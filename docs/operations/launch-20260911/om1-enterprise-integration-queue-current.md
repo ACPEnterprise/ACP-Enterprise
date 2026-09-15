@@ -1,21 +1,21 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 22:24 America/New_York
+Snapshot: 2026-09-15 10:54 America/New_York
 
 ## Authority and deployed state
 
-- Protected authority: `05c0806b7a9120c72555655acbc00c5963fd2ad4`
-- Protected tip: PR #289, bounded Luminary scenario presentation
+- Protected authority: `529bb78226717835c498524fa101ac5c03f92d51`
+- Protected tip: PR #291, Company Administrator Luminary-read grant
 - Deployed Preview: `60035693a51ec66328625dfcc78e7cd2dfead824`
-- Preview health: intermittent/unhealthy on old #279 since 10:33:31 on 2026-09-15; one healthy response at 10:35:51 was followed by timeouts at 10:36:54 and 10:38:06
-- Deployment gap: protected #280-#289 are not yet observed in Preview; deployed remains healthy #279
+- Preview health: recovered on old #279 with six consecutive healthy responses from 10:49:44 through 10:54:57 after the intermittent 10:33-10:48 incident
+- Deployment gap: protected #280-#289 and #291 are not yet observed in Preview; deployed remains old #279
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
   exact SHA `b4bf00d3...` with healthy application and connected PostgreSQL and
   Redis. A separate HTTP 502 occurred at 14:16:45 with no authority/PR/head
   change; four consecutive checks from 14:17:23 through 14:17:34 recovered HTTP
   200 at the same exact SHA with both dependencies connected. Preserve both
-  transient incidents in acceptance evidence. Required #261-#289 evidence and
+  transient incidents in acceptance evidence. Required #261-#289 and #291 evidence and
   authenticated persona evidence have not all been supplied. Do not run #265's
   command or #266's generators until repair successors land. During #266 rollout,
   Preview returned HTTP 502 at 15:10, then reported exact `9e866898...` with a
@@ -81,10 +81,14 @@ Snapshot: 2026-09-14 22:24 America/New_York
   On 2026-09-15, the same old #279 runtime hit an SSL connection timeout at
   10:33:31 and HTTP 502 at 10:34:43, returned one healthy response with
   PostgreSQL and Redis connected at 10:35:51, then timed out again at 10:36:54
-  and at 10:38:06 with no protected, candidate, or PR change. Treat the incident
-  as ongoing, preserve every observation, and keep acceptance stopped until
-  consecutive healthy responses prove sustained recovery. Even recovery at old
-  #279 would not supply the required exact-protected-SHA acceptance evidence.
+  and at 10:38:06. Further timeouts occurred at 10:39:33, 10:40:45, 10:41:57,
+  10:44:11, and 10:45:23, separated by isolated healthy old-#279 responses at
+  10:43:09 and 10:46:35. PR #291 merged at the latter observation without being
+  deployed. Preview was healthy at 10:47:38, returned HTTP 502 at 10:48:41, then
+  produced six consecutive healthy old-#279 responses with both dependencies
+  connected from 10:49:44 through 10:54:57. Preserve the complete incident and
+  recovery window. Sustained old-#279 recovery does not supply the required
+  exact-protected-SHA acceptance evidence, so acceptance remains stopped.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. PR #264's body reports 698 migration/job/scheduling regressions,
   16 focused tests, PostgreSQL zero-to-head/current=head, and zero drift, but no
@@ -258,9 +262,22 @@ Snapshot: 2026-09-14 22:24 America/New_York
   CLOSE_RATE_PERCENT and ADD_TRUCK therefore violate the backend contract that
   requires no numeric value and fail instead of returning their evidence blocker.
   It does not repair #288's backend qualification defects. Keep it disabled.
+- PR #291 merged at 10:46 on 2026-09-15 as protected `529bb782...` from
+  exact-base head `aec0d297...`, with no checks, statuses, reviews, comments, or
+  linked qualification log. Its three-file 82-addition/two-deletion delta adds
+  no secret, config, provider, or intended product-data mutation. It adds
+  `COMPANY_LUMINARY_READ` to the Company
+  Administrator launch bundle and existing active Company Administrator roles,
+  bumping authorization versions only for affected active users. It also advances
+  the protected schema head to `k1m3o5q7s9u1`. Its downgrade deletes every such
+  role-permission association, including a pre-existing grant it did not create,
+  and does not bump authorization versions; no migration replay, downgrade, or
+  PostgreSQL test was added. Keep Luminary operationally disabled, do not use
+  downgrade across this revision, and require a bounded forward repair/rollback
+  strategy plus exact deployed role-matrix acceptance.
 
 Independent qualification on 2026-09-12 covered the earlier #257-#260 tranche,
-not later #261-#289. That bounded run passed PostgreSQL zero-to-head, 20 affected
+not later #261-#289 or #291. That bounded run passed PostgreSQL zero-to-head, 20 affected
 backend tests, nine affected frontend suites and 43 tests, full ESLint, and the
 production TypeScript/Vite build. Four SQLAlchemy transaction-deassociation
 warnings were emitted by Invoice tests and remain part of that bounded evidence.
@@ -306,16 +323,16 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 | Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
 |---|---|---|---|---:|---|---|
-| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 40/46 | `f68730746aadf27ec7e14912f3a811494edb091c` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
-| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 45/1 | `1412fe955c0e2cf49694d50ea49c7cb382e1ba8a` | Stale but reconcilable; merge-clean; documentation-only |
-| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 55/1 | `c9ebcf2a0e647683f583e029c6074899125ec62d` | Stale but reconcilable; merge-clean; metadata edit required |
-| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 39/1 | `89ad713c859f19dbaabbefcc501a4998775aebbe` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
-| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 47/13 | `b14d25532c9487a839d3fe7ec43f9bf280673cfe` | Blocked on schema reconciliation; produces a sibling head beside protected `j0l2n4p6r8t0`; rebase and assign a new revision downstream of that head |
-| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 66/1 | `a65360f45beb8b49227d0ccd10a856d40e4ab65b` | Stale but reconcilable; merge-clean after #289; blocked behind authorization repairs, PR refresh, and combined rerun |
-| Accounting navigation grouping | `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` | None | 23/1 | `12c5a2319a42da42c7ef347b365ca708e0ab57ec` | Twenty-three protected commits stale but reconcilable; merge-clean; no schema/config; admissible after rebase, permission/deep-link/responsive/accessibility evidence, and a fresh PR |
-| Mobile employee TestFlight rollout | `work/mobile-employee-rollout-3day-1` | `a027b3e9a2c42726fb44ac0b369bf3043f39034a` | None | 10/18 | `7696cd8a2a2a4eddca9f266a663a4322c08a0c2c` | Ten protected commits stale, stacked on and supersedes the older owner packet; merge-clean but fails diff-check; blocked on contradictory/self-asserted Apple authority, App Store verification, field-readiness repair, dependency/native qualification, and owner acceptance |
-| Price Book real-world completion | `work/pricebook-realworld-complete-1` | `de6fbb2106c62f09ef140e731aacb7c5d69d466f` | #290 open/MERGEABLE | 0/8 | `acc0e16c66245471c60378f2c4a11f9599ca06ad` | Current and merge-clean; diff-check clean; held for independently derived evidence digests, proposal/approval/materialization separation, full PostgreSQL qualification, source-data review, and safe rollback. Adds sole candidate schema head `n0p8q16g3t9u` downstream of protected `j0l2n4p6r8t0` |
-| LIA Employee owner-query acceptance repair | `work/lia-owner-intelligence-preview-acceptance-1` | `b46560fabfc7dce0c3b442e2f53b0759dc7ff621` | None | 0/2 | `028a8d83d804498e4a05867cf2a92e327067f635` | Current, merge-clean, and diff-check clean; second commit adds fail-closed/scoped-query/follow-up tests but no runtime repair. Not admissible unchanged: it leaves #287's ignored `as_of` and source-authority defects, admits Branch-null Employees without a proved policy, selects the latest pay period without an authoritative-status/window filter, expands three canonical roles, and introduces sibling schema head `k1m3o5q7s9u1` beside Price Book/ECO candidates |
+| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 42/46 | `983c6672ee12f7688e5b2daec201f13dc6276192` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
+| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 47/1 | `fc2e335ccb50ac9041393b24fca218b97dee8186` | Stale but reconcilable; merge-clean; documentation-only |
+| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 57/1 | `7f26a535c150826f6d47306a22c2bcfe4ace1830` | Stale but reconcilable; merge-clean; metadata edit required |
+| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 41/1 | `2aa9036ab8d79b75dcd247ae246ffb2185f85f62` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
+| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 49/13 | `54ff7aa8e9b3347c52d8e4d9af651c17cd2e50dd` | Merge-clean but schema-blocked; its lineage predates the new protected `k1m3o5q7s9u1` head; rebase and assign a unique new revision downstream of that head |
+| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/MERGEABLE | 68/1 | `5cc70f32d2326cfaeaf0e9ecb96639a932545cfb` | Stale but reconcilable; merge-clean after #291; blocked behind authorization repairs, PR refresh, and combined rerun |
+| Accounting navigation grouping | `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` | None | 25/1 | `839c06f24746934cb24502ced480d233c6c005a1` | Twenty-five protected commits stale but reconcilable; merge-clean; no schema/config; admissible after rebase, permission/deep-link/responsive/accessibility evidence, and a fresh PR |
+| Mobile employee TestFlight rollout | `work/mobile-employee-rollout-3day-1` | `a027b3e9a2c42726fb44ac0b369bf3043f39034a` | None | 12/18 | `0ee071fa8e0f87d776bd6797e49cee1c912fa2f5` | Twelve protected commits stale, stacked on and supersedes the older owner packet; merge-clean but fails diff-check; blocked on contradictory/self-asserted Apple authority, App Store verification, field-readiness repair, dependency/native qualification, and owner acceptance |
+| Price Book real-world completion | `work/pricebook-realworld-complete-1` | `de6fbb2106c62f09ef140e731aacb7c5d69d466f` | #290 open/MERGEABLE | 2/8 | `98507ae1dfb90e9d6811664ccc28b6ecba7e813a` | Stale but merge-clean; diff-check clean; held for independently derived evidence digests, actor separation, PostgreSQL qualification, source-data review, safe rollback, and rebase of `n0p8q16g3t9u` downstream of protected `k1m3o5q7s9u1` |
+| LIA Employee owner-query acceptance repair | `work/lia-owner-intelligence-preview-acceptance-1` | `b46560fabfc7dce0c3b442e2f53b0759dc7ff621` | None | 2/2 | `9926cbede14071f4f1b049c474b709f44f18ad11` | Stale but textually merge-clean and diff-check clean; logically conflicting because it independently defines revision ID `k1m3o5q7s9u1`, now protected by #291. Preserve its test gains, repair remaining runtime gates, and replace its migration with a unique revision downstream of protected `k1m3o5q7s9u1` |
 
 ## Named launch queue coverage
 
@@ -327,7 +344,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1-B Customer office UX | `8516b08b...` conflicts in one add/add reliability test, while current-authority reconciliation `174fcd4e...` composes to zero delta. Superseded by #242 and #257. |
 | Workforce / Payroll #216 | Merged as `d52d1178...`; already protected. |
 | Workforce / Payroll #221, stacked #222, and #223 | Closed; their current successors are protected through #229, #231, and #235 respectively. |
-| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but forty protected commits stale. Reconcile it to `05c0806b...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
+| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but forty-two protected commits stale. Reconcile it to `529bb782...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
 | Payroll tax rule | Reconciled `9a44f714...` composes to zero delta; superseded by protected #236. |
 | Identity #227 and #230 | Still open but superseded by protected #256 and #258; close, do not integrate. |
 | Identity recovery successor | `4cf7bdf4...` composes to zero delta; protected #256 is authoritative. |
@@ -336,15 +353,17 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. PR #282 is a new read-only Employee-input migration planner, not OAuth or import authority. |
 | Payroll cutover permission seed | PR #284 is a one-file successor to protected #283. Do not integrate its edit to already-protected revision `i9k1m3o5q7s9`; replace it with a new downstream repair migration and a separated role grant policy. |
 | Company Administrator cutover grants | PR #285 is protected through `j0l2n4p6r8t0`, but it still edits prior migration `i9k1m3o5q7s9` and grants the same role owner-certify plus approve. Keep disabled; repair downstream. |
-| LIA owner intelligence successor | `b46560fa...` is the current two-commit acceptance repair on exact protected authority. Its new tests cover missing/ambiguous names, scoped SQL construction, and subject-bound Payroll follow-up, but it does not close #287's full authority, scope, and time gates; reconcile its new schema revision with Price Book/ECO ordering before integration. |
+| LIA owner intelligence successor | `b46560fa...` is now two protected commits stale. Its tests cover missing/ambiguous names, scoped SQL construction, and subject-bound Payroll follow-up, but it does not close #287's full authority, scope, and time gates and reuses #291's protected revision ID. Rebase and replace the migration before integration. |
 | Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, native binding, runtime inventory, v4 completeness, the v4 executor, Location lookup, exact-replay repair, authority-successor verifier, and mapped-row repair are protected through #262-#272. Recovery, builder, cohort authority, runtime repair, v4 repair, a complete executor repair, and a verifier repair remain preparation. PR #271/#272 assume an execution already occurred and cannot authorize one. Protected executor and verifier are not qualified. Do not run their generators, executor command, guarded admission, or replay verifier. |
-| Price Book operator readiness | PR #290 at `de6fbb21...` is the current successor and supersedes `49e852aa...` and `c1c90a0a...`. It is current and mechanically clean but held on authority, evidence-integrity, database, source-data, and rollback gates. |
+| Price Book operator readiness | PR #290 at `de6fbb21...` remains the current successor and supersedes `49e852aa...` and `c1c90a0a...`. It is two protected commits stale and mechanically clean but held on schema rebase, authority, evidence-integrity, database, source-data, and rollback gates. |
 
 Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-The ten remaining effective deltas are merge-clean. ECO and cohort authority
+All ten remaining effective deltas are textually merge-clean, but LIA is not
+schema-valid because it duplicates protected revision ID `k1m3o5q7s9u1`.
+Price Book and ECO also branch from pre-#291 schema lineage. ECO and cohort authority
 are not admissible, and Mobile is blocked on a complete repair to
 protected #273-#276: ECO's
 differently named migration still declares protected revision `g7i9k1m3o5q7`
@@ -359,12 +378,10 @@ independently defective post-execution verifier; #272 fixes only mapped-row
 serialization. Protected #273 adds independently defective Dispatch readiness;
 #274 fixes its selector, #275 expands administrator permissions, and #276 makes
 backend creation atomic but leaves visible-error and concurrency evidence gaps.
-The four currently independent candidates compose at tree
-`5c1202fc9fe70b551063efcdff97e3e419bf0998`; they change 31 files and pass
-`git diff --check`. Including blocked Mobile remains mechanically clean at tree
-`477092240b534658c85c534417dc04aa86b63123` across 63 files. The Mobile candidate
-itself fails `git diff --check` on a trailing blank line. Recompute all
-trees after protected movement or packet edits.
+Every candidate effective tree and behind/ahead count above was recomputed from
+protected `529bb782...`. The Mobile candidate itself still fails
+`git diff --check` on a trailing blank line. Recompute all trees after protected
+movement or packet edits.
 
 ## Integration order and release waves
 
@@ -390,17 +407,20 @@ operational order:
    scoped, and add command plus real-PostgreSQL zero-write/replay coverage. It
    remains unusable until a separately authorized execution exists.
 7. Reconcile ECO to a new unique revision downstream of the sole protected head
-   `j0l2n4p6r8t0`. Integrate ECO as its own later database checkpoint; never admit
+   `k1m3o5q7s9u1`. Integrate ECO as its own later database checkpoint; never admit
    its current sibling head.
-8. Keep protected #288/#289 Luminary owner economics disabled. Repair and qualify it
+8. Keep protected #288/#289/#291 Luminary owner economics and access disabled. Repair and qualify it
    in a successor as an independent read-only application checkpoint. It has no
    dependency on ECO's schema migration and must not imply operational action.
+   Preserve #291's read-only permission intent but repair its unsafe downgrade
+   behavior in the rollback plan and prove the effective administrator matrix.
 9. Treat `b46560fa...` as the current #287 LIA repair input, not a complete
    successor. Preserve its bounded exact-name resolution and Payroll follow-up,
    then repair `as_of`, explicit source authority, Branch-null scope,
    authoritative pay-period selection, minimum-necessary output, and role
-   expansion evidence. Assign its migration a unique position after the
-   then-current schema head and deploy it as an independent checkpoint.
+   expansion evidence. Delete neither protected migration; replace the candidate's
+   duplicate revision with a unique position after `k1m3o5q7s9u1` and deploy it
+   as an independent checkpoint.
 10. Treat #277-#282 as protected but operationally blocked; preserve #279 readback,
    #280 explicit-period navigation, and #281 metadata-only readiness UI; repair
    the still-present projection mismatch and qualify #281's effective role
@@ -411,9 +431,9 @@ operational order:
    draft instructions only and remains downstream of exact deployed Payroll readiness.
 12. Keep protected #283/#286 operationally disabled. Repair cutover separation,
    completeness, replay, metadata, and concurrency contracts in a successor;
-   requalify PostgreSQL zero-to-head through protected revision `j0l2n4p6r8t0`.
+   requalify PostgreSQL zero-to-head through protected revision `k1m3o5q7s9u1`.
 13. Keep protected #284/#285 operationally disabled. Preserve their permission intent
-   in a new revision downstream of `j0l2n4p6r8t0`; never rely on the protected
+   in a new revision downstream of `k1m3o5q7s9u1`; never rely on the protected
    migration rewrite.
    Separate certify and approve grants, define accountant provisioning, validate
    pre-existing permission identities, and prove upgrade/downgrade/replay.
@@ -434,7 +454,7 @@ upload an Apple build as part of integration.
 
 ```mermaid
 flowchart LR
-    A[Protected 05c0806b through Luminary scenarios] -->|reconcile| R[SOURCE.4 recovery]
+    A[Protected 529bb782 through Luminary access] -->|reconcile| R[SOURCE.4 recovery]
     A --> C[OM2-C persona contract]
     A --> L[Protected #262 through #266 qualification]
     A --> K[Cohort authority repair]
@@ -448,7 +468,7 @@ flowchart LR
     A --> Q[PR 282 QBO Employee planner repair]
     A --> T[PR 283 and 286 Payroll cutover repair]
     A --> S[PR 284 and 285 permission repair]
-    A --> O[Luminary owner-economics repair]
+    A --> O[Luminary owner-economics and access repair]
     A --> Z[LIA owner-intelligence repair]
     Z --> Z2[Employee-query acceptance successor completion]
     A --> N[Accounting navigation grouping]
@@ -492,10 +512,11 @@ flowchart LR
 Solid candidate-to-integration arrows do not require a combined batch; each lane
 may enter independently through its own PR. There are no hard Git dependency
 edges among the independently reconcilable candidates. PR #290 composes
-mechanically with every other active head, but must be isolated as a database and
+mechanically with every other active head, but must first move its migration
+downstream of protected `k1m3o5q7s9u1` and then be isolated as a database and
 application checkpoint. The dotted
 SOURCE.4-to-builder edge is operational ordering only. ECO must reconcile
-downstream of protected `j0l2n4p6r8t0`; if PR #290 lands first, ECO must instead
+downstream of protected `k1m3o5q7s9u1`; if a repaired PR #290 lands first, ECO must instead
 reconcile downstream of `n0p8q16g3t9u`. That is not permission to batch. Dotted
 owner-gate edges are explicitly outside this packet's authority.
 
@@ -509,17 +530,17 @@ sole protected schema head.
 
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
-| Acceptance tooling | Reconcile `1fb0481a...` to `05c0806b...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Current deployed acceptance | Keep acceptance stopped during the ongoing 2026-09-15 incident; require consecutive healthy responses and then wait for consecutive exact-`05c0806b...` responses. Preserve the #283/#284 rollout HTTP 502 window, every 10:33 onward timeout/502/isolated-health observation, old-#279 state, unobserved #285-#289 merges, and all earlier evidence; attach or rerun missing #261-#289 qualification; keep protected Migration commands/verifier, #273-#276 operator action, and #277-#289 office/Payroll-QBO/cutover/intelligence operations disabled | Any timeout/HTTP error or dependency regression continues, deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, or defective tooling is exercised |
+| Acceptance tooling | Reconcile `1fb0481a...` to `529bb782...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
+| Current deployed acceptance | The 2026-09-15 incident recovered after six consecutive healthy old-#279 responses, but keep acceptance stopped and wait for consecutive exact-`529bb782...` responses. Preserve the #283/#284 rollout HTTP 502 window, the complete 10:33-10:54 incident/recovery sequence, old-#279 state, unobserved #280-#289/#291 merges, and all earlier evidence; attach or rerun missing #261-#289/#291 qualification; keep protected Migration commands/verifier, #273-#276 operator action, and #277-#289/#291 office/Payroll-QBO/cutover/intelligence operations disabled | A timeout/HTTP error or dependency regression recurs, deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, or defective tooling is exercised |
 | Wave C preparation | Treat #264-#272 as integrated, but #265/#266, the executor through #270, and verifier through #272 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently; repair #271/#272 only as post-execution verification tooling | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, nondeterministic or overbroad replay evidence, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
-| ECO checkpoint | Assign ECO a unique revision downstream of protected `j0l2n4p6r8t0`, requalify, then integrate/deploy independently | Sibling/duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
-| Protected Luminary read-only checkpoint | Keep #288/#289 disabled. Repair fail-open quality and per-Job evidence gates, strict response model, unsupported scenario UI, and zero-write evidence, then deploy independently; it has no ECO schema dependency | Unknown quality becomes READY, incomplete/unbound Job yields a recommendation, unsupported scenario errors instead of reporting its blocker, cross-scope data appears, digest/evidence is unstable or unbound, mutation/provider call occurs, or response contract drifts |
-| Protected LIA read-only checkpoint | Start from current successor `b46560fa...`, preserving its bounded exact-name resolver, fail-closed name cases, scoped-query assertion, and subject-bound Payroll follow-up. Enforce context `as_of`, explicit source-authority mapping, nullable-Branch policy, authoritative pay-period selection, minimum-necessary output, and role-expansion review; move `k1m3o5q7s9u1` after the then-current sole schema head; prove permission-before-query and zero-write behavior, then deploy independently or after Luminary | Stale context succeeds, source evidence becomes ACP-authoritative, Branch-null row widens scope, a future/draft or otherwise non-authoritative pay period is selected, briefing retrieves unrelated domains, unauthorized query executes, protected values or overbroad role data appear, migration creates a sibling head, or mutation/provider call occurs |
+| ECO checkpoint | Assign ECO a unique revision downstream of protected `k1m3o5q7s9u1`, requalify, then integrate/deploy independently | Sibling/duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
+| Protected Luminary read-only checkpoint | Keep #288/#289/#291 disabled. Repair fail-open quality and per-Job evidence gates, strict response model, unsupported scenario UI, zero-write evidence, #291 downgrade safety, and administrator-role acceptance, then deploy independently; it has no ECO schema dependency | Unknown quality becomes READY, incomplete/unbound Job yields a recommendation, unsupported scenario errors instead of reporting its blocker, cross-scope data appears, digest/evidence is unstable or unbound, mutation/provider call occurs, response contract drifts, pre-existing grant is deleted, or authorization cache remains stale |
+| Protected LIA read-only checkpoint | Start from current successor `b46560fa...`, preserving its bounded exact-name resolver, fail-closed name cases, scoped-query assertion, and subject-bound Payroll follow-up. Enforce context `as_of`, explicit source-authority mapping, nullable-Branch policy, authoritative pay-period selection, minimum-necessary output, and role-expansion review; replace its duplicate `k1m3o5q7s9u1` with a unique revision after the protected head; prove permission-before-query and zero-write behavior, then deploy independently or after Luminary | Duplicate/sibling/multiple Alembic revision or head, stale context succeeds, source evidence becomes ACP-authoritative, Branch-null row widens scope, a future/draft or otherwise non-authoritative pay period is selected, briefing retrieves unrelated domains, unauthorized query executes, protected values or overbroad role data appear, or mutation/provider call occurs |
 | Wave B | Preserve #279 readback, audit its admin-role expansion, preserve #280 selected-period navigation and #281 metadata-only readiness UI; repair #278's projection mismatch and prove #281's intended role matrix, then accept #277-#281 without Payroll execution and reconcile PR #215. Keep protected #282 disabled until a repaired successor passes; then rerun the combined Payroll/QBO suites | Either route/service permission contract is inconsistent, unexplained broad-suite failure remains, selected period is lost or warning/readiness is contradictory, protected Payroll values appear, protected #282 or its successor accepts unbound/duplicate evidence or weakens approved ACP authority, pay-period replay/readback/overlap/audit test fails, Payroll/provider mutation occurs, or QBO/shared-route behavior regresses |
-| Protected Payroll cutover checkpoint | Keep #283-#286 mutations disabled. Put permission repair downstream of `j0l2n4p6r8t0`; separate certify/approve actors and grants; define accountant provisioning; require exactly one head, zero drift, full PostgreSQL/API/concurrency/replay/rollback evidence, then deploy and accept synthetic certification only—never Payroll execution | Protected migration rewrite is relied upon, same actor can certify and approve, reader sees mutation controls/source IDs, a role can self-select authority, any Employee/fact/bridge coverage is omitted, changed replay succeeds, protected value leaks, partial/racy state, multiple heads/drift, or execution/ACH/provider action |
+| Protected Payroll cutover checkpoint | Keep #283-#286 mutations disabled. Put permission repair downstream of `k1m3o5q7s9u1`; separate certify/approve actors and grants; define accountant provisioning; require exactly one head, zero drift, full PostgreSQL/API/concurrency/replay/rollback evidence, then deploy and accept synthetic certification only—never Payroll execution | Protected migration rewrite is relied upon, same actor can certify and approve, reader sees mutation controls/source IDs, a role can self-select authority, any Employee/fact/bridge coverage is omitted, changed replay succeeds, protected value leaks, partial/racy state, multiple heads/drift, or execution/ACH/provider action |
 | Accounting navigation UI | Open a fresh exact-head PR; run permission filtering, direct/deep-link, active-state, keyboard, narrow/mobile, full frontend, lint, and build checks. It may join Wave B only as a separately reviewable frontend commit | Any route becomes broader than its existing permission, operational links disappear without an equivalent Accounting path, deep links/back-forward break, hidden unsupported feature appears, mobile/keyboard navigation regresses, or the candidate claims financial/QBO/Payroll behavior |
 | Wave D | Keep protected #273-#276 operator action disabled; audit administrator permissions, preserve #276 atomicity, surface mutation errors, and qualify concurrent/API behavior before Mobile. Treat rollout `a027b3e9...` as held until Apple authority evidence and dependency/native qualification reconcile | Unexpected role privilege, partial readiness persists on failure, mutation error is hidden, PostgreSQL/API/concurrency/idempotency/rollback test fails, Mobile manifests contradict, Apple action is self-authorized, diff-check fails, or runtime/dependency evidence is stale |
-| Price Book checkpoint | Hold PR #290. Require the server to derive and verify review/proposal digests from canonical selected rows and transformation evidence; prohibit the creator from approving or materializing the same proposal; prove exact replay and concurrent materialization in supported PostgreSQL; review the 218-service/361-material source artifacts; and define a rollback that preserves `other_direct` rows. Deploy backend, frontend, and `n0p8q16g3t9u` together only after those gates close. If it lands before ECO, rebase ECO's replacement revision downstream of `n0p8q16g3t9u` | Caller-supplied digest is accepted without recomputation, one actor creates and approves/materializes, candidate/source set changes undetected, duplicate drafts appear, READ sees costs or mutation controls, activation occurs implicitly, source classifications/prices are unapproved, PostgreSQL one-head/drift fails, or downgrade would violate the restored component constraint |
+| Price Book checkpoint | Hold PR #290. Rebase it to `529bb782...` and move `n0p8q16g3t9u` downstream of protected `k1m3o5q7s9u1`; require server-derived review/proposal digests, actor separation, supported-PostgreSQL replay/concurrency evidence, review of the 218-service/361-material sources, and a rollback preserving `other_direct` rows. Deploy its backend, frontend, and migration together only after those gates close. If it lands before ECO, rebase ECO's replacement revision downstream of `n0p8q16g3t9u` | Pre-#291 schema parent remains, caller-supplied digest is accepted without recomputation, one actor creates and approves/materializes, candidate/source set changes undetected, duplicate drafts appear, READ sees costs or mutation controls, activation occurs implicitly, source classifications/prices are unapproved, PostgreSQL one-head/drift fails, or downgrade violates the restored constraint |
 
 After every protected integration, stop before integrating another candidate and
 run this read-only checkpoint in a clone containing the remaining remote branch:
@@ -557,7 +578,7 @@ pushes, or merges the protected branch.
 ```bash
 git fetch origin --prune
 test "$(git rev-parse origin/customer-management-v1)" = \
-  05c0806b7a9120c72555655acbc00c5963fd2ad4
+  529bb78226717835c498524fa101ac5c03f92d51
 
 lane=work/REPLACE_WITH_LANE
 expected=REPLACE_WITH_FULL_HEAD
@@ -590,7 +611,7 @@ flow; direct protected updates are not an execution option.
 
 ### OM2-C persona contract and acceptance harness
 
-The branch is eighteen commits behind protected authority and has no open PR. PR #212 is
+The branch is forty-two commits behind protected authority and has no open PR. PR #212 is
 historical and already merged; do not append this head to that closed identity.
 Open a fresh PR for the 15-file effective delta. It has no Alembic migration and
 zero file overlap with every other active or held lane.
@@ -611,8 +632,8 @@ python -m compileall -q \
 ```
 
 After merging protected authority, update the successor's protected binding to
-`05c0806b...` and its deployed binding only after Preview reports that exact SHA;
-advance schema binding to `j0l2n4p6r8t0` and recompute any
+`529bb782...` and its deployed binding only after Preview reports that exact SHA;
+advance schema binding to `k1m3o5q7s9u1` and recompute any
 contract/report digests affected by those edits. Retain the qualified frontend
 digest unless the deployed frontend artifact proves it changed. Require those
 exact bindings, exact synthetic Company/Branch IDs,
@@ -731,10 +752,10 @@ current-calendar dependencies, before mutation. Do not invoke
 
 ### SOURCE.4 UPDATE cohort authority
 
-Branch `work/hcp-update-cohort-authority-1` is current at
-`d53e5d36422218bd715f07d8099e09865167e0f1`, has no PR, is 17 behind / 1 ahead,
+Branch `work/hcp-update-cohort-authority-1` remains at
+`d53e5d36422218bd715f07d8099e09865167e0f1`, has no PR, is 41 behind / 1 ahead,
 and composes merge-clean at tree
-`89ad713c859f19dbaabbefcc501a4998775aebbe`. It has no schema change and is the
+`2aa9036ab8d79b75dcd247ae246ffb2185f85f62`. It has no schema change and is the
 intended sealed input authority for a post-#265 repair successor.
 
 The documented local artifact at
@@ -967,7 +988,7 @@ any other verifier blocker above. Preserve it in the complete verifier repair.
 
 Merge current protected authority into
 `work/migration-source4-accepted-artifact-recovery-1`, require tree
-`1412fe955c0e2cf49694d50ea49c7cb382e1ba8a`, run `git diff --check`, push the
+`fc2e335ccb50ac9041393b24fca218b97dee8186`, run `git diff --check`, push the
 lane branch, and open a documentation PR. The packet contains no protected SHA
 that needs editing.
 
@@ -993,7 +1014,7 @@ ENVIRONMENT=test PYTHONPATH=backend python -c 'from pathlib import Path; from ap
 
 ### HCP historical safe-tranche builder
 
-Update the packet authority from `9096a777...` to `05c0806b...` and state that
+Update the packet authority from `9096a777...` to `529bb782...` and state that
 the executor and post-admission acceptance are protected through PR #253 at
 `96d67cb73dbe4838e882e1551de5906eda598f4e`. Run:
 
@@ -1008,8 +1029,8 @@ python -m compileall -q \
 The builder is read-only with respect to application data, but writes the
 explicit `--output` artifact. It must not be treated as admission authority.
 
-Composition was revalidated on 2026-09-14 at tree
-`c9ebcf2a0e647683f583e029c6074899125ec62d`; lane qualification on 2026-09-12
+Composition was revalidated on 2026-09-15 at tree
+`7f26a535c150826f6d47306a22c2bcfe4ace1830`; lane qualification on 2026-09-12
 passed all three focused tests and Python compilation. The tests cover accepted-record selection,
 HOLD treatment for unbound updates, `execution_allowed = false`, acceptance-plan
 digest tampering, and conflicting cross-scope native bindings.
@@ -1022,7 +1043,7 @@ candidate independently declares Alembic revision `g7i9k1m3o5q7` from
 `f6h8j0l2n4p6`; that identity is now reserved by the lineage candidate. Before
 opening ECO's PR, wait until native binding is protected, merge the new authority,
 rename ECO's migration file and internal `revision` to a new unique ID, set
-`down_revision` to the sole protected head `j0l2n4p6r8t0`, and update every ECO
+`down_revision` to the sole protected head `k1m3o5q7s9u1`, and update every ECO
 packet/test reference. Never integrate ECO's current migration as a sibling.
 
 Prior isolated ECO qualification passed:
@@ -1077,6 +1098,30 @@ CLOSE_RATE_PERCENT and ADD_TRUCK therefore violate `ScenarioAssumption`, which
 requires that field to be absent, and cannot return their intended
 INSUFFICIENT_EVIDENCE blocker. #289 merged without checks or review and does not
 repair the backend gates below.
+
+PR #291 then merged exact-base head `aec0d297...` as protected `529bb782...`.
+It grants Company Administrators the existing read-only Luminary permission in
+the launch bundle and through new revision `k1m3o5q7s9u1`; it does not grant
+Luminary analyze authority. No check, review, comment, status, PostgreSQL test,
+or migration replay/downgrade evidence is attached. The downgrade is unsafe: it
+deletes matching grants regardless of whether this migration inserted them and
+does not invalidate affected authorization versions. Do not roll back across
+this revision without an owner-approved data-preserving rollback plan. The new
+permission does not cure #288/#289's application defects, so keep the surface
+disabled and verify the exact administrator role diff after deployment.
+
+Before deployment, run the Luminary and launch-control suites shown below, then
+use a disposable PostgreSQL database to prove zero-to-`k1m3o5q7s9u1`, replay,
+pre-existing-grant preservation, authorization-version invalidation, and a
+data-preserving rollback strategy. The current downgrade-preservation case is
+expected to fail and blocks rollback approval; do not run this test on Preview.
+
+```bash
+ENVIRONMENT=test PYTHONPATH=backend python -m pytest -q \
+  backend/tests/platform/test_launch_controls.py \
+  backend/tests/luminary/test_owner_economics_readonly.py \
+  backend/tests/luminary/test_api_boundary.py
+```
 
 Do not enable it unchanged. `_readiness` maps every unexpected
 `quality_state` to READY instead of failing closed. Recommendation emission is
@@ -1164,18 +1209,18 @@ the repository's Python 3.11+ `StrEnum` and union syntax, while installed Python
 failure or passing result. Preserve the original Python 3.12 command log or rerun
 in the supported backend environment before accepting #287 or its repair.
 
-Current successor `work/lia-owner-intelligence-preview-acceptance-1` is based
-exactly on protected `05c0806b...` at `b46560fabfc7dce0c3b442e2f53b0759dc7ff621`.
-It is two commits ahead, has no PR, changes 13 files with 624 additions and 21
-deletions, passes `git diff --check`, and composes at tree
-`028a8d83d804498e4a05867cf2a92e327067f635`. It adds exact, scoped
+Current successor `work/lia-owner-intelligence-preview-acceptance-1` remains at
+`b46560fabfc7dce0c3b442e2f53b0759dc7ff621`. It is two commits behind and two
+ahead of protected `529bb782...`, has no PR, changes 13 files with 624 additions
+and 21 deletions, passes `git diff --check`, and composes textually at tree
+`9926cbede14071f4f1b049c474b709f44f18ad11`. It adds exact, scoped
 `Show me <Employee name>` resolution, subject-preserving Payroll follow-up,
 minimum-necessary context fields, a canonical launch-role grant, and schema
-revision `k1m3o5q7s9u1` downstream of protected `j0l2n4p6r8t0`. It is
-mechanically compatible with Price Book (`26d39bde...`), ECO (`9095d6c1...`),
-Mobile (`928f9afc...`), and PR #215 (`87a51602...`), but Price Book, ECO, and
-this candidate each declare a sibling migration from the same protected head;
-they must be ordered and revised, never deployed together as multiple heads.
+revision `k1m3o5q7s9u1` downstream of old protected `j0l2n4p6r8t0`. PR #291 now
+protects a different migration with that exact revision ID. Git composition is
+clean because the filenames differ, but Alembic identity is duplicated and the
+candidate is not schema-valid. Replace its migration with a unique revision
+downstream of protected `k1m3o5q7s9u1`, then recompute all pairwise compositions.
 
 The successor is not complete. It does not touch the ignored `as_of`, substring
 source-authority mapping, briefing fallback, or context entity-type binding.
@@ -1304,8 +1349,8 @@ continues to report `mutation_authority: none`. GitHub reports no checks on the
 candidate branch, so Enterprise must require and record these results before
 integration.
 
-Composition was revalidated on 2026-09-14 at tree
-`a65360f45beb8b49227d0ccd10a856d40e4ab65b`; lane qualification on 2026-09-12
+Composition was revalidated on 2026-09-15 at tree
+`5cc70f32d2326cfaeaf0e9ecb96639a932545cfb`; lane qualification on 2026-09-12
 passed three suites and nine tests, followed by clean full ESLint and production
 TypeScript/Vite builds. This evidence does not replace Enterprise's final rerun
 after branch reconciliation.
@@ -1326,8 +1371,9 @@ PR #282 merged unchanged at 20:11 as protected
 `b1bcca65a06ed83c43594dcbe864c23c4ec8e885` from exact head
 `98610c7da9c0c19e6a5719fea8b726334af95970`, based on #281. Its four additive
 files have tree `14c95174128d9c17cb628a6e61fb090fa1f77afa` and pass
-`git diff --check`. The now-stale PR #215 remains merge-clean on top at tree
-`a65360f45beb8b49227d0ccd10a856d40e4ab65b`. There is no migration, QBO write,
+`git diff --check`. The now-stale PR #215 remains merge-clean on current
+protected authority at tree `5cc70f32d2326cfaeaf0e9ecb96639a932545cfb`.
+There is no migration, QBO write,
 Payroll execution, or new application secret. The read-only inventory needs an
 Enterprise-supplied `QBO_PRODUCTION_EVIDENCE_ROOT` pointing to the already sealed
 evidence volume; do not authorize QBO or expose the path/raw evidence in logs.
@@ -1423,8 +1469,8 @@ the sole head. Reproduce in a disposable PostgreSQL database, never Preview:
 ```bash
 cd backend
 ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic upgrade head
-test "$(ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic current | awk 'NR == 1 {print $1}')" = j0l2n4p6r8t0
-test "$(ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic heads | awk 'NR == 1 {print $1}')" = j0l2n4p6r8t0
+test "$(ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic current | awk 'NR == 1 {print $1}')" = k1m3o5q7s9u1
+test "$(ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic heads | awk 'NR == 1 {print $1}')" = k1m3o5q7s9u1
 test "$(ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic heads | wc -l | tr -d ' ')" = 1
 ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic check
 ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" python -m pytest -q \
@@ -1441,10 +1487,10 @@ npm run build
 The named component test does not exist at the current head; the repair must add
 it before this command can pass. PR #283 merged with no GitHub checks, statuses, reviews,
 comments, linked logs, or qualification claims beyond its behavioral summary.
-PR #215 now composes mechanically over protected #289 at tree `a65360f4...` and
-overlaps only in `PayrollRoute.tsx`; Accounting navigation (`12c5a231...`) and
+PR #215 now composes mechanically over protected #291 at tree `5cc70f32...` and
+overlaps only in `PayrollRoute.tsx`; Accounting navigation (`839c06f2...`) and
 current Mobile rollout compose without file overlap. ECO's Git-clean effective
-tree is `b14d2553...`, but it has two sibling Alembic heads and is forbidden.
+tree is `54ff7aa8...`, but its schema lineage predates protected #291 and is forbidden.
 Keep the repair and ECO schema checkpoints separate.
 After a repaired exact-SHA deployment, acceptance may exercise only synthetic
 cutover review/certification state. Do not enter real Payroll values, approve a
@@ -1498,10 +1544,10 @@ Administrator grants without proving that the migration created them. Editing
 from fresh databases.
 
 Keep #283-#286 cutover mutations disabled. The repair successor must descend
-from `j0l2n4p6r8t0`, never edit either protected revision, reconcile and attest
+from the current protected head `k1m3o5q7s9u1`, never edit any protected revision, reconcile and attest
 existing catalog/grant state, separate certify from approve, provide a bounded
 accountant path, and meet the complete test/acceptance matrix above. ECO must
-also move downstream of `j0l2n4p6r8t0`; do not create a sibling head.
+also move downstream of `k1m3o5q7s9u1`; do not create a sibling head.
 
 ### PR #286 bridge Payroll cutover controls
 
@@ -1534,9 +1580,9 @@ actions.
 
 Branch `work/ux-accounting-navigation-1` at exact head
 `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` is based directly on protected
-predecessor `7f1d98dc...`, has no PR, changes ten frontend/docs files, is twenty-three
+predecessor `7f1d98dc...`, has no PR, changes ten frontend/docs files, is twenty-five
 protected commits stale, and composes merge-clean at tree
-`12c5a2319a42da42c7ef347b365ca708e0ab57ec`.
+`839c06f24746934cb24502ced480d233c6c005a1`.
 It has no schema, backend, secret, config, financial-authority, QBO, or Payroll
 behavior change. It has zero effective-file overlap and remains mechanically
 compatible with PR #215, current Mobile, and OM2-C, but all pairwise evidence
@@ -1628,9 +1674,9 @@ concurrent first-use requests cannot race on absent canonical rows, plus the
 permission/cross-scope/invalid-window/API failure matrix, before enabling use.
 
 The current successor is `work/mobile-employee-rollout-3day-1` at exact head
-`a027b3e9a2c42726fb44ac0b369bf3043f39034a`, ten protected commits stale from
-`05c0806b...`. Its 18-commit effective delta changes 32 files and composes at tree
-`7696cd8a2a2a4eddca9f266a663a4322c08a0c2c`. It stacks the earlier distribution
+`a027b3e9a2c42726fb44ac0b369bf3043f39034a`, twelve protected commits stale from
+`529bb782...`. Its 18-commit effective delta changes 32 files and composes at tree
+`0ee071fa8e0f87d776bd6797e49cee1c912fa2f5`. It stacks the earlier distribution
 and owner packets, adds native/dependency changes, an icon, AASA tooling, archive
 scripts, TestFlight evidence, and a three-day Employee rollout packet. It has no
 PR and fails `git diff --check` because
@@ -1720,14 +1766,15 @@ back through this queue refresh before Enterprise integrates it.
 
 ## Held candidate
 
-Price Book PR #290, branch `work/pricebook-realworld-complete-1`, is current at
-`de6fbb2106c62f09ef140e731aacb7c5d69d466f`: zero behind/eight ahead of exact
-protected `05c0806b...`, mergeable, diff-check clean, and effective tree
-`acc0e16c66245471c60378f2c4a11f9599ca06ad`. Its 34-file delta includes 218
+Price Book PR #290, branch `work/pricebook-realworld-complete-1`, remains at
+`de6fbb2106c62f09ef140e731aacb7c5d69d466f`: two behind/eight ahead of
+protected `529bb782...`, GitHub-mergeable, diff-check clean, and effective tree
+`98507ae1dfb90e9d6811664ccc28b6ecba7e813a`. Its 34-file delta includes 218
 service configurations and 361 material candidates, catalog and maintenance
 APIs, manager cost readiness, non-activating bulk successor-draft workflows,
-Estimate selection, and migration `n0p8q16g3t9u` directly downstream of the
-protected sole head `j0l2n4p6r8t0`. It supersedes `49e852aa...` and
+Estimate selection, and migration `n0p8q16g3t9u` directly downstream of old
+head `j0l2n4p6r8t0`. Protected #291 advances the sole head to `k1m3o5q7s9u1`,
+so #290 now creates a sibling head unless rebased. It supersedes `49e852aa...` and
 `c1c90a0a...`.
 
 Do not integrate #290 yet. Exact-head inspection found:
@@ -1854,7 +1901,7 @@ links, Payroll values, provider payloads, Apple credentials, or Customer PII.
 | ECO | Alembic current/head output; governed policy create/read/update correlation IDs; immutable event IDs and ordering | Wrong/multiple head, drift, mutable/missing audit event, cross-Company visibility, or unexplained calculation variance |
 | PR #215 / QBO | Payroll evidence projection and QBO source-evidence response; role-negative result; before/after provider connection state | OAuth prompt/change, provider write, fabricated readiness, unauthorized financial visibility, or `mutation_authority` other than `none` |
 | PR #282 QBO/Payroll planner | Repaired candidate/merge/deployed SHA; expected sealed run/manifest/realm/cutoff; manifest and deterministic inventory digests; entity counts reconciled to bounded records; zero identifiers/values; crosswalk/fact authority chain; duplicate/tamper/foreign-scope negatives; approved ACP preservation; before/after QBO, Payroll, and provider state | Unbound/self-asserted authority, digest/count mismatch, unsafe evidence path, duplicate silently accepted, approved ACP value weakened, protected identifier/value disclosure, draft/approval/import/provider mutation, OAuth, or Payroll execution |
-| Luminary owner economics | Repaired #288/#289-successor candidate/merge/deployed SHA; exact Company/Branch/period/input snapshot/generated-at; strict contract/digest; unknown/per-Job incomplete/conflicting/missing negatives; every supported and unsupported scenario baseline/delta/blocker; permission/cross-scope matrix; zero flush/commit/audit/event/command/provider evidence | Unknown quality becomes READY, incomplete/unbound Job produces a candidate, CLOSE_RATE/ADD_TRUCK request fails instead of returning its blocker, protected/cross-scope data appears, scenario is actual, digest unbound, operational instruction appears, or mutation/provider call occurs |
+| Luminary owner economics | Repaired #288/#289/#291-successor candidate/merge/deployed SHA; exact Company/Branch/period/input snapshot/generated-at; strict contract/digest; unknown/per-Job incomplete/conflicting/missing negatives; every supported and unsupported scenario baseline/delta/blocker; effective administrator permission diff; pre-existing-grant-preserving rollback; zero flush/commit/audit/event/command/provider evidence | Unknown quality becomes READY, incomplete/unbound Job produces a candidate, CLOSE_RATE/ADD_TRUCK request fails instead of returning its blocker, protected/cross-scope data appears, scenario is actual, digest unbound, operational instruction appears, pre-existing grant is deleted, authorization cache remains stale, or mutation/provider call occurs |
 | LIA owner intelligence | Completed successor/merge/deployed SHA derived from `b46560fa...`; exact Company/Branch/subject/question/auth-version/evidence-digest/as-of; explicit authority mapping; authoritative selected pay-period ID/state/window; effective role-grant diff; permission-before-query SQL trace; null-Branch adapter matrix; exact/ambiguous/missing-name and stale auth/evidence/time negatives; protected-data masking; zero flush/commit/audit/event/command/provider evidence | Stale `as_of` succeeds, source evidence is promoted, context domain/entity mismatch succeeds, future/draft/non-authoritative pay period is selected, null-Branch or briefing fallback widens scope, role grant is broader than approved, unauthorized query executes, protected value appears, unsupported answer is invented, or mutation/provider call occurs |
 | Accounting navigation | Candidate/merge/deployed SHA; permission-to-destination matrix; direct/deep-link and active/breadcrumb results; desktop/phone screenshots; keyboard/focus and no-permission evidence | Broadened access, missing prior destination, broken deep link/history, unsupported feature represented as available, inaccessible navigation, responsive regression, or implied financial mutation authority |
 | Payroll cutover review | Repaired #283-#286-successor candidate/merge/deployed SHA; protected migration immutability; sole head; permission catalog/role/actor separation matrix; every in-scope Employee/fact and bridge-coverage result; changed/exact replay; concurrency/rollback; encryption key readiness without secret content; immutable revision, business-event, and audit IDs; before/after Payroll/QBO/provider state | Protected migration rewritten, conflicting catalog row ignored, shared certify/approve actor, reader mutation controls/source IDs, accountant path unspecified, client-selected authority, incomplete Employee/fact/bridge coverage, changed replay, metadata/value leak, partial/racy state, schema drift/multiple heads, real approval, Payroll/ACH, or provider/QBO mutation |
@@ -1876,8 +1923,13 @@ authority and recomputing their compositions.
 
 ## Rollback
 
-- #257-#287, PR #215, Luminary, and Mobile have no general application-state rollback. Rebuild the previous
+- #257-#287, PR #215, Luminary application code, and Mobile have no general application-state rollback. Rebuild the previous
   approved application image and retain evidence.
+- Do not downgrade protected #291's `k1m3o5q7s9u1`: its downgrade cannot
+  distinguish pre-existing Company Administrator Luminary grants and does not
+  invalidate authorization versions. Use a database-owner-approved,
+  data-preserving compensating plan after inventorying grant provenance; retain
+  the revision and authorization evidence.
 - Disable the Preview fixture flag rather than deleting its tenant or audit data.
 - ECO application rollback should retain its additive migration under the
   post-reconciliation unique revision. Its downgrade drops the immutable event
