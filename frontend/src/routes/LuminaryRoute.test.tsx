@@ -51,6 +51,18 @@ vi.mock("../hooks/useLuminary", () => ({
     data: {
       readiness: "READY",
       confidence: { score_percent: 90 },
+      admitted_source_evidence: {
+        authority: "accepted_acp_native_owning_domain_facts",
+        admitted_reference_count: 7,
+        evidence_digest: "b".repeat(64),
+        families: {
+          REVENUE: {
+            state: "AVAILABLE",
+            reference_count: 2,
+            limitation: "Invoiced basis is not earned revenue or settlement.",
+          },
+        },
+      },
       scenario: null,
       recommendation_candidates: [
         {
@@ -86,6 +98,14 @@ describe("Luminary workspace recovery", () => {
     state.error = undefined;
     state.refetch.mockReset();
     state.analyze.mockReset();
+  });
+
+  it("shows admitted native evidence without presenting it as profitability", () => {
+    renderRoute();
+    expect(screen.getByText("Admitted source evidence")).toBeVisible();
+    expect(screen.getByText(/7 accepted native reference/)).toBeVisible();
+    expect(screen.getByText(/Invoiced basis is not earned revenue/)).toBeVisible();
+    expect(screen.getByText(/remain separate from calculated profitability/)).toBeVisible();
   });
 
   it("retries a temporary briefing failure without offering analysis", () => {
