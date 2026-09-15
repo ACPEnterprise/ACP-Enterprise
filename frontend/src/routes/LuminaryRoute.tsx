@@ -10,6 +10,7 @@ import type {
 import {
   useAnalyzeLuminary,
   useLuminaryBriefing,
+  useLuminaryOwnerEconomics,
   useLuminarySourceReadiness,
 } from "../hooks/useLuminary";
 import {
@@ -165,6 +166,7 @@ export function LuminaryRoute() {
   const [scope, setScope] = useState({ start: monthStart, end: today });
   const briefing = useLuminaryBriefing(scope.start, scope.end, canRead);
   const readiness = useLuminarySourceReadiness(scope.start, scope.end, canRead);
+  const ownerEconomics = useLuminaryOwnerEconomics(scope.start, scope.end, canRead);
   const analyze = useAnalyzeLuminary(scope.start, scope.end);
   const briefingMissing =
     isAxiosError(briefing.error) && briefing.error.response?.status === 404;
@@ -224,6 +226,40 @@ export function LuminaryRoute() {
         <Alert variant="warning">
           Source completeness could not be verified. No readiness was inferred.
         </Alert>
+      )}
+      {ownerEconomics.isPending ? (
+        <Spinner label="Preparing read-only owner economics" />
+      ) : ownerEconomics.data ? (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle>Owner economics decision support</CardTitle>
+              <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                {words(ownerEconomics.data.readiness)} · {ownerEconomics.data.confidence.score_percent}% confidence
+              </span>
+            </div>
+            <CardDescription>
+              Read-only candidates from admitted evidence. No price, Employee, Payroll, payment, or Accounting state can be changed here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {ownerEconomics.data.recommendation_candidates.length ? (
+              ownerEconomics.data.recommendation_candidates.map((candidate) => (
+                <article className="rounded-lg border border-stroke p-4" key={candidate.recommendation_id}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">{words(candidate.family)} · candidate only</p>
+                  <h3 className="mt-1 font-semibold">{candidate.owner_decision_required}</h3>
+                  <p className="mt-2 text-sm text-content-muted">{candidate.economic_mechanism}</p>
+                  <p className="mt-2 text-xs text-content-muted">Confidence {candidate.confidence}% · {candidate.status}</p>
+                </article>
+              ))
+            ) : (
+              <Alert variant="warning">No recommendation is supported for this scope. Missing or conflicting evidence remains missing.</Alert>
+            )}
+            <p className="break-all text-xs text-content-muted">Read-only packet {ownerEconomics.data.packet_digest}</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Alert variant="warning">Read-only owner Economics is unavailable. No recommendation was generated.</Alert>
       )}
       {briefing.isPending ? (
         <Spinner label="Loading Luminary briefing" />

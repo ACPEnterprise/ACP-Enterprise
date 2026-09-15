@@ -73,6 +73,28 @@ export interface LuminarySourceReadiness {
   sources: Array<{ domain: string; state: string; use: string }>;
   limitations: string[];
 }
+export interface LuminaryOwnerEconomics {
+  contract_version: string;
+  company_id: string;
+  branch_id: string | null;
+  period: { start: string; end: string };
+  readiness: string;
+  confidence: { score_percent: number; method: string };
+  recommendation_candidates: Array<{
+    recommendation_id: string;
+    family: string;
+    subject: { kind: string; id: string; label: string };
+    economic_mechanism: string;
+    confidence: number;
+    uncertainty: string[];
+    alternatives: string[];
+    owner_decision_required: string;
+    status: string;
+  }>;
+  market_evidence: { state: string; reason: string };
+  mutation_authority: "none";
+  packet_digest: string;
+}
 export async function getLuminaryBriefing(start: string, end: string) {
   return (
     await apiClient.get<LuminaryBriefing>("/api/v1/luminary/briefing", {
@@ -95,5 +117,12 @@ export async function getLuminarySourceReadiness(start: string, end: string) {
       "/api/v1/luminary/source-readiness",
       { params: { start, end } },
     )
+  ).data;
+}
+export async function getLuminaryOwnerEconomics(start: string, end: string) {
+  return (
+    await apiClient.get<LuminaryOwnerEconomics>("/api/v1/luminary/owner-economics", {
+      params: { start, end },
+    })
   ).data;
 }

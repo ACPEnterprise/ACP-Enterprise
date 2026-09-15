@@ -46,6 +46,24 @@ vi.mock("../hooks/useLuminary", () => ({
       },
     },
   }),
+  useLuminaryOwnerEconomics: () => ({
+    isPending: false,
+    data: {
+      readiness: "READY",
+      confidence: { score_percent: 90 },
+      recommendation_candidates: [
+        {
+          recommendation_id: "candidate-1",
+          family: "PRICING",
+          owner_decision_required: "Review measured Job contribution",
+          economic_mechanism: "Measured contribution is below zero; no cause is presumed.",
+          confidence: 90,
+          status: "CANDIDATE_READ_ONLY",
+        },
+      ],
+      packet_digest: "a".repeat(64),
+    },
+  }),
   useAnalyzeLuminary: () => ({
     mutate: state.analyze,
     isPending: false,
@@ -104,5 +122,8 @@ describe("Luminary workspace recovery", () => {
     expect(
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
     ).toBeVisible();
+    expect(screen.getByText("Owner economics decision support")).toBeVisible();
+    expect(screen.getByText("Review measured Job contribution")).toBeVisible();
+    expect(screen.getByText(/No price, Employee, Payroll, payment, or Accounting state can be changed/i)).toBeVisible();
   });
 });
