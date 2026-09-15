@@ -92,6 +92,14 @@ export interface LuminaryOwnerEconomics {
     status: string;
   }>;
   market_evidence: { state: string; reason: string };
+  scenario: null | {
+    state: string;
+    changed_assumption: { kind: string; change_basis_points: number | null };
+    missing_prerequisites: string[];
+    deltas?: Record<string, number>;
+    hypothetical: true;
+    operational_action_occurred: false;
+  };
   mutation_authority: "none";
   packet_digest: string;
 }
@@ -119,10 +127,20 @@ export async function getLuminarySourceReadiness(start: string, end: string) {
     )
   ).data;
 }
-export async function getLuminaryOwnerEconomics(start: string, end: string) {
+export async function getLuminaryOwnerEconomics(
+  start: string,
+  end: string,
+  scenarioKind?: string,
+  changeBasisPoints?: number,
+) {
   return (
     await apiClient.get<LuminaryOwnerEconomics>("/api/v1/luminary/owner-economics", {
-      params: { start, end },
+      params: {
+        start,
+        end,
+        scenario_kind: scenarioKind,
+        change_basis_points: scenarioKind ? changeBasisPoints : undefined,
+      },
     })
   ).data;
 }

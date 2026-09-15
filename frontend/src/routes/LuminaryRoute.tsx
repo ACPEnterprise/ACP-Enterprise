@@ -164,9 +164,18 @@ export function LuminaryRoute() {
   const [start, setStart] = useState(monthStart);
   const [end, setEnd] = useState(today);
   const [scope, setScope] = useState({ start: monthStart, end: today });
+  const [scenarioKind, setScenarioKind] = useState("PRICE_PERCENT");
+  const [scenarioChange, setScenarioChange] = useState("0");
+  const [scenario, setScenario] = useState<{ kind: string; change: number }>();
   const briefing = useLuminaryBriefing(scope.start, scope.end, canRead);
   const readiness = useLuminarySourceReadiness(scope.start, scope.end, canRead);
-  const ownerEconomics = useLuminaryOwnerEconomics(scope.start, scope.end, canRead);
+  const ownerEconomics = useLuminaryOwnerEconomics(
+    scope.start,
+    scope.end,
+    scenario?.kind,
+    scenario?.change,
+    canRead,
+  );
   const analyze = useAnalyzeLuminary(scope.start, scope.end);
   const briefingMissing =
     isAxiosError(briefing.error) && briefing.error.response?.status === 404;
@@ -243,6 +252,16 @@ export function LuminaryRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <section className="rounded-lg border border-stroke p-4" aria-labelledby="scenario-title">
+              <h3 className="font-semibold" id="scenario-title">Read-only scenario</h3>
+              <p className="mt-1 text-sm text-content-muted">Hypothetical decision support only. Evaluating a scenario cannot change pricing or operations.</p>
+              <form className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); setScenario({ kind: scenarioKind, change: Number(scenarioChange) }); }}>
+                <label>Assumption<select className="block w-full" value={scenarioKind} onChange={(event) => setScenarioKind(event.target.value)}><option value="PRICE_PERCENT">Price percent</option><option value="AVERAGE_TICKET_PERCENT">Average ticket percent</option><option value="LABOR_EFFICIENCY_PERCENT">Labor efficiency percent</option><option value="MATERIAL_COST_PERCENT">Material cost percent</option><option value="CLOSE_RATE_PERCENT">Close rate percent</option><option value="ADD_TRUCK">Add truck</option></select></label>
+                <label>Change (basis points)<Input max={10000} min={-10000} type="number" value={scenarioChange} onChange={(event) => setScenarioChange(event.target.value)} /></label>
+                <Button type="submit">Evaluate scenario</Button>
+              </form>
+              {ownerEconomics.data.scenario ? <div className="mt-3 text-sm"><p>Scenario state: <strong>{words(ownerEconomics.data.scenario.state)}</strong></p>{ownerEconomics.data.scenario.missing_prerequisites.length ? <p className="text-content-muted">Missing evidence: {ownerEconomics.data.scenario.missing_prerequisites.map(words).join(" · ")}</p> : <p className="text-content-muted">Deterministic deltas: {Object.entries(ownerEconomics.data.scenario.deltas ?? {}).map(([key, value]) => `${words(key)} ${value}`).join(" · ")}</p>}<p className="text-content-muted">No operational action occurred.</p></div> : <p className="mt-3 text-sm text-content-muted">No hypothetical scenario selected.</p>}
+            </section>
             {ownerEconomics.data.recommendation_candidates.length ? (
               ownerEconomics.data.recommendation_candidates.map((candidate) => (
                 <article className="rounded-lg border border-stroke p-4" key={candidate.recommendation_id}>
