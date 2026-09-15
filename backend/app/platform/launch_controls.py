@@ -46,6 +46,7 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
         DispatchPermission.READ,
         WorkforcePermission.CAPABILITY_MANAGE,
         WorkforcePermission.AVAILABILITY_MANAGE,
+        WorkforcePermission.READ,
         EconomicsPolicyPermission.MEASUREMENT_READ,
         InventoryPermission.READ,
         PurchasingPermission.READ,

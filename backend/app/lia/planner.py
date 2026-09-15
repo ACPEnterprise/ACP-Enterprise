@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -25,6 +26,7 @@ class QuestionPlan:
     intent: QuestionIntent
     domains: frozenset[str]
     required_sources: tuple[str, ...]
+    subject_query: str | None = None
 
 
 DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -112,11 +114,27 @@ OWNER_BRIEFING_DOMAINS = frozenset(
 )
 
 
-def plan_question(question: str, context_domain: str | None = None) -> QuestionPlan:
-    if context_domain:
-        domains = frozenset({context_domain})
+def plan_question(
+    question: str,
+    context_domain: str | None = None,
+    topic_domains: tuple[str, ...] = (),
+) -> QuestionPlan:
+    normalized = question.casefold()
+    subject_query = _employee_subject(question) if context_domain is None else None
+    if subject_query is not None:
+        domains = frozenset({"workforce"})
+    elif context_domain:
+        question_domains = (
+            frozenset(
+                domain
+                for domain, terms in DOMAIN_TERMS
+                if any(term in normalized for term in terms)
+            )
+            if topic_domains
+            else frozenset()
+        )
+        domains = frozenset({context_domain, *topic_domains, *question_domains})
     else:
-        normalized = question.casefold()
         if any(phrase in normalized for phrase in BRIEFING_PHRASES):
             domains = OWNER_BRIEFING_DOMAINS
         else:
@@ -130,7 +148,17 @@ def plan_question(question: str, context_domain: str | None = None) -> QuestionP
         intent=intent,
         domains=domains,
         required_sources=tuple(sorted(domains)),
+        subject_query=subject_query,
     )
+
+
+def _employee_subject(question: str) -> str | None:
+    match = re.fullmatch(
+        r"\s*show\s+me\s+([\w'’-]+(?:\s+[\w'’-]+){1,3})[?.!]?\s*",
+        question,
+        re.IGNORECASE,
+    )
+    return " ".join(match.group(1).split()) if match else None
 
 
 def _intent(domains: frozenset[str]) -> QuestionIntent:

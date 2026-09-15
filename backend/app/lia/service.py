@@ -9,10 +9,12 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.permissions.authorization import AuthorizationContext
+from app.workforce.service import workforce_operations_service
 
 from .contracts import (
     AnswerAuthority,
     EvidenceReference,
+    LiaContext,
     LiaRequest,
     LiaResponse,
     NavigationSuggestion,
@@ -133,7 +135,9 @@ class LiaService:
             )
 
         plan = plan_question(
-            question, request.context.domain if request.context else None
+            question,
+            request.context.domain if request.context else None,
+            request.context.topic_domains if request.context else (),
         )
         requested_domains = set(plan.domains)
         if plan.intent is QuestionIntent.UNSUPPORTED:
@@ -164,16 +168,54 @@ class LiaService:
                 answer="I can’t retrieve that domain with your current authorization.",
                 limitations=("ACP does not reveal whether protected records exist.",),
             )
+        effective_request = request
+        entity_id = request.context.entity_id if request.context else None
+        if plan.subject_query is not None:
+            matches = await workforce_operations_service.resolve_display_name(
+                session,
+                context=context,
+                display_name=plan.subject_query,
+            )
+            if len(matches) != 1:
+                return self._response(
+                    context=context,
+                    request=request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    classification=(
+                        TruthClassification.INCOMPLETE
+                        if matches
+                        else TruthClassification.UNAVAILABLE
+                    ),
+                    answer=(
+                        "More than one authorized Employee has that exact name. Open Team and select the intended Employee."
+                        if matches
+                        else "No authorized Employee with that exact name is available in your current Company and Branch scope."
+                    ),
+                    limitations=(
+                        "ACP does not reveal Employees outside the authorized scope.",
+                    ),
+                )
+            entity_id = matches[0]
+            effective_request = request.model_copy(
+                update={
+                    "context": LiaContext(
+                        domain="workforce",
+                        entity_id=entity_id,
+                        authorization_version=context.authorization_version,
+                    )
+                }
+            )
         evidence = await self.retrieval.retrieve(
             session,
             context=context,
             domains=selected,
-            entity_id=request.context.entity_id if request.context else None,
+            entity_id=entity_id,
         )
         if not evidence:
             return self._response(
                 context=context,
-                request=request,
+                request=effective_request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAVAILABLE,
@@ -188,11 +230,15 @@ class LiaService:
         if (
             request.context is not None
             and request.context.evidence_digest is not None
+            and (
+                not request.context.topic_domains
+                or selected == set(request.context.topic_domains)
+            )
             and request.context.evidence_digest != evidence_digest
         ):
             return self._response(
                 context=context,
-                request=request,
+                request=effective_request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.STALE,
@@ -205,7 +251,7 @@ class LiaService:
         ):
             response = self._response(
                 context=context,
-                request=request,
+                request=effective_request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.INCOMPLETE,
@@ -251,7 +297,7 @@ class LiaService:
         )
         response = self._response(
             context=context,
-            request=request,
+            request=effective_request,
             request_id=request_id,
             conversation_id=conversation_id,
             classification=TruthClassification.KNOWN,
