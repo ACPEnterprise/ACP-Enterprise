@@ -7,7 +7,7 @@ Snapshot: 2026-09-14 22:24 America/New_York
 - Protected authority: `05c0806b7a9120c72555655acbc00c5963fd2ad4`
 - Protected tip: PR #289, bounded Luminary scenario presentation
 - Deployed Preview: `60035693a51ec66328625dfcc78e7cd2dfead824`
-- Preview health: healthy on old #279 from 21:31 through 22:24 after HTTP 502 from 21:24 through 21:30
+- Preview health: healthy on old #279 at 10:35:51 on 2026-09-15 after an SSL timeout at 10:33:31 and HTTP 502 at 10:34:43
 - Deployment gap: protected #280-#289 are not yet observed in Preview; deployed remains healthy #279
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
@@ -78,6 +78,11 @@ Snapshot: 2026-09-14 22:24 America/New_York
   #285-#289 merged during those observations and were not deployed. Preserve
   the outage window, stop acceptance, and require consecutive healthy exact-`05c0806b...` responses
   with both dependencies connected before any cutover review acceptance.
+  On 2026-09-15, the same old #279 runtime hit an SSL connection timeout at
+  10:33:31 and HTTP 502 at 10:34:43, then recovered healthy with PostgreSQL and
+  Redis connected at 10:35:51 without a protected, candidate, or PR change.
+  Preserve this additional transient window. One recovery response is not the
+  required consecutive exact-protected-SHA acceptance evidence.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. PR #264's body reports 698 migration/job/scheduling regressions,
   16 focused tests, PostgreSQL zero-to-head/current=head, and zero drift, but no
@@ -503,7 +508,7 @@ sole protected schema head.
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
 | Acceptance tooling | Reconcile `1fb0481a...` to `05c0806b...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Current deployed acceptance | Wait for consecutive exact-`05c0806b...` healthy responses; preserve the #283/#284 rollout HTTP 502 window from 21:24 through 21:30, old-#279 recovery, unobserved #285-#289 merges, and all earlier evidence; attach or rerun missing #261-#289 qualification; keep protected Migration commands/verifier, #273-#276 operator action, and #277-#289 office/Payroll-QBO/cutover/intelligence operations disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
+| Current deployed acceptance | Wait for consecutive exact-`05c0806b...` healthy responses; preserve the #283/#284 rollout HTTP 502 window from 21:24 through 21:30, the 2026-09-15 10:33-10:35 timeout/502/recovery window, old-#279 recovery, unobserved #285-#289 merges, and all earlier evidence; attach or rerun missing #261-#289 qualification; keep protected Migration commands/verifier, #273-#276 operator action, and #277-#289 office/Payroll-QBO/cutover/intelligence operations disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
 | Wave C preparation | Treat #264-#272 as integrated, but #265/#266, the executor through #270, and verifier through #272 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently; repair #271/#272 only as post-execution verification tooling | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, nondeterministic or overbroad replay evidence, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Assign ECO a unique revision downstream of protected `j0l2n4p6r8t0`, requalify, then integrate/deploy independently | Sibling/duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Protected Luminary read-only checkpoint | Keep #288/#289 disabled. Repair fail-open quality and per-Job evidence gates, strict response model, unsupported scenario UI, and zero-write evidence, then deploy independently; it has no ECO schema dependency | Unknown quality becomes READY, incomplete/unbound Job yields a recommendation, unsupported scenario errors instead of reporting its blocker, cross-scope data appears, digest/evidence is unstable or unbound, mutation/provider call occurs, or response contract drifts |
