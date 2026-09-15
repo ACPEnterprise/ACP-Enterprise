@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   QboAccountingEvidenceWorkspace,
   QboAmount,
@@ -30,6 +30,169 @@ const money = (value: QboAmount) => {
 const when = (value: string | null) =>
   value === null ? "Unavailable" : new Date(value).toLocaleString();
 
+type ActivityReport = "invoices" | "bills" | "payments";
+
+const inPeriod = (
+  transactionDate: string | null,
+  startDate: string,
+  endDate: string,
+) =>
+  transactionDate !== null &&
+  transactionDate >= startDate &&
+  transactionDate <= endDate;
+
+function SourceActivityReport({
+  value,
+}: {
+  value: QboAccountingEvidenceWorkspace;
+}) {
+  const [report, setReport] = useState<ActivityReport>("invoices");
+  const [startDate, setStartDate] = useState("2026-05-01");
+  const [endDate, setEndDate] = useState("2026-05-31");
+  const [request, setRequest] = useState({
+    report,
+    startDate,
+    endDate,
+  });
+  const rows = useMemo(() => {
+    if (request.report === "invoices")
+      return value.invoices.filter((row) =>
+        inPeriod(row.transaction_date, request.startDate, request.endDate),
+      );
+    if (request.report === "bills")
+      return value.bills.filter((row) =>
+        inPeriod(row.transaction_date, request.startDate, request.endDate),
+      );
+    return value.payments.filter((row) =>
+      inPeriod(row.transaction_date, request.startDate, request.endDate),
+    );
+  }, [request, value]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Historical source activity report</CardTitle>
+        <CardDescription>
+          Actual transaction values reported by QuickBooks. This is source
+          evidence, not an ACP-native financial statement.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <form
+          className="grid gap-3 md:grid-cols-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setRequest({ report, startDate, endDate });
+          }}
+        >
+          <Select
+            aria-label="QuickBooks source report"
+            value={report}
+            onChange={(event) =>
+              setReport(event.target.value as ActivityReport)
+            }
+          >
+            <option value="invoices">Invoice activity</option>
+            <option value="bills">Bill activity</option>
+            <option value="payments">Payment activity</option>
+          </Select>
+          <input
+            aria-label="QuickBooks report start date"
+            className="h-10 rounded-md border border-stroke bg-surface px-3 text-sm"
+            required
+            type="date"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
+          <input
+            aria-label="QuickBooks report end date"
+            className="h-10 rounded-md border border-stroke bg-surface px-3 text-sm"
+            min={startDate}
+            required
+            type="date"
+            value={endDate}
+            onChange={(event) => setEndDate(event.target.value)}
+          />
+          <Button type="submit">Generate</Button>
+        </form>
+        <dl className="grid gap-3 text-sm sm:grid-cols-4">
+          <div>
+            <dt className="text-content-muted">Authority</dt>
+            <dd className="font-semibold">QUICKBOOKS SOURCE EVIDENCE</dd>
+          </div>
+          <div>
+            <dt className="text-content-muted">Period</dt>
+            <dd>
+              {request.startDate} through {request.endDate}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-content-muted">Basis</dt>
+            <dd className="capitalize">{value.accounting_basis}</dd>
+          </div>
+          <div>
+            <dt className="text-content-muted">Source as of</dt>
+            <dd>{when(value.as_of)}</dd>
+          </div>
+        </dl>
+        {rows.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th>Date</th>
+                  <th>Document / source ID</th>
+                  <th>Party</th>
+                  <th>Status</th>
+                  <th>Source amount</th>
+                  <th>Open amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const isPayment = "amount" in row;
+                  return (
+                    <tr className="border-b border-stroke" key={row.source_id}>
+                      <td className="py-2">{row.transaction_date}</td>
+                      <td>
+                        {"document_number" in row
+                          ? (row.document_number ?? row.source_id)
+                          : row.source_id}
+                      </td>
+                      <td>
+                        {"customer_label" in row
+                          ? (row.customer_label ?? "Unavailable")
+                          : (row.vendor_label ?? "Unavailable")}
+                      </td>
+                      <td>{row.source_status ?? "Unavailable"}</td>
+                      <td>{money(isPayment ? row.amount : row.total)}</td>
+                      <td>
+                        {isPayment ? "Not applicable" : money(row.open_balance)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Alert
+            variant="warning"
+            title="No source values available for this period"
+          >
+            QuickBooks supplied no {request.report} dated in this range. No zero
+            value was inferred.
+          </Alert>
+        )}
+        <p className="text-xs text-content-muted">
+          Snapshot acquired {when(value.acquired_at)}. Values retain QuickBooks
+          source identities and are never posted to ACP by this report.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
   return (
     <div className="space-y-6">
@@ -53,6 +216,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
           General Ledger truth.
         </p>
       </Alert>
+      <SourceActivityReport value={value} />
       <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <dt className="text-content-muted">Source company</dt>
@@ -378,7 +542,7 @@ export function QboSourceEvidence({ enabled }: { enabled: boolean }) {
     <section aria-label="QuickBooks source evidence" className="space-y-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
-          <h2 className="text-xl font-semibold">QuickBooks source evidence</h2>
+          <h2 className="text-xl font-semibold">QUICKBOOKS SOURCE EVIDENCE</h2>
           <p className="text-sm text-content-muted">
             Verified real-company, read-only snapshot evidence. Kept separate
             from ACP native Accounting and HCP operational evidence.

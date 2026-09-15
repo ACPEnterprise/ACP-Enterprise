@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useQboAccountingEvidence } from "../../hooks/useQboAccountingEvidence";
 import { QboSourceEvidence } from "./QboSourceEvidence";
@@ -37,7 +37,36 @@ const value = {
       balance: unavailable,
     },
   ],
-  invoices: [],
+  invoices: [
+    {
+      source_id: "invoice-may-1",
+      document_number: "1050",
+      customer_label: "Source customer",
+      transaction_date: "2026-05-14",
+      due_date: "2026-06-14",
+      source_status: "Open",
+      total: { amount: "425.00", currency: "USD", state: "available" as const },
+      open_balance: {
+        amount: "125.00",
+        currency: "USD",
+        state: "available" as const,
+      },
+    },
+    {
+      source_id: "invoice-june-1",
+      document_number: "1051",
+      customer_label: "Later customer",
+      transaction_date: "2026-06-01",
+      due_date: "2026-07-01",
+      source_status: "Open",
+      total: { amount: "999.00", currency: "USD", state: "available" as const },
+      open_balance: {
+        amount: "999.00",
+        currency: "USD",
+        state: "available" as const,
+      },
+    },
+  ],
   bills: [],
   ar: { total_open: unavailable, current: unavailable, overdue: unavailable },
   payments: [],
@@ -102,5 +131,33 @@ describe("QboSourceEvidence", () => {
       target: { value: "accrual" },
     });
     expect(useQboAccountingEvidence).toHaveBeenLastCalledWith("accrual", true);
+  });
+
+  it("generates a bounded historical source report without inferred zeros", () => {
+    vi.mocked(useQboAccountingEvidence).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: value,
+    } as unknown as ReturnType<typeof useQboAccountingEvidence>);
+    render(<QboSourceEvidence enabled />);
+    expect(
+      screen.getByText("QUICKBOOKS SOURCE EVIDENCE", { selector: "dd" }),
+    ).toBeVisible();
+    expect(screen.getByText("2026-05-01 through 2026-05-31")).toBeVisible();
+    const activity = screen
+      .getByRole("heading", { name: "Historical source activity report" })
+      .closest("article");
+    expect(activity).not.toBeNull();
+    expect(within(activity!).getByText("$425.00")).toBeVisible();
+    expect(within(activity!).queryByText("$999.00")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("QuickBooks report start date"), {
+      target: { value: "2026-04-01" },
+    });
+    fireEvent.change(screen.getByLabelText("QuickBooks report end date"), {
+      target: { value: "2026-04-30" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    expect(screen.getByText(/No zero value was inferred/i)).toBeVisible();
   });
 });
