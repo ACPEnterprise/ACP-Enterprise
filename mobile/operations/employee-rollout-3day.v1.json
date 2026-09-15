@@ -1,0 +1,34 @@
+{
+  "contractVersion": "1",
+  "product": "ACP Employee",
+  "bundleIdentifier": "com.acpenterprise.employee",
+  "teamId": "74R6X48GHA",
+  "version": "0.2.0",
+  "build": "2",
+  "buildReuseAllowed": false,
+  "distribution": "internal-testflight",
+  "environment": "preview",
+  "apiBaseUrl": "https://preview.allcountyhomeservices.com",
+  "productionActivated": false,
+  "upload": {
+    "acceptedAt": "2026-09-14T21:59:11-04:00",
+    "processingState": "PROCESSING_NOT_YET_UI_VERIFIED",
+    "publicSubmission": false
+  },
+  "branding": {
+    "iconSha256": "6d8c94f57f17277cde5012e837f7444e4066601323c4f66922a451ae5bf8e19d",
+    "opaque": true,
+    "pixels": "1024x1024"
+  },
+  "associatedDomains": ["applinks:employee.acpenterprise.com"],
+  "aasaAppId": "74R6X48GHA.com.acpenterprise.employee",
+  "remainingOwnerGates": [
+    "verify Apple processing completed",
+    "create or select the internal testing group",
+    "add only owner-approved testers using their authoritative Apple IDs",
+    "approve and publish employee.acpenterprise.com DNS/HTTPS and AASA",
+    "approve live support and privacy-policy URLs and legal wording",
+    "perform Lianne physical acceptance",
+    "identify and authorize a second non-development employee"
+  ]
+}

@@ -16,5 +16,6 @@
     "exactGeneratedBytes": true
   },
   "dnsMutationAuthorized": false,
-  "teamIdKnown": false
+  "teamIdKnown": true,
+  "teamId": "74R6X48GHA"
 }

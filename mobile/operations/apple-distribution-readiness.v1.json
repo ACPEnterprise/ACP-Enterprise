@@ -2,7 +2,7 @@
   "contractVersion": "1",
   "product": "ACP Employee",
   "bundleIdentifier": "com.acpenterprise.employee",
-  "currentLocalCandidate": { "version": "0.2.0", "build": "2", "uploaded": false },
+  "currentLocalCandidate": { "version": "0.2.0", "build": "2", "uploaded": true },
   "versionPolicy": {
     "marketingVersion": "Owner-approved semantic product release train",
     "buildNumber": "Strictly increasing positive integer for every uploaded build within a train",
@@ -30,6 +30,6 @@
   "minimumIos": "16.4",
   "supportedDevices": ["iPhone"],
   "orientation": "portrait",
-  "appleMutationAuthorized": false,
-  "uploadAuthorized": false
+  "appleMutationAuthorized": true,
+  "uploadAuthorized": true
 }

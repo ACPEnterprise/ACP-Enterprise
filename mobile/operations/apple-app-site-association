@@ -1,0 +1,21 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "74R6X48GHA.com.acpenterprise.employee"
+        ],
+        "components": [
+          {
+            "/": "/activate",
+            "comment": "ACP employee activation"
+          },
+          {
+            "/": "/activate/*",
+            "comment": "ACP employee activation variants"
+          }
+        ]
+      }
+    ]
+  }
+}

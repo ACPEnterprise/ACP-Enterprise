@@ -5,12 +5,12 @@ describe("Apple distribution readiness contract", () => {
     expect(contract.bundleIdentifier).toBe("com.acpenterprise.employee");
     expect(contract.previewDistribution.apiBaseUrl).toBe("https://preview.allcountyhomeservices.com");
     expect(contract.productionDistribution.authorized).toBe(false);
-    expect(contract.appleMutationAuthorized).toBe(false);
-    expect(contract.uploadAuthorized).toBe(false);
+    expect(contract.appleMutationAuthorized).toBe(true);
+    expect(contract.uploadAuthorized).toBe(true);
   });
 
   it("prohibits uploaded build-number reuse", () => {
-    expect(contract.currentLocalCandidate.uploaded).toBe(false);
+    expect(contract.currentLocalCandidate.uploaded).toBe(true);
     expect(contract.versionPolicy.reuseUploadedBuild).toBe(false);
     expect(contract.versionPolicy.sourceOfTruthAfterFirstUpload).toContain("App Store Connect");
   });
