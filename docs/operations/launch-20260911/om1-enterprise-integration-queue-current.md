@@ -1,13 +1,13 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 21:51 America/New_York
+Snapshot: 2026-09-14 21:55 America/New_York
 
 ## Authority and deployed state
 
 - Protected authority: `e3353f3c8120c8638bf1c3a8836ae4073436746d`
 - Protected tip: PR #286, bridge Payroll cutover controls
 - Deployed Preview: `60035693a51ec66328625dfcc78e7cd2dfead824`
-- Preview health: healthy on old #279 from 21:31 through 21:51 after HTTP 502 from 21:24 through 21:30
+- Preview health: healthy on old #279 from 21:31 through 21:55 after HTTP 502 from 21:24 through 21:30
 - Deployment gap: protected #280-#286 are not yet observed in Preview; deployed remains healthy #279
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
@@ -74,7 +74,7 @@ Snapshot: 2026-09-14 21:51 America/New_York
   #283 merges; none of #280-#283 was observed as deployed. It then returned HTTP
   502 every minute from 21:24 through 21:30; #284 merged during that outage and
   was not observed deployed. Preview recovered healthy on old
-  `60035693...` with both dependencies connected from 21:31 through 21:51;
+  `60035693...` with both dependencies connected from 21:31 through 21:55;
   #285 and #286 merged during those observations and were not deployed. Preserve
   the outage window, stop acceptance, and require consecutive healthy exact-`e3353f3c...` responses
   with both dependencies connected before any cutover review acceptance.
