@@ -38,13 +38,17 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
     totals = _mapping(workspace.get("totals"))
     readiness = _mapping(workspace.get("readiness"))
     source_count = _count(workspace.get("source_result_count"))
+    native = _mapping(workspace.get("native_evidence"))
+    native_families = _mapping(native.get("families"))
 
     sources = (
         _entry(
             "revenue",
-            _component_state(base, totals, "revenue"),
-            source_count,
-            "Accepted earned-revenue evidence in admitted Job profitability results.",
+            _native_or_result_state(
+                base, totals, "revenue", native_families, "REVENUE", partial=True
+            ),
+            max(source_count, _native_count(native_families, "REVENUE")),
+            "Admitted profitability uses earned revenue; accepted native Invoice evidence is shown as partial invoiced-basis evidence and is never promoted to earned revenue.",
         ),
         _entry(
             "settlement",
@@ -54,9 +58,16 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "direct_labor",
-            _component_state(base, totals, "labor"),
-            source_count,
-            "Direct labor is accepted only through admitted Economics measurement lineage.",
+            _native_or_result_state(
+                base,
+                totals,
+                "labor",
+                native_families,
+                "DIRECT_LABOR",
+                partial=True,
+            ),
+            max(source_count, _native_count(native_families, "DIRECT_LABOR")),
+            "Admitted profitability requires labor cost; accepted native Job-work duration is partial evidence and is not converted to wage cost.",
         ),
         _entry(
             "employer_burden",
@@ -68,9 +79,11 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "materials",
-            _component_state(base, totals, "materials"),
-            source_count,
-            "Direct materials are accepted only through admitted Economics measurement lineage.",
+            _native_or_result_state(
+                base, totals, "materials", native_families, "DIRECT_MATERIAL"
+            ),
+            max(source_count, _native_count(native_families, "DIRECT_MATERIAL")),
+            "Direct materials use admitted profitability results or accepted Job-demand issues with authoritative Inventory valuation; unvalued quantity remains partial.",
         ),
         _entry(
             "other_direct_cost",
@@ -86,8 +99,8 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "job_identity_lifecycle",
-            _identity_state(base, workspace),
-            len(jobs),
+            _native_identity_state(base, workspace, native_families, "JOB_IDENTITY"),
+            max(len(jobs), _native_count(native_families, "JOB_IDENTITY")),
             "Job identity and lifecycle must reconcile to authoritative Company and Branch records.",
         ),
         _entry(
@@ -98,14 +111,24 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "customer_attribution",
-            _rollup_state(base, workspace, "customers"),
-            len(_rows(workspace.get("customers"))),
+            _native_identity_state(
+                base, workspace, native_families, "CUSTOMER_ATTRIBUTION"
+            ),
+            max(
+                len(_rows(workspace.get("customers"))),
+                _native_count(native_families, "CUSTOMER_ATTRIBUTION"),
+            ),
             "Customer economics uses authoritative Customer-to-Job identity; it does not infer lifetime value.",
         ),
         _entry(
             "branch_attribution",
-            _rollup_state(base, workspace, "branches"),
-            len(_rows(workspace.get("branches"))),
+            _native_identity_state(
+                base, workspace, native_families, "BRANCH_ATTRIBUTION"
+            ),
+            max(
+                len(_rows(workspace.get("branches"))),
+                _native_count(native_families, "BRANCH_ATTRIBUTION"),
+            ),
             "Branch economics requires authoritative Job Branch identity and compatible periods, policy, and currency.",
         ),
         _entry(
@@ -150,8 +173,8 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "accounting_evidence",
-            _accounting_state(base, readiness),
-            source_count,
+            _native_accounting_state(base, readiness, native_families),
+            max(source_count, _native_count(native_families, "ACCOUNTING")),
             "Accounting remains a separate authority; only admitted reconciliation lineage may support Economics.",
         ),
     )
@@ -243,6 +266,78 @@ def _component_state(
     base: SourceCompletenessState, totals: dict[str, Any], key: str
 ) -> SourceCompletenessState:
     return base if totals.get(key) is not None else SourceCompletenessState.UNAVAILABLE
+
+
+def _native_count(families: dict[str, Any], family: str) -> int:
+    return _count(_mapping(families.get(family)).get("reference_count"))
+
+
+def _native_state(
+    families: dict[str, Any], family: str
+) -> SourceCompletenessState | None:
+    value = str(_mapping(families.get(family)).get("state") or "")
+    try:
+        return SourceCompletenessState(value)
+    except ValueError:
+        return None
+
+
+def _native_or_result_state(
+    base: SourceCompletenessState,
+    totals: dict[str, Any],
+    key: str,
+    families: dict[str, Any],
+    family: str,
+    *,
+    partial: bool = False,
+) -> SourceCompletenessState:
+    result_state = _component_state(base, totals, key)
+    if result_state is not SourceCompletenessState.UNAVAILABLE:
+        return result_state
+    native_state = _native_state(families, family)
+    if native_state is SourceCompletenessState.CONFLICTING:
+        return native_state
+    if native_state in {
+        SourceCompletenessState.AVAILABLE,
+        SourceCompletenessState.PARTIAL,
+    }:
+        return SourceCompletenessState.PARTIAL if partial else native_state
+    return SourceCompletenessState.UNAVAILABLE
+
+
+def _native_identity_state(
+    base: SourceCompletenessState,
+    workspace: dict[str, object],
+    families: dict[str, Any],
+    family: str,
+) -> SourceCompletenessState:
+    result_state = (
+        _identity_state(base, workspace)
+        if family == "JOB_IDENTITY"
+        else _rollup_state(
+            base,
+            workspace,
+            "customers" if family == "CUSTOMER_ATTRIBUTION" else "branches",
+        )
+    )
+    if result_state is not SourceCompletenessState.UNAVAILABLE:
+        return result_state
+    native_state = _native_state(families, family)
+    return native_state or SourceCompletenessState.UNAVAILABLE
+
+
+def _native_accounting_state(
+    base: SourceCompletenessState,
+    readiness: dict[str, Any],
+    families: dict[str, Any],
+) -> SourceCompletenessState:
+    result_state = _accounting_state(base, readiness)
+    native_state = _native_state(families, "ACCOUNTING")
+    if native_state is SourceCompletenessState.CONFLICTING:
+        return native_state
+    if result_state is not SourceCompletenessState.UNAVAILABLE:
+        return result_state
+    return native_state or SourceCompletenessState.UNAVAILABLE
 
 
 def _other_cost_state(

@@ -22,6 +22,7 @@ from .models import (
     EconomicsProfitabilityResultRecord,
     EconomicsProfitabilityResultSupersessionRecord,
 )
+from .native_evidence import NativeEconomicsEvidenceService
 from .owner_acceptance import owner_question_acceptance_matrix
 
 
@@ -48,6 +49,12 @@ class EconomicsWorkspaceService:
         if period_end < period_start:
             raise ValueError("period end cannot precede period start")
         current = await self._records(session, context, period_start, period_end)
+        native_evidence = await NativeEconomicsEvidenceService().project(
+            session,
+            context=context,
+            period_start=period_start,
+            period_end=period_end,
+        )
         duration = period_end - period_start
         prior_end = period_start - timedelta(days=1)
         prior_start = prior_end - duration
@@ -110,6 +117,7 @@ class EconomicsWorkspaceService:
                 "end": prior_end.isoformat(),
             },
             **current_projection,
+            "native_evidence": native_evidence,
             "comparison": comparison,
             "readiness": {
                 "evidence": current_projection["quality_state"],

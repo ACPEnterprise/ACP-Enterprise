@@ -80,6 +80,12 @@ export interface LuminaryOwnerEconomics {
   period: { start: string; end: string };
   readiness: string;
   confidence: { score_percent: number; method: string };
+  admitted_source_evidence?: {
+    authority: string;
+    admitted_reference_count: number;
+    families: Record<string, { state: string; reference_count: number; limitation: string }>;
+    evidence_digest: string;
+  };
   recommendation_candidates: Array<{
     recommendation_id: string;
     family: string;

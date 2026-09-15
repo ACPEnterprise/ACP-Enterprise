@@ -4,6 +4,7 @@ import type {
   QboAmount,
 } from "../../api/qboAccountingEvidence";
 import { useQboAccountingEvidence } from "../../hooks/useQboAccountingEvidence";
+import { useQboSourceBackedProfitAndLoss } from "../../hooks/useQboAccountingEvidence";
 import {
   Alert,
   Button,
@@ -14,6 +15,7 @@ import {
   CardTitle,
   Select,
   Spinner,
+  Input,
 } from "../../ui";
 
 const money = (value: QboAmount) => {
@@ -373,7 +375,19 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
 
 export function QboSourceEvidence({ enabled }: { enabled: boolean }) {
   const [basis, setBasis] = useState<"cash" | "accrual">("cash");
+  const [startDate, setStartDate] = useState("2026-05-01");
+  const [endDate, setEndDate] = useState("2026-05-31");
+  const [reportRequest, setReportRequest] = useState<{
+    startDate: string;
+    endDate: string;
+    basis: "cash" | "accrual";
+  }>({
+    startDate: "2026-05-01",
+    endDate: "2026-05-31",
+    basis: "cash",
+  });
   const evidence = useQboAccountingEvidence(basis, enabled);
+  const sourceReport = useQboSourceBackedProfitAndLoss(reportRequest, enabled);
   return (
     <section aria-label="QuickBooks source evidence" className="space-y-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -417,6 +431,114 @@ export function QboSourceEvidence({ enabled }: { enabled: boolean }) {
       ) : (
         <Workspace value={evidence.data} />
       )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Real-company Profit &amp; Loss</CardTitle>
+          <CardDescription>
+            GET-only QuickBooks Production report. This remains QBO
+            source-backed evidence and is never represented as an ACP-posted
+            financial statement.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form
+            className="grid gap-3 sm:grid-cols-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setReportRequest({ startDate, endDate, basis });
+            }}
+          >
+            <Input
+              aria-label="QBO report start date"
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+            />
+            <Input
+              aria-label="QBO report end date"
+              type="date"
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
+            <Select
+              aria-label="QBO Profit and Loss basis"
+              value={basis}
+              onChange={(event) =>
+                setBasis(event.target.value as "cash" | "accrual")
+              }
+            >
+              <option value="cash">Cash basis</option>
+              <option value="accrual">Accrual basis</option>
+            </Select>
+            <Button type="submit">Run source-backed report</Button>
+          </form>
+          {sourceReport.isPending ? (
+            <Spinner label="Loading QBO Profit and Loss" />
+          ) : sourceReport.isError || !sourceReport.data ? (
+            <Alert variant="warning" title="QBO Profit & Loss unavailable">
+              The requested provider report could not be read. No ACP-native
+              statement or inferred value was substituted.
+            </Alert>
+          ) : (
+            <div className="space-y-4">
+              <Alert variant="success" title="QBO_SOURCE_BACKED">
+                {sourceReport.data.source_company} · Production realm{" "}
+                {sourceReport.data.realm_id}
+                {" · "}
+                {sourceReport.data.start_date}–{sourceReport.data.end_date}
+                {" · "}
+                {sourceReport.data.accounting_basis} basis · acquired{" "}
+                {when(sourceReport.data.acquired_at)}.
+              </Alert>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left">
+                      {sourceReport.data.columns.map((column, index) => (
+                        <th key={`${column}-${index}`}>{column || "Value"}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sourceReport.data.rows.map((row, rowIndex) => (
+                      <tr
+                        className={
+                          row.kind === "summary"
+                            ? "border-t border-stroke font-semibold"
+                            : "border-b border-stroke"
+                        }
+                        key={`${row.kind}-${rowIndex}`}
+                      >
+                        {sourceReport.data.columns.map((_, columnIndex) => (
+                          <td
+                            className="py-2"
+                            key={columnIndex}
+                            style={
+                              columnIndex === 0
+                                ? { paddingLeft: `${row.depth * 1.25}rem` }
+                                : undefined
+                            }
+                          >
+                            {row.values[columnIndex] ?? ""}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="break-all text-xs text-content-muted">
+                Source as-of{" "}
+                {sourceReport.data.source_as_of ??
+                  "provider response time unavailable"}
+                {" · digest "}
+                {sourceReport.data.source_digest}
+                {" · accepted as ACP Accounting: no · mutation authority: none"}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }
