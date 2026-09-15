@@ -41,4 +41,24 @@ describe("employee mobile navigation", () => {
     });
     expect(operations?.items).toContain(purchasing);
   });
+
+  it("groups real financial routes under Accounting without duplicating operational entries", () => {
+    const accounting = navigationGroups.find((group) => group.id === "accounting");
+    const operations = navigationGroups.find((group) => group.id === "operations");
+
+    expect(accounting?.items.map((entry) => [entry.label, entry.path])).toEqual([
+      ["Overview", "/accounting"],
+      ["Financial Reports", "/financial-reports"],
+      ["Accounts Receivable", "/invoices"],
+      ["Accounts Payable", "/accounts-payable"],
+      ["Payments & Receipts", "/payments"],
+      ["Payroll Accounting", "/payroll"],
+    ]);
+    expect(operations?.items.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining(["revenue-cycle", "purchasing"]),
+    );
+    expect(operations?.items.map((entry) => entry.id)).not.toEqual(
+      expect.arrayContaining(["invoices", "payments", "payroll", "accounts-payable", "financial-reports"]),
+    );
+  });
 });

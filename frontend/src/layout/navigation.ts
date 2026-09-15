@@ -34,6 +34,21 @@ import type { NavigationGroup, NavigationItem } from "./types";
 
 export const navigationCatalog = [
   {
+    id: "accounting",
+    label: "Overview",
+    path: "/accounting",
+    icon: Landmark,
+    availability: "available",
+    requiredPermissions: [
+      "COMPANY_ACCOUNTING_REPORT_READ",
+      "COMPANY_INVOICE_READ",
+      "COMPANY_PAYMENT_READ",
+      "COMPANY_ACCOUNTS_PAYABLE_READ",
+      "COMPANY_ACCOUNTS_PAYABLE_REPORT_READ",
+      "COMPANY_PAYROLL_REPORTING_READ",
+    ],
+  },
+  {
     id: "lia",
     label: "Ask LIA",
     path: "/lia",
@@ -125,7 +140,7 @@ export const navigationCatalog = [
   },
   {
     id: "invoices",
-    label: "Invoices",
+    label: "Accounts Receivable",
     path: "/invoices",
     icon: FileText,
     availability: "available",
@@ -133,7 +148,7 @@ export const navigationCatalog = [
   },
   {
     id: "payments" as NavigationItem["id"],
-    label: "Payments",
+    label: "Payments & Receipts",
     path: "/payments",
     icon: CreditCard,
     availability: "available",
@@ -141,7 +156,7 @@ export const navigationCatalog = [
   },
   {
     id: "payroll",
-    label: "Payroll",
+    label: "Payroll Accounting",
     path: "/payroll",
     icon: Banknote,
     availability: "available",
@@ -332,14 +347,21 @@ export const navigationGroups = [
       item("dispatch"),
       item("estimates"),
       item("price-book"),
-      item("invoices"),
-      item("payments" as NavigationItem["id"]),
-      item("payroll"),
       item("revenue-cycle"),
-      item("accounts-payable"),
-      item("financial-reports"),
       item("inventory"),
       item("purchasing"),
+    ],
+  },
+  {
+    id: "accounting",
+    label: "Accounting",
+    items: [
+      item("accounting"),
+      item("financial-reports"),
+      item("invoices"),
+      item("accounts-payable"),
+      item("payments" as NavigationItem["id"]),
+      item("payroll"),
     ],
   },
   {

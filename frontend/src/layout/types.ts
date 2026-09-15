@@ -28,6 +28,7 @@ export type NavigationItemId =
   | "estimates"
   | "jobs"
   | "engineering"
+  | "accounting"
   | "invoices"
   | "payments"
   | "revenue-cycle"
@@ -62,6 +63,7 @@ export interface NavigationItem {
   readonly icon: LucideIcon;
   readonly availability: "available" | "coming-soon";
   readonly requiredPermission?: string;
+  readonly requiredPermissions?: readonly string[];
 }
 
 export interface NavigationGroup {

@@ -34,7 +34,13 @@ export function Sidebar({
       const requiredPermission = "requiredPermission" in item
         ? item.requiredPermission
         : undefined;
-      return !requiredPermission || permissions.has(requiredPermission);
+      const requiredPermissions = "requiredPermissions" in item
+        ? item.requiredPermissions
+        : undefined;
+      return (
+        (!requiredPermission || permissions.has(requiredPermission)) &&
+        (!requiredPermissions || requiredPermissions.some((permission) => permissions.has(permission)))
+      );
     }),
   }));
   return (

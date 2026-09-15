@@ -4,6 +4,7 @@ import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
 import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuard";
 import {
+  accountingHandle,
   accountsPayableHandle,
   financialReportsHandle,
   businessEconomicsHandle,
@@ -156,6 +157,11 @@ export const appRoutes: RouteObject[] = [
               Component: (await import("../routes/EstimatesRoute"))
                 .EstimatesRoute,
             }),
+          },
+          {
+            path: "accounting",
+            handle: accountingHandle,
+            lazy: async () => ({ Component: (await import("../routes/AccountingRoute")).AccountingRoute }),
           },
           {
             path: "invoices",

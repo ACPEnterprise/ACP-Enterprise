@@ -23,4 +23,11 @@ describe("PrimaryNavigation", () => {
     expect(screen.getByRole("link", { name: "Customers" })).toBeInTheDocument();
     expect(screen.getByLabelText("Settings, Coming Soon")).toBeInTheDocument();
   });
+
+  it("marks Accounting destinations active without changing their deep links", () => {
+    render(<MemoryRouter initialEntries={["/invoices/invoice-1"]}><PrimaryNavigation groups={navigationGroups} /></MemoryRouter>);
+    expect(screen.getByRole("heading", { name: "Accounting" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Accounts Receivable" })).toHaveAttribute("href", "/invoices");
+    expect(screen.getByRole("link", { name: "Accounts Receivable" })).toHaveAttribute("aria-current", "page");
+  });
 });

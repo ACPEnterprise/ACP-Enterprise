@@ -164,14 +164,14 @@ export const estimatesHandle = {
 export const invoicesHandle = {
   workspace: {
     pageTitle: "Invoices",
-    breadcrumbs: [{ label: "Invoices" }],
+    breadcrumbs: [{ label: "Accounting", path: "/accounting" }, { label: "Accounts Receivable" }],
     helpTopic: "invoices",
     aiContext: "invoices",
   },
 } as const satisfies ShellRouteHandle;
 
 export const paymentsHandle = {
-  workspace: { pageTitle: "Payments", breadcrumbs: [{ label: "Payments" }], helpTopic: "payments", aiContext: "payments" },
+  workspace: { pageTitle: "Payments", breadcrumbs: [{ label: "Accounting", path: "/accounting" }, { label: "Payments & Receipts" }], helpTopic: "payments", aiContext: "payments" },
 } as const satisfies ShellRouteHandle;
 
 export const revenueCycleHandle = {
@@ -184,11 +184,15 @@ export const revenueCycleHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const accountsPayableHandle = {
-  workspace: { pageTitle: "Accounts Payable", breadcrumbs: [{ label: "Accounts Payable" }], helpTopic: "accounts-payable", aiContext: "accounts-payable" },
+  workspace: { pageTitle: "Accounts Payable", breadcrumbs: [{ label: "Accounting", path: "/accounting" }, { label: "Accounts Payable" }], helpTopic: "accounts-payable", aiContext: "accounts-payable" },
+} as const satisfies ShellRouteHandle;
+
+export const accountingHandle = {
+  workspace: { pageTitle: "Accounting", breadcrumbs: [{ label: "Accounting" }], helpTopic: "accounting", aiContext: "accounting" },
 } as const satisfies ShellRouteHandle;
 
 export const financialReportsHandle = {
-  workspace: { pageTitle: "Financial Reports", breadcrumbs: [{ label: "Financial Reports" }], helpTopic: "financial-reporting", aiContext: "financial-reporting" },
+  workspace: { pageTitle: "Financial Reports", breadcrumbs: [{ label: "Accounting", path: "/accounting" }, { label: "Financial Reports" }], helpTopic: "financial-reporting", aiContext: "financial-reporting" },
 } as const satisfies ShellRouteHandle;
 
 export const businessEconomicsHandle = {
@@ -200,7 +204,7 @@ export const luminaryHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const payrollHandle = {
-  workspace: { pageTitle: "Payroll Administration", breadcrumbs: [{ label: "Payroll" }], helpTopic: "payroll-administration", aiContext: "payroll-administration" },
+  workspace: { pageTitle: "Payroll Administration", breadcrumbs: [{ label: "Accounting", path: "/accounting" }, { label: "Payroll Accounting" }], helpTopic: "payroll-administration", aiContext: "payroll-administration" },
 } as const satisfies ShellRouteHandle;
 
 export const engineeringHandle = {
