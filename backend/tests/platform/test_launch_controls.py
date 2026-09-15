@@ -4,6 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.employee_operations.permissions import EmployeeOperationsPermission
@@ -40,6 +43,7 @@ from app.platform.permissions.codes import (
     InvoicePermission,
     JobPermission,
     LaunchPlatformPermission,
+    LuminaryPermission,
     MigrationPermission,
     PaymentPermission,
     PurchasingPermission,
@@ -48,8 +52,6 @@ from app.platform.permissions.codes import (
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.timekeeping.permissions import TimekeepingPermission
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -104,6 +106,8 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     assert WorkforcePermission.CAPABILITY_MANAGE in administrator
     assert WorkforcePermission.AVAILABILITY_MANAGE in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_READ in administrator
+    assert LuminaryPermission.READ in administrator
+    assert LuminaryPermission.ANALYZE not in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_EXECUTE not in administrator
     assert PayrollPermission.REPORTING_MANAGE not in administrator
 
