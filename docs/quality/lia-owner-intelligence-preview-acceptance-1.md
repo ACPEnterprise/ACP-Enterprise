@@ -47,8 +47,8 @@ call, transcript persistence, or Production behavior.
 
 ## Qualification
 
-- Backend LIA and launch controls: 100 passed.
-- Workforce: 24 passed (one existing SQLAlchemy teardown warning).
+- Backend LIA, launch controls, and Workforce: 128 passed (one existing
+  SQLAlchemy teardown warning).
 - Frontend: 125 files / 474 tests passed.
 - Ruff, MyPy, Python compilation, ESLint, TypeScript, and Vite production build:
   passed.
