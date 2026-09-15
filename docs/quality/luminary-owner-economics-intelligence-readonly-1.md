@@ -3,6 +3,7 @@
 ## Authority and prerequisite sweep
 
 Starting protected authority: `b1bcca65c79164a699dc5e713dae44a10072b53b`.
+Final reconciled protected authority: `a8a834c9ae2ed39cdb7bf18f8baa29910af799c3`.
 
 | Prerequisite | Existing authority reused | Read-only conclusion |
 |---|---|---|
@@ -101,7 +102,7 @@ new recommendation families.
   test was rerun from its required `backend` working directory and passed.
 - Focused Luminary and owner-intelligence suite: 28 passed.
 - Fresh PostgreSQL zero-to-head: passed; one head/current=head
-  `h8j0l2n4p6r8`; Alembic autogenerate drift: none.
+  `i9k1m3o5q7s9` on final protected authority; Alembic autogenerate drift: none.
 - Backend Ruff, MyPy, Python compilation, diff, and protected-data scan: passed.
 - Complete frontend suite: 473 passed across 125 files.
 - Frontend ESLint, TypeScript, and production build: passed.
