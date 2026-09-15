@@ -691,7 +691,7 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
                 {
                     "start_date": start_date.isoformat(),
                     "end_date": end_date.isoformat(),
-                    "accounting_method": method,
+                    "accounting_method": method.title(),
                     "minorversion": minor_version,
                 }
             )
