@@ -35,4 +35,3 @@ git diff --check
 ```
 
 Synthetic fixtures only were used. No real payable punches or Payroll execution occurred.
-

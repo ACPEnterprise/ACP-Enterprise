@@ -24,4 +24,3 @@ For an Aug 29–Sep 4 period, suppose synthetic accepted time is 120 minutes on 
 ## Consequences
 
 The approved choice is Company-scoped, effective-dated, versioned, separately approved, provenance-bound, digest-bound, and superseded without rewriting history. Corrections must be reassembled from the current accepted time evidence; predecessors contribute zero. Tax calculation, Payroll execution, Accounting posting, and money movement remain downstream and untouched.
-
