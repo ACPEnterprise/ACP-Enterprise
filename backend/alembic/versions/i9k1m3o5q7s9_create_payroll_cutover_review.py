@@ -4,6 +4,9 @@ Revision ID: i9k1m3o5q7s9
 Revises: h8j0l2n4p6r8
 """
 
+from datetime import datetime, timezone
+from uuid import UUID
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -13,8 +16,63 @@ down_revision = "h8j0l2n4p6r8"
 branch_labels = None
 depends_on = None
 
+PERMISSIONS = (
+    (
+        "96f45db6-f17a-58ed-b8aa-dbbef4a28cef",
+        "COMPANY_PAYROLL_CUTOVER_READ",
+        "cutover_read",
+    ),
+    (
+        "75565bd2-a647-5910-97aa-e82b1f11e4c3",
+        "COMPANY_PAYROLL_CUTOVER_OWNER_CERTIFY",
+        "cutover_owner_certify",
+    ),
+    (
+        "51b84db5-12ae-58d2-94e0-f47c30f8f87e",
+        "COMPANY_PAYROLL_CUTOVER_ACCOUNTANT_CERTIFY",
+        "cutover_accountant_certify",
+    ),
+    (
+        "45822116-8510-5a81-a4d6-b782379543ad",
+        "COMPANY_PAYROLL_CUTOVER_APPROVE",
+        "cutover_approve",
+    ),
+)
+
 
 def upgrade() -> None:
+    occurred_at = datetime.now(timezone.utc)
+    for permission_id, code, action in PERMISSIONS:
+        op.execute(
+            sa.text(
+                "INSERT INTO permissions (id, code, name, description, resource, action, status, created_at, updated_at, retired_at) VALUES (:id, :code, :name, NULL, 'payroll_authority', :action, 'active', :at, :at, NULL) ON CONFLICT (code) DO NOTHING"
+            ).bindparams(
+                id=UUID(permission_id),
+                code=code,
+                name=code.replace("_", " ").title(),
+                action=action,
+                at=occurred_at,
+            )
+        )
+    op.execute(
+        sa.text("""
+        INSERT INTO role_permissions (id, role_id, permission_id, assigned_at, assigned_by_user_id)
+        SELECT (
+            substr(md5(r.id::text || p.id::text), 1, 8) || '-' ||
+            substr(md5(r.id::text || p.id::text), 9, 4) || '-' ||
+            substr(md5(r.id::text || p.id::text), 13, 4) || '-' ||
+            substr(md5(r.id::text || p.id::text), 17, 4) || '-' ||
+            substr(md5(r.id::text || p.id::text), 21, 12)
+        )::uuid, r.id, p.id, :at, NULL
+        FROM roles r JOIN permissions p ON p.code IN (
+            'COMPANY_PAYROLL_CUTOVER_READ',
+            'COMPANY_PAYROLL_CUTOVER_OWNER_CERTIFY',
+            'COMPANY_PAYROLL_CUTOVER_APPROVE'
+        )
+        WHERE r.code IN ('OWNER', 'ADMIN') AND r.archived_at IS NULL
+        ON CONFLICT (role_id, permission_id) DO NOTHING
+    """).bindparams(at=occurred_at)
+    )
     op.create_table(
         "payroll_cutover_reviews",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -287,3 +345,19 @@ def downgrade() -> None:
     op.drop_table("payroll_cutover_bridge_periods")
     op.drop_table("payroll_cutover_fact_revisions")
     op.drop_table("payroll_cutover_reviews")
+    op.execute(
+        sa.text(
+            "DELETE FROM role_permissions WHERE permission_id IN (SELECT id FROM permissions WHERE code IN :codes)"
+        ).bindparams(
+            sa.bindparam(
+                "codes", expanding=True, value=tuple(code for _, code, _ in PERMISSIONS)
+            )
+        )
+    )
+    op.execute(
+        sa.text("DELETE FROM permissions WHERE code IN :codes").bindparams(
+            sa.bindparam(
+                "codes", expanding=True, value=tuple(code for _, code, _ in PERMISSIONS)
+            )
+        )
+    )
