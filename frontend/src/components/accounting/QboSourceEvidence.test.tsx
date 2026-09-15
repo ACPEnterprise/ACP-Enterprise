@@ -1,10 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { useQboAccountingEvidence } from "../../hooks/useQboAccountingEvidence";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  useQboAccountingEvidence,
+  useQboSourceBackedProfitAndLoss,
+} from "../../hooks/useQboAccountingEvidence";
 import { QboSourceEvidence } from "./QboSourceEvidence";
 
 vi.mock("../../hooks/useQboAccountingEvidence", () => ({
   useQboAccountingEvidence: vi.fn(),
+  useQboSourceBackedProfitAndLoss: vi.fn(),
 }));
 
 const unavailable = {
@@ -68,6 +72,33 @@ const value = {
 };
 
 describe("QboSourceEvidence", () => {
+  beforeEach(() => {
+    vi.mocked(useQboSourceBackedProfitAndLoss).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: {
+        contract_version: "qbo-source-backed-financial-report/v1",
+        report_type: "profit_and_loss",
+        authority: "QBO_SOURCE_BACKED",
+        provider_environment: "production",
+        source: "QuickBooks Online",
+        source_company: "All County Plumbing and Leak",
+        realm_id: "9130357972400696",
+        start_date: "2026-05-01",
+        end_date: "2026-05-31",
+        accounting_basis: "cash",
+        currency: "USD",
+        source_as_of: "2026-09-15T12:00:00Z",
+        acquired_at: "2026-09-15T12:00:01Z",
+        columns: ["Account", "Total"],
+        rows: [{ kind: "summary", depth: 0, values: ["Net Income", "10.00"] }],
+        source_digest: "e".repeat(64),
+        accepted_as_acp_accounting: false,
+        mutation_authority: "none",
+      },
+    } as unknown as ReturnType<typeof useQboSourceBackedProfitAndLoss>);
+  });
+
   it("labels snapshot/source truth and never renders a missing amount as zero", () => {
     vi.mocked(useQboAccountingEvidence).mockReturnValue({
       isPending: false,
@@ -91,6 +122,11 @@ describe("QboSourceEvidence", () => {
     ).toBeVisible();
     expect(screen.getByText(/No winner selected/i)).toBeVisible();
     expect(screen.getByText(/Bill\/AP evidence is unavailable/i)).toBeVisible();
+    expect(screen.getByText("QBO_SOURCE_BACKED")).toBeVisible();
+    expect(
+      screen.getByText(/Production realm 9130357972400696/i),
+    ).toBeVisible();
+    expect(screen.getByText(/accepted as ACP Accounting: no/i)).toBeVisible();
   });
 
   it("keeps cash and accrual requests explicit", () => {

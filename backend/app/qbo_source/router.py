@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -30,6 +31,8 @@ from .runtime import (
     get_production_oauth_runtime,
     get_sandbox_oauth_runtime,
 )
+from .production import ProductionProfitAndLossRequest, read_production_profit_and_loss
+from .source_report import project_profit_and_loss
 from .secrets import SandboxSecretStoreError
 
 router = APIRouter(tags=["QBO Sandbox OAuth"])
@@ -53,6 +56,7 @@ PRODUCTION_AUTHORIZE_PATH = "/api/v1/integrations/qbo/production/oauth/authorize
 PRODUCTION_CONNECTION_PATH = "/api/v1/integrations/qbo/production/connection"
 PRODUCTION_CALLBACK_PATH = "/api/v1/integrations/qbo/production/oauth/callback"
 ACCOUNTING_EVIDENCE_PATH = "/api/v1/accounting/source-evidence/qbo"
+PROFIT_AND_LOSS_PATH = "/api/v1/accounting/source-evidence/qbo/reports/profit-and-loss"
 _PRODUCTION_CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com"
     "/api/v1/integrations/qbo/production/oauth/callback"
@@ -102,6 +106,55 @@ async def qbo_accounting_source_evidence(
     return JSONResponse(
         content=workspace, headers={"Cache-Control": "private, no-store"}
     )
+
+
+@router.get(PROFIT_AND_LOSS_PATH, name="qbo-source-backed-profit-and-loss")
+async def qbo_source_backed_profit_and_loss(
+    start_date: date,
+    end_date: date,
+    basis: Basis,
+    authorization: _ReportRead,
+) -> JSONResponse:
+    """Read a real-company provider P&L without creating ACP ledger truth."""
+    if (
+        not settings.qbo_production_acp_company_id
+        or settings.qbo_production_acp_company_id != authorization.company.id
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "QBO source report is not available."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    if start_date > end_date:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": "Report start date must not follow end date."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        document, marker = await read_production_profit_and_loss(
+            ProductionProfitAndLossRequest(start_date, end_date, basis)
+        )
+        workspace = project_profit_and_loss(
+            document,
+            realm_id=str(marker["realm_id"]),
+            expected_company_name=str(marker["company_name"]),
+        )
+    except (
+        OSError,
+        ValueError,
+        QboEvidenceProjectionError,
+        SandboxRuntimeError,
+        SandboxSecretStoreError,
+        IntuitAuthenticationError,
+        IntuitProtocolError,
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "QBO source report is temporarily unavailable."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return JSONResponse(content=workspace, headers={"Cache-Control": "private, no-store"})
 
 
 def _safe_response(status_code: int, code: str) -> JSONResponse:
