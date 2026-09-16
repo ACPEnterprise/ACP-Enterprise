@@ -5,6 +5,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _module():
     path = Path(__file__).parents[3] / "scripts" / "enterprise-release-qualify"
@@ -59,3 +61,46 @@ def test_status_vocabulary_is_closed() -> None:
         "NOT APPLICABLE",
         "NOT YET EXECUTED",
     }
+
+
+def result(module, status: str):
+    return module.Result(
+        "check",
+        "Check",
+        status,
+        None,
+        "expected",
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+@pytest.mark.parametrize("status", ["FAIL", "BLOCKED"])
+def test_incomplete_executed_qualification_fails_closed(status: str) -> None:
+    module = _module()
+    assert (
+        module.qualification_decision([result(module, status)], executed=True) == status
+    )
+
+
+def test_executed_profile_can_pass_with_out_of_scope_checks_recorded() -> None:
+    module = _module()
+    results = [
+        result(module, "PASS"),
+        result(module, "NOT YET EXECUTED"),
+        result(module, "NOT APPLICABLE"),
+    ]
+    assert module.qualification_decision(results, executed=True) == "PASS"
+
+
+def test_plan_without_execution_never_claims_pass() -> None:
+    module = _module()
+    assert (
+        module.qualification_decision(
+            [result(module, "NOT YET EXECUTED")], executed=False
+        )
+        == "NOT YET EXECUTED"
+    )

@@ -125,6 +125,17 @@ def placeholder(check: Check, status: str, reason: str) -> Result:
     return Result(check.key, check.title, status, shlex.join(check.command) if check.command else None, check.expected, None, None, None, reason, None)
 
 
+def qualification_decision(results: list[Result], *, executed: bool) -> str:
+    statuses = {result.status for result in results}
+    if "FAIL" in statuses:
+        return "FAIL"
+    if "BLOCKED" in statuses:
+        return "BLOCKED"
+    if executed:
+        return "PASS"
+    return "NOT YET EXECUTED"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=("plan", "local", "database", "preview", "postdeploy", "commissioning"), default="plan")
@@ -176,6 +187,7 @@ def main() -> int:
     for name, path in (("backup", args.backup_receipt), ("restore", args.restore_receipt)):
         if path and path.is_file():
             receipts[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    decision = qualification_decision(results, executed=args.execute)
     packet = {
         "contract": CONTRACT,
         "candidate_sha": candidate,
@@ -187,7 +199,7 @@ def main() -> int:
         "results": [asdict(result) for result in results],
         "status_counts": status_counts,
         "rollback_receipts": receipts,
-        "release_decision": "FAIL" if status_counts["FAIL"] else ("BLOCKED" if status_counts["BLOCKED"] else ("PASS" if status_counts["NOT YET EXECUTED"] == 0 else "NOT YET EXECUTED")),
+        "release_decision": decision,
         "deployment_authorized": False,
     }
     packet["digest"] = hashlib.sha256(canonical(packet)).hexdigest()
@@ -196,7 +208,7 @@ def main() -> int:
     with os.fdopen(descriptor, "wb") as stream:
         stream.write(json.dumps(packet, indent=2, sort_keys=True).encode() + b"\n")
     print(json.dumps({"packet": str(packet_path), "digest": packet["digest"], "decision": packet["release_decision"], "status_counts": status_counts}, sort_keys=True))
-    return 1 if packet["release_decision"] == "FAIL" else 0
+    return 1 if decision in {"FAIL", "BLOCKED"} else 0
 
 
 if __name__ == "__main__":
