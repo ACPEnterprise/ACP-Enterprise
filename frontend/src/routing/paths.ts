@@ -22,6 +22,18 @@ export function schedulingReturnPath(value: string | null): string {
   }
 }
 
+export function customerReturnPath(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value, "https://acp.invalid");
+    return url.origin === "https://acp.invalid" && /^\/customers\/[^/]+$/.test(url.pathname)
+      ? url.pathname
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export const withSchedulingReturn = (path: string, returnTo: string) => {
   const url = new URL(path, "https://acp.invalid");
   url.searchParams.set("returnTo", returnTo);
