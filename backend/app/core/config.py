@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     qbo_production_acp_company_id: UUID | None = None
     qbo_production_api_minor_version: int = 75
     qbo_repository_root: str = "/app"
+    hcp_source4_evidence_root: str | None = None
 
     password_min_length: int = 12
     password_max_length: int = 256
@@ -243,6 +244,10 @@ class Settings(BaseSettings):
                 raise ValueError("QBO sandbox and Production roots must be isolated")
             if not 1 <= self.qbo_production_api_minor_version <= 999:
                 raise ValueError("QBO Production API minor version is invalid")
+        if self.hcp_source4_evidence_root and not Path(
+            self.hcp_source4_evidence_root
+        ).is_absolute():
+            raise ValueError("HCP SOURCE.4 evidence root must be an absolute path")
         if self.environment in {"preview", "production"}:
             if not self.platform_contract_expected_fingerprint:
                 raise ValueError(

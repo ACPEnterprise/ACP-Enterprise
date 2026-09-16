@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as auth from "../../auth";
 import * as estimateHooks from "../../hooks/useEstimates";
 import * as invoiceHooks from "../../hooks/useInvoices";
+import * as sourceHistoryHooks from "../../hooks/useHcpSourceHistory";
 import * as jobHooks from "../../hooks/useJobs";
 import * as paymentHooks from "../../hooks/usePayments";
 import * as schedulingHooks from "../../hooks/useScheduling";
@@ -13,6 +14,7 @@ import { CustomerOperationsPanel } from "./CustomerOperationsPanel";
 vi.mock("../../auth");
 vi.mock("../../hooks/useEstimates");
 vi.mock("../../hooks/useInvoices");
+vi.mock("../../hooks/useHcpSourceHistory");
 vi.mock("../../hooks/useJobs");
 vi.mock("../../hooks/usePayments");
 vi.mock("../../hooks/useScheduling");
@@ -31,6 +33,30 @@ describe("CustomerOperationsPanel office workflow", () => {
     vi.mocked(invoiceHooks.useInvoiceWorkspace).mockReturnValue(query([{ id: "invoice-1", invoice_number: "INV-1", service_location_id: "location-1", currency: "USD", total_amount: "100.00", open_amount: "75.00", issue_date: "2026-09-12", status: "partially_paid" }, { id: "invoice-paid", invoice_number: "INV-PAID", service_location_id: "location-1", currency: "USD", total_amount: "50.00", open_amount: "0.00", issue_date: "2026-09-11", status: "paid" }]) as never);
     vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue(query({ currency: "USD", open_balance: "75.00", native_invoice_count: 2, applied_payment_total: "25.00", unapplied_receipt_total: "10.00", legacy_evidence_incomplete: false, as_of: "2026-09-12", evidence_classifications: [{ company_id: "company-1", customer_id: "customer-1", source_system: "acp_native", source_record_identity: "customer-1", as_of: "2026-09-12", acquired_at: "2026-09-12T00:00:00Z", evidence_digest: "a", completeness: "complete", conflict_state: "none", classification: "CURRENT_AUTHORITATIVE", authority: "native_invoice_and_receipt_authority" }] }) as never);
     vi.mocked(paymentHooks.usePayments).mockReturnValue(query([{ id: "receipt-1", customer_id: "customer-1", currency: "USD", status: "partially_applied", captured_amount: "35.00", applied_amount: "25.00", available_amount: "10.00", refunded_amount: "0.00", captured_at: "2026-09-12T00:00:00Z" }]) as never);
+    vi.mocked(sourceHistoryHooks.useHcpCustomerSourceHistory).mockReturnValue(
+      query(undefined) as never,
+    );
+  });
+
+  it("shows exact HCP history without promoting QuickBooks overlap to native Accounting", () => {
+    vi.mocked(sourceHistoryHooks.useHcpCustomerSourceHistory).mockReturnValue(query({
+      contract: "hcp-customer-source-history/v2",
+      authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
+      accepted_as_acp_accounting: false,
+      mutation_authority: "none",
+      source_customer_id: "source-customer-1",
+      source_manifest_sha256: "digest",
+      counts: { estimates: 1, invoices: 1, payments: 1, refunds: 1 },
+      estimates: [{ source_id: "estimate-source-1", number: "100", status: "approved", created_at: null, updated_at: null, options: [], authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY" }],
+      invoices: [{ source_id: "invoice-source-1", source_job_id: "job-source-1", number: "200", status: "paid", amount_cents: 12500, balance_cents: 0, invoice_date: null, service_date: null, authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY", payments: [{ source_id: "payment-source-1", status: "succeeded", amount_cents: 12500, date: null, payment_method: "imported_from_quickbooks", overlap_disposition: "HOLD_FROM_AGGREGATION_PENDING_QBO_RECONCILIATION", authority: "HCP_SOURCE_BACKED_PAYMENT_EVIDENCE_NOT_ACCOUNTING_POSTING" }], refunds: [{ source_id: null, status: "succeeded", amount_cents: 2500, date: null, payment_method: "card", identity_disposition: "SOURCE_BACKED_UNLINKED_REFUND", aggregation_safe: false, authority: "HCP_SOURCE_BACKED_REFUND_EVIDENCE_NOT_ACCOUNTING_POSTING" }] }],
+    }) as never);
+
+    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" locations={[]} /></MemoryRouter>);
+    expect(screen.getByRole("heading", { name: "Housecall Pro history" })).toBeInTheDocument();
+    expect(screen.getByText("Source-backed evidence")).toBeVisible();
+    expect(screen.getByText(/not ACP Accounting postings/i)).toBeVisible();
+    expect(screen.getByText(/held from aggregation/i)).toBeVisible();
+    expect(screen.queryByText("source-customer-1")).not.toBeInTheDocument();
   });
 
   it("separates current and historical work and preserves action context", () => {
