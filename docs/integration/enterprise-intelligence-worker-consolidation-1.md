@@ -150,3 +150,31 @@ required escalation.
   `2777f1bbb1fe3aa5145d4b4bd9a8bc7759073706`; the intervening Price Book
   presentation-only OM2 change was incorporated as protected ancestry and did
   not alter Intelligence source contracts.
+
+## Continuous Maximum 2 cycle
+
+- Fresh protected authority was `388226f21d43c055934a87f26a92f3cad0b0e901`.
+  The cumulative branch was reconciled from `02ab21c4...` onto this current
+  authority before worker consumption. Subsequent protected changes during
+  reconciliation were OM2/OM1 platform changes outside Intelligence ownership.
+- Laptop-A `work/lia-connected-intelligence-maximum-1` remains at
+  `cccfc26991f5c94f2f8f4edcd35d081168118c78` and is already represented in the
+  cumulative Intelligence content; no duplicate replay occurred.
+- Laptop-B advanced to `work/cosmic-intelligence-realdata-maximum-1` at
+  `825eb42f89071aad47366a04d5bae6945668a9dc`. Patch identity classified its
+  earlier Analytics/Beacon/reporting commits as equivalent to existing lane
+  work. New presentation-state hardening, unavailable-evidence handling, and
+  unsupported Economics-scope rejection were integrated. Its overlapping
+  older Luminary UI patch was not replayed because it regressed the qualified
+  delta explanation; compatible currency/period safeguards remain present.
+- Phone/C advanced to `work/cosmic-mobile-employee-beta-maximum-1` at
+  `298ba14f87674ed463772de960c70a57ddefe5b0`. The two new malformed-time
+  commits were integrated after the prior endpoint/date contract. The beta
+  endpoint remains prepared-but-not-switched and Production remains
+  fail-closed.
+- No migration files changed. Broad qualification after integration: backend
+  `382 passed` with 3 existing warnings; frontend affected Intelligence and
+  reporting routes `30 passed`, lint, TypeScript, and Vite build passed;
+  Mobile `139 passed`, typecheck, lint, config validation, and iOS/Android
+  Expo exports passed. Unsigned Xcode simulator Release remains blocked by
+  missing generated CocoaPods `Pods-ACPEmployee.release.xcconfig`.
