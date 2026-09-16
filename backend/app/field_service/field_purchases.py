@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.schemas import BusinessEventCreate
@@ -121,10 +122,17 @@ class FieldPurchaseService:
         duplicate = await session.scalar(
             select(FieldPurchase).where(
                 FieldPurchase.company_id == context.company.id,
-                FieldPurchase.receipt_artifact_id == artifact.id,
+                (
+                    (FieldPurchase.receipt_artifact_id == artifact.id)
+                    | (FieldPurchase.receipt_digest == artifact.content_digest)
+                ),
             )
         )
         if duplicate is not None:
+            if duplicate.job_id != job_id:
+                raise FieldServiceConflict(
+                    "Identical receipt evidence is already bound to another Job."
+                )
             return await self._out(session, duplicate)
         record = FieldPurchase(
             company_id=context.company.id,
@@ -148,7 +156,23 @@ class FieldPurchaseService:
             assignment.branch_id,
             {"job_id": str(job_id), "receipt_digest": artifact.content_digest},
         )
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            replay = await session.scalar(
+                select(FieldPurchase).where(
+                    FieldPurchase.company_id == context.company.id,
+                    FieldPurchase.receipt_digest == artifact.content_digest,
+                )
+            )
+            if replay is None:
+                raise
+            if replay.job_id != job_id:
+                raise FieldServiceConflict(
+                    "Identical receipt evidence is already bound to another Job."
+                )
+            return await self._out(session, replay)
         return await self._out(session, record)
 
     async def record_extraction(
@@ -163,8 +187,6 @@ class FieldPurchaseService:
         purchase = await self._purchase(
             session, context, job_id, purchase_id, lock=True
         )
-        if purchase.version != payload.expected_version:
-            raise FieldServiceConflict("Field purchase changed. Refresh and retry.")
         replay = await session.scalar(
             select(FieldPurchaseExtraction).where(
                 FieldPurchaseExtraction.company_id == context.company.id,
@@ -177,6 +199,8 @@ class FieldPurchaseService:
                     "Extraction digest belongs to different receipt evidence."
                 )
             return await self._out(session, purchase)
+        if purchase.version != payload.expected_version:
+            raise FieldServiceConflict("Field purchase changed. Refresh and retry.")
         if payload.vendor_id is not None:
             vendor = await session.scalar(
                 select(OperationalVendor.id).where(
@@ -239,6 +263,9 @@ class FieldPurchaseService:
             mappings = {row.vendor_code: row.inventory_item_id for row in rows}
         for source in payload.lines:
             item_id = mappings.get(source.vendor_code) if source.vendor_code else None
+            certain = bool(source.confidence) and all(
+                value == Decimal(1) for value in source.confidence.values()
+            )
             session.add(
                 FieldPurchaseLine(
                     company_id=context.company.id,
@@ -252,7 +279,13 @@ class FieldPurchaseService:
                     unit_price=source.unit_price,
                     extended_amount=source.extended_amount,
                     inventory_item_id=item_id,
-                    match_state="exact" if item_id else "unmatched",
+                    match_state=(
+                        "exact"
+                        if item_id and certain
+                        else "review_required"
+                        if item_id
+                        else "unmatched"
+                    ),
                     confidence_evidence={
                         key: str(value) for key, value in source.confidence.items()
                     },
@@ -260,8 +293,12 @@ class FieldPurchaseService:
             )
         purchase.state = (
             "ready_for_disposition"
-            if all(
-                line.vendor_code and line.vendor_code in mappings
+            if payload.lines
+            and all(
+                line.vendor_code
+                and line.vendor_code in mappings
+                and line.confidence
+                and all(value == Decimal(1) for value in line.confidence.values())
                 for line in payload.lines
             )
             else "review_required"
@@ -308,6 +345,15 @@ class FieldPurchaseService:
             )
         if purchase.version != payload.expected_version:
             raise FieldServiceConflict("Field purchase changed. Refresh and retry.")
+        latest_extraction_id = await session.scalar(
+            select(FieldPurchaseExtraction.id)
+            .where(
+                FieldPurchaseExtraction.company_id == context.company.id,
+                FieldPurchaseExtraction.field_purchase_id == purchase.id,
+            )
+            .order_by(FieldPurchaseExtraction.version.desc())
+            .limit(1)
+        )
         lines = {
             line.id: line
             for line in (
@@ -315,6 +361,7 @@ class FieldPurchaseService:
                     select(FieldPurchaseLine).where(
                         FieldPurchaseLine.company_id == context.company.id,
                         FieldPurchaseLine.field_purchase_id == purchase.id,
+                        FieldPurchaseLine.extraction_id == latest_extraction_id,
                     )
                 )
             ).all()
@@ -338,6 +385,15 @@ class FieldPurchaseService:
                 raise FieldServiceValidation(
                     "An exact Inventory item match is required."
                 )
+        if any(
+            requested.get(line.id, Decimal(0)) != line.quantity
+            for line in lines.values()
+        ):
+            raise FieldServiceValidation(
+                "Every latest receipt line requires a complete disposition."
+            )
+        for decision in payload.dispositions:
+            line = lines[decision.line_id]
             location_id = (
                 decision.inventory_location_id or purchase.inventory_location_id
             )
@@ -371,17 +427,17 @@ class FieldPurchaseService:
                     )
                 continue
             disposition = FieldPurchaseDisposition(
-                    company_id=context.company.id,
-                    field_purchase_id=purchase.id,
-                    line_id=line.id,
-                    disposition=decision.disposition,
-                    quantity=decision.quantity,
-                    inventory_location_id=location_id,
-                    state=state,
-                    reason=decision.reason,
-                    idempotency_key=decision.idempotency_key,
-                    confirmed_by_user_id=context.user.id,
-                )
+                company_id=context.company.id,
+                field_purchase_id=purchase.id,
+                line_id=line.id,
+                disposition=decision.disposition,
+                quantity=decision.quantity,
+                inventory_location_id=location_id,
+                state=state,
+                reason=decision.reason,
+                idempotency_key=decision.idempotency_key,
+                confirmed_by_user_id=context.user.id,
+            )
             session.add(disposition)
             await session.flush()
             if state == "confirmed" and decision.disposition in {
@@ -592,13 +648,24 @@ class FieldPurchaseService:
         ).all()
         results = []
         for purchase in purchases:
+            latest_extraction_id = await session.scalar(
+                select(FieldPurchaseExtraction.id)
+                .where(FieldPurchaseExtraction.field_purchase_id == purchase.id)
+                .order_by(FieldPurchaseExtraction.version.desc())
+                .limit(1)
+            )
             lines = (
-                await session.scalars(
-                    select(FieldPurchaseLine).where(
-                        FieldPurchaseLine.field_purchase_id == purchase.id
+                (
+                    await session.scalars(
+                        select(FieldPurchaseLine).where(
+                            FieldPurchaseLine.field_purchase_id == purchase.id,
+                            FieldPurchaseLine.extraction_id == latest_extraction_id,
+                        )
                     )
-                )
-            ).all()
+                ).all()
+                if latest_extraction_id is not None
+                else []
+            )
             dispositions = (
                 await session.scalars(
                     select(FieldPurchaseDisposition).where(
@@ -717,12 +784,19 @@ class FieldPurchaseService:
             .limit(1)
         )
         lines = (
-            await session.scalars(
-                select(FieldPurchaseLine)
-                .where(FieldPurchaseLine.field_purchase_id == purchase.id)
-                .order_by(FieldPurchaseLine.line_number)
-            )
-        ).all()
+            (
+                await session.scalars(
+                    select(FieldPurchaseLine)
+                    .where(
+                        FieldPurchaseLine.field_purchase_id == purchase.id,
+                        FieldPurchaseLine.extraction_id == extraction.id,
+                    )
+                    .order_by(FieldPurchaseLine.line_number)
+                )
+            ).all()
+            if extraction is not None
+            else []
+        )
         dispositions = (
             await session.scalars(
                 select(FieldPurchaseDisposition)

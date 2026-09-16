@@ -20,7 +20,7 @@ runtime evidence is `READY BUT UNPROVEN`.
 | Compute | Identity delivery worker | BLOCKED | External identity delivery is intentionally disabled. The current admitted Postmark worker is Preview-only and is not a Production worker. |
 | Database | Dedicated PostgreSQL 16 topology | EXTERNAL ACTION REQUIRED | Select/provision a private managed endpoint independent from application and Preview. |
 | Database | Least-privilege users/connectivity | OWNER ACTION REQUIRED | Name migration and runtime operators; provision separate credentials and verify private/TLS controls. |
-| Database | Migration procedure | READY BUT UNPROVEN | One-shot migration gate exists; zero-to-head rehearsal passed all 177 revisions to one `q3s1t29j6w2x` head. Exact Production endpoint is absent. |
+| Database | Migration procedure | READY BUT UNPROVEN | One-shot migration gate exists; zero-to-head rehearsal passed all 178 revisions to one `o1q9s27h4u0v` head. Exact Production endpoint is absent. |
 | Database | Backup/PITR | MISSING | Provider PITR, approved RPO/retention, encrypted off-host logical backup, manifest, and alerting are not provisioned. |
 | Database | Restore rehearsal | READY | PostgreSQL 16 disposable restore completed in 17 seconds; catalog, schema and representative counts were verified. Source dump lacked the Production sidecar manifest, so Production recovery-point readiness is not established. |
 | Redis | Private TLS/ACL service | EXTERNAL ACTION REQUIRED | Provision dedicated `rediss` endpoint, ACL user, persistence/recovery policy and monitoring. |

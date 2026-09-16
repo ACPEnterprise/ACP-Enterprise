@@ -9,9 +9,9 @@
   "cycle_revisions": [],
   "duplicate_revisions": {},
   "heads": [
-    "q3s1t29j6w2x"
+    "o1q9s27h4u0v"
   ],
-  "lineage_digest": "dbf0c5032f0b32d105cccd28633994a835b4d8b50bc289e5bb0f989fc5023754",
+  "lineage_digest": "9436cd69cd5a6d7603d339013f98af5db6eb69820abbaa819f6396610c391e8e",
   "merge_revisions": {
     "e3c2a71f8d4b": [
       "19i4k89084j8",
@@ -21,7 +21,7 @@
   "missing_down_revisions": [],
   "parse_errors": [],
   "release_ready": true,
-  "revision_count": 177,
+  "revision_count": 178,
   "revisions": [
     {
       "down_revision": [
@@ -1597,6 +1597,17 @@
     },
     {
       "down_revision": [
+        "q3s1t29j6w2x"
+      ],
+      "is_head": true,
+      "is_merge": false,
+      "path": "backend/alembic/versions/o1q9s27h4u0v_harden_field_purchase_replay.py",
+      "revision": "o1q9s27h4u0v",
+      "sha256": "b240217b9cc95bc78c8e0161a93e2ac84ca7afe4b856b4dd7da3240ce077cf79",
+      "source_commit": "4b048bbb5ef58d3ea90aedbe89068e24fbfd7f0d"
+    },
+    {
+      "down_revision": [
         "p5r7t9v1x3z5"
       ],
       "is_head": false,
@@ -1698,7 +1709,7 @@
       "down_revision": [
         "p2r0s28i5v1w"
       ],
-      "is_head": true,
+      "is_head": false,
       "is_merge": false,
       "path": "backend/alembic/versions/q3s1t29j6w2x_create_manual_invoice_payment_evidence.py",
       "revision": "q3s1t29j6w2x",
@@ -2151,6 +2162,7 @@
     "n0p8q16g3t9u",
     "o1q9r27h4u0v",
     "p2r0s28i5v1w",
-    "q3s1t29j6w2x"
+    "q3s1t29j6w2x",
+    "o1q9s27h4u0v"
   ]
 }
