@@ -1,7 +1,7 @@
 """Create durable Workforce source certification lineage.
 
 Revision ID: o5q7s9u1w3y5
-Revises: n4p6r8t0v2x4
+Revises: p5r7t9v1x3z5
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "o5q7s9u1w3y5"
-down_revision: str | Sequence[str] | None = "n4p6r8t0v2x4"
+down_revision: str | Sequence[str] | None = "p5r7t9v1x3z5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
