@@ -2,7 +2,6 @@ from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.business_economics.policy_authority import (
     POLICY_DEFINITION_VERSION,
     POLICY_FAMILY_REGISTRY,
@@ -55,7 +54,7 @@ def policy(
 
 
 def test_registry_contains_required_product_families() -> None:
-    assert len(POLICY_FAMILY_REGISTRY) == 12
+    assert len(POLICY_FAMILY_REGISTRY) == 20
     assert "accounting_reconciliation_admission" in POLICY_FAMILY_REGISTRY
 
 
