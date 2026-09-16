@@ -85,3 +85,28 @@ text/voice evidence path.
 
 Result: one privacy/recovery lifecycle defect repaired. This sweep does not
 count toward the required three consecutive clean sweeps.
+
+### Clean sweep 1 — retrieval, authority, and evidence
+
+Covered exact Customer/Job/Employee resolution, ambiguity and existence
+hiding, Company/Branch isolation, Payroll guidance and protected-field
+exclusion, temporal evidence, source-backed/native authority, incomplete data,
+and adversarial safety. Focused result: 83 passed; no new actionable LIA-owned
+defect.
+
+### Clean sweep 2 — web, navigation, and voice lifecycle
+
+Covered contextual entry, authorized navigation, topic/period continuation,
+malformed links, loading/error states, push-to-talk, conversation mode,
+interruption, cancel, inactivity, mutation intent refusal, and concise spoken
+output. Focused result: 20 passed; no new actionable LIA-owned defect.
+
+### Clean sweep 3 — conversational breadth and non-mutation
+
+Covered natural-language routing, correction, ambiguity, referents, topic
+switching, comparisons, response modes, owner question corpus, provider-neutral
+retrieval, high-impact requests, and cross-domain evidence composition. Focused
+result: 83 passed; no new actionable LIA-owned defect.
+
+The remaining backlog is source-domain or human/provider gated. No owned P0,
+P1, or P2 defect remains after these three consecutive sweeps.
