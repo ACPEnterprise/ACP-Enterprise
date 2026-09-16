@@ -9,8 +9,7 @@ import type {
   DispatchExceptionCode,
   TechnicianEligibility,
 } from "../../types/dispatch";
-import { useAuth } from "../../auth";
-import { canPrepareFieldReadiness } from "./fieldReadiness";
+import { isFieldAssignmentCandidate } from "./fieldReadiness";
 import {
   Alert,
   Button,
@@ -29,7 +28,6 @@ export function DispatchAssignmentPanel({
   readonly onClose: () => void;
 }) {
   const technicians = useEligibleTechnicians(item.appointment_id);
-  const { permissionCodes = [] } = useAuth();
   const mutations = useDispatchMutations();
   const [employeeId, setEmployeeId] = useState("");
   const [reason, setReason] = useState("Dispatcher assignment");
@@ -52,7 +50,6 @@ export function DispatchAssignmentPanel({
   );
   const assignment = item.assignment;
   const pending =
-    mutations.fieldReadiness.isPending ||
     mutations.assign.isPending ||
     mutations.release.isPending ||
     mutations.crew.isPending ||
@@ -214,11 +211,11 @@ export function DispatchAssignmentPanel({
               onChange={(e) => setEmployeeId(e.target.value)}
             >
               <option value="">Select a technician</option>
-              {technicians.data?.map((t) => (
+              {technicians.data?.filter(isFieldAssignmentCandidate).map((t) => (
                 <option
                   key={t.employee_id}
                   value={t.employee_id}
-                  disabled={!t.eligible && !canPrepareFieldReadiness(t, permissionCodes)}
+                  disabled={!t.eligible}
                 >
                   {t.display_name} —{" "}
                   {t.eligible ? "Eligible" : label(t.decision)}
@@ -227,20 +224,6 @@ export function DispatchAssignmentPanel({
             </Select>
           </label>
           {selected && <Eligibility item={selected} />}
-          {selected && canPrepareFieldReadiness(selected, permissionCodes) && (
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={() => mutations.fieldReadiness.mutate({
-                employeeId: selected.employee_id,
-                branchId: item.branch_id,
-                windowStartAt: item.window_start_at,
-                windowEndAt: item.window_end_at,
-              })}
-            >
-              Confirm field-ready for this appointment
-            </Button>
-          )}
           <label className="block text-sm font-medium">
             Assignment reason
             <input

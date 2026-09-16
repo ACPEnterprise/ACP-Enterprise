@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TechnicianEligibility } from "../../types/dispatch";
-import { canPrepareFieldReadiness } from "./fieldReadiness";
+import { isFieldAssignmentCandidate } from "./fieldReadiness";
 
 const profileless: TechnicianEligibility = {
   employee_id: "employee-lianne",
@@ -21,26 +21,17 @@ const profileless: TechnicianEligibility = {
   availability_confidence: "unknown",
 };
 
-describe("Dispatch field-readiness selection", () => {
-  it("allows an authorized operator to select a profile-less employee for explicit preparation", () => {
-    expect(
-      canPrepareFieldReadiness(profileless, [
-        "COMPANY_WORKFORCE_CAPABILITY_MANAGE",
-        "COMPANY_WORKFORCE_AVAILABILITY_MANAGE",
-      ]),
-    ).toBe(true);
+describe("Dispatch field-assignment selection", () => {
+  it("does not treat a profile-less Office Manager as a field candidate", () => {
+    expect(isFieldAssignmentCandidate(profileless)).toBe(false);
   });
 
-  it("keeps non-preparable and unauthorized employees unavailable", () => {
-    expect(canPrepareFieldReadiness(profileless, [])).toBe(false);
+  it("requires explicit technician capability for a selector candidate", () => {
     expect(
-      canPrepareFieldReadiness(
-        { ...profileless, reasons: ["branch_scope_mismatch"] },
-        [
-          "COMPANY_WORKFORCE_CAPABILITY_MANAGE",
-          "COMPANY_WORKFORCE_AVAILABILITY_MANAGE",
-        ],
-      ),
-    ).toBe(false);
+      isFieldAssignmentCandidate({
+        ...profileless,
+        capability_codes: ["technician"],
+      }),
+    ).toBe(true);
   });
 });
