@@ -1,0 +1,30 @@
+{
+  "canonical_build_1_source": {
+    "classification": "OWNER_OPERATIONAL_SOURCE",
+    "path": "~/Desktop/ACPL docs/pricebook_materials_template.numbers",
+    "sha256": "487afcbbce7584471c691507616c2f87464ee2959105b1b03bfe41eee03e92a9",
+    "size_bytes": 287208,
+    "status": "UNCHANGED_BUILD_1_AUTHORITY"
+  },
+  "discovered_representation": {
+    "classification": "SEMANTICALLY_EQUIVALENT_DOWNLOAD_COPY",
+    "path": "~/Downloads/pricebook_materials_template (1).numbers",
+    "sha256": "c9707e9abfc40a46be2ab0d234d7149857b5e7d9605a6aa747e152bb094c0712",
+    "size_bytes": 288743,
+    "status": "NOT_BUILD_1_BYTE_AUTHORITY"
+  },
+  "comparison": {
+    "archive_bytes_equal": false,
+    "entry_count_each": 45,
+    "mechanical_parse_equal": true,
+    "normalized_import_contract_sha256": "ba85c914a2f4b55720016300da64769219627a5362fc0cb9cef7faf3ad5faa2c",
+    "parsed_sheets": 1,
+    "parsed_tables": 1,
+    "parsed_rows_including_header": 362,
+    "parsed_columns": 19,
+    "material_candidates": 361,
+    "conclusion": "Package metadata/view/calculation/header-storage bytes differ, but the provider-neutral import projection is exactly equal. The Downloads copy is retained as a distinct representation, not a successor owner source."
+  },
+  "successor_source_required": false,
+  "owner_original_modified_by_program": false
+}
