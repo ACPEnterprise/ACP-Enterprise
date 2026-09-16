@@ -25,6 +25,17 @@ merge revision `e3c2a71f8d4b`; it is not a current multi-head condition.
 No migration was added to any remote commit newer than the protected Batch 12
 merge during this sweep. Accordingly, no canonical reline migration is needed.
 
+### Subsequent arrival watch
+
+After protected advanced through PR #384, the following newly arriving heads
+were swept: Cosmic Intelligence real-data, Cosmic mobile employee beta, OM2-C
+workforce/scheduling/dispatch, Cosmic office/revenue, and Price Book Preview
+operability 2. None changes an Alembic file. The first four are based two
+protected commits behind and require ordinary code reconciliation; Price Book
+operability 2 is based directly on current protected. None requires a schema
+reline. OM2E commit `cf3154d5` is already integrated by protected merge
+`e69241c3`.
+
 Run `scripts/migration-candidate-sweep` after every fetch. It evaluates candidate
 graphs from Git objects without checking branches out, detects modified protected
 revision bodies, forks/orphans/duplicates, behind-protected schema candidates,
