@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.beacon.briefing import build_morning_brief
 from app.beacon.catalog import (
     NATIVE_FINANCIAL_SIGNAL_CATALOG,
     OPERATIONAL_SIGNAL_CATALOG,
@@ -30,6 +31,7 @@ from app.beacon.schemas import (
     BeaconLifecycleCommandRequest,
     BeaconLifecycleEventResponse,
     BeaconLifecycleHistoryResponse,
+    BeaconMorningBriefResponse,
     BeaconSignalPage,
     BeaconSignalResponse,
     BeaconSnoozeCommandRequest,
@@ -284,6 +286,7 @@ async def list_beacon_signals(
         context=context,
         now=evaluated_at,
     )
+
     workflows = await beacon_workflow_service.current_for_conditions(
         session,
         context=context,
@@ -315,6 +318,31 @@ async def list_beacon_signals(
         evaluated_at=evaluated_at,
         expires_at=evaluated_at + SIGNAL_TTL,
         lifecycle_commands_available=context.has_permission(BeaconPermission.REVIEW),
+    )
+
+
+@router.get(
+    "/morning-brief",
+    response_model=BeaconMorningBriefResponse,
+    summary="Read the deterministic owner attention brief",
+)
+async def morning_brief(
+    session: DatabaseSession,
+    context: BeaconReader,
+) -> BeaconMorningBriefResponse:
+    evaluated_at = datetime.now(timezone.utc)
+    queue = await beacon_query_service.get_attention_queue(
+        session, context=context, now=evaluated_at
+    )
+    return BeaconMorningBriefResponse.model_validate(
+        build_morning_brief(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id if context.active_branch else None,
+            active=queue.active,
+            snoozed=queue.snoozed,
+            evaluated_at=evaluated_at,
+        ),
+        from_attributes=True,
     )
 
 

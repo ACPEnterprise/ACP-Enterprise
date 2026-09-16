@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.beacon.briefing import OwnerAttentionWindow
 from app.beacon.catalog import (
     OperationalConflictPolicy,
     OperationalSignalAdmission,
@@ -160,6 +161,30 @@ class BeaconSignalPage(BaseModel):
     evaluated_at: datetime
     expires_at: datetime
     lifecycle_commands_available: bool
+
+
+class OwnerAttentionGroupResponse(BaseModel):
+    window: OwnerAttentionWindow
+    signal_ids: tuple[UUID, ...]
+
+
+class BeaconMorningBriefResponse(BaseModel):
+    company_id: UUID
+    branch_id: UUID | None
+    evaluated_at: datetime
+    groups: tuple[OwnerAttentionGroupResponse, ...]
+    unresolved_count: int
+    acknowledged_count: int
+    snoozed_count: int
+    urgent_today_count: int
+    historical_comparison_available: bool
+    new_since_yesterday: int | None
+    resolved_since_yesterday: int | None
+    limitations: tuple[str, ...]
+    dashboard_ready: bool
+    mobile_inbox_ready: bool
+    external_delivery_ready: bool
+    brief_digest: str
 
 
 class OperationalRankingResponse(BaseModel):
