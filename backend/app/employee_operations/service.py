@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta, timezone
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,7 @@ class EmployeeDayService:
         context: AuthorizationContext,
         business_date: date | None = None,
         observed_at: datetime | None = None,
+        authorized_branch_ids: frozenset[UUID] | None = None,
     ) -> EmployeeDayResponse:
         employee = await self.repository.employee_for_membership(
             session,
@@ -53,7 +55,11 @@ class EmployeeDayService:
             session,
             company_id=context.company.id,
             employee_id=employee.id,
-            authorized_branch_ids=context.authorized_branch_ids,
+            authorized_branch_ids=(
+                authorized_branch_ids
+                if authorized_branch_ids is not None
+                else context.authorized_branch_ids
+            ),
             start_at=start_at,
             end_at=end_at,
         )

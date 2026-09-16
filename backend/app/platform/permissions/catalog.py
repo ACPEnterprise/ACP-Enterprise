@@ -261,7 +261,7 @@ EMPLOYEE_OPERATIONS_DEFINITIONS = tuple(
         code=code,
         name=code.replace("_", " ").title(),
         resource="employee_operations",
-        action="own_day_read",
+        action=code.removeprefix("COMPANY_EMPLOYEE_OPERATIONS_").lower(),
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(EmployeeOperationsPermission.ALL)
