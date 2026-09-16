@@ -8,6 +8,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from app.beacon.contracts import BeaconPriorityBand, BeaconSeverity
+from app.beacon.history import BeaconEvaluationRecord, EvaluationDisposition
 from app.beacon.records import BeaconSignal
 
 
@@ -37,6 +38,8 @@ class BeaconMorningBrief:
     historical_comparison_available: bool
     new_since_yesterday: int | None
     resolved_since_yesterday: int | None
+    changed_since_yesterday: int | None
+    expired_since_yesterday: int | None
     limitations: tuple[str, ...]
     dashboard_ready: bool
     mobile_inbox_ready: bool
@@ -68,6 +71,7 @@ def build_morning_brief(
     active: tuple[BeaconSignal, ...],
     snoozed: tuple[BeaconSignal, ...],
     evaluated_at: datetime,
+    historical_deltas: tuple[BeaconEvaluationRecord, ...] | None = None,
 ) -> BeaconMorningBrief:
     grouped = {
         window: tuple(
@@ -102,6 +106,22 @@ def build_morning_brief(
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+    historical_available = historical_deltas is not None
+    disposition_counts = {
+        disposition: sum(
+            item.disposition is disposition for item in historical_deltas or ()
+        )
+        for disposition in EvaluationDisposition
+    }
+    limitations = [
+        "Snoozed conditions remain unresolved and are included in the unresolved total.",
+        "The brief contains attention evidence only and cannot mutate a source domain.",
+    ]
+    if not historical_available:
+        limitations.insert(
+            0,
+            "No persisted evaluation history is available for the requested comparison window.",
+        )
     return BeaconMorningBrief(
         company_id=company_id,
         branch_id=branch_id,
@@ -113,14 +133,28 @@ def build_morning_brief(
         ),
         snoozed_count=len(snoozed),
         urgent_today_count=urgent,
-        historical_comparison_available=False,
-        new_since_yesterday=None,
-        resolved_since_yesterday=None,
-        limitations=(
-            "Beacon does not persist periodic evaluation snapshots, so new and resolved counts since yesterday are unavailable.",
-            "Snoozed conditions remain unresolved and are included in the unresolved total.",
-            "The brief contains attention evidence only and cannot mutate a source domain.",
+        historical_comparison_available=historical_available,
+        new_since_yesterday=(
+            disposition_counts[EvaluationDisposition.NEW]
+            if historical_available
+            else None
         ),
+        resolved_since_yesterday=(
+            disposition_counts[EvaluationDisposition.RESOLVED]
+            if historical_available
+            else None
+        ),
+        changed_since_yesterday=(
+            disposition_counts[EvaluationDisposition.CHANGED]
+            if historical_available
+            else None
+        ),
+        expired_since_yesterday=(
+            disposition_counts[EvaluationDisposition.EXPIRED]
+            if historical_available
+            else None
+        ),
+        limitations=tuple(limitations),
         dashboard_ready=True,
         mobile_inbox_ready=False,
         external_delivery_ready=False,
