@@ -895,6 +895,7 @@ def project_owner_economics(
         "branch_id": str(branch_id) if branch_id else None,
         "period": period,
         "prior_period": workspace.get("prior_period"),
+        "currency": workspace.get("currency"),
         "readiness": readiness.value,
         "facts": facts,
         "job_economics": job_economics,
