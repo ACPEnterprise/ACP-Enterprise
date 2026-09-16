@@ -174,7 +174,11 @@ class NativeEconomicsEvidenceService:
             *(reservation.demand_id for _, reservation, _ in material_rows),
             *(invoice.job_id for _, invoice, _ in settlement_rows),
         }
-        period_identity = (Job.created_at <= end_at) & (Job.updated_at >= start_at)
+        period_identity = or_(
+            Job.created_at.between(start_at, end_at),
+            Job.started_at.between(start_at, end_at),
+            Job.completed_at.between(start_at, end_at),
+        )
         jobs_query = jobs_query.where(
             or_(period_identity, Job.id.in_(referenced_job_ids))
             if referenced_job_ids
@@ -293,6 +297,7 @@ class NativeEconomicsEvidenceService:
 
         material_totals: dict[UUID, int] = defaultdict(int)
         material_cost_complete: dict[UUID, bool] = defaultdict(lambda: True)
+        material_currencies: set[str] = set()
         for issue, reservation, movement in material_rows:
             row = jobs.get(reservation.demand_id)
             if row is None:
@@ -301,6 +306,7 @@ class NativeEconomicsEvidenceService:
             if movement.unit_cost is None or movement.currency is None:
                 material_cost_complete[reservation.demand_id] = False
             else:
+                material_currencies.add(movement.currency.upper())
                 direction = -1 if issue.issue_type == "reversal" else 1
                 material_totals[reservation.demand_id] += direction * _minor(
                     issue.quantity * movement.unit_cost
@@ -432,6 +438,12 @@ class NativeEconomicsEvidenceService:
         ordered_jobs = sorted(
             jobs.values(), key=lambda item: (item["job_number"], item["job_id"])
         )
+        currencies = {
+            str(row["currency"]) for row in ordered_jobs if row["currency"] is not None
+        }
+        material_cost_known = [
+            row for row in ordered_jobs if row["material_quantity_evidence_count"]
+        ]
         payload: dict[str, object] = {
             "contract_version": CONTRACT_VERSION,
             "authority": "accepted_acp_native_owning_domain_facts",
@@ -441,6 +453,48 @@ class NativeEconomicsEvidenceService:
             },
             "families": families,
             "admitted_reference_count": len(references),
+            "summary": {
+                "job_count": len(ordered_jobs),
+                "invoiced_revenue_minor": (
+                    sum(int(row["invoiced_revenue_minor"] or 0) for row in ordered_jobs)
+                    if invoices and len(currencies) == 1
+                    else None
+                ),
+                "currency": next(iter(currencies)) if len(currencies) == 1 else None,
+                "accepted_worked_seconds": (
+                    sum(
+                        int(row["accepted_worked_seconds"] or 0) for row in ordered_jobs
+                    )
+                    if intervals
+                    else None
+                ),
+                "material_cost_minor": (
+                    sum(
+                        int(row["material_cost_minor"] or 0)
+                        for row in material_cost_known
+                    )
+                    if material_cost_known
+                    and all(
+                        row["material_cost_minor"] is not None
+                        for row in material_cost_known
+                    )
+                    and len(material_currencies) == 1
+                    else None
+                ),
+                "material_currency": (
+                    next(iter(material_currencies))
+                    if len(material_currencies) == 1
+                    else None
+                ),
+                "settlement_applied_minor": (
+                    sum(
+                        int(row["settlement_applied_minor"] or 0)
+                        for row in ordered_jobs
+                    )
+                    if settlement_rows and len(currencies) == 1
+                    else None
+                ),
+            },
             "jobs": ordered_jobs,
             "limitations": [
                 "Invoiced revenue is not substituted for earned revenue, settlement, or cash.",

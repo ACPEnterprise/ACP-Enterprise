@@ -258,6 +258,17 @@ export function LuminaryRoute() {
                 <p className="mt-1 text-sm text-content-muted">
                   {ownerEconomics.data.admitted_source_evidence.admitted_reference_count} accepted native reference(s). Source facts remain separate from calculated profitability.
                 </p>
+                {ownerEconomics.data.admitted_source_evidence.summary ? (
+                  <p className="mt-2 text-sm">
+                    Jobs {ownerEconomics.data.admitted_source_evidence.summary.job_count}
+                    {ownerEconomics.data.admitted_source_evidence.summary.invoiced_revenue_minor !== null
+                      ? ` · Invoiced revenue ${(ownerEconomics.data.admitted_source_evidence.summary.invoiced_revenue_minor / 100).toLocaleString(undefined, { style: "currency", currency: ownerEconomics.data.admitted_source_evidence.summary.currency ?? "USD" })}`
+                      : " · Invoiced revenue unavailable"}
+                    {ownerEconomics.data.admitted_source_evidence.summary.accepted_worked_seconds !== null
+                      ? ` · Accepted worked hours ${(ownerEconomics.data.admitted_source_evidence.summary.accepted_worked_seconds / 3600).toFixed(2)}`
+                      : " · Accepted worked hours unavailable"}
+                  </p>
+                ) : null}
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                   {Object.entries(ownerEconomics.data.admitted_source_evidence.families).map(([family, item]) => (
                     <div className="rounded-md bg-surface-muted p-3" key={family}>

@@ -55,6 +55,14 @@ vi.mock("../hooks/useLuminary", () => ({
         authority: "accepted_acp_native_owning_domain_facts",
         admitted_reference_count: 7,
         evidence_digest: "b".repeat(64),
+        summary: {
+          job_count: 2,
+          invoiced_revenue_minor: 12550,
+          currency: "USD",
+          accepted_worked_seconds: 3600,
+          material_cost_minor: null,
+          settlement_applied_minor: null,
+        },
         families: {
           REVENUE: {
             state: "AVAILABLE",
@@ -106,6 +114,8 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText(/7 accepted native reference/)).toBeVisible();
     expect(screen.getByText(/Invoiced basis is not earned revenue/)).toBeVisible();
     expect(screen.getByText(/remain separate from calculated profitability/)).toBeVisible();
+    expect(screen.getByText(/Invoiced revenue \$125\.50/)).toBeVisible();
+    expect(screen.getByText(/Accepted worked hours 1\.00/)).toBeVisible();
   });
 
   it("retries a temporary briefing failure without offering analysis", () => {

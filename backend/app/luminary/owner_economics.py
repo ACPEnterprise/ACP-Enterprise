@@ -85,6 +85,9 @@ def _readiness(workspace: dict[str, object]) -> AnalysisReadiness:
     if quality == "conflicting":
         return AnalysisReadiness.CONFLICTING_EVIDENCE
     if quality == "unavailable":
+        native = _mapping(workspace.get("native_evidence"))
+        if int(native.get("admitted_reference_count") or 0) > 0:
+            return AnalysisReadiness.PARTIAL
         return AnalysisReadiness.SOURCE_MISSING
     if quality in {"partial", "stale"}:
         return AnalysisReadiness.PARTIAL
@@ -95,24 +98,48 @@ def _confidence(workspace: dict[str, object]) -> dict[str, object]:
     jobs = _rows(workspace.get("jobs"))
     scores = [int(item.get("confidence_percent") or 0) for item in jobs]
     completeness = str(workspace.get("quality_state", "unavailable"))
-    score = min(scores) if scores else 0
+    native = _mapping(workspace.get("native_evidence"))
+    native_families = _mapping(native.get("families"))
+    native_states = [
+        str(_mapping(item).get("state")) for item in native_families.values()
+    ]
+    native_count = int(native.get("admitted_reference_count") or 0)
+    score = (
+        min(scores)
+        if scores
+        else (
+            0
+            if "CONFLICTING" in native_states
+            else 70
+            if native_count and "PARTIAL" in native_states
+            else 80
+            if native_count
+            else 0
+        )
+    )
     if completeness == "partial":
         score = min(score, 70)
     elif completeness == "stale":
         score = min(score, 50)
-    elif completeness in {"conflicting", "unavailable"}:
+    elif completeness == "conflicting":
         score = 0
     return {
         "score_percent": score,
         "method": "minimum_admitted_job_confidence_with_quality_caps",
         "factors": {
-            "source_authority": "admitted_business_economics_only",
+            "source_authority": (
+                "admitted_business_economics_only"
+                if jobs
+                else "accepted_acp_native_owning_domain_facts"
+                if native_count
+                else "unavailable"
+            ),
             "completeness": completeness,
             "recency": "current" if completeness == "complete" else completeness,
             "reconciliation": "conflicting"
             if completeness == "conflicting"
             else "preserved",
-            "sample_size": len(jobs),
+            "sample_size": len(jobs) or native_count,
             "allocation_dependence": not bool(
                 workspace.get("fully_allocated_available")
             ),
@@ -132,6 +159,9 @@ def _facts(
     period = _mapping(workspace.get("period"))
     currency = str(workspace.get("currency") or "USD")
     jobs = _rows(workspace.get("jobs"))
+    native = _mapping(workspace.get("native_evidence"))
+    native_summary = _mapping(native.get("summary"))
+    native_jobs = _rows(native.get("jobs"))
     references = [
         {
             "record_type": "profitability_result",
@@ -140,6 +170,9 @@ def _facts(
         }
         for item in jobs
         if item.get("result_id") and item.get("result_digest")
+    ]
+    native_references = [
+        reference for job in native_jobs for reference in _rows(job.get("references"))
     ]
     fact_specs = (
         ("REVENUE", "revenue", "minor_currency"),
@@ -163,10 +196,26 @@ def _facts(
             )
             else totals.get(key)
         )
+        native_key = {
+            "revenue": "invoiced_revenue_minor",
+            "materials": "material_cost_minor",
+        }.get(key)
+        native_value = native_summary.get(native_key) if native_key else None
+        uses_native = not isinstance(value, int) and isinstance(native_value, int)
+        if uses_native:
+            value = native_value
+        fact_references = references or [
+            item
+            for item in native_references
+            if item.get("family")
+            == ("REVENUE" if key == "revenue" else "DIRECT_MATERIAL")
+        ]
         facts.append(
             {
                 "family": family,
-                "metric": key,
+                "metric": "invoiced_revenue"
+                if uses_native and key == "revenue"
+                else key,
                 "value": value if isinstance(value, int) else None,
                 "units": unit,
                 "currency": currency,
@@ -176,14 +225,46 @@ def _facts(
                     "company_id": str(company_id),
                     "branch_id": str(branch_id) if branch_id else None,
                 },
-                "source": "business_economics",
-                "authority": "admitted_immutable_actual_results",
+                "source": "acp_native" if uses_native else "business_economics",
+                "authority": (
+                    "accepted_native_invoiced_or_valued_fact"
+                    if uses_native
+                    else "admitted_immutable_actual_results"
+                ),
                 "confidence": _confidence(workspace)["score_percent"],
                 "prerequisite_completeness": "AVAILABLE"
                 if isinstance(value, int)
                 else "SOURCE_MISSING",
-                "evidence_references": references,
+                "evidence_references": fact_references,
                 "as_of": as_of.isoformat(),
+            }
+        )
+    worked_seconds = native_summary.get("accepted_worked_seconds")
+    if isinstance(worked_seconds, int):
+        facts.append(
+            {
+                "family": "DIRECT_LABOR",
+                "metric": "accepted_worked_seconds",
+                "value": worked_seconds,
+                "units": "seconds",
+                "currency": None,
+                "period": period,
+                "subject": {
+                    "kind": "BRANCH" if branch_id else "COMPANY",
+                    "company_id": str(company_id),
+                    "branch_id": str(branch_id) if branch_id else None,
+                },
+                "source": "acp_native_timekeeping",
+                "authority": "accepted_authoritative_job_work_intervals",
+                "confidence": _confidence(workspace)["score_percent"],
+                "prerequisite_completeness": "PARTIAL",
+                "evidence_references": [
+                    item
+                    for item in native_references
+                    if item.get("family") == "DIRECT_LABOR"
+                ],
+                "as_of": as_of.isoformat(),
+                "limitations": ["worked duration is not wage cost or paid time"],
             }
         )
     return facts
@@ -410,9 +491,15 @@ def project_owner_economics(
         "trend_support": {
             "state": "READY"
             if _mapping(workspace.get("comparison")).get("state") == "available"
+            or _mapping(workspace.get("native_evidence_comparison")).get("state")
+            == "AVAILABLE"
             else "INSUFFICIENT_EVIDENCE",
-            "comparison": workspace.get("comparison"),
-            "authority": "equal_length_admitted_actual_periods_only",
+            "comparison": (
+                workspace.get("comparison")
+                if _mapping(workspace.get("comparison")).get("state") == "available"
+                else workspace.get("native_evidence_comparison")
+            ),
+            "authority": "equal_length_single_authority_periods_only",
             "mixed_authority_periods": "labeled_and_not_combined",
         },
         "market_evidence": {

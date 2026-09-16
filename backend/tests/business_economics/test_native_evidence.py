@@ -117,6 +117,9 @@ async def test_native_facts_are_admitted_without_inventing_profitability() -> No
     assert projected["accepted_worked_seconds"] == 3600
     assert projected["material_cost_minor"] == 2_000
     assert projected["settlement_applied_minor"] == -2_500
+    assert result["summary"]["invoiced_revenue_minor"] == 12_550
+    assert result["summary"]["accepted_worked_seconds"] == 3_600
+    assert result["summary"]["material_cost_minor"] == 2_000
     assert "contribution_minor" not in projected
 
 

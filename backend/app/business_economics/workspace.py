@@ -59,6 +59,12 @@ class EconomicsWorkspaceService:
         prior_end = period_start - timedelta(days=1)
         prior_start = prior_end - duration
         prior = await self._records(session, context, prior_start, prior_end)
+        prior_native_evidence = await NativeEconomicsEvidenceService().project(
+            session,
+            context=context,
+            period_start=prior_start,
+            period_end=prior_end,
+        )
         job_ids = {
             item.subject_id for item in (*current, *prior) if item.scope == "job"
         }
@@ -118,6 +124,9 @@ class EconomicsWorkspaceService:
             },
             **current_projection,
             "native_evidence": native_evidence,
+            "native_evidence_comparison": self._native_comparison(
+                native_evidence, prior_native_evidence
+            ),
             "comparison": comparison,
             "readiness": {
                 "evidence": current_projection["quality_state"],
@@ -184,6 +193,40 @@ class EconomicsWorkspaceService:
             projection, context.permission_codes
         )
         return projection
+
+    @staticmethod
+    def _native_comparison(
+        current: dict[str, object], prior: dict[str, object]
+    ) -> dict[str, object]:
+        current_summary = current.get("summary")
+        prior_summary = prior.get("summary")
+        if not isinstance(current_summary, dict) or not isinstance(prior_summary, dict):
+            return {"state": "INSUFFICIENT_EVIDENCE"}
+        current_revenue = current_summary.get("invoiced_revenue_minor")
+        prior_revenue = prior_summary.get("invoiced_revenue_minor")
+        current_currency = current_summary.get("currency")
+        prior_currency = prior_summary.get("currency")
+        if (
+            not isinstance(current_revenue, int)
+            or not isinstance(prior_revenue, int)
+            or current_currency != prior_currency
+        ):
+            return {
+                "state": "INSUFFICIENT_EVIDENCE",
+                "basis": "ACP_NATIVE_INVOICED",
+                "current_reference_count": current.get("admitted_reference_count", 0),
+                "prior_reference_count": prior.get("admitted_reference_count", 0),
+            }
+        return {
+            "state": "AVAILABLE",
+            "basis": "ACP_NATIVE_INVOICED",
+            "currency": current_currency,
+            "current_invoiced_revenue_minor": current_revenue,
+            "prior_invoiced_revenue_minor": prior_revenue,
+            "invoiced_revenue_change_minor": current_revenue - prior_revenue,
+            "current_reference_count": current.get("admitted_reference_count", 0),
+            "prior_reference_count": prior.get("admitted_reference_count", 0),
+        }
 
     async def detail(
         self,

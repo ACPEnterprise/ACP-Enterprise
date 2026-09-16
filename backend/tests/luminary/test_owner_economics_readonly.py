@@ -192,3 +192,64 @@ def test_scenario_validation_rejects_silent_compounding() -> None:
         ScenarioAssumption(ScenarioKind.ADD_TRUCK, 1_000)
     with pytest.raises(ValueError, match="between"):
         ScenarioAssumption(ScenarioKind.PRICE_PERCENT, 10_001)
+
+
+def test_native_evidence_produces_partial_confident_facts_without_margin() -> None:
+    value = {
+        "period": {"start": "2026-09-01", "end": "2026-09-30"},
+        "quality_state": "unavailable",
+        "totals": None,
+        "jobs": [],
+        "fully_allocated_available": False,
+        "comparison": {"state": "unavailable"},
+        "native_evidence_comparison": {
+            "state": "AVAILABLE",
+            "basis": "ACP_NATIVE_INVOICED",
+            "invoiced_revenue_change_minor": 2_500,
+        },
+        "native_evidence": {
+            "admitted_reference_count": 2,
+            "families": {
+                "REVENUE": {"state": "AVAILABLE"},
+                "DIRECT_LABOR": {"state": "PARTIAL"},
+            },
+            "summary": {
+                "invoiced_revenue_minor": 12_500,
+                "currency": "USD",
+                "accepted_worked_seconds": 3_600,
+            },
+            "jobs": [
+                {
+                    "references": [
+                        {
+                            "family": "REVENUE",
+                            "record_id": "invoice-1",
+                            "digest": "a" * 64,
+                        },
+                        {
+                            "family": "DIRECT_LABOR",
+                            "record_id": "interval-1",
+                            "digest": "b" * 64,
+                        },
+                    ]
+                }
+            ],
+        },
+        "readiness": {"allocation_policy": "policy_required"},
+    }
+    result = project(value)
+    assert result["readiness"] == AnalysisReadiness.PARTIAL
+    assert result["confidence"]["score_percent"] == 70
+    invoiced = next(
+        item for item in result["facts"] if item["metric"] == "invoiced_revenue"
+    )
+    worked = next(
+        item for item in result["facts"] if item["metric"] == "accepted_worked_seconds"
+    )
+    margin = next(item for item in result["facts"] if item["metric"] == "gross_profit")
+    assert invoiced["value"] == 12_500
+    assert invoiced["authority"] == "accepted_native_invoiced_or_valued_fact"
+    assert worked["value"] == 3_600
+    assert margin["value"] is None
+    assert result["trend_support"]["state"] == "READY"
+    assert result["recommendation_candidates"] == []
