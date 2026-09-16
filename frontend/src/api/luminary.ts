@@ -80,6 +80,7 @@ export interface LuminaryOwnerEconomics {
   period: { start: string; end: string };
   prior_period: { start: string; end: string } | null;
   generated_at: string;
+  currency: string | null;
   readiness: string;
   confidence: { score_percent: number; method: string };
   job_economics: Array<{
