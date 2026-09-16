@@ -2907,8 +2907,78 @@
       "path": "/api/v1/assets/operationalization/import-preview",
       "reason": "Import preview replay cannot duplicate candidates or silently overwrite changed source evidence.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, aggregate locking, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "create_review_api_v1_payroll_cutover_review_post",
+      "path": "/api/v1/payroll/cutover-review",
+      "reason": "Cutover review creation establishes durable Payroll certification authority without executing Payroll.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical protected request digest, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "save_fact_api_v1_payroll_cutover_review_facts_post",
+      "path": "/api/v1/payroll/cutover-review/facts",
+      "reason": "Fact drafts revise protected cutover authority and exact replay must not duplicate revisions or events.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical protected request digest, role authorization, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "certify_fact_api_v1_payroll_cutover_review_certifications_post",
+      "path": "/api/v1/payroll/cutover-review/certifications",
+      "reason": "Human certification creates durable owner or accountant authority but never Payroll execution authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, review locking, overlap validation, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "create_bridge_period_api_v1_payroll_cutover_review_bridge_periods_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods",
+      "reason": "Externally calculated bridge-period evidence changes cutover coverage authority and must replay without duplication.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical protected request digest, period locking, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "write_bridge_fact_api_v1_payroll_cutover_review_bridge_periods__bridge_period_id__facts_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods/{bridge_period_id}/facts",
+      "reason": "Protected bridge Employee facts revise certified historical evidence and cannot duplicate revisions or events on replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, period locking, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "certify_bridge_period_api_v1_payroll_cutover_review_bridge_periods__bridge_period_id__certify_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods/{bridge_period_id}/certify",
+      "reason": "Bridge coverage certification is a durable authority transition without Payroll execution or external side effects.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, review locking, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "approve_api_v1_payroll_cutover_review_approve_post",
+      "path": "/api/v1/payroll/cutover-review/approve",
+      "reason": "Cutover approval is a durable certification transition that does not calculate or execute Payroll.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2959a05f7167ee4305f371c5a90b7c76e1ecceeae388eb4d6ca67fe7c89a9da7",
+  "fingerprint": "730a81def07fbdd794ea593e14f75e8f6a33a9851ca0f8da92dd6c34521166f9",
   "schema_version": "1"
 }
