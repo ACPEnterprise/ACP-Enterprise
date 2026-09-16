@@ -59,6 +59,17 @@ Branch UUID. It now presents the session-scoped Branch names/codes and defaults
 to the Company's configured default Branch. The submitted value remains the
 same authoritative Branch ID; no Branch scope or permission is broadened.
 
+### Scheduling and assignment partial completion
+
+Booking an Appointment and assigning its technician are separate governed
+mutations. A successful booking followed by an assignment rejection previously
+appeared to be a failed booking and encouraged replay. The workflow now
+preserves and links to the authoritative Appointment, keeps it in Needs
+Scheduling, explains that assignment remains outstanding, and never offers to
+book it again. The pre-booking technician list also excludes Workforce records
+whose canonical readiness is not `READY`; final Appointment-specific
+eligibility remains enforced by Dispatch.
+
 ## Qualified connected surfaces
 
 The focused UI suite covers Employee roster/detail/timecard navigation,

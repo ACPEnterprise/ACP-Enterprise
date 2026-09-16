@@ -3,7 +3,7 @@ import { Link } from "react-router";
 
 import { useScheduleExistingJob } from "../../hooks/useOperations";
 import { useWorkforceDirectory } from "../../hooks/useWorkforce";
-import { schedulingReturnPath } from "../../routing/paths";
+import { appointmentDetailPath, schedulingReturnPath } from "../../routing/paths";
 import type { JobDetail } from "../../types/jobs";
 import { Alert, Button, Field, Input, Select } from "../../ui";
 import { schedulingMutationRecovery } from "../scheduling/schedulingRecovery";
@@ -28,6 +28,7 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   const technicians = useMemo(
     () => (workforce.data ?? []).filter((employee) =>
       employee.technician && employee.employee_status === "active" &&
+      employee.readiness_state === "READY" &&
       (!employee.home_branch_id || employee.home_branch_id === job.branch_id)),
     [job.branch_id, workforce.data],
   );
@@ -59,7 +60,8 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
     <p className="mt-1 text-sm text-content-muted">Book an authoritative Appointment for this Job. Technician assignment is optional and remains human-confirmed.</p>
     {job.status === "in_progress" || job.status === "paused" ? <Alert className="mt-4" variant="warning" title="Unscheduled field work already began">ACP supports emergency work before scheduling. Add the service window now so office, Dispatch, and My Day share the same operating record.</Alert> : null}
     {error ? <Alert className="mt-4" variant="danger" title={error.title} action={error.retryLabel ? <Button variant="outline" onClick={book} disabled={schedule.isPending}>{error.retryLabel}</Button> : undefined}><strong>{error.state.replaceAll("_", " ")}</strong> — {error.message}</Alert> : null}
-    {schedule.isSuccess ? <Alert className="mt-4" variant="success" title="Job scheduled">SUCCEEDED — The Appointment was linked to this Job and authoritative operating views were refreshed.{returnTo ? <div className="mt-2"><Link className="font-semibold underline" to={schedulingReturnPath(returnTo)}>Return to prior Schedule view</Link></div> : null}</Alert> : null}
+    {schedule.isSuccess && schedule.data.assignmentState === "FAILED" ? <Alert className="mt-4" variant="warning" title="Appointment booked; technician not assigned">The Appointment exists and will remain in Needs Scheduling. Open it to review current Dispatch eligibility and assign a technician; do not book it again.<div className="mt-2"><Link className="font-semibold underline" to={appointmentDetailPath(schedule.data.appointment.id)}>Open {schedule.data.appointment.appointment_number}</Link></div></Alert> : null}
+    {schedule.isSuccess && schedule.data.assignmentState !== "FAILED" ? <Alert className="mt-4" variant="success" title="Job scheduled">SUCCEEDED — The Appointment was linked to this Job{schedule.data.assignmentState === "ASSIGNED" ? " and the technician was assigned" : ""}. Authoritative operating views were refreshed.{returnTo ? <div className="mt-2"><Link className="font-semibold underline" to={schedulingReturnPath(returnTo)}>Return to prior Schedule view</Link></div> : null}</Alert> : null}
     <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
       <Field label="Arrival window starts" required><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
       <Field label="Arrival window ends" required helperText={startAt && endAt && new Date(endAt) <= new Date(startAt) ? "Arrival window must end after it starts." : "Customer-facing arrival window; separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
