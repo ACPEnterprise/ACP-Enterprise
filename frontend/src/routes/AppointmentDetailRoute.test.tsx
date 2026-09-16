@@ -4,78 +4,239 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useCustomerDetail } from "../hooks/useCustomers";
-import { useCreateJobFromAppointment, useJobForAppointment } from "../hooks/useJobs";
+import {
+  useCreateJobFromAppointment,
+  useJobForAppointment,
+} from "../hooks/useJobs";
 import { useAppointment } from "../hooks/useScheduling";
 import type { AppointmentDetail } from "../types/scheduling";
 import { AppointmentDetailRoute } from "./AppointmentDetailRoute";
 
-let permissions = new Set(["COMPANY_SCHEDULING_READ", "COMPANY_JOB_READ", "COMPANY_JOB_MANAGE", "COMPANY_CUSTOMER_READ"]);
-vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }] } }), useHasPermission: (code: string) => permissions.has(code) }));
+let permissions = new Set([
+  "COMPANY_SCHEDULING_READ",
+  "COMPANY_JOB_READ",
+  "COMPANY_JOB_MANAGE",
+  "COMPANY_CUSTOMER_READ",
+]);
+vi.mock("../auth", () => ({
+  useAuth: () => ({
+    activeCompany: {
+      branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }],
+    },
+  }),
+  useHasPermission: (code: string) => permissions.has(code),
+}));
 vi.mock("../hooks/useCustomers");
 vi.mock("../hooks/useJobs");
 vi.mock("../hooks/useScheduling");
 
-const appointment = { id: "appointment-1", appointment_number: "APT-000001", branch_id: "branch-1", customer_id: "customer-1", service_location_id: "location-1", status: "scheduled", arrival_window_start_at: "2026-07-24T13:00:00Z", arrival_window_end_at: "2026-07-24T15:00:00Z", expected_duration_minutes: 90 } as AppointmentDetail;
+const appointment = {
+  id: "appointment-1",
+  appointment_number: "APT-000001",
+  branch_id: "branch-1",
+  customer_id: "customer-1",
+  service_location_id: "location-1",
+  status: "scheduled",
+  arrival_window_start_at: "2026-07-24T13:00:00Z",
+  arrival_window_end_at: "2026-07-24T15:00:00Z",
+  expected_duration_minutes: 90,
+} as AppointmentDetail;
 
 function renderRoute(entry = "/appointments/appointment-1") {
-  return render(<MemoryRouter initialEntries={[entry]}><Routes><Route path="/appointments/:appointmentId" element={<AppointmentDetailRoute />} /></Routes></MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route
+          path="/appointments/:appointmentId"
+          element={<AppointmentDetailRoute />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
 }
 
 describe("AppointmentDetailRoute", () => {
   beforeEach(() => {
-    permissions = new Set(["COMPANY_SCHEDULING_READ", "COMPANY_JOB_READ", "COMPANY_JOB_MANAGE", "COMPANY_CUSTOMER_READ"]);
+    permissions = new Set([
+      "COMPANY_SCHEDULING_READ",
+      "COMPANY_JOB_READ",
+      "COMPANY_JOB_MANAGE",
+      "COMPANY_CUSTOMER_READ",
+    ]);
     vi.clearAllMocks();
-    vi.mocked(useAppointment).mockReturnValue({ isLoading: false, isError: false, data: appointment } as never);
-    vi.mocked(useCreateJobFromAppointment).mockReturnValue({ mutate: vi.fn(), isPending: false, error: null } as never);
-    vi.mocked(useCustomerDetail).mockReturnValue({ data: { first_name: "Alex", last_name: "Taylor", business_name: null, properties: [{ id: "location-1", address_line_1: "10 Main Street", address_line_2: null, city: "Albany", state: "NY", postal_code: "12207" }] } } as never);
+    vi.mocked(useAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: appointment,
+    } as never);
+    vi.mocked(useCreateJobFromAppointment).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      error: null,
+    } as never);
+    vi.mocked(useCustomerDetail).mockReturnValue({
+      data: {
+        first_name: "Alex",
+        last_name: "Taylor",
+        business_name: null,
+        properties: [
+          {
+            id: "location-1",
+            address_line_1: "10 Main Street",
+            address_line_2: null,
+            city: "Albany",
+            state: "NY",
+            postal_code: "12207",
+          },
+        ],
+      },
+    } as never);
   });
   it("shows the authoritative related Job and navigates by business number", () => {
-    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [{ id: "job-1", job_number: "JOB-000001", status: "ready" }] } } as never);
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{ id: "job-1", job_number: "JOB-000001", status: "ready" }],
+      },
+    } as never);
     renderRoute();
-    expect(screen.getByRole("heading", { name: "APT-000001" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "JOB-000001" })).toHaveAttribute("href", "/jobs/job-1");
-    expect(screen.queryByRole("button", { name: "Create Job" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "APT-000001" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "JOB-000001" })).toHaveAttribute(
+      "href",
+      "/jobs/job-1",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Create Job" }),
+    ).not.toBeInTheDocument();
+  });
+  it("shows versioned Scheduling history and direct Customer and Location navigation", () => {
+    vi.mocked(useAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        ...appointment,
+        concurrency_version: 4,
+        reschedule_count: 2,
+        rescheduled_at: "2026-07-23T14:00:00Z",
+        updated_at: "2026-07-23T14:00:00Z",
+      },
+    } as never);
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{ id: "job-1", job_number: "JOB-000001", status: "ready" }],
+      },
+    } as never);
+    renderRoute(
+      "/appointments/appointment-1?returnTo=%2Fscheduling%3Fdate%3D2026-07-24",
+    );
+    expect(screen.getByText("Scheduling history and source")).toBeVisible();
+    expect(
+      screen.getByText("Source identity is not exposed by this read contract"),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("returnTo="),
+    );
+    expect(screen.getByRole("link", { name: "Open Location" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("#service-location-location-1"),
+    );
   });
   it("preserves a validated Scheduling return path through Appointment and Job detail", () => {
-    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [{ id: "job-1", job_number: "JOB-000001", status: "ready" }] } } as never);
-    renderRoute("/appointments/appointment-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dmonth");
-    expect(screen.getByRole("link", { name: "Back to Scheduling" })).toHaveAttribute("href", "/scheduling?date=2026-08-13&view=month");
-    expect(screen.getByRole("link", { name: "Open Job" })).toHaveAttribute("href", "/jobs/job-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dmonth");
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{ id: "job-1", job_number: "JOB-000001", status: "ready" }],
+      },
+    } as never);
+    renderRoute(
+      "/appointments/appointment-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dmonth",
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to Scheduling" }),
+    ).toHaveAttribute("href", "/scheduling?date=2026-08-13&view=month");
+    expect(screen.getByRole("link", { name: "Open Job" })).toHaveAttribute(
+      "href",
+      "/jobs/job-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dmonth",
+    );
   });
   it("rejects a foreign return URL", () => {
-    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [] } } as never);
-    renderRoute("/appointments/appointment-1?returnTo=https%3A%2F%2Fevil.example%2Fsteal");
-    expect(screen.getByRole("link", { name: "Back to Scheduling" })).toHaveAttribute("href", "/scheduling");
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [] },
+    } as never);
+    renderRoute(
+      "/appointments/appointment-1?returnTo=https%3A%2F%2Fevil.example%2Fsteal",
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to Scheduling" }),
+    ).toHaveAttribute("href", "/scheduling");
   });
   it("offers creation for an eligible unlinked Appointment", async () => {
-    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [] } } as never);
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [] },
+    } as never);
     renderRoute();
-    expect(screen.getByText("No Job has been created from this Appointment.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No Job has been created from this Appointment."),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Create Job" }));
-    expect(screen.getByRole("heading", { name: "Create Job from APT-000001" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Create Job from APT-000001" }),
+    ).toBeInTheDocument();
   });
   it("keeps Appointment rendering intact when Job relationship access is denied", () => {
-    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: true, error: new Error("denied") } as never);
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: new Error("denied"),
+    } as never);
     renderRoute();
-    expect(screen.getByRole("heading", { name: "APT-000001" })).toBeInTheDocument();
-    expect(screen.getByText("Related Job information is unavailable with your current access.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "APT-000001" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Related Job information is unavailable with your current access.",
+      ),
+    ).toBeInTheDocument();
   });
   it("does not request an Appointment without scheduling read authority", () => {
     permissions = new Set();
-    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false } as never);
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+    } as never);
     renderRoute();
-    expect(screen.getByText(/not authorized to view this Appointment/i)).toBeVisible();
+    expect(
+      screen.getByText(/not authorized to view this Appointment/i),
+    ).toBeVisible();
     expect(useAppointment).toHaveBeenCalledWith("appointment-1", false);
     expect(useJobForAppointment).toHaveBeenCalledWith("appointment-1", false);
   });
   it("does not compose Customer or Job authority into scheduling read", () => {
     permissions = new Set(["COMPANY_SCHEDULING_READ"]);
-    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false } as never);
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+    } as never);
     renderRoute();
     expect(screen.getByRole("heading", { name: "APT-000001" })).toBeVisible();
     expect(useJobForAppointment).toHaveBeenCalledWith("appointment-1", false);
     expect(useCustomerDetail).toHaveBeenCalledWith("customer-1", false);
-    expect(screen.getByText("Job details require Job read authority.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Create Job" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Job details require Job read authority."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Create Job" }),
+    ).not.toBeInTheDocument();
   });
 });

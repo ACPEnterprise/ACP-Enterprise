@@ -95,22 +95,84 @@ describe("SchedulingRoute", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Day agenda" })).toBeVisible();
-    expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(
+      2,
+    );
   });
 
   it("offers bounded recovery when schedule or Job context projections fail", async () => {
     const appointmentRefetch = vi.fn();
     const dispatchRefetch = vi.fn();
     const jobsRefetch = vi.fn();
-    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: true, error: new Error("schedule failed"), refetch: appointmentRefetch } as never);
-    vi.mocked(useDispatchBoard).mockReturnValue({ isLoading: false, isError: true, error: new Error("dispatch failed"), refetch: dispatchRefetch } as never);
-    vi.mocked(useJobs).mockReturnValue({ isLoading: false, isError: true, error: new Error("jobs failed"), refetch: jobsRefetch } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-    expect(screen.getByText(/Appointment times remain authoritative and usable/)).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Retry schedule" }));
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: new Error("schedule failed"),
+      refetch: appointmentRefetch,
+    } as never);
+    vi.mocked(useDispatchBoard).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: new Error("dispatch failed"),
+      refetch: dispatchRefetch,
+    } as never);
+    vi.mocked(useJobs).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: new Error("jobs failed"),
+      refetch: jobsRefetch,
+    } as never);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText(/Appointment times remain authoritative and usable/),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry schedule" }),
+    );
     expect(appointmentRefetch).toHaveBeenCalledOnce();
     expect(dispatchRefetch).toHaveBeenCalledOnce();
-    await userEvent.click(screen.getByRole("button", { name: "Retry Job context" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry Job context" }),
+    );
+    expect(jobsRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("offers an explicit authoritative refresh without implying realtime updates", async () => {
+    const appointmentRefetch = vi.fn();
+    const dispatchRefetch = vi.fn();
+    const jobsRefetch = vi.fn();
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+      refetch: appointmentRefetch,
+    } as never);
+    vi.mocked(useDispatchBoard).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0 },
+      refetch: dispatchRefetch,
+    } as never);
+    vi.mocked(useJobs).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, total_pages: 0 },
+      refetch: jobsRefetch,
+    } as never);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh authoritative calendar" }),
+    );
+    expect(appointmentRefetch).toHaveBeenCalledTimes(2);
+    expect(dispatchRefetch).toHaveBeenCalledOnce();
     expect(jobsRefetch).toHaveBeenCalledOnce();
   });
 
@@ -163,14 +225,26 @@ describe("SchedulingRoute", () => {
       isError: false,
       data: { items: [], total_count: 0, page: 1, page_size: 100 },
     } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-    expect(screen.queryByRole("button", { name: "Book customer work" })).not.toBeInTheDocument();
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Book customer work" }),
+    ).not.toBeInTheDocument();
 
     permissions.add("COMPANY_SCHEDULING_MANAGE");
     permissions.add("COMPANY_JOB_MANAGE");
     permissions.add("COMPANY_CUSTOMER_READ");
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-    expect(screen.getByRole("button", { name: "Book customer work" })).toBeVisible();
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("button", { name: "Book customer work" }),
+    ).toBeVisible();
   });
 
   it("offers a planning week and accessible non-drag calendar controls", async () => {
@@ -206,7 +280,9 @@ describe("SchedulingRoute", () => {
       screen.getByRole("region", { name: "Work Week calendar" }),
     ).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Month" }));
-    expect(screen.getByRole("region", { name: "Month calendar" })).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "Month calendar" }),
+    ).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Day" }));
     await userEvent.click(screen.getByRole("button", { name: "Dispatch" }));
     expect(
@@ -216,23 +292,51 @@ describe("SchedulingRoute", () => {
   });
 
   it("opens directly in the Dispatch calendar perspective", () => {
-    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [appointment], total_count: 1, page: 1, page_size: 100 } } as never);
-    render(<MemoryRouter initialEntries={["/scheduling?perspective=dispatch"]}><SchedulingRoute /></MemoryRouter>);
-    expect(screen.getByRole("region", { name: "Dispatch timeline" })).toBeVisible();
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    render(
+      <MemoryRouter initialEntries={["/scheduling?perspective=dispatch"]}>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("region", { name: "Dispatch timeline" }),
+    ).toBeVisible();
   });
 
   it("restores a direct-linked operating scope instead of resetting the CSR workspace", () => {
-    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [appointment], total_count: 1, page: 1, page_size: 100 } } as never);
-    render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13&view=month&perspective=schedule&branch=branch-1&status=scheduled&technician=__unassigned&search=Taylor&jobStatus=ready&priority=emergency&queue=scheduled_unassigned&order=priority"]}><SchedulingRoute /></MemoryRouter>);
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/scheduling?date=2026-08-13&view=month&perspective=schedule&branch=branch-1&status=scheduled&technician=__unassigned&search=Taylor&jobStatus=ready&priority=emergency&queue=scheduled_unassigned&order=priority",
+        ]}
+      >
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
     expect(screen.getByLabelText("Service date")).toHaveValue("2026-08-13");
-    expect(screen.getByRole("region", { name: "Month calendar" })).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "Month calendar" }),
+    ).toBeVisible();
     expect(screen.getByLabelText("Branch")).toHaveValue("branch-1");
-    expect(screen.getByLabelText("Appointment status")).toHaveValue("scheduled");
+    expect(screen.getByLabelText("Appointment status")).toHaveValue(
+      "scheduled",
+    );
     expect(screen.getByLabelText("Technician")).toHaveValue("__unassigned");
     expect(screen.getByLabelText("Search schedule")).toHaveValue("Taylor");
     expect(screen.getByLabelText("Queue Job status")).toHaveValue("ready");
     expect(screen.getByLabelText("Queue priority")).toHaveValue("emergency");
-    expect(screen.getByLabelText("Queue state")).toHaveValue("scheduled_unassigned");
+    expect(screen.getByLabelText("Queue state")).toHaveValue(
+      "scheduled_unassigned",
+    );
     expect(screen.getByLabelText("Queue order")).toHaveValue("priority");
   });
 
@@ -243,31 +347,60 @@ describe("SchedulingRoute", () => {
       isError: false,
       data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
     } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
     const date = screen.getByLabelText("Service date");
     await userEvent.clear(date);
     await userEvent.type(date, "2026-08-13");
     await userEvent.click(screen.getByRole("button", { name: "Month" }));
-    await userEvent.click(within(screen.getByRole("region", { name: "Month calendar" })).getByRole("button", { name: /APT-000001.*UNASSIGNED/i }));
-    expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute("href", expect.stringMatching(/^\/customers\/customer-1\?returnTo=/));
-    expect(screen.getAllByText("Customer context unavailable").at(-1)).toBeVisible();
+    await userEvent.click(
+      within(screen.getByRole("region", { name: "Month calendar" })).getByRole(
+        "button",
+        { name: /APT-000001.*UNASSIGNED/i },
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^\/customers\/customer-1\?returnTo=/),
+    );
+    expect(
+      screen.getAllByText("Customer context unavailable").at(-1),
+    ).toBeVisible();
     await userEvent.clear(screen.getByLabelText("New start"));
-    await userEvent.type(screen.getByLabelText("New start"), "2026-08-14T09:00");
+    await userEvent.type(
+      screen.getByLabelText("New start"),
+      "2026-08-14T09:00",
+    );
     await userEvent.clear(screen.getByLabelText("New arrival-window end"));
-    await userEvent.type(screen.getByLabelText("New arrival-window end"), "2026-08-14T12:00");
+    await userEvent.type(
+      screen.getByLabelText("New arrival-window end"),
+      "2026-08-14T12:00",
+    );
     await userEvent.clear(screen.getByLabelText("Duration in minutes"));
     await userEvent.type(screen.getByLabelText("Duration in minutes"), "90");
-    await userEvent.click(screen.getByRole("button", { name: "Review new time" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review new time" }),
+    );
     expect(rescheduleMutate).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Move this appointment?" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Confirm new time" }));
-    expect(rescheduleMutate).toHaveBeenCalledWith(expect.objectContaining({
-      input: expect.objectContaining({
-        arrival_window_start_at: new Date("2026-08-14T09:00").toISOString(),
-        arrival_window_end_at: new Date("2026-08-14T12:00").toISOString(),
-        expected_duration_minutes: 90,
+    expect(
+      screen.getByRole("dialog", { name: "Move this appointment?" }),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm new time" }),
+    );
+    expect(rescheduleMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          arrival_window_start_at: new Date("2026-08-14T09:00").toISOString(),
+          arrival_window_end_at: new Date("2026-08-14T12:00").toISOString(),
+          expected_duration_minutes: 90,
+        }),
       }),
-    }), expect.any(Object));
+      expect.any(Object),
+    );
   });
 
   it("reconciles selected appointment detail after the authoritative calendar refreshes", async () => {
@@ -277,22 +410,40 @@ describe("SchedulingRoute", () => {
       isError: false,
       data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
     } as never);
-    const rendered = render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-    await userEvent.click(screen.getAllByRole("button", { name: /APT-000001/ })[0]);
-    expect(screen.getByLabelText("New start")).toHaveValue(expectedLocalInput("2026-08-13T13:00:00Z"));
+    const rendered = render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /APT-000001/ })[0],
+    );
+    expect(screen.getByLabelText("New start")).toHaveValue(
+      expectedLocalInput("2026-08-13T13:00:00Z"),
+    );
 
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
       isError: false,
       data: {
-        items: [{ ...appointment, arrival_window_start_at: "2026-08-13T14:00:00Z" }],
+        items: [
+          { ...appointment, arrival_window_start_at: "2026-08-13T14:00:00Z" },
+        ],
         total_count: 1,
         page: 1,
         page_size: 100,
       },
     } as never);
-    rendered.rerender(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByLabelText("New start")).toHaveValue(expectedLocalInput("2026-08-13T14:00:00Z")));
+    rendered.rerender(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("New start")).toHaveValue(
+        expectedLocalInput("2026-08-13T14:00:00Z"),
+      ),
+    );
   });
 
   it("expands and selects every appointment on a crowded Month day before an explicit Day drill-down", async () => {
@@ -306,33 +457,61 @@ describe("SchedulingRoute", () => {
       isError: false,
       data: { items: crowded, total_count: 5, page: 1, page_size: 100 },
     } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
     const date = screen.getByLabelText("Service date");
     await userEvent.clear(date);
     await userEvent.type(date, "2026-08-13");
-    await userEvent.selectOptions(screen.getByLabelText("Technician"), "__unassigned");
+    await userEvent.selectOptions(
+      screen.getByLabelText("Technician"),
+      "__unassigned",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Month" }));
 
     const month = screen.getByRole("region", { name: "Month calendar" });
-    const overflow = within(month).getByRole("button", { name: /Show all 5 appointments/ });
+    expect(within(month).getByLabelText("5 appointments")).toBeVisible();
+    const overflow = within(month).getByRole("button", {
+      name: /Show all 5 appointments/,
+    });
     expect(overflow).toHaveTextContent("+2 more");
     expect(overflow).toHaveAttribute("aria-expanded", "false");
-    expect(within(month).getAllByRole("button", { name: /APT-00000/ })).toHaveLength(3);
+    expect(
+      within(month).getAllByRole("button", { name: /APT-00000/ }),
+    ).toHaveLength(3);
 
     await userEvent.click(overflow);
-    expect(screen.getByRole("region", { name: "Month calendar" })).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "Month calendar" }),
+    ).toBeVisible();
     expect(overflow).toHaveAttribute("aria-expanded", "true");
     for (const item of crowded) {
-      expect(within(month).getByRole("button", { name: new RegExp(item.appointment_number) })).toBeVisible();
+      expect(
+        within(month).getByRole("button", {
+          name: new RegExp(item.appointment_number),
+        }),
+      ).toBeVisible();
     }
-    await userEvent.click(within(month).getByRole("button", { name: /APT-000005/ }));
+    await userEvent.click(
+      within(month).getByRole("button", { name: /APT-000005/ }),
+    );
     expect(
-      screen.getAllByRole("link", { name: "Open Appointment" }).find((link) =>
-        link.getAttribute("href")?.startsWith("/appointments/appointment-5?returnTo="),
-      ),
+      screen
+        .getAllByRole("link", { name: "Open Appointment" })
+        .find((link) =>
+          link
+            .getAttribute("href")
+            ?.startsWith("/appointments/appointment-5?returnTo="),
+        ),
     ).toBeDefined();
 
-    await userEvent.click(within(month).getByRole("button", { name: /Open 8\/13\/2026 day schedule/ }));
+    await userEvent.click(
+      within(month).getByRole("button", {
+        name: /Open 8\/13\/2026 day schedule/,
+      }),
+    );
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
     expect(screen.getByLabelText("Technician")).toHaveValue("__unassigned");
   });
@@ -343,10 +522,18 @@ describe("SchedulingRoute", () => {
       isError: false,
       data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
     } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Unassigned" }));
-    expect(screen.getByRole("heading", { name: "Needs Scheduling work queue" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Select for assignment" }));
+    expect(
+      screen.getByRole("heading", { name: "Needs Scheduling work queue" }),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select for assignment" }),
+    );
     expect(screen.getByText("Customer context unavailable")).toBeVisible();
   });
 
@@ -401,7 +588,12 @@ describe("SchedulingRoute", () => {
     expect(
       screen.getByRole("heading", { name: "Needs Scheduling work queue" }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open Job to schedule" })).toHaveAttribute("href", expect.stringMatching(/^\/jobs\/job-1\?returnTo=/));
+    expect(
+      screen.getByRole("link", { name: "Open Job to schedule" }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^\/jobs\/job-1\?returnTo=/),
+    );
   });
 
   it("renders technician and unassigned lanes without claiming open time is availability", () => {
