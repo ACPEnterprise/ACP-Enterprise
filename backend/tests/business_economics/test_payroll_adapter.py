@@ -3,7 +3,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-
 from app.business_economics.findings import SubjectKind
 from app.business_economics.measurement_contract import MeasurementComponent
 from app.business_economics.payroll_adapter import (
@@ -71,6 +70,11 @@ def attribution(**overrides):
         "currency": "USD",
         "effective_date": date(2026, 1, 15),
         "approved": True,
+        "compensation_allocation_family": "direct_labor_measurement",
+        "compensation_allocation_method": "approved_actual_job_time",
+        "compensation_policy_digest": "d" * 64,
+        "burden_allocation_method": "component_specific_certified_drivers",
+        "burden_policy_digest": "e" * 64,
     }
     values.update(overrides)
     return LaborAttributionAuthority(**values)
@@ -104,4 +108,23 @@ def test_attribution_is_required_and_cannot_exceed_payroll_truth() -> None:
     with pytest.raises(PayrollEconomicsAdmissionError, match="Company"):
         adapt_payroll_reporting(
             report=report(), attribution=attribution(company_id=uuid4())
+        )
+
+
+def test_job_subject_and_certified_policy_lineage_are_required() -> None:
+    with pytest.raises(PayrollEconomicsAdmissionError, match="exact Job"):
+        adapt_payroll_reporting(
+            report=report(),
+            attribution=attribution(subject_kind=SubjectKind.SERVICE_LINE),
+        )
+    with pytest.raises(PayrollEconomicsAdmissionError, match="policy digests"):
+        adapt_payroll_reporting(
+            report=report(), attribution=attribution(burden_policy_digest="")
+        )
+
+
+def test_allocation_effective_date_must_match_payroll_period() -> None:
+    with pytest.raises(PayrollEconomicsAdmissionError, match="outside"):
+        adapt_payroll_reporting(
+            report=report(), attribution=attribution(effective_date=date(2025, 12, 31))
         )
