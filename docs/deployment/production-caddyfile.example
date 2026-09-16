@@ -1,6 +1,6 @@
-# Owner must set ACP_PRODUCTION_HOSTNAME only after the Production runtime has a
-# stable public address and the exact DNS record has been approved.
-{$ACP_PRODUCTION_HOSTNAME} {
+# Install only after the Production runtime has a stable public address and the
+# app.twelve-hats.com DNS record has been separately approved.
+app.twelve-hats.com {
 	encode zstd gzip
 
 	header {

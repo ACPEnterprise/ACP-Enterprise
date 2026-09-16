@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+compose_file="$root/docker-compose.release-qualification.yml"
+project="acp_release_qualify_$(git -C "$root" rev-parse --short=12 HEAD)_$$"
+
+cleanup() {
+  docker compose -p "$project" -f "$compose_file" down --volumes --remove-orphans >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
+docker compose -p "$project" -f "$compose_file" up \
+  --build \
+  --abort-on-container-exit \
+  --exit-code-from qualifier
