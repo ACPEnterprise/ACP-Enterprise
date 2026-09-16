@@ -22,6 +22,7 @@ from .contracts import (
     NavigationSuggestion,
     TruthClassification,
 )
+from .payroll_guidance import payroll_guidance_answer
 from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
 from .retrieval import GovernedRetrievalService, permitted_domain_names
 from .security import (
@@ -311,9 +312,12 @@ class LiaService:
             )
             return response
 
+        interpreted = payroll_guidance_answer(question, evidence)
         lines = [f"{item.label}: {item.count} ({item.state})." for item in evidence]
-        answer = "Here is the current authorized ACP evidence: " + " ".join(lines)
-        if any(
+        answer = interpreted or (
+            "Here is the current authorized ACP evidence: " + " ".join(lines)
+        )
+        if interpreted is None and any(
             word in question.casefold()
             for word in ("why", "profit", "margin", "economics")
         ):
