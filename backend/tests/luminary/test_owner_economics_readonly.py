@@ -274,5 +274,15 @@ def test_native_evidence_produces_partial_confident_facts_without_margin() -> No
     assert service["service_category"] == "drain_cleaning"
     assert service["invoiced_revenue_minor"] == 12_500
     assert service["direct_contribution_minor"] is None
+    queue = result["evidence_priority_queue"]
+    assert queue
+    wage = next(
+        item for item in queue if item["prerequisite"] == "certified_direct_wage_cost"
+    )
+    assert wage["affected_job_count"] == 1
+    assert wage["responsible_domain"] == "Payroll/Economics policy"
+    answers = result["owner_question_answers"]
+    assert answers["which_jobs_make_money"]["state"] == "INSUFFICIENT_EVIDENCE"
+    assert answers["what_prevents_fully_loaded_profit"]["state"] == "POLICY_REQUIRED"
     assert result["trend_support"]["state"] == "READY"
     assert result["recommendation_candidates"] == []
