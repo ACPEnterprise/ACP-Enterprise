@@ -22,6 +22,7 @@ a stop condition. Source domains continue to own their facts and calculations.
 | LIA-N1-010 | Evidence inspection | Exact Appointment, Invoice, and Payment evidence navigated only to collection pages | SLOWS_WORK | Uses the existing authorized detail routes when an evidence entity identity is present |
 | LIA-N1-011 | Job follow-up | A question containing “Job JOB-000306” outside the narrow “show/open” form lost exact subject resolution | BLOCKS_WORK | Extracts the explicit canonical Job reference without fuzzy matching |
 | LIA-N1-012 | Brief answer mode | “Short version” could return a complete long owner-answer line | ANNOYING | Deterministic, word-safe 320-character presentation cap; evidence metadata remains intact |
+| LIA-N1-013 | Voice conversation timeout/cancel | Inactivity could label the session IDLE without aborting active recognition; Cancel did not end every capture/speech path | BLOCKS_WORK | Inactivity and Cancel now abort recognition, cancel speech, clear timers, and exit conversation mode |
 
 ## UI friction ledger
 
@@ -46,6 +47,12 @@ a stop condition. Source domains continue to own their facts and calculations.
 - Luminary/Economics presentation: contextual entry points currently claim
   evidence context without passing an accepted entity identifier. Coordinate
   with the active `work/cosmic-intelligence-realdata-maximum-1` lane.
+- Protected frontend test ownership: the full suite currently has eight
+  non-LIA failures. Invoice route mocks omit `getInvoiceCandidates` (five),
+  Customer operations reliability fixtures lack a `QueryClientProvider` after
+  source-history composition (two), and the Financial Reports mock omits
+  `useQboSourceBackedProfitAndLoss` (one). LIA-focused tests remain green; these
+  fixture repairs belong with their newly integrated source-domain changes.
 
 ## Sweep record
 
@@ -69,3 +76,12 @@ Result: four additional bounded LIA-owned defects repaired. Protected Estimate
 changes require no LIA contract change: the accepted Estimate adapter and
 canonical `/estimates` workspace remain compatible. This sweep does not count
 toward the required three consecutive clean sweeps.
+
+### Sweep 3 — actionable defect found
+
+Exercised foreground voice capture, conversation mode, speech output,
+interruption, cancellation, inactivity, mutation-intent refusal, and the shared
+text/voice evidence path.
+
+Result: one privacy/recovery lifecycle defect repaired. This sweep does not
+count toward the required three consecutive clean sweeps.
