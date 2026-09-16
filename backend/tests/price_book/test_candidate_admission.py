@@ -6,10 +6,14 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.idempotency.reliability import IdempotencyConflict
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 from app.price_book.candidate_admission import (
@@ -27,8 +31,6 @@ from app.price_book.models import (
 )
 from app.price_book.schemas import PriceVersionCreate, TaxClassificationCreate
 from app.price_book.service import PriceBookService
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 ROOT = Path(__file__).parents[3]
 CONFIGURATION = (
@@ -314,7 +316,31 @@ async def test_candidate_activation_requires_exact_separate_approvals(
                 expected_version=1,
                 decision=decision,
                 reason=f"Approved {decision}",
+                idempotency_key=f"approve-{decision}",
             )
+    async with factory() as session:
+        audit_count_before = await session.scalar(
+            select(func.count())
+            .select_from(PriceBookAuditEntry)
+            .where(PriceBookAuditEntry.action == "price_approved")
+        )
+    async with factory() as session:
+        await service.record_activation_review(
+            session,
+            context=context,
+            version_id=version.id,
+            expected_version=1,
+            decision="price",
+            reason="Approved price",
+            idempotency_key="approve-price",
+        )
+    async with factory() as session:
+        audit_count_after = await session.scalar(
+            select(func.count())
+            .select_from(PriceBookAuditEntry)
+            .where(PriceBookAuditEntry.action == "price_approved")
+        )
+    assert audit_count_after == audit_count_before
     async with factory() as session:
         ready = await service.record_activation_review(
             session,
@@ -323,6 +349,7 @@ async def test_candidate_activation_requires_exact_separate_approvals(
             expected_version=1,
             decision="activation_authorization",
             reason="Authorized for later explicit activation",
+            idempotency_key="approve-activation",
         )
     assert ready.activation_ready is True
     assert ready.material_mapping_required is False
@@ -335,3 +362,14 @@ async def test_candidate_activation_requires_exact_separate_approvals(
             reason="Explicit bounded activation",
         )
     assert activated.status == "active"
+    async with factory() as session:
+        with pytest.raises(IdempotencyConflict):
+            await service.record_activation_review(
+                session,
+                context=context,
+                version_id=version.id,
+                expected_version=1,
+                decision="price",
+                reason="Contradictory price rationale",
+                idempotency_key="approve-price",
+            )

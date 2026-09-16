@@ -38,6 +38,7 @@ export async function recordActivationReview(
   return (await apiClient.post<PriceBookActivationReadiness>(`${path}/versions/${versionId}/review/${decision}`, {
     expected_version: expectedVersion,
     reason,
+    idempotency_key: crypto.randomUUID(),
   })).data;
 }
 export async function getPriceBookAudit(entityId: string): Promise<PriceBookAuditItem[]> {

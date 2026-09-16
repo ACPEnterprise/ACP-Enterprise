@@ -12,6 +12,15 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.branch.models import Branch
+from app.platform.idempotency.contracts import (
+    IdempotencyIdentity,
+    canonical_request_digest,
+)
+from app.platform.idempotency.reliability import (
+    AuthoritativeOutcome,
+    RetentionClass,
+    mutation_reliability_service,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import PriceBookPermission
 
@@ -1105,100 +1114,156 @@ class PriceBookService:
         expected_version: int,
         decision: str,
         reason: str,
+        idempotency_key: str,
     ) -> ActivationReadinessItem:
+        async def mutate() -> AuthoritativeOutcome[PriceBookPriceVersion]:
+            version = await self._stage_activation_review(
+                session,
+                context=context,
+                version_id=version_id,
+                expected_version=expected_version,
+                decision=decision,
+                reason=reason,
+            )
+            return AuthoritativeOutcome(
+                version,
+                "price_book_price_version",
+                version.id,
+                200,
+            )
+
+        async def recover(result_id: UUID) -> PriceBookPriceVersion | None:
+            return await session.scalar(
+                select(PriceBookPriceVersion).where(
+                    PriceBookPriceVersion.company_id == context.company.id,
+                    PriceBookPriceVersion.id == result_id,
+                )
+            )
+
+        await mutation_reliability_service.execute(
+            session,
+            identity=IdempotencyIdentity(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id if context.active_branch else None,
+                operation=f"price_book.activation_review.{decision}",
+                idempotency_key=idempotency_key,
+            ),
+            actor_user_id=context.user.id,
+            request_digest=canonical_request_digest(
+                {
+                    "version_id": version_id,
+                    "expected_version": expected_version,
+                    "decision": decision,
+                    "reason": reason,
+                }
+            ),
+            retention_class=RetentionClass.FINANCIAL_AUDIT,
+            mutate=mutate,
+            recover=recover,
+        )
+        return await self.activation_readiness(
+            session, context=context, version_id=version_id
+        )
+
+    async def _stage_activation_review(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        version_id: UUID,
+        expected_version: int,
+        decision: str,
+        reason: str,
+    ) -> PriceBookPriceVersion:
         allowed = {"price", "tax", "effective_date", "activation_authorization"}
         if decision not in allowed:
             raise PriceBookValidation("Unsupported activation review decision.")
         now = utc_now()
-        async with session.begin():
-            version = await session.scalar(
-                select(PriceBookPriceVersion)
-                .where(
-                    PriceBookPriceVersion.company_id == context.company.id,
-                    PriceBookPriceVersion.id == version_id,
-                )
-                .with_for_update()
+        version = await session.scalar(
+            select(PriceBookPriceVersion)
+            .where(
+                PriceBookPriceVersion.company_id == context.company.id,
+                PriceBookPriceVersion.id == version_id,
             )
-            if version is None:
-                raise PriceBookNotFound("Price version was not found.")
-            if version.status != "draft" or version.version != expected_version:
-                raise PriceBookConflict("Only the current draft may be approved.")
-            binding = await session.scalar(
-                select(PriceBookCandidateBinding).where(
-                    PriceBookCandidateBinding.company_id == context.company.id,
-                    PriceBookCandidateBinding.entity_type == "service",
-                    PriceBookCandidateBinding.native_entity_id
-                    == version.service_item_id,
-                )
-            )
-            if binding is None or "SOURCE_CONFLICT" in binding.review_flags:
-                raise PriceBookConflict("Candidate source authority is not approvable.")
-            review = await session.scalar(
-                select(PriceBookActivationReview)
-                .where(
-                    PriceBookActivationReview.company_id == context.company.id,
-                    PriceBookActivationReview.price_version_id == version.id,
-                )
-                .with_for_update()
-            )
-            if review is None:
-                review = PriceBookActivationReview(
-                    company_id=context.company.id,
-                    price_version_id=version.id,
-                    draft_version=version.version,
-                    rationale={},
-                )
-                session.add(review)
-            elif review.draft_version != version.version:
-                review.draft_version = version.version
-                review.price_approved_by_user_id = review.tax_approved_by_user_id = None
-                review.effective_approved_by_user_id = (
-                    review.activation_authorized_by_user_id
-                ) = None
-                review.price_approved_at = review.tax_approved_at = None
-                review.effective_approved_at = review.activation_authorized_at = None
-                review.rationale = {}
-            if decision == "activation_authorization" and not all(
-                (
-                    review.price_approved_at,
-                    review.tax_approved_at,
-                    review.effective_approved_at,
-                )
-            ):
-                raise PriceBookConflict(
-                    "Price, tax, and effective date approvals are required first."
-                )
-            fields = {
-                "price": ("price_approved_by_user_id", "price_approved_at"),
-                "tax": ("tax_approved_by_user_id", "tax_approved_at"),
-                "effective_date": (
-                    "effective_approved_by_user_id",
-                    "effective_approved_at",
-                ),
-                "activation_authorization": (
-                    "activation_authorized_by_user_id",
-                    "activation_authorized_at",
-                ),
-            }
-            actor_field, time_field = fields[decision]
-            setattr(review, actor_field, context.user.id)
-            setattr(review, time_field, now)
-            review.rationale = {**review.rationale, decision: reason}
-            review.updated_at = now
-            await session.flush()
-            self._audit(
-                session,
-                context=context,
-                entity_type="price_book_price_version",
-                entity_id=version.id,
-                action=f"{decision}_approved",
-                state={"draft_version": version.version, "decision": decision},
-                reason=reason,
-                version=version.version,
-            )
-        return await self.activation_readiness(
-            session, context=context, version_id=version_id
+            .with_for_update()
         )
+        if version is None:
+            raise PriceBookNotFound("Price version was not found.")
+        if version.status != "draft" or version.version != expected_version:
+            raise PriceBookConflict("Only the current draft may be approved.")
+        binding = await session.scalar(
+            select(PriceBookCandidateBinding).where(
+                PriceBookCandidateBinding.company_id == context.company.id,
+                PriceBookCandidateBinding.entity_type == "service",
+                PriceBookCandidateBinding.native_entity_id == version.service_item_id,
+            )
+        )
+        if binding is None or "SOURCE_CONFLICT" in binding.review_flags:
+            raise PriceBookConflict("Candidate source authority is not approvable.")
+        review = await session.scalar(
+            select(PriceBookActivationReview)
+            .where(
+                PriceBookActivationReview.company_id == context.company.id,
+                PriceBookActivationReview.price_version_id == version.id,
+            )
+            .with_for_update()
+        )
+        if review is None:
+            review = PriceBookActivationReview(
+                company_id=context.company.id,
+                price_version_id=version.id,
+                draft_version=version.version,
+                rationale={},
+            )
+            session.add(review)
+        elif review.draft_version != version.version:
+            review.draft_version = version.version
+            review.price_approved_by_user_id = review.tax_approved_by_user_id = None
+            review.effective_approved_by_user_id = (
+                review.activation_authorized_by_user_id
+            ) = None
+            review.price_approved_at = review.tax_approved_at = None
+            review.effective_approved_at = review.activation_authorized_at = None
+            review.rationale = {}
+        if decision == "activation_authorization" and not all(
+            (
+                review.price_approved_at,
+                review.tax_approved_at,
+                review.effective_approved_at,
+            )
+        ):
+            raise PriceBookConflict(
+                "Price, tax, and effective date approvals are required first."
+            )
+        fields = {
+            "price": ("price_approved_by_user_id", "price_approved_at"),
+            "tax": ("tax_approved_by_user_id", "tax_approved_at"),
+            "effective_date": (
+                "effective_approved_by_user_id",
+                "effective_approved_at",
+            ),
+            "activation_authorization": (
+                "activation_authorized_by_user_id",
+                "activation_authorized_at",
+            ),
+        }
+        actor_field, time_field = fields[decision]
+        setattr(review, actor_field, context.user.id)
+        setattr(review, time_field, now)
+        review.rationale = {**review.rationale, decision: reason}
+        review.updated_at = now
+        await session.flush()
+        self._audit(
+            session,
+            context=context,
+            entity_type="price_book_price_version",
+            entity_id=version.id,
+            action=f"{decision}_approved",
+            state={"draft_version": version.version, "decision": decision},
+            reason=reason,
+            version=version.version,
+        )
+        return version
 
     async def transition_lifecycle(
         self,

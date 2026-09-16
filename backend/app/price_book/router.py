@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.idempotency.errors import reliability_http_error
+from app.platform.idempotency.reliability import MutationReliabilityError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AccountingPermission, PriceBookPermission
 from app.platform.permissions.dependencies import require_permission
@@ -358,7 +360,10 @@ async def _record_review(
             expected_version=payload.expected_version,
             decision=decision,
             reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
         )
+    except MutationReliabilityError as error:
+        raise reliability_http_error(error) from error
     except PriceBookError as error:
         raise http_error(error) from error
 

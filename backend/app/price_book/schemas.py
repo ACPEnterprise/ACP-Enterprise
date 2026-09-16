@@ -83,6 +83,7 @@ class ActivationRequest(PriceBookSchema):
 class ActivationReviewDecision(PriceBookSchema):
     expected_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=160)
 
 
 class ActivationReadinessItem(PriceBookSchema):
