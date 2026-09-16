@@ -49,8 +49,38 @@ vi.mock("../hooks/useLuminary", () => ({
   useLuminaryOwnerEconomics: () => ({
     isPending: false,
     data: {
+      period: { start: "2026-09-01", end: "2026-09-15" },
+      prior_period: { start: "2026-08-17", end: "2026-08-31" },
+      generated_at: "2026-09-16T12:00:00Z",
       readiness: "READY",
       confidence: { score_percent: 90 },
+      facts: [
+        {
+          family: "REVENUE", metric: "invoiced_revenue", value: 12550,
+          units: "minor_currency", currency: "USD",
+          authority: "accepted_native_invoiced_or_valued_fact",
+          prerequisite_completeness: "AVAILABLE",
+          as_of: "2026-09-16T12:00:00Z",
+        },
+      ],
+      trend_support: {
+        state: "READY",
+        authority: "equal_length_single_authority_periods_only",
+        mixed_authority_periods: "labeled_and_not_combined",
+        comparison: {
+          state: "AVAILABLE", basis: "ACP_NATIVE_INVOICED",
+          invoiced_revenue_change_minor: 2500,
+        },
+      },
+      evidence_priority_queue: [
+        {
+          prerequisite: "certified_direct_wage_cost",
+          affected_job_count: 1,
+          responsible_domain: "Payroll/Economics policy",
+          next_safe_step: "owner_input_required",
+          economic_unlock: "direct_contribution",
+        },
+      ],
       job_economics: [
         {
           job_id: "job-1", job_number: "J-100", job_status: "completed",
@@ -182,6 +212,11 @@ describe("Luminary workspace recovery", () => {
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
     ).toBeVisible();
     expect(screen.getByText("Owner economics decision support")).toBeVisible();
+    expect(screen.getByText("What changed from the prior equal period")).toBeVisible();
+    expect(screen.getByText("+$25.00")).toBeVisible();
+    expect(screen.getByText("Measurement freshness and authority")).toBeVisible();
+    expect(screen.getByText("What evidence would improve this answer?")).toBeVisible();
+    expect(screen.getByText(/responsible domain: Payroll\/Economics policy/)).toBeVisible();
     expect(screen.getByText("Read-only scenario")).toBeVisible();
     expect(screen.getByText("No hypothetical scenario selected.")).toBeVisible();
     expect(screen.getByText("Review measured Job contribution")).toBeVisible();
