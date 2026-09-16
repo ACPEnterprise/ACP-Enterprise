@@ -75,8 +75,39 @@ def test_classifies_source_history_without_promoting_accounting(tmp_path: Path) 
         "failed_assertion": 1,
         "qbo_overlap_hold": 1,
         "hcp_only_displayable": 0,
+        "exact_qbo_overlap": 0,
+        "qbo_only": 0,
+        "source_displayable_nonaggregated": 1,
+        "conflicting": 0,
+        "unresolved": 1,
+    }
+    assert result.payment_records[0]["aggregation_safe"] is False
+    assert result.payment_records[0]["exact_qbo_provider_identity"] is None
+    assert result.payment_records[0]["disposition"] == "SOURCE_DISPLAYABLE_NONAGGREGATED"
+    assert result.payment_records[1]["disposition"] == "UNRESOLVED"
+    assert result.refund_counts == {
+        "source_acquired": 2,
+        "exact_refund": 1,
+        "source_backed_unlinked_refund": 1,
+        "conflicting": 0,
+        "source_missing": 0,
+    }
+    assert {record["disposition"] for record in result.refund_records} == {
+        "EXACT_REFUND",
+        "SOURCE_BACKED_UNLINKED_REFUND",
     }
     assert result.authority["mutation_authority"] == "none"
+
+
+def test_payment_and_refund_records_are_digest_stable(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    first = classify_financial_history(source)
+    second = classify_financial_history(source)
+
+    assert first == second
+    first.verify()
+    assert all(record["aggregation_safe"] is False for record in first.payment_records)
+    assert all(record["aggregation_safe"] is False for record in first.refund_records)
 
 
 def test_rejects_duplicate_payment_source_identity(tmp_path: Path) -> None:

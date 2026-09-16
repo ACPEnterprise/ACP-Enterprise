@@ -131,6 +131,80 @@ _FAMILIES = {
         ("completed_only", "approved_progress", "closed_period"),
         {},
     ),
+    "overtime_premium_allocation": (
+        "ECO-FIN-013",
+        "Overtime premium allocation",
+        (
+            "accepted_overtime_job_hours_proportional",
+            "explicit_payroll_job_attribution",
+            "hold_unallocated",
+            "certified_method_reference",
+        ),
+        {"method_ref": "reference"},
+    ),
+    "salary_job_allocation": (
+        "ECO-FIN-014",
+        "Salaried compensation Job allocation",
+        (
+            "accepted_job_hours_within_pay_period",
+            "accepted_productive_hours_within_pay_period",
+            "hold_outside_direct_job_cost",
+            "certified_method_reference",
+        ),
+        {"method_ref": "reference"},
+    ),
+    "non_job_paid_time_treatment": (
+        "ECO-FIN-015",
+        "Non-Job paid time treatment",
+        ("indirect_labor", "overhead_pool", "hold_unallocated"),
+        {"overhead_pool_ref": "reference"},
+    ),
+    "employer_burden_allocation": (
+        "ECO-FIN-016",
+        "Employer burden component allocation",
+        ("component_specific_certified_drivers", "hold_unallocated"),
+        {"component_driver_refs": "reference_list"},
+    ),
+    "owner_compensation_treatment": (
+        "ECO-FIN-017",
+        "Owner compensation treatment",
+        (
+            "direct_role_component",
+            "operating_overhead",
+            "normalized_management_view",
+            "excluded_management_view",
+        ),
+        {"certified_treatment_ref": "reference"},
+    ),
+    "marketing_cost_treatment": (
+        "ECO-FIN-018",
+        "Marketing cost treatment",
+        (
+            "company_overhead",
+            "branch_overhead",
+            "service_line_allocation",
+            "acquisition_economics",
+            "hold_unallocated",
+        ),
+        {"allocation_ref": "reference"},
+    ),
+    "fleet_equipment_cost_treatment": (
+        "ECO-FIN-019",
+        "Fleet and equipment cost treatment",
+        (
+            "general_overhead",
+            "authoritative_vehicle_job_allocation",
+            "truck_capacity_economics",
+            "hold_unallocated",
+        ),
+        {"cost_evidence_refs": "reference_list", "allocation_ref": "reference"},
+    ),
+    "capacity_buffer": (
+        "ECO-FIN-020",
+        "Capacity buffer treatment",
+        ("certified_capacity_buffer", "no_capacity_buffer"),
+        {"capacity_parameter_ref": "reference"},
+    ),
 }
 POLICY_FAMILY_REGISTRY: Mapping[str, PolicyFamilyDefinition] = MappingProxyType(
     {
@@ -158,6 +232,36 @@ STRATEGY_REQUIRED_PARAMETERS: Mapping[tuple[str, str], tuple[str, ...]] = (
             ("monetary_materiality", "approved_threshold"): (
                 "threshold_minor_units",
                 "currency",
+            ),
+            ("overtime_premium_allocation", "certified_method_reference"): (
+                "method_ref",
+            ),
+            ("salary_job_allocation", "certified_method_reference"): (
+                "method_ref",
+            ),
+            ("non_job_paid_time_treatment", "overhead_pool"): (
+                "overhead_pool_ref",
+            ),
+            (
+                "employer_burden_allocation",
+                "component_specific_certified_drivers",
+            ): ("component_driver_refs",),
+            ("owner_compensation_treatment", "normalized_management_view"): (
+                "certified_treatment_ref",
+            ),
+            ("marketing_cost_treatment", "service_line_allocation"): (
+                "allocation_ref",
+            ),
+            (
+                "fleet_equipment_cost_treatment",
+                "authoritative_vehicle_job_allocation",
+            ): ("cost_evidence_refs", "allocation_ref"),
+            ("fleet_equipment_cost_treatment", "truck_capacity_economics"): (
+                "cost_evidence_refs",
+                "allocation_ref",
+            ),
+            ("capacity_buffer", "certified_capacity_buffer"): (
+                "capacity_parameter_ref",
             ),
         }
     )
