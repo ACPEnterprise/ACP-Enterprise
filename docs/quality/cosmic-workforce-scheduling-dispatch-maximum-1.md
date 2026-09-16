@@ -52,6 +52,13 @@ mocks after source certification, timeline, and real-roster readiness were
 added. The acceptance scaffold now supplies those read-only contracts. No
 Employee or Workforce product authority changed.
 
+### Internal Branch identity exposed to office users
+
+The Workforce eligibility form required an operator to type an authorized
+Branch UUID. It now presents the session-scoped Branch names/codes and defaults
+to the Company's configured default Branch. The submitted value remains the
+same authoritative Branch ID; no Branch scope or permission is broadened.
+
 ## Qualified connected surfaces
 
 The focused UI suite covers Employee roster/detail/timecard navigation,
