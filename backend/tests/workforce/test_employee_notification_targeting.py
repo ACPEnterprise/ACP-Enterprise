@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.workforce.notification_targeting import (
     SUPPORTED_EVENTS,
     EmployeeNotificationTargetingService,

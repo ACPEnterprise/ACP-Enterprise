@@ -3,14 +3,13 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from app.workforce.models import WorkforceSourceCertification
 from app.workforce.schemas import SourceCertificationDecisionRequest
 from app.workforce.source_certification import (
     SourceCertificationConflict,
     SourceCertificationService,
 )
+from pydantic import ValidationError
 
 
 def command(decision: str, **values) -> SourceCertificationDecisionRequest:

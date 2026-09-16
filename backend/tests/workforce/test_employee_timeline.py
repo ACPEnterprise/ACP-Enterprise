@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.workforce.employee_timeline import EmployeeTimelineService
 
 
