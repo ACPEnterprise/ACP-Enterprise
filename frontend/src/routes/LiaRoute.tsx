@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Bot, ChevronDown, ShieldCheck, Sparkles } from "lucide-react";
 
@@ -159,18 +159,16 @@ export function LiaRoute() {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       contextId,
     );
-  const context = useMemo(
-    () =>
-      contextDomain !== null &&
-      contextualDomains.has(contextDomain) &&
-      validContextId
-        ? {
-            domain: contextDomain,
-            ...(contextId ? { entity_id: contextId } : {}),
-          }
-        : undefined,
-    [contextDomain, contextId, validContextId],
-  );
+  const invalidContext =
+    contextDomain !== null &&
+    (!contextualDomains.has(contextDomain) || !validContextId);
+  const context =
+    contextDomain !== null && contextualDomains.has(contextDomain) && validContextId
+      ? {
+          domain: contextDomain,
+          ...(contextId ? { entity_id: contextId } : {}),
+        }
+      : undefined;
   const contextLabel = context
     ? {
         customers: "Customer",
@@ -344,6 +342,13 @@ export function LiaRoute() {
         <Alert variant="success" title="Entity context ready">
           LIA will retrieve only the server-authorized minimum-necessary{" "}
           {contextLabel} context. The entity identifier does not grant access.
+        </Alert>
+      ) : null}
+      {invalidContext ? (
+        <Alert variant="warning" title="Record context unavailable">
+          This link does not contain a supported safe record context. LIA did not
+          use the supplied record identifier; open the authoritative record and
+          choose Ask LIA again.
         </Alert>
       ) : null}
       {foundation.data ? (

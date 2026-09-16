@@ -227,6 +227,18 @@ describe("LIA workspace", () => {
     );
   });
 
+  it("fails a malformed record-context link visibly instead of silently dropping it", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/lia?contextDomain=customers&contextId=not-a-uuid"]}
+      >
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Record context unavailable")).toBeVisible();
+    expect(screen.getByText(/did not use the supplied record identifier/i)).toBeVisible();
+  });
+
   it("preserves a server-resolved Employee referent for payroll follow-up", () => {
     const employeeId = "33333333-3333-4333-8333-333333333333";
     render(
