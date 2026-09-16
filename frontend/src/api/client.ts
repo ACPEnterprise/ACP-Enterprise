@@ -23,6 +23,12 @@ interface AuthenticationHandlers {
 
 let authenticationHandlers: AuthenticationHandlers | null = null;
 
+function trustedApiRequest(config: InternalAxiosRequestConfig): boolean {
+  const configuredBase = new URL(config.baseURL ?? apiBaseUrl, window.location.origin);
+  const requestUrl = new URL(config.url ?? "", configuredBase);
+  return requestUrl.origin === configuredBase.origin;
+}
+
 export function authenticatedRequestHeaders(): Headers {
   const headers = new Headers({ Accept: "text/event-stream" });
   const accessToken = authenticationHandlers?.getAccessToken();
@@ -49,6 +55,7 @@ export function configureAuthentication(handlers: AuthenticationHandlers | null)
 }
 
 apiClient.interceptors.request.use((config) => {
+  if (!trustedApiRequest(config)) return config;
   const accessToken = authenticationHandlers?.getAccessToken();
   if (accessToken) config.headers.set("Authorization", `Bearer ${accessToken}`);
   const companyId = authenticationHandlers?.getActiveCompanyId();
@@ -64,6 +71,7 @@ apiClient.interceptors.response.use(
     }
 
     const request = error.config as RetriableRequestConfig;
+    if (!trustedApiRequest(request)) return Promise.reject(error);
     const isAuthenticationRequest = request.url?.includes("/api/v1/auth/") ?? false;
     if (!authenticationHandlers || request.authenticationRetry || isAuthenticationRequest) {
       return Promise.reject(error);
