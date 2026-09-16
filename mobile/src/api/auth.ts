@@ -20,6 +20,9 @@ export function refresh(client: ApiClient, refreshToken: string) {
 export function logout(client: ApiClient) {
   return client.request("/api/v1/auth/logout", z.object({ message: z.string() }).passthrough(), { method: "POST" });
 }
+export function requestPasswordReset(client: ApiClient, email: string) {
+  return client.request("/api/v1/auth/password-reset/request", z.object({ message: z.string() }).passthrough(), { method: "POST", authentication: "none", body: JSON.stringify({ email }) });
+}
 const verifiedSessionSchema = z.object({ session_id: z.string(), status: z.string(), absolute_expires_at: z.string(), idle_expires_at: z.string().nullable() }).passthrough();
 export function verifySession(client: ApiClient) { return client.request("/api/v1/auth/session", verifiedSessionSchema, { unauthorized: "preserve" }); }
 

@@ -21,6 +21,7 @@ import type { AppEnvironment } from "./config/environment";
 import { PrivacyShield } from "./components/PrivacyShield";
 import { createPayrollService } from "./api/payroll";
 import { createFieldService } from "./api/fieldService";
+import { requestPasswordReset } from "./api/auth";
 import { activationTokenFromLink } from "./linking/linking";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -48,10 +49,11 @@ function RuntimeApp({ environment }: { environment: AppEnvironment }) {
   useEffect(() => { const accept = (url: string | null) => { if (!url) return; const token = activationTokenFromLink(url); if (token) setActivationToken(token); }; void Linking.getInitialURL().then(accept); const subscription = Linking.addEventListener("url", ({ url }) => accept(url)); return () => subscription.remove(); }, []);
   useEffect(() => { const subscription = AppState.addEventListener("change", (next) => { if (next === "active" && state !== "boot" && state !== "anonymous") void restore(); }); return () => subscription.remove(); }, [restore, state]);
   const signIn = useCallback(async (email: string, password: string) => { apply(await coordinator.signIn(email, password)); }, [apply, coordinator]);
+  const recover = useCallback(async (email: string) => { await requestPasswordReset(client, email); }, [client]);
   const activate = useCallback(async (token: string, password: string) => { await coordinator.activate(token, password); }, [coordinator]);
   const signOut = useCallback(async () => { await coordinator.signOut(); setCapabilities([]); setIdentity(null); setState("anonymous"); }, [coordinator]);
   if (state === "boot") return <Screen><Text accessibilityLabel="Verifying protected ACP session">Verifying your ACP session…</Text></Screen>;
   if (state === "restore_error") return <Screen><Text accessibilityRole="alert">ACP could not verify this device session. Connect to the internet and try again.</Text><PrimaryButton label="Retry Session Verification" onPress={() => void restore()} /><PrimaryButton label="Clear Session and Sign In" onPress={() => void signOut()} /></Screen>;
   if (state === "onboarding_incomplete" || state === "access_limited") return <RestrictedStateScreen kind={state} onRetry={restore} onLogout={signOut} />;
-  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={state === "authenticated"} capabilities={capabilities} identity={identity} environment={environment} activationToken={activationToken} onActivationConsumed={() => setActivationToken(null)} timekeeping={timekeeping} employeeOperations={employeeOperations} payroll={payroll} fieldService={fieldService} network={deviceNetworkMonitor} onSignIn={signIn} onActivate={activate} onLogout={signOut} /></ErrorBoundary>;
+  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={state === "authenticated"} capabilities={capabilities} identity={identity} environment={environment} activationToken={activationToken} onActivationConsumed={() => setActivationToken(null)} timekeeping={timekeeping} employeeOperations={employeeOperations} payroll={payroll} fieldService={fieldService} network={deviceNetworkMonitor} onSignIn={signIn} onRequestPasswordReset={recover} onActivate={activate} onLogout={signOut} /></ErrorBoundary>;
 }
