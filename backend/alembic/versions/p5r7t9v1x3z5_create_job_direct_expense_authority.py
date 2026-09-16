@@ -1,7 +1,7 @@
 """Create certified direct-expense-to-Job authority.
 
-Revision ID: m3p5r7t9v1x3
-Revises: l2n4o6q8s0u2
+Revision ID: p5r7t9v1x3z5
+Revises: n4p6r8t0v2x4
 """
 
 from collections.abc import Sequence
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "m3p5r7t9v1x3"
-down_revision: str | Sequence[str] | None = "l2n4o6q8s0u2"
+revision: str = "p5r7t9v1x3z5"
+down_revision: str | Sequence[str] | None = "n4p6r8t0v2x4"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
