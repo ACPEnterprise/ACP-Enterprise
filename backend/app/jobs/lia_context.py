@@ -29,6 +29,8 @@ from app.platform.permissions.codes import (
     SchedulingPermission,
 )
 from app.scheduling.models import Appointment
+from app.timekeeping.models import JobWorkedIntervalRevision
+from app.timekeeping.permissions import TimekeepingPermission
 
 CONTRACT_VERSION = "JOB.LIA_CONTEXT.v1"
 MAX_APPOINTMENTS = 10
@@ -61,6 +63,8 @@ class JobLiaContext(BaseModel):
     estimate_origin: JobContextItem | None
     invoice_states: dict[str, int] | None
     payment_states: dict[str, int] | None
+    worked_time_states: dict[str, int] | None
+    worked_minutes: int | None
     limitations: tuple[str, ...]
     observed_at: datetime
     evidence_digest: str
@@ -74,6 +78,7 @@ class JobLiaContext(BaseModel):
             ("Dispatch", self.dispatch_states),
             ("Invoice", self.invoice_states),
             ("Payment receipt", self.payment_states),
+            ("Worked-time evidence", self.worked_time_states),
         ):
             if states is not None:
                 value = (
@@ -81,6 +86,8 @@ class JobLiaContext(BaseModel):
                     or "none"
                 )
                 parts.append(f"{label} states: {value}.")
+        if self.worked_minutes is not None:
+            parts.append(f"Accepted Job worked minutes: {self.worked_minutes}.")
         return " ".join(parts)
 
 
@@ -274,6 +281,43 @@ class JobLiaContextService:
                 ),
             )
 
+        worked_time_states = None
+        worked_minutes = None
+        if context.has_permission(TimekeepingPermission.ADMIN_READ):
+            worked_rows = (
+                await session.execute(
+                    select(
+                        JobWorkedIntervalRevision.validity,
+                        JobWorkedIntervalRevision.confidence,
+                        func.count(),
+                        func.sum(JobWorkedIntervalRevision.duration_minutes),
+                    )
+                    .where(
+                        JobWorkedIntervalRevision.company_id == context.company.id,
+                        JobWorkedIntervalRevision.branch_id == job.branch_id,
+                        JobWorkedIntervalRevision.job_id == job.id,
+                        JobWorkedIntervalRevision.correction_state != "superseded",
+                    )
+                    .group_by(
+                        JobWorkedIntervalRevision.validity,
+                        JobWorkedIntervalRevision.confidence,
+                    )
+                    .order_by(
+                        JobWorkedIntervalRevision.validity,
+                        JobWorkedIntervalRevision.confidence,
+                    )
+                )
+            ).all()
+            worked_time_states = {
+                f"{validity}:{confidence}": int(count)
+                for validity, confidence, count, _minutes in worked_rows
+            }
+            worked_minutes = sum(
+                int(minutes or 0)
+                for validity, confidence, _count, minutes in worked_rows
+                if validity == "valid" and confidence == "authoritative"
+            )
+
         limitations = tuple(
             label
             for permission, label in (
@@ -283,6 +327,7 @@ class JobLiaContextService:
                 (EstimatePermission.READ, "estimate_context_not_authorized"),
                 (InvoicePermission.READ, "invoice_context_not_authorized"),
                 (PaymentPermission.READ, "payment_context_not_authorized"),
+                (TimekeepingPermission.ADMIN_READ, "timekeeping_context_not_authorized"),
             )
             if not context.has_permission(permission)
         )
@@ -306,6 +351,8 @@ class JobLiaContextService:
             else None,
             "invoice_states": invoice_states,
             "payment_states": payment_states,
+            "worked_time_states": worked_time_states,
+            "worked_minutes": worked_minutes,
             "limitations": limitations,
         }
         digest = hashlib.sha256(
@@ -327,6 +374,8 @@ class JobLiaContextService:
             estimate_origin=estimate_origin,
             invoice_states=invoice_states,
             payment_states=payment_states,
+            worked_time_states=worked_time_states,
+            worked_minutes=worked_minutes,
             limitations=limitations,
             observed_at=observed_at,
             evidence_digest=digest,

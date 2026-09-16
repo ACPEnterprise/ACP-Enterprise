@@ -29,9 +29,11 @@ before them:
 
 The existing `CUSTOMER.LIA_CONTEXT.v1` projection supplies authorized Customer,
 Location, Job, Estimate, Invoice, Agreement, Appointment-state, and
-Payment-state evidence. The existing `JOB.LIA_CONTEXT.v1` projection supplies
-Customer, Location, lifecycle, Appointment, Dispatch, Estimate, Invoice, and
-Payment evidence. Missing permissions remain explicit limitations. Neither
+  Payment-state evidence. The existing `JOB.LIA_CONTEXT.v1` projection supplies
+  Customer, Location, lifecycle, Appointment, Dispatch, Estimate, Invoice, and
+  Payment evidence plus permission-gated current Jobsite Hours totals from
+  authoritative, non-superseded worked intervals. Missing permissions remain
+  explicit limitations. Neither
 projection exposes payment instruments, protected Payroll fields, raw notes, or
 source-system identity guesses.
 
