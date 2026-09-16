@@ -75,6 +75,14 @@ book it again. The pre-booking technician list also excludes Workforce records
 whose canonical readiness is not `READY`; final Appointment-specific
 eligibility remains enforced by Dispatch.
 
+### Terminal Appointment rescheduling
+
+Calendar detail previously exposed the move form for completed and no-show
+Appointments even though the Scheduling service correctly accepts rescheduling
+only from scheduled or confirmed state. Terminal records now retain navigation
+and history access while the UI explains why they cannot be moved instead of
+leading an operator into a predictable conflict response.
+
 ## Qualified connected surfaces
 
 The focused UI suite covers Employee roster/detail/timecard navigation,
