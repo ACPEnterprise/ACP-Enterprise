@@ -27,6 +27,8 @@ from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
 from app.timekeeping.models import JobWorkedIntervalRevision
 
+from .operational_rollups import build_operational_rollups
+
 CONTRACT_VERSION: Final = "economics.native-evidence-admission.v1"
 MAX_SOURCE_ROWS: Final = 5000
 _INVOICE_EVIDENCE_STATES: Final = (
@@ -496,6 +498,7 @@ class NativeEconomicsEvidenceService:
                 ),
             },
             "jobs": ordered_jobs,
+            "operational_rollups": build_operational_rollups(ordered_jobs),
             "limitations": [
                 "Invoiced revenue is not substituted for earned revenue, settlement, or cash.",
                 "Accepted worked duration is not substituted for paid time or labor cost.",
