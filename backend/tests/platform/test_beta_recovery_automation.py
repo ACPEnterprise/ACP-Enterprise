@@ -12,6 +12,10 @@ def test_backup_is_restricted_atomic_and_validated_before_publication() -> None:
 
     assert "umask 077" in script
     assert 'install -d -m 700 "$backup_root"' in script
+    assert "PREVIEW_POSTGRES_CONTAINER:-acp-enterprise-postgres" in script
+    assert "docker inspect" in script
+    assert 'docker exec "$postgres_container"' in script
+    assert 'docker exec -i "$postgres_container"' in script
     assert "pg_dump" in script
     assert "--format=custom" in script
     assert "pg_restore --list" in script

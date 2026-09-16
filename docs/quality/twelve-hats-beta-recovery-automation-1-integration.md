@@ -29,7 +29,8 @@
 
 `scripts/backup-preview-postgres.sh`:
 
-- uses the existing restricted Preview environment and Compose PostgreSQL service;
+- targets the exact existing Preview PostgreSQL container by its explicit protected
+  runtime identity and verifies that it is running before acquisition;
 - creates a custom-format dump under a mode-0700 directory with umask 0077;
 - writes to a unique temporary file;
 - rejects an empty dump;
