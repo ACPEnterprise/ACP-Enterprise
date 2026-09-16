@@ -26,6 +26,8 @@ from app.workforce.schemas import (
     LanguageEvidenceRequest,
     RealRosterBindingRequest,
     RealRosterReadiness,
+    SourceCertificationDecisionRequest,
+    SourceCertificationLedger,
     WorkforceDirectory,
     WorkforceEligibilityRequest,
     WorkforceEligibilityResponse,
@@ -34,6 +36,10 @@ from app.workforce.schemas import (
     WorkforceProfileResponse,
 )
 from app.workforce.service import workforce_operations_service
+from app.workforce.source_certification import (
+    SourceCertificationConflict,
+    source_certification_service,
+)
 
 router = APIRouter(prefix="/api/v1/workforce", tags=["Workforce"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -63,7 +69,9 @@ def _require_employee_administration(context: AuthorizationContext) -> None:
         AdministrationPermission.ROLE_READ,
     }
     if not required.issubset(context.permission_codes):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Employee administration authority is required.")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Employee administration authority is required."
+        )
 
 
 def _workforce_conflict(error: ValueError) -> HTTPException:
@@ -82,15 +90,11 @@ async def directory(context: ReadContext, session: Session) -> WorkforceDirector
 
 
 @router.get("/real-roster", response_model=RealRosterReadiness)
-async def real_roster(
-    context: ReadContext, session: Session
-) -> RealRosterReadiness:
+async def real_roster(context: ReadContext, session: Session) -> RealRosterReadiness:
     return await real_roster_service.readiness(session, context=context)
 
 
-@router.put(
-    "/real-roster/{roster_key}/binding", response_model=RealRosterReadiness
-)
+@router.put("/real-roster/{roster_key}/binding", response_model=RealRosterReadiness)
 async def bind_real_roster_employee(
     roster_key: str,
     data: RealRosterBindingRequest,
@@ -105,6 +109,34 @@ async def bind_real_roster_employee(
             employee_id=data.employee_id,
         )
     except RealRosterConflict as error:
+        raise _workforce_conflict(error) from error
+
+
+@router.get("/source-certifications", response_model=SourceCertificationLedger)
+async def source_certifications(
+    context: CertificationManageContext, session: Session
+) -> SourceCertificationLedger:
+    return await source_certification_service.ledger(session, context=context)
+
+
+@router.put(
+    "/source-certifications/HCP/{source_employee_id}",
+    response_model=SourceCertificationLedger,
+)
+async def decide_source_certification(
+    source_employee_id: str,
+    data: SourceCertificationDecisionRequest,
+    context: CertificationManageContext,
+    session: Session,
+) -> SourceCertificationLedger:
+    try:
+        return await source_certification_service.decide(
+            session,
+            context=context,
+            source_employee_id=source_employee_id,
+            command=data,
+        )
+    except SourceCertificationConflict as error:
         raise _workforce_conflict(error) from error
 
 
@@ -271,7 +303,9 @@ async def prepare_field_readiness(
     session: Session,
 ) -> FieldReadinessResponse:
     if not context.has_permission(WorkforcePermission.AVAILABILITY_MANAGE):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Availability management authority is required.")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Availability management authority is required."
+        )
     try:
         profile_id, capability_id, availability_id = (
             await workforce_administration_service.prepare_field_readiness(

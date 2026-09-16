@@ -108,6 +108,42 @@ export interface RealRosterReadiness {
   payroll_identity_ready_total: number;
 }
 
+export type SourceCertificationDecision = "CONFIRM" | "SELECT_EXISTING" | "CREATE_ONBOARD" | "HOLD" | "LEGACY_ONLY";
+
+export interface SourceCertificationItem {
+  source_system: "HCP";
+  source_employee_id: string;
+  source_disposition: string;
+  source_branch_id: string;
+  source_branch_name: string;
+  evidence_reference: string;
+  evidence_digest: string;
+  mechanically_supported_employee_id: string | null;
+  mechanically_supported_employee_name: string | null;
+  decision: SourceCertificationDecision | null;
+  revision: number;
+  employee_id: string | null;
+  employee_name: string | null;
+  onboarding_request_id: string | null;
+  reason: string | null;
+  decided_at: string | null;
+  history: Array<{
+    revision: number;
+    decision: SourceCertificationDecision;
+    employee_id: string | null;
+    onboarding_request_id: string | null;
+    actor_user_id: string;
+    reason: string;
+    occurred_at: string;
+  }>;
+}
+
+export interface SourceCertificationLedger {
+  items: SourceCertificationItem[];
+  total: number;
+  undecided: number;
+}
+
 export interface EmployeePermissionExplanation {
   code: string;
   name: string;
@@ -174,6 +210,27 @@ export async function evaluateWorkforceEligibility(payload: WorkforceEligibility
 
 export async function getRealRosterReadiness(): Promise<RealRosterReadiness> {
   return (await apiClient.get<RealRosterReadiness>("/api/v1/workforce/real-roster")).data;
+}
+
+export async function getSourceCertificationLedger(): Promise<SourceCertificationLedger> {
+  return (await apiClient.get<SourceCertificationLedger>("/api/v1/workforce/source-certifications")).data;
+}
+
+export async function decideSourceCertification(
+  sourceEmployeeId: string,
+  input: {
+    decision: SourceCertificationDecision;
+    expected_revision: number;
+    employee_id?: string;
+    reason: string;
+  },
+): Promise<SourceCertificationLedger> {
+  return (
+    await apiClient.put<SourceCertificationLedger>(
+      `/api/v1/workforce/source-certifications/HCP/${encodeURIComponent(sourceEmployeeId)}`,
+      input,
+    )
+  ).data;
 }
 
 export async function bindRealRosterEmployee(

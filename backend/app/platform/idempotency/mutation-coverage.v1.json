@@ -2981,6 +2981,16 @@
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "workforce",
+      "mechanism": "Company/source identity row lock, optimistic revision, exact replay convergence, and append-only revision evidence",
+      "method": "PUT",
+      "operation_id": "decide_source_certification_api_v1_workforce_source_certifications_HCP__source_employee_id__put",
+      "path": "/api/v1/workforce/source-certifications/HCP/{source_employee_id}",
+      "reason": "An exact owner decision replay returns the accepted revision while stale or contradictory decisions fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
       "mechanism": "Unique Company roster key and Employee binding with contradictory-rebind rejection",
       "method": "PUT",
       "operation_id": "bind_real_roster_employee_api_v1_workforce_real_roster__roster_key__binding_put",
@@ -2989,6 +2999,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "540ff0363393b7023de901b7ac356e40b25d31e3e3c68dc6a2e19591f7f721e4",
+  "fingerprint": "894980effcc92ae74e86a4bd4f96bcca4bbb6ec54007e57e334cbaed03e40601",
   "schema_version": "1"
 }
