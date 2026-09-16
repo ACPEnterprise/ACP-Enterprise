@@ -55,6 +55,9 @@ export function directionsUrl(assignment: DayAssignment, platform: "ios" | "andr
   return platform === "ios" ? `https://maps.apple.com/?daddr=${destination}` : `geo:0,0?q=${destination}`;
 }
 
+export function phoneUrl(phone: string) { return `tel:${phone.replace(/[^0-9+*#,;]/g, "")}`; }
+export function emailUrl(email: string) { return `mailto:${email.trim()}`; }
+
 function Detail({ assignment, timezone, stale, onDirections }: { assignment: DayAssignment; timezone: string; stale: boolean; onDirections(): void }) {
   return <View accessible accessibilityLabel={`${stale ? "Stale assignment detail" : "Authoritative assignment detail"}, ${assignment.customer_display_name}, ${assignment.appointment_status}, ${assignment.assignment_role}`} style={styles.detail}>
     <Text style={styles.kicker}>{stale ? "LAST CONFIRMED — STALE" : "ASSIGNED WORK"}</Text>
@@ -66,14 +69,15 @@ function Detail({ assignment, timezone, stale, onDirections }: { assignment: Day
   </View>;
 }
 
-export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, timekeeping, network, canReadField = false, canExecuteField = false, canPunch = false, canReadAssets = false, canReadEstimates = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; timekeeping?: TimekeepingService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean; canPunch?: boolean; canReadAssets?: boolean; canReadEstimates?: boolean }) {
+export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, timekeeping, network, canReadField = false, canExecuteField = false, canPunch = false, canReadAssets = false, canReadEstimates = false, canReadSources = false, canReadPriceBook = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; timekeeping?: TimekeepingService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean; canPunch?: boolean; canReadAssets?: boolean; canReadEstimates?: boolean; canReadSources?: boolean; canReadPriceBook?: boolean }) {
   const detail = useAssignmentDetail(service, network, appointmentId, initialAssignment);
   const [directionsError, setDirectionsError] = useState(false);
   const [summary, setSummary] = useState("");
+  const [contactActionError, setContactActionError] = useState(false);
   const timezone = detail.timezone ?? initialTimezone;
   const serviceDate = businessDate ?? detail.assignment?.window_start_at.slice(0, 10) ?? initialAssignment?.window_start_at.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
   const field = useFieldWorkspace(fieldService, network, appointmentId, detail.assignment?.job_id ?? initialAssignment?.job_id ?? null, serviceDate, canReadField);
-  const context = useFieldContext(fieldService, network, detail.assignment?.job_id ?? initialAssignment?.job_id ?? null, canReadAssets, canReadEstimates);
+  const context = useFieldContext(fieldService, network, detail.assignment?.job_id ?? initialAssignment?.job_id ?? null, canReadAssets, canReadEstimates, canReadSources, canReadPriceBook);
   const stale = (detail.status === "offline" || detail.status === "error") && detail.assignment !== null;
   const message = detail.status === "not_authorized" ? "You are not authorized to view this assignment."
     : detail.status === "identity_not_ready" ? "Your employee account is not ready for assigned work."
@@ -93,11 +97,21 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
       setDirectionsError(true);
     }
   }
+  async function openContact(url: string) {
+    setContactActionError(false);
+    try {
+      if (!(await Linking.canOpenURL(url))) throw new Error("Contact action unavailable");
+      await Linking.openURL(url);
+    } catch {
+      setContactActionError(true);
+    }
+  }
   const refreshAll = () => Promise.all([detail.refresh(), field.refresh(), context.refresh()]);
   return <ScrollView testID="job-workspace-scroll" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" style={styles.safe} contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={detail.status === "loading" || detail.refreshing || field.status === "loading" || context.status === "loading"} onRefresh={() => void refreshAll()} accessibilityLabel="Refresh latest Job information" />}>
     <Text accessibilityRole="header" style={styles.title}>Job</Text>
     <Text style={styles.readOnly}>{canExecuteField ? "Job status and My Time are separate." : "Read-only assigned work. Job status and My Time are separate."}</Text>
     {directionsError && <Text accessibilityRole="alert" style={styles.message}>Directions are unavailable on this device. The service address remains shown below.</Text>}
+    {contactActionError && <Text accessibilityRole="alert" style={styles.message}>This contact action is unavailable on this device. The confirmed contact details remain shown below.</Text>}
     {message && <Text accessibilityRole="alert" style={stale ? styles.stale : styles.message}>{message}</Text>}
     {detail.status === "loading" && !detail.assignment && <Text accessibilityLabel="Loading authoritative assignment detail">Loading assignment…</Text>}
     {detail.assignment && <Detail assignment={detail.assignment} timezone={timezone} stale={stale} onDirections={() => void openDirections()} />}
@@ -127,13 +141,23 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
         <PrimaryButton label="Refresh Invoice Handoff" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.refreshHandoff(field.item!.job_id!, field.item!.job_version!, field.item!.assignment_version))} />
         <Text style={styles.readOnly}>ACP confirms every action before showing it as complete. Job actions never create a My Time punch.</Text>
       </View>}
-      {(canReadAssets || canReadEstimates) && <View style={styles.section} accessible accessibilityLabel="Assignment scoped field context">
+      {(canReadAssets || canReadEstimates || canReadSources || canReadPriceBook) && <View style={styles.section} accessible accessibilityLabel="Assignment scoped field context">
         <Text style={styles.sectionTitle}>Field context</Text>
         {context.status === "loading" && <Text>Refreshing latest field context…</Text>}
         {context.status === "stale" && <Text accessibilityRole="alert" style={styles.stale}>LAST CONFIRMED — STALE. Actions requiring current context remain unavailable.</Text>}
-        {context.status === "offline" && <Text accessibilityRole="alert">Equipment and Estimate information are unavailable offline until first confirmed.</Text>}
+        {context.status === "offline" && <Text accessibilityRole="alert">Field context is unavailable offline until first confirmed.</Text>}
         {context.status === "denied" && <Text accessibilityRole="alert">Permission or assignment changed. Field context is no longer available.</Text>}
-        {context.status === "unavailable" && <Text accessibilityRole="alert">Equipment or Estimate information is unavailable. Pull to refresh when connected.</Text>}
+        {context.status === "unavailable" && <Text accessibilityRole="alert">Field context is unavailable. Pull to refresh when connected.</Text>}
+        {canReadSources && context.jobSources && <View accessibilityLabel="Assigned Job customer contact">
+          <Text style={styles.sectionTitle}>Customer contact</Text>
+          {!context.jobSources.contact ? <Text style={styles.line}>No active customer contact is available for this Job.</Text> : <View style={styles.contextCard}>
+            <Text style={styles.sectionTitle}>{context.jobSources.contact.display_name}</Text>
+            <Text style={styles.line}>Work approval: {context.jobSources.contact.can_approve_work ? "Authorized contact" : "Not confirmed"}</Text>
+            {context.jobSources.contact.phone && <><Text style={styles.line}>{context.jobSources.contact.phone}</Text><Pressable accessibilityRole="link" accessibilityLabel={`Call ${context.jobSources.contact.display_name}`} onPress={() => void openContact(phoneUrl(context.jobSources!.contact!.phone!))} style={styles.directions}><Text style={styles.directionsText}>Call Customer</Text></Pressable></>}
+            {context.jobSources.contact.email && <><Text style={styles.line}>{context.jobSources.contact.email}</Text><Pressable accessibilityRole="link" accessibilityLabel={`Email ${context.jobSources.contact.display_name}`} onPress={() => void openContact(emailUrl(context.jobSources!.contact!.email!))} style={styles.directions}><Text style={styles.directionsText}>Email Customer</Text></Pressable></>}
+          </View>}
+          <Text style={styles.readOnly}>Calling or composing email opens the device app. ACP Employee does not send a message automatically.</Text>
+        </View>}
         {canReadAssets && context.equipment && <View accessibilityLabel="Assigned Job equipment">
           <Text style={styles.sectionTitle}>Equipment</Text>
           {context.equipment.items.length === 0 ? <Text style={styles.line}>No equipment is related to this Job.</Text> : context.equipment.items.map((asset) => <View key={asset.asset_id} style={styles.contextCard}><Text style={styles.sectionTitle}>{asset.display_name}</Text><Text style={styles.line}>{[asset.manufacturer, asset.model].filter(Boolean).join(" · ") || "Equipment details unavailable"}</Text><Text style={styles.line}>Status: {asset.lifecycle.replaceAll("_", " ")}</Text><Text style={styles.line}>Installation evidence: {asset.installation_state?.replaceAll("_", " ") ?? "Unavailable"}</Text><Text style={styles.line}>Warranty evidence: {asset.warranty_state?.replaceAll("_", " ") ?? "Unavailable — coverage not determined"}</Text><Text style={styles.sectionTitle}>Recent service</Text>{asset.service_history.length ? asset.service_history.map((item, index) => <Text key={`${item.occurred_at}-${index}`} style={styles.line}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(item.occurred_at))} · {item.kind.replaceAll("_", " ")} · {item.state.replaceAll("_", " ")}</Text>) : <Text style={styles.line}>No related service evidence is available.</Text>}<Text style={styles.readOnly}>Showing up to {context.equipment?.history_limit ?? 10} related records.</Text><Text style={styles.line}>Protected evidence: {asset.evidence.some((item) => item.protected_document_available) ? "Available through ACP" : "None confirmed"}</Text></View>)}
@@ -141,6 +165,11 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
         </View>}
         {canReadAssets && context.readiness && <View><Text style={styles.sectionTitle}>My field readiness</Text><Text style={styles.line}>Workforce profile: {context.readiness.workforce_profile_available ? "Available" : "Not configured"}</Text><Text style={styles.line}>Branch eligibility: {context.readiness.branch_eligible ? "Confirmed" : "Not confirmed"}</Text><Text style={styles.line}>Availability: {context.readiness.availability_state ?? "No current evidence"}</Text>{context.readiness.fleet.map((asset) => <Text key={asset.asset_id} style={styles.line}>{asset.display_name}: {asset.out_of_service ? "Out of service" : asset.readiness_state ?? "Readiness unavailable"}; inspection {asset.inspection_state ?? "unavailable"}; maintenance {asset.maintenance_state ?? "unavailable"}</Text>)}<Text style={styles.readOnly}>Vehicle inspection checklists aren't available yet.</Text></View>}
         {canReadEstimates && context.estimate && <View accessibilityLabel="Assigned Job Estimate presentation"><Text style={styles.sectionTitle}>Estimate for this Job</Text>{!context.estimate.available ? <Text style={styles.line}>No current issued Estimate is related to this Job.</Text> : <><Text style={styles.readOnly}>{context.estimate.estimate_number} · {context.estimate.estimate_status}</Text><Text style={styles.estimateTitle}>{context.estimate.proposal_title}</Text>{context.estimate.customer_message && <Text style={styles.line}>{context.estimate.customer_message}</Text>}{context.estimate.lines.map((line) => <View key={line.position} style={styles.estimateLine}><Text style={styles.line}>{line.title}</Text>{line.description && <Text style={styles.readOnly}>{line.description}</Text>}<Text style={styles.line}>{money(line.line_total, line.currency)}</Text></View>)}<Text style={styles.estimateTotal}>Total {money(context.estimate.total_amount, context.estimate.currency)}</Text><Text style={styles.line}>Customer decision: {context.estimate.acceptance_status?.replaceAll("_", " ")}</Text><Text style={styles.readOnly}>Issued revision {context.estimate.revision_number}. This view cannot edit pricing or accept the Estimate.</Text></>}</View>}
+        {canReadPriceBook && context.priceBookItems && <View accessibilityLabel="Assigned Job Price Book">
+          <Text style={styles.sectionTitle}>Price Book</Text>
+          {context.priceBookItems.length === 0 ? <Text style={styles.line}>No active Price Book items are available for this Branch.</Text> : context.priceBookItems.map((item) => <View key={item.item_id} style={styles.contextCard}><Text style={styles.sectionTitle}>{item.name}</Text><Text style={styles.readOnly}>{item.code}</Text><Text style={styles.line}>{item.customer_description}</Text><Text style={styles.line}>{money(item.unit_price, item.currency)}</Text></View>)}
+          <Text style={styles.readOnly}>Read-only current pricing for this assigned Job. Adding items to an Estimate is not available here.</Text>
+        </View>}
       </View>}
       <View style={styles.section} accessible accessibilityLabel="Additional field capability readiness">
         <Text style={styles.sectionTitle}>Availability</Text>
