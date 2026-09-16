@@ -6,12 +6,15 @@ import { useAuth } from "../../auth";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Spinner } from "../../ui";
 import {
   getIdentityOnboardingDelivery,
+  getCanonicalRoleSyncPlan,
+  applyCanonicalRoleSync,
   initiateEmployeeBetaOnboarding,
   listRoles,
   planEmployeeOnboarding,
   reissueIdentityOnboarding,
   revokeIdentityOnboarding,
   type CompanyRole,
+  type CanonicalRoleSyncPlan,
   type IdentityOnboardingDeliveryView,
   type IdentityOnboardingView,
 } from "./api";
@@ -31,7 +34,7 @@ type OperatingProfile = { label: string; roles: CompanyRole[] };
 type Preparation =
   | { state: "loading" }
   | { state: "ready"; profiles: OperatingProfile[] }
-  | { state: "blocked"; message: string };
+  | { state: "blocked"; message: string; reconciliation?: CanonicalRoleSyncPlan };
 
 function submissionMessage(error: unknown): string {
   if (axios.isAxiosError(error) && error.response?.status === 403) return "You are not authorized to add employees.";
@@ -43,6 +46,7 @@ export function IdentityOnboardingRoute() {
   const [searchParams] = useSearchParams();
   const { activeCompany, permissionCodes = [] } = useAuth();
   const authorized = permissionCodes.includes(ONBOARDING_PERMISSION);
+  const canReconcileProfiles = permissionCodes.includes("COMPANY_PERMISSION_MANAGE");
   const branches = useMemo(() => activeCompany?.branches ?? [], [activeCompany]);
   const requestedBranch = searchParams.get("branch");
   const defaultBranch = branches.find((branch) => branch.code === requestedBranch)?.id ?? activeCompany?.default_branch_id ?? branches.find((branch) => branch.code === "MAIN")?.id ?? branches[0]?.id ?? "";
@@ -57,6 +61,7 @@ export function IdentityOnboardingRoute() {
   const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
   const [readinessAttempt, setReadinessAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [onboarding, setOnboarding] = useState<IdentityOnboardingView | null>(null);
   const [delivery, setDelivery] = useState<IdentityOnboardingDeliveryView | null>(null);
@@ -76,7 +81,19 @@ export function IdentityOnboardingRoute() {
           : [];
       });
       if (profiles.length !== OPERATING_PROFILES.length) {
-        setPreparation({ state: "blocked", message: "Approved Employee operating profiles are unavailable." });
+        void getCanonicalRoleSyncPlan().then((reconciliation) => {
+          if (!current) return;
+          const unavailable = OPERATING_PROFILES
+            .filter((profile) => !profiles.some((candidate) => candidate.label === profile.label))
+            .map((profile) => profile.label.replaceAll("_", " "));
+          setPreparation({
+            state: "blocked",
+            message: `Approved Employee operating profiles require canonical role reconciliation: ${unavailable.join(", ")}.`,
+            reconciliation,
+          });
+        }).catch(() => {
+          if (current) setPreparation({ state: "blocked", message: "Approved Employee operating profiles are unavailable and reconciliation readiness could not be verified." });
+        });
         return;
       }
       setPreparation({ state: "ready", profiles });
@@ -132,6 +149,22 @@ export function IdentityOnboardingRoute() {
     }
   };
 
+  const reconcileProfiles = async () => {
+    if (preparation.state !== "blocked" || !preparation.reconciliation?.safe_to_apply) return;
+    setReconciling(true);
+    setMessage(null);
+    try {
+      await applyCanonicalRoleSync(preparation.reconciliation.plan_digest);
+      setPreparation({ state: "loading" });
+      setReadinessAttempt((value) => value + 1);
+      setMessage({ kind: "success", text: "Approved Employee operating profiles are ready." });
+    } catch {
+      setMessage({ kind: "error", text: "Operating-profile reconciliation was not applied. Review the protected role conflict in Administration." });
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   const updateInvitation = async (operation: "reissue" | "revoke") => {
     if (!onboarding) return;
     setSubmitting(true);
@@ -148,7 +181,7 @@ export function IdentityOnboardingRoute() {
     <header><h1 className="text-heading-m">Team / Employees</h1><p className="mt-ui-2 text-body-s text-content-muted">Add an employee, select their standard role, and send a protected invitation.</p></header>
     {message && <Alert variant={message.kind === "success" ? "success" : "danger"} announcement={message.kind === "success" ? "polite" : "assertive"}>{message.text}</Alert>}
     <Card><CardHeader><CardTitle>Add Employee</CardTitle><CardDescription>Standard role permissions and Company scope are applied automatically. Duplicate identities fail safely. Login email is never guessed or prefilled from roster identity.</CardDescription></CardHeader><CardContent>
-      {preparation.state === "loading" ? <Spinner label="Checking Employee onboarding readiness" /> : preparation.state === "blocked" ? <Alert variant="danger"><div className="space-y-ui-3"><p>{preparation.message}</p><Button variant="secondary" onClick={() => { setPreparation({ state: "loading" }); setReadinessAttempt((value) => value + 1); }}>Retry readiness</Button></div></Alert> :
+      {preparation.state === "loading" ? <Spinner label="Checking Employee onboarding readiness" /> : preparation.state === "blocked" ? <Alert variant="danger"><div className="space-y-ui-3"><p>{preparation.message}</p>{preparation.reconciliation && !preparation.reconciliation.safe_to_apply && <p>A protected role identity conflict requires review. No role will be replaced automatically.</p>}<div className="flex flex-wrap gap-ui-3">{preparation.reconciliation?.safe_to_apply && canReconcileProfiles && <Button loading={reconciling} loadingLabel="Preparing profiles" onClick={() => void reconcileProfiles()}>Prepare approved profiles</Button>}<Button variant="secondary" onClick={() => { setPreparation({ state: "loading" }); setReadinessAttempt((value) => value + 1); }}>Retry readiness</Button>{(!preparation.reconciliation?.safe_to_apply || !canReconcileProfiles) && <Link className="text-link" to="/administration">Review protected roles</Link>}</div></div></Alert> :
         <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-ui-3 sm:grid-cols-2">
             <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} required /></label>

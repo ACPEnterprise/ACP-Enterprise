@@ -12,6 +12,8 @@ function renderPage(authentication = context, entry = "/administration/identity-
 describe("IdentityOnboardingRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks(); vi.mocked(api.listRoles).mockResolvedValue(roles);
+    vi.mocked(api.getCanonicalRoleSyncPlan).mockResolvedValue({ company_id: "company-1", plan_digest: "a".repeat(64), safe_to_apply: true, items: [] });
+    vi.mocked(api.applyCanonicalRoleSync).mockResolvedValue({ plan: { company_id: "company-1", plan_digest: "a".repeat(64), safe_to_apply: true, items: [] }, roles_created: [], permissions_added: [], metadata_restored: [], authorization_users_advanced: 0 });
     vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({ classification: "NEW_EMPLOYEE_CANDIDATE", safe_to_apply: true, masked_login: "l***@example.com", user_action: "CREATE_USER", membership_action: "CREATE_MEMBERSHIP", employee_action: "CREATE_EMPLOYEE", branch_action: "GRANT_EXPLICIT_BRANCH", employee_number_prefix: "ACP-", employee_number_width: 4, role_codes: ["TECHNICIAN"], additional_permission_codes: [], readiness_stages: { IDENTITY: "READY" }, blockers: [] });
     vi.mocked(api.initiateEmployeeBetaOnboarding).mockResolvedValue({ id: "request-1", employee_id: "employee-1", membership_id: "membership-2", branch_id: "main", masked_login: "l***@example.com", status: "invited" });
     vi.mocked(api.getIdentityOnboardingDelivery).mockResolvedValue({ request_id: "request-1", invitation_id: "invitation-1", message_id: "message-1", invitation_status: "active", delivery_status: "submitted", template_version: "identity-onboarding-invitation-v1", retry_count: 0, provider_reference_present: true, last_error_code: null, created_at: "2026-09-10T00:00:00Z", submitted_at: "2026-09-10T00:00:01Z", delivered_at: null });
@@ -45,4 +47,30 @@ describe("IdentityOnboardingRoute", () => {
     expect(await screen.findByText(/needs review.*employee identity already exists/i)).toBeInTheDocument(); expect(api.initiateEmployeeBetaOnboarding).not.toHaveBeenCalled();
   });
   it("fails closed without onboarding authority", () => { renderPage({ ...context, permissionCodes: [] }); expect(screen.getByText("You are not authorized to add employees.")).toBeInTheDocument(); expect(api.listRoles).not.toHaveBeenCalled(); });
+  it("repairs safely missing canonical profiles through the audited reconciliation", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listRoles)
+      .mockResolvedValueOnce(roles.filter((role) => role.code !== "ACP_EMPLOYEE_MOBILE"))
+      .mockResolvedValueOnce(roles);
+    renderPage({ ...context, permissionCodes: [...(context.permissionCodes ?? []), "COMPANY_PERMISSION_MANAGE"] });
+    expect(await screen.findByText(/canonical role reconciliation: FIELD TECH/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Prepare approved profiles" }));
+    expect(api.applyCanonicalRoleSync).toHaveBeenCalledWith("a".repeat(64));
+    expect(await screen.findByText("Approved Employee operating profiles are ready.")).toBeInTheDocument();
+    const select = (await screen.findAllByRole("combobox"))[0];
+    expect(select).toHaveTextContent("FIELD TECH");
+  });
+  it("does not replace a conflicting protected role", async () => {
+    vi.mocked(api.listRoles).mockResolvedValue(roles.filter((role) => role.code !== "OFFICE_MANAGER"));
+    vi.mocked(api.getCanonicalRoleSyncPlan).mockResolvedValue({
+      company_id: "company-1",
+      plan_digest: "b".repeat(64),
+      safe_to_apply: false,
+      items: [{ code: "OFFICE_MANAGER", classification: "UNSAFE_IDENTITY_COLLISION", missing_permissions: [], metadata_update_required: false }],
+    });
+    renderPage({ ...context, permissionCodes: [...(context.permissionCodes ?? []), "COMPANY_PERMISSION_MANAGE"] });
+    expect(await screen.findByText(/protected role identity conflict requires review/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Prepare approved profiles" })).not.toBeInTheDocument();
+    expect(api.applyCanonicalRoleSync).not.toHaveBeenCalled();
+  });
 });
