@@ -67,6 +67,47 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
     }
 )
 
+OFFICE_MANAGER_OPERATIONAL_PERMISSIONS = frozenset(
+    {
+        AdministrationPermission.MEMBERSHIP_READ,
+        AdministrationPermission.MEMBERSHIP_MANAGE,
+        AdministrationPermission.BRANCH_ACCESS_MANAGE,
+        AdministrationPermission.ROLE_READ,
+        AdministrationPermission.IDENTITY_ONBOARDING_MANAGE,
+        LaunchPlatformPermission.AUDIT_READ,
+        AnalyticsPermission.READ,
+        CustomerPermission.READ,
+        CustomerPermission.MANAGE,
+        SchedulingPermission.READ,
+        SchedulingPermission.MANAGE,
+        JobPermission.READ,
+        JobPermission.MANAGE,
+        DispatchPermission.READ,
+        DispatchPermission.MANAGE,
+        WorkforcePermission.READ,
+        WorkforcePermission.MANAGE,
+        WorkforcePermission.CAPABILITY_MANAGE,
+        WorkforcePermission.AVAILABILITY_MANAGE,
+        PriceBookPermission.READ,
+        PriceBookPermission.MANAGE,
+        CommunicationsPermission.READ,
+        CommunicationsPermission.MANAGE,
+        EstimatePermission.READ,
+        EstimatePermission.MANAGE,
+        InvoicePermission.READ,
+        InvoicePermission.MANAGE,
+        InvoicePermission.ISSUE,
+        PaymentPermission.READ,
+        InventoryPermission.READ,
+        InventoryPermission.MANAGE,
+        InventoryPermission.MOVE,
+        InventoryPermission.RESERVE,
+        PurchasingPermission.READ,
+        PurchasingPermission.MANAGE,
+        TimekeepingPermission.ADMIN_READ,
+    }
+)
+
 
 class LaunchRoleCode(StrEnum):
     OWNER = "OWNER"
@@ -141,30 +182,12 @@ LAUNCH_ROLE_MATRIX = (
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.OFFICE_MANAGER,
-        purpose="Branch operations and commercial catalog administration.",
-        permission_codes=frozenset(
-            {
-                CustomerPermission.READ,
-                CustomerPermission.MANAGE,
-                SchedulingPermission.READ,
-                SchedulingPermission.MANAGE,
-                JobPermission.READ,
-                JobPermission.MANAGE,
-                DispatchPermission.READ,
-                DispatchPermission.MANAGE,
-                PriceBookPermission.READ,
-                PriceBookPermission.MANAGE,
-                PriceBookPermission.ACTIVATE,
-                AnalyticsPermission.READ,
-                LaunchPlatformPermission.AUDIT_READ,
-                InventoryPermission.READ,
-                InventoryPermission.MANAGE,
-                InventoryPermission.MOVE,
-                InventoryPermission.RESERVE,
-                PurchasingPermission.READ,
-                PurchasingPermission.MANAGE,
-            }
+        purpose=(
+            "Operate normal Company office, workforce, Customer, scheduling, "
+            "dispatch, estimate, invoice, and read-only payment workflows without "
+            "owner-only activation, money movement, Payroll, or Accounting authority."
         ),
+        permission_codes=OFFICE_MANAGER_OPERATIONAL_PERMISSIONS,
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.DISPATCHER,

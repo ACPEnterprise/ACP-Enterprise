@@ -2,10 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   evaluateWorkforceEligibility,
+  bindRealRosterEmployee,
   getEmployeeAdministration,
   getEmployeePasswordReset,
+  getRealRosterReadiness,
   getWorkforceEmployee,
   listWorkforceEmployees,
+  prepareEmployeeFieldReadiness,
   setEmployeeBranchGrant,
   setEmployeeMembershipStatus,
   setEmployeeRole,
@@ -14,6 +17,41 @@ import {
 
 export function useWorkforceDirectory() {
   return useQuery({ queryKey: ["workforce-directory"], queryFn: listWorkforceEmployees });
+}
+
+export function useRealRosterReadiness(canBind: boolean) {
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ["real-workforce-roster"],
+    queryFn: getRealRosterReadiness,
+  });
+  const bind = useMutation({
+    mutationFn: ({ rosterKey, employeeId }: { rosterKey: string; employeeId: string }) =>
+      bindRealRosterEmployee(rosterKey, employeeId),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["real-workforce-roster"] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+      ]);
+    },
+  });
+  const prepareFieldReadiness = useMutation({
+    mutationFn: ({ employeeId, branchId, windowStartAt, windowEndAt }: {
+      employeeId: string;
+      branchId: string;
+      windowStartAt: string;
+      windowEndAt: string;
+    }) => prepareEmployeeFieldReadiness(
+      employeeId, branchId, windowStartAt, windowEndAt,
+    ),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["real-workforce-roster"] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+      ]);
+    },
+  });
+  return { query, bind, prepareFieldReadiness, canBind };
 }
 
 export function useEmployeePasswordReset(userId: string | null, enabled: boolean) {

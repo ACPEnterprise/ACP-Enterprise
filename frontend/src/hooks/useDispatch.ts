@@ -6,7 +6,6 @@ import {
   getDispatchRecommendation,
   getEligibleTechnicians,
   markReconciliation,
-  prepareFieldReadiness,
   releasePrimary,
   reportDispatchException,
   resolveReconciliation,
@@ -56,11 +55,6 @@ export function useDispatchMutations() {
   const refresh = () =>
     client.invalidateQueries({ queryKey: dispatchKeys.all });
   return {
-    fieldReadiness: useMutation({
-      mutationFn: (x: { employeeId: string; branchId: string; windowStartAt: string; windowEndAt: string }) =>
-        prepareFieldReadiness(x.employeeId, x.branchId, x.windowStartAt, x.windowEndAt),
-      onSettled: refresh,
-    }),
     assign: useMutation({
       mutationFn: (x: {
         appointmentId: string;

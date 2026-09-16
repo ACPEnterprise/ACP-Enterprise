@@ -15,6 +15,7 @@ from app.workforce.administration_commands import (
     workforce_administration_service,
 )
 from app.workforce.employee_administration import employee_administration_service
+from app.workforce.real_roster_service import RealRosterConflict, real_roster_service
 from app.workforce.schemas import (
     AvailabilityEvidenceRequest,
     CapabilityEvidenceRequest,
@@ -23,6 +24,8 @@ from app.workforce.schemas import (
     FieldReadinessRequest,
     FieldReadinessResponse,
     LanguageEvidenceRequest,
+    RealRosterBindingRequest,
+    RealRosterReadiness,
     WorkforceDirectory,
     WorkforceEligibilityRequest,
     WorkforceEligibilityResponse,
@@ -63,7 +66,7 @@ def _require_employee_administration(context: AuthorizationContext) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Employee administration authority is required.")
 
 
-def _workforce_conflict(error: WorkforceAdministrationConflict) -> HTTPException:
+def _workforce_conflict(error: ValueError) -> HTTPException:
     failure = SafeFailure(
         FailureCode.RESOURCE_STATE_CONFLICT,
         "Workforce evidence conflicts with current authority.",
@@ -76,6 +79,33 @@ def _workforce_conflict(error: WorkforceAdministrationConflict) -> HTTPException
 @router.get("/employees", response_model=WorkforceDirectory)
 async def directory(context: ReadContext, session: Session) -> WorkforceDirectory:
     return await workforce_operations_service.directory(session, context=context)
+
+
+@router.get("/real-roster", response_model=RealRosterReadiness)
+async def real_roster(
+    context: ReadContext, session: Session
+) -> RealRosterReadiness:
+    return await real_roster_service.readiness(session, context=context)
+
+
+@router.put(
+    "/real-roster/{roster_key}/binding", response_model=RealRosterReadiness
+)
+async def bind_real_roster_employee(
+    roster_key: str,
+    data: RealRosterBindingRequest,
+    context: CapabilityManageContext,
+    session: Session,
+) -> RealRosterReadiness:
+    try:
+        return await real_roster_service.bind(
+            session,
+            context=context,
+            roster_key=roster_key,
+            employee_id=data.employee_id,
+        )
+    except RealRosterConflict as error:
+        raise _workforce_conflict(error) from error
 
 
 @router.get("/employees/{employee_id}", response_model=WorkforceEmployeeDetail)

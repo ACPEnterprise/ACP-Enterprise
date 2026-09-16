@@ -2977,8 +2977,18 @@
       "path": "/api/v1/payroll/cutover-review/approve",
       "reason": "Cutover approval is a durable certification transition that does not calculate or execute Payroll.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Unique Company roster key and Employee binding with contradictory-rebind rejection",
+      "method": "PUT",
+      "operation_id": "bind_real_roster_employee_api_v1_workforce_real_roster__roster_key__binding_put",
+      "path": "/api/v1/workforce/real-roster/{roster_key}/binding",
+      "reason": "Exact owner-confirmed binding replay converges while reuse or rebinding fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "730a81def07fbdd794ea593e14f75e8f6a33a9851ca0f8da92dd6c34521166f9",
+  "fingerprint": "540ff0363393b7023de901b7ac356e40b25d31e3e3c68dc6a2e19591f7f721e4",
   "schema_version": "1"
 }

@@ -58,6 +58,43 @@ const summary = {
 
 describe("WorkforceRoute", () => {
   function mockEligibility() {
+    vi.mocked(workforceHooks.useRealRosterReadiness).mockReturnValue({
+      query: {
+        isLoading: false,
+        isError: false,
+        data: {
+          total: 8,
+          bound: 0,
+          field_tech_total: 5,
+          field_tech_capability_ready: 0,
+          items: [{
+            roster_key: "melvin-santiago",
+            display_name: "Melvin Santiago",
+            operating_role: "FIELD_TECH",
+            field_tech: true,
+            employee_id: null,
+            employee_display_name: null,
+            user_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            employee_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            membership_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            branch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            role_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            workforce_profile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            technician_capability_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            mobile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            credential_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            availability_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            dispatch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            timekeeping_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            payroll_linkage_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            blockers: ["OWNER_EMPLOYEE_BINDING_REQUIRED"],
+          }],
+        },
+      },
+      bind: { isPending: false, mutate: vi.fn() },
+      prepareFieldReadiness: { isPending: false, mutate: vi.fn() },
+      canBind: false,
+    } as never);
     vi.mocked(workforceHooks.useWorkforceEligibility).mockReturnValue({
       isPending: false,
       isError: false,

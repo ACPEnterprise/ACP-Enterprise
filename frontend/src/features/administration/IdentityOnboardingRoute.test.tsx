@@ -6,7 +6,7 @@ import { AuthenticationContext, type AuthenticationContextValue } from "../../au
 import * as api from "./api";
 import { IdentityOnboardingRoute } from "./IdentityOnboardingRoute";
 vi.mock("./api");
-const roles = [["company-admin", "COMPANY_ADMINISTRATOR", "Company Administrator"], ["manager", "OFFICE_MANAGER", "Office Manager"], ["csr", "SERVICE_CSR", "Service CSR"], ["technician", "TECHNICIAN", "Technician"]].map(([id, code, name]) => ({ id, code, name, company_id: "company-1", description: null, status: "active", is_system: true }));
+const roles = [["company-admin", "COMPANY_ADMINISTRATOR", "Company Administrator"], ["manager", "OFFICE_MANAGER", "Office Manager"], ["csr", "SERVICE_CSR", "Service CSR"], ["technician", "TECHNICIAN", "Technician"], ["mobile", "ACP_EMPLOYEE_MOBILE", "ACP Employee Mobile"]].map(([id, code, name]) => ({ id, code, name, company_id: "company-1", description: null, status: "active", is_system: true }));
 const context: AuthenticationContextValue = { status: "authenticated", activeCompany: { id: "company-1", code: "ACP", name: "All County", membership_id: "membership-1", default_branch_id: "main", has_all_branch_access: false, branches: [{ id: "main", code: "MAIN", name: "Main Branch", is_primary: true }] }, permissionCodes: ["COMPANY_IDENTITY_ONBOARDING_MANAGE"], user: null, signIn: vi.fn(), signOut: vi.fn(), signOutAll: vi.fn(), requireReauthentication: vi.fn() };
 function renderPage(authentication = context) { const router = createMemoryRouter([{ path: "/administration/identity-onboarding", Component: IdentityOnboardingRoute }], { initialEntries: ["/administration/identity-onboarding"] }); render(<AuthenticationContext.Provider value={authentication}><RouterProvider router={router} /></AuthenticationContext.Provider>); }
 describe("IdentityOnboardingRoute", () => {
@@ -20,17 +20,17 @@ describe("IdentityOnboardingRoute", () => {
     const user = userEvent.setup(); renderPage();
     await user.type(await screen.findByLabelText("First name"), "Lianne"); await user.type(screen.getByLabelText("Last name"), "Hernandez"); await user.type(screen.getByLabelText("Email"), "lianne@example.com");
     const [role, branch] = screen.getAllByRole("combobox");
-    expect(role).toHaveValue("technician"); expect(branch).toHaveValue("main");
+    expect(role).toHaveValue("FIELD_TECH"); expect(branch).toHaveValue("main");
     expect(screen.queryByText(/Membership UUID/i)).not.toBeInTheDocument(); expect(screen.queryByText(/Effective permission preview/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Send Invite" }));
-    expect(api.planEmployeeOnboarding).toHaveBeenCalledWith(expect.objectContaining({ role_ids: ["technician"], additional_permission_ids: [], branch_id: "main" }));
+    expect(api.planEmployeeOnboarding).toHaveBeenCalledWith(expect.objectContaining({ role_ids: ["technician", "mobile"], additional_permission_ids: [], branch_id: "main" }));
     expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledTimes(1); expect(await screen.findByText("Employee invited. Delivery status is shown below.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View Team" })).toHaveAttribute("href", "/employees");
   });
-  it("shows only the five standard owner-facing role choices", async () => {
+  it("shows only the four approved owner-facing operating profiles", async () => {
     renderPage(); const select = (await screen.findAllByRole("combobox"))[0];
-    for (const label of ["OWNER", "MANAGER", "ADMIN", "CSR", "TECHNICIAN"]) expect(select).toHaveTextContent(label);
-    expect(select).not.toHaveTextContent("SUPPORT"); expect(select).not.toHaveTextContent("ACP_EMPLOYEE_MOBILE");
+    for (const label of ["ADMIN", "OFFICE MANAGER", "OFFICE STAFF", "FIELD TECH"]) expect(select).toHaveTextContent(label);
+    expect(select).not.toHaveTextContent("SUPPORT"); expect(select).not.toHaveTextContent("ACP EMPLOYEE MOBILE");
   });
   it("does not mutate when identity planning finds a conflict", async () => {
     vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({ classification: "DUPLICATE_CONFLICT", safe_to_apply: false, masked_login: "l***@example.com", user_action: "REUSE_REVIEW_REQUIRED", membership_action: "NO_CHANGE", employee_action: "NO_CHANGE", branch_action: "NO_CHANGE", employee_number_prefix: "ACP-", employee_number_width: 4, role_codes: ["TECHNICIAN"], additional_permission_codes: [], readiness_stages: { IDENTITY: "REVIEW_REQUIRED" }, blockers: ["employee_identity_already_exists"] });
