@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     hsts_include_subdomains: bool = True
     hsts_preload: bool = False
     content_security_policy: str = "default-src 'self'; frame-ancestors 'none'"
-    permissions_policy: str = "camera=(), microphone=(), geolocation=()"
+    permissions_policy: str = "camera=(), microphone=(self), geolocation=()"
     referrer_policy: str = "strict-origin-when-cross-origin"
 
     model_config = SettingsConfigDict(

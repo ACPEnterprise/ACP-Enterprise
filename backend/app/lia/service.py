@@ -8,6 +8,8 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.lia_context import customer_lia_context_service
+from app.jobs.lia_context import job_lia_context_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.workforce.service import workforce_operations_service
 
@@ -20,6 +22,8 @@ from .contracts import (
     NavigationSuggestion,
     TruthClassification,
 )
+from .owner_answers import compose_owner_answer
+from .payroll_guidance import payroll_guidance_answer
 from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
 from .retrieval import GovernedRetrievalService, permitted_domain_names
 from .security import (
@@ -170,13 +174,44 @@ class LiaService:
             )
         effective_request = request
         entity_id = request.context.entity_id if request.context else None
-        if plan.subject_query is not None:
-            matches = await workforce_operations_service.resolve_display_name(
-                session,
-                context=context,
-                display_name=plan.subject_query,
-            )
-            if len(matches) != 1:
+        if plan.subject_query is not None and plan.subject_domain is not None:
+            subject_matches: list[tuple[str, UUID]] = []
+            if "customers" in selected and plan.subject_domain in {
+                "customers",
+                "identity",
+            }:
+                subject_matches.extend(
+                    ("customers", match)
+                    for match in await customer_lia_context_service.resolve_display_name(
+                        session,
+                        context=context,
+                        display_name=plan.subject_query,
+                    )
+                )
+            if "workforce" in selected and plan.subject_domain == "identity":
+                subject_matches.extend(
+                    ("workforce", match)
+                    for match in await workforce_operations_service.resolve_display_name(
+                        session,
+                        context=context,
+                        display_name=plan.subject_query,
+                    )
+                )
+            if "jobs" in selected and plan.subject_domain == "jobs":
+                subject_matches.extend(
+                    ("jobs", match)
+                    for match in await job_lia_context_service.resolve_job_number(
+                        session,
+                        context=context,
+                        job_number=plan.subject_query,
+                    )
+                )
+            if len(subject_matches) != 1:
+                subject_label = {
+                    "customers": "Customer",
+                    "jobs": "Job",
+                    "identity": "Customer or Employee",
+                }[plan.subject_domain]
                 return self._response(
                     context=context,
                     request=request,
@@ -184,23 +219,24 @@ class LiaService:
                     conversation_id=conversation_id,
                     classification=(
                         TruthClassification.INCOMPLETE
-                        if matches
+                        if subject_matches
                         else TruthClassification.UNAVAILABLE
                     ),
                     answer=(
-                        "More than one authorized Employee has that exact name. Open Team and select the intended Employee."
-                        if matches
-                        else "No authorized Employee with that exact name is available in your current Company and Branch scope."
+                        f"More than one authorized {subject_label} matches exactly. Open the authoritative workspace and select the intended record."
+                        if subject_matches
+                        else f"No authorized {subject_label} with that exact identity is available in your current Company and Branch scope."
                     ),
                     limitations=(
-                        "ACP does not reveal Employees outside the authorized scope.",
+                        "ACP does not reveal records outside the authorized scope.",
                     ),
                 )
-            entity_id = matches[0]
+            resolved_domain, entity_id = subject_matches[0]
+            selected = {resolved_domain}
             effective_request = request.model_copy(
                 update={
                     "context": LiaContext(
-                        domain="workforce",
+                        domain=resolved_domain,
                         entity_id=entity_id,
                         authorization_version=context.authorization_version,
                     )
@@ -277,13 +313,9 @@ class LiaService:
             )
             return response
 
-        lines = [f"{item.label}: {item.count} ({item.state})." for item in evidence]
-        answer = "Here is the current authorized ACP evidence: " + " ".join(lines)
-        if any(
-            word in question.casefold()
-            for word in ("why", "profit", "margin", "economics")
-        ):
-            answer += " A causal explanation requires an admitted Business Economics result; these operational counts alone do not establish cause or profitability."
+        interpreted = payroll_guidance_answer(question, evidence)
+        owner_answer = compose_owner_answer(question, evidence)
+        answer = interpreted or owner_answer.text
         limitations = (
             "This deterministic response summarizes current ACP records; no external AI provider was invoked.",
             "Counts are not a substitute for domain approval, settlement, posting, or payroll authority.",
@@ -305,6 +337,7 @@ class LiaService:
             evidence=evidence,
             limitations=limitations,
             navigation=navigation,
+            safe_next_action=owner_answer.next_action,
         )
         return response
 
@@ -321,6 +354,7 @@ class LiaService:
         limitations=(),
         navigation=(),
         proposals=(),
+        safe_next_action: str | None = None,
     ) -> LiaResponse:
         digest = _evidence_digest(evidence)
         evidence_as_of = max(
@@ -363,11 +397,8 @@ class LiaService:
             subject_id=request.context.entity_id if request.context else None,
             source_systems=tuple(sorted({item.domain for item in evidence})),
             missing_evidence=missing,
-            safe_next_action=(
-                navigation[0].label
-                if navigation
-                else "Refresh authoritative ACP evidence"
-            ),
+            safe_next_action=safe_next_action
+            or (navigation[0].label if navigation else "Refresh authoritative ACP evidence"),
             as_of=evidence_as_of,
             generated_at=datetime.now(timezone.utc),
         )
