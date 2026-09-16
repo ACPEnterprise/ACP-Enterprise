@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { schedulingMutationRecovery } from "../scheduling/schedulingRecovery";
 import {
   useDispatchMutations,
@@ -18,6 +19,7 @@ import {
   Spinner,
 } from "../../ui";
 import { dispatchReadiness, isDispatchSelectable } from "./dispatchEligibility";
+import { employeeDetailPath } from "../../routing/paths";
 
 const label = (value: string) => value.replaceAll("_", " ");
 export function DispatchAssignmentPanel({
@@ -309,6 +311,12 @@ export function DispatchAssignmentPanel({
                       ? t.reasons.map(label).join(" · ")
                       : "Workforce did not provide a readiness reason"}
                   </span>
+                  <Link
+                    className="mt-2 inline-flex min-h-11 items-center font-semibold text-action-primary"
+                    to={employeeDetailPath(t.employee_id)}
+                  >
+                    Open employee readiness
+                  </Link>
                 </li>
               ))}
             </ul>
