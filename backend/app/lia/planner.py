@@ -213,6 +213,8 @@ def plan_question(
     )
     if corrected_context_subject:
         subject = (context_domain or "identity", conversation.corrected_subject or "")
+    elif conversation.corrected_subject:
+        subject = ("identity", conversation.corrected_subject)
     subject_domain, subject_query = subject if subject is not None else (None, None)
     if subject_domain == "identity":
         domains = frozenset({"customers", "workforce"})
@@ -275,12 +277,30 @@ def plan_question(
 
 def _named_subject(question: str) -> tuple[str, str] | None:
     patterns = (
-        ("jobs", r"\s*show\s+me\s+job\s+([A-Z0-9-]+)[?.!]?\s*"),
-        ("customers", r"\s*show\s+me\s+customer\s+(.+?)[?.!]?\s*"),
-        ("workforce", r"\s*show\s+me\s+employee\s+(.+?)[?.!]?\s*"),
+        (
+            "workforce",
+            r"\s*is\s+(.+?)\s+(?:ready\s+for\s+payroll|payroll[- ]ready)[?.!]?\s*",
+        ),
+        (
+            "workforce",
+            r"\s*what(?:\s+specifically)?\s+(?:is\s+)?preventing\s+(.+?)\s+from\s+being\s+payroll[- ]ready[?.!]?\s*",
+        ),
+        (
+            "workforce",
+            r"\s*what\s+should\s+i\s+do(?:\s+next)?\s+to\s+make\s+(.+?)\s+payroll[- ]ready[?.!]?\s*",
+        ),
+        ("jobs", r"\s*(?:show\s+me|find|open)\s+job\s+(.+?)[?.!]?\s*"),
+        (
+            "customers",
+            r"\s*(?:show\s+me|find|open)\s+customer\s+(.+?)[?.!]?\s*",
+        ),
+        (
+            "workforce",
+            r"\s*(?:show\s+me|find|open)\s+employee\s+(.+?)[?.!]?\s*",
+        ),
         (
             "identity",
-            r"\s*(?:uh\s+)?(?:show me|find|actually,?\s*show me)\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){0,7})[?.!]?\s*",
+            r"\s*(?:uh\s+)?(?:show me|find|open|actually,?\s*show me)\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){0,7})[?.!]?\s*",
         ),
     )
     for domain, pattern in patterns:

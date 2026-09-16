@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   readinessRefetch: vi.fn(),
   briefingRefetch: vi.fn(),
   askMutate: vi.fn(),
+  askError: undefined as unknown,
 }));
 
 vi.mock("../hooks/useLia", () => ({
@@ -96,7 +97,8 @@ vi.mock("../hooks/useLia", () => ({
   useAskLia: () => ({
     mutate: state.askMutate,
     isPending: false,
-    isError: false,
+    isError: Boolean(state.askError),
+    error: state.askError,
     data: undefined,
   }),
 }));
@@ -137,6 +139,20 @@ describe("LIA workspace", () => {
     expect(state.briefingRefetch).toHaveBeenCalledOnce();
     state.readinessError = false;
     state.briefingError = false;
+  });
+
+  it("explains a disconnected LIA service without implying a business answer", () => {
+    state.askError = new Error("network unavailable");
+    render(
+      <MemoryRouter>
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Unexpected error")).toBeVisible();
+    expect(
+      screen.getByText(/operation could not be completed.*No answer was inferred/i),
+    ).toBeVisible();
+    state.askError = undefined;
   });
 
   it("passes only opaque Customer context for server-side authorization", () => {
@@ -246,6 +262,97 @@ describe("LIA workspace", () => {
           as_of: "2026-09-14T20:00:00Z",
           topic_domains: ["workforce"],
         },
+      },
+      expect.any(Object),
+    );
+  });
+
+  it("uses a server-confirmed topic switch instead of replaying route entity context", () => {
+    const customerId = "11111111-1111-4111-8111-111111111111";
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `/lia?contextDomain=customers&contextId=${customerId}`,
+        ]}
+      >
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    const input = screen.getByRole("textbox", { name: "Ask LIA a question" });
+    fireEvent.change(input, {
+      target: { value: "What is scheduled tomorrow?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    state.askMutate.mock.calls.at(-1)?.[1].onSuccess({
+      conversation_id: "switched-conversation",
+      subject_domain: "scheduling",
+      subject_id: null,
+      authorization_version: 21,
+      evidence_digest: "b".repeat(64),
+      as_of: "2026-09-16T20:00:00Z",
+      source_systems: ["scheduling"],
+    });
+
+    fireEvent.change(input, { target: { value: "What about next week?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(state.askMutate).toHaveBeenLastCalledWith(
+      {
+        question: "What about next week?",
+        conversation_id: "switched-conversation",
+        context: {
+          domain: "scheduling",
+          authorization_version: 21,
+          evidence_digest: "b".repeat(64),
+          as_of: "2026-09-16T20:00:00Z",
+          topic_domains: ["scheduling"],
+        },
+      },
+      expect.any(Object),
+    );
+  });
+
+  it("preserves resolved periods for comparison follow-ups", () => {
+    render(
+      <MemoryRouter>
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    const input = screen.getByRole("textbox", { name: "Ask LIA a question" });
+    fireEvent.change(input, { target: { value: "Show me May 2026 P&L" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    state.askMutate.mock.calls.at(-1)?.[1].onSuccess({
+      conversation_id: "period-conversation",
+      subject_domain: "accounting",
+      subject_id: null,
+      authorization_version: 31,
+      evidence_digest: "c".repeat(64),
+      as_of: "2026-09-16T20:00:00Z",
+      source_systems: ["accounting"],
+      temporal: {
+        start_date: "2026-05-01",
+        end_date: "2026-05-31",
+        as_of: "2026-09-16T20:00:00Z",
+        timezone: "America/New_York",
+        period_label: "May 2026",
+      },
+    });
+
+    fireEvent.change(input, { target: { value: "What about June?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(state.askMutate).toHaveBeenLastCalledWith(
+      {
+        question: "What about June?",
+        conversation_id: "period-conversation",
+        context: expect.objectContaining({
+          domain: "accounting",
+          temporal: expect.objectContaining({
+            start_date: "2026-05-01",
+            end_date: "2026-05-31",
+            period_label: "May 2026",
+          }),
+        }),
       },
       expect.any(Object),
     );
