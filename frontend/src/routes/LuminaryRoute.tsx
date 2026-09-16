@@ -35,6 +35,13 @@ const money = (item: LuminaryObservation) =>
         style: "currency",
         currency: item.currency,
       }).format(item.value_minor / 100);
+const minorMoney = (value: number | null) =>
+  value == null
+    ? "Not yet available"
+    : new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: "USD",
+      }).format(value / 100);
 
 function FindingCard({ finding }: { finding: LuminaryFinding }) {
   const warning = [
@@ -252,6 +259,48 @@ export function LuminaryRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <section aria-labelledby="job-economics-title" className="space-y-3">
+              <div>
+                <h3 className="font-semibold" id="job-economics-title">What ACP knows by Job</h3>
+                <p className="text-sm text-content-muted">Invoiced revenue, accepted work, and actual material evidence stay distinct. Missing cost is not shown as zero.</p>
+              </div>
+              {ownerEconomics.data.job_economics.length ? (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {ownerEconomics.data.job_economics.map((job) => (
+                    <article className="rounded-lg border border-stroke p-4" key={job.job_id}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div><h4 className="font-semibold">Job {job.job_number}</h4><p className="text-xs text-content-muted">{job.customer.name} · {job.branch.name} · {job.service_category ? words(job.service_category) : "Uncategorized"}</p></div>
+                        <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">{words(job.readiness)} · {job.confidence_percent}%</span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                        <div><dt className="text-content-muted">Invoiced revenue</dt><dd className="font-semibold">{minorMoney(job.invoiced_revenue_minor)}</dd></div>
+                        <div><dt className="text-content-muted">Accepted work</dt><dd className="font-semibold">{job.accepted_worked_seconds == null ? "Not yet available" : `${(job.accepted_worked_seconds / 3600).toFixed(2)} hours`}</dd></div>
+                        <div><dt className="text-content-muted">Direct wage cost</dt><dd className="font-semibold">{minorMoney(job.direct_wage_cost_minor)}</dd></div>
+                        <div><dt className="text-content-muted">Actual material cost</dt><dd className="font-semibold">{minorMoney(job.actual_material_cost_minor)}</dd></div>
+                        <div><dt className="text-content-muted">Direct contribution</dt><dd className="font-semibold">{minorMoney(job.direct_contribution_minor)}</dd></div>
+                        <div><dt className="text-content-muted">Fully loaded profit</dt><dd className="font-semibold">{minorMoney(job.fully_loaded_profit_minor)}</dd></div>
+                      </dl>
+                      <div className="mt-3"><p className="text-xs font-semibold">What ACP does not know</p><p className="text-xs text-content-muted">{job.missing_prerequisites.length ? job.missing_prerequisites.map(words).join(" · ") : "No required direct-contribution input is missing."}</p></div>
+                    </article>
+                  ))}
+                </div>
+              ) : <Alert variant="warning">No admitted Job evidence exists for this period. ACP did not convert that absence to zero.</Alert>}
+            </section>
+            <section aria-labelledby="service-economics-title" className="space-y-3">
+              <div><h3 className="font-semibold" id="service-economics-title">What it means by service line</h3><p className="text-sm text-content-muted">Only canonical Job categories are grouped. Incomplete contribution stays unavailable.</p></div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {ownerEconomics.data.service_line_economics.map((service) => (
+                  <article className="rounded-lg border border-stroke p-3" key={service.service_category}>
+                    <h4 className="font-semibold capitalize">{words(service.service_category)}</h4>
+                    <p className="text-xs text-content-muted">{service.job_count} Jobs · {service.contribution_ready_job_count} contribution-ready</p>
+                    <p className="mt-2 text-sm">Invoiced {minorMoney(service.invoiced_revenue_minor)}</p>
+                    <p className="text-sm">Average ticket {minorMoney(service.average_invoiced_ticket_minor)}</p>
+                    <p className="text-sm">Direct contribution {minorMoney(service.direct_contribution_minor)}</p>
+                    <p className="mt-2 text-xs text-content-muted">{service.missing_prerequisites.length ? `Still needed: ${service.missing_prerequisites.map(words).join(" · ")}` : "Complete for direct contribution."}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
             {ownerEconomics.data.admitted_source_evidence ? (
               <section className="rounded-lg border border-stroke p-4" aria-labelledby="admitted-evidence-title">
                 <h3 className="font-semibold" id="admitted-evidence-title">Admitted source evidence</h3>

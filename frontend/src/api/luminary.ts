@@ -80,6 +80,38 @@ export interface LuminaryOwnerEconomics {
   period: { start: string; end: string };
   readiness: string;
   confidence: { score_percent: number; method: string };
+  job_economics: Array<{
+    job_id: string;
+    job_number: string;
+    job_status: string;
+    customer: { id: string; name: string };
+    branch: { id: string; name: string };
+    service_category: string | null;
+    readiness: string;
+    invoiced_revenue_minor: number | null;
+    settlement_applied_minor: number | null;
+    accepted_worked_seconds: number | null;
+    direct_wage_cost_minor: number | null;
+    actual_material_cost_minor: number | null;
+    other_direct_cost_minor: number | null;
+    direct_contribution_minor: number | null;
+    contribution_percent_basis_points: number | null;
+    fully_loaded_profit_minor: number | null;
+    missing_prerequisites: string[];
+    confidence_percent: number;
+  }>;
+  service_line_economics: Array<{
+    service_category: string;
+    job_count: number;
+    contribution_ready_job_count: number;
+    invoiced_revenue_minor: number;
+    accepted_worked_seconds: number;
+    actual_material_cost_minor: number | null;
+    direct_contribution_minor: number | null;
+    average_invoiced_ticket_minor: number | null;
+    readiness: string;
+    missing_prerequisites: string[];
+  }>;
   admitted_source_evidence?: {
     authority: string;
     admitted_reference_count: number;
