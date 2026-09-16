@@ -1,0 +1,31 @@
+{
+  "contract": "twelve-hats-production-platform/v1",
+  "release_candidate_sha": "d5148f60ba842f9b4e7c9e83f16d1d3301372491",
+  "resources": {
+    "runtime": {"state": "NOT_PROVISIONED", "evidence": null},
+    "postgresql": {"state": "NOT_PROVISIONED", "evidence": null},
+    "redis": {"state": "NOT_PROVISIONED", "evidence": null},
+    "object_storage": {"state": "NOT_PROVISIONED", "evidence": null},
+    "registry": {"state": "NOT_PROVISIONED", "evidence": null},
+    "backup_pitr": {"state": "NOT_PROVISIONED", "evidence": null},
+    "monitoring": {"state": "NOT_PROVISIONED", "evidence": null},
+    "alert_delivery": {"state": "NOT_CONFIGURED", "evidence": null},
+    "dns_tls": {"state": "NOT_CONFIGURED", "evidence": null}
+  },
+  "authorities": {
+    "release": {"principal": null},
+    "security": {"principal": null},
+    "incident": {"principal": null},
+    "backup": {"principal": null},
+    "restore": {"principal": null},
+    "secret_recovery": {"principal": null}
+  },
+  "owner_decisions": {
+    "rpo": null,
+    "rto": null,
+    "retention": null,
+    "region": null,
+    "geographic_separation": null,
+    "alert_destination": null
+  }
+}
