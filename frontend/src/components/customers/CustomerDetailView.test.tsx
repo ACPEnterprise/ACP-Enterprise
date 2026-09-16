@@ -96,6 +96,14 @@ describe("CustomerDetailView", () => {
     expect(screen.getByRole("link", { name: "View Jobs for this Location" })).toHaveAttribute("href", "/jobs?customerId=customer-1&locationId=location-1");
   });
 
+  it("distinguishes native authority from marketing source and states history limits", () => {
+    render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByText("Native ACP Customer")).toBeInTheDocument();
+    expect(screen.getByText(/Marketing source: referral/)).toBeInTheDocument();
+    expect(screen.getByText("History completeness")).toBeInTheDocument();
+    expect(screen.getByText(/Missing or source-only history is not treated as none or zero/)).toBeInTheDocument();
+  });
+
   it("pages authoritative history instead of silently stopping at the first page", async () => {
     vi.mocked(customerHooks.useCustomerTimeline).mockReturnValue({
       isLoading: false, isFetching: false, isError: false, isSuccess: true,
