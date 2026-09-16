@@ -172,7 +172,11 @@ class WorkforceSourceCertification(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     source_system: Mapped[str] = mapped_column(String(40), nullable=False)
     source_employee_id: Mapped[str] = mapped_column(String(191), nullable=False)
     evidence_reference: Mapped[str] = mapped_column(String(255), nullable=False)
