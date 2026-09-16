@@ -13,6 +13,7 @@ from app.field_service.schemas import (
     FieldCommunicationState,
     FieldContact,
     FieldInvoice,
+    FieldJobInstructions,
     FieldJobSources,
     FieldPaymentState,
     FieldPriceBookItem,
@@ -77,6 +78,39 @@ class FieldSourceService:
             payment=payment,
             communications=communications,
             completion=completion,
+        )
+
+    async def job_instructions(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        job_id: UUID,
+    ) -> FieldJobInstructions:
+        assignment = await self.field._assigned_job(session, context, job_id)
+        job = await session.scalar(
+            select(Job).where(
+                Job.company_id == context.company.id,
+                Job.branch_id == assignment.branch_id,
+                Job.id == job_id,
+            )
+        )
+        if job is None:
+            raise FieldServiceNotFound("Assigned field Job was not found.")
+        return FieldJobInstructions(
+            job_id=job.id,
+            assignment_id=assignment.id,
+            assignment_version=assignment.version,
+            job_version=job.concurrency_version,
+            customer_reported_problem=job.customer_reported_problem,
+            source_as_of=job.updated_at,
+            omitted_unclassified_fields=(
+                "job_internal_description",
+                "customer_internal_notes",
+                "location_property_notes",
+                "location_gate_code",
+                "location_gate_access_instructions",
+            ),
         )
 
     async def price_book(

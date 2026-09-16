@@ -22,6 +22,7 @@ from app.field_service.schemas import (
     FieldEquipmentProjection,
     FieldEstimatePresentation,
     FieldHistoryProjection,
+    FieldJobInstructions,
     FieldJobSources,
     FieldJobState,
     FieldPriceBookItem,
@@ -126,6 +127,18 @@ async def itinerary(service_date: date, context: Read, session: Session) -> Itin
 async def job_state(job_id: UUID, context: Read, session: Session) -> FieldJobState:
     try:
         return await field_service.state(session, context=context, job_id=job_id)
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/jobs/{job_id}/instructions", response_model=FieldJobInstructions)
+async def job_instructions(
+    job_id: UUID, context: Read, session: Session
+) -> FieldJobInstructions:
+    try:
+        return await field_source_service.job_instructions(
+            session, context=context, job_id=job_id
+        )
     except FieldServiceError as error:
         raise field_error(error) from error
 

@@ -143,6 +143,27 @@ class FieldJobSources(FieldSchema):
     completion: FieldJobState
 
 
+class FieldJobInstructions(FieldSchema):
+    """Employee-safe, assignment-scoped service intent; never an office-note view."""
+
+    job_id: UUID
+    assignment_id: UUID
+    assignment_version: int
+    job_version: int
+    customer_reported_problem: str | None
+    source_as_of: datetime
+    omitted_unclassified_fields: tuple[
+        Literal[
+            "job_internal_description",
+            "customer_internal_notes",
+            "location_property_notes",
+            "location_gate_code",
+            "location_gate_access_instructions",
+        ],
+        ...,
+    ]
+
+
 class FieldArtifactIntentInput(FieldSchema):
     artifact_class: Literal["photo", "field_document", "equipment_evidence"]
     media_type: Literal["image/jpeg", "image/png", "image/heic", "application/pdf"]

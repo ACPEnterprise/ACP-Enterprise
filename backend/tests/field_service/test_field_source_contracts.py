@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -12,12 +15,15 @@ from app.field_service.schemas import (
     FieldArtifactIntentInput,
     FieldContact,
     FieldInvoice,
+    FieldJobInstructions,
 )
+from app.field_service.sources import FieldSourceService
 
 
 def test_field_source_routes_are_assignment_scoped() -> None:
     paths = {route.path for route in router.routes}
     assert "/api/v1/technician/jobs/{job_id}/sources" in paths
+    assert "/api/v1/technician/jobs/{job_id}/instructions" in paths
     assert "/api/v1/technician/jobs/{job_id}/price-book" in paths
     assert "/api/v1/technician/history" in paths
     assert "/api/v1/technician/jobs/{job_id}/equipment" in paths
@@ -25,6 +31,60 @@ def test_field_source_routes_are_assignment_scoped() -> None:
     assert "/api/v1/technician/jobs/{job_id}/artifacts/intents" in paths
     assert "/api/v1/technician/readiness" in paths
     assert not any("customers/search" in path or "assets/search" in path for path in paths)
+
+
+def test_job_instructions_contract_allowlists_only_customer_service_need() -> None:
+    fields = set(FieldJobInstructions.model_fields)
+    assert fields == {
+        "job_id",
+        "assignment_id",
+        "assignment_version",
+        "job_version",
+        "customer_reported_problem",
+        "source_as_of",
+        "omitted_unclassified_fields",
+    }
+    assert not fields.intersection(
+        {
+            "internal_description",
+            "customer_notes",
+            "property_notes",
+            "gate_code",
+            "gate_access_instructions",
+            "invoice",
+            "payment",
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_job_instructions_use_assignment_scope_and_omit_unclassified_text() -> None:
+    job_id = uuid4()
+    branch_id = uuid4()
+    assignment = SimpleNamespace(id=uuid4(), branch_id=branch_id, version=7)
+    job = SimpleNamespace(
+        id=job_id,
+        concurrency_version=4,
+        customer_reported_problem="Synthetic customer reports no cooling.",
+        internal_description="Office-only synthetic note.",
+        updated_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+    )
+    field = SimpleNamespace(_assigned_job=AsyncMock(return_value=assignment))
+    service = FieldSourceService(field)  # type: ignore[arg-type]
+    session = SimpleNamespace(scalar=AsyncMock(return_value=job))
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=uuid4()), authorized_branch_ids=(branch_id,)
+    )
+
+    result = await service.job_instructions(
+        session, context=context, job_id=job_id  # type: ignore[arg-type]
+    )
+
+    field._assigned_job.assert_awaited_once_with(session, context, job_id)
+    assert result.customer_reported_problem == "Synthetic customer reports no cooling."
+    assert "Office-only synthetic note." not in result.model_dump_json()
+    assert "job_internal_description" in result.omitted_unclassified_fields
+    assert "location_gate_code" in result.omitted_unclassified_fields
 
 
 def test_field_contact_rejects_protected_or_unbounded_payload() -> None:
