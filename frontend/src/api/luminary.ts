@@ -175,6 +175,37 @@ export interface LuminaryOwnerEconomics {
       prior_reference_count?: number;
     };
   };
+  delta_explanation: {
+    state: string;
+    authority?: string;
+    classification?: string;
+    headline?: string;
+    explanation?: string;
+    reason?: string;
+    period: { start: string; end: string };
+    prior_period: { start: string; end: string } | null;
+    scope: { company_id: string; branch_id: string | null };
+    as_of: string;
+    freshness: string;
+    currency?: string | null;
+    causality_boundary: string;
+    contribution_change_minor?: number;
+    contribution_margin_change_basis_points?: number | null;
+    explained_change_minor?: number;
+    unexplained_change_minor: number | null;
+    components: Array<{
+      component: string;
+      change_minor: number;
+      contribution_effect_minor: number | null;
+      classification: string;
+      authority: string;
+    }>;
+    evidence_references?: {
+      current?: Array<{ result_id: string; result_digest: string }>;
+      prior?: Array<{ result_id: string; result_digest: string }>;
+    };
+    missing_evidence?: string[];
+  };
   market_evidence: { state: string; reason: string };
   scenario: null | {
     state: string;

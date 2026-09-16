@@ -72,6 +72,28 @@ vi.mock("../hooks/useLuminary", () => ({
           invoiced_revenue_change_minor: 2500,
         },
       },
+      delta_explanation: {
+        state: "PARTIAL",
+        authority: "accepted_native_invoiced_evidence",
+        classification: "MEASURED_PERIOD_DIFFERENCE",
+        headline: "Invoiced revenue increased by 2500 minor currency units.",
+        explanation: "ACP can measure invoiced revenue change but cannot explain contribution change without admitted direct costs.",
+        period: { start: "2026-09-01", end: "2026-09-15" },
+        prior_period: { start: "2026-08-17", end: "2026-08-31" },
+        scope: { company_id: "company-1", branch_id: "branch-1" },
+        as_of: "2026-09-16T12:00:00Z",
+        freshness: "partial",
+        currency: "USD",
+        causality_boundary: "Arithmetic decomposition identifies measured contributors, not operational cause.",
+        components: [{
+          component: "invoiced_revenue", change_minor: 2500,
+          contribution_effect_minor: null,
+          classification: "MEASURED_PERIOD_DIFFERENCE",
+          authority: "accepted_native_invoiced_evidence",
+        }],
+        unexplained_change_minor: null,
+        missing_evidence: ["admitted_direct_contribution"],
+      },
       evidence_priority_queue: [
         {
           prerequisite: "certified_direct_wage_cost",
@@ -214,6 +236,10 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("Owner economics decision support")).toBeVisible();
     expect(screen.getByText("What changed from the prior equal period")).toBeVisible();
     expect(screen.getByText("+$25.00")).toBeVisible();
+    expect(screen.getByText("Why the measured economics changed")).toBeVisible();
+    expect(screen.getByText(/cannot explain contribution change/)).toBeVisible();
+    expect(screen.getByText(/not operational cause/)).toBeVisible();
+    expect(screen.getByText(/ACP cannot yet explain: admitted direct contribution/)).toBeVisible();
     expect(screen.getByText("Measurement freshness and authority")).toBeVisible();
     expect(screen.getByText("What evidence would improve this answer?")).toBeVisible();
     expect(screen.getByText(/responsible domain: Payroll\/Economics policy/)).toBeVisible();
