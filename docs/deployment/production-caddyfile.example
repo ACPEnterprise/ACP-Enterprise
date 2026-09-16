@@ -1,0 +1,14 @@
+# Owner must set ACP_PRODUCTION_HOSTNAME only after the Production runtime has a
+# stable public address and the exact DNS record has been approved.
+{$ACP_PRODUCTION_HOSTNAME} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	reverse_proxy 127.0.0.1:{$ACP_PRODUCTION_HTTP_PORT}
+}
