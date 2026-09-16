@@ -154,3 +154,24 @@ def test_owner_projection_rejects_result_job_branch_conflict() -> None:
     assert value["quality_state"] == "conflicting"
     assert value["totals"] is None
     assert "branch" in value["explanation"].lower()
+
+
+def test_native_equal_period_comparison_requires_same_currency_and_values() -> None:
+    current = {
+        "summary": {"invoiced_revenue_minor": 15_000, "currency": "USD"},
+        "admitted_reference_count": 4,
+    }
+    prior = {
+        "summary": {"invoiced_revenue_minor": 10_000, "currency": "USD"},
+        "admitted_reference_count": 3,
+    }
+    value = EconomicsWorkspaceService._native_comparison(current, prior)
+    assert value["state"] == "AVAILABLE"
+    assert value["invoiced_revenue_change_minor"] == 5_000
+    assert (
+        EconomicsWorkspaceService._native_comparison(
+            current,
+            {"summary": {"invoiced_revenue_minor": 10_000, "currency": "CAD"}},
+        )["state"]
+        == "INSUFFICIENT_EVIDENCE"
+    )
