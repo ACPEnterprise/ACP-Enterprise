@@ -59,6 +59,15 @@ async def test_native_facts_are_admitted_without_inventing_profitability() -> No
     movement = SimpleNamespace(
         unit_cost=Decimal("10.00"), currency="USD", valuation_method="fifo"
     )
+    settlement = SimpleNamespace(
+        id=uuid4(),
+        entry_type="payment_application",
+        amount=Decimal("-25.00"),
+        currency="USD",
+        source_version=1,
+        occurred_at=now,
+    )
+    receipt = SimpleNamespace(receipt_id=uuid4(), evidence_digest="c" * 64)
     job = SimpleNamespace(
         id=job_id,
         company_id=company_id,
@@ -77,6 +86,7 @@ async def test_native_facts_are_admitted_without_inventing_profitability() -> No
         execute=AsyncMock(
             side_effect=[
                 _result([(issue, reservation, movement)]),
+                _result([(settlement, invoice, receipt)]),
                 _result([(job, customer, branch)]),
             ]
         ),
@@ -94,15 +104,19 @@ async def test_native_facts_are_admitted_without_inventing_profitability() -> No
         period_end=date(2026, 9, 30),
     )
 
-    assert result["admitted_reference_count"] == 4
+    assert result["admitted_reference_count"] == 6
     assert result["families"]["REVENUE"]["state"] == "AVAILABLE"
     assert result["families"]["DIRECT_LABOR"]["state"] == "AVAILABLE"
     assert result["families"]["DIRECT_MATERIAL"]["state"] == "AVAILABLE"
+    assert result["families"]["SERVICE_CATEGORY"]["state"] == "AVAILABLE"
+    assert result["families"]["WORKFORCE_ATTRIBUTION"]["state"] == "AVAILABLE"
+    assert result["families"]["SETTLEMENT"]["state"] == "AVAILABLE"
     assert result["families"]["ACCOUNTING"]["state"] == "PARTIAL"
     projected = result["jobs"][0]
     assert projected["invoiced_revenue_minor"] == 12_550
     assert projected["accepted_worked_seconds"] == 3600
     assert projected["material_cost_minor"] == 2_000
+    assert projected["settlement_applied_minor"] == -2_500
     assert "contribution_minor" not in projected
 
 
@@ -136,6 +150,7 @@ async def test_missing_material_cost_remains_partial_and_missing() -> None:
         execute=AsyncMock(
             side_effect=[
                 _result([(issue, reservation, movement)]),
+                _result([]),
                 _result(
                     [
                         (

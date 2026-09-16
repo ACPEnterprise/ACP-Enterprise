@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer
 from app.inventory.models import InventoryReservation, MaterialIssue, StockMovement
-from app.invoicing.models import Invoice
+from app.invoicing.models import ARLedgerEntry, Invoice, PaymentReceiptEvidence
 from app.jobs.models import Job
 from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
@@ -127,6 +127,30 @@ class NativeEconomicsEvidenceService:
             .order_by(MaterialIssue.occurred_at.desc(), MaterialIssue.id.desc())
             .limit(MAX_SOURCE_ROWS)
         )
+        settlements_query = (
+            select(ARLedgerEntry, Invoice, PaymentReceiptEvidence)
+            .join(
+                Invoice,
+                (Invoice.company_id == ARLedgerEntry.company_id)
+                & (Invoice.id == ARLedgerEntry.invoice_id),
+            )
+            .join(
+                PaymentReceiptEvidence,
+                (PaymentReceiptEvidence.company_id == ARLedgerEntry.company_id)
+                & (PaymentReceiptEvidence.receipt_id == ARLedgerEntry.source_id),
+            )
+            .where(
+                ARLedgerEntry.company_id == company_id,
+                ARLedgerEntry.branch_id.in_(authorized_branch_ids),
+                ARLedgerEntry.entry_type.in_(
+                    ("payment_application", "application_reversal")
+                ),
+                ARLedgerEntry.occurred_at >= start_at,
+                ARLedgerEntry.occurred_at <= end_at,
+            )
+            .order_by(ARLedgerEntry.occurred_at.desc(), ARLedgerEntry.id.desc())
+            .limit(MAX_SOURCE_ROWS)
+        )
         if branch_id is not None:
             jobs_query = jobs_query.where(Job.branch_id == branch_id)
             invoices_query = invoices_query.where(Invoice.branch_id == branch_id)
@@ -136,14 +160,19 @@ class NativeEconomicsEvidenceService:
             materials_query = materials_query.where(
                 MaterialIssue.branch_id == branch_id
             )
+            settlements_query = settlements_query.where(
+                ARLedgerEntry.branch_id == branch_id
+            )
 
         invoices = tuple((await session.scalars(invoices_query)).all())
         intervals = tuple((await session.scalars(intervals_query)).all())
         material_rows = tuple((await session.execute(materials_query)).all())
+        settlement_rows = tuple((await session.execute(settlements_query)).all())
         referenced_job_ids = {
             *(item.job_id for item in invoices),
             *(item.job_id for item in intervals),
             *(reservation.demand_id for _, reservation, _ in material_rows),
+            *(invoice.job_id for _, invoice, _ in settlement_rows),
         }
         period_identity = (Job.created_at <= end_at) & (Job.updated_at >= start_at)
         jobs_query = jobs_query.where(
@@ -185,6 +214,7 @@ class NativeEconomicsEvidenceService:
                 "accepted_worked_seconds": None,
                 "material_cost_minor": None,
                 "material_quantity_evidence_count": 0,
+                "settlement_applied_minor": None,
             }
 
         invoice_totals: dict[UUID, int] = defaultdict(int)
@@ -243,6 +273,23 @@ class NativeEconomicsEvidenceService:
             )
         for job_id, seconds in labor_totals.items():
             jobs[job_id]["accepted_worked_seconds"] = seconds
+            attributed = tuple(item for item in intervals if item.job_id == job_id)
+            jobs[job_id]["references"].append(
+                self._reference(
+                    family="WORKFORCE_ATTRIBUTION",
+                    record_type="employee_job_work_attribution",
+                    record_id=attributed[0].id,
+                    source_version=max(item.revision_number for item in attributed),
+                    as_of=max(item.created_at for item in attributed),
+                    payload={
+                        "job_id": job_id,
+                        "employee_ids": sorted(
+                            {str(item.employee_id) for item in attributed}
+                        ),
+                        "accepted_worked_seconds": seconds,
+                    },
+                )
+            )
 
         material_totals: dict[UUID, int] = defaultdict(int)
         material_cost_complete: dict[UUID, bool] = defaultdict(lambda: True)
@@ -283,6 +330,33 @@ class NativeEconomicsEvidenceService:
             ):
                 row["material_cost_minor"] = material_totals[job_id]
 
+        settlement_totals: dict[UUID, int] = defaultdict(int)
+        for entry, invoice, receipt in settlement_rows:
+            row = jobs.get(invoice.job_id)
+            if row is None:
+                continue
+            settlement_totals[invoice.job_id] += _minor(entry.amount)
+            row["references"].append(
+                self._reference(
+                    family="SETTLEMENT",
+                    record_type="verified_payment_application",
+                    record_id=entry.id,
+                    source_version=entry.source_version,
+                    as_of=entry.occurred_at,
+                    payload={
+                        "receipt_id": receipt.receipt_id,
+                        "invoice_id": invoice.id,
+                        "job_id": invoice.job_id,
+                        "entry_type": entry.entry_type,
+                        "amount": entry.amount,
+                        "currency": entry.currency,
+                        "receipt_evidence_digest": receipt.evidence_digest,
+                    },
+                )
+            )
+        for job_id, amount in settlement_totals.items():
+            jobs[job_id]["settlement_applied_minor"] = amount
+
         references = [ref for row in jobs.values() for ref in row["references"]]
         accounting_conflicts = sum(
             invoice.accounting_status == "reconciliation_required"
@@ -310,10 +384,24 @@ class NativeEconomicsEvidenceService:
                 len(jobs),
                 "Job foreign-key attribution to authorized ACP Branch.",
             ),
+            "SERVICE_CATEGORY": self._family(
+                "AVAILABLE"
+                if jobs and all(row["service_category"] for row in jobs.values())
+                else "PARTIAL"
+                if jobs
+                else "ABSENT",
+                sum(bool(row["service_category"]) for row in jobs.values()),
+                "Explicit canonical Job type code only; free text is not classified.",
+            ),
             "DIRECT_LABOR": self._family(
                 "AVAILABLE" if intervals else "ABSENT",
                 len(intervals),
                 "Accepted authoritative Job-work duration; wage cost is not inferred.",
+            ),
+            "WORKFORCE_ATTRIBUTION": self._family(
+                "AVAILABLE" if intervals else "ABSENT",
+                len(intervals),
+                "Accepted Employee-to-Job work attribution; no ranking, pay rate, or employment conclusion.",
             ),
             "DIRECT_MATERIAL": self._family(
                 "AVAILABLE"
@@ -334,6 +422,11 @@ class NativeEconomicsEvidenceService:
                 else "ABSENT",
                 posted,
                 "Only posted Invoice accounting receipts are admitted; pending operational invoices remain non-Accounting evidence.",
+            ),
+            "SETTLEMENT": self._family(
+                "AVAILABLE" if settlement_rows else "ABSENT",
+                len(settlement_rows),
+                "Verified receipt application to an Invoice; distinct from earned revenue, Accounting recognition, and cash deposit.",
             ),
         }
         ordered_jobs = sorted(

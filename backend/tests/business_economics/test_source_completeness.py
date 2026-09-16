@@ -28,7 +28,7 @@ def test_matrix_distinguishes_admitted_inputs_from_policy_and_partial_seams() ->
     value = source_completeness_matrix(workspace())
     assert states(value) == {
         "revenue": "AVAILABLE",
-        "settlement": "POLICY_REQUIRED",
+        "settlement": "SOURCE_REQUIRED",
         "direct_labor": "AVAILABLE",
         "employer_burden": "PARTIAL",
         "materials": "AVAILABLE",
@@ -105,9 +105,15 @@ def test_native_evidence_replaces_false_zero_without_claiming_profitability() ->
                         "reference_count": 4,
                     },
                     "BRANCH_ATTRIBUTION": {"state": "AVAILABLE", "reference_count": 4},
+                    "SERVICE_CATEGORY": {"state": "PARTIAL", "reference_count": 3},
                     "DIRECT_LABOR": {"state": "AVAILABLE", "reference_count": 2},
+                    "WORKFORCE_ATTRIBUTION": {
+                        "state": "AVAILABLE",
+                        "reference_count": 2,
+                    },
                     "DIRECT_MATERIAL": {"state": "PARTIAL", "reference_count": 1},
                     "ACCOUNTING": {"state": "PARTIAL", "reference_count": 0},
+                    "SETTLEMENT": {"state": "AVAILABLE", "reference_count": 1},
                 }
             },
         }
@@ -119,4 +125,7 @@ def test_native_evidence_replaces_false_zero_without_claiming_profitability() ->
     assert matrix["customer_attribution"]["evidence_count"] == 4
     assert matrix["direct_labor"]["state"] == "PARTIAL"
     assert matrix["materials"]["state"] == "PARTIAL"
+    assert matrix["service_category"]["state"] == "PARTIAL"
+    assert matrix["workforce_attribution"]["state"] == "AVAILABLE"
+    assert matrix["settlement"]["state"] == "AVAILABLE"
     assert value["complete_for_direct_contribution"] is False

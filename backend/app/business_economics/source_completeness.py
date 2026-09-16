@@ -52,9 +52,10 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "settlement",
-            SourceCompletenessState.POLICY_REQUIRED,
-            0,
-            "Settlement is distinct from earned revenue; a cash-recognition policy and admitted settlement measurement are required.",
+            _native_state(native_families, "SETTLEMENT")
+            or SourceCompletenessState.SOURCE_REQUIRED,
+            _native_count(native_families, "SETTLEMENT"),
+            "Verified payment application is factual settlement evidence distinct from earned revenue, deposit, cash recognition, and Accounting income.",
         ),
         _entry(
             "direct_labor",
@@ -105,8 +106,8 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "service_category",
-            _category_state(base, workspace),
-            len(jobs),
+            _native_service_category_state(base, workspace, native_families),
+            max(len(jobs), _native_count(native_families, "SERVICE_CATEGORY")),
             "Service/category rollups require canonical Job classification; free text is not classified.",
         ),
         _entry(
@@ -133,10 +134,16 @@ def source_completeness_matrix(workspace: dict[str, object]) -> dict[str, object
         ),
         _entry(
             "workforce_attribution",
-            SourceCompletenessState.PARTIAL
-            if totals.get("labor") is not None
-            else SourceCompletenessState.SOURCE_REQUIRED,
-            source_count,
+            _native_state(native_families, "WORKFORCE_ATTRIBUTION")
+            or (
+                SourceCompletenessState.PARTIAL
+                if totals.get("labor") is not None
+                else SourceCompletenessState.SOURCE_REQUIRED
+            ),
+            max(
+                source_count,
+                _native_count(native_families, "WORKFORCE_ATTRIBUTION"),
+            ),
             "Aggregate labor may be admitted, but Employee-to-Job economics requires explicit protected attribution authority.",
         ),
         _entry(
@@ -338,6 +345,20 @@ def _native_accounting_state(
     if result_state is not SourceCompletenessState.UNAVAILABLE:
         return result_state
     return native_state or SourceCompletenessState.UNAVAILABLE
+
+
+def _native_service_category_state(
+    base: SourceCompletenessState,
+    workspace: dict[str, object],
+    families: dict[str, Any],
+) -> SourceCompletenessState:
+    result_state = _category_state(base, workspace)
+    if result_state is not SourceCompletenessState.UNAVAILABLE:
+        return result_state
+    return (
+        _native_state(families, "SERVICE_CATEGORY")
+        or SourceCompletenessState.UNAVAILABLE
+    )
 
 
 def _other_cost_state(
