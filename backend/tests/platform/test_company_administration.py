@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import timedelta
@@ -7,15 +9,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -75,6 +68,14 @@ from app.workforce.models import (
     CapabilityCategory,
     Certification,
     Language,
+)
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
 
 
@@ -482,6 +483,91 @@ async def test_canonical_role_sync_rejects_custom_code_collision_without_mutatio
             )
         )
     assert system_count == 0
+
+
+@pytest.mark.asyncio
+async def test_governed_collision_promotion_preserves_assignee_and_removes_excess(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ROLEPROMOTE")
+    await synchronize_permission_catalog(factory)
+    definition = next(
+        item for item in CANONICAL_ROLE_DEFINITIONS
+        if item.code == "ACP_EMPLOYEE_MOBILE"
+    )
+    async with factory() as session, session.begin():
+        role = Role(
+            company_id=fixture.context.company.id,
+            code=definition.code,
+            name="Legacy Mobile",
+            status="active",
+            is_system=False,
+        )
+        session.add(role)
+        await session.flush()
+        codes = set(definition.permission_codes) | {"COMPANY_PAYROLL_POLICY_MANAGE"}
+        permissions = tuple(
+            await session.scalars(select(Permission).where(Permission.code.in_(codes)))
+        )
+        assert {item.code for item in permissions} == codes
+        for permission in permissions:
+            session.add(RolePermission(role_id=role.id, permission_id=permission.id))
+        session.add(
+            MembershipRole(
+                company_id=fixture.context.company.id,
+                membership_id=fixture.target_membership_id,
+                role_id=role.id,
+            )
+        )
+        role_id = role.id
+    digest = hashlib.sha256(
+        json.dumps(sorted(codes), separators=(",", ":")).encode()
+    ).hexdigest()
+    before = await user_version(factory, fixture.target_user_id)
+    service = CanonicalRoleSyncService()
+    async with factory() as session:
+        result = await service.promote_legacy_collision(
+            session,
+            company_id=fixture.context.company.id,
+            actor_user_id=fixture.context.user.id,
+            expected_role_id=role_id,
+            role_code=definition.code,
+            expected_permission_digest=digest,
+        )
+    assert result.promoted
+    assert result.permissions_removed == ("COMPANY_PAYROLL_POLICY_MANAGE",)
+    assert result.authorization_users_advanced == 1
+    async with factory() as session:
+        role = await session.get(Role, role_id)
+        assigned = frozenset(
+            await session.scalars(
+                select(Permission.code)
+                .join(RolePermission, RolePermission.permission_id == Permission.id)
+                .where(RolePermission.role_id == role_id)
+            )
+        )
+        assignment = await session.scalar(
+            select(MembershipRole).where(
+                MembershipRole.membership_id == fixture.target_membership_id,
+                MembershipRole.role_id == role_id,
+            )
+        )
+    assert role is not None and role.is_system and role.status == "active"
+    assert assigned == definition.permission_codes
+    assert assignment is not None
+    assert await user_version(factory, fixture.target_user_id) == before + 1
+    async with factory() as session:
+        replay = await service.promote_legacy_collision(
+            session,
+            company_id=fixture.context.company.id,
+            actor_user_id=fixture.context.user.id,
+            expected_role_id=role_id,
+            role_code=definition.code,
+            expected_permission_digest=digest,
+        )
+    assert not replay.promoted
+    assert await user_version(factory, fixture.target_user_id) == before + 1
 
 
 def test_canonical_role_sync_failure_is_classified_and_non_reflective() -> None:
