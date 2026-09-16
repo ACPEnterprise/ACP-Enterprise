@@ -152,6 +152,15 @@ async def test_receipt_replay_exact_mapping_and_split_disposition(
             created_by_user_id=context.user.id,
             updated_by_user_id=context.user.id,
         )
+        corrected_item = InventoryItem(
+            company_id=context.company.id,
+            code=f"FIT-CORRECTED-{uuid4().hex[:6].upper()}",
+            name="Corrected fitting identity",
+            stocking_unit="each",
+            status="active",
+            created_by_user_id=context.user.id,
+            updated_by_user_id=context.user.id,
+        )
         vendor = OperationalVendor(
             company_id=context.company.id,
             code=f"VEN-{uuid4().hex[:6].upper()}",
@@ -169,7 +178,7 @@ async def test_receipt_replay_exact_mapping_and_split_disposition(
             created_by_user_id=context.user.id,
             updated_by_user_id=context.user.id,
         )
-        session.add_all([assignment, item, vendor, truck])
+        session.add_all([assignment, item, corrected_item, vendor, truck])
 
     artifact_service = FieldArtifactService(FieldService())
     async with factory() as session:
@@ -228,36 +237,72 @@ async def test_receipt_replay_exact_mapping_and_split_disposition(
             session, context=context, job_id=job.id, payload=create
         )
         assert replay.id == purchase.id
+    extraction_payload = FieldPurchaseExtractionInput(
+        method="synthetic_fixture",
+        provider_reference=None,
+        vendor_id=vendor.id,
+        extraction_digest="d" * 64,
+        expected_version=1,
+        lines=(
+            ExtractedLine(
+                line_number=1,
+                description="Receipt wording",
+                vendor_code="SKU-EXACT-1",
+                quantity=Decimal(4),
+                unit="each",
+                unit_price=Decimal("2.50"),
+                extended_amount=Decimal("10.00"),
+                confidence={"vendor_code": Decimal(1)},
+            ),
+        ),
+    )
     async with factory() as session:
         extracted = await service.record_extraction(
             session,
             context=context,
             job_id=job.id,
             purchase_id=purchase.id,
-            payload=FieldPurchaseExtractionInput(
-                method="synthetic_fixture",
-                provider_reference=None,
-                vendor_id=vendor.id,
-                extraction_digest="d" * 64,
-                expected_version=1,
-                lines=(
-                    ExtractedLine(
-                        line_number=1,
-                        description="Receipt wording",
-                        vendor_code="SKU-EXACT-1",
-                        quantity=Decimal(4),
-                        unit="each",
-                        unit_price=Decimal("2.50"),
-                        extended_amount=Decimal("10.00"),
-                        confidence={"vendor_code": Decimal(1)},
-                    ),
-                ),
-            ),
+            payload=extraction_payload,
         )
         assert extracted.lines[0].match_state == "exact"
         assert extracted.lines[0].inventory_item_id == item.id
+    async with factory() as session:
+        lost_response_replay = await service.record_extraction(
+            session,
+            context=context,
+            job_id=job.id,
+            purchase_id=purchase.id,
+            payload=extraction_payload,
+        )
+        assert lost_response_replay.version == extracted.version
+    async with factory() as session:
+        corrected_mapping = await service.certify_mapping(
+            session,
+            context=context,
+            payload=VendorMappingCreate(
+                vendor_id=vendor.id,
+                vendor_code="SKU-EXACT-1",
+                inventory_item_id=corrected_item.id,
+                expected_prior_mapping_id=mapping.id,
+                evidence_digest="f" * 64,
+            ),
+        )
+        assert corrected_mapping.supersedes_id == mapping.id
+    corrected_payload = extraction_payload.model_copy(
+        update={"extraction_digest": "e" * 64, "expected_version": 2}
+    )
+    async with factory() as session:
+        extracted = await service.record_extraction(
+            session,
+            context=context,
+            job_id=job.id,
+            purchase_id=purchase.id,
+            payload=corrected_payload,
+        )
+        assert len(extracted.lines) == 1
+        assert extracted.lines[0].inventory_item_id == corrected_item.id
     disposition_payload = FieldPurchaseDispositionInput(
-        expected_version=2,
+        expected_version=3,
         idempotency_key="field-purchase-submit-1",
         dispositions=(
             LineDispositionInput(
@@ -294,33 +339,53 @@ async def test_receipt_replay_exact_mapping_and_split_disposition(
             payload=disposition_payload,
         )
         assert replay.version == submitted.version
-        assert await session.scalar(
-            select(func.count()).select_from(StockMovement).where(
-                StockMovement.company_id == context.company.id,
-                StockMovement.provenance_type == "field_purchase_disposition",
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(StockMovement)
+                .where(
+                    StockMovement.company_id == context.company.id,
+                    StockMovement.provenance_type == "field_purchase_disposition",
+                )
             )
-        ) == 2
-        assert await session.scalar(
-            select(func.count()).select_from(InventoryReservation).where(
-                InventoryReservation.company_id == context.company.id,
-                InventoryReservation.demand_id == job.id,
+            == 2
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(InventoryReservation)
+                .where(
+                    InventoryReservation.company_id == context.company.id,
+                    InventoryReservation.demand_id == job.id,
+                )
             )
-        ) == 1
-        assert await session.scalar(
-            select(func.count()).select_from(ReservationAllocation).where(
-                ReservationAllocation.company_id == context.company.id,
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ReservationAllocation)
+                .where(
+                    ReservationAllocation.company_id == context.company.id,
+                )
             )
-        ) == 1
-        assert await session.scalar(
-            select(func.count()).select_from(MaterialIssue).where(
-                MaterialIssue.company_id == context.company.id,
-                MaterialIssue.external_reference_type
-                == "field_purchase_disposition",
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(MaterialIssue)
+                .where(
+                    MaterialIssue.company_id == context.company.id,
+                    MaterialIssue.external_reference_type
+                    == "field_purchase_disposition",
+                )
             )
-        ) == 1
+            == 1
+        )
         quantity = await session.scalar(
             select(InventoryQuantity).where(
-                InventoryQuantity.item_id == item.id,
+                InventoryQuantity.item_id == corrected_item.id,
                 InventoryQuantity.location_id == truck.id,
             )
         )
@@ -346,3 +411,21 @@ async def test_receipt_replay_exact_mapping_and_split_disposition(
                 purchase_id=purchase.id,
                 payload=conflicting,
             )
+
+
+def test_empty_or_uncertain_extraction_cannot_be_ready() -> None:
+    empty = FieldPurchaseExtractionInput(
+        method="provider_adapter",
+        extraction_digest="e" * 64,
+        expected_version=1,
+        lines=(),
+    )
+    assert empty.lines == ()
+    uncertain = ExtractedLine(
+        line_number=1,
+        description="Possible fitting",
+        vendor_code="SKU-EXACT-1",
+        quantity=Decimal(1),
+        confidence={"vendor_code": Decimal("0.75")},
+    )
+    assert uncertain.confidence["vendor_code"] < 1

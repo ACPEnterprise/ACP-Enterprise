@@ -438,6 +438,9 @@ class FieldPurchase(Base):
         UniqueConstraint(
             "company_id", "receipt_artifact_id", name="uq_field_purchase_receipt"
         ),
+        UniqueConstraint(
+            "company_id", "receipt_digest", name="uq_field_purchase_receipt_digest"
+        ),
         Index(
             "ix_field_purchase_review", "company_id", "branch_id", "state", "created_at"
         ),
@@ -560,7 +563,7 @@ class FieldPurchaseLine(Base):
         ),
         UniqueConstraint(
             "company_id",
-            "field_purchase_id",
+            "extraction_id",
             "line_number",
             name="uq_field_purchase_line_number",
         ),
