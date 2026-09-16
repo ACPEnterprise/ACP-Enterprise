@@ -83,6 +83,14 @@ only from scheduled or confirmed state. Terminal records now retain navigation
 and history access while the UI explains why they cannot be moved instead of
 leading an operator into a predictable conflict response.
 
+### Dispatch selection refresh consistency
+
+The Dispatch board previously stored a selected row snapshot. Query refreshes
+could update the board while an open assignment panel continued using stale
+assignment and version evidence. Selection now stores only the Appointment
+identity and resolves the panel from every authoritative board result, including
+response-loss recovery and changes made by another authorized operator.
+
 ## Qualified connected surfaces
 
 The focused UI suite covers Employee roster/detail/timecard navigation,
