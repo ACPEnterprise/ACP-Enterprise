@@ -15,6 +15,9 @@ const mutationState = vi.hoisted(() => ({
   categoryError: null as unknown,
   categoryMutate: vi.fn(),
 }));
+const candidateReviewState = vi.hoisted(() => ({
+  calls: [] as Array<Record<string, unknown>>,
+}));
 
 vi.mock("../auth", () => ({
   useAuth: () => ({
@@ -29,7 +32,9 @@ vi.mock("../auth", () => ({
 vi.mock("../hooks/usePriceBook", () => ({
   useActivationReadiness: () => ({ isPending: false, isError: false, data: undefined }),
   usePriceBookAudit: () => ({ isPending: false, isError: false, data: [] }),
-  useCandidateReview: () => ({
+  useCandidateReview: (params: Record<string, unknown>) => {
+    candidateReviewState.calls.push(params);
+    return ({
     isPending: false,
     isError: false,
     data: {
@@ -62,7 +67,8 @@ vi.mock("../hooks/usePriceBook", () => ({
       },
       total: 218,
     },
-  }),
+    });
+  },
   usePriceBook: () => ({
     isPending: false,
     isError: false,
@@ -182,7 +188,21 @@ vi.mock("../hooks/usePriceBook", () => ({
 describe("PriceBookRoute", () => {
   beforeEach(() => {
     mutationState.categoryError = null;
+    candidateReviewState.calls = [];
     mutationState.categoryMutate.mockReset();
+  });
+
+  it("pages through every candidate instead of hiding records past the first page", async () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+
+    expect(screen.getByText("Showing 1–1 of 218 candidates.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next candidates" }));
+
+    await waitFor(() =>
+      expect(candidateReviewState.calls).toContainEqual(
+        expect.objectContaining({ limit: 50, offset: 50 }),
+      ),
+    );
   });
   it("fails closed without Price Book read authority", () => {
     authState.permissionCodes = [];
