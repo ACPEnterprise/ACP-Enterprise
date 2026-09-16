@@ -88,6 +88,60 @@ export interface PriceBookCatalog {
   costs_visible: boolean;
 }
 
+export interface PriceBookCandidateReviewItem {
+  candidate_identity: string;
+  native_service_item_id: string | null;
+  service_code: string;
+  name: string;
+  customer_description: string;
+  category: string;
+  admission_status: "admitted" | "held";
+  review_flags: string[];
+  activation_blockers: string[];
+  candidate_prices: Record<string, string | null>;
+  price_derivation: string;
+  labor_hours?: string;
+  material_cost_evidence?: string;
+  source_sheet: string;
+  source_row: number;
+  source_digest: string;
+  evidence_digest: string;
+  tax_decision_group: string;
+  conflict_reason: string | null;
+}
+
+export interface PriceBookCandidateReviewPage {
+  items: PriceBookCandidateReviewItem[];
+  counts: Record<string, number>;
+  total: number;
+  limit: number;
+  offset: number;
+  costs_visible: boolean;
+}
+
+export interface PriceBookActivationReadiness {
+  price_version_id: string;
+  draft_version: number;
+  candidate_identity: string;
+  service_code: string;
+  price_approved: boolean;
+  tax_approved: boolean;
+  effective_date_approved: boolean;
+  activation_authorized: boolean;
+  material_mapping_required: boolean;
+  source_conflict: boolean;
+  activation_ready: boolean;
+  remaining_blockers: string[];
+  rationale: Record<string, string>;
+}
+export interface PriceBookAuditItem {
+  id: string;
+  action: string;
+  reason: string;
+  actor_user_id: string;
+  occurred_at: string;
+}
+
 export interface PriceBookSnapshot {
   id: string;
   company_id: string;

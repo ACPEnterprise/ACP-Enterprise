@@ -1,7 +1,13 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
-import { usePriceBook, usePriceBookMutations } from "../hooks/usePriceBook";
+import {
+  useCandidateReview,
+  useActivationReadiness,
+  usePriceBookAudit,
+  usePriceBook,
+  usePriceBookMutations,
+} from "../hooks/usePriceBook";
 import {
   Alert,
   Badge,
@@ -48,6 +54,7 @@ export function PriceBookRoute() {
   const canRead = useHasPermission("COMPANY_PRICE_BOOK_READ");
   const canManage = useHasPermission("COMPANY_PRICE_BOOK_MANAGE");
   const canActivate = useHasPermission("COMPANY_PRICE_BOOK_ACTIVATE");
+  const canApproveTax = useHasPermission("COMPANY_ACCOUNTING_FINANCE_APPROVE");
   const [branch, setBranch] = useState("");
   const catalog = usePriceBook(branch || undefined, canRead);
   const mutations = usePriceBookMutations();
@@ -87,6 +94,13 @@ export function PriceBookRoute() {
     componentCost: "",
   });
   const [search, setSearch] = useState("");
+  const [reviewVersionId, setReviewVersionId] = useState<string>();
+  const activationReadiness = useActivationReadiness(reviewVersionId);
+  const reviewAudit = usePriceBookAudit(reviewVersionId);
+  const candidateReview = useCandidateReview(
+    { search: search.trim() || undefined, limit: 200 },
+    canRead && Boolean(activeCompany),
+  );
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [reviewType, setReviewType] = useState<
@@ -388,6 +402,7 @@ export function PriceBookRoute() {
     mutations.adjustmentProposal,
     mutations.adjustmentDecision,
     mutations.adjustmentMaterialize,
+    mutations.activationReview,
   ].find((mutation) => mutation.isError);
   const services = catalog.data?.service_items ?? [];
   const versions = catalog.data?.versions ?? [];
@@ -497,6 +512,115 @@ export function PriceBookRoute() {
               </CardHeader>
             </Card>
           </section>
+          <Card>
+            <CardHeader>
+              <CardTitle>All County candidate review</CardTitle>
+              <CardDescription>
+                Source-backed draft candidates are visible here before any price
+                becomes active. Held items remain isolated until their source
+                conflict is resolved.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {candidateReview.isPending ? (
+                <Spinner label="Loading candidate review" />
+              ) : candidateReview.isError ? (
+                <Alert variant="danger">
+                  Candidate evidence could not be loaded. Native Price Book
+                  authority was not changed.
+                </Alert>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div><strong>{candidateReview.data?.counts.admitted ?? 0}</strong><p className="text-sm text-content-muted">Draft — ready for review</p></div>
+                    <div><strong>{candidateReview.data?.counts.held ?? 0}</strong><p className="text-sm text-content-muted">Held — source conflict</p></div>
+                    <div><strong>{candidateReview.data?.counts.material_mapping_required ?? 0}</strong><p className="text-sm text-content-muted">Need material mapping</p></div>
+                    <div><strong>{candidateReview.data?.counts.activation_ready ?? 0}</strong><p className="text-sm text-content-muted">Activation ready</p></div>
+                  </div>
+                  <div className="space-y-3" aria-label="All County candidate services">
+                    {(candidateReview.data?.items ?? []).map((candidate) => (
+                      <article
+                        key={candidate.candidate_identity}
+                        className="rounded-lg border border-stroke p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs text-content-muted">{candidate.category} · {candidate.service_code}</p>
+                            <h3 className="font-semibold">{candidate.name}</h3>
+                          </div>
+                          <Badge variant={candidate.admission_status === "held" ? "danger" : "warning"}>
+                            {candidate.admission_status === "held" ? "Held — source conflict" : "Draft — ready for review"}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-sm">{candidate.customer_description}</p>
+                        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                          <div><dt className="text-content-muted">Candidate price</dt><dd>${candidate.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
+                          <div><dt className="text-content-muted">Source</dt><dd>{candidate.source_sheet}, row {candidate.source_row}</dd></div>
+                          <div><dt className="text-content-muted">Price evidence</dt><dd>{candidate.price_derivation === "OWNER_OVERRIDE" ? "Owner workbook value" : "Workbook formula"}</dd></div>
+                        </dl>
+                        <p className="mt-3 text-xs text-content-muted">
+                          {candidate.review_flags.map((flag) => flag.replaceAll("_", " ").toLocaleLowerCase()).join(" · ")}
+                        </p>
+                        {candidate.conflict_reason && (
+                          <Alert variant="warning">
+                            Workbook pricing differs from illustrative Water Heater script examples. No source was selected automatically.
+                          </Alert>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                  {(candidateReview.data?.total ?? 0) > (candidateReview.data?.items.length ?? 0) && (
+                    <p className="text-sm text-content-muted">
+                      Showing the first {candidateReview.data?.items.length} of {candidateReview.data?.total}. Refine search to review the remaining services.
+                    </p>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+          {reviewVersionId && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Activation checklist</CardTitle>
+                <CardDescription>
+                  Each approval applies only to this exact draft revision. Editing the draft makes prior approvals stale. Activation remains a separate final action.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {activationReadiness.isPending ? <Spinner label="Loading activation checklist" /> : activationReadiness.isError ? (
+                  <Alert variant="danger">Activation evidence could not be loaded.</Alert>
+                ) : activationReadiness.data && (
+                  <>
+                    <p><strong>{activationReadiness.data.service_code}</strong> · {activationReadiness.data.activation_ready ? "Ready for explicit activation" : "Not ready to activate"}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {activationReadiness.data.remaining_blockers.map((blocker) => (
+                        <div key={blocker} className="rounded border border-stroke p-3 text-sm">
+                          {blocker.replaceAll("_", " ").toLocaleLowerCase()}
+                        </div>
+                      ))}
+                    </div>
+                    {activationReadiness.data.material_mapping_required && (
+                      <Alert variant="warning">Material mapping is incomplete. This affects internal material readiness; it is not silently treated as Inventory consumption.</Alert>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {canManage && !activationReadiness.data.price_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "price", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the ACP selling price shown for this exact draft." })}>Approve selling price</Button>}
+                      {canApproveTax && !activationReadiness.data.tax_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "tax", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized finance reviewer approved the selected tax classification for this exact draft." })}>Approve tax classification</Button>}
+                      {canManage && !activationReadiness.data.effective_date_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "effective-date", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the effective date shown for this exact draft." })}>Approve effective date</Button>}
+                      {canActivate && !activationReadiness.data.activation_authorized && <Button disabled={!activationReadiness.data.price_approved || !activationReadiness.data.tax_approved || !activationReadiness.data.effective_date_approved} onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "activation-authorization", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized owner approved this exact draft for a later explicit activation command." })}>Authorize later activation</Button>}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Review and activation history</h3>
+                      {reviewAudit.isPending ? <Spinner label="Loading Price Book history" /> : (
+                        <ul className="mt-2 space-y-2 text-sm">
+                          {(reviewAudit.data ?? []).map((entry) => <li key={entry.id}><strong>{entry.action.replaceAll("_", " ")}</strong> · {entry.reason} · {new Date(entry.occurred_at).toLocaleString()}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Activation readiness</CardTitle>
@@ -1190,7 +1314,7 @@ export function PriceBookRoute() {
                               )}
                             </div>
                             {canActivate && version.status === "draft" && (
-                              <Button
+                              <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button><Button
                                 onClick={() =>
                                   void performMutation(() =>
                                     mutations.activate.mutateAsync({
@@ -1201,7 +1325,7 @@ export function PriceBookRoute() {
                                 }
                               >
                                 Activate version
-                              </Button>
+                              </Button></div>
                             )}
                           </div>
                         ))}

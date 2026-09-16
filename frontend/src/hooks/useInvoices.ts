@@ -7,10 +7,16 @@ export const invoiceKeys = {
   workspace: (filters: import("../types/invoices").InvoiceWorkspaceFilters) => ["invoices", "workspace", filters] as const,
   customerBalance: (customerId: string, asOf: string) => ["invoices", "customer-balance", customerId, asOf] as const,
   officeDetail: (id: string, asOf: string) => ["invoices", "office-detail", id, asOf] as const,
+  manualPayments: (id: string) => ["invoices", id, "manual-payments"] as const,
+  candidates: ["invoices", "candidates"] as const,
 };
 
 export function useInvoices(enabled = true) {
   return useQuery({ queryKey: invoiceKeys.all, queryFn: api.listInvoices, enabled });
+}
+
+export function useInvoiceCandidates(enabled = true) {
+  return useQuery({ queryKey: invoiceKeys.candidates, queryFn: api.getInvoiceCandidates, enabled });
 }
 
 export function useInvoiceWorkspace(filters: import("../types/invoices").InvoiceWorkspaceFilters, enabled = true) {
@@ -33,11 +39,20 @@ export function useInvoice(id: string, enabled = true) {
   });
 }
 
+export function useManualPaymentHistory(id: string, enabled = true) {
+  return useQuery({
+    queryKey: invoiceKeys.manualPayments(id),
+    queryFn: () => api.getManualPaymentHistory(id),
+    enabled: enabled && Boolean(id),
+  });
+}
+
 export function useInvoiceMutations() {
   const client = useQueryClient();
   const update = (invoice: Awaited<ReturnType<typeof api.getInvoice>>) => {
     client.setQueryData(invoiceKeys.detail(invoice.id), invoice);
     void client.invalidateQueries({ queryKey: invoiceKeys.all });
+    void client.invalidateQueries({ queryKey: invoiceKeys.candidates });
   };
   return {
     create: useMutation({ mutationFn: api.createInvoice, onSuccess: update }),
@@ -62,6 +77,15 @@ export function useInvoiceMutations() {
     void: useMutation({
       mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.voidInvoice>[1] }) => api.voidInvoice(id, input),
       onSuccess: update,
+    }),
+    manualPayment: useMutation({
+      mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.recordManualPayment>[1] }) => api.recordManualPayment(id, input),
+      onSuccess: (result) => {
+        update(result.invoice);
+        void client.invalidateQueries({ queryKey: invoiceKeys.manualPayments(result.invoice.id) });
+        void client.invalidateQueries({ queryKey: ["invoices", "customer-balance"] });
+        void client.invalidateQueries({ queryKey: ["invoices", "workspace"] });
+      },
     }),
   };
 }

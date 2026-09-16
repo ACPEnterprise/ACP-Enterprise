@@ -17,9 +17,15 @@ vi.mock("../api/invoices", () => ({
   getInvoice: vi.fn(),
   getInvoiceOfficeDetail: vi.fn(),
   getCustomerBalance: vi.fn(),
+  getInvoiceCandidates: vi.fn(),
   listInvoices: vi.fn(),
   createInvoice: vi.fn(),
   issueInvoice: vi.fn(),
+  creditInvoice: vi.fn(),
+  writeOffInvoice: vi.fn(),
+  voidInvoice: vi.fn(),
+  recordManualPayment: vi.fn(),
+  getManualPaymentHistory: vi.fn(),
 }));
 vi.mock("../api/payments", () => ({
   getPaymentReceipt: vi.fn(),

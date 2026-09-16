@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useHasPermission } from "../auth";
-import { useInvoiceMutations, useInvoiceWorkspace } from "../hooks/useInvoices";
+import { useInvoiceCandidates, useInvoiceMutations, useInvoiceWorkspace } from "../hooks/useInvoices";
 import type { InvoiceWorkspaceState } from "../types/invoices";
 import {
   Alert,
@@ -22,10 +22,9 @@ export function InvoicesRoute() {
   const canManage = useHasPermission("COMPANY_INVOICE_MANAGE");
   const today = new Date().toISOString().slice(0, 10);
   const mutations = useInvoiceMutations();
+  const candidates = useInvoiceCandidates(canRead && canManage);
   const [form, setForm] = useState({
-    branch: "",
-    estimate: "",
-    job: "",
+    candidate: "",
     due: "",
     terms: "Net 30",
   });
@@ -38,10 +37,12 @@ export function InvoicesRoute() {
     );
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const candidate = candidates.data?.find((item) => item.job_id === form.candidate);
+    if (!candidate) return;
     await mutations.create.mutateAsync({
-      branch_id: form.branch,
-      estimate_id: form.estimate,
-      job_id: form.job,
+      branch_id: candidate.branch_id,
+      estimate_id: candidate.estimate_id,
+      job_id: candidate.job_id,
       due_date: form.due,
       terms: form.terms,
       idempotency_key: crypto.randomUUID(),
@@ -109,30 +110,8 @@ export function InvoicesRoute() {
               className="grid gap-3 sm:grid-cols-2"
               onSubmit={(event) => void submit(event)}
             >
-              <Input
-                aria-label="Branch ID"
-                required
-                value={form.branch}
-                onChange={(event) =>
-                  setForm({ ...form, branch: event.target.value })
-                }
-              />
-              <Input
-                aria-label="Estimate ID"
-                required
-                value={form.estimate}
-                onChange={(event) =>
-                  setForm({ ...form, estimate: event.target.value })
-                }
-              />
-              <Input
-                aria-label="Job ID"
-                required
-                value={form.job}
-                onChange={(event) =>
-                  setForm({ ...form, job: event.target.value })
-                }
-              />
+              <label className="grid gap-1 text-sm sm:col-span-2"><span>Completed accepted work</span><select aria-label="Completed accepted work" required className="rounded-lg border border-stroke bg-surface px-3 py-2" value={form.candidate} onChange={(event) => setForm({ ...form, candidate: event.target.value })}><option value="">Select a completed Job</option>{candidates.data?.map((candidate) => <option key={candidate.job_id} value={candidate.job_id}>{candidate.job_number} · {candidate.customer_display_name} · {candidate.accepted_total} {candidate.currency}</option>)}</select></label>
+              {candidates.isError && <Alert variant="warning">Eligible completed work is unavailable. Refresh before creating an Invoice.</Alert>}
               <Input
                 aria-label="Due date"
                 type="date"

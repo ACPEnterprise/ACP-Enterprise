@@ -1,6 +1,9 @@
 import { apiClient } from "./client";
 import type {
   PriceBookCatalog,
+  PriceBookCandidateReviewPage,
+  PriceBookActivationReadiness,
+  PriceBookAuditItem,
   PriceBookAdjustmentProposal,
   PriceBookBulkMaterialization,
   PriceBookCategory,
@@ -20,6 +23,38 @@ export async function getPriceBook(
   return (
     await apiClient.get<PriceBookCatalog>(path, {
       params: { ...(branchId ? { branch_id: branchId } : {}), limit: 500 },
+    })
+  ).data;
+}
+export async function getActivationReadiness(versionId: string): Promise<PriceBookActivationReadiness> {
+  return (await apiClient.get<PriceBookActivationReadiness>(`${path}/versions/${versionId}/activation-readiness`)).data;
+}
+export async function recordActivationReview(
+  versionId: string,
+  decision: "price" | "tax" | "effective-date" | "activation-authorization",
+  expectedVersion: number,
+  reason: string,
+): Promise<PriceBookActivationReadiness> {
+  return (await apiClient.post<PriceBookActivationReadiness>(`${path}/versions/${versionId}/review/${decision}`, {
+    expected_version: expectedVersion,
+    reason,
+    idempotency_key: crypto.randomUUID(),
+  })).data;
+}
+export async function getPriceBookAudit(entityId: string): Promise<PriceBookAuditItem[]> {
+  return (await apiClient.get<PriceBookAuditItem[]>(`${path}/audit`, { params: { entity_id: entityId } })).data;
+}
+export async function getCandidateReview(params: {
+  search?: string;
+  category?: string;
+  admission_status?: "admitted" | "held";
+  review_flag?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<PriceBookCandidateReviewPage> {
+  return (
+    await apiClient.get<PriceBookCandidateReviewPage>(`${path}/candidate-review`, {
+      params,
     })
   ).data;
 }

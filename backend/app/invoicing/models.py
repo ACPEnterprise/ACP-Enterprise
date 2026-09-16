@@ -381,6 +381,85 @@ class PaymentReceiptEvidence(Base):
     )
 
 
+class ManualPaymentReceipt(Base):
+    __tablename__ = "invoice_manual_payment_receipts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_manual_payment_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "invoice_id"],
+            ["invoices.company_id", "invoices.id"],
+            name="fk_manual_payment_invoice",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "payment_method IN ('check','other_manual')",
+            name="ck_manual_payment_method",
+        ),
+        CheckConstraint("amount > 0", name="ck_manual_payment_amount"),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_manual_payment_currency"),
+        CheckConstraint(
+            "settlement_state = 'not_asserted'", name="ck_manual_payment_settlement"
+        ),
+        CheckConstraint(
+            "accounting_state = 'not_posted'", name="ck_manual_payment_accounting"
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_manual_payment_command"
+        ),
+        UniqueConstraint(
+            "company_id", "reference_digest", name="uq_manual_payment_reference"
+        ),
+        Index(
+            "ix_manual_payment_invoice_time", "company_id", "invoice_id", "occurred_at"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    customer_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    invoice_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payment_method: Mapped[str] = mapped_column(String(24), nullable=False)
+    reference_label: Mapped[str] = mapped_column(String(32), nullable=False)
+    reference_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    settlement_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_asserted"
+    )
+    accounting_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_posted"
+    )
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class AccountingPostingReceipt(Base):
     __tablename__ = "invoice_accounting_posting_receipts"
     __table_args__ = (

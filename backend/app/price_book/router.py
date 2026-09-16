@@ -5,12 +5,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.idempotency.errors import reliability_http_error
+from app.platform.idempotency.reliability import MutationReliabilityError
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import PriceBookPermission
+from app.platform.permissions.codes import AccountingPermission, PriceBookPermission
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .candidate_admission import candidate_review_page
 from .errors import (
     PriceBookConflict,
     PriceBookError,
@@ -18,13 +21,16 @@ from .errors import (
     PriceBookValidation,
 )
 from .schemas import (
+    ActivationReadinessItem,
     ActivationRequest,
+    ActivationReviewDecision,
     AdjustmentProposalCreate,
     AdjustmentProposalDecision,
     AdjustmentProposalItem,
     AuditItem,
     BulkMaterializeItem,
     BulkMaterializeRequest,
+    CandidateReviewPage,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
@@ -61,6 +67,36 @@ ManageContext = Annotated[
 ActivateContext = Annotated[
     AuthorizationContext, Depends(require_permission(PriceBookPermission.ACTIVATE))
 ]
+FinanceApproveContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AccountingPermission.FINANCE_APPROVE)),
+]
+
+
+@router.get("/candidate-review", response_model=CandidateReviewPage)
+async def candidate_review(
+    context: ReadContext,
+    session: DatabaseSession,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    category: Annotated[str | None, Query(max_length=200)] = None,
+    admission_status: Annotated[str | None, Query(pattern=r"^(admitted|held)$")] = None,
+    review_flag: Annotated[str | None, Query(max_length=80)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> CandidateReviewPage:
+    return CandidateReviewPage.model_validate(
+        await candidate_review_page(
+            session,
+            company_id=context.company.id,
+            search=search,
+            category=category,
+            admission_status=admission_status,
+            review_flag=review_flag,
+            limit=limit,
+            offset=offset,
+            costs_visible=context.has_permission(PriceBookPermission.MANAGE),
+        )
+    )
 
 
 def http_error(error: PriceBookError) -> HTTPException:
@@ -292,6 +328,96 @@ async def activate(
         )
     except PriceBookError as error:
         raise http_error(error) from error
+
+
+@router.get(
+    "/versions/{version_id}/activation-readiness",
+    response_model=ActivationReadinessItem,
+)
+async def activation_readiness(
+    version_id: UUID, context: ReadContext, session: DatabaseSession
+) -> ActivationReadinessItem:
+    try:
+        return await price_book_service.activation_readiness(
+            session, context=context, version_id=version_id
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+async def _record_review(
+    version_id: UUID,
+    payload: ActivationReviewDecision,
+    context: AuthorizationContext,
+    session: AsyncSession,
+    decision: str,
+) -> ActivationReadinessItem:
+    try:
+        return await price_book_service.record_activation_review(
+            session,
+            context=context,
+            version_id=version_id,
+            expected_version=payload.expected_version,
+            decision=decision,
+            reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
+        )
+    except MutationReliabilityError as error:
+        raise reliability_http_error(error) from error
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/versions/{version_id}/review/price", response_model=ActivationReadinessItem
+)
+async def approve_price(
+    version_id: UUID,
+    payload: ActivationReviewDecision,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ActivationReadinessItem:
+    return await _record_review(version_id, payload, context, session, "price")
+
+
+@router.post(
+    "/versions/{version_id}/review/tax", response_model=ActivationReadinessItem
+)
+async def approve_tax(
+    version_id: UUID,
+    payload: ActivationReviewDecision,
+    context: FinanceApproveContext,
+    session: DatabaseSession,
+) -> ActivationReadinessItem:
+    return await _record_review(version_id, payload, context, session, "tax")
+
+
+@router.post(
+    "/versions/{version_id}/review/effective-date",
+    response_model=ActivationReadinessItem,
+)
+async def approve_effective_date(
+    version_id: UUID,
+    payload: ActivationReviewDecision,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ActivationReadinessItem:
+    return await _record_review(version_id, payload, context, session, "effective_date")
+
+
+@router.post(
+    "/versions/{version_id}/review/activation-authorization",
+    response_model=ActivationReadinessItem,
+)
+async def authorize_activation(
+    version_id: UUID,
+    payload: ActivationReviewDecision,
+    context: ActivateContext,
+    session: DatabaseSession,
+) -> ActivationReadinessItem:
+    return await _record_review(
+        version_id, payload, context, session, "activation_authorization"
+    )
 
 
 @router.put("/versions/{version_id}/draft", response_model=PriceVersionItem)

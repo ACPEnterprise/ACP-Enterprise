@@ -11,6 +11,15 @@ def test_price_book_permissions_and_openapi_are_bounded() -> None:
     assert PriceBookPermission.ALL <= codes
     paths = app.openapi()["paths"]
     assert "/api/v1/price-book" in paths
+    assert "/api/v1/price-book/candidate-review" in paths
+    assert "/api/v1/price-book/versions/{version_id}/activation-readiness" in paths
+    assert "/api/v1/price-book/versions/{version_id}/review/price" in paths
+    assert "/api/v1/price-book/versions/{version_id}/review/tax" in paths
+    assert "/api/v1/price-book/versions/{version_id}/review/effective-date" in paths
+    assert (
+        "/api/v1/price-book/versions/{version_id}/review/activation-authorization"
+        in paths
+    )
     assert "/api/v1/price-book/service-items/{item_id}/versions" in paths
     assert "/api/v1/price-book/versions/{version_id}/activate" in paths
     assert "/api/v1/price-book/service-items/{item_id}/snapshots" in paths
