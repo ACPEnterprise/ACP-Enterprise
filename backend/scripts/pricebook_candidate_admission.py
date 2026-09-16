@@ -9,6 +9,10 @@ import json
 from pathlib import Path
 from uuid import UUID
 
+# Standalone commands do not import the FastAPI application automatically.  Load
+# its model registry before opening a session so SQLAlchemy can resolve the
+# Company, User, and Branch foreign keys used by Price Book draft admission.
+from app import main as application_model_registry  # noqa: F401
 from app.database.session import AsyncSessionFactory
 from app.price_book.candidate_admission import admit_candidate_plan, classify_packet
 
