@@ -714,8 +714,16 @@ class LiaService:
 
 def _evidence_route(item: EvidenceReference) -> str:
     base = ROUTES[item.domain]
-    if item.entity_id is not None and item.domain in {"customers", "jobs"}:
-        return f"{base}/{item.entity_id}"
+    if item.entity_id is not None:
+        entity_base = {
+            "customers": "/customers",
+            "jobs": "/jobs",
+            "scheduling": "/appointments",
+            "invoicing": "/invoices",
+            "payments": "/payments",
+        }.get(item.domain)
+        if entity_base is not None:
+            return f"{entity_base}/{item.entity_id}"
     return base
 
 
@@ -769,7 +777,7 @@ def _compose_answer(
             "date-filtered, so they must not be treated as period totals."
         )
     if mode is ResponseMode.BRIEF:
-        first = lines[0] if lines else "No result was returned."
+        first = _brief_text(lines[0]) if lines else "No result was returned."
         return f"{authority_text}: {first}{period_text}"
     detail = " ".join(lines)
     answer = f"{authority_text}: {detail}{period_text}"
@@ -780,6 +788,17 @@ def _compose_answer(
         as_of = max(item.observed_at for item in evidence).isoformat()
         answer += f" Evidence authority: {sources}. As of {as_of}."
     return answer
+
+
+def _brief_text(answer: str, *, limit: int = 320) -> str:
+    """Keep the spoken/default brief answer useful without hiding evidence metadata."""
+    normalized = " ".join(answer.split())
+    if len(normalized) <= limit:
+        return normalized
+    boundary = normalized.rfind(" ", 0, limit - 1)
+    if boundary < limit // 2:
+        boundary = limit - 1
+    return f"{normalized[:boundary].rstrip('.,;:')}…"
 
 
 def _capability_answer(question: str) -> str:

@@ -18,6 +18,10 @@ a stop condition. Source domains continue to own their facts and calculations.
 | LIA-N1-006 | Default owner briefing | “Today” forced Beacon/current readiness through unsupported historical filtering | BLOCKS_WORK | Default briefing now requests current state; explicit dated questions remain period-bound |
 | LIA-N1-007 | Voice payment questions | Read-only “what did they pay/collect?” wording was classified as money mutation | SLOWS_WORK | Mutation recognition now requires an imperative at the start of the utterance |
 | LIA-N1-008 | Request failure | UI reduced authentication/connectivity/conflict failures to one generic message | SLOWS_WORK | Uses the established safe operator-error classifier; still infers no answer |
+| LIA-N1-009 | Malformed contextual link | An invalid record identifier was silently discarded, leaving the user to believe record context was active | SLOWS_WORK | Fail visibly before asking; the untrusted identifier is not sent to LIA |
+| LIA-N1-010 | Evidence inspection | Exact Appointment, Invoice, and Payment evidence navigated only to collection pages | SLOWS_WORK | Uses the existing authorized detail routes when an evidence entity identity is present |
+| LIA-N1-011 | Job follow-up | A question containing “Job JOB-000306” outside the narrow “show/open” form lost exact subject resolution | BLOCKS_WORK | Extracts the explicit canonical Job reference without fuzzy matching |
+| LIA-N1-012 | Brief answer mode | “Short version” could return a complete long owner-answer line | ANNOYING | Deterministic, word-safe 320-character presentation cap; evidence metadata remains intact |
 
 ## UI friction ledger
 
@@ -53,4 +57,15 @@ Economics, Beacon/Luminary navigation, text/voice intent, response modes,
 permissions, missing evidence, route context, and period comparisons.
 
 Result: eight bounded LIA-owned defects repaired. This sweep does not count
+toward the required three consecutive clean sweeps.
+
+### Sweep 2 — actionable defects found
+
+Re-ran the connected Customer/Job/Employee lookup paths, explicit record
+navigation, malformed contextual entry, response modes, authorization-aware
+retrieval, source limitations, and newly protected Estimate workflow changes.
+
+Result: four additional bounded LIA-owned defects repaired. Protected Estimate
+changes require no LIA contract change: the accepted Estimate adapter and
+canonical `/estimates` workspace remain compatible. This sweep does not count
 toward the required three consecutive clean sweeps.
