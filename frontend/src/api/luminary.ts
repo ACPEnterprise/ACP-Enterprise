@@ -78,6 +78,8 @@ export interface LuminaryOwnerEconomics {
   company_id: string;
   branch_id: string | null;
   period: { start: string; end: string };
+  prior_period: { start: string; end: string } | null;
+  generated_at: string;
   readiness: string;
   confidence: { score_percent: number; method: string };
   job_economics: Array<{
@@ -137,6 +139,42 @@ export interface LuminaryOwnerEconomics {
     owner_decision_required: string;
     status: string;
   }>;
+  facts: Array<{
+    family: string;
+    metric: string;
+    value: number | null;
+    units: string;
+    currency: string | null;
+    authority: string;
+    prerequisite_completeness: string;
+    as_of: string;
+  }>;
+  evidence_priority_queue: Array<{
+    prerequisite: string;
+    affected_job_count: number;
+    responsible_domain: string;
+    next_safe_step: string;
+    economic_unlock: string;
+  }>;
+  trend_support: {
+    state: string;
+    authority: string;
+    mixed_authority_periods: string;
+    comparison: null | {
+      state: string;
+      basis?: string;
+      currency?: string | null;
+      reason?: string;
+      explanation?: string;
+      revenue_change_minor?: number;
+      contribution_change_minor?: number;
+      labor_change_minor?: number;
+      materials_change_minor?: number;
+      invoiced_revenue_change_minor?: number;
+      current_reference_count?: number;
+      prior_reference_count?: number;
+    };
+  };
   market_evidence: { state: string; reason: string };
   scenario: null | {
     state: string;
