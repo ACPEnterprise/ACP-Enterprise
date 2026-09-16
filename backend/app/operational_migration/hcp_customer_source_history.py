@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final
 
-CONTRACT: Final = "hcp-customer-source-history/v1"
+CONTRACT: Final = "hcp-customer-source-history/v2"
 
 
 class HcpCustomerSourceHistoryError(ValueError):
@@ -104,6 +104,7 @@ def project_customer_source_history(
         )
 
     payment_count = 0
+    refund_count = 0
     invoice_items = []
     for invoice in sorted(invoices, key=lambda row: str(row.get("id"))):
         raw_payments = invoice.get("payments")
@@ -129,6 +130,29 @@ def project_customer_source_history(
                     "authority": "HCP_SOURCE_BACKED_PAYMENT_EVIDENCE_NOT_ACCOUNTING_POSTING",
                 }
             )
+        raw_refunds = invoice.get("refunds")
+        refunds = raw_refunds if isinstance(raw_refunds, list) else []
+        refund_items = []
+        for refund in refunds:
+            if not isinstance(refund, Mapping):
+                continue
+            refund_count += 1
+            refund_items.append(
+                {
+                    "source_id": refund.get("id"),
+                    "status": refund.get("status"),
+                    "amount_cents": refund.get("amount"),
+                    "date": refund.get("refunded_at"),
+                    "payment_method": refund.get("payment_method"),
+                    "identity_disposition": (
+                        "EXACT_PROVIDER_REFUND_ID"
+                        if refund.get("id")
+                        else "SOURCE_BACKED_UNLINKED_REFUND"
+                    ),
+                    "aggregation_safe": False,
+                    "authority": "HCP_SOURCE_BACKED_REFUND_EVIDENCE_NOT_ACCOUNTING_POSTING",
+                }
+            )
         invoice_items.append(
             {
                 "source_id": invoice.get("id"),
@@ -140,6 +164,7 @@ def project_customer_source_history(
                 "invoice_date": invoice.get("invoice_date"),
                 "service_date": invoice.get("service_date"),
                 "payments": payment_items,
+                "refunds": refund_items,
                 "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
             }
         )
@@ -155,6 +180,7 @@ def project_customer_source_history(
             "estimates": len(estimate_items),
             "invoices": len(invoice_items),
             "payments": payment_count,
+            "refunds": refund_count,
         },
         "estimates": estimate_items,
         "invoices": invoice_items,
