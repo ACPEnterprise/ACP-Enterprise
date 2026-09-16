@@ -35,13 +35,20 @@ const money = (item: LuminaryObservation) =>
         style: "currency",
         currency: item.currency,
       }).format(item.value_minor / 100);
-const minorMoney = (value: number | null) =>
+const minorMoney = (value: number | null, currency = "USD") =>
   value == null
     ? "Not yet available"
     : new Intl.NumberFormat(undefined, {
         style: "currency",
-        currency: "USD",
+        currency,
       }).format(value / 100);
+const signedMinorMoney = (value: number | undefined, currency = "USD") =>
+  value == null
+    ? "Unavailable"
+    : `${value > 0 ? "+" : ""}${new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency,
+      }).format(value / 100)}`;
 
 function FindingCard({ finding }: { finding: LuminaryFinding }) {
   const warning = [
@@ -259,6 +266,57 @@ export function LuminaryRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <section
+              aria-labelledby="period-comparison-title"
+              className="rounded-lg border border-stroke p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="period-comparison-title">
+                    What changed from the prior equal period
+                  </h3>
+                  <p className="text-sm text-content-muted">
+                    {ownerEconomics.data.period.start}–{ownerEconomics.data.period.end}
+                    {ownerEconomics.data.prior_period
+                      ? ` compared with ${ownerEconomics.data.prior_period.start}–${ownerEconomics.data.prior_period.end}`
+                      : " · prior period unavailable"}
+                  </p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                  {words(ownerEconomics.data.trend_support.state)}
+                </span>
+              </div>
+              {ownerEconomics.data.trend_support.state === "READY" &&
+              ownerEconomics.data.trend_support.comparison ? (
+                <dl className="mt-3 grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
+                  <div><dt className="text-content-muted">Revenue change</dt><dd className="font-semibold">{signedMinorMoney(ownerEconomics.data.trend_support.comparison.revenue_change_minor ?? ownerEconomics.data.trend_support.comparison.invoiced_revenue_change_minor, ownerEconomics.data.trend_support.comparison.currency ?? "USD")}</dd></div>
+                  <div><dt className="text-content-muted">Contribution change</dt><dd className="font-semibold">{signedMinorMoney(ownerEconomics.data.trend_support.comparison.contribution_change_minor, ownerEconomics.data.trend_support.comparison.currency ?? "USD")}</dd></div>
+                  <div><dt className="text-content-muted">Labor-cost change</dt><dd className="font-semibold">{signedMinorMoney(ownerEconomics.data.trend_support.comparison.labor_change_minor, ownerEconomics.data.trend_support.comparison.currency ?? "USD")}</dd></div>
+                  <div><dt className="text-content-muted">Material-cost change</dt><dd className="font-semibold">{signedMinorMoney(ownerEconomics.data.trend_support.comparison.materials_change_minor, ownerEconomics.data.trend_support.comparison.currency ?? "USD")}</dd></div>
+                </dl>
+              ) : (
+                <p className="mt-3 text-sm text-content-muted">
+                  {ownerEconomics.data.trend_support.comparison?.reason ??
+                    "Both equal periods need comparable admitted evidence before ACP can describe a trend."}
+                </p>
+              )}
+              <p className="mt-3 text-xs text-content-muted">
+                Authority: {words(ownerEconomics.data.trend_support.authority)}. Mixed-authority periods are labeled and never combined.
+              </p>
+            </section>
+            <section aria-labelledby="measurement-freshness-title" className="rounded-lg border border-stroke p-4">
+              <h3 className="font-semibold" id="measurement-freshness-title">Measurement freshness and authority</h3>
+              <p className="mt-1 text-sm text-content-muted">Generated as of {new Date(ownerEconomics.data.generated_at).toLocaleString()} from admitted evidence for the selected period.</p>
+              <dl className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {ownerEconomics.data.facts.map((fact) => (
+                  <div className="rounded-md bg-surface-muted p-3" key={`${fact.family}:${fact.metric}`}>
+                    <dt className="text-xs font-semibold uppercase tracking-wide">{words(fact.metric)}</dt>
+                    <dd className="text-sm font-semibold">{fact.units === "minor_currency" ? minorMoney(fact.value, fact.currency ?? "USD") : fact.value ?? "Unavailable"}</dd>
+                    <dd className="text-xs text-content-muted">{words(fact.prerequisite_completeness)} · {words(fact.authority)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
             <section aria-labelledby="job-economics-title" className="space-y-3">
               <div>
                 <h3 className="font-semibold" id="job-economics-title">What ACP knows by Job</h3>
@@ -351,6 +409,20 @@ export function LuminaryRoute() {
             ) : (
               <Alert variant="warning">No recommendation is supported for this scope. Missing or conflicting evidence remains missing.</Alert>
             )}
+            {ownerEconomics.data.evidence_priority_queue.length ? (
+              <section aria-labelledby="evidence-priority-title" className="rounded-lg border border-stroke p-4">
+                <h3 className="font-semibold" id="evidence-priority-title">What evidence would improve this answer?</h3>
+                <ul className="mt-3 space-y-3">
+                  {ownerEconomics.data.evidence_priority_queue.map((item) => (
+                    <li className="rounded-md bg-surface-muted p-3" key={item.prerequisite}>
+                      <p className="font-medium">{words(item.prerequisite)}</p>
+                      <p className="text-sm text-content-muted">{item.affected_job_count} affected Job(s) · responsible domain: {item.responsible_domain}</p>
+                      <p className="text-xs text-content-muted">Next safe step: {words(item.next_safe_step)}. Unlocks {words(item.economic_unlock)}.</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
             <p className="break-all text-xs text-content-muted">Read-only packet {ownerEconomics.data.packet_digest}</p>
           </CardContent>
         </Card>
