@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Final
 from uuid import UUID, uuid5
@@ -52,9 +53,14 @@ class ScenarioAssumption:
     change_basis_points: int | None = None
 
     def __post_init__(self) -> None:
-        if self.kind in {ScenarioKind.CLOSE_RATE_PERCENT, ScenarioKind.ADD_TRUCK}:
+        if self.kind is ScenarioKind.ADD_TRUCK:
             if self.change_basis_points is not None:
                 raise ValueError("unsupported scenario cannot imply a numeric result")
+        elif (
+            self.kind is ScenarioKind.CLOSE_RATE_PERCENT
+            and self.change_basis_points is None
+        ):
+            return
         elif (
             self.change_basis_points is None
             or not -10_000 <= self.change_basis_points <= 10_000
@@ -352,7 +358,82 @@ def _scenario(
         key: totals.get(key)
         for key in ("revenue", "labor", "materials", "gross_profit")
     }
-    if assumption.kind in {ScenarioKind.CLOSE_RATE_PERCENT, ScenarioKind.ADD_TRUCK}:
+    if assumption.kind is ScenarioKind.CLOSE_RATE_PERCENT:
+        conversion = _mapping(workspace.get("conversion_evidence"))
+        if (
+            conversion.get("readiness") != "READY"
+            or assumption.change_basis_points is None
+        ):
+            return {
+                "state": AnalysisReadiness.INSUFFICIENT_EVIDENCE.value,
+                "baseline": conversion or baseline,
+                "changed_assumption": asdict(assumption),
+                "missing_prerequisites": [
+                    "complete_terminal_authoritative_conversion_cohort_and_explicit_change"
+                ],
+                "hypothetical": True,
+                "operational_action_occurred": False,
+            }
+        accepted_count = int(conversion.get("accepted_count") or 0)
+        terminal_count = sum(
+            int(conversion.get(key) or 0)
+            for key in ("accepted_count", "declined_count", "expired_count")
+        )
+        accepted_value = conversion.get("accepted_value")
+        if (
+            not accepted_count
+            or not terminal_count
+            or not isinstance(accepted_value, str)
+        ):
+            return {
+                "state": AnalysisReadiness.INSUFFICIENT_EVIDENCE.value,
+                "baseline": conversion,
+                "changed_assumption": asdict(assumption),
+                "missing_prerequisites": [
+                    "accepted_value_and_terminal_outcome_population"
+                ],
+                "hypothetical": True,
+                "operational_action_occurred": False,
+            }
+        baseline_rate = Decimal(accepted_count) / Decimal(terminal_count)
+        modeled_rate = baseline_rate + Decimal(
+            assumption.change_basis_points
+        ) / Decimal(10_000)
+        if modeled_rate < 0 or modeled_rate > 1:
+            raise ValueError("modeled close rate must remain between zero and one")
+        average_accepted_value = Decimal(accepted_value) / Decimal(accepted_count)
+        modeled_accepted_count = Decimal(terminal_count) * modeled_rate
+        modeled_value = (modeled_accepted_count * average_accepted_value).quantize(
+            Decimal("0.01")
+        )
+        return {
+            "state": AnalysisReadiness.READY.value,
+            "baseline": {
+                "close_rate": str(baseline_rate),
+                "terminal_opportunity_count": terminal_count,
+                "accepted_count": accepted_count,
+                "accepted_value": accepted_value,
+                "currency": conversion.get("currency"),
+            },
+            "changed_assumption": asdict(assumption),
+            "unchanged_assumptions": [
+                "terminal opportunity population",
+                "average accepted Estimate value",
+            ],
+            "output_metrics": {
+                "modeled_close_rate": str(modeled_rate),
+                "modeled_accepted_count": str(modeled_accepted_count),
+                "modeled_accepted_value": str(modeled_value),
+                "currency": conversion.get("currency"),
+            },
+            "confidence": _confidence(workspace),
+            "missing_prerequisites": [],
+            "sensitivity": "single_assumption_close_rate_with_constant_average_accepted_value",
+            "hypothetical": True,
+            "authoritative_actual": False,
+            "operational_action_occurred": False,
+        }
+    if assumption.kind is ScenarioKind.ADD_TRUCK:
         blocker = (
             "authoritative_conversion_population"
             if assumption.kind is ScenarioKind.CLOSE_RATE_PERCENT
@@ -452,6 +533,7 @@ def project_owner_economics(
         "readiness": readiness.value,
         "facts": facts,
         "admitted_source_evidence": workspace.get("native_evidence"),
+        "conversion_evidence": workspace.get("conversion_evidence"),
         "confidence": _confidence(workspace),
         "recommendation_candidates": recommendations,
         "scenario": _scenario(workspace, scenario),

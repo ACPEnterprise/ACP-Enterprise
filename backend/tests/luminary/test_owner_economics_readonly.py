@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
-
 from app.luminary.owner_economics import (
     AnalysisReadiness,
     ScenarioAssumption,
@@ -172,6 +171,29 @@ def test_unsupported_scenario_returns_exact_evidence_blocker(
     scenario = project(workspace(), ScenarioAssumption(kind))["scenario"]
     assert scenario["state"] == AnalysisReadiness.INSUFFICIENT_EVIDENCE
     assert scenario["missing_prerequisites"]
+    assert scenario["operational_action_occurred"] is False
+
+
+def test_close_rate_scenario_uses_authoritative_conversion_cohort() -> None:
+    value = workspace()
+    value["conversion_evidence"] = {
+        "readiness": "READY",
+        "accepted_count": 4,
+        "declined_count": 5,
+        "expired_count": 1,
+        "accepted_value": "4000.00",
+        "currency": "USD",
+    }
+
+    scenario = project(value, ScenarioAssumption(ScenarioKind.CLOSE_RATE_PERCENT, 500))[
+        "scenario"
+    ]
+
+    assert scenario["state"] == "READY"
+    assert scenario["baseline"]["close_rate"] == "0.4"
+    assert scenario["output_metrics"]["modeled_close_rate"] == "0.45"
+    assert scenario["output_metrics"]["modeled_accepted_value"] == "4500.00"
+    assert scenario["authoritative_actual"] is False
     assert scenario["operational_action_occurred"] is False
 
 
