@@ -69,7 +69,16 @@ export function PriceBookRoute() {
     offset: catalogOffset,
   });
   const mutations = usePriceBookMutations();
-  const [category, setCategory] = useState({ code: "", name: "" });
+  const emptyCategory = {
+    code: "",
+    name: "",
+    description: "",
+    parentId: "",
+    position: "",
+    status: "draft" as "draft" | "active" | "archived",
+  };
+  const [category, setCategory] = useState(emptyCategory);
+  const [editCategory, setEditCategory] = useState<{ id: string; version: number } | null>(null);
   const [tax, setTax] = useState({ code: "", name: "", taxable: true });
   const [optionGroup, setOptionGroup] = useState({
     code: "",
@@ -180,8 +189,31 @@ export function PriceBookRoute() {
   const submitCategory = async (event: FormEvent) => {
     event.preventDefault();
     await performMutation(
-      () => mutations.category.mutateAsync(category),
-      () => setCategory({ code: "", name: "" }),
+      () =>
+        editCategory
+          ? mutations.categoryUpdate.mutateAsync({
+              categoryId: editCategory.id,
+              data: {
+                code: category.code,
+                name: category.name,
+                description: category.description || undefined,
+                parent_id: category.parentId || undefined,
+                position: category.position ? Number(category.position) : undefined,
+                status: category.status,
+                expected_version: editCategory.version,
+              },
+            })
+          : mutations.category.mutateAsync({
+              code: category.code,
+              name: category.name,
+              description: category.description || undefined,
+              parent_id: category.parentId || undefined,
+              position: category.position ? Number(category.position) : undefined,
+            }),
+      () => {
+        setCategory(emptyCategory);
+        setEditCategory(null);
+      },
     );
   };
   const submitTax = async (event: FormEvent) => {
@@ -902,6 +934,36 @@ export function PriceBookRoute() {
                     className="space-y-3"
                     onSubmit={(e) => void submitCategory(e)}
                   >
+                    <Select
+                      aria-label="Choose category to edit"
+                      value={editCategory?.id ?? ""}
+                      onChange={(event) => {
+                        const selected = catalog.data?.categories.find(
+                          (candidate) => candidate.id === event.target.value,
+                        );
+                        if (!selected) {
+                          setEditCategory(null);
+                          setCategory(emptyCategory);
+                          return;
+                        }
+                        setEditCategory({ id: selected.id, version: selected.version });
+                        setCategory({
+                          code: selected.code,
+                          name: selected.name,
+                          description: selected.description ?? "",
+                          parentId: selected.parent_id ?? "",
+                          position: selected.position?.toString() ?? "",
+                          status: selected.status as "draft" | "active" | "archived",
+                        });
+                      }}
+                    >
+                      <option value="">Create a new category</option>
+                      {catalog.data?.categories.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          Edit {candidate.name}
+                        </option>
+                      ))}
+                    </Select>
                     <Input
                       aria-label="Category code"
                       placeholder="Code"
@@ -920,13 +982,53 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Category description"
+                      placeholder="Description"
+                      value={category.description}
+                      onChange={(e) => setCategory({ ...category, description: e.target.value })}
+                    />
+                    <Select
+                      aria-label="Parent category"
+                      value={category.parentId}
+                      onChange={(e) => setCategory({ ...category, parentId: e.target.value })}
+                    >
+                      <option value="">No parent category</option>
+                      {catalog.data?.categories
+                        .filter((candidate) => candidate.id !== editCategory?.id)
+                        .map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                    </Select>
+                    <Input
+                      aria-label="Category order"
+                      type="number"
+                      min="1"
+                      placeholder="Display order"
+                      value={category.position}
+                      onChange={(e) => setCategory({ ...category, position: e.target.value })}
+                    />
+                    {editCategory && (
+                      <Select
+                        aria-label="Category status"
+                        value={category.status}
+                        onChange={(e) => setCategory({ ...category, status: e.target.value as "draft" | "active" | "archived" })}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                      </Select>
+                    )}
                     <Button
                       fullWidth
                       type="submit"
-                      loading={mutations.category.isPending}
+                      loading={mutations.category.isPending || mutations.categoryUpdate.isPending}
                     >
-                      Create category
+                      {editCategory ? "Save category" : "Create category"}
                     </Button>
+                    {editCategory && (
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditCategory(null); setCategory(emptyCategory); }}>
+                        Cancel category edit
+                      </Button>
+                    )}
                   </form>
                 </CardContent>
               </Card>
