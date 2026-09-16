@@ -8,6 +8,8 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
+
+from app.beacon.history import EvaluationDisposition
 from app.lia.contracts import (
     EvidenceReference,
     LiaContext,
@@ -15,11 +17,16 @@ from app.lia.contracts import (
     LiaTemporalContext,
     TruthClassification,
 )
+from app.lia.owner_answers import compose_owner_answer
 from app.lia.planner import QuestionIntent, plan_question
 from app.lia.retrieval import GovernedRetrievalService
 from app.lia.service import LiaService
 from app.lia.temporal import resolve_temporal_context
-from app.platform.permissions.codes import AccountingPermission, SchedulingPermission
+from app.platform.permissions.codes import (
+    AccountingPermission,
+    AnalyticsPermission,
+    SchedulingPermission,
+)
 
 ANCHOR = datetime(2026, 9, 15, 16, tzinfo=UTC)
 
@@ -134,6 +141,222 @@ async def test_schedule_question_passes_period_to_authoritative_adapter() -> Non
     assert temporal.end_date == tomorrow
     assert result.temporal == temporal
     assert "tomorrow" in result.answer
+
+
+@pytest.mark.asyncio
+async def test_beacon_period_uses_company_branch_scoped_persisted_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(AnalyticsPermission.READ)
+    temporal = LiaTemporalContext(
+        start_date=date(2026, 9, 14),
+        end_date=date(2026, 9, 15),
+        as_of=ANCHOR,
+        timezone="America/New_York",
+        period_label="since yesterday",
+    )
+    record = SimpleNamespace(
+        id=uuid4(),
+        run_id=uuid4(),
+        condition_key=uuid4(),
+        evidence_digest="a" * 64,
+        disposition=EvaluationDisposition.CHANGED,
+        evaluated_at=ANCHOR - timedelta(hours=2),
+        evidence_as_of=ANCHOR - timedelta(hours=2),
+    )
+    deltas = AsyncMock(return_value=(record,))
+    completed = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.deltas", deltas
+    )
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.has_completed_run",
+        completed,
+    )
+
+    evidence = await GovernedRetrievalService._beacon_history(
+        AsyncMock(), context, ANCHOR, temporal
+    )
+
+    assert evidence[0].authority == "AUTHORITATIVE_SIGNAL_HISTORY"
+    assert evidence[0].source_contract_version == "BEACON.EVALUATION_HISTORY.v1"
+    assert evidence[0].company_id == context.company.id
+    assert evidence[0].branch_ids == (context.active_branch.id,)
+    assert evidence[0].authorization_version == context.authorization_version
+    assert evidence[0].period_start == temporal.start_date
+    assert evidence[0].state == "changed=1"
+    assert deltas.await_args.kwargs["company_id"] == context.company.id
+    assert deltas.await_args.kwargs["branch_id"] == context.active_branch.id
+    assert completed.await_args.kwargs["company_id"] == context.company.id
+
+
+@pytest.mark.asyncio
+async def test_beacon_completed_period_with_no_changes_is_authoritative_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(AnalyticsPermission.READ)
+    temporal = LiaTemporalContext(
+        start_date=date(2026, 9, 15),
+        end_date=date(2026, 9, 15),
+        as_of=ANCHOR,
+        timezone="America/New_York",
+        period_label="today",
+    )
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.deltas",
+        AsyncMock(return_value=()),
+    )
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.has_completed_run",
+        AsyncMock(return_value=True),
+    )
+
+    evidence = await GovernedRetrievalService._beacon_history(
+        AsyncMock(), context, ANCHOR, temporal
+    )
+
+    assert evidence[0].count == 0
+    assert evidence[0].freshness == "PERSISTED_EVIDENCE"
+    assert evidence[0].state == "no Beacon changes recorded"
+
+
+@pytest.mark.asyncio
+async def test_beacon_period_without_completed_evaluation_is_explicitly_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(AnalyticsPermission.READ)
+    temporal = LiaTemporalContext(
+        start_date=date(2026, 9, 15),
+        end_date=date(2026, 9, 15),
+        as_of=ANCHOR,
+        timezone="America/New_York",
+        period_label="today",
+    )
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.deltas",
+        AsyncMock(return_value=()),
+    )
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.has_completed_run",
+        AsyncMock(return_value=False),
+    )
+
+    evidence = await GovernedRetrievalService._beacon_history(
+        AsyncMock(), context, ANCHOR, temporal
+    )
+
+    assert evidence[0].authority == "PERIOD_AUTHORITY_UNAVAILABLE"
+    assert evidence[0].freshness == "NO_ACCEPTED_EVIDENCE"
+    assert evidence[0].limitations == (
+        "no_completed_beacon_evaluation_in_period",
+    )
+
+
+@pytest.mark.asyncio
+async def test_beacon_history_rejects_unbounded_period_before_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(AnalyticsPermission.READ)
+    temporal = LiaTemporalContext(
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 3, 31),
+        as_of=ANCHOR,
+        timezone="America/New_York",
+        period_label="January through March 2026",
+    )
+    deltas = AsyncMock()
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.deltas", deltas
+    )
+
+    evidence = await GovernedRetrievalService._beacon_history(
+        AsyncMock(), context, ANCHOR, temporal
+    )
+
+    assert evidence[0].authority == "PERIOD_AUTHORITY_UNAVAILABLE"
+    assert evidence[0].limitations == ("beacon_history_window_exceeds_31_days",)
+    deltas.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_beacon_period_history_is_not_queried_without_analytics_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context()
+    temporal = LiaTemporalContext(
+        start_date=date(2026, 9, 15),
+        end_date=date(2026, 9, 15),
+        as_of=ANCHOR,
+        timezone="America/New_York",
+        period_label="today",
+    )
+    deltas = AsyncMock()
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_evaluation_history_service.deltas", deltas
+    )
+
+    evidence = await GovernedRetrievalService().retrieve(
+        AsyncMock(), context=context, domains={"beacon"}, temporal=temporal
+    )
+
+    assert evidence == ()
+    deltas.assert_not_awaited()
+
+
+def test_beacon_period_answer_explains_why_without_fabricating_causality() -> None:
+    evidence = EvidenceReference(
+        domain="beacon",
+        label="Beacon evaluation history",
+        authority="AUTHORITATIVE_SIGNAL_HISTORY",
+        observed_at=ANCHOR,
+        freshness="PERSISTED_EVIDENCE",
+        evidence_digest="f" * 64,
+        count=5,
+        state="changed=1, expired=1, new=2, resolved=1, still_active=0",
+        period_start=date(2026, 9, 15),
+        period_end=date(2026, 9, 15),
+        period_label="today",
+        timezone="America/New_York",
+    )
+
+    answer = compose_owner_answer("What changed in Beacon today?", (evidence,))
+
+    assert "2 new, 1 changed, 1 resolved, and 1 expired" in answer.text
+    assert "not an inferred timeline" in answer.text
+
+
+def test_beacon_period_comparison_preserves_both_comparable_periods() -> None:
+    may = EvidenceReference(
+        domain="beacon",
+        label="Beacon evaluation history",
+        authority="AUTHORITATIVE_SIGNAL_HISTORY",
+        observed_at=ANCHOR,
+        freshness="PERSISTED_EVIDENCE",
+        evidence_digest="a" * 64,
+        count=2,
+        state="changed=1, new=1",
+        source_contract_version="BEACON.EVALUATION_HISTORY.v1",
+        period_start=date(2026, 5, 1),
+        period_end=date(2026, 5, 31),
+        period_label="May 2026",
+        timezone="America/New_York",
+    )
+    june = may.model_copy(
+        update={
+            "evidence_digest": "b" * 64,
+            "state": "new=2, resolved=1",
+            "count": 3,
+            "period_start": date(2026, 6, 1),
+            "period_end": date(2026, 6, 30),
+            "period_label": "June 2026",
+        }
+    )
+
+    answer = compose_owner_answer("Compare Beacon in May and June", (may, june))
+
+    assert "May 2026: 1 new, 1 changed, 0 resolved, and 0 expired" in answer.text
+    assert "June 2026: 2 new, 0 changed, 1 resolved, and 0 expired" in answer.text
+    assert "do not establish business causality" in answer.text
 
 
 @pytest.mark.asyncio
