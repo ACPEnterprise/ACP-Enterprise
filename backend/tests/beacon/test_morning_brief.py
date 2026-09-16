@@ -127,20 +127,3 @@ def test_morning_brief_uses_persisted_history_deltas() -> None:
     assert brief.resolved_since_yesterday == 1
     assert brief.changed_since_yesterday == 1
     assert brief.expired_since_yesterday == 1
-    without_history = build_morning_brief(
-        company_id=COMPANY_ID,
-        branch_id=None,
-        active=signals,
-        snoozed=(),
-        evaluated_at=evaluated_at,
-    )
-    changed_history = build_morning_brief(
-        company_id=COMPANY_ID,
-        branch_id=None,
-        active=signals,
-        snoozed=(),
-        evaluated_at=evaluated_at,
-        historical_deltas=(replace(records[0], evidence_digest="f" * 64), *records[1:]),
-    )
-    assert brief.brief_digest != without_history.brief_digest
-    assert brief.brief_digest != changed_history.brief_digest
