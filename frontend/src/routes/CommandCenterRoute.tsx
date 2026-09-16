@@ -24,11 +24,12 @@ import { BeaconPanel } from "../components/command-center/BeaconPanel";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
   useBeaconLifecycleActions,
+  useBeaconMorningBrief,
   useBeaconSignals,
   useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
-import { Alert } from "../ui";
+import { Alert, Spinner } from "../ui";
 
 function formatCurrency(value: string | number | null): string {
   if (value == null) return "Data Unavailable";
@@ -58,6 +59,7 @@ export function CommandCenterRoute() {
   const canReadJobs = permissions.has("COMPANY_JOB_READ");
   const analytics = useAnalyticsSummary(canReadAnalytics);
   const beacon = useBeaconSignals(canReadAnalytics);
+  const beaconBrief = useBeaconMorningBrief(canReadAnalytics);
   const beaconLifecycle = useBeaconLifecycleActions();
   const beaconWorkflow = useBeaconWorkflowActions();
   const jobs = useJobs({ page: 1, pageSize: 1 }, canReadJobs);
@@ -120,6 +122,35 @@ export function CommandCenterRoute() {
           />
         </div>
       </section>
+
+      {canReadAnalytics && beaconBrief.isLoading ? (
+        <CommandCenterPanel title="Beacon morning brief" description="Loading durable attention changes.">
+          <Spinner label="Loading Beacon morning brief" />
+        </CommandCenterPanel>
+      ) : null}
+      {canReadAnalytics && beaconBrief.isError ? (
+        <Alert variant="danger" title="Beacon morning brief unavailable">
+          Current signals may still be inspected below. No historical change state was inferred.
+        </Alert>
+      ) : null}
+      {canReadAnalytics && beaconBrief.data ? (
+        <CommandCenterPanel
+          title="Beacon morning brief"
+          description={`Evaluated ${new Date(beaconBrief.data.evaluated_at).toLocaleString()}. Snoozed conditions remain unresolved.`}
+        >
+          <dl className="grid gap-ui-2 text-body-s sm:grid-cols-4">
+            <div className="rounded-md border border-stroke p-ui-3"><dt className="text-content-muted">Urgent today</dt><dd className="text-title-m font-semibold">{beaconBrief.data.urgent_today_count}</dd></div>
+            <div className="rounded-md border border-stroke p-ui-3"><dt className="text-content-muted">Still unresolved</dt><dd className="text-title-m font-semibold">{beaconBrief.data.unresolved_count}</dd></div>
+            <div className="rounded-md border border-stroke p-ui-3"><dt className="text-content-muted">New since yesterday</dt><dd className="text-title-m font-semibold">{beaconBrief.data.historical_comparison_available ? beaconBrief.data.new_since_yesterday : "Unavailable"}</dd></div>
+            <div className="rounded-md border border-stroke p-ui-3"><dt className="text-content-muted">Resolved since yesterday</dt><dd className="text-title-m font-semibold">{beaconBrief.data.historical_comparison_available ? beaconBrief.data.resolved_since_yesterday : "Unavailable"}</dd></div>
+          </dl>
+          {!beaconBrief.data.historical_comparison_available ? (
+            <Alert variant="warning" title="Historical comparison unavailable">
+              {beaconBrief.data.limitations[0] ?? "Beacon has not established a durable comparison window for this brief."}
+            </Alert>
+          ) : null}
+        </CommandCenterPanel>
+      ) : null}
 
       {canReadAnalytics ? <BeaconPanel
         signals={beacon.data?.items}

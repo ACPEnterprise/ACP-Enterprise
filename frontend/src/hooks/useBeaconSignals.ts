@@ -2,12 +2,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getBeaconSignals,
+  getBeaconMorningBrief,
   recordBeaconLifecycleAction,
   recordBeaconWorkflowAction,
   type BeaconLifecycleAction,
   type BeaconSignal,
   type BeaconWorkflowAction,
 } from "../api/beacon";
+
+export function useBeaconMorningBrief(enabled = true) {
+  return useQuery({
+    queryKey: ["beacon-morning-brief"],
+    queryFn: getBeaconMorningBrief,
+    refetchInterval: 60_000,
+    enabled,
+  });
+}
 
 export function useBeaconSignals(enabled = true) {
   return useQuery({

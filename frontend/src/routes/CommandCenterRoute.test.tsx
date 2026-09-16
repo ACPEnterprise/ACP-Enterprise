@@ -7,6 +7,7 @@ import { useEffectivePermissions } from "../auth/usePermissions";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
   useBeaconLifecycleActions,
+  useBeaconMorningBrief,
   useBeaconSignals,
   useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
@@ -21,11 +22,31 @@ vi.mock("../auth/usePermissions");
 
 const analyticsHook = vi.mocked(useAnalyticsSummary);
 const beaconHook = vi.mocked(useBeaconSignals);
+const beaconBriefHook = vi.mocked(useBeaconMorningBrief);
 const beaconLifecycleHook = vi.mocked(useBeaconLifecycleActions);
 const beaconWorkflowHook = vi.mocked(useBeaconWorkflowActions);
 const jobsHook = vi.mocked(useJobs);
 
 describe("CommandCenterRoute", () => {
+  const brief = {
+    company_id: "company-a",
+    branch_id: null,
+    evaluated_at: "2026-07-24T12:00:00Z",
+    groups: [],
+    unresolved_count: 0,
+    acknowledged_count: 0,
+    snoozed_count: 0,
+    urgent_today_count: 0,
+    historical_comparison_available: false,
+    new_since_yesterday: null,
+    resolved_since_yesterday: null,
+    limitations: ["Durable comparison evidence is unavailable."],
+    dashboard_ready: true,
+    mobile_inbox_ready: false,
+    external_delivery_ready: false,
+    brief_digest: "a".repeat(64),
+  };
+
   it("renders connected metrics without fabricating workforce activity", () => {
     vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<
       typeof useAuth
@@ -55,6 +76,7 @@ describe("CommandCenterRoute", () => {
       isError: false,
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof useBeaconSignals>);
+    beaconBriefHook.mockReturnValue({ data: brief, isLoading: false, isError: false } as unknown as ReturnType<typeof useBeaconMorningBrief>);
     analyticsHook.mockReturnValue({
       data: {
         period_start: "2026-07-24T00:00:00Z",
@@ -81,6 +103,7 @@ describe("CommandCenterRoute", () => {
     expect(screen.getByText("$1,250")).toBeInTheDocument();
     expect(screen.getByText("No critical issues requiring attention.")).toBeInTheDocument();
     expect(screen.getByText("No active Beacon signals")).toBeInTheDocument();
+    expect(screen.getByText("Historical comparison unavailable")).toBeInTheDocument();
     expect(screen.getAllByText("Not Connected").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Coming Soon").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Codex.*live/i)).not.toBeInTheDocument();
@@ -109,6 +132,7 @@ describe("CommandCenterRoute", () => {
       isError: true,
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof useBeaconSignals>);
+    beaconBriefHook.mockReturnValue({ data: undefined, isLoading: false, isError: true } as unknown as ReturnType<typeof useBeaconMorningBrief>);
     analyticsHook.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -132,6 +156,7 @@ describe("CommandCenterRoute", () => {
     vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
     analyticsHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useAnalyticsSummary>);
     beaconHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useBeaconSignals>);
+    beaconBriefHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useBeaconMorningBrief>);
     jobsHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useJobs>);
     beaconWorkflowHook.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<typeof useBeaconWorkflowActions>);
     beaconLifecycleHook.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<typeof useBeaconLifecycleActions>);
@@ -140,6 +165,7 @@ describe("CommandCenterRoute", () => {
 
     expect(analyticsHook).toHaveBeenCalledWith(false);
     expect(beaconHook).toHaveBeenCalledWith(false);
+    expect(beaconBriefHook).toHaveBeenCalledWith(false);
     expect(jobsHook).toHaveBeenCalledWith({ page: 1, pageSize: 1 }, false);
     expect(screen.getByText("Beacon access unavailable")).toBeInTheDocument();
     expect(screen.queryByText("No active Beacon signals")).not.toBeInTheDocument();
