@@ -2,7 +2,7 @@
 
 ## Dependency and authority
 
-- Starting protected authority: `bae55401586e48e4b606604c3aac1eeef4832a27`.
+- Final reconciled protected authority: `626eb9316d85e6fca52302b845d3fddf0aa17ce8`.
 - Stack parent: PR #299 candidate
   `57852bdf20ed9e45a5dbaaad48540358b5c9dcf1`.
 - Integration dependency: **REQUIRES PR #299**. Integrate #299 first; do not
