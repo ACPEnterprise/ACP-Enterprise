@@ -94,6 +94,17 @@ vi.mock("../hooks/usePriceBook", () => ({
           unit_price: "149.95",
           status: "draft",
           version: 1,
+          components: [
+            {
+              component_type: "material",
+              code: null,
+              label: "Expected fitting",
+              quantity: "2",
+              unit_cost: "4.50",
+              extended_cost: "9.00",
+              position: 1,
+            },
+          ],
         },
       ],
       option_groups: [
@@ -251,6 +262,9 @@ describe("PriceBookRoute", () => {
     expect(
       screen.queryByRole("button", { name: "Activate version" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Expected component quantity")).toBeVisible();
+    expect(screen.getByLabelText("Expected component unit cost")).toBeVisible();
+    expect(screen.getByText(/Expected fitting/)).toBeVisible();
     unmount();
     authState.permissionCodes = [
       "COMPANY_PRICE_BOOK_READ",
