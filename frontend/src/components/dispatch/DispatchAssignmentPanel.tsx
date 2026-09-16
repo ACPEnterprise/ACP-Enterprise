@@ -19,6 +19,7 @@ import {
   Spinner,
 } from "../../ui";
 import { dispatchReadiness, isDispatchSelectable } from "./dispatchEligibility";
+import { activeDispatchAssignment } from "./dispatchOperations";
 import { employeeDetailPath } from "../../routing/paths";
 
 const label = (value: string) => value.replaceAll("_", " ");
@@ -50,7 +51,8 @@ export function DispatchAssignmentPanel({
     () => technicians.data?.find((x) => x.employee_id === employeeId),
     [employeeId, technicians.data],
   );
-  const assignment = item.assignment;
+  const assignmentEvidence = item.assignment;
+  const assignment = activeDispatchAssignment(item);
   const pending =
     mutations.assign.isPending ||
     mutations.release.isPending ||
@@ -156,6 +158,12 @@ export function DispatchAssignmentPanel({
           Close
         </Button>
       </div>
+      {assignmentEvidence && !assignment && (
+        <Alert variant="warning" title="No active assignment">
+          The latest assignment is {label(assignmentEvidence.status)} history.
+          Assign a technician to create new current Dispatch authority.
+        </Alert>
+      )}
       {assignment?.status === "reconciliation_required" && (
         <div className="space-y-3">
           <Alert variant="danger" title="Reconciliation required">

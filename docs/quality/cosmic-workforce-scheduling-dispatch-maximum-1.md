@@ -36,6 +36,11 @@ Appointment detail applies the same rule. A terminal assignment now appears as
 retained history with its terminal state and release time rather than labeling
 the former Employee as the current primary technician.
 
+The Dispatch assignment panel also treats terminal evidence as history. It no
+longer labels the former technician as current or exposes release and crew
+controls against a released, replaced, or cancelled assignment; the normal new
+assignment action remains available.
+
 ### Nested overlap undercount
 
 Capacity previously compared each window only with the immediately preceding
@@ -69,6 +74,22 @@ Scheduling, explains that assignment remains outstanding, and never offers to
 book it again. The pre-booking technician list also excludes Workforce records
 whose canonical readiness is not `READY`; final Appointment-specific
 eligibility remains enforced by Dispatch.
+
+### Terminal Appointment rescheduling
+
+Calendar detail previously exposed the move form for completed and no-show
+Appointments even though the Scheduling service correctly accepts rescheduling
+only from scheduled or confirmed state. Terminal records now retain navigation
+and history access while the UI explains why they cannot be moved instead of
+leading an operator into a predictable conflict response.
+
+### Dispatch selection refresh consistency
+
+The Dispatch board previously stored a selected row snapshot. Query refreshes
+could update the board while an open assignment panel continued using stale
+assignment and version evidence. Selection now stores only the Appointment
+identity and resolves the panel from every authoritative board result, including
+response-loss recovery and changes made by another authorized operator.
 
 ## Qualified connected surfaces
 

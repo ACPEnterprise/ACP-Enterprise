@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useDispatchBoard } from "../hooks/useDispatch";
+import { useDispatchBoard, useDispatchMutations, useDispatchRecommendation, useEligibleTechnicians } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
 import { DispatchRoute } from "./DispatchRoute";
 
@@ -28,6 +28,7 @@ vi.mock("../hooks/useDispatch", () => ({
   useDispatchBoard: vi.fn(),
   useEligibleTechnicians: vi.fn(),
   useDispatchMutations: vi.fn(),
+  useDispatchRecommendation: vi.fn(),
 }));
 const refetchDispatch = vi.fn(),
   refetchJobs = vi.fn();
@@ -65,6 +66,13 @@ describe("DispatchRoute", () => {
       error: null,
       data: { items: [work], total_count: 1 },
       refetch: refetchDispatch,
+    } as never);
+    vi.mocked(useEligibleTechnicians).mockReturnValue({ isLoading: false, data: [] } as never);
+    vi.mocked(useDispatchRecommendation).mockReturnValue({ isLoading: false, data: null } as never);
+    vi.mocked(useDispatchMutations).mockReturnValue({
+      assign: { isPending: false, error: null }, release: { isPending: false, error: null },
+      crew: { isPending: false, error: null }, reconcile: { isPending: false, error: null },
+      exception: { isPending: false, error: null },
     } as never);
     vi.mocked(useJobs).mockReturnValue({
       isLoading: false,
@@ -261,5 +269,34 @@ describe("DispatchRoute", () => {
     expect(
       screen.getByText(/Exception: safety condition/i),
     ).toBeInTheDocument();
+  });
+
+  it("reconciles the open assignment panel from refreshed board authority", () => {
+    const rendered = render(<MemoryRouter><DispatchRoute /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Assign technician" }));
+    expect(screen.getByText(/No primary technician/)).toBeVisible();
+
+    vi.mocked(useDispatchBoard).mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: { items: [{
+        ...work,
+        assignment: {
+          id: "assignment-1", appointment_id: work.appointment_id,
+          appointment_number: work.appointment_number, job_id: work.job_id,
+          company_id: "company-1", branch_id: work.branch_id,
+          primary_employee_id: "employee-1", primary_employee_name: "Technician One",
+          status: "assigned", arrival_state: "pending", active_exception_code: null,
+          assignment_reason: "Dispatcher assignment", window_start_at: work.window_start_at,
+          window_end_at: work.window_end_at, effective_at: "2026-08-03T12:00:00Z",
+          released_at: null, version: 1, crew_members: [],
+        },
+      }], total_count: 1 },
+      refetch: refetchDispatch,
+    } as never);
+    rendered.rerender(<MemoryRouter><DispatchRoute /></MemoryRouter>);
+
+    expect(screen.getAllByText(/Technician One/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Replace primary" })).toBeVisible();
   });
 });
