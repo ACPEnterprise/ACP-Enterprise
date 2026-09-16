@@ -79,10 +79,23 @@ def workspace(*, quality: str = "complete") -> dict[str, object]:
         ],
         "comparison": {
             "state": "available",
+            "current": {
+                "revenue_minor": 300_000,
+                "contribution_minor": 115_000,
+            },
+            "prior": {
+                "revenue_minor": 280_000,
+                "contribution_minor": 110_000,
+            },
             "revenue_change_minor": 20_000,
-            "contribution_change_minor": -10_000,
+            "contribution_change_minor": 5_000,
             "labor_change_minor": 8_000,
             "materials_change_minor": 2_000,
+            "other_direct_cost_change_minor": 5_000,
+            "evidence_references": {
+                "current": [{"result_id": "result-a", "result_digest": "a" * 64}],
+                "prior": [{"result_id": "result-prior", "result_digest": "c" * 64}],
+            },
         },
         "readiness": {"allocation_policy": "policy_required"},
     }
@@ -118,6 +131,82 @@ def test_fact_projection_is_deterministic_scoped_and_source_labeled() -> None:
     assert revenue["subject"]["company_id"] == str(COMPANY)
     assert revenue["subject"]["branch_id"] == str(BRANCH)
     assert revenue["evidence_references"]
+
+
+def test_equal_period_delta_is_exactly_decomposed_without_causal_claim() -> None:
+    delta = project(workspace())["delta_explanation"]
+    assert delta["state"] == "EXPLAINED"
+    assert delta["classification"] == "DETERMINISTIC_DERIVED_CALCULATION"
+    assert delta["contribution_change_minor"] == 5_000
+    assert delta["explained_change_minor"] == 5_000
+    assert delta["unexplained_change_minor"] == 0
+    assert delta["contribution_margin_change_basis_points"] == -95
+    assert delta["scope"] == {
+        "company_id": str(COMPANY),
+        "branch_id": str(BRANCH),
+    }
+    assert delta["evidence_references"]["prior"][0]["result_id"] == "result-prior"
+    assert "not operational cause" in delta["causality_boundary"]
+
+
+def test_zero_delta_remains_a_deterministic_explanation() -> None:
+    value = workspace()
+    comparison = value["comparison"]
+    assert isinstance(comparison, dict)
+    for key in (
+        "revenue_change_minor",
+        "contribution_change_minor",
+        "labor_change_minor",
+        "materials_change_minor",
+        "other_direct_cost_change_minor",
+    ):
+        comparison[key] = 0
+    comparison["prior"] = deepcopy(comparison["current"])
+    delta = project(value)["delta_explanation"]
+    assert delta["state"] == "EXPLAINED"
+    assert delta["contribution_change_minor"] == 0
+    assert delta["unexplained_change_minor"] == 0
+    assert "did not change" in delta["headline"]
+
+
+def test_incomplete_or_conflicting_comparison_fails_closed() -> None:
+    incomplete = workspace()
+    comparison = incomplete["comparison"]
+    assert isinstance(comparison, dict)
+    comparison.pop("other_direct_cost_change_minor")
+    delta = project(incomplete)["delta_explanation"]
+    assert delta["state"] == "INCOMPLETE"
+    assert delta["components"] == []
+
+    conflicting = workspace(quality="conflicting")
+    conflicting["comparison"] = {
+        "state": "unavailable",
+        "reason": "Both periods require one non-conflicting authority.",
+    }
+    delta = project(conflicting)["delta_explanation"]
+    assert delta["state"] == "CONFLICTING"
+    assert "non-conflicting" in delta["reason"]
+
+
+def test_stale_or_missing_prior_evidence_is_not_comparable() -> None:
+    stale = workspace(quality="stale")
+    stale["comparison"] = {
+        "state": "unavailable",
+        "reason": "Both comparable periods require current admitted evidence.",
+    }
+    delta = project(stale)["delta_explanation"]
+    assert delta["state"] == "NOT_COMPARABLE"
+    assert delta["freshness"] == "stale"
+
+    missing_prior = workspace()
+    missing_prior["prior_period"] = None
+    missing_prior["comparison"] = {
+        "state": "unavailable",
+        "reason": "A prior equal-length period is unavailable.",
+    }
+    delta = project(missing_prior)["delta_explanation"]
+    assert delta["state"] == "NOT_COMPARABLE"
+    assert delta["prior_period"] is None
 
 
 @pytest.mark.parametrize(
@@ -278,6 +367,11 @@ def test_native_evidence_produces_partial_confident_facts_without_margin() -> No
     assert jobs[0]["evidence_states"]["direct_wage_cost"] == "POLICY_REQUIRED"
     service = result["service_line_economics"][0]
     assert service["service_category"] == "drain_cleaning"
+    delta = result["delta_explanation"]
+    assert delta["state"] == "PARTIAL"
+    assert delta["classification"] == "MEASURED_PERIOD_DIFFERENCE"
+    assert delta["components"][0]["component"] == "invoiced_revenue"
+    assert "admitted_direct_contribution" in delta["missing_evidence"]
     assert service["invoiced_revenue_minor"] == 12_500
     assert service["direct_contribution_minor"] is None
     queue = result["evidence_priority_queue"]
