@@ -2,7 +2,9 @@ import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { InventoryCountAdjustmentWorkbench } from "../components/InventoryCountAdjustmentWorkbench";
-import { useInventory, useInventoryMutations } from "../hooks/useInventory";
+import { MaterialCostReadinessCard } from "../components/MaterialCostReadinessCard";
+import { useInventory, useInventoryMutations, useMaterialCostReadiness } from "../hooks/useInventory";
+import { useJobs } from "../hooks/useJobs";
 import {
   Alert,
   Badge,
@@ -42,8 +44,14 @@ export function InventoryRoute() {
   const canReserve = useHasPermission("COMPANY_INVENTORY_RESERVE");
   const canAdjust = useHasPermission("COMPANY_INVENTORY_ADJUST");
   const canCount = useHasPermission("COMPANY_INVENTORY_COUNT");
+  const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const [branch, setBranch] = useState("");
   const inventory = useInventory(branch || undefined, canRead);
+  const costReadiness = useMaterialCostReadiness(canRead);
+  const jobs = useJobs(
+    { branchId: branch || undefined, page: 1, pageSize: 100, sortField: "updated_at", sortDirection: "desc" },
+    canRead && canReadJobs,
+  );
   const mutations = useInventoryMutations();
   const [item, setItem] = useState({
     code: "",
@@ -148,6 +156,8 @@ export function InventoryRoute() {
     mutations.createReservation,
     mutations.allocate,
     mutations.release,
+    mutations.issueMaterial,
+    mutations.reverseIssue,
   ].find((mutation) => mutation.isError);
   const runReservationMutation = async (operation: () => Promise<unknown>) => {
     try {
@@ -429,19 +439,8 @@ export function InventoryRoute() {
                     }
                     required
                   />
-                  <Input
-                    aria-label="Demand type"
-                    value={reservation.demand_type}
-                    onChange={(event) =>
-                      setReservation({
-                        ...reservation,
-                        demand_type: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                  <Input
-                    aria-label="Demand ID"
+                  <Select
+                    aria-label="Job material demand"
                     value={reservation.demand_id}
                     onChange={(event) =>
                       setReservation({
@@ -450,7 +449,15 @@ export function InventoryRoute() {
                       })
                     }
                     required
-                  />
+                    disabled={!canReadJobs}
+                  >
+                    <option value="">Select Job</option>
+                    {jobs.data?.items.map((job) => (
+                      <option key={job.id} value={job.id}>
+                        {job.job_number} — {job.customer_display_name}
+                      </option>
+                    ))}
+                  </Select>
                   <Button
                     type="submit"
                     loading={mutations.createReservation.isPending}
@@ -499,6 +506,11 @@ export function InventoryRoute() {
               </div>
             </CardContent>
           </Card>
+          {costReadiness.data ? (
+            <MaterialCostReadinessCard data={costReadiness.data} items={inventory.data?.items ?? []} />
+          ) : costReadiness.isError ? (
+            <Alert variant="warning">Material cost readiness is currently unavailable.</Alert>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle>Reservations</CardTitle>
@@ -509,7 +521,20 @@ export function InventoryRoute() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-3">
-                {inventory.data?.reservations.map((reservation) => (
+                {inventory.data?.reservations.map((reservation) => {
+                  const allocations = (inventory.data.allocations ?? []).filter(
+                    (allocation) => allocation.reservation_id === reservation.id,
+                  );
+                  const issues = (inventory.data.material_issues ?? []).filter(
+                    (issue) => issue.reservation_id === reservation.id,
+                  );
+                  const issuedAllocationIds = new Set(
+                    issues.filter((issue) => issue.issue_type === "issue").map((issue) => issue.allocation_id),
+                  );
+                  const reversedIssueIds = new Set(
+                    issues.filter((issue) => issue.issue_type === "reversal").map((issue) => issue.reversal_of_issue_id),
+                  );
+                  return (
                   <li
                     key={reservation.id}
                     className="flex flex-col gap-3 rounded-lg border border-stroke p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -524,6 +549,38 @@ export function InventoryRoute() {
                           {reservation.quantity} {reservation.stocking_unit}
                         </span>
                       </div>
+                      {reservation.demand_type === "job" ? (
+                        <div className="mt-1 text-xs text-content-muted">
+                          Job {reservation.demand_id}
+                        </div>
+                      ) : null}
+                      {issues.length > 0 ? (
+                        <div className="mt-2 text-sm">
+                          {issues.map((issue) => (
+                            <div key={issue.id}>
+                              {issue.issue_type === "issue" ? "Consumed" : "Returned to stock"}: {issue.quantity} {issue.stocking_unit}
+                              {canReserve && issue.issue_type === "issue" && !reversedIssueIds.has(issue.id) ? (
+                                <Button
+                                  className="ml-2"
+                                  variant="secondary"
+                                  onClick={() => void runReservationMutation(() => mutations.reverseIssue.mutateAsync({
+                                    issueId: issue.id,
+                                    data: {
+                                      branch_id: reservation.branch_id,
+                                      expected_reservation_version: reservation.version,
+                                      occurred_at: new Date().toISOString(),
+                                      idempotency_key: crypto.randomUUID(),
+                                    },
+                                  }))}
+                                  loading={mutations.reverseIssue.isPending}
+                                >
+                                  Return unused
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     {canReserve &&
                       [
@@ -567,10 +624,33 @@ export function InventoryRoute() {
                           >
                             Release
                           </Button>
+                          {reservation.demand_type === "job" && allocations
+                            .filter((allocation) => !issuedAllocationIds.has(allocation.id))
+                            .map((allocation) => (
+                              <Button
+                                key={allocation.id}
+                                onClick={() => void runReservationMutation(() => mutations.issueMaterial.mutateAsync({
+                                  reservationId: reservation.id,
+                                  data: {
+                                    branch_id: reservation.branch_id,
+                                    allocation_id: allocation.id,
+                                    item_id: reservation.item_id,
+                                    location_id: reservation.location_id,
+                                    expected_reservation_version: reservation.version,
+                                    occurred_at: new Date().toISOString(),
+                                    idempotency_key: crypto.randomUUID(),
+                                  },
+                                }))}
+                                loading={mutations.issueMaterial.isPending}
+                              >
+                                Issue {allocation.quantity} {reservation.stocking_unit} to Job
+                              </Button>
+                            ))}
                         </div>
                       )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </CardContent>
           </Card>

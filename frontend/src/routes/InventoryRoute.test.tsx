@@ -5,8 +5,10 @@ import {
   useCycleCounts,
   useInventory,
   useInventoryMutations,
+  useMaterialCostReadiness,
 } from "../hooks/useInventory";
 import { InventoryRoute } from "./InventoryRoute";
+import { useJobs } from "../hooks/useJobs";
 
 let permissions = new Set<string>();
 vi.mock("../auth", () => ({
@@ -22,7 +24,9 @@ vi.mock("../hooks/useInventory", () => ({
   useInventory: vi.fn(),
   useCycleCounts: vi.fn(),
   useInventoryMutations: vi.fn(),
+  useMaterialCostReadiness: vi.fn(),
 }));
+vi.mock("../hooks/useJobs", () => ({ useJobs: vi.fn() }));
 
 const mutateAsync = {
   createItem: vi.fn(),
@@ -31,6 +35,8 @@ const mutateAsync = {
   createReservation: vi.fn(),
   allocate: vi.fn(),
   release: vi.fn(),
+  issueMaterial: vi.fn(),
+  reverseIssue: vi.fn(),
   adjust: vi.fn(),
   startCount: vi.fn(),
   recordCount: vi.fn(),
@@ -51,6 +57,8 @@ const inventoryMutations = (locationError: unknown = null) => ({
   createReservation: mutation(mutateAsync.createReservation),
   allocate: mutation(mutateAsync.allocate),
   release: mutation(mutateAsync.release),
+  issueMaterial: mutation(mutateAsync.issueMaterial),
+  reverseIssue: mutation(mutateAsync.reverseIssue),
   adjust: mutation(mutateAsync.adjust),
   startCount: mutation(mutateAsync.startCount),
   recordCount: mutation(mutateAsync.recordCount),
@@ -98,6 +106,16 @@ describe("InventoryRoute", () => {
           entries: [],
         },
       ],
+    } as never);
+    vi.mocked(useMaterialCostReadiness).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: { evidence: [], readiness: [] },
+    } as never);
+    vi.mocked(useJobs).mockReturnValue({
+      data: {
+        items: [{ id: "job-1", job_number: "JOB-000001", customer_display_name: "Taylor Home" }],
+      },
     } as never);
     vi.mocked(useInventoryMutations).mockReturnValue(
       inventoryMutations() as never,
@@ -175,6 +193,7 @@ describe("InventoryRoute", () => {
 
   it("creates and allocates reservations without changing on-hand", async () => {
     permissions.add("COMPANY_INVENTORY_RESERVE");
+    permissions.add("COMPANY_JOB_READ");
     render(<InventoryRoute />);
     fireEvent.change(screen.getByLabelText("Inventory Branch"), {
       target: { value: "branch-1" },
@@ -188,8 +207,8 @@ describe("InventoryRoute", () => {
     fireEvent.change(screen.getByLabelText("Reservation quantity"), {
       target: { value: "2" },
     });
-    fireEvent.change(screen.getByLabelText("Demand ID"), {
-      target: { value: "00000000-0000-0000-0000-000000000001" },
+    fireEvent.change(screen.getByLabelText("Job material demand"), {
+      target: { value: "job-1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create reservation" }));
     await waitFor(() =>
@@ -234,6 +253,64 @@ describe("InventoryRoute", () => {
       /requires reconciliation/i,
     );
     expect(screen.queryByText(/sql-provider-secret-canary/)).not.toBeInTheDocument();
+  });
+
+  it("issues allocated Job material and offers an auditable unused return", async () => {
+    permissions.add("COMPANY_INVENTORY_RESERVE");
+    vi.mocked(useInventory).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: {
+        items: [{ id: "item-1", name: "Filter", stocking_unit: "each" }],
+        locations: [{ id: "location-1", name: "Main warehouse" }],
+        quantities: [],
+        reservations: [{
+          id: "reservation-1", branch_id: "branch-1", item_id: "item-1",
+          location_id: "location-1", allocated_quantity: "2", issued_quantity: "0",
+          quantity: "2", stocking_unit: "each", demand_type: "job", demand_id: "job-1",
+          status: "allocated", version: 2,
+        }],
+        allocations: [{
+          id: "allocation-1", reservation_id: "reservation-1", item_id: "item-1",
+          location_id: "location-1", quantity: "2", requested_quantity: "2",
+          partial_allowed: false, reservation_version: 1, allocated_at: "2026-09-15T12:00:00Z",
+        }],
+        material_issues: [],
+      },
+    } as never);
+    const { rerender } = render(<InventoryRoute />);
+    fireEvent.click(screen.getByRole("button", { name: "Issue 2 each to Job" }));
+    await waitFor(() => expect(mutateAsync.issueMaterial).toHaveBeenCalledWith({
+      reservationId: "reservation-1",
+      data: expect.objectContaining({
+        branch_id: "branch-1", allocation_id: "allocation-1",
+        item_id: "item-1", location_id: "location-1", expected_reservation_version: 2,
+      }),
+    }));
+
+    vi.mocked(useInventory).mockReturnValue({
+      isPending: false, isError: false,
+      data: {
+        items: [{ id: "item-1", name: "Filter", stocking_unit: "each" }],
+        locations: [{ id: "location-1", name: "Main warehouse" }], quantities: [], allocations: [],
+        reservations: [{
+          id: "reservation-1", branch_id: "branch-1", item_id: "item-1", location_id: "location-1",
+          allocated_quantity: "2", issued_quantity: "2", quantity: "2", stocking_unit: "each",
+          demand_type: "job", demand_id: "job-1", status: "fulfilled", version: 3,
+        }],
+        material_issues: [{
+          id: "issue-1", reservation_id: "reservation-1", allocation_id: "allocation-1",
+          issue_type: "issue", item_id: "item-1", location_id: "location-1", quantity: "2",
+          stocking_unit: "each",
+        }],
+      },
+    } as never);
+    rerender(<InventoryRoute />);
+    fireEvent.click(screen.getByRole("button", { name: "Return unused" }));
+    await waitFor(() => expect(mutateAsync.reverseIssue).toHaveBeenCalledWith({
+      issueId: "issue-1",
+      data: expect.objectContaining({ branch_id: "branch-1", expected_reservation_version: 3 }),
+    }));
   });
 
   it("retains location evidence when a mutation rejects", async () => {

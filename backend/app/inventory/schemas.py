@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -56,6 +56,23 @@ class ReservationAllocate(InventorySchema):
 
 class ReservationRelease(InventorySchema):
     expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class MaterialIssueCreate(InventorySchema):
+    branch_id: UUID
+    allocation_id: UUID
+    item_id: UUID
+    location_id: UUID
+    expected_reservation_version: int = Field(ge=1)
+    occurred_at: AwareDatetime
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class MaterialIssueReverse(InventorySchema):
+    branch_id: UUID
+    expected_reservation_version: int = Field(ge=1)
+    occurred_at: AwareDatetime
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
@@ -196,6 +213,27 @@ class AllocationResponse(InventorySchema):
     allocated_at: datetime
 
 
+class MaterialIssueResponse(InventorySchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    reservation_id: UUID
+    allocation_id: UUID
+    issue_type: str
+    item_id: UUID
+    location_id: UUID
+    quantity: Decimal
+    stocking_unit: str
+    occurred_at: datetime
+    posted_at: datetime
+    actor_user_id: UUID
+    idempotency_key: str
+    movement_id: UUID
+    reversal_of_issue_id: UUID | None
+    external_reference_type: str | None
+    external_reference_id: UUID | None
+
+
 class AdjustmentResponse(InventorySchema):
     id: UUID
     company_id: UUID
@@ -249,3 +287,37 @@ class InventoryOverview(InventorySchema):
     locations: tuple[LocationResponse, ...]
     quantities: tuple[QuantityResponse, ...]
     reservations: tuple[ReservationResponse, ...]
+    allocations: tuple[AllocationResponse, ...] = ()
+    material_issues: tuple[MaterialIssueResponse, ...] = ()
+
+
+class MaterialCostEvidenceResponse(InventorySchema):
+    inventory_item_id: UUID
+    vendor_id: UUID
+    vendor_name: str
+    purchase_order_id: UUID
+    purchase_order_line_id: UUID
+    receipt_id: UUID
+    receipt_line_id: UUID
+    received_at: datetime
+    effective_date: date
+    accepted_quantity: Decimal
+    unit: str
+    unit_cost: Decimal
+    currency: str
+    source_reference: str | None
+    authority_state: str = "ACTUAL_RECEIPT"
+
+
+class MaterialValuationReadinessResponse(InventorySchema):
+    inventory_item_id: UUID
+    on_hand_quantity: Decimal
+    actual_receipt_cost_available: bool
+    currencies: tuple[str, ...]
+    readiness_state: str
+    blockers: tuple[str, ...]
+
+
+class MaterialCostReadinessResponse(InventorySchema):
+    evidence: tuple[MaterialCostEvidenceResponse, ...]
+    readiness: tuple[MaterialValuationReadinessResponse, ...]

@@ -386,6 +386,22 @@ class InventoryRepositoryContract(Protocol):
         reservation_id: UUID,
     ) -> tuple[AllocationRecord, ...]: ...
 
+    async def list_branch_allocations(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[AllocationRecord, ...]: ...
+
+    async def list_material_issues(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[MaterialIssueRecord, ...]: ...
+
     async def transition_reservation(
         self, session: AsyncSession, *, spec: TransitionReservation
     ) -> ReservationRecord: ...

@@ -12,6 +12,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.customers import models as customer_models  # noqa: F401
 from app.inventory.contracts import (
     AllocateReservation,
     CreateInventoryItem,
@@ -36,6 +37,7 @@ from app.platform.company import membership_models  # noqa: F401
 from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
+from app.scheduling import models as scheduling_models  # noqa: F401
 
 
 @pytest_asyncio.fixture
