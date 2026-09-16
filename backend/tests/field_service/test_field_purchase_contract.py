@@ -5,7 +5,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-
 from app.dispatch.models import DispatchAssignment
 from app.field_service.artifacts import FieldArtifactService
 from app.field_service.errors import FieldServiceConflict
