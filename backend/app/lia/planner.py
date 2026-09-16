@@ -26,6 +26,7 @@ class QuestionPlan:
     intent: QuestionIntent
     domains: frozenset[str]
     required_sources: tuple[str, ...]
+    subject_domain: str | None = None
     subject_query: str | None = None
 
 
@@ -120,9 +121,12 @@ def plan_question(
     topic_domains: tuple[str, ...] = (),
 ) -> QuestionPlan:
     normalized = question.casefold()
-    subject_query = _employee_subject(question) if context_domain is None else None
-    if subject_query is not None:
-        domains = frozenset({"workforce"})
+    subject = _named_subject(question) if context_domain is None else None
+    subject_domain, subject_query = subject if subject is not None else (None, None)
+    if subject_domain == "identity":
+        domains = frozenset({"customers", "workforce"})
+    elif subject_domain is not None:
+        domains = frozenset({subject_domain})
     elif context_domain:
         question_domains = (
             frozenset(
@@ -148,17 +152,23 @@ def plan_question(
         intent=intent,
         domains=domains,
         required_sources=tuple(sorted(domains)),
+        subject_domain=subject_domain,
         subject_query=subject_query,
     )
 
 
-def _employee_subject(question: str) -> str | None:
-    match = re.fullmatch(
-        r"\s*show\s+me\s+([\w'’-]+(?:\s+[\w'’-]+){1,3})[?.!]?\s*",
-        question,
-        re.IGNORECASE,
+def _named_subject(question: str) -> tuple[str, str] | None:
+    patterns = (
+        ("jobs", r"\s*show\s+me\s+job\s+([A-Z0-9-]+)[?.!]?\s*"),
+        ("customers", r"\s*show\s+me\s+customer\s+(.+?)[?.!]?\s*"),
+        ("identity", r"\s*show\s+me\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){1,7})[?.!]?\s*"),
     )
-    return " ".join(match.group(1).split()) if match else None
+    for domain, pattern in patterns:
+        match = re.fullmatch(pattern, question, re.IGNORECASE)
+        if match:
+            value = " ".join(match.group(1).strip(" .?!").split())
+            return (domain, value) if value else None
+    return None
 
 
 def _intent(domains: frozenset[str]) -> QuestionIntent:

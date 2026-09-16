@@ -85,6 +85,43 @@ class JobLiaContext(BaseModel):
 
 
 class JobLiaContextService:
+    async def resolve_job_number(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        job_number: str,
+    ) -> tuple[UUID, ...]:
+        """Resolve an exact authorized native Job number."""
+        if not context.has_permission(JobPermission.READ):
+            return ()
+        branch_ids = (
+            (context.active_branch.id,)
+            if context.active_branch is not None
+            else tuple(sorted(context.authorized_branch_ids, key=str))
+        )
+        if not branch_ids:
+            return ()
+        normalized = job_number.strip().upper()
+        digits = normalized.removeprefix("JOB-")
+        if digits.isdigit():
+            normalized = f"JOB-{digits.zfill(6)}"
+        return tuple(
+            (
+                await session.scalars(
+                    select(Job.id)
+                    .where(
+                        Job.company_id == context.company.id,
+                        Job.branch_id.in_(branch_ids),
+                        func.upper(func.trim(Job.job_number))
+                        == normalized,
+                    )
+                    .order_by(Job.id)
+                    .limit(2)
+                )
+            ).all()
+        )
+
     async def project(
         self,
         session: AsyncSession,

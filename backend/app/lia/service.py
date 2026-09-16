@@ -8,6 +8,8 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.lia_context import customer_lia_context_service
+from app.jobs.lia_context import job_lia_context_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.workforce.service import workforce_operations_service
 
@@ -170,13 +172,44 @@ class LiaService:
             )
         effective_request = request
         entity_id = request.context.entity_id if request.context else None
-        if plan.subject_query is not None:
-            matches = await workforce_operations_service.resolve_display_name(
-                session,
-                context=context,
-                display_name=plan.subject_query,
-            )
-            if len(matches) != 1:
+        if plan.subject_query is not None and plan.subject_domain is not None:
+            subject_matches: list[tuple[str, UUID]] = []
+            if "customers" in selected and plan.subject_domain in {
+                "customers",
+                "identity",
+            }:
+                subject_matches.extend(
+                    ("customers", match)
+                    for match in await customer_lia_context_service.resolve_display_name(
+                        session,
+                        context=context,
+                        display_name=plan.subject_query,
+                    )
+                )
+            if "workforce" in selected and plan.subject_domain == "identity":
+                subject_matches.extend(
+                    ("workforce", match)
+                    for match in await workforce_operations_service.resolve_display_name(
+                        session,
+                        context=context,
+                        display_name=plan.subject_query,
+                    )
+                )
+            if "jobs" in selected and plan.subject_domain == "jobs":
+                subject_matches.extend(
+                    ("jobs", match)
+                    for match in await job_lia_context_service.resolve_job_number(
+                        session,
+                        context=context,
+                        job_number=plan.subject_query,
+                    )
+                )
+            if len(subject_matches) != 1:
+                subject_label = {
+                    "customers": "Customer",
+                    "jobs": "Job",
+                    "identity": "Customer or Employee",
+                }[plan.subject_domain]
                 return self._response(
                     context=context,
                     request=request,
@@ -184,23 +217,24 @@ class LiaService:
                     conversation_id=conversation_id,
                     classification=(
                         TruthClassification.INCOMPLETE
-                        if matches
+                        if subject_matches
                         else TruthClassification.UNAVAILABLE
                     ),
                     answer=(
-                        "More than one authorized Employee has that exact name. Open Team and select the intended Employee."
-                        if matches
-                        else "No authorized Employee with that exact name is available in your current Company and Branch scope."
+                        f"More than one authorized {subject_label} matches exactly. Open the authoritative workspace and select the intended record."
+                        if subject_matches
+                        else f"No authorized {subject_label} with that exact identity is available in your current Company and Branch scope."
                     ),
                     limitations=(
-                        "ACP does not reveal Employees outside the authorized scope.",
+                        "ACP does not reveal records outside the authorized scope.",
                     ),
                 )
-            entity_id = matches[0]
+            resolved_domain, entity_id = subject_matches[0]
+            selected = {resolved_domain}
             effective_request = request.model_copy(
                 update={
                     "context": LiaContext(
-                        domain="workforce",
+                        domain=resolved_domain,
                         entity_id=entity_id,
                         authorization_version=context.authorization_version,
                     )
