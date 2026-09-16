@@ -7,6 +7,8 @@ import type {
   InventoryAdjustment,
   InventoryAdjustmentCreate,
   InventoryLocation,
+  InventoryItem,
+  InventoryItemCreate,
   InventoryLocationCreate,
   InventoryOverview,
   InventoryReservation,
@@ -24,6 +26,18 @@ export async function getInventoryOverview(
     await apiClient.get<InventoryOverview>(`${ROOT}/overview`, {
       params: { branch_id: branchId },
     })
+  ).data;
+}
+
+export async function createInventoryItem(
+  data: InventoryItemCreate,
+): Promise<InventoryItem> {
+  const { code, ...body } = data;
+  return (
+    await apiClient.put<InventoryItem>(
+      `${ROOT}/items/${encodeURIComponent(code.trim().toUpperCase())}`,
+      body,
+    )
   ).data;
 }
 

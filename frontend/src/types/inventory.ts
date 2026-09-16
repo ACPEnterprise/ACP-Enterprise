@@ -8,6 +8,12 @@ export interface InventoryItem {
   status: string;
   version: number;
 }
+export interface InventoryItemCreate {
+  code: string;
+  name: string;
+  stocking_unit: string;
+  allow_fractional: boolean;
+}
 export interface InventoryLocation {
   id: string;
   company_id: string;

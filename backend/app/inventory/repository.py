@@ -94,6 +94,17 @@ class InventoryRepository:
         )
         return self._item_record(item) if item else None
 
+    async def get_item_by_code(
+        self, session: AsyncSession, *, company_id: UUID, code: str
+    ) -> InventoryItemRecord | None:
+        item = await session.scalar(
+            select(InventoryItem).where(
+                InventoryItem.company_id == company_id,
+                InventoryItem.code == code.strip().upper(),
+            )
+        )
+        return self._item_record(item) if item else None
+
     async def create_location(
         self, session: AsyncSession, *, spec: CreateStockLocation
     ) -> StockLocationRecord:

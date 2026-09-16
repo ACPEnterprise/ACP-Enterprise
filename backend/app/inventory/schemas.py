@@ -9,6 +9,12 @@ class InventorySchema(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, from_attributes=True)
 
 
+class ItemCreate(InventorySchema):
+    name: str = Field(min_length=1, max_length=240)
+    stocking_unit: str = Field(min_length=1, max_length=40)
+    allow_fractional: bool = True
+
+
 class LocationCreate(InventorySchema):
     branch_id: UUID
     code: str = Field(min_length=1, max_length=64)

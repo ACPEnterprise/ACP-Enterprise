@@ -3,6 +3,7 @@ import {
   allocateInventoryReservation,
   completeCycleCount,
   createInventoryLocation,
+  createInventoryItem,
   createInventoryReservation,
   getInventoryOverview,
   getCycleCounts,
@@ -45,6 +46,7 @@ export function useInventoryMutations() {
   const refresh = () =>
     client.invalidateQueries({ queryKey: inventoryKeys.all });
   return {
+    createItem: useMutation({ mutationFn: createInventoryItem, onSuccess: refresh }),
     createLocation: useMutation({
       mutationFn: createInventoryLocation,
       onSuccess: refresh,
