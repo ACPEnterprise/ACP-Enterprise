@@ -27,6 +27,40 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => authState.permissionCodes.includes(code),
 }));
 vi.mock("../hooks/usePriceBook", () => ({
+  useCandidateReview: () => ({
+    isPending: false,
+    isError: false,
+    data: {
+      items: [
+        {
+          candidate_identity: "flat-rate:SVC-001",
+          native_service_item_id: "item-1",
+          service_code: "SVC-001",
+          name: "Standard service call",
+          customer_description: "Diagnostic visit",
+          category: "Service Calls",
+          admission_status: "admitted",
+          review_flags: ["TAX_REVIEW_REQUIRED"],
+          activation_blockers: ["OWNER_APPROVAL_REQUIRED"],
+          candidate_prices: { standard: "129.00" },
+          price_derivation: "OWNER_OVERRIDE",
+          source_sheet: "Service Calls",
+          source_row: 5,
+          source_digest: "a".repeat(64),
+          evidence_digest: "b".repeat(64),
+          tax_decision_group: "CATEGORY_SERVICE_CALLS",
+          conflict_reason: null,
+        },
+      ],
+      counts: {
+        admitted: 179,
+        held: 39,
+        material_mapping_required: 194,
+        activation_ready: 0,
+      },
+      total: 218,
+    },
+  }),
   usePriceBook: () => ({
     isPending: false,
     isError: false,
@@ -234,6 +268,8 @@ describe("PriceBookRoute", () => {
     expect(
       screen.getByRole("button", { name: "Activate version" }),
     ).toBeVisible();
+    expect(screen.getByText("Standard service call")).toBeVisible();
+    expect(screen.getByText(/not active/i)).toBeVisible();
   });
 
   it("renders structured recovery without reflecting backend details", () => {

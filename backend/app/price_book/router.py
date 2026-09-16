@@ -11,6 +11,7 @@ from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .candidate_admission import candidate_review_page
 from .errors import (
     PriceBookConflict,
     PriceBookError,
@@ -25,6 +26,7 @@ from .schemas import (
     AuditItem,
     BulkMaterializeItem,
     BulkMaterializeRequest,
+    CandidateReviewPage,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
@@ -61,6 +63,32 @@ ManageContext = Annotated[
 ActivateContext = Annotated[
     AuthorizationContext, Depends(require_permission(PriceBookPermission.ACTIVATE))
 ]
+
+
+@router.get("/candidate-review", response_model=CandidateReviewPage)
+async def candidate_review(
+    context: ReadContext,
+    session: DatabaseSession,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    category: Annotated[str | None, Query(max_length=200)] = None,
+    admission_status: Annotated[str | None, Query(pattern=r"^(admitted|held)$")] = None,
+    review_flag: Annotated[str | None, Query(max_length=80)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> CandidateReviewPage:
+    return CandidateReviewPage.model_validate(
+        await candidate_review_page(
+            session,
+            company_id=context.company_id,
+            search=search,
+            category=category,
+            admission_status=admission_status,
+            review_flag=review_flag,
+            limit=limit,
+            offset=offset,
+            costs_visible=context.has_permission(PriceBookPermission.MANAGE),
+        )
+    )
 
 
 def http_error(error: PriceBookError) -> HTTPException:

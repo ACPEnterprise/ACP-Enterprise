@@ -1,7 +1,11 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
-import { usePriceBook, usePriceBookMutations } from "../hooks/usePriceBook";
+import {
+  useCandidateReview,
+  usePriceBook,
+  usePriceBookMutations,
+} from "../hooks/usePriceBook";
 import {
   Alert,
   Badge,
@@ -87,6 +91,10 @@ export function PriceBookRoute() {
     componentCost: "",
   });
   const [search, setSearch] = useState("");
+  const candidateReview = useCandidateReview(
+    { search: search.trim() || undefined, limit: 200 },
+    canRead && Boolean(activeCompany),
+  );
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [reviewType, setReviewType] = useState<
@@ -497,6 +505,72 @@ export function PriceBookRoute() {
               </CardHeader>
             </Card>
           </section>
+          <Card>
+            <CardHeader>
+              <CardTitle>All County candidate review</CardTitle>
+              <CardDescription>
+                Source-backed draft candidates are visible here before any price
+                becomes active. Held items remain isolated until their source
+                conflict is resolved.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {candidateReview.isPending ? (
+                <Spinner label="Loading candidate review" />
+              ) : candidateReview.isError ? (
+                <Alert variant="danger">
+                  Candidate evidence could not be loaded. Native Price Book
+                  authority was not changed.
+                </Alert>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div><strong>{candidateReview.data?.counts.admitted ?? 0}</strong><p className="text-sm text-content-muted">Draft — ready for review</p></div>
+                    <div><strong>{candidateReview.data?.counts.held ?? 0}</strong><p className="text-sm text-content-muted">Held — source conflict</p></div>
+                    <div><strong>{candidateReview.data?.counts.material_mapping_required ?? 0}</strong><p className="text-sm text-content-muted">Need material mapping</p></div>
+                    <div><strong>{candidateReview.data?.counts.activation_ready ?? 0}</strong><p className="text-sm text-content-muted">Activation ready</p></div>
+                  </div>
+                  <div className="space-y-3" aria-label="All County candidate services">
+                    {(candidateReview.data?.items ?? []).map((candidate) => (
+                      <article
+                        key={candidate.candidate_identity}
+                        className="rounded-lg border border-stroke p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs text-content-muted">{candidate.category} · {candidate.service_code}</p>
+                            <h3 className="font-semibold">{candidate.name}</h3>
+                          </div>
+                          <Badge variant={candidate.admission_status === "held" ? "danger" : "warning"}>
+                            {candidate.admission_status === "held" ? "Held — source conflict" : "Draft — ready for review"}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-sm">{candidate.customer_description}</p>
+                        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                          <div><dt className="text-content-muted">Candidate price</dt><dd>${candidate.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
+                          <div><dt className="text-content-muted">Source</dt><dd>{candidate.source_sheet}, row {candidate.source_row}</dd></div>
+                          <div><dt className="text-content-muted">Price evidence</dt><dd>{candidate.price_derivation === "OWNER_OVERRIDE" ? "Owner workbook value" : "Workbook formula"}</dd></div>
+                        </dl>
+                        <p className="mt-3 text-xs text-content-muted">
+                          {candidate.review_flags.map((flag) => flag.replaceAll("_", " ").toLocaleLowerCase()).join(" · ")}
+                        </p>
+                        {candidate.conflict_reason && (
+                          <Alert variant="warning">
+                            Workbook pricing differs from illustrative Water Heater script examples. No source was selected automatically.
+                          </Alert>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                  {(candidateReview.data?.total ?? 0) > (candidateReview.data?.items.length ?? 0) && (
+                    <p className="text-sm text-content-muted">
+                      Showing the first {candidateReview.data?.items.length} of {candidateReview.data?.total}. Refine search to review the remaining services.
+                    </p>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Activation readiness</CardTitle>

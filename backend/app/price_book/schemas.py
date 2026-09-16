@@ -14,6 +14,7 @@ class CategoryCreate(PriceBookSchema):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     parent_id: UUID | None = None
+    position: int | None = Field(default=None, ge=1)
 
     @field_validator("code")
     @classmethod
@@ -23,7 +24,7 @@ class CategoryCreate(PriceBookSchema):
 
 class CategoryUpdate(CategoryCreate):
     expected_version: int = Field(ge=1)
-    status: str = Field(pattern=r"^(active|archived)$")
+    status: str = Field(pattern=r"^(draft|active|archived)$")
 
 
 class TaxClassificationCreate(PriceBookSchema):
@@ -225,6 +226,7 @@ class CategoryItem(PriceBookSchema):
     code: str
     name: str
     description: str | None
+    position: int | None
     status: str
     version: int
 
@@ -352,6 +354,37 @@ class CatalogPage(PriceBookSchema):
     limit: int = 100
     offset: int = 0
     costs_visible: bool = False
+
+
+class CandidateReviewItem(PriceBookSchema):
+    candidate_identity: str
+    native_service_item_id: UUID | None
+    service_code: str
+    name: str
+    customer_description: str
+    category: str
+    admission_status: str
+    review_flags: list[str]
+    activation_blockers: list[str]
+    candidate_prices: dict[str, str | None]
+    price_derivation: str
+    labor_hours: str | None
+    material_cost_evidence: str | None
+    source_sheet: str
+    source_row: int
+    source_digest: str
+    evidence_digest: str
+    tax_decision_group: str
+    conflict_reason: str | None
+
+
+class CandidateReviewPage(PriceBookSchema):
+    items: list[CandidateReviewItem]
+    counts: dict[str, int]
+    total: int
+    limit: int
+    offset: int
+    costs_visible: bool
 
 
 class BulkMaterializeRequest(PriceBookSchema):
