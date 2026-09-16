@@ -265,7 +265,7 @@ describe("PriceBookRoute", () => {
       screen.queryByRole("button", { name: "Create category" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Activate version" }),
+      screen.queryByRole("button", { name: "Review activation" }),
     ).not.toBeInTheDocument();
   });
 
@@ -302,7 +302,7 @@ describe("PriceBookRoute", () => {
       screen.queryByRole("button", { name: "Create category" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Activate version" }),
+      screen.getByRole("button", { name: "Review activation" }),
     ).toBeVisible();
   });
 
@@ -332,7 +332,7 @@ describe("PriceBookRoute", () => {
       screen.getByRole("button", { name: "Create option group" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Activate version" }),
+      screen.getByRole("button", { name: "Review activation" }),
     ).toBeVisible();
     expect(screen.getByText("Standard service call")).toBeVisible();
     expect(screen.getByText(/not active/i)).toBeVisible();

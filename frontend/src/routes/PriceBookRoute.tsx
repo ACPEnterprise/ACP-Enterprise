@@ -703,6 +703,7 @@ export function PriceBookRoute() {
                       {canApproveTax && !activationReadiness.data.tax_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "tax", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized finance reviewer approved the selected tax classification for this exact draft." })}>Approve tax classification</Button>}
                       {canManage && !activationReadiness.data.effective_date_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "effective-date", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the effective date shown for this exact draft." })}>Approve effective date</Button>}
                       {canActivate && !activationReadiness.data.activation_authorized && <Button disabled={!activationReadiness.data.price_approved || !activationReadiness.data.tax_approved || !activationReadiness.data.effective_date_approved} onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "activation-authorization", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized owner approved this exact draft for a later explicit activation command." })}>Authorize later activation</Button>}
+                      {canActivate && activationReadiness.data.activation_ready && <Button onClick={() => void performMutation(() => mutations.activate.mutateAsync({ id: reviewVersionId, version: activationReadiness.data!.draft_version }))}>Activate reviewed version</Button>}
                     </div>
                     <div>
                       <h3 className="font-semibold">Review and activation history</h3>
@@ -1559,18 +1560,7 @@ export function PriceBookRoute() {
                               )}
                             </div>
                             {canActivate && version.status === "draft" && (
-                              <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button><Button
-                                onClick={() =>
-                                  void performMutation(() =>
-                                    mutations.activate.mutateAsync({
-                                      id: version.id,
-                                      version: version.version,
-                                    }),
-                                  )
-                                }
-                              >
-                                Activate version
-                              </Button></div>
+                              <Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button>
                             )}
                           </div>
                         ))}
