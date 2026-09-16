@@ -8,7 +8,48 @@ import { EstimatesRoute } from "./EstimatesRoute";
 
 let permissions = new Set<string>();
 vi.mock("../auth", () => ({
+  useAuth: () => ({
+    activeCompany: {
+      default_branch_id: "11111111-1111-4111-8111-111111111111",
+      branches: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "Main",
+          code: "MAIN",
+        },
+      ],
+    },
+  }),
   useHasPermission: (code: string) => permissions.has(code),
+}));
+vi.mock("../hooks/useCustomers", () => ({
+  useCustomerSearch: () => ({
+    isLoading: false,
+    isError: false,
+    data: {
+      items: [{ id: "customer-1", display_name: "Michael Customer" }],
+      page: 1,
+      page_size: 25,
+      total_count: 1,
+      total_pages: 1,
+    },
+  }),
+  useCustomerDetail: (customerId: string | null) => ({
+    isLoading: false,
+    data: customerId
+      ? {
+          id: customerId,
+          display_name: "Michael Customer",
+          properties: [
+            {
+              id: "location-1",
+              address_line_1: "10 Main Street",
+              city: "Clearwater",
+            },
+          ],
+        }
+      : undefined,
+  }),
 }));
 vi.mock("../api/estimates", () => ({
   listEstimates: vi.fn().mockResolvedValue({
@@ -161,6 +202,7 @@ describe("EstimatesRoute", () => {
       "COMPANY_ESTIMATE_READ",
       "COMPANY_ESTIMATE_MANAGE",
       "COMPANY_PRICE_BOOK_READ",
+      "COMPANY_CUSTOMER_READ",
     ]);
     renderRoute("/estimates?id=estimate-1");
     expect(await screen.findByText("Create proposal")).toBeVisible();
@@ -173,11 +215,24 @@ describe("EstimatesRoute", () => {
       "COMPANY_ESTIMATE_READ",
       "COMPANY_ESTIMATE_MANAGE",
       "COMPANY_PRICE_BOOK_READ",
+      "COMPANY_CUSTOMER_READ",
     ]);
     renderRoute();
-    fireEvent.change(screen.getByLabelText("Branch ID"), {
-      target: { value: "11111111-1111-4111-8111-111111111111" },
+    expect(screen.getByLabelText("Branch")).toHaveValue(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    fireEvent.change(screen.getByLabelText("Estimate Customer"), {
+      target: { value: "customer-1" },
     });
+    expect(
+      await screen.findByRole("option", { name: "10 Main Street, Clearwater" }),
+    ).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Estimate Service Location"), {
+      target: { value: "location-1" },
+    });
+    expect(screen.getByLabelText("Estimate Service Location")).toHaveValue(
+      "location-1",
+    );
     await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
 
     fireEvent.change(screen.getByLabelText("Search active Price Book services"), {
@@ -209,6 +264,7 @@ describe("EstimatesRoute", () => {
       "COMPANY_ESTIMATE_READ",
       "COMPANY_ESTIMATE_MANAGE",
       "COMPANY_PRICE_BOOK_READ",
+      "COMPANY_CUSTOMER_READ",
     ]);
     vi.mocked(estimatesApi.createEstimate).mockRejectedValueOnce({
       isAxiosError: true,
@@ -223,10 +279,7 @@ describe("EstimatesRoute", () => {
     });
     renderRoute();
     await screen.findByText("Create proposal");
-    fireEvent.change(screen.getByLabelText("Branch ID"), {
-      target: { value: "11111111-1111-4111-8111-111111111111" },
-    });
-    fireEvent.change(screen.getByLabelText("Customer ID"), {
+    fireEvent.change(screen.getByLabelText("Estimate Customer"), {
       target: { value: "customer-1" },
     });
     await screen.findByRole("option", { name: "HEAT-1 · Heating service" });

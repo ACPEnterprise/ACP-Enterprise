@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useSearchParams } from "react-router";
-import { useHasPermission } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
+import { useCustomerDetail, useCustomerSearch } from "../hooks/useCustomers";
 import {
   useEstimate,
   useEstimateMutations,
@@ -17,6 +18,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Field,
   Input,
   Select,
   Spinner,
@@ -48,10 +50,12 @@ function estimateRecoveryMessage(error: unknown) {
 }
 
 export function EstimatesRoute() {
+  const { activeCompany } = useAuth();
   const [params, setParams] = useSearchParams();
   const canRead = useHasPermission("COMPANY_ESTIMATE_READ");
   const canManage = useHasPermission("COMPANY_ESTIMATE_MANAGE");
   const canReadPriceBook = useHasPermission("COMPANY_PRICE_BOOK_READ");
+  const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
   const id = params.get("id") ?? "";
   const estimate = useEstimate(id, canRead && Boolean(id));
   const mutations = useEstimateMutations();
@@ -60,7 +64,8 @@ export function EstimatesRoute() {
   const estimates = useEstimates(statusFilter || undefined, undefined, canRead);
   const [lookup, setLookup] = useState(id);
   const [form, setForm] = useState({
-    branch: "",
+    branch:
+      activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? "",
     customer: "",
     serviceLocation: "",
     serviceItem: "",
@@ -79,6 +84,24 @@ export function EstimatesRoute() {
   >([]);
   const [serviceSearch, setServiceSearch] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
+  const [customerSearchInput, setCustomerSearchInput] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerPage, setCustomerPage] = useState(1);
+  const customers = useCustomerSearch(
+    {
+      query: customerSearch || undefined,
+      sort_by: "display_name",
+      sort_direction: "asc",
+      record_state: "current",
+      page: customerPage,
+      page_size: 25,
+    },
+    canManage && canReadCustomers,
+  );
+  const selectedCustomer = useCustomerDetail(
+    form.customer || null,
+    canManage && canReadCustomers,
+  );
   const priceBook = usePriceBook(
     form.branch || undefined,
     canManage && canReadPriceBook && form.branch.length === 36,
@@ -392,6 +415,11 @@ export function EstimatesRoute() {
                 services.
               </Alert>
             )}
+            {!canReadCustomers && (
+              <Alert variant="danger">
+                Customer read permission is required to select a Customer and Service Location.
+              </Alert>
+            )}
             {(mutations.create.isError ||
               priceBookMutations.snapshot.isError) && (
               <Alert variant="danger" role="alert" aria-live="assertive">
@@ -404,8 +432,8 @@ export function EstimatesRoute() {
               className="grid gap-3 sm:grid-cols-2"
               onSubmit={(event) => void submit(event)}
             >
-              <Input
-                aria-label="Branch ID"
+              <Select
+                aria-label="Branch"
                 value={form.branch}
                 onChange={(event) => {
                   setProposalLines([]);
@@ -420,23 +448,87 @@ export function EstimatesRoute() {
                   });
                 }}
                 required
-              />
-              <Input
-                aria-label="Customer ID"
-                value={form.customer}
-                onChange={(event) =>
-                  setForm({ ...form, customer: event.target.value })
-                }
+              >
+                <option value="">Select Branch</option>
+                {activeCompany?.branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name} ({branch.code})
+                  </option>
+                ))}
+              </Select>
+              <Field label="Find Customer" helperText="Searches the admitted Customer roster.">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Input
+                    aria-label="Find Estimate Customer"
+                    value={customerSearchInput}
+                    onChange={(event) => setCustomerSearchInput(event.target.value)}
+                    placeholder="Name, number, phone, email, or address"
+                    disabled={!canReadCustomers}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!canReadCustomers}
+                    onClick={() => {
+                      setCustomerSearch(customerSearchInput.trim());
+                      setCustomerPage(1);
+                    }}
+                  >
+                    Search Customers
+                  </Button>
+                </div>
+              </Field>
+              <Field
+                label="Customer"
                 required
-              />
-              <Input
-                aria-label="Service Location ID"
-                value={form.serviceLocation}
-                onChange={(event) =>
-                  setForm({ ...form, serviceLocation: event.target.value })
-                }
-                placeholder="Required before Job conversion"
-              />
+                helperText={customers.isError ? "Customer search is unavailable; no selection was changed." : customers.data ? `Showing ${customers.data.items.length} of ${customers.data.total_count} admitted Customers.` : undefined}
+              >
+                <Select
+                  aria-label="Estimate Customer"
+                  value={form.customer}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      customer: event.target.value,
+                      serviceLocation: "",
+                    })
+                  }
+                  required
+                  disabled={!canReadCustomers || customers.isLoading}
+                >
+                  <option value="">Select Customer</option>
+                  {selectedCustomer.data && !customers.data?.items.some((item) => item.id === selectedCustomer.data.id) && (
+                    <option value={selectedCustomer.data.id}>{selectedCustomer.data.display_name || selectedCustomer.data.business_name || "Selected Customer"}</option>
+                  )}
+                  {customers.data?.items.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.display_name || customer.business_name || "Unnamed Customer"}
+                    </option>
+                  ))}
+                </Select>
+                <div className="mt-2 flex gap-2">
+                  <Button type="button" variant="ghost" disabled={!customers.data || customerPage <= 1} onClick={() => setCustomerPage((page) => Math.max(1, page - 1))}>Previous Customers</Button>
+                  <Button type="button" variant="ghost" disabled={!customers.data || customerPage >= customers.data.total_pages} onClick={() => setCustomerPage((page) => page + 1)}>Next Customers</Button>
+                </div>
+              </Field>
+              <Field
+                label="Service Location"
+                helperText={form.customer && selectedCustomer.data?.properties.length === 0 ? "This Customer has no Service Locations. A location is required before Job conversion." : "Optional for a Draft Estimate; required before Job conversion."}
+              >
+                <Select
+                  aria-label="Estimate Service Location"
+                  value={form.serviceLocation}
+                  onChange={(event) => setForm({ ...form, serviceLocation: event.target.value })}
+                  disabled={!form.customer || selectedCustomer.isLoading}
+                >
+                  <option value="">No Service Location selected</option>
+                  {selectedCustomer.data?.properties.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.address_line_1}, {location.city}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Input
                 aria-label="Search active Price Book services"
                 placeholder="Search by service name, code, or category"
@@ -690,6 +782,9 @@ export function EstimatesRoute() {
                 type="submit"
                 disabled={
                   !canReadPriceBook ||
+                  !canReadCustomers ||
+                  !form.customer ||
+                  !form.branch ||
                   (!form.serviceItem && proposalLines.length === 0)
                 }
                 loading={
