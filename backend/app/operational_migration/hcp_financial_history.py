@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Final
 
-CONTRACT: Final = "hcp-financial-history-classification/v1"
+CONTRACT: Final = "hcp-financial-history-classification/v2"
 
 
 def _canonical_digest(value: object) -> str:
@@ -37,6 +37,8 @@ class FinancialHistoryClassification:
     invoice_counts: dict[str, int]
     payment_counts: dict[str, int]
     refund_counts: dict[str, int]
+    payment_records: tuple[dict[str, Any], ...]
+    refund_records: tuple[dict[str, Any], ...]
     authority: dict[str, str]
     digest: str
 
@@ -83,10 +85,64 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         for _, payment in payments
     )
     refunds = [
-        refund
+        (invoice, refund)
         for invoice in invoices
         for refund in invoice.get("refunds", [])
     ]
+
+    payment_records = tuple(
+        {
+            "source_payment_id": str(payment["id"]),
+            "source_invoice_id": str(invoice["id"]),
+            "status": str(payment.get("status")),
+            "payment_method": str(payment.get("payment_method")),
+            "amount": payment.get("amount"),
+            "paid_at": payment.get("paid_at"),
+            "source_origin": "HCP",
+            "qbo_origin_asserted": payment.get("payment_method")
+            == "imported_from_quickbooks",
+            "exact_qbo_provider_identity": None,
+            "disposition": (
+                "SOURCE_DISPLAYABLE_NONAGGREGATED"
+                if payment.get("payment_method") == "imported_from_quickbooks"
+                else (
+                    "HCP_ONLY"
+                    if payment.get("status") == "succeeded"
+                    else "UNRESOLVED"
+                )
+            ),
+            "display_authority": (
+                "SOURCE_BACKED_NOT_ACCOUNTING_POSTING"
+                if payment.get("status") == "succeeded"
+                else "FAILED_SOURCE_ASSERTION"
+            ),
+            "aggregation_safe": False,
+        }
+        for invoice, payment in sorted(payments, key=lambda item: str(item[1]["id"]))
+    )
+    refund_records = tuple(
+        {
+            "source_refund_id": refund.get("id"),
+            "source_invoice_id": str(invoice["id"]),
+            "status": str(refund.get("status")),
+            "payment_method": str(refund.get("payment_method")),
+            "amount": refund.get("amount"),
+            "refunded_at": refund.get("refunded_at"),
+            "disposition": (
+                "EXACT_REFUND" if refund.get("id") else "SOURCE_BACKED_UNLINKED_REFUND"
+            ),
+            "display_authority": "SOURCE_BACKED_NOT_ACCOUNTING_POSTING",
+            "aggregation_safe": False,
+        }
+        for invoice, refund in sorted(
+            refunds,
+            key=lambda item: (
+                str(item[0]["id"]),
+                str(item[1].get("id") or ""),
+                str(item[1].get("refunded_at") or ""),
+            ),
+        )
+    )
 
     invoice_counts = {
         "source_acquired": len(invoices),
@@ -101,11 +157,20 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         "failed_assertion": payment_statuses["failed"],
         "qbo_overlap_hold": qbo_overlap,
         "hcp_only_displayable": payment_statuses["succeeded"] - qbo_overlap,
+        "exact_qbo_overlap": 0,
+        "qbo_only": 0,
+        "source_displayable_nonaggregated": qbo_overlap,
+        "conflicting": 0,
+        "unresolved": payment_statuses["failed"],
     }
     refund_counts = {
         "source_acquired": len(refunds),
-        "native_provider_id_present": sum(bool(refund.get("id")) for refund in refunds),
-        "native_provider_id_missing": sum(not refund.get("id") for refund in refunds),
+        "exact_refund": sum(bool(refund.get("id")) for _, refund in refunds),
+        "source_backed_unlinked_refund": sum(
+            not refund.get("id") for _, refund in refunds
+        ),
+        "conflicting": 0,
+        "source_missing": 0,
     }
     authority = {
         "invoice": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
@@ -120,6 +185,8 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         "invoice_counts": invoice_counts,
         "payment_counts": payment_counts,
         "refund_counts": refund_counts,
+        "payment_records": payment_records,
+        "refund_records": refund_records,
         "authority": authority,
     }
     return FinancialHistoryClassification(
@@ -128,6 +195,8 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         invoice_counts=invoice_counts,
         payment_counts=payment_counts,
         refund_counts=refund_counts,
+        payment_records=payment_records,
+        refund_records=refund_records,
         authority=authority,
         digest=_canonical_digest(payload),
     )
