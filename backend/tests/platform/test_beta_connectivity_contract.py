@@ -106,6 +106,5 @@ def test_owner_assets_route_does_not_collide_with_static_asset_directory() -> No
         encoding="utf-8"
     )
 
-    assert "location = /assets {" in nginx
-    assert "location = /assets/ {" in nginx
-    assert nginx.count("try_files /index.html =404;") == 2
+    assert "location = /assets {\n        try_files /index.html =404;\n    }" in nginx
+    assert "location = /assets/ {\n        try_files /index.html =404;\n    }" in nginx
