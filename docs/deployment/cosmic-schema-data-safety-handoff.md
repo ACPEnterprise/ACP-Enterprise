@@ -4,7 +4,7 @@ Evidence timestamp: 2026-09-16 after remote fetch.
 
 ## Current protected authority
 
-- SHA: `5f7a45118885a38e5faa4fcfcf98dd395d3ea7ea`
+- SHA: `e69241c399323090ebbd003b4bd3bef73501fc78`
 - Revisions: 178
 - Root: `218775b8a49c`
 - Head: `o1q9s27h4u0v`
@@ -18,8 +18,8 @@ merge revision `e3c2a71f8d4b`; it is not a current multi-head condition.
 
 | Lane | SHA / relationship | Migration disposition |
 | --- | --- | --- |
-| OM2E (`origin/integration/om2-operations`) | Equal to protected | No reline required. |
-| LaptopE (`origin/integration/laptop1-intelligence`) | 32 commits ahead, zero behind | No Alembic files changed; schema-safe to compose subject to normal application qualification. |
+| OM2E (`origin/integration/om2-operations`) | `cf3154d5` is integrated by protected merge PR #384 | No reline required. |
+| LaptopE (`origin/integration/laptop1-intelligence`) | 32 commits ahead of the prior protected base and two protected commits behind | No Alembic files changed; reconcile application changes onto current protected before composition. |
 | Worker runtime multislot | Two commits beyond an old base and 281 commits behind protected | No new worker migration relative to its own base. Do not integrate as a cumulative head; reconcile code onto current protected if still needed. |
 
 No migration was added to any remote commit newer than the protected Batch 12
