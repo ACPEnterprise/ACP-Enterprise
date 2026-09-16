@@ -73,12 +73,28 @@ export interface RealRosterReadinessItem {
   blockers: string[];
 }
 
+export interface RealRosterSourceEvidence {
+  source_system: "HCP";
+  source_employee_id: string;
+  source_disposition: string;
+  source_branch_id: string;
+  acp_employee_id: string | null;
+  roster_key: string | null;
+  certification_state: "ACP_EMPLOYEE_BOUND" | "SOURCE_ONLY" | "OWNER_CERTIFICATION_REQUIRED" | "NOT_EMPLOYEE";
+  evidence_version: number;
+  recorded_at: string;
+}
+
 export interface RealRosterReadiness {
   items: RealRosterReadinessItem[];
+  source_evidence: RealRosterSourceEvidence[];
   total: number;
   bound: number;
   field_tech_total: number;
   field_tech_capability_ready: number;
+  source_evidence_total: number;
+  source_only_total: number;
+  certification_required_total: number;
 }
 
 export interface EmployeePermissionExplanation {

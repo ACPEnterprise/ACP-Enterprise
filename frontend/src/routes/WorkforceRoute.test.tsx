@@ -67,6 +67,10 @@ describe("WorkforceRoute", () => {
           bound: 0,
           field_tech_total: 5,
           field_tech_capability_ready: 0,
+          source_evidence: [],
+          source_evidence_total: 0,
+          source_only_total: 0,
+          certification_required_total: 8,
           items: [{
             roster_key: "melvin-santiago",
             display_name: "Melvin Santiago",

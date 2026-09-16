@@ -144,6 +144,14 @@ export function WorkforceRoute() {
                 {person.blockers.length > 0 && <p className="mt-2 text-xs text-content-muted">{person.blockers.map((value) => value.replaceAll("_", " ")).join(" · ")}</p>}
               </div>
             ))}
+            <section className="rounded-lg border border-stroke p-3" aria-label="HCP Employee certification evidence">
+              <h4 className="font-semibold">Source Employee certification</h4>
+              <p className="mt-1 text-xs text-content-muted">Exact HCP identifiers and persisted ACP targets only. ACP never matches these records by name or email.</p>
+              <p className="mt-2 text-sm text-content-muted">{realRoster.query.data?.source_evidence_total ?? 0} sealed source identities · {realRoster.query.data?.source_only_total ?? 0} source-only · {realRoster.query.data?.certification_required_total ?? 0} certification actions remaining</p>
+              <div className="mt-3 space-y-2">
+                {realRoster.query.data?.source_evidence.map((source) => <div className="rounded-md bg-surface-subtle p-2 text-xs" key={`${source.source_system}-${source.source_employee_id}`}><div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{source.source_system} · {source.source_employee_id}</span><Badge variant={source.certification_state === "ACP_EMPLOYEE_BOUND" ? "success" : "neutral"}>{source.certification_state.replaceAll("_", " ")}</Badge></div><p className="mt-1 text-content-muted">{source.source_disposition.replaceAll("_", " ")} · evidence v{source.evidence_version}{source.roster_key ? ` · ${source.roster_key.replaceAll("-", " ")}` : ""}</p></div>)}
+              </div>
+            </section>
           </div>
         )}
       </Card>

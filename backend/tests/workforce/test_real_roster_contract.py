@@ -3,8 +3,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
@@ -12,6 +10,7 @@ from app.platform.employees.models import Employee
 from app.platform.users.models import User
 from app.workforce.real_roster import REAL_ALL_COUNTY_ROSTER, RealRosterRole
 from app.workforce.real_roster_service import RealRosterService
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -20,9 +19,7 @@ async def real_roster_database():
     connection = await engine.connect()
     transaction = await connection.begin()
     factory = async_sessionmaker(connection, expire_on_commit=False)
-    company_id, branch_id, employee_id, actor_id = (
-        uuid4(), uuid4(), uuid4(), uuid4()
-    )
+    company_id, branch_id, employee_id, actor_id = (uuid4(), uuid4(), uuid4(), uuid4())
     async with factory() as session, session.begin():
         session.add(
             Company(
@@ -115,6 +112,45 @@ def test_unbound_roster_identity_remains_unknown_not_missing() -> None:
     assert item.blockers == ("OWNER_EMPLOYEE_BINDING_REQUIRED",)
 
 
+def test_source_certification_requires_exact_persisted_target_binding() -> None:
+    employee_id = uuid4()
+    assert (
+        RealRosterService._source_certification_state(
+            disposition="CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+            employee_id=employee_id,
+            roster_by_employee={employee_id: "melvin-santiago"},
+        )
+        == "ACP_EMPLOYEE_BOUND"
+    )
+    assert (
+        RealRosterService._source_certification_state(
+            disposition="CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+            employee_id=employee_id,
+            roster_by_employee={},
+        )
+        == "OWNER_CERTIFICATION_REQUIRED"
+    )
+    assert (
+        RealRosterService._source_certification_state(
+            disposition="CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+            employee_id=None,
+            roster_by_employee={},
+        )
+        == "SOURCE_ONLY"
+    )
+
+
+def test_excluded_source_identity_is_not_reported_as_employee() -> None:
+    assert (
+        RealRosterService._source_certification_state(
+            disposition="EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS",
+            employee_id=None,
+            roster_by_employee={},
+        )
+        == "NOT_EMPLOYEE"
+    )
+
+
 @pytest.mark.asyncio
 async def test_exact_employee_binding_is_durable_and_does_not_name_match(
     real_roster_database,
@@ -127,7 +163,9 @@ async def test_exact_employee_binding_is_durable_and_does_not_name_match(
             roster_key="melvin-santiago",
             employee_id=employee_id,
         )
-        melvin = next(item for item in result.items if item.roster_key == "melvin-santiago")
+        melvin = next(
+            item for item in result.items if item.roster_key == "melvin-santiago"
+        )
         assert melvin.employee_id == employee_id
         assert melvin.employee_display_name == "Exact Employee"
         assert melvin.user_state == "USER_MISSING_OR_INACTIVE"
