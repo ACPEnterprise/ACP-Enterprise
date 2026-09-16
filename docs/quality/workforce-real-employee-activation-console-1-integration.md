@@ -2,7 +2,7 @@
 
 ## Dependency and authority
 
-- Final reconciled protected authority: `626eb9316d85e6fca52302b845d3fddf0aa17ce8`.
+- Final reconciled protected authority: `b5c8f427d48028144d58cf7a76e6f4a33729feb5`.
 - Stack parent: PR #299 candidate
   `57852bdf20ed9e45a5dbaaad48540358b5c9dcf1`.
 - Integration dependency: **REQUIRES PR #299**. Integrate #299 first; do not
