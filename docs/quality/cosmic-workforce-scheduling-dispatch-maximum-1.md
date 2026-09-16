@@ -36,6 +36,11 @@ Appointment detail applies the same rule. A terminal assignment now appears as
 retained history with its terminal state and release time rather than labeling
 the former Employee as the current primary technician.
 
+The Dispatch assignment panel also treats terminal evidence as history. It no
+longer labels the former technician as current or exposes release and crew
+controls against a released, replaced, or cancelled assignment; the normal new
+assignment action remains available.
+
 ### Nested overlap undercount
 
 Capacity previously compared each window only with the immediately preceding
