@@ -6,9 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
@@ -31,6 +28,8 @@ from app.price_book.models import (
 )
 from app.price_book.schemas import PriceVersionCreate, TaxClassificationCreate
 from app.price_book.service import PriceBookService
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 ROOT = Path(__file__).parents[3]
 CONFIGURATION = (
@@ -218,6 +217,55 @@ async def test_admission_is_draft_only_replay_safe_and_searchable(
             )
             assert page["total"] > 0
             assert all(item["labor_hours"] is None for item in page["items"])
+        native_search_counts = {}
+        for term in ("drain", "toilet", "sewer", "DRN-001"):
+            catalog = await PriceBookService().catalog(
+                session,
+                context=context,
+                search=term,
+                limit=200,
+            )
+            native_search_counts[term] = catalog.total_service_items
+            assert all(item.status == "draft" for item in catalog.service_items)
+            assert all(
+                item.category_id in {category.id for category in catalog.categories}
+                for item in catalog.service_items
+            )
+        assert all(count > 0 for count in native_search_counts.values())
+
+        held_water_heaters = await candidate_review_page(
+            session,
+            company_id=context.company.id,
+            search="water heater",
+            category=None,
+            admission_status="held",
+            review_flag=None,
+            limit=200,
+            offset=0,
+            costs_visible=False,
+        )
+        all_held = await candidate_review_page(
+            session,
+            company_id=context.company.id,
+            search=None,
+            category=None,
+            admission_status="held",
+            review_flag=None,
+            limit=200,
+            offset=0,
+            costs_visible=False,
+        )
+        native_water_heaters = await PriceBookService().catalog(
+            session,
+            context=context,
+            search="water heater",
+            limit=200,
+        )
+        assert held_water_heaters["total"] > 0
+        assert all(item["admission_status"] == "held" for item in held_water_heaters["items"])
+        assert all_held["total"] == 39
+        assert native_water_heaters.total_service_items > 0
+        assert all(item.status == "draft" for item in native_water_heaters.service_items)
     assert after == {
         "categories": 16,
         "services": 179,

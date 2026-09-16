@@ -101,11 +101,17 @@ export function PriceBookRoute() {
     componentCost: "",
   });
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
+  const [candidateOffset, setCandidateOffset] = useState(0);
+  const candidatePageSize = 50;
   const [reviewVersionId, setReviewVersionId] = useState<string>();
   const activationReadiness = useActivationReadiness(reviewVersionId);
   const reviewAudit = usePriceBookAudit(reviewVersionId);
   const candidateReview = useCandidateReview(
-    { search: search.trim() || undefined, limit: 200 },
+    {
+      search: search.trim() || undefined,
+      limit: candidatePageSize,
+      offset: candidateOffset,
+    },
     canRead && Boolean(activeCompany),
   );
   const selectedService = catalog.data?.service_items.find(
@@ -598,11 +604,29 @@ export function PriceBookRoute() {
                       </article>
                     ))}
                   </div>
-                  {(candidateReview.data?.total ?? 0) > (candidateReview.data?.items.length ?? 0) && (
-                    <p className="text-sm text-content-muted">
-                      Showing the first {candidateReview.data?.items.length} of {candidateReview.data?.total}. Refine search to review the remaining services.
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-content-muted" aria-live="polite">
+                      Showing {candidateReview.data?.total ? candidateOffset + 1 : 0}–{Math.min(candidateOffset + (candidateReview.data?.items.length ?? 0), candidateReview.data?.total ?? 0)} of {candidateReview.data?.total ?? 0} candidates.
                     </p>
-                  )}
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={candidateOffset === 0}
+                        onClick={() => setCandidateOffset((offset) => Math.max(0, offset - candidatePageSize))}
+                      >
+                        Previous candidates
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={candidateOffset + (candidateReview.data?.items.length ?? 0) >= (candidateReview.data?.total ?? 0)}
+                        onClick={() => setCandidateOffset((offset) => offset + candidatePageSize)}
+                      >
+                        Next candidates
+                      </Button>
+                    </div>
+                  </div>
                 </>
               )}
             </CardContent>
@@ -1228,7 +1252,10 @@ export function PriceBookRoute() {
                   aria-label="Search Price Book"
                   placeholder="Search services"
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setCandidateOffset(0);
+                  }}
                 />
                 <Select
                   aria-label="Filter Price Book category"
@@ -1254,6 +1281,25 @@ export function PriceBookRoute() {
                   <option value="archived">Archived</option>
                 </Select>
               </div>
+              <nav aria-label="Browse Price Book categories" className="mb-4 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={categoryFilter === "all" ? "primary" : "ghost"}
+                  onClick={() => setCategoryFilter("all")}
+                >
+                  All categories
+                </Button>
+                {catalog.data?.categories.map((category) => (
+                  <Button
+                    key={category.id}
+                    type="button"
+                    variant={categoryFilter === category.id ? "primary" : "ghost"}
+                    onClick={() => setCategoryFilter(category.id)}
+                  >
+                    {category.name}
+                  </Button>
+                ))}
+              </nav>
               <p className="mb-3 text-sm text-content-muted" aria-live="polite">
                 Showing {filteredServices.length} of {services.length} services.
               </p>
@@ -1278,6 +1324,11 @@ export function PriceBookRoute() {
                     </Button>
                   </div>
                   <p className="mt-2">{selectedService.customer_description}</p>
+                  {selectedService.status === "draft" && (
+                    <Alert>
+                      This Draft service is available for owner review. It cannot be selected in an Estimate until an authorized owner explicitly activates it.
+                    </Alert>
+                  )}
                   {selectedCandidate.isPending ? (
                     <Spinner label="Loading service evidence" />
                   ) : selectedCandidate.isError || !selectedEvidence ? (
