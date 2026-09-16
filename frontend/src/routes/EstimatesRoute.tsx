@@ -90,7 +90,15 @@ export function EstimatesRoute() {
     discountValue: "",
   });
   const [proposalLines, setProposalLines] = useState<
-    Array<{ serviceItem: string; option: string; quantity: string }>
+    Array<{
+      serviceItem: string;
+      serviceName: string;
+      customerDescription: string;
+      option: string;
+      optionGroup?: string;
+      optionLabel?: string;
+      quantity: string;
+    }>
   >([]);
   const [serviceSearch, setServiceSearch] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
@@ -133,12 +141,22 @@ export function EstimatesRoute() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     try {
-      const requestedLines = form.serviceItem
+      const selectedService = priceBook.data?.service_items.find(
+        (item) => item.id === form.serviceItem,
+      );
+      const selectedOption = priceBook.data?.options.find(
+        (option) => option.id === form.option,
+      );
+      const requestedLines = selectedService
         ? [
             ...proposalLines,
             {
-              serviceItem: form.serviceItem,
-              option: form.option,
+              serviceItem: selectedService.id,
+              serviceName: selectedService.name,
+              customerDescription: selectedService.customer_description,
+              option: selectedOption?.id ?? "",
+              optionGroup: selectedOption?.option_group_id,
+              optionLabel: selectedOption?.label,
               quantity: form.quantity,
             },
           ]
@@ -146,29 +164,24 @@ export function EstimatesRoute() {
       if (!requestedLines.length) return;
       const lines = [];
       for (const requested of requestedLines) {
-        const service = priceBook.data?.service_items.find(
-          (item) => item.id === requested.serviceItem,
-        );
-        if (!service) return;
-        const option = priceBook.data?.options.find(
-          (candidate) => candidate.id === requested.option,
-        );
         const snapshot = await priceBookMutations.snapshot.mutateAsync({
-          itemId: service.id,
+          itemId: requested.serviceItem,
           data: {
             branch_id: form.branch,
             quantity: requested.quantity,
             currency: "USD",
             effective_at: new Date().toISOString(),
             idempotency_key: `estimate-${crypto.randomUUID()}`,
-            option_group_id: option?.option_group_id,
-            option_id: option?.id,
+            option_group_id: requested.optionGroup,
+            option_id: requested.option || undefined,
           },
         });
         lines.push({
           snapshot_id: snapshot.id,
-          title: option ? `${option.label} · ${service.name}` : service.name,
-          description: service.customer_description,
+          title: requested.optionLabel
+            ? `${requested.optionLabel} · ${requested.serviceName}`
+            : requested.serviceName,
+          description: requested.customerDescription,
         });
       }
       const created = await mutations.create.mutateAsync({
@@ -694,11 +707,22 @@ export function EstimatesRoute() {
                 variant="outline"
                 disabled={!form.serviceItem}
                 onClick={() => {
+                  const service = priceBook.data?.service_items.find(
+                    (item) => item.id === form.serviceItem,
+                  );
+                  const selectedOption = priceBook.data?.options.find(
+                    (candidate) => candidate.id === form.option,
+                  );
+                  if (!service) return;
                   setProposalLines([
                     ...proposalLines,
                     {
-                      serviceItem: form.serviceItem,
-                      option: form.option,
+                      serviceItem: service.id,
+                      serviceName: service.name,
+                      customerDescription: service.customer_description,
+                      option: selectedOption?.id ?? "",
+                      optionGroup: selectedOption?.option_group_id,
+                      optionLabel: selectedOption?.label,
                       quantity: form.quantity,
                     },
                   ]);
@@ -726,12 +750,8 @@ export function EstimatesRoute() {
                         className="flex justify-between gap-3"
                       >
                         <span>
-                          {line.option
-                            ? `${priceBook.data?.options.find((option) => option.id === line.option)?.label ?? "Selected option"} · `
-                            : ""}
-                          {priceBook.data?.service_items.find(
-                            (item) => item.id === line.serviceItem,
-                          )?.name}{" "}
+                          {line.optionLabel ? `${line.optionLabel} · ` : ""}
+                          {line.serviceName}{" "}
                           × {line.quantity}
                         </span>
                         <Button

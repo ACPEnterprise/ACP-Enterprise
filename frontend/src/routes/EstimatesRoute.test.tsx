@@ -276,6 +276,9 @@ describe("EstimatesRoute", () => {
     fireEvent.change(screen.getByLabelText("Estimate Customer"), {
       target: { value: "customer-1" },
     });
+    fireEvent.change(await screen.findByLabelText("Estimate Service Location"), {
+      target: { value: "location-1" },
+    });
     expect(
       await screen.findByRole("option", { name: "10 Main Street, Clearwater" }),
     ).toBeVisible();
@@ -373,5 +376,66 @@ describe("EstimatesRoute", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add another service" }));
     expect(screen.getByText(/Better · Heating service/)).toBeVisible();
+  });
+
+  it("preserves staged services while searching for another line", async () => {
+    permissions = new Set([
+      "COMPANY_ESTIMATE_READ",
+      "COMPANY_ESTIMATE_MANAGE",
+      "COMPANY_PRICE_BOOK_READ",
+      "COMPANY_CUSTOMER_READ",
+    ]);
+    vi.mocked(estimatesApi.createEstimate).mockResolvedValue({ id: "estimate-2" } as never);
+    renderRoute();
+    fireEvent.change(screen.getByLabelText("Estimate Customer"), {
+      target: { value: "customer-1" },
+    });
+    const serviceSelect = await screen.findByLabelText("Price Book service");
+    await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
+    fireEvent.change(serviceSelect, {
+      target: { value: "service-1" },
+    });
+    expect(serviceSelect).toHaveValue("service-1");
+    const addService = screen.getByRole("button", { name: "Add another service" });
+    expect(addService).toBeEnabled();
+    fireEvent.click(addService);
+    expect(await screen.findByText("1 proposal line staged")).toBeVisible();
+
+    vi.mocked(priceBookApi.getPriceBook).mockResolvedValue({
+      categories: [],
+      tax_classifications: [],
+      option_groups: [],
+      options: [],
+      service_items: [],
+      versions: [],
+      total_service_items: 0,
+      limit: 500,
+      offset: 0,
+      costs_visible: false,
+    });
+    fireEvent.change(screen.getByLabelText("Search active Price Book services"), {
+      target: { value: "toilet" },
+    });
+    await screen.findByText(/No active Price Book services match/);
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Create immutable Estimate" }).closest("form")!,
+    );
+
+    await waitFor(() =>
+      expect(priceBookApi.createCommercialSnapshot).toHaveBeenCalledWith(
+        "service-1",
+        expect.objectContaining({ quantity: "1" }),
+      ),
+    );
+    expect(vi.mocked(estimatesApi.createEstimate).mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        lines: [
+          expect.objectContaining({
+            title: "Heating service",
+            description: "Heating service",
+          }),
+        ],
+      }),
+    );
   });
 });
