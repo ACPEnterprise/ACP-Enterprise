@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
+
 from scripts.production_release_preflight import inspect_platform_manifest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
