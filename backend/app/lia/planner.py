@@ -225,7 +225,15 @@ def plan_question(
         domains = (
             question_domains
             if explicit_switch
-            else frozenset({context_domain})
+            else frozenset(
+                {
+                    context_domain,
+                    *( () if corrected_context_subject else topic_domains),
+                    *question_domains,
+                }
+                if context_domain == "workforce"
+                else {context_domain}
+            )
         )
     else:
         if any(phrase in normalized for phrase in BRIEFING_PHRASES):

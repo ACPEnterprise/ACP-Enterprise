@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from app.lia.contracts import (
@@ -105,6 +106,7 @@ def test_temporal_contract_rejects_inverted_ranges() -> None:
 
 @pytest.mark.asyncio
 async def test_schedule_question_passes_period_to_authoritative_adapter() -> None:
+    tomorrow = datetime.now(ZoneInfo("America/New_York")).date() + timedelta(days=1)
     retrieval = AsyncMock(spec=GovernedRetrievalService)
     retrieval.retrieve.return_value = (
         EvidenceReference(
@@ -116,8 +118,8 @@ async def test_schedule_question_passes_period_to_authoritative_adapter() -> Non
             evidence_digest="a" * 64,
             count=2,
             state="scheduled=2",
-            period_start=date(2026, 9, 16),
-            period_end=date(2026, 9, 16),
+            period_start=tomorrow,
+            period_end=tomorrow,
             period_label="tomorrow",
             timezone="America/New_York",
         ),
@@ -128,8 +130,8 @@ async def test_schedule_question_passes_period_to_authoritative_adapter() -> Non
         request=LiaRequest(question="What's scheduled tomorrow?"),
     )
     temporal = retrieval.retrieve.await_args.kwargs["temporal"]
-    assert temporal.start_date == date(2026, 9, 16)
-    assert temporal.end_date == date(2026, 9, 16)
+    assert temporal.start_date == tomorrow
+    assert temporal.end_date == tomorrow
     assert result.temporal == temporal
     assert "tomorrow" in result.answer
 
