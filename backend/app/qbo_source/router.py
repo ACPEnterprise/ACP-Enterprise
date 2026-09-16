@@ -26,14 +26,19 @@ from .accounting_evidence_projection import (
 )
 from .callback import CALLBACK_PATH
 from .intuit import IntuitAuthenticationError, IntuitError, IntuitProtocolError
-from .production import ProductionProfitAndLossRequest, read_production_profit_and_loss
+from .production import (
+    ProductionAgedReceivablesRequest,
+    ProductionProfitAndLossRequest,
+    read_production_aged_receivables,
+    read_production_profit_and_loss,
+)
 from .runtime import (
     SandboxRuntimeError,
     get_production_oauth_runtime,
     get_sandbox_oauth_runtime,
 )
 from .secrets import SandboxSecretStoreError
-from .source_report import project_profit_and_loss
+from .source_report import project_aged_receivables, project_profit_and_loss
 
 router = APIRouter(tags=["QBO Sandbox OAuth"])
 _rate_limiter = AuthenticationRateLimiter()
@@ -57,6 +62,9 @@ PRODUCTION_CONNECTION_PATH = "/api/v1/integrations/qbo/production/connection"
 PRODUCTION_CALLBACK_PATH = "/api/v1/integrations/qbo/production/oauth/callback"
 ACCOUNTING_EVIDENCE_PATH = "/api/v1/accounting/source-evidence/qbo"
 PROFIT_AND_LOSS_PATH = "/api/v1/accounting/source-evidence/qbo/reports/profit-and-loss"
+AGED_RECEIVABLES_PATH = (
+    "/api/v1/accounting/source-evidence/qbo/reports/aged-receivables"
+)
 _PRODUCTION_CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com"
     "/api/v1/integrations/qbo/production/oauth/callback"
@@ -153,7 +161,51 @@ async def qbo_source_backed_profit_and_loss(
             content={"detail": "QBO source report is temporarily unavailable."},
             headers={"Cache-Control": "private, no-store"},
         )
-    return JSONResponse(content=workspace, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse(
+        content=workspace, headers={"Cache-Control": "private, no-store"}
+    )
+
+
+@router.get(AGED_RECEIVABLES_PATH, name="qbo-source-backed-aged-receivables")
+async def qbo_source_backed_aged_receivables(
+    report_date: date,
+    authorization: _ReportRead,
+) -> JSONResponse:
+    """Read QBO's net A/R aging total without creating ACP Accounting truth."""
+    if (
+        not settings.qbo_production_acp_company_id
+        or settings.qbo_production_acp_company_id != authorization.company.id
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "QBO source report is not available."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        document, marker = await read_production_aged_receivables(
+            ProductionAgedReceivablesRequest(report_date)
+        )
+        workspace = project_aged_receivables(
+            document,
+            realm_id=str(marker["realm_id"]),
+            expected_company_name=str(marker["company_name"]),
+        )
+    except (
+        OSError,
+        ValueError,
+        QboEvidenceProjectionError,
+        SandboxRuntimeError,
+        SandboxSecretStoreError,
+        IntuitError,
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "QBO A/R summary is temporarily unavailable."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return JSONResponse(
+        content=workspace, headers={"Cache-Control": "private, no-store"}
+    )
 
 
 def _safe_response(status_code: int, code: str) -> JSONResponse:

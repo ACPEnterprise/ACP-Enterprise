@@ -5,6 +5,7 @@ import type {
 } from "../../api/qboAccountingEvidence";
 import { useQboAccountingEvidence } from "../../hooks/useQboAccountingEvidence";
 import { useQboSourceBackedProfitAndLoss } from "../../hooks/useQboAccountingEvidence";
+import { useQboSourceBackedArSummary } from "../../hooks/useQboAccountingEvidence";
 import {
   Alert,
   Button,
@@ -33,6 +34,33 @@ const when = (value: string | null) =>
   value === null ? "Unavailable" : new Date(value).toLocaleString();
 
 function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
+  const [invoiceFilter, setInvoiceFilter] = useState<"open" | "closed" | "all">(
+    "open",
+  );
+  const arSummary = useQboSourceBackedArSummary(value.as_of ?? "", Boolean(value.as_of));
+  const filteredInvoices = value.invoices.filter((invoice) => {
+    const amount = Number(invoice.open_balance.amount ?? 0);
+    if (invoiceFilter === "open") return amount > 0;
+    if (invoiceFilter === "closed") return amount === 0;
+    return true;
+  });
+  const netOpenAr = arSummary.data
+    ? ({
+        amount: arSummary.data.net_open_ar,
+        currency: arSummary.data.currency,
+        state: "available" as const,
+      } satisfies QboAmount)
+    : ({ amount: null, currency: null, state: "unavailable" as const } satisfies QboAmount);
+  const grossAmount = Number(value.ar.total_open.amount);
+  const netAmount = Number(arSummary.data?.net_open_ar);
+  const creditOffset =
+    Number.isFinite(grossAmount) && Number.isFinite(netAmount)
+      ? ({
+          amount: (grossAmount - netAmount).toFixed(2),
+          currency: value.ar.total_open.currency ?? arSummary.data?.currency ?? null,
+          state: "available" as const,
+        } satisfies QboAmount)
+      : ({ amount: null, currency: null, state: "unavailable" as const } satisfies QboAmount);
   return (
     <div className="space-y-6">
       <Alert
@@ -147,7 +175,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                     <th>Document</th>
                     <th>Vendor</th>
                     <th>Date / due</th>
-                    <th>Status</th>
+                    <th>Provider workflow</th>
                     <th>Total</th>
                     <th>Open</th>
                   </tr>
@@ -178,49 +206,74 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
           )}
         </CardContent>
       </Card>
-      <div className="grid gap-4 md:grid-cols-3">
-        {[
-          ["Open AR", value.ar.total_open],
-          ["Current", value.ar.current],
-          ["Overdue", value.ar.overdue],
-        ].map(([label, total]) => (
-          <Card key={label as string}>
-            <CardHeader>
-              <CardTitle>{label as string}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{money(total as QboAmount)}</p>
-              <p className="text-sm text-content-muted">
-                QBO source-reported balance
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader><CardTitle>Actually open invoices</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{value.ar.open_invoice_count}</p>
+            <p className="text-sm text-content-muted">QBO invoices with Balance &gt; $0</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Gross open invoice balances</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{money(value.ar.total_open)}</p>
+            <p className="text-sm text-content-muted">Sum of positive QBO Invoice Balance fields</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Real total open A/R</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{arSummary.isLoading ? "Loading…" : money(netOpenAr)}</p>
+            <p className="text-sm text-content-muted">QBO A/R Aging Summary · net of customer credits and unapplied payments</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Credits/payment offset</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{money(creditOffset)}</p>
+            <p className="text-sm text-content-muted">Gross invoice balances minus QBO net A/R</p>
+          </CardContent>
+        </Card>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Invoice and AR evidence</CardTitle>
+          <CardTitle>QBO source invoice history</CardTitle>
           <CardDescription>
-            Provider assertions only. HCP and ACP records are not added to these
-            totals.
+            This is the complete acquired invoice population, not a list of open
+            invoices. Default view shows only invoices with a positive QBO Balance.
+            Provider workflow reflects print/email delivery state, not whether an
+            invoice is paid.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {value.invoices.length ? (
-            <div className="overflow-x-auto">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <label>
+                  <span className="mb-1 block text-sm text-content-muted">Invoice view</span>
+                  <Select value={invoiceFilter} onChange={(event) => setInvoiceFilter(event.target.value as "open" | "closed" | "all")}>
+                    <option value="open">Open only ({value.ar.open_invoice_count})</option>
+                    <option value="closed">Paid/closed ({value.ar.closed_invoice_count})</option>
+                    <option value="all">All source invoices ({value.ar.invoice_evidence_count})</option>
+                  </Select>
+                </label>
+                <p className="text-sm text-content-muted">Showing {filteredInvoices.length} invoices</p>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left">
                     <th>Document</th>
                     <th>Customer</th>
                     <th>Date / due</th>
-                    <th>Status</th>
+                    <th>Provider workflow</th>
                     <th>Total</th>
                     <th>Open</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {value.invoices.map((row) => (
+                  {filteredInvoices.map((row) => (
                     <tr className="border-b border-stroke" key={row.source_id}>
                       <td className="py-2">
                         {row.document_number ?? "Unavailable"}
@@ -237,6 +290,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ) : (
             <p className="text-content-muted">

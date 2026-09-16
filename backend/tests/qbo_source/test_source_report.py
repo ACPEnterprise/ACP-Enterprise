@@ -1,7 +1,10 @@
 from typing import cast
 
 from app.qbo_source.accounting_evidence_projection import QboEvidenceProjectionError
-from app.qbo_source.source_report import project_profit_and_loss
+from app.qbo_source.source_report import (
+    project_aged_receivables,
+    project_profit_and_loss,
+)
 
 
 def _report() -> dict[str, object]:
@@ -71,3 +74,35 @@ def test_non_profit_and_loss_provider_response_fails_closed() -> None:
         assert str(error) == "qbo_profit_and_loss_identity_invalid"
     else:
         raise AssertionError("unexpected report type was accepted")
+
+
+def test_aged_receivables_preserves_provider_net_total() -> None:
+    result = project_aged_receivables(
+        {
+            "Header": {
+                "ReportName": "AgedReceivables",
+                "EndPeriod": "2026-09-14",
+                "Currency": "USD",
+                "Time": "2026-09-15T17:22:41-07:00",
+            },
+            "Rows": {
+                "Row": [
+                    {
+                        "group": "GrandTotal",
+                        "Summary": {
+                            "ColData": [
+                                {"value": "TOTAL"},
+                                {"value": "480875.48"},
+                            ]
+                        },
+                    }
+                ]
+            },
+        },
+        realm_id="9130357972400696",
+        expected_company_name="All County",
+    )
+    assert result["net_open_ar"] == "480875.48"
+    assert result["includes_customer_credits_and_unapplied_payments"] is True
+    assert result["accepted_as_acp_accounting"] is False
+    assert result["mutation_authority"] == "none"
