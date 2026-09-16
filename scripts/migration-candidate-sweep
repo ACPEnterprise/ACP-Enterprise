@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Compare cumulative candidate migration graphs with protected authority."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import subprocess
+import sys
+import tarfile
+import tempfile
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+from typing import Any, cast
+
+DESTRUCTIVE_MARKERS = (
+    "op.drop_table(",
+    "op.drop_column(",
+    "op.execute(\"DELETE ",
+    "op.execute('DELETE ",
+    "op.execute(\"TRUNCATE ",
+    "op.execute('TRUNCATE ",
+)
+
+
+def lineage_module(root: Path):  # type: ignore[no-untyped-def]
+    path = root / "scripts/migration-lineage"
+    loader = SourceFileLoader("candidate_migration_lineage", str(path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("migration lineage module is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def git(root: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", *arguments], cwd=root, check=True, capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
+def report_for_ref(root: Path, ref: str, module: object) -> dict[str, object]:
+    if git(root, "rev-parse", ref) == git(root, "rev-parse", "HEAD"):
+        return module.build_report(  # type: ignore[attr-defined,no-any-return]
+            root, root / "backend/alembic/versions"
+        )
+    with tempfile.TemporaryDirectory(prefix="migration-candidate-") as directory:
+        target = Path(directory)
+        archive = target / "candidate.tar"
+        with archive.open("wb") as output:
+            subprocess.run(
+                ["git", "archive", ref, "backend/alembic/versions"],
+                cwd=root,
+                check=True,
+                stdout=output,
+            )
+        with tarfile.open(archive) as payload:
+            for member in payload.getmembers():
+                destination = (target / member.name).resolve()
+                if target.resolve() not in destination.parents:
+                    raise RuntimeError("unsafe path in Git archive")
+            payload.extractall(target)
+        return module.build_report(  # type: ignore[attr-defined,no-any-return]
+            target, target / "backend/alembic/versions"
+        )
+
+
+def destructive_operations(root: Path, base: str, candidate: str) -> list[dict[str, str]]:
+    names = git(
+        root,
+        "diff",
+        "--diff-filter=AM",
+        "--name-only",
+        f"{base}...{candidate}",
+        "--",
+        "backend/alembic/versions",
+    ).splitlines()
+    findings: list[dict[str, str]] = []
+    for name in names:
+        content = git(root, "show", f"{candidate}:{name}")
+        for marker in DESTRUCTIVE_MARKERS:
+            if marker in content:
+                findings.append({"path": name, "marker": marker})
+    return findings
+
+
+def candidate_report(
+    root: Path,
+    *,
+    protected: str,
+    candidate: str,
+    protected_report: dict[str, object],
+    module: object,
+) -> dict[str, object]:
+    merge_base = git(root, "merge-base", protected, candidate)
+    ahead = int(git(root, "rev-list", "--count", f"{protected}..{candidate}"))
+    behind = int(git(root, "rev-list", "--count", f"{candidate}..{protected}"))
+    paths = git(
+        root,
+        "diff",
+        "--name-only",
+        f"{merge_base}..{candidate}",
+        "--",
+        "backend/alembic/versions",
+    ).splitlines()
+    candidate_lineage = report_for_ref(root, candidate, module)
+    protected_revisions = cast(list[dict[str, Any]], protected_report["revisions"])
+    candidate_revisions = cast(list[dict[str, Any]], candidate_lineage["revisions"])
+    protected_rows = {row["revision"]: row for row in protected_revisions}
+    candidate_rows = {row["revision"]: row for row in candidate_revisions}
+    changed_history = sorted(
+        revision
+        for revision in protected_rows.keys() & candidate_rows.keys()
+        if protected_rows[revision]["sha256"] != candidate_rows[revision]["sha256"]
+    )
+    risks = list(cast(list[str], candidate_lineage["risks"]))
+    if changed_history:
+        risks.append("PROTECTED_REVISION_CONTENT_CHANGED")
+    if merge_base != git(root, "rev-parse", protected):
+        risks.append("CANDIDATE_BEHIND_PROTECTED")
+    destructive = destructive_operations(root, merge_base, candidate)
+    if destructive:
+        risks.append("DESTRUCTIVE_OPERATION_REVIEW_REQUIRED")
+    return {
+        "candidate": candidate,
+        "sha": git(root, "rev-parse", candidate),
+        "merge_base": merge_base,
+        "ahead": ahead,
+        "behind": behind,
+        "migration_paths_changed_from_candidate_base": paths,
+        "revision_count": candidate_lineage["revision_count"],
+        "heads": candidate_lineage["heads"],
+        "lineage_digest": candidate_lineage["lineage_digest"],
+        "changed_protected_revision_ids": changed_history,
+        "destructive_operations": destructive,
+        "risks": sorted(set(risks)),
+        "reline_required": bool(risks),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--protected", default="origin/customer-management-v1")
+    parser.add_argument("--candidate", action="append", required=True)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parents[1]
+    module = lineage_module(root)
+    protected = report_for_ref(root, args.protected, module)
+    payload = {
+        "contract": "enterprise-release.migration-candidate-sweep.v1",
+        "protected": {
+            "ref": args.protected,
+            "sha": git(root, "rev-parse", args.protected),
+            "revision_count": protected["revision_count"],
+            "heads": protected["heads"],
+            "lineage_digest": protected["lineage_digest"],
+            "risks": protected["risks"],
+        },
+        "candidates": [
+            candidate_report(
+                root,
+                protected=args.protected,
+                candidate=candidate,
+                protected_report=protected,
+                module=module,
+            )
+            for candidate in args.candidate
+        ],
+    }
+    encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if args.output:
+        args.output.write_text(encoded, encoding="utf-8")
+    else:
+        print(encoded, end="")
+    return 2 if protected["risks"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
