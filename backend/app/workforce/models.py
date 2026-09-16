@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -116,6 +117,135 @@ class RealWorkforceRosterBinding(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+
+class WorkforceSourceCertification(Base):
+    """Current owner decision for one immutable Company/source Employee identity."""
+
+    __tablename__ = "workforce_source_certifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_employee_id",
+            name="uq_workforce_source_certification_identity",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_workforce_source_certification_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            name="fk_workforce_source_certification_employee",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "current_decision IN ('CONFIRM','SELECT_EXISTING','CREATE_ONBOARD','HOLD','LEGACY_ONLY')",
+            name="ck_workforce_source_certification_decision",
+        ),
+        CheckConstraint(
+            "current_revision >= 1", name="ck_workforce_source_certification_revision"
+        ),
+        Index(
+            "uq_workforce_source_certification_active_employee",
+            "company_id",
+            "employee_id",
+            unique=True,
+            postgresql_where=text(
+                "employee_id IS NOT NULL AND current_decision IN "
+                "('CONFIRM','SELECT_EXISTING')"
+            ),
+        ),
+        Index(
+            "uq_workforce_source_certification_active_onboarding",
+            "company_id",
+            "onboarding_request_id",
+            unique=True,
+            postgresql_where=text("onboarding_request_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_employee_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    current_decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    current_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    employee_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    onboarding_request_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("identity_onboarding_requests.id", ondelete="RESTRICT"),
+    )
+    decided_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class WorkforceSourceCertificationRevision(Base):
+    """Append-only history for one source-identity certification aggregate."""
+
+    __tablename__ = "workforce_source_certification_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "certification_id",
+            "revision",
+            name="uq_workforce_source_certification_revision",
+        ),
+        CheckConstraint("revision >= 1", name="ck_workforce_source_revision_number"),
+        CheckConstraint(
+            "decision IN ('CONFIRM','SELECT_EXISTING','CREATE_ONBOARD','HOLD','LEGACY_ONLY')",
+            name="ck_workforce_source_revision_decision",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    certification_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("workforce_source_certifications.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    prior_revision_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("workforce_source_certification_revisions.id", ondelete="RESTRICT"),
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    onboarding_request_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
 
 

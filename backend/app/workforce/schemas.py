@@ -176,6 +176,52 @@ class RealRosterReadiness(WorkforceSchema):
     payroll_identity_ready_total: int
 
 
+class SourceCertificationDecisionRequest(WorkforceSchema):
+    decision: Literal[
+        "CONFIRM", "SELECT_EXISTING", "CREATE_ONBOARD", "HOLD", "LEGACY_ONLY"
+    ]
+    expected_revision: int = Field(ge=0)
+    employee_id: UUID | None = None
+    onboarding_request_id: UUID | None = None
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class SourceCertificationRevisionItem(WorkforceSchema):
+    revision: int
+    decision: str
+    employee_id: UUID | None
+    onboarding_request_id: UUID | None
+    actor_user_id: UUID
+    reason: str
+    occurred_at: datetime
+
+
+class SourceCertificationItem(WorkforceSchema):
+    source_system: Literal["HCP"]
+    source_employee_id: str
+    source_disposition: str
+    source_branch_id: UUID
+    source_branch_name: str
+    evidence_reference: str
+    evidence_digest: str
+    mechanically_supported_employee_id: UUID | None
+    mechanically_supported_employee_name: str | None
+    decision: str | None
+    revision: int
+    employee_id: UUID | None
+    employee_name: str | None
+    onboarding_request_id: UUID | None
+    reason: str | None
+    decided_at: datetime | None
+    history: tuple[SourceCertificationRevisionItem, ...]
+
+
+class SourceCertificationLedger(WorkforceSchema):
+    items: tuple[SourceCertificationItem, ...]
+    total: int
+    undecided: int
+
+
 class EmployeeAdministrationSummary(WorkforceEmployeeSummary):
     user_id: UUID | None
     membership_id: UUID | None
