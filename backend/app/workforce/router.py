@@ -15,17 +15,23 @@ from app.workforce.administration_commands import (
     workforce_administration_service,
 )
 from app.workforce.employee_administration import employee_administration_service
+from app.workforce.employee_timeline import employee_timeline_service
+from app.workforce.notification_targeting import employee_notification_targeting_service
 from app.workforce.real_roster_service import RealRosterConflict, real_roster_service
 from app.workforce.schemas import (
     AvailabilityEvidenceRequest,
     CapabilityEvidenceRequest,
     CertificationEvidenceRequest,
     EmployeeAdministrationDetail,
+    EmployeeNotificationTarget,
+    EmployeeTimeline,
     FieldReadinessRequest,
     FieldReadinessResponse,
     LanguageEvidenceRequest,
     RealRosterBindingRequest,
     RealRosterReadiness,
+    SourceCertificationDecisionRequest,
+    SourceCertificationLedger,
     WorkforceDirectory,
     WorkforceEligibilityRequest,
     WorkforceEligibilityResponse,
@@ -34,6 +40,10 @@ from app.workforce.schemas import (
     WorkforceProfileResponse,
 )
 from app.workforce.service import workforce_operations_service
+from app.workforce.source_certification import (
+    SourceCertificationConflict,
+    source_certification_service,
+)
 
 router = APIRouter(prefix="/api/v1/workforce", tags=["Workforce"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -63,7 +73,9 @@ def _require_employee_administration(context: AuthorizationContext) -> None:
         AdministrationPermission.ROLE_READ,
     }
     if not required.issubset(context.permission_codes):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Employee administration authority is required.")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Employee administration authority is required."
+        )
 
 
 def _workforce_conflict(error: ValueError) -> HTTPException:
@@ -82,15 +94,11 @@ async def directory(context: ReadContext, session: Session) -> WorkforceDirector
 
 
 @router.get("/real-roster", response_model=RealRosterReadiness)
-async def real_roster(
-    context: ReadContext, session: Session
-) -> RealRosterReadiness:
+async def real_roster(context: ReadContext, session: Session) -> RealRosterReadiness:
     return await real_roster_service.readiness(session, context=context)
 
 
-@router.put(
-    "/real-roster/{roster_key}/binding", response_model=RealRosterReadiness
-)
+@router.put("/real-roster/{roster_key}/binding", response_model=RealRosterReadiness)
 async def bind_real_roster_employee(
     roster_key: str,
     data: RealRosterBindingRequest,
@@ -108,6 +116,34 @@ async def bind_real_roster_employee(
         raise _workforce_conflict(error) from error
 
 
+@router.get("/source-certifications", response_model=SourceCertificationLedger)
+async def source_certifications(
+    context: CertificationManageContext, session: Session
+) -> SourceCertificationLedger:
+    return await source_certification_service.ledger(session, context=context)
+
+
+@router.put(
+    "/source-certifications/HCP/{source_employee_id}",
+    response_model=SourceCertificationLedger,
+)
+async def decide_source_certification(
+    source_employee_id: str,
+    data: SourceCertificationDecisionRequest,
+    context: CertificationManageContext,
+    session: Session,
+) -> SourceCertificationLedger:
+    try:
+        return await source_certification_service.decide(
+            session,
+            context=context,
+            source_employee_id=source_employee_id,
+            command=data,
+        )
+    except SourceCertificationConflict as error:
+        raise _workforce_conflict(error) from error
+
+
 @router.get("/employees/{employee_id}", response_model=WorkforceEmployeeDetail)
 async def detail(
     employee_id: UUID, context: ReadContext, session: Session
@@ -119,6 +155,44 @@ async def detail(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "Workforce profile was not found."
         )
+    return result
+
+
+@router.get("/employees/{employee_id}/timeline", response_model=EmployeeTimeline)
+async def employee_timeline(
+    employee_id: UUID, context: ReadContext, session: Session
+) -> EmployeeTimeline:
+    result = await employee_timeline_service.read(
+        session, context=context, employee_id=employee_id
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
+    return result
+
+
+@router.get(
+    "/employees/{employee_id}/notification-target",
+    response_model=EmployeeNotificationTarget,
+)
+async def employee_notification_target(
+    employee_id: UUID,
+    event_type: str,
+    branch_id: UUID,
+    context: ReadContext,
+    session: Session,
+) -> EmployeeNotificationTarget:
+    try:
+        result = await employee_notification_targeting_service.resolve(
+            session,
+            context=context,
+            employee_id=employee_id,
+            event_type=event_type,
+            branch_id=branch_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
     return result
 
 
@@ -271,7 +345,9 @@ async def prepare_field_readiness(
     session: Session,
 ) -> FieldReadinessResponse:
     if not context.has_permission(WorkforcePermission.AVAILABILITY_MANAGE):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Availability management authority is required.")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Availability management authority is required."
+        )
     try:
         profile_id, capability_id, availability_id = (
             await workforce_administration_service.prepare_field_readiness(

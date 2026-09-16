@@ -3,9 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   evaluateWorkforceEligibility,
   bindRealRosterEmployee,
+  decideSourceCertification,
   getEmployeeAdministration,
   getEmployeePasswordReset,
+  getEmployeeTimeline,
   getRealRosterReadiness,
+  getSourceCertificationLedger,
   getWorkforceEmployee,
   listWorkforceEmployees,
   prepareEmployeeFieldReadiness,
@@ -55,6 +58,26 @@ export function useRealRosterReadiness(canBind: boolean) {
   return { query, bind, prepareFieldReadiness, canBind };
 }
 
+export function useSourceCertification(enabled: boolean) {
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ["workforce-source-certifications"],
+    queryFn: getSourceCertificationLedger,
+    enabled,
+  });
+  const decide = useMutation({
+    mutationFn: ({ sourceEmployeeId, ...input }: Parameters<typeof decideSourceCertification>[1] & { sourceEmployeeId: string }) =>
+      decideSourceCertification(sourceEmployeeId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["workforce-source-certifications"] }),
+        client.invalidateQueries({ queryKey: ["real-workforce-roster"] }),
+      ]);
+    },
+  });
+  return { query, decide };
+}
+
 export function useEmployeePasswordReset(userId: string | null, enabled: boolean) {
   const client = useQueryClient();
   const query = useQuery({
@@ -79,6 +102,14 @@ export function useWorkforceEmployee(employeeId: string | null) {
   return useQuery({
     queryKey: ["workforce-employee", employeeId],
     queryFn: () => getWorkforceEmployee(employeeId as string),
+    enabled: Boolean(employeeId),
+  });
+}
+
+export function useEmployeeTimeline(employeeId: string | null) {
+  return useQuery({
+    queryKey: ["employee-timeline", employeeId],
+    queryFn: () => getEmployeeTimeline(employeeId as string),
     enabled: Boolean(employeeId),
   });
 }

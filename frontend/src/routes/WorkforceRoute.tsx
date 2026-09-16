@@ -7,8 +7,9 @@ import type { AdminEmployeeTimecard } from "../api/timekeeping";
 import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
+import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Spinner } from "../ui";
 
@@ -36,12 +37,17 @@ export function WorkforceRoute() {
   const { activeCompany, permissionCodes = [] } = useAuth();
   const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
   const directory = useWorkforceDirectory();
+  const canCertifySources = permissionCodes.includes("COMPANY_WORKFORCE_CERTIFICATION_MANAGE");
+  const sourceCertifications = useSourceCertification(canCertifySources);
+  const [sourceEmployeeSelections, setSourceEmployeeSelections] = useState<Record<string, string>>({});
+  const [sourceReasons, setSourceReasons] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string | null>(linkedEmployeeId);
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [readinessFilter, setReadinessFilter] = useState("");
   const detail = useWorkforceEmployee(selected);
+  const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
   const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
   const passwordReset = useEmployeePasswordReset(
@@ -127,6 +133,40 @@ export function WorkforceRoute() {
         {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" to="/payroll">Payroll</Link>}
       </nav>
       <RealRosterActivationConsole />
+      <Card className="p-4 sm:p-6">
+        <h3 className="text-lg font-semibold">Source Employee certification</h3>
+        <p className="mt-1 text-sm text-content-muted">Review exact source evidence and choose an explicit owner decision. ACP never matches by name or email.</p>
+        {canCertifySources && <section className="mt-4" aria-label="Source Employee certification">
+              <h4 className="font-semibold">Source Employee certification</h4>
+              <p className="mt-1 text-xs text-content-muted">Review exact source evidence and choose an explicit owner decision. ACP never matches by name or email.</p>
+              {sourceCertifications.query.isLoading ? <Spinner label="Loading source certification ledger" /> : sourceCertifications.query.isError ? <Alert className="mt-3" variant="danger">Source certification evidence is unavailable. No decision was inferred.</Alert> : <div className="mt-3 space-y-3">
+                <p className="text-sm text-content-muted">{sourceCertifications.query.data?.total ?? 0} source identities · {sourceCertifications.query.data?.undecided ?? 0} decisions remaining</p>
+                {sourceCertifications.query.data?.items.map((source) => {
+                  const reason = sourceReasons[source.source_employee_id] ?? "";
+                  const selectedEmployee = sourceEmployeeSelections[source.source_employee_id] ?? "";
+                  const decide = (decision: "CONFIRM" | "SELECT_EXISTING" | "CREATE_ONBOARD" | "HOLD" | "LEGACY_ONLY", employeeId?: string) => sourceCertifications.decide.mutate({ sourceEmployeeId: source.source_employee_id, decision, expected_revision: source.revision, employee_id: employeeId, reason });
+                  return <article className="rounded-md bg-surface-subtle p-3 text-xs" key={source.source_employee_id}>
+                    <div className="flex flex-wrap justify-between gap-2"><span className="font-semibold">{source.source_system} · {source.source_employee_id}</span><Badge variant={source.decision === "CONFIRM" || source.decision === "SELECT_EXISTING" ? "success" : "neutral"}>{source.decision?.replaceAll("_", " ") ?? "Decision required"}</Badge></div>
+                    <p className="mt-1 text-content-muted">Branch: {source.source_branch_name} · Evidence: {source.evidence_digest.slice(0, 12)}… · Revision {source.revision}</p>
+                    <p className="mt-1">Mechanically supported ACP target: <strong>{source.mechanically_supported_employee_name ?? "None"}</strong></p>
+                    {source.employee_name && <p className="mt-1">Current certified Employee: <strong>{source.employee_name}</strong></p>}
+                    <label className="mt-3 block"><span className="font-medium">Owner reason</span><Input className="mt-1" value={reason} onChange={(event) => setSourceReasons((current) => ({ ...current, [source.source_employee_id]: event.target.value }))} placeholder="Record the human authority for this decision" /></label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {source.mechanically_supported_employee_id && <Button variant="outline" disabled={reason.trim().length < 3 || sourceCertifications.decide.isPending} onClick={() => decide("CONFIRM")}>Confirm candidate</Button>}
+                      <select aria-label={`Select existing Employee for ${source.source_employee_id}`} className="min-h-10 min-w-64 rounded-md border border-stroke bg-surface px-2" value={selectedEmployee} onChange={(event) => setSourceEmployeeSelections((current) => ({ ...current, [source.source_employee_id]: event.target.value }))}><option value="">Select another existing Employee</option>{(directory.data ?? []).map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} · {employee.employee_number}</option>)}</select>
+                      <Button variant="outline" disabled={!selectedEmployee || reason.trim().length < 3 || sourceCertifications.decide.isPending} onClick={() => decide("SELECT_EXISTING", selectedEmployee)}>Select existing</Button>
+                      <Button variant="outline" disabled={reason.trim().length < 3 || sourceCertifications.decide.isPending} onClick={() => decide("CREATE_ONBOARD")}>Create / onboard</Button>
+                      <Button variant="outline" disabled={reason.trim().length < 3 || sourceCertifications.decide.isPending} onClick={() => decide("HOLD")}>Hold</Button>
+                      <Button variant="outline" disabled={reason.trim().length < 3 || sourceCertifications.decide.isPending} onClick={() => decide("LEGACY_ONLY")}>Legacy only</Button>
+                    </div>
+                    {source.decision === "CREATE_ONBOARD" && permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && <Link className="mt-2 inline-block font-semibold text-action-primary" to="/administration/identity-onboarding">Continue protected onboarding</Link>}
+                    {source.history.length > 0 && <details className="mt-2"><summary className="cursor-pointer font-medium">Decision history ({source.history.length})</summary><ol className="mt-1 space-y-1 text-content-muted">{source.history.map((entry) => <li key={entry.revision}>Revision {entry.revision}: {entry.decision.replaceAll("_", " ")} · {entry.reason}</li>)}</ol></details>}
+                  </article>;
+                })}
+              </div>}
+            </section>}
+        {!canCertifySources && <Alert variant="information">Workforce certification authority is required to review source identities.</Alert>}
+      </Card>
       <Card className="p-4 sm:p-6">
         <h3 className="text-lg font-semibold">Assignment eligibility</h3>
         <p className="mt-1 text-sm text-content-muted">Evaluate explicit Branch, availability, capability, language, restriction, and assignment evidence. This does not assign work.</p>
@@ -656,6 +696,7 @@ export function WorkforceRoute() {
               <a className="text-action-primary underline" href="#employee-access-heading">Role / Permissions</a>
               {canReviewTime && <a className="text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Time / Attendance</a>}
               {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Payroll setup</Link>}
+              <a className="text-action-primary underline" href="#employee-history">History</a>
             </nav>
             <section id="employee-personal" className="mt-4 scroll-mt-4" aria-label="Employee personal and work identity">
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
@@ -667,11 +708,7 @@ export function WorkforceRoute() {
             {detail.data.readiness_blockers.length > 0 && (
               <section className="mt-5 rounded-xl border border-status-warning/40 bg-status-warning/5 p-4">
                 <h4 className="font-semibold">Assignment readiness blockers</h4>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-content-muted">
-                  {detail.data.readiness_blockers.map((item) => (
-                    <li key={item}>{item.replaceAll("_", " ")}</li>
-                  ))}
-                </ul>
+                <ReadinessBlockers blockers={detail.data.readiness_blockers} />
               </section>
             )}
             {canAdministerEmployees && administration.isLoading && (
@@ -853,11 +890,7 @@ export function WorkforceRoute() {
                 )}
                 {administration.data.mobile_readiness_blockers.length > 0 && (
                   <Alert variant="warning" title="Mobile readiness blockers">
-                    <ul className="list-disc pl-5">
-                      {administration.data.mobile_readiness_blockers.map((item) => (
-                        <li key={item}>{item.replaceAll("_", " ")}</li>
-                      ))}
-                    </ul>
+                    <ReadinessBlockers blockers={administration.data.mobile_readiness_blockers} />
                   </Alert>
                 )}
                 <div className="mt-5">
@@ -971,6 +1004,24 @@ export function WorkforceRoute() {
                 </div>
               </section>
             </div>
+            <section id="employee-history" className="mt-5 scroll-mt-4 rounded-xl border border-stroke p-4" aria-label="Employee history">
+              <h4 className="font-semibold">Employee history</h4>
+              <p className="mt-1 text-sm text-content-muted">Canonical ACP events are labeled by authority. Source-backed evidence remains explicitly source-backed when available.</p>
+              {timeline.isLoading && <div className="mt-3"><Spinner label="Loading Employee history" /></div>}
+              {timeline.isError && <div className="mt-3"><Alert variant="warning">Employee history is unavailable. No historical event was inferred.</Alert></div>}
+              {timeline.data && <ol className="mt-3 space-y-3">
+                {timeline.data.items.map((item, index) => <li className="rounded-lg bg-surface-subtle p-3 text-sm" key={`${item.event_type}-${item.occurred_at}-${index}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <strong>{item.event_type.replaceAll("_", " ")}</strong>
+                    <Badge variant={item.authority === "ACP_NATIVE" ? "success" : "neutral"}>{item.authority.replaceAll("_", " ")}</Badge>
+                  </div>
+                  <p className="mt-1">{item.description}</p>
+                  <p className="mt-1 text-xs text-content-muted">{new Date(item.occurred_at).toLocaleString()} · {item.source.replaceAll("_", " ")}{item.actor_display_name ? ` · ${item.actor_display_name}` : ""}</p>
+                  {item.navigation_reference && <Link className="mt-2 inline-block font-semibold text-action-primary" to={item.navigation_reference}>Open related workspace</Link>}
+                </li>)}
+                {timeline.data.items.length === 0 && <li className="text-sm text-content-muted">No canonical Employee history is available.</li>}
+              </ol>}
+            </section>
       </Card>
         )}
       {confirmPasswordReset && administration.data?.user_id && (
