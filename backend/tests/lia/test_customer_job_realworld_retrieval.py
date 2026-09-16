@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.customers.lia_context import customer_lia_context_service
 from app.jobs.lia_context import job_lia_context_service
 from app.lia.contracts import (
@@ -15,8 +16,12 @@ from app.lia.contracts import (
 )
 from app.lia.planner import plan_question
 from app.lia.retrieval import GovernedRetrievalService
-from app.lia.service import LiaService
-from app.platform.permissions.codes import CustomerPermission, JobPermission
+from app.lia.service import ROUTES, LiaService
+from app.platform.permissions.codes import (
+    CustomerPermission,
+    JobPermission,
+    SchedulingPermission,
+)
 
 
 def _context(*permissions: str) -> SimpleNamespace:
@@ -65,6 +70,36 @@ def test_named_customer_and_job_plans_are_bounded() -> None:
     assert job.subject_domain == "jobs"
     assert job.subject_query == "306"
     assert job.domains == frozenset({"jobs"})
+
+    employee = plan_question("Show me Employee Lianne Hernandez")
+    assert employee.subject_domain == "workforce"
+    assert employee.subject_query == "Lianne Hernandez"
+    assert employee.domains == frozenset({"workforce"})
+
+    assert "price-book" in plan_question(
+        "What's our price for drain cleaning?"
+    ).domains
+    assert "payments" in plan_question("What did they pay us last time?").domains
+
+
+def test_exact_subject_corrections_replace_customer_and_job_referents() -> None:
+    customer = plan_question(
+        "No, I meant Acme Plumbing", "customers", ("customers",)
+    )
+    assert customer.subject_domain == "customers"
+    assert customer.subject_query == "Acme Plumbing"
+    assert customer.domains == frozenset({"customers"})
+
+    job = plan_question("No, I meant JOB-000307", "jobs", ("jobs",))
+    assert job.subject_domain == "jobs"
+    assert job.subject_query == "JOB-000307"
+    assert job.domains == frozenset({"jobs"})
+
+
+def test_navigation_targets_use_canonical_product_routes() -> None:
+    assert ROUTES["accounting"] == "/financial-reports"
+    assert ROUTES["timekeeping"] == "/employees"
+    assert ROUTES["communications"] == "/administration/communications"
 
 
 @pytest.mark.asyncio
@@ -209,6 +244,69 @@ async def test_customer_and_job_follow_ups_retain_authoritative_referent() -> No
             assert response.subject_id == entity_id
             assert retrieval.retrieve.await_args.kwargs["entity_id"] == entity_id
             assert response.proposals == ()
+
+
+@pytest.mark.asyncio
+async def test_initial_domain_question_binds_safe_follow_up_topic() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="scheduling",
+            label="Appointments",
+            authority="AUTHORITATIVE_FACT",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            evidence_digest="s" * 64,
+            count=1,
+            state="SCHEDULED=1",
+        ),
+    )
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(SchedulingPermission.READ),
+        request=LiaRequest(question="What is scheduled today?"),
+    )
+
+    assert response.subject_domain == "scheduling"
+    assert response.subject_id is None
+    assert response.temporal is not None
+    assert response.temporal.period_label == "today"
+
+
+@pytest.mark.asyncio
+async def test_explicit_topic_switch_drops_prior_entity_referent() -> None:
+    customer_id = uuid4()
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="scheduling",
+            label="Appointments",
+            authority="AUTHORITATIVE_FACT",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            evidence_digest="s" * 64,
+            count=1,
+            state="SCHEDULED=1",
+        ),
+    )
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(CustomerPermission.READ, SchedulingPermission.READ),
+        request=LiaRequest(
+            question="What is scheduled tomorrow?",
+            context=LiaContext(
+                domain="customers",
+                entity_id=customer_id,
+                authorization_version=14,
+                topic_domains=("customers",),
+            ),
+        ),
+    )
+
+    assert response.subject_domain == "scheduling"
+    assert response.subject_id is None
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] is None
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {"scheduling"}
 
 
 @pytest.mark.asyncio
