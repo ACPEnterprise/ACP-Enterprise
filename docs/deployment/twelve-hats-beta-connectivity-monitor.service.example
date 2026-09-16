@@ -1,0 +1,17 @@
+[Unit]
+Description=Twelve Hats Beta connectivity verification
+After=network-online.target caddy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/acp-enterprise/current
+ExecStart=/opt/acp-enterprise/current/scripts/verify-beta-connectivity.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/opt/acp-enterprise/current
+StandardOutput=journal
+StandardError=journal

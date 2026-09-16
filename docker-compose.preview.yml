@@ -8,8 +8,8 @@ x-backend-environment: &backend-environment
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   REDIS_USERNAME: ${REDIS_USERNAME:-acp-application}
   REDIS_PASSWORD_FILE: /run/secrets/redis/application-password
-  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-["https://preview.allcountyhomeservices.com"]}
-  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-["preview.allcountyhomeservices.com","backend","localhost","127.0.0.1"]}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-["https://preview.allcountyhomeservices.com","https://beta.twelve-hats.com"]}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-["preview.allcountyhomeservices.com","beta.twelve-hats.com","backend","localhost","127.0.0.1"]}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   PLATFORM_CONTRACT_EXPECTED_FINGERPRINT: ${PLATFORM_CONTRACT_EXPECTED_FINGERPRINT:?Set PLATFORM_CONTRACT_EXPECTED_FINGERPRINT in .env.preview}
   ACCESS_TOKEN_KEYS: ${ACCESS_TOKEN_KEYS:?Set ACCESS_TOKEN_KEYS in .env.preview}
