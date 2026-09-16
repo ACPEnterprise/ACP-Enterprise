@@ -16,4 +16,9 @@ describe("AppointmentSummaryTable", () => {
     render(<MemoryRouter><AppointmentSummaryTable job={{ appointments: [] } as unknown as JobDetail} /></MemoryRouter>);
     expect(screen.getByText("No Appointments linked.")).toBeInTheDocument();
   });
+  it("does not claim an Appointment is unassigned when assignment evidence is unavailable", () => {
+    const job = { appointments: [{ appointment_id: "appointment-1", visit_sequence: 1, appointment_number: "APT-000001", status: "scheduled", arrival_window_start_at: null }] } as unknown as JobDetail;
+    render(<MemoryRouter><AppointmentSummaryTable job={job} assignmentsAvailable={false} /></MemoryRouter>);
+    expect(screen.getByText("Technician: Unavailable")).toBeInTheDocument();
+  });
 });

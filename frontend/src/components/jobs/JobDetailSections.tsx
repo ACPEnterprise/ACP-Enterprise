@@ -2,36 +2,205 @@ import type { JobDetail } from "../../types/jobs";
 import { Card } from "../../ui";
 import { useAuth } from "../../auth";
 import { Link } from "react-router";
-import { appointmentDetailPath, customerDetailPath, withSchedulingReturn } from "../../routing/paths";
+import {
+  appointmentDetailPath,
+  customerDetailPath,
+  withSchedulingReturn,
+} from "../../routing/paths";
 import type { JobAppointmentAssignment } from "../../types/dispatch";
 
-export function CustomerSummaryCard({ job, canOpenCustomer = false, returnTo }: { readonly job: JobDetail; readonly canOpenCustomer?: boolean; readonly returnTo?: string }) {
-  const path = returnTo ? withSchedulingReturn(customerDetailPath(job.customer.id), returnTo) : customerDetailPath(job.customer.id);
-  return <Card className="p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Customer</h3><p className="mt-2 break-words">{job.customer.display_name}</p><p className="break-all text-sm text-content-muted">{job.customer.customer_number}</p>{canOpenCustomer && <Link className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline" to={path}>Open Customer</Link>}</Card>;
+export function CustomerSummaryCard({
+  job,
+  canOpenCustomer = false,
+  returnTo,
+}: {
+  readonly job: JobDetail;
+  readonly canOpenCustomer?: boolean;
+  readonly returnTo?: string;
+}) {
+  const path = returnTo
+    ? withSchedulingReturn(customerDetailPath(job.customer.id), returnTo)
+    : customerDetailPath(job.customer.id);
+  return (
+    <Card className="p-ui-4 sm:p-ui-6">
+      <h3 className="font-semibold">Customer</h3>
+      <p className="mt-2 break-words">{job.customer.display_name}</p>
+      <p className="break-all text-sm text-content-muted">
+        {job.customer.customer_number}
+      </p>
+      {canOpenCustomer && (
+        <Link
+          className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline"
+          to={path}
+        >
+          Open Customer
+        </Link>
+      )}
+    </Card>
+  );
 }
 export function ServiceLocationCard({ job }: { readonly job: JobDetail }) {
   const location = job.service_location;
-  return <Card className="p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Service Location</h3><address className="mt-2 break-words not-italic text-sm text-content-secondary">{location.nickname && <strong className="block">{location.nickname}</strong>}{location.address_line_1}<br />{location.address_line_2 && <>{location.address_line_2}<br /></>}{location.city}, {location.state} {location.postal_code}</address></Card>;
+  return (
+    <Card className="p-ui-4 sm:p-ui-6">
+      <h3 className="font-semibold">Service Location</h3>
+      <address className="mt-2 break-words not-italic text-sm text-content-secondary">
+        {location.nickname && (
+          <strong className="block">{location.nickname}</strong>
+        )}
+        {location.address_line_1}
+        <br />
+        {location.address_line_2 && (
+          <>
+            {location.address_line_2}
+            <br />
+          </>
+        )}
+        {location.city}, {location.state} {location.postal_code}
+      </address>
+    </Card>
+  );
 }
-export function AppointmentSummaryTable({ job, assignments = [], returnTo }: { readonly job: JobDetail; readonly assignments?: readonly JobAppointmentAssignment[]; readonly returnTo?: string }) {
-  const assignmentByAppointment = new Map(assignments.map((item) => [item.appointment_id, item]));
-  return <Card className="p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Appointments</h3>{job.appointments.length === 0 ? <p className="mt-3 text-sm text-content-muted">No Appointments linked.</p> : <div className="mt-3 divide-y divide-stroke">{job.appointments.map((item) => { const path = returnTo ? withSchedulingReturn(appointmentDetailPath(item.appointment_id), returnTo) : appointmentDetailPath(item.appointment_id); const assignment = assignmentByAppointment.get(item.appointment_id); return <div className="grid min-w-0 gap-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center" key={item.appointment_id}><div className="min-w-0"><span className="text-content-muted">{item.visit_sequence}. </span><Link className="break-all font-semibold text-action-primary hover:underline" to={path}>{item.appointment_number}</Link><p className="mt-1 capitalize text-content-muted">{item.status.replaceAll("_", " ")}</p><p className="mt-1 text-content-muted">Technician: {assignment?.primary_employee_name ?? "Unassigned"}</p></div><span className="text-content-muted">{item.arrival_window_start_at ? new Date(item.arrival_window_start_at).toLocaleString() : "No arrival window"}</span></div>; })}</div>}</Card>;
+export function AppointmentSummaryTable({
+  job,
+  assignments = [],
+  assignmentsAvailable = true,
+  returnTo,
+}: {
+  readonly job: JobDetail;
+  readonly assignments?: readonly JobAppointmentAssignment[];
+  readonly assignmentsAvailable?: boolean;
+  readonly returnTo?: string;
+}) {
+  const assignmentByAppointment = new Map(
+    assignments.map((item) => [item.appointment_id, item]),
+  );
+  return (
+    <Card className="p-ui-4 sm:p-ui-6">
+      <h3 className="font-semibold">Appointments</h3>
+      {job.appointments.length === 0 ? (
+        <p className="mt-3 text-sm text-content-muted">
+          No Appointments linked.
+        </p>
+      ) : (
+        <div className="mt-3 divide-y divide-stroke">
+          {job.appointments.map((item) => {
+            const path = returnTo
+              ? withSchedulingReturn(
+                  appointmentDetailPath(item.appointment_id),
+                  returnTo,
+                )
+              : appointmentDetailPath(item.appointment_id);
+            const assignment = assignmentByAppointment.get(item.appointment_id);
+            return (
+              <div
+                className="grid min-w-0 gap-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center"
+                key={item.appointment_id}
+              >
+                <div className="min-w-0">
+                  <span className="text-content-muted">
+                    {item.visit_sequence}.{" "}
+                  </span>
+                  <Link
+                    className="break-all font-semibold text-action-primary hover:underline"
+                    to={path}
+                  >
+                    {item.appointment_number}
+                  </Link>
+                  <p className="mt-1 capitalize text-content-muted">
+                    {item.status.replaceAll("_", " ")}
+                  </p>
+                  <p className="mt-1 text-content-muted">
+                    Technician:{" "}
+                    {assignment?.primary_employee_name ??
+                      (assignmentsAvailable ? "Unassigned" : "Unavailable")}
+                  </p>
+                </div>
+                <span className="text-content-muted">
+                  {item.arrival_window_start_at
+                    ? new Date(item.arrival_window_start_at).toLocaleString()
+                    : "No arrival window"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
 }
 
-const timestamp = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
+const timestamp = (value: string | null) =>
+  value ? new Date(value).toLocaleString() : "Not recorded";
 
 export function JobOperationalDetails({ job }: { readonly job: JobDetail }) {
   const { activeCompany } = useAuth();
-  const branch = activeCompany?.branches.find((item) => item.id === job.branch_id);
-  return <Card className="p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Operational details</h3><dl className="mt-4 grid min-w-0 gap-3 text-sm sm:grid-cols-2">
-    <div><dt className="text-content-muted">Branch</dt><dd>{branch ? `${branch.name} (${branch.code})` : "Accessible Branch"}</dd></div>
-    <div><dt className="text-content-muted">Job type</dt><dd>{job.job_type_code ?? "Not specified"}</dd></div>
-    <div><dt className="text-content-muted">Created</dt><dd>{timestamp(job.created_at)}</dd></div>
-    <div><dt className="text-content-muted">Updated</dt><dd>{timestamp(job.updated_at)}</dd></div>
-    <div><dt className="text-content-muted">Activated</dt><dd>{timestamp(job.activated_at)}</dd></div>
-    <div><dt className="text-content-muted">Started</dt><dd>{timestamp(job.started_at)}</dd></div>
-    {job.paused_at && <div><dt className="text-content-muted">Paused</dt><dd>{timestamp(job.paused_at)} · {job.pause_reason_code?.replaceAll("_", " ")}</dd></div>}
-    {job.completed_at && <div><dt className="text-content-muted">Last completed</dt><dd>{timestamp(job.completed_at)}</dd></div>}
-    {job.cancelled_at && <div><dt className="text-content-muted">Last cancelled</dt><dd>{timestamp(job.cancelled_at)} · {job.cancellation_reason_code?.replaceAll("_", " ")}</dd></div>}
-  </dl>{job.internal_description && <div className="mt-5 min-w-0 border-t border-stroke pt-4"><h4 className="text-sm font-semibold">Internal description</h4><p className="mt-2 whitespace-pre-wrap break-words text-sm text-content-secondary">{job.internal_description}</p></div>}</Card>;
+  const branch = activeCompany?.branches.find(
+    (item) => item.id === job.branch_id,
+  );
+  return (
+    <Card className="p-ui-4 sm:p-ui-6">
+      <h3 className="font-semibold">Operational details</h3>
+      <dl className="mt-4 grid min-w-0 gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-content-muted">Branch</dt>
+          <dd>
+            {branch ? `${branch.name} (${branch.code})` : "Accessible Branch"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Job type</dt>
+          <dd>{job.job_type_code ?? "Not specified"}</dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Created</dt>
+          <dd>{timestamp(job.created_at)}</dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Updated</dt>
+          <dd>{timestamp(job.updated_at)}</dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Activated</dt>
+          <dd>{timestamp(job.activated_at)}</dd>
+        </div>
+        <div>
+          <dt className="text-content-muted">Started</dt>
+          <dd>{timestamp(job.started_at)}</dd>
+        </div>
+        {job.paused_at && (
+          <div>
+            <dt className="text-content-muted">Paused</dt>
+            <dd>
+              {timestamp(job.paused_at)} ·{" "}
+              {job.pause_reason_code?.replaceAll("_", " ")}
+            </dd>
+          </div>
+        )}
+        {job.completed_at && (
+          <div>
+            <dt className="text-content-muted">Last completed</dt>
+            <dd>{timestamp(job.completed_at)}</dd>
+          </div>
+        )}
+        {job.cancelled_at && (
+          <div>
+            <dt className="text-content-muted">Last cancelled</dt>
+            <dd>
+              {timestamp(job.cancelled_at)} ·{" "}
+              {job.cancellation_reason_code?.replaceAll("_", " ")}
+            </dd>
+          </div>
+        )}
+      </dl>
+      {job.internal_description && (
+        <div className="mt-5 min-w-0 border-t border-stroke pt-4">
+          <h4 className="text-sm font-semibold">Internal description</h4>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm text-content-secondary">
+            {job.internal_description}
+          </p>
+        </div>
+      )}
+    </Card>
+  );
 }

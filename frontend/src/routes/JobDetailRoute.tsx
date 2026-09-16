@@ -95,7 +95,8 @@ export function JobDetailRoute() {
       </div>
       <JobOperationalDetails job={job} />
       {canSchedule && job.appointments.length === 0 && !["completed", "cancelled"].includes(job.status) ? <ScheduleJobPanel job={job} timeZone={branchTimeZone} returnTo={hasSchedulingReturn ? returnTo : undefined} /> : null}
-      <AppointmentSummaryTable job={job} assignments={assignments.data} returnTo={hasSchedulingReturn ? returnTo : undefined} />
+      {canReadDispatch && assignments.isError ? <Alert variant="warning" action={<Button onClick={() => void assignments.refetch()}>Retry</Button>}>Dispatch assignment evidence is currently unavailable. Technician state is unknown.</Alert> : null}
+      <AppointmentSummaryTable job={job} assignments={assignments.data} assignmentsAvailable={!assignments.isError} returnTo={hasSchedulingReturn ? returnTo : undefined} />
       <JobCompletionStatus jobId={job.id} />
     </div>
   );
