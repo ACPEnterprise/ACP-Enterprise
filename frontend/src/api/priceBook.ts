@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import type {
   PriceBookCatalog,
+  PriceBookCandidateReviewPage,
   PriceBookAdjustmentProposal,
   PriceBookBulkMaterialization,
   PriceBookCategory,
@@ -20,6 +21,20 @@ export async function getPriceBook(
   return (
     await apiClient.get<PriceBookCatalog>(path, {
       params: { ...(branchId ? { branch_id: branchId } : {}), limit: 500 },
+    })
+  ).data;
+}
+export async function getCandidateReview(params: {
+  search?: string;
+  category?: string;
+  admission_status?: "admitted" | "held";
+  review_flag?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<PriceBookCandidateReviewPage> {
+  return (
+    await apiClient.get<PriceBookCandidateReviewPage>(`${path}/candidate-review`, {
+      params,
     })
   ).data;
 }

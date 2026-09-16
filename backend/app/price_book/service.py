@@ -163,7 +163,9 @@ class PriceBookService:
         items = tuple(
             (
                 await session.scalars(
-                    item_query.order_by(PriceBookServiceItem.name, PriceBookServiceItem.id)
+                    item_query.order_by(
+                        PriceBookServiceItem.name, PriceBookServiceItem.id
+                    )
                     .limit(limit)
                     .offset(offset)
                 )
@@ -272,7 +274,14 @@ class PriceBookService:
     ) -> PriceVersionItem:
         complete = bool(components) and all(c.unit_cost is not None for c in components)
         total = (
-            sum((c.quantity * c.unit_cost for c in components if c.unit_cost is not None), Decimal(0))
+            sum(
+                (
+                    c.quantity * c.unit_cost
+                    for c in components
+                    if c.unit_cost is not None
+                ),
+                Decimal(0),
+            )
             if complete
             else None
         )
@@ -407,6 +416,7 @@ class PriceBookService:
                 code=payload.code,
                 name=payload.name.strip(),
                 description=payload.description,
+                position=payload.position,
                 created_by_user_id=context.user.id,
                 created_at=now,
                 updated_at=now,
@@ -505,6 +515,7 @@ class PriceBookService:
             category.name = payload.name.strip()
             category.description = payload.description
             category.parent_id = payload.parent_id
+            category.position = payload.position
             category.status = payload.status
             category.version += 1
             category.updated_at = utc_now()
@@ -519,7 +530,11 @@ class PriceBookService:
                 entity_id=category.id,
                 action="updated",
                 prior_state=prior,
-                state={"code": category.code, "name": category.name, "status": category.status},
+                state={
+                    "code": category.code,
+                    "name": category.name,
+                    "status": category.status,
+                },
                 reason="Category maintained by authorized operator.",
                 version=category.version,
             )
@@ -1574,8 +1589,13 @@ class PriceBookService:
                     created_count=len(proposal.materialized_version_ids),
                     replayed=True,
                 )
-            if proposal.status != "approved" or proposal.version != payload.expected_version:
-                raise PriceBookConflict("Only the current approved proposal may create drafts.")
+            if (
+                proposal.status != "approved"
+                or proposal.version != payload.expected_version
+            ):
+                raise PriceBookConflict(
+                    "Only the current approved proposal may create drafts."
+                )
             if proposal.transformation_kind not in {"percentage", "fixed_amount"}:
                 raise PriceBookValidation(
                     "This pricing transformation is not deterministically supported."
@@ -1586,9 +1606,7 @@ class PriceBookService:
                 else "fixed_amount"
             )
             try:
-                transformation_value = Decimal(
-                    str(proposal.transformation[value_key])
-                )
+                transformation_value = Decimal(str(proposal.transformation[value_key]))
             except (InvalidOperation, KeyError) as error:
                 raise PriceBookValidation(
                     "Adjustment transformation evidence is invalid."
@@ -1620,7 +1638,9 @@ class PriceBookService:
             created: list[UUID] = []
             for item in sorted(items, key=lambda value: value.code):
                 if item.current_version_id is None:
-                    raise PriceBookConflict("Adjustment requires one active source price.")
+                    raise PriceBookConflict(
+                        "Adjustment requires one active source price."
+                    )
                 source = await session.scalar(
                     select(PriceBookPriceVersion)
                     .where(
@@ -1648,15 +1668,18 @@ class PriceBookService:
                     )
                 if proposed < 0:
                     raise PriceBookValidation("Proposed price cannot be negative.")
-                revision = int(
-                    await session.scalar(
-                        select(func.max(PriceBookPriceVersion.revision)).where(
-                            PriceBookPriceVersion.company_id == context.company.id,
-                            PriceBookPriceVersion.service_item_id == item.id,
+                revision = (
+                    int(
+                        await session.scalar(
+                            select(func.max(PriceBookPriceVersion.revision)).where(
+                                PriceBookPriceVersion.company_id == context.company.id,
+                                PriceBookPriceVersion.service_item_id == item.id,
+                            )
                         )
+                        or 0
                     )
-                    or 0
-                ) + 1
+                    + 1
+                )
                 draft = PriceBookPriceVersion(
                     company_id=context.company.id,
                     service_item_id=item.id,
@@ -1721,7 +1744,10 @@ class PriceBookService:
                 entity_type="price_book_adjustment_proposal",
                 entity_id=proposal.id,
                 action="materialized_as_drafts",
-                state={"count": len(created), "proposal_digest": proposal.proposal_digest},
+                state={
+                    "count": len(created),
+                    "proposal_digest": proposal.proposal_digest,
+                },
                 reason="Approved proposal created reviewable successor drafts only.",
                 version=proposal.version,
             )
