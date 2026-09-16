@@ -148,6 +148,86 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Company-scoped idempotency key plus exact candidate-set digest",
+      "method": "POST",
+      "operation_id": "create_review_batch_api_v1_price_book_activation_readiness_review_batches_post",
+      "path": "/api/v1/price-book/activation-readiness/review-batches",
+      "reason": "Exact replay returns one draft review batch and contradictory evidence is rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "estimates",
+      "mechanism": "Company-scoped conversion idempotency key and immutable accepted Estimate revision",
+      "method": "POST",
+      "operation_id": "convert_estimate_to_job_api_v1_estimates__estimate_id__convert_to_job_post",
+      "path": "/api/v1/estimates/{estimate_id}/convert-to-job",
+      "reason": "Exact conversion replay returns one Job and contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "proposal row lock, immutable proposal digest and materialization idempotency key",
+      "method": "POST",
+      "operation_id": "materialize_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals__proposal_id__materialize_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals/{proposal_id}/materialize",
+      "reason": "Exact replay returns the same successor drafts; contradictory commands fail closed and never activate pricing.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "Company-scoped category identity plus convergent target state",
+      "method": "PUT",
+      "operation_id": "update_category_api_v1_price_book_categories__category_id__put",
+      "path": "/api/v1/price-book/categories/{category_id}",
+      "reason": "Repeated category updates converge on the requested state without duplicate authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "Company-scoped service-item identity plus convergent target state",
+      "method": "PUT",
+      "operation_id": "update_item_api_v1_price_book_service_items__item_id__put",
+      "path": "/api/v1/price-book/service-items/{item_id}",
+      "reason": "Repeated service-item updates converge on the requested state without creating a price version.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "row lock, optimistic version, evidence digest and convergent terminal decision",
+      "method": "POST",
+      "operation_id": "decide_review_batch_api_v1_price_book_activation_readiness_review_batches__batch_id__decision_post",
+      "path": "/api/v1/price-book/activation-readiness/review-batches/{batch_id}/decision",
+      "reason": "A reviewed candidate set converges on one evidence-bound decision or rejects stale/contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "Company-scoped recommendation identity plus immutable proposal digest",
+      "method": "POST",
+      "operation_id": "create_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals",
+      "reason": "Recommendation replay returns one non-activating proposal and contradictory evidence is rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "row lock, optimistic version, proposal digest and convergent terminal decision",
+      "method": "POST",
+      "operation_id": "decide_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals__proposal_id__decision_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals/{proposal_id}/decision",
+      "reason": "Proposal review is evidence-bound and cannot activate or rewrite Price Book versions.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "company_admin",
       "mechanism": "resource identity plus target state or optimistic aggregate version",
@@ -3069,6 +3149,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "80c88a8eaf1fdc2297eae55c7aaa5696194b4662c5cc7d1659b9e3ddc95c8e0d",
+  "fingerprint": "82c33bc9c7718a785a062c98897ab5609e1682089a857ea93e789c693ce7c51b",
   "schema_version": "1"
 }

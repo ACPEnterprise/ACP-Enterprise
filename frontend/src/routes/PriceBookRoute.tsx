@@ -2,54 +2,1218 @@ import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { usePriceBook, usePriceBookMutations } from "../hooks/usePriceBook";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Spinner } from "../ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Select,
+  Spinner,
+} from "../ui";
 
 const priceBookRecoveryMessage = (error: unknown) => {
   if (axios.isAxiosError(error)) {
-    const recovery = (error.response?.data as { detail?: { recovery?: string } })?.detail?.recovery;
-    if (recovery === "RETRY_AFTER_REFRESH") return "Price Book authority changed. Refresh before continuing.";
-    if (recovery === "USER_CORRECTION_REQUIRED") return "Price Book evidence requires correction. Review the retained inputs.";
-    if (recovery === "TEMPORARILY_UNAVAILABLE") return "Price Book is temporarily unavailable. Your inputs were retained.";
-    if (recovery === "OWNER_ADMIN_ACTION_REQUIRED") return "Price Book requires owner or administrator action before continuing.";
-    if (recovery === "TERMINAL_FAILURE") return "The Price Book resource is no longer available. Refresh authoritative state.";
+    const recovery = (
+      error.response?.data as { detail?: { recovery?: string } }
+    )?.detail?.recovery;
+    if (recovery === "RETRY_AFTER_REFRESH")
+      return "Price Book authority changed. Refresh before continuing.";
+    if (recovery === "USER_CORRECTION_REQUIRED")
+      return "Price Book evidence requires correction. Review the retained inputs.";
+    if (recovery === "TEMPORARILY_UNAVAILABLE")
+      return "Price Book is temporarily unavailable. Your inputs were retained.";
+    if (recovery === "OWNER_ADMIN_ACTION_REQUIRED")
+      return "Price Book requires owner or administrator action before continuing.";
+    if (recovery === "TERMINAL_FAILURE")
+      return "The Price Book resource is no longer available. Refresh authoritative state.";
   }
   return "Price Book operation failed safely. Refresh authoritative state before retrying.";
 };
 
+const digestServiceCodes = async (codes: string[]) => {
+  const evidence = new TextEncoder().encode(JSON.stringify([...codes].sort()));
+  const digest = await crypto.subtle.digest("SHA-256", evidence);
+  return Array.from(new Uint8Array(digest), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+};
+
 export function PriceBookRoute() {
-  const { activeCompany } = useAuth(); const canRead = useHasPermission("COMPANY_PRICE_BOOK_READ"); const canManage = useHasPermission("COMPANY_PRICE_BOOK_MANAGE"); const canActivate = useHasPermission("COMPANY_PRICE_BOOK_ACTIVATE"); const [branch, setBranch] = useState(""); const catalog = usePriceBook(branch || undefined, canRead); const mutations = usePriceBookMutations();
+  const { activeCompany } = useAuth();
+  const canRead = useHasPermission("COMPANY_PRICE_BOOK_READ");
+  const canManage = useHasPermission("COMPANY_PRICE_BOOK_MANAGE");
+  const canActivate = useHasPermission("COMPANY_PRICE_BOOK_ACTIVATE");
+  const [branch, setBranch] = useState("");
+  const catalog = usePriceBook(branch || undefined, canRead);
+  const mutations = usePriceBookMutations();
   const [category, setCategory] = useState({ code: "", name: "" });
   const [tax, setTax] = useState({ code: "", name: "", taxable: true });
-  const [optionGroup, setOptionGroup] = useState({ code: "", name: "", minimum_selections: 0, maximum_selections: 1 });
-  const [option, setOption] = useState({ groupId: "", serviceItemId: "", label: "", position: "1" });
-  const [item, setItem] = useState({ category_id: "", code: "", name: "", customer_description: "" });
-  const [draft, setDraft] = useState({ itemId: "", taxId: "", price: "", effective: "", componentType: "labor" as "labor" | "material", componentLabel: "", componentQuantity: "1", componentCost: "" });
-  if (!activeCompany) return <Alert variant="danger">Select an accessible Company before opening Price Book.</Alert>;
-  if (!canRead) return <Alert variant="danger">You are not authorized to view Price Book.</Alert>;
-  const performMutation = async (operation: () => Promise<unknown>, onSuccess?: () => void) => { try { await operation(); onSuccess?.(); } catch { /* The governed recovery state is announced below. */ } };
-  const submitCategory = async (event: FormEvent) => { event.preventDefault(); await performMutation(() => mutations.category.mutateAsync(category), () => setCategory({ code: "", name: "" })); };
-  const submitTax = async (event: FormEvent) => { event.preventDefault(); await performMutation(() => mutations.tax.mutateAsync(tax), () => setTax({ code: "", name: "", taxable: true })); };
-  const submitOptionGroup = async (event: FormEvent) => { event.preventDefault(); await performMutation(() => mutations.optionGroup.mutateAsync(optionGroup), () => setOptionGroup({ code: "", name: "", minimum_selections: 0, maximum_selections: 1 })); };
-  const submitOption = async (event: FormEvent) => { event.preventDefault(); await performMutation(() => mutations.option.mutateAsync({ groupId: option.groupId, data: { service_item_id: option.serviceItemId, label: option.label, position: Number(option.position) } }), () => setOption({ groupId: "", serviceItemId: "", label: "", position: "1" })); };
-  const submitItem = async (event: FormEvent) => { event.preventDefault(); await performMutation(() => mutations.item.mutateAsync({ ...item, branch_id: branch || undefined }), () => setItem({ category_id: "", code: "", name: "", customer_description: "" })); };
-  const submitDraft = async (event: FormEvent) => { event.preventDefault(); await performMutation(() => mutations.version.mutateAsync({ itemId: draft.itemId, data: { branch_id: branch || undefined, tax_classification_id: draft.taxId, currency: "USD", unit_price: draft.price, effective_at: new Date(draft.effective).toISOString(), components: [{ component_type: draft.componentType, label: draft.componentLabel, quantity: draft.componentQuantity, unit_cost: draft.componentCost || undefined }] } })); };
-  const failedMutation = [mutations.category, mutations.tax, mutations.item, mutations.version, mutations.activate, mutations.optionGroup, mutations.option].find((mutation) => mutation.isError);
-  return <div className="mx-auto max-w-6xl space-y-6 pb-10">
-    <header><p className="text-sm font-semibold text-action-primary">Sales / Commercial Operations</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Price Book</h1><p className="mt-2 text-content-muted">Create controlled service prices and activate immutable commercial versions.</p></header>
-    <Card><CardHeader><CardTitle>Catalog scope</CardTitle><CardDescription>Company-wide items are visible in every Branch. Branch items remain local.</CardDescription></CardHeader><CardContent><Select aria-label="Price Book Branch" value={branch} onChange={(event) => setBranch(event.target.value)}><option value="">All Company prices</option>{activeCompany.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</Select></CardContent></Card>
-    {catalog.isPending ? <Spinner label="Loading Price Book" /> : catalog.isError ? <Alert variant="danger">Price Book could not be loaded.</Alert> : <>
-      {failedMutation && <Alert variant="danger" role="alert" aria-live="assertive">{priceBookRecoveryMessage(failedMutation.error)}</Alert>}
-      {canManage && <section className="grid gap-4 lg:grid-cols-3">
-        <Card><CardHeader><CardTitle>New category</CardTitle></CardHeader><CardContent><form className="space-y-3" onSubmit={(e) => void submitCategory(e)}><Input aria-label="Category code" placeholder="Code" value={category.code} onChange={(e) => setCategory({ ...category, code: e.target.value })} required /><Input aria-label="Category name" placeholder="Name" value={category.name} onChange={(e) => setCategory({ ...category, name: e.target.value })} required /><Button fullWidth type="submit" loading={mutations.category.isPending}>Create category</Button></form></CardContent></Card>
-        <Card><CardHeader><CardTitle>New service item</CardTitle></CardHeader><CardContent><form className="space-y-3" onSubmit={(e) => void submitItem(e)}><Select aria-label="Service category" value={item.category_id} onChange={(e) => setItem({ ...item, category_id: e.target.value })} required><option value="">Category</option>{catalog.data?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Input aria-label="Service code" placeholder="Code" value={item.code} onChange={(e) => setItem({ ...item, code: e.target.value })} required /><Input aria-label="Service name" placeholder="Name" value={item.name} onChange={(e) => setItem({ ...item, name: e.target.value })} required /><Input aria-label="Customer description" placeholder="Customer description" value={item.customer_description} onChange={(e) => setItem({ ...item, customer_description: e.target.value })} required /><Button fullWidth type="submit" loading={mutations.item.isPending}>Create service item</Button></form></CardContent></Card>
-        <Card><CardHeader><CardTitle>Draft price version</CardTitle></CardHeader><CardContent><form className="space-y-3" onSubmit={(e) => void submitDraft(e)}><Select aria-label="Price service item" value={draft.itemId} onChange={(e) => setDraft({ ...draft, itemId: e.target.value })} required><option value="">Service item</option>{catalog.data?.service_items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</Select><Select aria-label="Tax classification" value={draft.taxId} onChange={(e) => setDraft({ ...draft, taxId: e.target.value })} required><option value="">Tax classification</option>{catalog.data?.tax_classifications.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select><Input aria-label="Unit price" type="number" min="0" step="0.0001" placeholder="Unit price" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} required /><Input aria-label="Effective time" type="datetime-local" value={draft.effective} onChange={(e) => setDraft({ ...draft, effective: e.target.value })} required /><Select aria-label="Component type" value={draft.componentType} onChange={(e) => setDraft({ ...draft, componentType: e.target.value as "labor" | "material" })}><option value="labor">Labor</option><option value="material">Material</option></Select><Input aria-label="Component label" placeholder="Component label" value={draft.componentLabel} onChange={(e) => setDraft({ ...draft, componentLabel: e.target.value })} required /><Button fullWidth type="submit" loading={mutations.version.isPending}>Create draft</Button></form></CardContent></Card>
-      </section>}
-      {canManage && <section className="grid gap-4 lg:grid-cols-3">
-        <Card><CardHeader><CardTitle>Tax classification</CardTitle><CardDescription>Define the internal tax treatment carried into snapshots.</CardDescription></CardHeader><CardContent><form className="space-y-3" onSubmit={(e) => void submitTax(e)}><Input aria-label="Tax code" placeholder="Code" value={tax.code} onChange={(e) => setTax({ ...tax, code: e.target.value })} required /><Input aria-label="Tax name" placeholder="Name" value={tax.name} onChange={(e) => setTax({ ...tax, name: e.target.value })} required /><label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={tax.taxable} onChange={(e) => setTax({ ...tax, taxable: e.target.checked })} />Taxable</label><Button fullWidth type="submit" loading={mutations.tax.isPending}>Create tax classification</Button></form></CardContent></Card>
-        <Card><CardHeader><CardTitle>Customer option group</CardTitle><CardDescription>Define explicit required and maximum selections.</CardDescription></CardHeader><CardContent><form className="space-y-3" onSubmit={(e) => void submitOptionGroup(e)}><Input aria-label="Option group code" placeholder="Code" value={optionGroup.code} onChange={(e) => setOptionGroup({ ...optionGroup, code: e.target.value })} required /><Input aria-label="Option group name" placeholder="Name" value={optionGroup.name} onChange={(e) => setOptionGroup({ ...optionGroup, name: e.target.value })} required /><Input aria-label="Minimum selections" type="number" min="0" value={optionGroup.minimum_selections} onChange={(e) => setOptionGroup({ ...optionGroup, minimum_selections: Number(e.target.value) })} required /><Input aria-label="Maximum selections" type="number" min="1" value={optionGroup.maximum_selections} onChange={(e) => setOptionGroup({ ...optionGroup, maximum_selections: Number(e.target.value) })} required /><Button fullWidth type="submit" loading={mutations.optionGroup.isPending}>Create option group</Button></form></CardContent></Card>
-        <Card><CardHeader><CardTitle>Add customer option</CardTitle></CardHeader><CardContent><form className="space-y-3" onSubmit={(e) => void submitOption(e)}><Select aria-label="Option group" value={option.groupId} onChange={(e) => setOption({ ...option, groupId: e.target.value })} required><option value="">Option group</option>{catalog.data?.option_groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</Select><Select aria-label="Option service item" value={option.serviceItemId} onChange={(e) => setOption({ ...option, serviceItemId: e.target.value })} required><option value="">Service item</option>{catalog.data?.service_items.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</Select><Input aria-label="Option label" placeholder="Customer label" value={option.label} onChange={(e) => setOption({ ...option, label: e.target.value })} required /><Input aria-label="Option position" type="number" min="1" value={option.position} onChange={(e) => setOption({ ...option, position: e.target.value })} required /><Button fullWidth type="submit" loading={mutations.option.isPending}>Add option</Button></form></CardContent></Card>
-      </section>}
-      <Card><CardHeader><CardTitle>Service prices</CardTitle><CardDescription>Activation supersedes one overlapping active version transactionally.</CardDescription></CardHeader><CardContent><ul className="space-y-3">{catalog.data?.service_items.map((service) => { const versions = catalog.data.versions.filter((v) => v.service_item_id === service.id); return <li key={service.id} className="rounded-lg border border-stroke p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap gap-2"><strong>{service.name}</strong><code>{service.code}</code><Badge variant={service.status === "active" ? "success" : "neutral"}>{service.status}</Badge></div><p className="mt-1 text-sm text-content-muted">{service.customer_description}</p></div></div><div className="mt-3 grid gap-2">{versions.map((version) => <div key={version.id} className="flex flex-col gap-2 rounded-md bg-surface-muted p-3 sm:flex-row sm:items-center sm:justify-between"><span>Revision {version.revision} · {version.currency} {version.unit_price} · {version.status}</span>{canActivate && version.status === "draft" && <Button onClick={() => void performMutation(() => mutations.activate.mutateAsync({ id: version.id, version: version.version }))}>Activate version</Button>}</div>)}</div></li>; })}</ul></CardContent></Card>
-    </>}
-  </div>;
+  const [optionGroup, setOptionGroup] = useState({
+    code: "",
+    name: "",
+    minimum_selections: 0,
+    maximum_selections: 1,
+  });
+  const [option, setOption] = useState({
+    groupId: "",
+    serviceItemId: "",
+    label: "",
+    position: "1",
+  });
+  const [item, setItem] = useState({
+    category_id: "",
+    code: "",
+    name: "",
+    customer_description: "",
+  });
+  const [editItem, setEditItem] = useState<{
+    id: string;
+    version: number;
+    status: "draft" | "active" | "inactive" | "archived";
+  } | null>(null);
+  const [draft, setDraft] = useState({
+    itemId: "",
+    taxId: "",
+    price: "",
+    effective: "",
+    componentType: "labor" as "labor" | "material" | "other_direct",
+    componentLabel: "",
+    componentQuantity: "1",
+    componentCost: "",
+  });
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [reviewType, setReviewType] = useState<
+    | "commercial_content"
+    | "candidate_prices"
+    | "tax_classification"
+    | "membership"
+    | "source_conflict"
+  >("candidate_prices");
+  const [savedReview, setSavedReview] = useState<{
+    id: string;
+    digest: string;
+    version: number;
+    count: number;
+  } | null>(null);
+  const [adjustment, setAdjustment] = useState({
+    kind: "percentage" as "percentage" | "fixed_amount",
+    value: "",
+    effective: "",
+  });
+  const [savedAdjustment, setSavedAdjustment] = useState<{
+    id: string;
+    digest: string;
+    version: number;
+    count: number;
+    status: string;
+  } | null>(null);
+  if (!activeCompany)
+    return (
+      <Alert variant="danger">
+        Select an accessible Company before opening Price Book.
+      </Alert>
+    );
+  if (!canRead)
+    return (
+      <Alert variant="danger">You are not authorized to view Price Book.</Alert>
+    );
+  const performMutation = async (
+    operation: () => Promise<unknown>,
+    onSuccess?: () => void,
+  ) => {
+    try {
+      await operation();
+      onSuccess?.();
+    } catch {
+      /* The governed recovery state is announced below. */
+    }
+  };
+  const submitCategory = async (event: FormEvent) => {
+    event.preventDefault();
+    await performMutation(
+      () => mutations.category.mutateAsync(category),
+      () => setCategory({ code: "", name: "" }),
+    );
+  };
+  const submitTax = async (event: FormEvent) => {
+    event.preventDefault();
+    await performMutation(
+      () => mutations.tax.mutateAsync(tax),
+      () => setTax({ code: "", name: "", taxable: true }),
+    );
+  };
+  const submitOptionGroup = async (event: FormEvent) => {
+    event.preventDefault();
+    await performMutation(
+      () => mutations.optionGroup.mutateAsync(optionGroup),
+      () =>
+        setOptionGroup({
+          code: "",
+          name: "",
+          minimum_selections: 0,
+          maximum_selections: 1,
+        }),
+    );
+  };
+  const submitOption = async (event: FormEvent) => {
+    event.preventDefault();
+    await performMutation(
+      () =>
+        mutations.option.mutateAsync({
+          groupId: option.groupId,
+          data: {
+            service_item_id: option.serviceItemId,
+            label: option.label,
+            position: Number(option.position),
+          },
+        }),
+      () =>
+        setOption({ groupId: "", serviceItemId: "", label: "", position: "1" }),
+    );
+  };
+  const submitItem = async (event: FormEvent) => {
+    event.preventDefault();
+    await performMutation(
+      () =>
+        editItem
+          ? mutations.itemUpdate.mutateAsync({
+              itemId: editItem.id,
+              data: {
+                ...item,
+                branch_id: branch || undefined,
+                status: editItem.status,
+                expected_version: editItem.version,
+              },
+            })
+          : mutations.item.mutateAsync({
+              ...item,
+              branch_id: branch || undefined,
+            }),
+      () => {
+        setItem({
+          category_id: "",
+          code: "",
+          name: "",
+          customer_description: "",
+        });
+        setEditItem(null);
+      },
+    );
+  };
+  const submitDraft = async (event: FormEvent) => {
+    event.preventDefault();
+    await performMutation(() =>
+      mutations.version.mutateAsync({
+        itemId: draft.itemId,
+        data: {
+          branch_id: branch || undefined,
+          tax_classification_id: draft.taxId,
+          currency: "USD",
+          unit_price: draft.price,
+          effective_at: new Date(draft.effective).toISOString(),
+          components: [
+            {
+              component_type: draft.componentType,
+              label: draft.componentLabel,
+              quantity: draft.componentQuantity,
+              unit_cost: draft.componentCost || undefined,
+            },
+          ],
+        },
+      }),
+    );
+  };
+  const saveVisibleReview = async () => {
+    const codes = filteredServices.map((service) => service.code).sort();
+    if (codes.length === 0) return;
+    const digest = await digestServiceCodes(codes);
+    await performMutation(async () => {
+      const saved = await mutations.reviewBatch.mutateAsync({
+        configuration_version: "owner-review-workspace-v1",
+        review_type: reviewType,
+        selector: {
+          branch_id: branch || null,
+          search: normalizedSearch || null,
+          status: statusFilter,
+        },
+        service_codes: codes,
+        exclusions: [],
+        candidate_set_digest: digest,
+        idempotency_key: `owner-review-${reviewType}-${digest.slice(0, 24)}`,
+      });
+      setSavedReview({
+        id: saved.id,
+        digest: saved.candidate_set_digest,
+        version: saved.version,
+        count: saved.service_codes.length,
+      });
+    });
+  };
+  const approveSavedReview = async () => {
+    if (!savedReview) return;
+    await performMutation(async () => {
+      const decided = await mutations.reviewDecision.mutateAsync({
+        batchId: savedReview.id,
+        data: {
+          expected_version: savedReview.version,
+          expected_digest: savedReview.digest,
+          decision: "approved",
+          reason:
+            "Owner approved this filtered candidate group for review readiness. Activation remains separate.",
+        },
+      });
+      setSavedReview({ ...savedReview, version: decided.version });
+    });
+  };
+  const saveAdjustmentPreview = async () => {
+    const value = Number(adjustment.value);
+    if (!Number.isFinite(value) || !adjustment.effective) return;
+    const impacts = filteredServices.flatMap((service) => {
+      const active = versions.find(
+        (version) =>
+          version.id === service.current_version_id &&
+          version.status === "active",
+      );
+      if (!active) return [];
+      const current = Number(active.unit_price);
+      const proposed =
+        Math.round(
+          (adjustment.kind === "percentage"
+            ? current * (1 + value / 100)
+            : current + value) * 100,
+        ) / 100;
+      if (proposed < 0) return [];
+      return [
+        {
+          service_code: service.code,
+          current_price: current.toFixed(2),
+          proposed_price: proposed.toFixed(2),
+          absolute_change: (proposed - current).toFixed(2),
+        },
+      ];
+    });
+    if (impacts.length === 0) return;
+    const effectiveAt = new Date(adjustment.effective).toISOString();
+    const codes = impacts.map((impact) => impact.service_code).sort();
+    const digestBytes = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(
+        JSON.stringify({
+          codes,
+          kind: adjustment.kind,
+          value: adjustment.value,
+          effectiveAt,
+          impacts,
+        }),
+      ),
+    );
+    const digest = Array.from(new Uint8Array(digestBytes), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    await performMutation(async () => {
+      const saved = await mutations.adjustmentProposal.mutateAsync({
+        source_price_book_version: "current-active-selection",
+        recommendation_identity: `owner-bulk-${digest}`,
+        affected_service_codes: codes,
+        owner_exclusions: [],
+        transformation_kind: adjustment.kind,
+        transformation: { [adjustment.kind]: adjustment.value },
+        impacts,
+        limitations: [
+          "No profit effect is asserted where cost evidence is incomplete.",
+        ],
+        effective_at: effectiveAt,
+        proposal_digest: digest,
+      });
+      setSavedAdjustment({
+        id: saved.id,
+        digest,
+        version: saved.version,
+        count: impacts.length,
+        status: saved.status,
+      });
+    });
+  };
+  const approveAdjustment = async () => {
+    if (!savedAdjustment) return;
+    await performMutation(async () => {
+      const saved = await mutations.adjustmentDecision.mutateAsync({
+        proposalId: savedAdjustment.id,
+        data: {
+          expected_version: savedAdjustment.version,
+          expected_digest: savedAdjustment.digest,
+          decision: "approved",
+          reason: "Owner approved this exact bulk price preview.",
+        },
+      });
+      setSavedAdjustment({
+        ...savedAdjustment,
+        version: saved.version,
+        status: saved.status,
+      });
+    });
+  };
+  const createAdjustmentDrafts = async () => {
+    if (!savedAdjustment || savedAdjustment.status !== "approved") return;
+    await performMutation(async () => {
+      await mutations.adjustmentMaterialize.mutateAsync({
+        proposalId: savedAdjustment.id,
+        data: {
+          expected_version: savedAdjustment.version,
+          expected_digest: savedAdjustment.digest,
+          idempotency_key: `materialize-${savedAdjustment.digest.slice(0, 40)}`,
+        },
+      });
+      setSavedAdjustment(null);
+    });
+  };
+  const failedMutation = [
+    mutations.category,
+    mutations.tax,
+    mutations.item,
+    mutations.itemUpdate,
+    mutations.version,
+    mutations.activate,
+    mutations.optionGroup,
+    mutations.option,
+    mutations.reviewBatch,
+    mutations.reviewDecision,
+    mutations.adjustmentProposal,
+    mutations.adjustmentDecision,
+    mutations.adjustmentMaterialize,
+  ].find((mutation) => mutation.isError);
+  const services = catalog.data?.service_items ?? [];
+  const versions = catalog.data?.versions ?? [];
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredServices = services.filter((service) => {
+    const matchesCategory =
+      categoryFilter === "all" || service.category_id === categoryFilter;
+    const matchesSearch =
+      !normalizedSearch ||
+      [service.code, service.name, service.customer_description].some((value) =>
+        value.toLocaleLowerCase().includes(normalizedSearch),
+      );
+    return (
+      matchesCategory &&
+      matchesSearch &&
+      (statusFilter === "all" || service.status === statusFilter)
+    );
+  });
+  const activeCount = services.filter(
+    (service) => service.status === "active",
+  ).length;
+  const draftCount = services.filter(
+    (service) => service.status === "draft",
+  ).length;
+  const ownerReviewCount = services.filter((service) =>
+    versions.some(
+      (version) =>
+        version.service_item_id === service.id && version.status === "draft",
+    ),
+  ).length;
+  const missingPriceCount = services.filter(
+    (service) =>
+      !versions.some((version) => version.service_item_id === service.id),
+  ).length;
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 pb-10">
+      <header>
+        <p className="text-sm font-semibold text-action-primary">
+          Sales / Commercial Operations
+        </p>
+        <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Price Book</h1>
+        <p className="mt-2 text-content-muted">
+          Create controlled service prices and activate immutable commercial
+          versions.
+        </p>
+      </header>
+      <Card>
+        <CardHeader>
+          <CardTitle>Catalog scope</CardTitle>
+          <CardDescription>
+            Company-wide items are visible in every Branch. Branch items remain
+            local.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select
+            aria-label="Price Book Branch"
+            value={branch}
+            onChange={(event) => setBranch(event.target.value)}
+          >
+            <option value="">All Company prices</option>
+            {activeCompany.branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </Select>
+        </CardContent>
+      </Card>
+      {catalog.isPending ? (
+        <Spinner label="Loading Price Book" />
+      ) : catalog.isError ? (
+        <Alert variant="danger">Price Book could not be loaded.</Alert>
+      ) : (
+        <>
+          {failedMutation && (
+            <Alert variant="danger" role="alert" aria-live="assertive">
+              {priceBookRecoveryMessage(failedMutation.error)}
+            </Alert>
+          )}
+          <section
+            aria-label="Price Book readiness"
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <Card>
+              <CardHeader>
+                <CardDescription>Services</CardDescription>
+                <CardTitle>{services.length}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Active</CardDescription>
+                <CardTitle>{activeCount}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Ready for owner review</CardDescription>
+                <CardTitle>{ownerReviewCount + draftCount}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Missing price evidence</CardDescription>
+                <CardTitle>{missingPriceCount}</CardTitle>
+              </CardHeader>
+            </Card>
+          </section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Activation readiness</CardTitle>
+              <CardDescription>
+                Review customer content and prices in groups. Tax decisions and
+                internal cost completion stay visible as separate work; saving
+                or approving a review never activates a price.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-lg border border-stroke p-4">
+                  <strong>Customer use</strong>
+                  <p className="mt-1 text-sm text-content-muted">
+                    Description, candidate price, options and membership
+                    eligibility determine what can be presented on an Estimate.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-stroke p-4">
+                  <strong>Tax decision</strong>
+                  <p className="mt-1 text-sm text-content-muted">
+                    Reusable treatment classes can be reviewed by an accountant
+                    without answering once per service.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-stroke p-4">
+                  <strong>Internal costing</strong>
+                  <p className="mt-1 text-sm text-content-muted">
+                    Missing cost detail affects planned Economics and
+                    price-review insight, not an otherwise complete customer
+                    price.
+                  </p>
+                </div>
+              </div>
+              {canManage && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+                  <label className="space-y-1 text-sm font-medium">
+                    Review the visible group
+                    <Select
+                      aria-label="Bulk review type"
+                      value={reviewType}
+                      onChange={(event) => {
+                        setReviewType(event.target.value as typeof reviewType);
+                        setSavedReview(null);
+                      }}
+                    >
+                      <option value="candidate_prices">Candidate prices</option>
+                      <option value="commercial_content">
+                        Customer content
+                      </option>
+                      <option value="tax_classification">
+                        Tax classification
+                      </option>
+                      <option value="membership">Membership</option>
+                      <option value="source_conflict">Source conflicts</option>
+                    </Select>
+                  </label>
+                  <Button
+                    onClick={() => void saveVisibleReview()}
+                    loading={mutations.reviewBatch.isPending}
+                    disabled={filteredServices.length === 0}
+                  >
+                    Save {filteredServices.length} as draft
+                  </Button>
+                  <Button
+                    onClick={() => void approveSavedReview()}
+                    loading={mutations.reviewDecision.isPending}
+                    disabled={!savedReview}
+                  >
+                    Approve saved group
+                  </Button>
+                </div>
+              )}
+              {savedReview && (
+                <Alert variant="success" role="status">
+                  Saved a review group containing {savedReview.count} services.
+                  Activation is still separate.
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+          {canManage && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Bulk price adjustment</CardTitle>
+                <CardDescription>
+                  Preview the currently filtered active services. Approval creates
+                  successor drafts only; activation remains a separate action.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Select
+                    aria-label="Bulk adjustment method"
+                    value={adjustment.kind}
+                    onChange={(event) =>
+                      setAdjustment({
+                        ...adjustment,
+                        kind: event.target.value as typeof adjustment.kind,
+                      })
+                    }
+                  >
+                    <option value="percentage">Percentage</option>
+                    <option value="fixed_amount">Fixed amount</option>
+                  </Select>
+                  <Input
+                    aria-label="Bulk adjustment value"
+                    type="number"
+                    step="0.01"
+                    value={adjustment.value}
+                    onChange={(event) =>
+                      setAdjustment({ ...adjustment, value: event.target.value })
+                    }
+                  />
+                  <Input
+                    aria-label="Bulk adjustment effective date"
+                    type="datetime-local"
+                    value={adjustment.effective}
+                    onChange={(event) =>
+                      setAdjustment({
+                        ...adjustment,
+                        effective: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <p className="text-sm text-content-muted">
+                  Preview scope: {filteredServices.filter((service) => service.current_version_id).length} active-priced services. No historical version will be changed.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => void saveAdjustmentPreview()}
+                    disabled={!adjustment.value || !adjustment.effective}
+                    loading={mutations.adjustmentProposal.isPending}
+                  >
+                    Save exact preview
+                  </Button>
+                  {canActivate && (
+                    <Button
+                      onClick={() => void approveAdjustment()}
+                      disabled={!savedAdjustment || savedAdjustment.status !== "draft"}
+                      loading={mutations.adjustmentDecision.isPending}
+                    >
+                      Approve preview
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => void createAdjustmentDrafts()}
+                    disabled={!savedAdjustment || savedAdjustment.status !== "approved"}
+                    loading={mutations.adjustmentMaterialize.isPending}
+                  >
+                    Create successor drafts
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setSavedAdjustment(null)}
+                    disabled={!savedAdjustment}
+                  >
+                    Cancel preview
+                  </Button>
+                </div>
+                {savedAdjustment && (
+                  <Alert variant="success" role="status">
+                    Exact preview saved for {savedAdjustment.count} services · {savedAdjustment.status}. No price is active.
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          {canManage && (
+            <section className="grid gap-4 lg:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>New category</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => void submitCategory(e)}
+                  >
+                    <Input
+                      aria-label="Category code"
+                      placeholder="Code"
+                      value={category.code}
+                      onChange={(e) =>
+                        setCategory({ ...category, code: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Category name"
+                      placeholder="Name"
+                      value={category.name}
+                      onChange={(e) =>
+                        setCategory({ ...category, name: e.target.value })
+                      }
+                      required
+                    />
+                    <Button
+                      fullWidth
+                      type="submit"
+                      loading={mutations.category.isPending}
+                    >
+                      Create category
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{editItem ? "Edit service item" : "New service item"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => void submitItem(e)}
+                  >
+                    <Select
+                      aria-label="Service category"
+                      value={item.category_id}
+                      onChange={(e) =>
+                        setItem({ ...item, category_id: e.target.value })
+                      }
+                      required
+                    >
+                      <option value="">Category</option>
+                      {catalog.data?.categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      aria-label="Service code"
+                      placeholder="Code"
+                      value={item.code}
+                      onChange={(e) =>
+                        setItem({ ...item, code: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Service name"
+                      placeholder="Name"
+                      value={item.name}
+                      onChange={(e) =>
+                        setItem({ ...item, name: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Customer description"
+                      placeholder="Customer description"
+                      value={item.customer_description}
+                      onChange={(e) =>
+                        setItem({
+                          ...item,
+                          customer_description: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                    <Button
+                      fullWidth
+                      type="submit"
+                      loading={mutations.item.isPending || mutations.itemUpdate.isPending}
+                    >
+                      {editItem ? "Save service item" : "Create service item"}
+                    </Button>
+                    {editItem && (
+                      <Button
+                        fullWidth
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditItem(null);
+                          setItem({ category_id: "", code: "", name: "", customer_description: "" });
+                        }}
+                      >
+                        Cancel edit
+                      </Button>
+                    )}
+                  </form>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Draft price version</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => void submitDraft(e)}
+                  >
+                    <Select
+                      aria-label="Price service item"
+                      value={draft.itemId}
+                      onChange={(e) =>
+                        setDraft({ ...draft, itemId: e.target.value })
+                      }
+                      required
+                    >
+                      <option value="">Service item</option>
+                      {catalog.data?.service_items.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      aria-label="Tax classification"
+                      value={draft.taxId}
+                      onChange={(e) =>
+                        setDraft({ ...draft, taxId: e.target.value })
+                      }
+                      required
+                    >
+                      <option value="">Tax classification</option>
+                      {catalog.data?.tax_classifications.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      aria-label="Unit price"
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      placeholder="Unit price"
+                      value={draft.price}
+                      onChange={(e) =>
+                        setDraft({ ...draft, price: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Effective time"
+                      type="datetime-local"
+                      value={draft.effective}
+                      onChange={(e) =>
+                        setDraft({ ...draft, effective: e.target.value })
+                      }
+                      required
+                    />
+                    <Select
+                      aria-label="Component type"
+                      value={draft.componentType}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          componentType: e.target.value as "labor" | "material" | "other_direct",
+                        })
+                      }
+                    >
+                      <option value="labor">Labor</option>
+                      <option value="material">Material</option>
+                      <option value="other_direct">Other direct cost</option>
+                    </Select>
+                    <Input
+                      aria-label="Component label"
+                      placeholder="Component label"
+                      value={draft.componentLabel}
+                      onChange={(e) =>
+                        setDraft({ ...draft, componentLabel: e.target.value })
+                      }
+                      required
+                    />
+                    <Button
+                      fullWidth
+                      type="submit"
+                      loading={mutations.version.isPending}
+                    >
+                      Create draft
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </section>
+          )}
+          {canManage && (
+            <section className="grid gap-4 lg:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tax classification</CardTitle>
+                  <CardDescription>
+                    Define the internal tax treatment carried into snapshots.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => void submitTax(e)}
+                  >
+                    <Input
+                      aria-label="Tax code"
+                      placeholder="Code"
+                      value={tax.code}
+                      onChange={(e) => setTax({ ...tax, code: e.target.value })}
+                      required
+                    />
+                    <Input
+                      aria-label="Tax name"
+                      placeholder="Name"
+                      value={tax.name}
+                      onChange={(e) => setTax({ ...tax, name: e.target.value })}
+                      required
+                    />
+                    <label className="flex min-h-11 items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={tax.taxable}
+                        onChange={(e) =>
+                          setTax({ ...tax, taxable: e.target.checked })
+                        }
+                      />
+                      Taxable
+                    </label>
+                    <Button
+                      fullWidth
+                      type="submit"
+                      loading={mutations.tax.isPending}
+                    >
+                      Create tax classification
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Customer option group</CardTitle>
+                  <CardDescription>
+                    Define explicit required and maximum selections.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => void submitOptionGroup(e)}
+                  >
+                    <Input
+                      aria-label="Option group code"
+                      placeholder="Code"
+                      value={optionGroup.code}
+                      onChange={(e) =>
+                        setOptionGroup({ ...optionGroup, code: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Option group name"
+                      placeholder="Name"
+                      value={optionGroup.name}
+                      onChange={(e) =>
+                        setOptionGroup({ ...optionGroup, name: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Minimum selections"
+                      type="number"
+                      min="0"
+                      value={optionGroup.minimum_selections}
+                      onChange={(e) =>
+                        setOptionGroup({
+                          ...optionGroup,
+                          minimum_selections: Number(e.target.value),
+                        })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Maximum selections"
+                      type="number"
+                      min="1"
+                      value={optionGroup.maximum_selections}
+                      onChange={(e) =>
+                        setOptionGroup({
+                          ...optionGroup,
+                          maximum_selections: Number(e.target.value),
+                        })
+                      }
+                      required
+                    />
+                    <Button
+                      fullWidth
+                      type="submit"
+                      loading={mutations.optionGroup.isPending}
+                    >
+                      Create option group
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add customer option</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => void submitOption(e)}
+                  >
+                    <Select
+                      aria-label="Option group"
+                      value={option.groupId}
+                      onChange={(e) =>
+                        setOption({ ...option, groupId: e.target.value })
+                      }
+                      required
+                    >
+                      <option value="">Option group</option>
+                      {catalog.data?.option_groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      aria-label="Option service item"
+                      value={option.serviceItemId}
+                      onChange={(e) =>
+                        setOption({ ...option, serviceItemId: e.target.value })
+                      }
+                      required
+                    >
+                      <option value="">Service item</option>
+                      {catalog.data?.service_items.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      aria-label="Option label"
+                      placeholder="Customer label"
+                      value={option.label}
+                      onChange={(e) =>
+                        setOption({ ...option, label: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Option position"
+                      type="number"
+                      min="1"
+                      value={option.position}
+                      onChange={(e) =>
+                        setOption({ ...option, position: e.target.value })
+                      }
+                      required
+                    />
+                    <Button
+                      fullWidth
+                      type="submit"
+                      loading={mutations.option.isPending}
+                    >
+                      Add option
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </section>
+          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Service prices</CardTitle>
+              <CardDescription>
+                Search by customer language or service code. Activation remains
+                a separate authorized action.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                <Input
+                  aria-label="Search Price Book"
+                  placeholder="Search services"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <Select
+                  aria-label="Filter Price Book category"
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                >
+                  <option value="all">All categories</option>
+                  {catalog.data?.categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  aria-label="Filter Price Book status"
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                >
+                  <option value="all">All states</option>
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="archived">Archived</option>
+                </Select>
+              </div>
+              <p className="mb-3 text-sm text-content-muted" aria-live="polite">
+                Showing {filteredServices.length} of {services.length} services.
+              </p>
+              <ul className="space-y-3">
+                {filteredServices.map((service) => {
+                  const itemVersions = versions.filter(
+                    (v) => v.service_item_id === service.id,
+                  );
+                  const reviewState = itemVersions.some(
+                    (version) => version.status === "draft",
+                  )
+                    ? "Ready for owner review"
+                    : itemVersions.length === 0
+                      ? "Missing price evidence"
+                      : "Configured";
+                  return (
+                    <li
+                      key={service.id}
+                      className="rounded-lg border border-stroke p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap gap-2">
+                            <strong>{service.name}</strong>
+                            <code>{service.code}</code>
+                            <Badge
+                              variant={
+                                service.status === "active"
+                                  ? "success"
+                                  : "neutral"
+                              }
+                            >
+                              {service.status}
+                            </Badge>
+                            <Badge variant="neutral">{reviewState}</Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-content-muted">
+                            {service.customer_description}
+                          </p>
+                          {canManage && (
+                            <Button
+                              className="mt-2"
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                setItem({
+                                  category_id: service.category_id,
+                                  code: service.code,
+                                  name: service.name,
+                                  customer_description: service.customer_description,
+                                });
+                                setEditItem({
+                                  id: service.id,
+                                  version: service.version,
+                                  status: service.status as "draft" | "active" | "inactive" | "archived",
+                                });
+                              }}
+                            >
+                              Edit service details
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {itemVersions.map((version) => (
+                          <div
+                            key={version.id}
+                            className="flex flex-col gap-2 rounded-md bg-surface-muted p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <span>
+                                Revision {version.revision} · {version.currency}{" "}
+                                {version.unit_price} · {version.status}
+                              </span>
+                              <p className="text-xs text-content-muted">
+                                Effective {new Date(version.effective_at).toLocaleString()} · {version.cost_readiness === "COST_COMPLETE" ? "Cost evidence complete" : "Insufficient cost evidence"}
+                              </p>
+                              {canManage && version.expected_direct_cost && (
+                                <p className="text-xs text-content-muted">
+                                  Expected direct cost {version.currency} {version.expected_direct_cost} · Expected direct contribution {version.currency} {version.expected_direct_contribution}
+                                </p>
+                              )}
+                              {version.status === "draft" && itemVersions.some((candidate) => candidate.status === "active") && (
+                                <p className="text-xs font-medium text-content-muted">
+                                  Change from active: {version.currency} {(Number(version.unit_price) - Number(itemVersions.find((candidate) => candidate.status === "active")?.unit_price ?? 0)).toFixed(2)}
+                                </p>
+                              )}
+                            </div>
+                            {canActivate && version.status === "draft" && (
+                              <Button
+                                onClick={() =>
+                                  void performMutation(() =>
+                                    mutations.activate.mutateAsync({
+                                      id: version.id,
+                                      version: version.version,
+                                    }),
+                                  )
+                                }
+                              >
+                                Activate version
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
 }

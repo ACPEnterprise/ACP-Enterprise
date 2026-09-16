@@ -2,6 +2,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
+
 from app.estimates.pricing import PricingLine, calculate, discount_amount
 from app.platform.permissions.catalog import permission_catalog
 

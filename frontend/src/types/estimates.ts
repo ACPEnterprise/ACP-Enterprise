@@ -30,6 +30,8 @@ export interface EstimateRevision {
   taxable_basis: string;
   tax_amount: string;
   total_amount: string;
+  expires_at: string | null;
+  created_at: string;
   lines: EstimateLine[];
 }
 
@@ -42,6 +44,13 @@ export interface Estimate {
   acceptance_status: string;
   version: number;
   current_revision: EstimateRevision;
+  customer_decision?: {
+    customer_name: string;
+    customer_email: string | null;
+    customer_comment: string | null;
+    evidence_reference: string | null;
+    occurred_at: string;
+  } | null;
 }
 
 export interface EstimateProposalInput {
@@ -51,6 +60,7 @@ export interface EstimateProposalInput {
   proposal_title: string;
   customer_message?: string;
   terms?: string;
+  expires_at?: string;
   lines: Array<{ snapshot_id: string; title: string; description?: string }>;
   discount_type?: "fixed" | "percentage";
   discount_value?: string;
@@ -68,6 +78,25 @@ export interface EstimateDecisionInput extends EstimateTransitionInput {
   customer_comment?: string;
   rejection_reason?: string;
   evidence_reference?: string;
+}
+
+export interface EstimateConversionInput {
+  branch_id: string;
+  expected_version: number;
+  idempotency_key: string;
+  job_type_code?: string;
+  customer_reported_problem?: string;
+  internal_description?: string;
+}
+
+export interface EstimateConversion {
+  id: string;
+  estimate_id: string;
+  estimate_revision_id: string;
+  job_id: string;
+  job_number: string;
+  snapshot_lineage_digest: string;
+  converted_at: string;
 }
 
 export interface EstimateSummary {
