@@ -21,6 +21,7 @@ from app.invoicing.contracts import (
     PaymentApplication,
     PaymentReceiptFact,
     PostingReceiptFact,
+    RecordManualPayment,
 )
 from app.invoicing.errors import InvoiceConflict, InvoiceNotFound
 from app.invoicing.models import (
@@ -29,6 +30,7 @@ from app.invoicing.models import (
     Invoice,
     InvoiceIdempotency,
     InvoiceLine,
+    ManualPaymentReceipt,
     PaymentReceiptEvidence,
 )
 from app.invoicing.service import InvoiceService
@@ -101,15 +103,27 @@ async def issue(factory, actor, invoice):
 
 
 @pytest.mark.asyncio
-async def test_office_workspace_and_customer_balance_use_native_scoped_evidence(invoice_fixture):
+async def test_office_workspace_and_customer_balance_use_native_scoped_evidence(
+    invoice_fixture,
+):
     factory, company, branch, _, customer, _, spec = invoice_fixture
     service = InvoiceService()
     async with factory() as session:
         invoice = await service.create_from_estimate(session, spec)
     as_of = spec.due_date
     async with factory() as session:
-        rows = await service.workspace(session, company.id, frozenset({branch.id}), as_of=as_of, state="all", query=customer.display_name, limit=10)
-        balance = await service.customer_balance(session, company.id, frozenset({branch.id}), customer.id, as_of=as_of)
+        rows = await service.workspace(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            as_of=as_of,
+            state="all",
+            query=customer.display_name,
+            limit=10,
+        )
+        balance = await service.customer_balance(
+            session, company.id, frozenset({branch.id}), customer.id, as_of=as_of
+        )
     assert len(rows) == 1
     assert rows[0]["id"] == invoice.id
     assert rows[0]["customer_display_name"] == customer.display_name
@@ -119,27 +133,88 @@ async def test_office_workspace_and_customer_balance_use_native_scoped_evidence(
     assert balance["native_invoice_count"] == 1
     assert balance["invoice_total"] == invoice.total_amount
     assert balance["open_balance"] == Decimal("0.00")
-    assert balance["evidence_classifications"][0]["classification"] == "CURRENT_AUTHORITATIVE"
+    assert (
+        balance["evidence_classifications"][0]["classification"]
+        == "CURRENT_AUTHORITATIVE"
+    )
     assert balance["evidence_classifications"][0]["source_system"] == "acp_native"
     assert balance["evidence_classifications"][1]["classification"] == "UNAVAILABLE"
 
     async with factory() as session:
-        hidden = await service.workspace(session, company.id, frozenset({uuid4()}), as_of=as_of, state="all")
+        hidden = await service.workspace(
+            session, company.id, frozenset({uuid4()}), as_of=as_of, state="all"
+        )
     assert hidden == ()
 
 
 @pytest.mark.asyncio
-async def test_customer_balance_composes_only_explicit_customer_source_identity(invoice_fixture):
+async def test_invoice_candidates_remove_uuid_entry_and_exclude_invoiced_work(
+    invoice_fixture,
+):
+    factory, company, branch, _, customer, _, spec = invoice_fixture
+    service = InvoiceService()
+    async with factory() as session:
+        candidates = await service.candidates(
+            session, company.id, frozenset({branch.id})
+        )
+    assert len(candidates) == 1
+    assert candidates[0]["job_id"] == spec.job_id
+    assert candidates[0]["estimate_id"] == spec.estimate_id
+    assert candidates[0]["customer_display_name"] == customer.display_name
+    async with factory() as session:
+        await service.create_from_estimate(session, spec)
+    async with factory() as session:
+        assert (
+            await service.candidates(session, company.id, frozenset({branch.id})) == ()
+        )
+        assert await service.candidates(session, uuid4(), frozenset({branch.id})) == ()
+
+
+@pytest.mark.asyncio
+async def test_customer_balance_composes_only_explicit_customer_source_identity(
+    invoice_fixture,
+):
     factory, company, branch, actor, customer, _, spec = invoice_fixture
-    run = CustomerMigrationRun(company_id=company.id, branch_id=branch.id, initiated_by_user_id=actor.id, source_system="housecall_pro", source_sha256="a" * 64, mode="import", status="completed", source_count=1, accepted_count=1, rejected_count=0, duplicate_count=0, unresolved_count=0, completed_at=datetime.now(timezone.utc))
+    run = CustomerMigrationRun(
+        company_id=company.id,
+        branch_id=branch.id,
+        initiated_by_user_id=actor.id,
+        source_system="housecall_pro",
+        source_sha256="a" * 64,
+        mode="import",
+        status="completed",
+        source_count=1,
+        accepted_count=1,
+        rejected_count=0,
+        duplicate_count=0,
+        unresolved_count=0,
+        completed_at=datetime.now(timezone.utc),
+    )
     async with factory() as session:
         session.add(run)
         await session.flush()
-        session.add(CustomerSourceIdentity(company_id=company.id, branch_id=branch.id, customer_id=customer.id, source_system="housecall_pro", source_customer_id="hcp-customer-1", first_run_id=run.id))
+        session.add(
+            CustomerSourceIdentity(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                source_system="housecall_pro",
+                source_customer_id="hcp-customer-1",
+                first_run_id=run.id,
+            )
+        )
         await session.commit()
     async with factory() as session:
-        balance = await InvoiceService().customer_balance(session, company.id, frozenset({branch.id}), customer.id, as_of=spec.due_date)
-        foreign = await InvoiceService().customer_balance(session, uuid4(), frozenset({branch.id}), customer.id, as_of=spec.due_date)
+        balance = await InvoiceService().customer_balance(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            customer.id,
+            as_of=spec.due_date,
+        )
+        foreign = await InvoiceService().customer_balance(
+            session, uuid4(), frozenset({branch.id}), customer.id, as_of=spec.due_date
+        )
     assert balance is not None
     source = balance["evidence_classifications"][1]
     assert source["company_id"] == str(company.id)
@@ -173,8 +248,23 @@ async def test_accepted_work_creates_and_issues_one_exact_receivable(invoice_fix
             session, replace(spec, idempotency_key="invoice-create-alternate")
         )
         assert alternate_key.id == invoice.id
-        assert await session.scalar(select(func.count(Invoice.id)).where(Invoice.estimate_revision_id == invoice.estimate_revision_id)) == 1
-        assert await session.scalar(select(func.count(InvoiceIdempotency.id)).where(InvoiceIdempotency.invoice_id == invoice.id, InvoiceIdempotency.operation == "create")) == 2
+        assert (
+            await session.scalar(
+                select(func.count(Invoice.id)).where(
+                    Invoice.estimate_revision_id == invoice.estimate_revision_id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(InvoiceIdempotency.id)).where(
+                    InvoiceIdempotency.invoice_id == invoice.id,
+                    InvoiceIdempotency.operation == "create",
+                )
+            )
+            == 2
+        )
     issued = await issue(factory, actor, invoice)
     assert issued.open_amount == issued.total_amount
     async with factory() as session:
@@ -339,6 +429,104 @@ async def test_verified_receipt_application_and_accounting_receipt_seams(
 
 
 @pytest.mark.asyncio
+async def test_manual_check_payment_is_replay_safe_partial_and_not_settlement(
+    invoice_fixture,
+):
+    factory, company, branch, actor, _, _, spec = invoice_fixture
+    service = InvoiceService()
+    async with factory() as session:
+        invoice = await service.create_from_estimate(session, spec)
+    invoice = await issue(factory, actor, invoice)
+    payment = RecordManualPayment(
+        company_id=company.id,
+        branch_id=branch.id,
+        invoice_id=invoice.id,
+        expected_version=invoice.version,
+        actor_user_id=actor.id,
+        idempotency_key="manual-check-payment-1",
+        occurred_at=datetime.now(timezone.utc),
+        amount=Decimal("25.00"),
+        payment_method="check",
+        reference="CHECK 1042",
+    )
+    async with factory() as session:
+        applied, receipt = await service.record_manual_payment(session, payment)
+    assert applied.status == "partially_paid"
+    assert applied.open_amount == invoice.total_amount - Decimal("25.00")
+    assert receipt.reference_label == "ending 1042"
+    assert receipt.settlement_state == "not_asserted"
+    assert receipt.accounting_state == "not_posted"
+    async with factory() as session:
+        replay_invoice, replay_receipt = await service.record_manual_payment(
+            session, payment
+        )
+        assert replay_receipt.id == receipt.id
+        assert replay_invoice.version == applied.version
+        assert (
+            await session.scalar(
+                select(func.count(ManualPaymentReceipt.id)).where(
+                    ManualPaymentReceipt.company_id == company.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(ARLedgerEntry.id)).where(
+                    ARLedgerEntry.invoice_id == invoice.id,
+                    ARLedgerEntry.entry_type == "payment_application",
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_manual_payment_duplicate_reference_and_tenant_scope_fail_closed(
+    invoice_fixture,
+):
+    factory, company, branch, actor, _, _, spec = invoice_fixture
+    service = InvoiceService()
+    async with factory() as session:
+        invoice = await service.create_from_estimate(session, spec)
+    invoice = await issue(factory, actor, invoice)
+    payment = RecordManualPayment(
+        company_id=company.id,
+        branch_id=branch.id,
+        invoice_id=invoice.id,
+        expected_version=invoice.version,
+        actor_user_id=actor.id,
+        idempotency_key="manual-check-duplicate-a",
+        occurred_at=datetime.now(timezone.utc),
+        amount=Decimal("10.00"),
+        payment_method="check",
+        reference="CHECK 2048",
+    )
+    async with factory() as session:
+        applied, _ = await service.record_manual_payment(session, payment)
+    async with factory() as session:
+        with pytest.raises(InvoiceConflict, match="reference already"):
+            await service.record_manual_payment(
+                session,
+                replace(
+                    payment,
+                    expected_version=applied.version,
+                    idempotency_key="manual-check-duplicate-b",
+                ),
+            )
+    async with factory() as session:
+        with pytest.raises(InvoiceNotFound):
+            await service.record_manual_payment(
+                session,
+                replace(
+                    payment,
+                    company_id=uuid4(),
+                    idempotency_key="manual-check-foreign-company",
+                ),
+            )
+
+
+@pytest.mark.asyncio
 async def test_company_branch_and_source_linkage_are_closed(invoice_fixture):
     factory, _, _, _, _, _, spec = invoice_fixture
     service = InvoiceService()
@@ -419,7 +607,15 @@ async def test_concurrent_payment_receipt_registration_has_one_authority(
     first, replay = await asyncio.gather(register(fact), register(fact))
     assert first.id == replay.id
     async with factory() as session:
-        assert await session.scalar(select(func.count(PaymentReceiptEvidence.id)).where(PaymentReceiptEvidence.company_id == company_id, PaymentReceiptEvidence.receipt_id == fact.receipt_id)) == 1
+        assert (
+            await session.scalar(
+                select(func.count(PaymentReceiptEvidence.id)).where(
+                    PaymentReceiptEvidence.company_id == company_id,
+                    PaymentReceiptEvidence.receipt_id == fact.receipt_id,
+                )
+            )
+            == 1
+        )
     with pytest.raises(InvoiceConflict):
         await register(replace(fact, evidence_digest="d" * 64))
     with pytest.raises(InvoiceConflict):

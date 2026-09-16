@@ -3,7 +3,7 @@ import json
 from dataclasses import asdict
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, and_, cast, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -29,6 +29,7 @@ from app.invoicing.contracts import (
     PaymentApplication,
     PaymentReceiptFact,
     PostingReceiptFact,
+    RecordManualPayment,
 )
 from app.invoicing.errors import InvoiceConflict, InvoiceNotFound, InvoiceValidation
 from app.invoicing.models import (
@@ -38,6 +39,7 @@ from app.invoicing.models import (
     InvoiceIdempotency,
     InvoiceLine,
     InvoiceNumberSequence,
+    ManualPaymentReceipt,
     PaymentReceiptEvidence,
 )
 from app.invoicing.source_classification import (
@@ -73,6 +75,86 @@ def _digest(value: object) -> str:
 
 
 class InvoiceService:
+    async def candidates(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branch_ids: frozenset[UUID],
+        *,
+        limit: int = 100,
+    ) -> tuple[dict[str, object], ...]:
+        rows = (
+            await session.execute(
+                select(
+                    Estimate,
+                    EstimateRevision,
+                    EstimateJobConversion,
+                    Job,
+                    Customer,
+                    ServiceLocation,
+                )
+                .join(
+                    EstimateRevision,
+                    (EstimateRevision.company_id == Estimate.company_id)
+                    & (EstimateRevision.id == Estimate.current_revision_id),
+                )
+                .join(
+                    EstimateJobConversion,
+                    (EstimateJobConversion.company_id == Estimate.company_id)
+                    & (EstimateJobConversion.estimate_id == Estimate.id)
+                    & (
+                        EstimateJobConversion.estimate_revision_id
+                        == Estimate.current_revision_id
+                    ),
+                )
+                .join(
+                    Job,
+                    (Job.company_id == EstimateJobConversion.company_id)
+                    & (Job.branch_id == EstimateJobConversion.branch_id)
+                    & (Job.id == EstimateJobConversion.job_id),
+                )
+                .join(
+                    Customer,
+                    (Customer.company_id == Estimate.company_id)
+                    & (Customer.id == Estimate.customer_id),
+                )
+                .join(
+                    ServiceLocation,
+                    (ServiceLocation.id == Estimate.service_location_id)
+                    & (ServiceLocation.customer_id == Estimate.customer_id),
+                )
+                .outerjoin(
+                    Invoice,
+                    (Invoice.company_id == Estimate.company_id)
+                    & (Invoice.estimate_revision_id == Estimate.current_revision_id),
+                )
+                .where(
+                    Estimate.company_id == company_id,
+                    Estimate.branch_id.in_(branch_ids),
+                    Estimate.status.in_(("approved", "accepted")),
+                    Estimate.acceptance_status.in_(("approved", "accepted")),
+                    Job.status == "completed",
+                    Invoice.id.is_(None),
+                )
+                .order_by(Job.completed_at.desc(), Job.id)
+                .limit(limit)
+            )
+        ).all()
+        return tuple(
+            {
+                "branch_id": estimate.branch_id,
+                "estimate_id": estimate.id,
+                "job_id": job.id,
+                "job_number": job.job_number,
+                "customer_id": customer.id,
+                "customer_display_name": customer.display_name,
+                "service_location_label": f"{location.address}, {location.city}, {location.state} {location.postal_code}",
+                "accepted_total": revision.total_amount,
+                "currency": revision.currency,
+            }
+            for estimate, revision, _, job, customer, location in rows
+        )
+
     async def create_from_estimate(
         self, session: AsyncSession, spec: CreateFromEstimate
     ) -> Invoice:
@@ -413,6 +495,191 @@ class InvoiceService:
             )
             return invoice
 
+    async def record_manual_payment(
+        self, session: AsyncSession, spec: RecordManualPayment
+    ) -> tuple[Invoice, ManualPaymentReceipt]:
+        """Record and fully apply operator-observed payment evidence without settlement."""
+        normalized_reference = " ".join(spec.reference.strip().upper().split())
+        reference_digest = _digest(
+            {
+                "company_id": spec.company_id,
+                "branch_id": spec.branch_id,
+                "payment_method": spec.payment_method,
+                "reference": normalized_reference,
+            }
+        )
+        request = _digest(
+            {
+                "operation": "record_manual_payment",
+                "branch_id": spec.branch_id,
+                "invoice_id": spec.invoice_id,
+                "expected_version": spec.expected_version,
+                "amount": spec.amount.quantize(CENT),
+                "payment_method": spec.payment_method,
+                "reference_digest": reference_digest,
+                "occurred_at": spec.occurred_at,
+            }
+        )
+        async with session.begin():
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            f"manual-payment-command:{spec.company_id}:"
+                            f"{spec.idempotency_key}"
+                        )
+                    },
+                )
+            replay = await session.scalar(
+                select(ManualPaymentReceipt).where(
+                    ManualPaymentReceipt.company_id == spec.company_id,
+                    ManualPaymentReceipt.idempotency_key == spec.idempotency_key,
+                )
+            )
+            if replay is not None:
+                if replay.request_digest != request:
+                    raise InvoiceConflict(
+                        "Manual payment command was reused for different evidence."
+                    )
+                invoice = await session.scalar(
+                    select(Invoice).where(
+                        Invoice.company_id == spec.company_id,
+                        Invoice.id == replay.invoice_id,
+                    )
+                )
+                if invoice is None:
+                    raise InvoiceNotFound("Invoice was not found.")
+                return invoice, replay
+            invoice = await self._required(session, spec, lock=True)
+            self._version(invoice, spec.expected_version)
+            amount = spec.amount.quantize(CENT)
+            if invoice.status not in {"issued", "partially_paid", "adjusted"}:
+                raise InvoiceConflict(
+                    "Manual payment requires an issued Invoice with an open balance."
+                )
+            if amount <= 0 or amount > invoice.open_amount:
+                raise InvoiceConflict(
+                    "Manual payment exceeds the open Invoice balance."
+                )
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            f"manual-payment-reference:{spec.company_id}:"
+                            f"{reference_digest}"
+                        )
+                    },
+                )
+            duplicate = await session.scalar(
+                select(ManualPaymentReceipt).where(
+                    ManualPaymentReceipt.company_id == spec.company_id,
+                    ManualPaymentReceipt.reference_digest == reference_digest,
+                )
+            )
+            if duplicate is not None:
+                raise InvoiceConflict(
+                    "Manual payment reference already identifies recorded evidence."
+                )
+            receipt_id = uuid4()
+            evidence_digest = _digest(
+                {
+                    "receipt_id": receipt_id,
+                    "company_id": spec.company_id,
+                    "branch_id": spec.branch_id,
+                    "customer_id": invoice.customer_id,
+                    "invoice_id": invoice.id,
+                    "amount": amount,
+                    "currency": invoice.currency,
+                    "payment_method": spec.payment_method,
+                    "reference_digest": reference_digest,
+                    "occurred_at": spec.occurred_at,
+                }
+            )
+            receipt = ManualPaymentReceipt(
+                id=receipt_id,
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                customer_id=invoice.customer_id,
+                invoice_id=invoice.id,
+                payment_method=spec.payment_method,
+                reference_label=f"ending {normalized_reference[-4:]}",
+                reference_digest=reference_digest,
+                amount=amount,
+                currency=invoice.currency,
+                occurred_at=spec.occurred_at,
+                settlement_state="not_asserted",
+                accounting_state="not_posted",
+                evidence_digest=evidence_digest,
+                request_digest=request,
+                idempotency_key=spec.idempotency_key,
+                recorded_by_user_id=spec.actor_user_id,
+            )
+            session.add(receipt)
+            session.add(
+                PaymentReceiptEvidence(
+                    company_id=spec.company_id,
+                    branch_id=spec.branch_id,
+                    customer_id=invoice.customer_id,
+                    receipt_id=receipt.id,
+                    currency=invoice.currency,
+                    verified_amount=amount,
+                    available_amount=Decimal("0.00"),
+                    occurred_at=spec.occurred_at,
+                    evidence_digest=evidence_digest,
+                )
+            )
+            invoice.open_amount -= amount
+            invoice.status = "paid" if invoice.open_amount == 0 else "partially_paid"
+            self._advance(invoice, spec.actor_user_id)
+            self._ar(
+                session,
+                invoice,
+                "payment_application",
+                -amount,
+                spec,
+                source_id=receipt.id,
+            )
+            self._idempotency(
+                session, invoice, spec.idempotency_key, "record_manual_payment", request
+            )
+            self._event(
+                session,
+                invoice,
+                EventType.INVOICE_MANUAL_PAYMENT_RECORDED,
+                spec.actor_user_id,
+            )
+            return invoice, receipt
+
+    async def manual_payment_history(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branch_ids: frozenset[UUID],
+        invoice_id: UUID,
+    ) -> tuple[ManualPaymentReceipt, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(ManualPaymentReceipt)
+                    .where(
+                        ManualPaymentReceipt.company_id == company_id,
+                        ManualPaymentReceipt.branch_id.in_(branch_ids),
+                        ManualPaymentReceipt.invoice_id == invoice_id,
+                    )
+                    .order_by(
+                        ManualPaymentReceipt.occurred_at,
+                        ManualPaymentReceipt.id,
+                    )
+                )
+            ).all()
+        )
+
     async def reverse_payment_application(
         self, session: AsyncSession, spec: PaymentApplication
     ) -> Invoice:
@@ -588,7 +855,9 @@ class InvoiceService:
             raise InvoiceValidation("Invoice workspace page is invalid.")
         scoped_branches = branches
         if branch_id is not None:
-            scoped_branches = frozenset({branch_id}) if branch_id in branches else frozenset()
+            scoped_branches = (
+                frozenset({branch_id}) if branch_id in branches else frozenset()
+            )
 
         last_activity_type = (
             select(ARLedgerEntry.entry_type)
@@ -625,10 +894,25 @@ class InvoiceService:
                 last_activity_type.label("last_activity_type"),
                 last_activity_at.label("last_activity_at"),
             )
-            .join(Customer, and_(Customer.company_id == Invoice.company_id, Customer.id == Invoice.customer_id))
+            .join(
+                Customer,
+                and_(
+                    Customer.company_id == Invoice.company_id,
+                    Customer.id == Invoice.customer_id,
+                ),
+            )
             .join(ServiceLocation, ServiceLocation.id == Invoice.service_location_id)
-            .join(Job, and_(Job.company_id == Invoice.company_id, Job.branch_id == Invoice.branch_id, Job.id == Invoice.job_id))
-            .where(Invoice.company_id == company_id, Invoice.branch_id.in_(scoped_branches))
+            .join(
+                Job,
+                and_(
+                    Job.company_id == Invoice.company_id,
+                    Job.branch_id == Invoice.branch_id,
+                    Job.id == Invoice.job_id,
+                ),
+            )
+            .where(
+                Invoice.company_id == company_id, Invoice.branch_id.in_(scoped_branches)
+            )
         )
         if customer_id is not None:
             statement = statement.where(Invoice.customer_id == customer_id)
@@ -648,23 +932,54 @@ class InvoiceService:
             )
         open_states = ("draft", "issued", "partially_paid", "adjusted")
         if state == "open":
-            statement = statement.where(Invoice.status.in_(open_states), Invoice.open_amount > 0)
+            statement = statement.where(
+                Invoice.status.in_(open_states), Invoice.open_amount > 0
+            )
         elif state == "overdue":
-            statement = statement.where(Invoice.status.in_(open_states), Invoice.open_amount > 0, Invoice.due_date < as_of)
+            statement = statement.where(
+                Invoice.status.in_(open_states),
+                Invoice.open_amount > 0,
+                Invoice.due_date < as_of,
+            )
         elif state == "needs_attention":
-            statement = statement.where(or_(Invoice.accounting_status == "reconciliation_required", Invoice.legacy_evidence_missing.is_(True), and_(Invoice.status.in_(open_states), Invoice.open_amount > 0, Invoice.due_date < as_of)))
+            statement = statement.where(
+                or_(
+                    Invoice.accounting_status == "reconciliation_required",
+                    Invoice.legacy_evidence_missing.is_(True),
+                    and_(
+                        Invoice.status.in_(open_states),
+                        Invoice.open_amount > 0,
+                        Invoice.due_date < as_of,
+                    ),
+                )
+            )
         elif state and state != "all":
             statement = statement.where(Invoice.status == state)
         rows = (
             await session.execute(
-                statement.order_by(Invoice.due_date.asc(), Invoice.created_at.desc(), Invoice.id.desc())
+                statement.order_by(
+                    Invoice.due_date.asc(), Invoice.created_at.desc(), Invoice.id.desc()
+                )
                 .limit(limit)
                 .offset(offset)
             )
         ).all()
         result: list[dict[str, object]] = []
-        for invoice, customer_number, display_name, nickname, address, city, location_state, job_number, activity_type, activity_at in rows:
-            age_days, bucket = aging_bucket(invoice.due_date, as_of, invoice.open_amount)
+        for (
+            invoice,
+            customer_number,
+            display_name,
+            nickname,
+            address,
+            city,
+            location_state,
+            job_number,
+            activity_type,
+            activity_at,
+        ) in rows:
+            age_days, bucket = aging_bucket(
+                invoice.due_date, as_of, invoice.open_amount
+            )
             attention: list[str] = []
             if invoice.open_amount > 0 and invoice.due_date < as_of:
                 attention.append("INVOICE_OVERDUE")
@@ -672,52 +987,198 @@ class InvoiceService:
                 attention.append("ACCOUNTING_RECONCILIATION_REQUIRED")
             if invoice.legacy_evidence_missing:
                 attention.append("MIGRATION_EVIDENCE_INCOMPLETE")
-            result.append({
-                "id": invoice.id, "branch_id": invoice.branch_id,
-                "customer_id": invoice.customer_id, "customer_number": customer_number,
-                "customer_display_name": display_name,
-                "service_location_id": invoice.service_location_id,
-                "service_location_label": nickname or f"{address}, {city}, {location_state}",
-                "job_id": invoice.job_id, "job_number": job_number,
-                "estimate_id": invoice.estimate_id, "invoice_number": invoice.invoice_number,
-                "status": invoice.status, "accounting_status": invoice.accounting_status,
-                "currency": invoice.currency, "issue_date": invoice.issue_date,
-                "due_date": invoice.due_date, "terms": invoice.terms,
-                "total_amount": invoice.total_amount, "open_amount": invoice.open_amount,
-                "age_days": age_days, "aging_bucket": bucket,
-                "attention_reasons": tuple(attention),
-                "last_ar_activity_type": activity_type, "last_ar_activity_at": activity_at,
-                "legacy_evidence_missing": invoice.legacy_evidence_missing,
-                "version": invoice.version,
-            })
+            result.append(
+                {
+                    "id": invoice.id,
+                    "branch_id": invoice.branch_id,
+                    "customer_id": invoice.customer_id,
+                    "customer_number": customer_number,
+                    "customer_display_name": display_name,
+                    "service_location_id": invoice.service_location_id,
+                    "service_location_label": nickname
+                    or f"{address}, {city}, {location_state}",
+                    "job_id": invoice.job_id,
+                    "job_number": job_number,
+                    "estimate_id": invoice.estimate_id,
+                    "invoice_number": invoice.invoice_number,
+                    "status": invoice.status,
+                    "accounting_status": invoice.accounting_status,
+                    "currency": invoice.currency,
+                    "issue_date": invoice.issue_date,
+                    "due_date": invoice.due_date,
+                    "terms": invoice.terms,
+                    "total_amount": invoice.total_amount,
+                    "open_amount": invoice.open_amount,
+                    "age_days": age_days,
+                    "aging_bucket": bucket,
+                    "attention_reasons": tuple(attention),
+                    "last_ar_activity_type": activity_type,
+                    "last_ar_activity_at": activity_at,
+                    "legacy_evidence_missing": invoice.legacy_evidence_missing,
+                    "version": invoice.version,
+                }
+            )
         return tuple(result)
 
     async def customer_balance(
-        self, session: AsyncSession, company_id: UUID, branches: frozenset[UUID], customer_id: UUID, *, as_of: date
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branches: frozenset[UUID],
+        customer_id: UUID,
+        *,
+        as_of: date,
     ) -> dict[str, object] | None:
-        customer = await session.scalar(select(Customer).where(Customer.company_id == company_id, Customer.id == customer_id))
+        customer = await session.scalar(
+            select(Customer).where(
+                Customer.company_id == company_id, Customer.id == customer_id
+            )
+        )
         if customer is None:
             return None
-        invoices = tuple((await session.scalars(select(Invoice).where(Invoice.company_id == company_id, Invoice.customer_id == customer_id, Invoice.branch_id.in_(branches)))).all())
+        invoices = tuple(
+            (
+                await session.scalars(
+                    select(Invoice).where(
+                        Invoice.company_id == company_id,
+                        Invoice.customer_id == customer_id,
+                        Invoice.branch_id.in_(branches),
+                    )
+                )
+            ).all()
+        )
         currencies = {item.currency for item in invoices}
         if len(currencies) > 1:
-            raise InvoiceValidation("Customer balance requires a single currency scope.")
+            raise InvoiceValidation(
+                "Customer balance requires a single currency scope."
+            )
         invoice_ids = tuple(item.id for item in invoices)
         totals: dict[str, Decimal] = {}
         if invoice_ids:
-            ledger = (await session.execute(select(ARLedgerEntry.entry_type, func.coalesce(func.sum(ARLedgerEntry.amount), 0)).where(ARLedgerEntry.company_id == company_id, ARLedgerEntry.invoice_id.in_(invoice_ids)).group_by(ARLedgerEntry.entry_type))).all()
+            ledger = (
+                await session.execute(
+                    select(
+                        ARLedgerEntry.entry_type,
+                        func.coalesce(func.sum(ARLedgerEntry.amount), 0),
+                    )
+                    .where(
+                        ARLedgerEntry.company_id == company_id,
+                        ARLedgerEntry.invoice_id.in_(invoice_ids),
+                    )
+                    .group_by(ARLedgerEntry.entry_type)
+                )
+            ).all()
             totals = {kind: Decimal(amount) for kind, amount in ledger}
-        receipts = (await session.execute(select(func.coalesce(func.sum(PaymentReceipt.available_amount), 0), func.coalesce(func.sum(PaymentReceipt.disputed_amount), 0)).where(PaymentReceipt.company_id == company_id, PaymentReceipt.customer_id == customer_id, PaymentReceipt.branch_id.in_(branches)))).one()
-        result: dict[str, object] = {"customer_id": customer.id, "customer_number": customer.customer_number, "customer_display_name": customer.display_name, "currency": next(iter(currencies), "USD"), "invoice_total": sum((item.total_amount for item in invoices), Decimal(0)), "open_balance": sum((item.open_amount for item in invoices), Decimal(0)), "credit_total": -totals.get("credit_memo", Decimal(0)), "write_off_total": -totals.get("write_off", Decimal(0)), "applied_payment_total": -totals.get("payment_application", Decimal(0)) + totals.get("application_reversal", Decimal(0)), "unapplied_receipt_total": Decimal(receipts[0]), "disputed_receipt_total": Decimal(receipts[1]), "native_invoice_count": len(invoices), "legacy_evidence_incomplete": any(item.legacy_evidence_missing for item in invoices), "as_of": as_of}
-        native_values = {key: result[key] for key in ("currency", "invoice_total", "open_balance", "applied_payment_total", "unapplied_receipt_total", "disputed_receipt_total", "native_invoice_count")}
-        has_native_financial_evidence = bool(invoices) or any(Decimal(value) != 0 for value in receipts)
-        classifications = [native_evidence(company_id=str(company_id), customer_id=str(customer.id), as_of=as_of, acquired_at=max((item.updated_at for item in invoices), default=customer.updated_at), values=native_values, partial=bool(result["legacy_evidence_incomplete"]), conflicting=any(item.accounting_status == "reconciliation_required" for item in invoices) or Decimal(receipts[1]) > 0) if has_native_financial_evidence else unavailable_source_evidence(company_id=str(company_id), customer_id=str(customer.id), source_system="acp_native")]
-        source_rows = (await session.execute(select(CustomerSourceIdentity, CustomerMigrationRun).join(CustomerMigrationRun, CustomerMigrationRun.id == CustomerSourceIdentity.first_run_id).where(CustomerSourceIdentity.company_id == company_id, CustomerSourceIdentity.customer_id == customer_id, CustomerSourceIdentity.branch_id.in_(branches), CustomerMigrationRun.company_id == company_id).order_by(CustomerSourceIdentity.source_system, CustomerSourceIdentity.created_at))).all()
+        receipts = (
+            await session.execute(
+                select(
+                    func.coalesce(func.sum(PaymentReceipt.available_amount), 0),
+                    func.coalesce(func.sum(PaymentReceipt.disputed_amount), 0),
+                ).where(
+                    PaymentReceipt.company_id == company_id,
+                    PaymentReceipt.customer_id == customer_id,
+                    PaymentReceipt.branch_id.in_(branches),
+                )
+            )
+        ).one()
+        result: dict[str, object] = {
+            "customer_id": customer.id,
+            "customer_number": customer.customer_number,
+            "customer_display_name": customer.display_name,
+            "currency": next(iter(currencies), "USD"),
+            "invoice_total": sum((item.total_amount for item in invoices), Decimal(0)),
+            "open_balance": sum((item.open_amount for item in invoices), Decimal(0)),
+            "credit_total": -totals.get("credit_memo", Decimal(0)),
+            "write_off_total": -totals.get("write_off", Decimal(0)),
+            "applied_payment_total": -totals.get("payment_application", Decimal(0))
+            + totals.get("application_reversal", Decimal(0)),
+            "unapplied_receipt_total": Decimal(receipts[0]),
+            "disputed_receipt_total": Decimal(receipts[1]),
+            "native_invoice_count": len(invoices),
+            "legacy_evidence_incomplete": any(
+                item.legacy_evidence_missing for item in invoices
+            ),
+            "as_of": as_of,
+        }
+        native_values = {
+            key: result[key]
+            for key in (
+                "currency",
+                "invoice_total",
+                "open_balance",
+                "applied_payment_total",
+                "unapplied_receipt_total",
+                "disputed_receipt_total",
+                "native_invoice_count",
+            )
+        }
+        has_native_financial_evidence = bool(invoices) or any(
+            Decimal(value) != 0 for value in receipts
+        )
+        classifications = [
+            native_evidence(
+                company_id=str(company_id),
+                customer_id=str(customer.id),
+                as_of=as_of,
+                acquired_at=max(
+                    (item.updated_at for item in invoices), default=customer.updated_at
+                ),
+                values=native_values,
+                partial=bool(result["legacy_evidence_incomplete"]),
+                conflicting=any(
+                    item.accounting_status == "reconciliation_required"
+                    for item in invoices
+                )
+                or Decimal(receipts[1]) > 0,
+            )
+            if has_native_financial_evidence
+            else unavailable_source_evidence(
+                company_id=str(company_id),
+                customer_id=str(customer.id),
+                source_system="acp_native",
+            )
+        ]
+        source_rows = (
+            await session.execute(
+                select(CustomerSourceIdentity, CustomerMigrationRun)
+                .join(
+                    CustomerMigrationRun,
+                    CustomerMigrationRun.id == CustomerSourceIdentity.first_run_id,
+                )
+                .where(
+                    CustomerSourceIdentity.company_id == company_id,
+                    CustomerSourceIdentity.customer_id == customer_id,
+                    CustomerSourceIdentity.branch_id.in_(branches),
+                    CustomerMigrationRun.company_id == company_id,
+                )
+                .order_by(
+                    CustomerSourceIdentity.source_system,
+                    CustomerSourceIdentity.created_at,
+                )
+            )
+        ).all()
         if source_rows:
-            classifications.extend(historical_source_evidence(company_id=str(company_id), customer_id=str(customer.id), source_system=identity.source_system, source_record_identity=identity.source_customer_id, acquired_at=run.completed_at or run.started_at, evidence_digest=run.source_sha256, complete=run.status == "completed" and run.unresolved_count == 0) for identity, run in source_rows)
+            classifications.extend(
+                historical_source_evidence(
+                    company_id=str(company_id),
+                    customer_id=str(customer.id),
+                    source_system=identity.source_system,
+                    source_record_identity=identity.source_customer_id,
+                    acquired_at=run.completed_at or run.started_at,
+                    evidence_digest=run.source_sha256,
+                    complete=run.status == "completed" and run.unresolved_count == 0,
+                )
+                for identity, run in source_rows
+            )
         else:
-            classifications.append(unavailable_source_evidence(company_id=str(company_id), customer_id=str(customer.id)))
-        result["evidence_classifications"] = tuple(item.as_dict() for item in classifications)
+            classifications.append(
+                unavailable_source_evidence(
+                    company_id=str(company_id), customer_id=str(customer.id)
+                )
+            )
+        result["evidence_classifications"] = tuple(
+            item.as_dict() for item in classifications
+        )
         return result
 
     async def _reduction(self, session, spec, kind, event):

@@ -54,6 +54,33 @@ export interface InvoiceMutationInput {
   occurred_at: string;
 }
 
+export interface ManualPaymentInput extends InvoiceMutationInput {
+  amount: string;
+  payment_method: "check" | "other_manual";
+  reference: string;
+}
+
+export interface ManualPayment {
+  id: string;
+  invoice_id: string;
+  customer_id: string;
+  payment_method: "check" | "other_manual";
+  reference_label: string;
+  amount: string;
+  currency: string;
+  occurred_at: string;
+  settlement_state: "not_asserted";
+  accounting_state: "not_posted";
+  evidence_digest: string;
+  recorded_by_user_id: string;
+  created_at: string;
+}
+
+export interface ManualPaymentResult {
+  invoice: Invoice;
+  payment: ManualPayment;
+}
+
 export type InvoiceWorkspaceState = "all" | "open" | "overdue" | "needs_attention" | InvoiceStatus;
 
 export interface InvoiceWorkspaceItem {
@@ -83,6 +110,18 @@ export interface InvoiceWorkspaceItem {
   last_ar_activity_at?: string;
   legacy_evidence_missing: boolean;
   version: number;
+}
+
+export interface InvoiceCandidate {
+  branch_id: string;
+  estimate_id: string;
+  job_id: string;
+  job_number: string;
+  customer_id: string;
+  customer_display_name: string;
+  service_location_label: string;
+  accepted_total: string;
+  currency: string;
 }
 
 export interface InvoiceWorkspaceFilters {
