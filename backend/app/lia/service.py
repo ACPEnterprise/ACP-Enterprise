@@ -258,7 +258,10 @@ class LiaService:
                         display_name=plan.subject_query,
                     )
                 )
-            if "workforce" in selected and plan.subject_domain == "identity":
+            if "workforce" in selected and plan.subject_domain in {
+                "identity",
+                "workforce",
+            }:
                 subject_matches.extend(
                     ("workforce", match)
                     for match in await workforce_operations_service.resolve_display_name(
@@ -281,6 +284,7 @@ class LiaService:
                     "customers": "Customer",
                     "jobs": "Job",
                     "identity": "Customer or Employee",
+                    "workforce": "Employee",
                 }[plan.subject_domain]
                 return self._response(
                     context=context,

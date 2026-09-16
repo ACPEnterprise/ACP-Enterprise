@@ -181,13 +181,21 @@ def plan_question(
     conversation = interpret_conversation(question)
     normalized = conversation.normalized
     subject = _named_subject(question) if context_domain is None else None
-    if conversation.corrected_subject and context_domain == "workforce":
-        subject = ("identity", conversation.corrected_subject)
+    corrected_context_subject = bool(
+        conversation.corrected_subject and context_domain == "workforce"
+    )
+    if corrected_context_subject:
+        subject = ("workforce", conversation.corrected_subject or "")
     subject_domain, subject_query = subject if subject is not None else (None, None)
     if subject_domain == "identity":
         domains = frozenset({"customers", "workforce"})
     elif subject_domain is not None:
-        domains = frozenset({subject_domain})
+        explicit_subject_domains = frozenset(
+            domain
+            for domain, terms in DOMAIN_TERMS
+            if any(term in normalized for term in terms)
+        )
+        domains = frozenset({subject_domain, *explicit_subject_domains})
     elif context_domain:
         question_domains = (
             frozenset(
@@ -198,14 +206,16 @@ def plan_question(
             if topic_domains
             else frozenset()
         )
-        explicit_switch = (
-            bool(question_domains - {context_domain, *topic_domains})
-            and not conversation.pronouns
-        )
+        related_followups = {
+            "customers": {"customers", "jobs", "invoicing", "payments"},
+            "jobs": {"jobs", "dispatch", "invoicing", "payments", "scheduling"},
+            "workforce": {"workforce", "payroll", "timekeeping", "dispatch"},
+        }.get(context_domain, {context_domain})
+        explicit_switch = bool(question_domains - related_followups) and not conversation.pronouns
         domains = (
             question_domains
             if explicit_switch
-            else frozenset({context_domain, *topic_domains, *question_domains})
+            else frozenset({context_domain})
         )
     else:
         if any(phrase in normalized for phrase in BRIEFING_PHRASES):
