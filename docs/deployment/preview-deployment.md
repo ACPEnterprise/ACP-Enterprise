@@ -158,6 +158,28 @@ docker compose --env-file .env.preview -f docker-compose.preview.yml up -d
 docker compose --env-file .env.preview -f docker-compose.preview.yml ps
 ```
 
+Mission Control is an optional but coherent web/API profile. Build and replace both
+services from the same protected checkout; never replace only one side or edit the
+expected platform fingerprint to make mismatched artifacts start:
+
+```bash
+docker compose --profile mission-control --env-file .env.preview \
+  -f docker-compose.preview.yml build mission-control-api mission-control-web
+docker compose --profile mission-control --env-file .env.preview \
+  -f docker-compose.preview.yml up -d mission-control-api mission-control-web
+docker compose --profile mission-control --env-file .env.preview \
+  -f docker-compose.preview.yml ps mission-control-api mission-control-web
+sh scripts/verify-mission-control-preview.sh
+```
+
+The web service is exposed only on loopback port 18008. Its `backend` upstream alias
+exists only on the isolated `172.32.0.0/24` Mission Control network, and only the API
+also joins the Preview data-service network. Before adopting this profile on a host
+with manually created legacy Mission Control containers, preserve their inspect/log
+evidence and remove only the exact conflicting legacy container names through the
+controlled Release procedure. Do not attach the web container to the ordinary Preview
+network as a DNS workaround.
+
 Start the persistent worker only after explicit enrollment has produced the
 configured worker ID and protected key path:
 

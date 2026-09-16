@@ -128,6 +128,71 @@ services:
     networks:
       preview:
 
+  # Mission Control is a coherent, optional release pair. Its API shares the
+  # Preview data services but accepts proxied requests only from the isolated
+  # Mission Control network. The `backend` alias is intentionally scoped to
+  # that network because the dedicated web artifact uses the standard Nginx
+  # upstream contract.
+  mission-control-api:
+    profiles: ["mission-control"]
+    logging: *default-logging
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    environment:
+      <<: *backend-environment
+      TRUSTED_PROXY_CIDRS: '["172.32.0.0/24"]'
+    expose:
+      - "8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qbo-sandbox-init:
+        condition: service_completed_successfully
+      qbo-production-init:
+        condition: service_completed_successfully
+    volumes:
+      - preview_qbo_sandbox_state:/var/lib/acp-qbo-sandbox
+      - preview_qbo_production_state:/var/lib/acp-qbo-production
+      - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
+      - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro
+      - ${REDIS_SECRET_DIR_HOST:?Set REDIS_SECRET_DIR_HOST in .env.preview}:/run/secrets/redis:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      preview:
+      mission-control:
+        aliases:
+          - backend
+
+  mission-control-web:
+    profiles: ["mission-control"]
+    logging: *default-logging
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.mission-control
+    ports:
+      - "127.0.0.1:${MISSION_CONTROL_HTTP_PORT:-18008}:80"
+    depends_on:
+      mission-control-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      mission-control:
+
   identity-delivery-worker:
     logging: *default-logging
     build:
@@ -286,3 +351,7 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
+  mission-control:
+    ipam:
+      config:
+        - subnet: 172.32.0.0/24
