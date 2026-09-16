@@ -276,6 +276,11 @@ def plan_question(
 
 
 def _named_subject(question: str) -> tuple[str, str] | None:
+    job_reference = re.search(
+        r"\bjob\s+([A-Z]+(?:-[A-Z]+)*-?\d+|\d+)\b", question, re.IGNORECASE
+    )
+    if job_reference:
+        return ("jobs", job_reference.group(1))
     patterns = (
         (
             "workforce",
