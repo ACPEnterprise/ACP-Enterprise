@@ -165,6 +165,22 @@ describe("LIA voice panel", () => {
     expect(screen.queryByText(/approve|reschedule|dispatch now/i)).toBeNull();
   });
 
+  it("cancel ends conversation capture and spoken output", () => {
+    render(
+      <LiaVoicePanel busy={false} onDraft={vi.fn()} onSubmit={vi.fn()} />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start conversation mode" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(RecognitionMock.latest?.abort).toHaveBeenCalled();
+    expect(speech.cancel).toHaveBeenCalled();
+    expect(screen.getByText("IDLE")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Start conversation mode" }),
+    ).toBeVisible();
+  });
+
   it("keeps spoken output concise while full evidence remains on screen", () => {
     const result = response();
     result.answer =
