@@ -55,9 +55,22 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "/backend-health" in verifier
     assert "/api/v1/auth/session" in verifier
     assert "access-control-allow-origin" in verifier
+    assert "https://attacker.invalid" in verifier
     assert "openssl s_client" in verifier
+    assert "-checkend 604800" in verifier
     assert "mission-control" in verifier
     assert "app.twelve-hats.com" not in verifier
+    assert "PREVIEW_URL" not in verifier
+    assert "BETA_URL" not in verifier
+    for header in (
+        "strict-transport-security",
+        "x-content-type-options",
+        "x-frame-options",
+        "referrer-policy",
+        "permissions-policy",
+        "content-security-policy",
+    ):
+        assert header in verifier
 
 
 def test_local_monitor_is_bounded_and_does_not_claim_external_alerting() -> None:
