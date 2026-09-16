@@ -26,10 +26,11 @@ export function useCustomerList(search: string, limit: number, offset: number) {
     queryFn: () => listCustomers(search, limit, offset),
   });
 }
-export function useCustomerSearch(criteria: CustomerSearchCriteria) {
+export function useCustomerSearch(criteria: CustomerSearchCriteria, enabled = true) {
   return useQuery({
     queryKey: ["customers", "search", criteria],
     queryFn: () => searchCustomers(criteria),
+    enabled,
   });
 }
 export function useCustomerDetail(customerId: string | null, enabled = true) {

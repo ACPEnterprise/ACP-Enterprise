@@ -8,6 +8,7 @@ import {
   useEstimates,
 } from "../hooks/useEstimates";
 import { usePriceBook, usePriceBookMutations } from "../hooks/usePriceBook";
+import { useCustomerSearch } from "../hooks/useCustomers";
 import {
   Alert,
   Badge,
@@ -76,6 +77,16 @@ export function EstimatesRoute() {
     discountType: "",
     discountValue: "",
   });
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [selectedCustomerLabel, setSelectedCustomerLabel] = useState("");
+  const customers = useCustomerSearch({
+    query: customerSearch.trim() || undefined,
+    sort_by: "display_name",
+    sort_direction: "asc",
+    record_state: "current",
+    page: 1,
+    page_size: 25,
+  }, canManage);
   const [proposalLines, setProposalLines] = useState<
     Array<{ serviceItem: string; option: string; quantity: string }>
   >([]);
@@ -413,14 +424,7 @@ export function EstimatesRoute() {
                 }}
                 required
               />
-              <Input
-                aria-label="Customer ID"
-                value={form.customer}
-                onChange={(event) =>
-                  setForm({ ...form, customer: event.target.value })
-                }
-                required
-              />
+              <label className="grid gap-1 text-sm sm:col-span-2"><span className="font-medium">Customer</span><Input aria-label="Search Customers" placeholder="Search by name, number, phone, or email" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} disabled={customers.isLoading} />{customers.isError && <span className="text-xs text-status-danger">Customer search is unavailable; no selection was changed.</span>}<Select aria-label="Customer" value={form.customer} onChange={(event) => { const selected = customers.data?.items.find((item) => item.id === event.target.value); setForm({ ...form, customer: event.target.value, serviceLocation: "" }); setSelectedCustomerLabel(selected?.display_name || selected?.business_name || `${selected?.first_name ?? ""} ${selected?.last_name ?? ""}`.trim()); }} required disabled={customers.isLoading || customers.isError}><option value="">{customers.isLoading ? "Loading Customers…" : "Select Customer"}</option>{form.customer && !customers.data?.items.some((item) => item.id === form.customer) && <option value={form.customer}>{selectedCustomerLabel || "Selected Customer"}</option>}{customers.data?.items.map((item) => <option key={item.id} value={item.id}>{item.display_name || item.business_name || `${item.first_name ?? ""} ${item.last_name ?? ""}`.trim() || "Unnamed Customer"} · {item.customer_number || "number unavailable"}</option>)}</Select>{customers.data && <span className="text-xs text-content-muted">Showing {customers.data.items.length} of {customers.data.total_count} admitted Customers. Select a result to bind the canonical Customer record.</span>}</label>
               <Input
                 aria-label="Service Location ID"
                 value={form.serviceLocation}

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as estimatesApi from "../api/estimates";
 import * as priceBookApi from "../api/priceBook";
+import * as customerHooks from "../hooks/useCustomers";
 import { EstimatesRoute } from "./EstimatesRoute";
 
 let permissions = new Set<string>();
@@ -117,6 +118,13 @@ vi.mock("../api/priceBook", () => ({
   decideAdjustmentProposal: vi.fn(),
   materializeAdjustmentProposal: vi.fn(),
 }));
+vi.mock("../hooks/useCustomers", () => ({
+  useCustomerSearch: vi.fn().mockReturnValue({
+    isLoading: false,
+    isError: false,
+    data: { items: [{ id: "customer-1", display_name: "Alex Taylor", customer_number: "C-1" }], total_count: 1, page: 1, page_size: 25, total_pages: 1 },
+  }),
+}));
 
 function renderRoute(path = "/estimates") {
   return render(
@@ -136,6 +144,7 @@ describe("EstimatesRoute", () => {
     vi.mocked(estimatesApi.getEstimate).mockClear();
     vi.mocked(priceBookApi.getPriceBook).mockClear();
     vi.mocked(priceBookApi.createCommercialSnapshot).mockClear();
+    vi.mocked(customerHooks.useCustomerSearch).mockClear();
   });
   it("fails closed without read permission", () => {
     renderRoute();
@@ -188,9 +197,7 @@ describe("EstimatesRoute", () => {
     fireEvent.change(screen.getByLabelText("Branch ID"), {
       target: { value: "11111111-1111-4111-8111-111111111111" },
     });
-    fireEvent.change(screen.getByLabelText("Customer ID"), {
-      target: { value: "customer-1" },
-    });
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "customer-1" } });
     await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
     fireEvent.change(await screen.findByLabelText("Price Book service"), {
       target: { value: "service-1" },
