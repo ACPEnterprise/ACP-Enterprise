@@ -11,9 +11,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 def _compose() -> dict[str, Any]:
     return yaml.safe_load(
-        (REPOSITORY_ROOT / "docker-compose.production.yml").read_text(
-            encoding="utf-8"
-        )
+        (REPOSITORY_ROOT / "docker-compose.production.yml").read_text(encoding="utf-8")
     )
 
 
@@ -63,6 +61,23 @@ def test_production_runtime_uses_immutable_images_and_read_only_custody() -> Non
     assert "immutable frontend image digest" in services["frontend"]["image"]
 
 
+def test_production_runtime_has_bounded_processes_and_no_reload_server() -> None:
+    services = _compose()["services"]
+    backend = services["backend"]
+    frontend = services["frontend"]
+
+    assert "--reload" not in backend["command"]
+    assert backend["command"][-1] == "--no-access-log"
+    for service in (backend, frontend):
+        assert service["init"] is True
+        assert service["cpus"]
+        assert service["mem_limit"]
+        assert service["pids_limit"]
+        assert service["stop_grace_period"]
+    assert frontend["read_only"] is True
+    assert any("/var/cache/nginx" in mount for mount in frontend["tmpfs"])
+
+
 def test_monitoring_contract_covers_launch_critical_dependencies() -> None:
     payload = json.loads(
         (
@@ -92,3 +107,20 @@ def test_monitoring_contract_covers_launch_critical_dependencies() -> None:
         "automatic_schema_downgrade": False,
         "automatic_business_mutation": False,
     }
+
+
+def test_permanent_edge_uses_twelve_hats_platform_domain() -> None:
+    environment = (REPOSITORY_ROOT / ".env.production.example").read_text(
+        encoding="utf-8"
+    )
+    caddy = (
+        REPOSITORY_ROOT / "docs/deployment/production-caddyfile.example"
+    ).read_text(encoding="utf-8")
+
+    assert "PRODUCTION_HOSTNAME=app.twelve-hats.com" in environment
+    assert "COMPOSE_PROJECT_NAME=twelve-hats-production" in environment
+    assert "/opt/twelve-hats-production/" in environment
+    assert 'CORS_ALLOWED_ORIGINS=["https://app.twelve-hats.com"]' in environment
+    assert "app.twelve-hats.com {" in caddy
+    assert "allcountyhomeservices.com" not in environment
+    assert "allcountyhomeservices.com" not in caddy

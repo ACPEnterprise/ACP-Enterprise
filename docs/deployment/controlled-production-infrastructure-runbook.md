@@ -1,8 +1,14 @@
 # Controlled Production infrastructure readiness
 
-This runbook prepares, but does not authorize or execute, ACP Production. Preview
+This runbook prepares, but does not authorize or execute, Twelve Hats Production. Preview
 is never renamed or reused as Production. Production business traffic remains
 closed until the owner records a separate go/no-go decision.
+
+The permanent edge identity is `app.twelve-hats.com`. All County Plumbing & Leak
+is the beta tenant and owns its business data; Twelve Hats / The 10:31 Project
+must own permanent platform infrastructure, domains, registry artifacts, master
+secrets, monitoring, and recovery custody. Existing All County Preview assets may
+remain temporarily but are not promoted into permanent Production assets.
 
 ## Immutable release candidate
 
@@ -42,7 +48,7 @@ database, cache, and backup loss.
 | Redis ACL credentials | `PROVIDER_REQUIRED` | Application and health identities; TLS/private endpoint |
 | Protected-field keyring | `MUST_GENERATE` | Production-only key identity; never copied from Preview |
 | Identity delivery keyring | `MUST_GENERATE` | Production-only invitation protection |
-| QBO source evidence | `READY_FOR_READONLY_COPY` | Copy sealed evidence; do not copy OAuth runtime tokens into ACP Production |
+| QBO source evidence | `READY_FOR_READONLY_COPY` | Copy sealed evidence; do not copy OAuth runtime tokens into Twelve Hats Production |
 | Email/invitations | `OWNER_REQUIRED` | Initial launch may remain owner-mediated with external delivery disabled |
 | Evidence/object storage | `PROVIDER_REQUIRED` | Encrypted storage, access log, lifecycle/retention, separate backup |
 | Monitoring/alert credentials | `PROVIDER_REQUIRED` | External destination; no secrets or customer data in alerts |
@@ -183,6 +189,10 @@ The Release Operator uses the exact release directory and mode-0600 environment
 file:
 
 ```bash
+install -d -m 0700 release-evidence
+python backend/scripts/production_release_preflight.py \
+  --env-file .env.production \
+  --report release-evidence/preflight.json
 docker compose --env-file .env.production -f docker-compose.production.yml config
 docker compose --env-file .env.production -f docker-compose.production.yml run --rm migrate
 docker compose --env-file .env.production -f docker-compose.production.yml up -d backend frontend
@@ -191,3 +201,44 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 Traffic remains closed until SHA/schema checks, health, owner login, Customer and
 Job reads, Scheduling/Dispatch reads, bounded Invoice behavior, source-backed
 financial reporting, monitoring, backup, and rollback evidence all pass.
+
+## Controlled cutover sequence — prepared, not authorized
+
+Every phase records operator, UTC time, protected SHA, image digests, schema
+head, evidence references and disposition. Secret values and customer payloads
+are prohibited from the packet.
+
+1. **Preflight:** freeze the release candidate; verify protected SHA, clean build,
+   signed/scanned immutable images, Production ownership, restricted environment
+   and keyring files, private dependencies, DNS/TLS readiness, monitoring humans,
+   and zero unresolved critical findings. Run the fail-closed preflight above.
+2. **Backup:** prove provider PITR is current; create the encrypted off-host
+   logical recovery point and checksum manifest; verify readability from the
+   recovery boundary. Failure stops the cutover.
+3. **Release freeze:** block candidate changes and record the exact HCP final-delta
+   window. No Product/Payroll/Accounting mutation is implied by the freeze.
+4. **Candidate verification:** render Compose, compare image labels/digests to the
+   protected SHA, verify one Alembic head, and attach build/test/security evidence.
+5. **Database migration:** keep public traffic closed, run the one-shot migration,
+   record exit and schema head, and stop on any mismatch. Never automatically
+   downgrade or restore.
+6. **Application deployment:** start backend, wait for readiness, then start the
+   frontend and edge. Do not start optional delivery/acquisition workers unless a
+   separate release authorization explicitly admits them.
+7. **Health checks:** prove internal liveness/readiness, database/schema/Redis,
+   external HTTPS, certificate chain, hostname, security headers, log collection,
+   monitoring delivery, disk/capacity and backup visibility.
+8. **Authenticated acceptance:** use separately sanctioned Production identities;
+   prove owner login, Company/Branch isolation, Customer/Job/Appointment reads,
+   Scheduling/Dispatch reads, bounded Employee access and fail-closed unauthorized
+   access. Do not execute Payroll, payment, communication or money movement.
+9. **Data reconciliation:** compare admitted source and migrated counts/digests;
+   preserve unavailable values as unavailable; require owner/accountant disposition
+   for every held or financial overlap item.
+10. **Go/no-go:** named incident authority, release operator, security contact and
+    data owner review one packet. Only an explicit recorded GO may open traffic.
+11. **Rollback:** before traffic, stop application services and keep DNS/edge
+    closed. After traffic, first close traffic and mutations, preserve evidence,
+    then choose compatible retained application rollback or forward fix. Database
+    restore requires explicit restore authority and reconciliation; Preview is
+    never a rollback target.
