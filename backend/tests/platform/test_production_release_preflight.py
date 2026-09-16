@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -12,13 +13,16 @@ def _write_environment(tmp_path: Path) -> Path:
     evidence = tmp_path / "evidence"
     for directory in (protected, redis, evidence):
         directory.mkdir(mode=0o700)
+    encoded_key = base64.urlsafe_b64encode(b"k" * 32).decode()
     for path in (
         protected / "identity-onboarding-delivery-keyring.json",
         protected / "payroll-input-encryption-keyring.json",
-        redis / "application-password",
     ):
-        path.write_text("fixture", encoding="utf-8")
+        path.write_text(json.dumps({"production-key": encoded_key}), encoding="utf-8")
         path.chmod(0o600)
+    redis_password = redis / "application-password"
+    redis_password.write_text("fixture", encoding="utf-8")
+    redis_password.chmod(0o600)
     env_file = tmp_path / ".env.production"
     env_file.write_text(
         "\n".join(
@@ -36,6 +40,8 @@ def _write_environment(tmp_path: Path) -> Path:
                 'ACCESS_TOKEN_KEYS={"production-1":"' + ("d" * 32) + '"}',
                 "ACCESS_TOKEN_ACTIVE_KID=production-1",
                 f"SECURITY_TOKEN_HMAC_KEY={'e' * 32}",
+                "IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID=production-key",
+                "PAYROLL_INPUT_ACTIVE_KID=production-key",
                 f"PRODUCTION_PROTECTED_SECRET_DIR_HOST={protected}",
                 f"PRODUCTION_REDIS_SECRET_DIR_HOST={redis}",
                 f"PRODUCTION_EVIDENCE_DIR_HOST={evidence}",
@@ -87,3 +93,20 @@ def test_preflight_report_contains_no_secret_values(tmp_path: Path) -> None:
     rendered = json.dumps([item.__dict__ for item in findings])
     assert "d" * 32 not in rendered
     assert "e" * 32 not in rendered
+
+
+def test_preflight_rejects_malformed_or_inactive_keyrings(tmp_path: Path) -> None:
+    env_file = _write_environment(tmp_path)
+    values = dict(
+        line.split("=", 1)
+        for line in env_file.read_text(encoding="utf-8").splitlines()
+        if line
+    )
+    protected = Path(values["PRODUCTION_PROTECTED_SECRET_DIR_HOST"])
+    identity = protected / "identity-onboarding-delivery-keyring.json"
+    identity.write_text(json.dumps({"different-key": "not-base64"}), encoding="utf-8")
+    identity.chmod(0o600)
+
+    findings = {item.check: item.status for item in inspect(env_file)}
+    assert findings["identity_delivery_keyring"] == "BLOCKED"
+    assert findings["protected_input_keyring"] == "READY"

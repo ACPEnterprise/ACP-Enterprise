@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import os
 import re
@@ -74,6 +76,32 @@ def _private_directory(path: Path, *, check: str, writable: bool) -> Finding:
     return Finding(check, "READY", "custody directory permissions are restricted")
 
 
+def _keyring_file(path: Path, *, active_kid: str, check: str) -> Finding:
+    custody = _private_file(path, check=check)
+    if custody.status != "READY":
+        return custody
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or not payload or active_kid not in payload:
+            raise ValueError("active key is unavailable")
+        decoded = {
+            key: base64.b64decode(value, altchars=b"-_", validate=True)
+            for key, value in payload.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+        if len(decoded) != len(payload) or any(
+            len(value) != 32 for value in decoded.values()
+        ):
+            raise ValueError("keyring values must be 32-byte keys")
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, binascii.Error):
+        return Finding(
+            check,
+            "BLOCKED",
+            "keyring must be a nonempty JSON object containing the active 32-byte key",
+        )
+    return Finding(check, "READY", "keyring and active key are structurally valid")
+
+
 def inspect(env_file: Path) -> list[Finding]:
     values = load_environment(env_file)
     findings: list[Finding] = []
@@ -102,6 +130,8 @@ def inspect(env_file: Path) -> list[Finding]:
         "ACCESS_TOKEN_KEYS",
         "ACCESS_TOKEN_ACTIVE_KID",
         "SECURITY_TOKEN_HMAC_KEY",
+        "IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID",
+        "PAYROLL_INPUT_ACTIVE_KID",
         "PRODUCTION_PROTECTED_SECRET_DIR_HOST",
         "PRODUCTION_REDIS_SECRET_DIR_HOST",
         "PRODUCTION_EVIDENCE_DIR_HOST",
@@ -237,13 +267,17 @@ def inspect(env_file: Path) -> list[Finding]:
     if protected_dir_text and Path(protected_dir_text).is_absolute():
         findings.extend(
             [
-                _private_file(
+                _keyring_file(
                     Path(protected_dir_text)
                     / "identity-onboarding-delivery-keyring.json",
+                    active_kid=values.get(
+                        "IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID", ""
+                    ),
                     check="identity_delivery_keyring",
                 ),
-                _private_file(
+                _keyring_file(
                     Path(protected_dir_text) / "payroll-input-encryption-keyring.json",
+                    active_kid=values.get("PAYROLL_INPUT_ACTIVE_KID", ""),
                     check="protected_input_keyring",
                 ),
             ]
@@ -318,9 +352,18 @@ def inspect_platform_manifest(path: Path, *, expected_sha: str) -> list[Finding]
         )
     )
     controls = payload.get("authorities", {})
-    required_controls = {"release", "security", "incident", "backup", "restore", "secret_recovery"}
+    required_controls = {
+        "release",
+        "security",
+        "incident",
+        "backup",
+        "restore",
+        "secret_recovery",
+    }
     unresolved = sorted(
-        name for name in required_controls if not controls.get(name, {}).get("principal")
+        name
+        for name in required_controls
+        if not controls.get(name, {}).get("principal")
     )
     findings.append(
         Finding(
@@ -333,7 +376,15 @@ def inspect_platform_manifest(path: Path, *, expected_sha: str) -> list[Finding]
     )
     decisions = payload.get("owner_decisions", {})
     undecided = sorted(
-        name for name in ("rpo", "rto", "retention", "region", "geographic_separation", "alert_destination")
+        name
+        for name in (
+            "rpo",
+            "rto",
+            "retention",
+            "region",
+            "geographic_separation",
+            "alert_destination",
+        )
         if not decisions.get(name)
     )
     findings.append(
