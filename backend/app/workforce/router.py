@@ -16,6 +16,7 @@ from app.workforce.administration_commands import (
 )
 from app.workforce.employee_administration import employee_administration_service
 from app.workforce.employee_timeline import employee_timeline_service
+from app.workforce.notification_targeting import employee_notification_targeting_service
 from app.workforce.real_roster_service import RealRosterConflict, real_roster_service
 from app.workforce.schemas import (
     AvailabilityEvidenceRequest,
@@ -23,6 +24,7 @@ from app.workforce.schemas import (
     CertificationEvidenceRequest,
     EmployeeAdministrationDetail,
     EmployeeTimeline,
+    EmployeeNotificationTarget,
     FieldReadinessRequest,
     FieldReadinessResponse,
     LanguageEvidenceRequest,
@@ -163,6 +165,32 @@ async def employee_timeline(
     result = await employee_timeline_service.read(
         session, context=context, employee_id=employee_id
     )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
+    return result
+
+
+@router.get(
+    "/employees/{employee_id}/notification-target",
+    response_model=EmployeeNotificationTarget,
+)
+async def employee_notification_target(
+    employee_id: UUID,
+    event_type: str,
+    branch_id: UUID,
+    context: ReadContext,
+    session: Session,
+) -> EmployeeNotificationTarget:
+    try:
+        result = await employee_notification_targeting_service.resolve(
+            session,
+            context=context,
+            employee_id=employee_id,
+            event_type=event_type,
+            branch_id=branch_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
     return result
