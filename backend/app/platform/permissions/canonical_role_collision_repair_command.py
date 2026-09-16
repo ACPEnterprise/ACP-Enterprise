@@ -45,12 +45,16 @@ async def run(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def main() -> None:
-    arguments = parser().parse_args()
+async def _execute(arguments: argparse.Namespace) -> dict[str, object]:
     try:
-        print(json.dumps(asyncio.run(run(arguments)), sort_keys=True))
+        return await run(arguments)
     finally:
-        asyncio.run(engine.dispose())
+        await engine.dispose()
+
+
+def main() -> None:
+    result = asyncio.run(_execute(parser().parse_args()))
+    print(json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":
