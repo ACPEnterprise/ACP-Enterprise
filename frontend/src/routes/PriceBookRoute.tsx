@@ -1042,6 +1042,31 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Expected component quantity"
+                      type="number"
+                      min="0.0001"
+                      step="0.0001"
+                      value={draft.componentQuantity}
+                      onChange={(e) =>
+                        setDraft({ ...draft, componentQuantity: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Expected component unit cost"
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      placeholder="Leave blank when cost evidence is unavailable"
+                      value={draft.componentCost}
+                      onChange={(e) =>
+                        setDraft({ ...draft, componentCost: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-content-muted">
+                      Expected inputs support planning only. They do not prove purchased or consumed materials, and missing cost is never treated as zero.
+                    </p>
                     <Button
                       fullWidth
                       type="submit"
@@ -1436,6 +1461,16 @@ export function PriceBookRoute() {
                                 <p className="text-xs text-content-muted">
                                   Expected direct cost {version.currency} {version.expected_direct_cost} · Expected direct contribution {version.currency} {version.expected_direct_contribution}
                                 </p>
+                              )}
+                              {canManage && version.components.length > 0 && (
+                                <ul className="mt-2 space-y-1 text-xs text-content-muted" aria-label={`Expected inputs for revision ${version.revision}`}>
+                                  {version.components.map((component) => (
+                                    <li key={`${component.position}:${component.label}`}>
+                                      {component.component_type.replaceAll("_", " ")} · {component.label} · {component.quantity}
+                                      {component.unit_cost == null ? " · cost evidence missing" : ` × ${version.currency} ${component.unit_cost}`}
+                                    </li>
+                                  ))}
+                                </ul>
                               )}
                               {version.status === "draft" && itemVersions.some((candidate) => candidate.status === "active") && (
                                 <p className="text-xs font-medium text-content-muted">
