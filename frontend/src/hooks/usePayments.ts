@@ -7,7 +7,12 @@ export const usePayments = (enabled = true, customerId?: string) => useQuery({ q
 export const usePayment = (id: string, enabled = true) => useQuery({ queryKey: paymentKeys.detail(id), queryFn: () => api.getPaymentReceipt(id), enabled: enabled && Boolean(id), retry: shouldRetryApiQuery });
 export function usePaymentMutations() {
   const client = useQueryClient();
-  const refresh = () => void client.invalidateQueries({ queryKey: paymentKeys.all });
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: paymentKeys.all });
+    // Applying or refunding a receipt changes Invoice allocation and the
+    // Customer AR projection. Keep those connected office views truthful too.
+    void client.invalidateQueries({ queryKey: ["invoices"] });
+  };
   return {
     collect: useMutation({ mutationFn: api.collectPayment, onSuccess: refresh }),
     apply: useMutation({ mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.applyPayment>[1] }) => api.applyPayment(id, input), onSuccess: refresh }),

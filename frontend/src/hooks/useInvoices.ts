@@ -53,6 +53,12 @@ export function useInvoiceMutations() {
     client.setQueryData(invoiceKeys.detail(invoice.id), invoice);
     void client.invalidateQueries({ queryKey: invoiceKeys.all });
     void client.invalidateQueries({ queryKey: invoiceKeys.candidates });
+    // Invoice mutations also change the office detail, Customer balance, and
+    // AR workspace projections. Refresh those views so operators never see a
+    // stale balance or status after issuing, crediting, voiding, or writing off.
+    void client.invalidateQueries({ queryKey: ["invoices", "office-detail", invoice.id] });
+    void client.invalidateQueries({ queryKey: ["invoices", "customer-balance", invoice.customer_id] });
+    void client.invalidateQueries({ queryKey: ["invoices", "workspace"] });
   };
   return {
     create: useMutation({ mutationFn: api.createInvoice, onSuccess: update }),
