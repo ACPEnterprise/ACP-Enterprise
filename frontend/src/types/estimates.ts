@@ -52,6 +52,7 @@ export interface Estimate {
     evidence_reference: string | null;
     occurred_at: string;
   } | null;
+  conversion?: EstimateConversion | null;
 }
 
 export interface EstimateProposalInput {

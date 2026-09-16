@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Estimate } from "../../types/estimates";
@@ -33,6 +34,39 @@ const mutations = (decisionError: unknown = null) => ({
 });
 
 describe("EstimateDecisionControls", () => {
+  it("shows persistent Job lineage and does not offer duplicate conversion", () => {
+    const controls = mutations();
+    render(
+      <MemoryRouter>
+        <EstimateDecisionControls
+          estimate={{
+            ...estimate,
+            status: "approved",
+            service_location_id: "location-1",
+            conversion: {
+              id: "conversion-1",
+              estimate_id: "estimate-1",
+              estimate_revision_id: "revision-1",
+              job_id: "job-1",
+              job_number: "JOB-000001",
+              snapshot_lineage_digest: "a".repeat(64),
+              converted_at: "2026-09-16T12:00:00Z",
+            },
+          } as Estimate}
+          mutations={controls as never}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "JOB-000001" })).toHaveAttribute(
+      "href",
+      "/jobs/job-1",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Convert approved Estimate to Job" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("binds a viewed transition to current branch and version", () => {
     const controls = mutations();
     render(
