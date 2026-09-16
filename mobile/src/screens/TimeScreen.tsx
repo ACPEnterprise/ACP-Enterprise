@@ -5,9 +5,10 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { colors, spacing } from "../design/tokens";
 import type { NetworkMonitor } from "../network/networkMonitor";
 import { useTimeclock } from "../timeclock/useTimeclock";
+import { formatAuthoritativeTimestamp } from "../utils/formatting";
 
 function labelForState(state: PunchState["state"]) { return state === "not_clocked_in" ? "Clocked out" : state === "clocked_in" ? "Clocked in" : "On break"; }
-function formatServerTime(value: string | null, timezone?: string) { if (!value) return "Not available"; return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: timezone }).format(new Date(value)); }
+function formatServerTime(value: string | null, timezone?: string) { if (!value) return "Not available"; return formatAuthoritativeTimestamp(value, timezone, { dateStyle: "medium", timeStyle: "short" }); }
 function duration(entry: TimeEntry) { if (entry.approved_duration_minutes !== null) return `${Math.floor(entry.approved_duration_minutes / 60)}h ${entry.approved_duration_minutes % 60}m`; if (entry.start_at && entry.end_at) return `${Math.round((Date.parse(entry.end_at) - Date.parse(entry.start_at)) / 60000)} minutes`; return "In progress"; }
 function entryMinutes(entry: TimeEntry) { if (entry.approved_duration_minutes !== null) return entry.approved_duration_minutes; if (entry.start_at && entry.end_at) return Math.max(0, Math.round((Date.parse(entry.end_at) - Date.parse(entry.start_at)) / 60000)); return 0; }
 function durationLabel(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); const remainder = seconds % 60; return hours ? `${hours}h ${minutes}m` : `${minutes}m ${remainder}s`; }
