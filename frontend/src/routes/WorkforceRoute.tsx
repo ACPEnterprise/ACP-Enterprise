@@ -7,6 +7,7 @@ import type { AdminEmployeeTimecard } from "../api/timekeeping";
 import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
+import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useRoles } from "../features/administration/hooks";
 import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
@@ -667,11 +668,7 @@ export function WorkforceRoute() {
             {detail.data.readiness_blockers.length > 0 && (
               <section className="mt-5 rounded-xl border border-status-warning/40 bg-status-warning/5 p-4">
                 <h4 className="font-semibold">Assignment readiness blockers</h4>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-content-muted">
-                  {detail.data.readiness_blockers.map((item) => (
-                    <li key={item}>{item.replaceAll("_", " ")}</li>
-                  ))}
-                </ul>
+                <ReadinessBlockers blockers={detail.data.readiness_blockers} />
               </section>
             )}
             {canAdministerEmployees && administration.isLoading && (
@@ -853,11 +850,7 @@ export function WorkforceRoute() {
                 )}
                 {administration.data.mobile_readiness_blockers.length > 0 && (
                   <Alert variant="warning" title="Mobile readiness blockers">
-                    <ul className="list-disc pl-5">
-                      {administration.data.mobile_readiness_blockers.map((item) => (
-                        <li key={item}>{item.replaceAll("_", " ")}</li>
-                      ))}
-                    </ul>
+                    <ReadinessBlockers blockers={administration.data.mobile_readiness_blockers} />
                   </Alert>
                 )}
                 <div className="mt-5">
