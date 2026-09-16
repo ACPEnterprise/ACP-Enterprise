@@ -9,10 +9,16 @@ a later environment. It never merges or deploys.
 Create a private evidence directory outside Git. Always pass the full candidate
 SHA obtained after fetching current remote authority.
 
+When the shell's default `python3` is older than 3.12, point the runner at the
+already-qualified repository environment. The runner records a missing or
+invalid interpreter as `BLOCKED`; it never silently falls back to an unsupported
+Python.
+
 ```bash
 git fetch --prune origin
 CANDIDATE_SHA=$(git rev-parse HEAD)
 install -d -m 700 /var/tmp/enterprise-release-${CANDIDATE_SHA}
+export ENTERPRISE_RELEASE_PYTHON=/path/to/repository-python-3.12/bin/python
 
 scripts/enterprise-release-qualify \
   --profile local --execute \

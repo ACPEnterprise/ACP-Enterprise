@@ -14,6 +14,14 @@ vi.mock("../../hooks/useInvoices");
 vi.mock("../../hooks/useJobs");
 vi.mock("../../hooks/usePayments");
 vi.mock("../../hooks/useScheduling");
+vi.mock("../../hooks/useHcpSourceHistory", () => ({
+  useHcpCustomerSourceHistory: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    isSuccess: true,
+  }),
+}));
 vi.mock("../../auth", () => ({ useHasPermission: () => true }));
 
 const query = (data: unknown) => ({

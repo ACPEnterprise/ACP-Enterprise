@@ -11,6 +11,19 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),
 }));
 vi.mock("../api/invoices", () => ({
+  getInvoiceCandidates: vi.fn().mockResolvedValue([
+    {
+      branch_id: "branch-1",
+      estimate_id: "estimate-1",
+      job_id: "job-1",
+      job_number: "JOB-000001",
+      customer_id: "customer-1",
+      customer_display_name: "Synthetic Customer",
+      service_location_label: "123 Test Street",
+      accepted_total: "125.00",
+      currency: "USD",
+    },
+  ]),
   getInvoiceWorkspace: vi
     .fn()
     .mockImplementation(async (filters: { query?: string }) => filters.query ? [] : [
@@ -84,8 +97,12 @@ describe("InvoicesRoute", () => {
     permissions = new Set(["COMPANY_INVOICE_READ", "COMPANY_INVOICE_MANAGE"]);
     renderRoute();
     expect(await screen.findByText("Create from accepted work")).toBeVisible();
-    expect(screen.getByLabelText("Estimate ID")).toBeVisible();
-    expect(screen.getByLabelText("Job ID")).toBeVisible();
+    expect(screen.getByLabelText("Completed accepted work")).toBeVisible();
+    expect(
+      await screen.findByRole("option", {
+        name: "JOB-000001 · Synthetic Customer · 125.00 USD",
+      }),
+    ).toBeVisible();
   });
   it("filters the operational receivables queue without changing authority", async () => {
     permissions = new Set(["COMPANY_INVOICE_READ"]);

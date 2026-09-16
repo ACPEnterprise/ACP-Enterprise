@@ -59,3 +59,23 @@ def test_status_vocabulary_is_closed() -> None:
         "NOT APPLICABLE",
         "NOT YET EXECUTED",
     }
+
+
+def test_supported_python_is_used_for_backend_checks(monkeypatch) -> None:
+    module = _module()
+    monkeypatch.setattr(module.sys, "version_info", (3, 9, 0))
+    monkeypatch.setattr(
+        module.shutil,
+        "which",
+        lambda tool: "/qualified/python3.12" if tool == "python3.12" else None,
+    )
+    assert module.supported_python() == "/qualified/python3.12"
+    backend = next(check for check in module.checks() if check.key == "backend_tests")
+    assert backend.command is not None
+    assert backend.command[0] == "/qualified/python3.12"
+
+
+def test_explicit_supported_python_environment_wins(monkeypatch) -> None:
+    module = _module()
+    monkeypatch.setenv("ENTERPRISE_RELEASE_PYTHON", "/qualified/venv/bin/python")
+    assert module.supported_python() == "/qualified/venv/bin/python"

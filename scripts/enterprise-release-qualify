@@ -26,6 +26,20 @@ STATUSES: Final = {"PASS", "FAIL", "BLOCKED", "NOT APPLICABLE", "NOT YET EXECUTE
 CONTRACT: Final = "enterprise-release-qualification/v1"
 
 
+def supported_python() -> str:
+    """Return a repository-supported Python interpreter, if one is installed."""
+    configured = os.environ.get("ENTERPRISE_RELEASE_PYTHON")
+    if configured:
+        return configured
+    if sys.version_info >= (3, 12):
+        return sys.executable
+    for candidate in ("python3.13", "python3.12"):
+        path = shutil.which(candidate)
+        if path:
+            return path
+    return "python3.12"
+
+
 @dataclass(frozen=True)
 class Check:
     key: str
@@ -52,7 +66,7 @@ class Result:
 
 
 def checks() -> tuple[Check, ...]:
-    py = "python"
+    py = supported_python()
     return (
         Check("repository_cleanliness", "Repository cleanliness", ("local",), ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
         Check("repository_provenance", "Repository provenance", ("local", "preview", "postdeploy"), ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
@@ -88,8 +102,8 @@ def canonical(value: object) -> bytes:
 
 
 def tool_available(tool: str) -> bool:
-    if tool == "python":
-        return sys.version_info >= (3, 12) and shutil.which("python") is not None
+    if Path(tool).name.startswith("python3.1"):
+        return Path(tool).is_file() if Path(tool).is_absolute() else shutil.which(tool) is not None
     return shutil.which(tool) is not None
 
 
@@ -103,7 +117,7 @@ def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Res
     missing = [tool for tool in check.required_tools if not tool_available(tool)]
     if missing:
         reason = "required supported tool unavailable: " + ", ".join(missing)
-        if "python" in missing:
+        if any(Path(tool).name.startswith("python") for tool in missing):
             reason += f" (observed Python {sys.version.split()[0]}; repository image uses Python 3.12)"
         return Result(check.key, check.title, "BLOCKED", shlex.join(check.command), check.expected, None, None, None, reason, None)
     started = datetime.now(timezone.utc)
