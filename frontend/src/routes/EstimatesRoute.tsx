@@ -365,6 +365,9 @@ export function EstimatesRoute() {
                               {line.description}
                             </p>
                           )}
+                          <p className="text-xs text-content-muted">
+                            {line.quantity} × {money(line.unit_price, line.currency)} each
+                          </p>
                           {line.option_id && (
                             <p className="text-xs text-content-muted">
                               Selected customer option

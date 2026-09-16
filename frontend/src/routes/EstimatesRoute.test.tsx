@@ -76,6 +76,7 @@ vi.mock("../api/estimates", () => ({
     id: "estimate-1",
     branch_id: "branch-1",
     customer_id: "customer-1",
+    service_location_id: "location-1",
     estimate_number: "EST-000001",
     status: "draft",
     acceptance_status: "not_requested",
@@ -204,6 +205,7 @@ describe("EstimatesRoute", () => {
     expect((await screen.findAllByText("Heating proposal"))[0]).toBeVisible();
     expect(screen.queryByText("Create proposal")).not.toBeInTheDocument();
     expect(screen.getByText("Selected customer option")).toBeVisible();
+    expect(screen.getByText("1 × $100.00 each")).toBeVisible();
     expect(screen.getByText("Estimate pipeline")).toBeVisible();
     expect(screen.getByText("EST-000001")).toBeVisible();
     expect(estimatesApi.listEstimates).toHaveBeenCalledWith(

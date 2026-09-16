@@ -185,6 +185,11 @@ export function EstimateDecisionControls({
       )}
       {estimate.status === "approved" && (
         <div className="grid gap-3 rounded-lg border border-stroke p-4 sm:grid-cols-2">
+          {!estimate.service_location_id && (
+            <Alert className="sm:col-span-2" variant="warning" role="alert">
+              Select a Service Location on a revised Estimate before converting it to a Job. The approved sold snapshot remains unchanged.
+            </Alert>
+          )}
           <Field label="Job type code (optional)">
             <Input
               value={jobTypeCode}
@@ -201,6 +206,7 @@ export function EstimateDecisionControls({
             <Button
               type="button"
               loading={mutations.convert.isPending}
+              disabled={!estimate.service_location_id}
               onClick={convert}
             >
               Convert approved Estimate to Job

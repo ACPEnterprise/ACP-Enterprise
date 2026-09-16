@@ -60,7 +60,7 @@ describe("EstimateDecisionControls", () => {
     const controls = mutations();
     render(
       <EstimateDecisionControls
-        estimate={{ ...estimate, status: "approved" }}
+        estimate={{ ...estimate, status: "approved", service_location_id: "location-1" }}
         mutations={controls as never}
       />,
     );
@@ -77,6 +77,20 @@ describe("EstimateDecisionControls", () => {
         }),
       }),
     );
+  });
+
+  it("explains and blocks Job conversion when Service Location is missing", () => {
+    const controls = mutations();
+    render(
+      <EstimateDecisionControls
+        estimate={{ ...estimate, status: "approved", service_location_id: null }}
+        mutations={controls as never}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/select a service location/i);
+    expect(
+      screen.getByRole("button", { name: "Convert approved Estimate to Job" }),
+    ).toBeDisabled();
   });
 
   it("requires explicit Customer evidence for rejection", () => {
