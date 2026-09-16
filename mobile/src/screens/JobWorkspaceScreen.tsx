@@ -10,6 +10,7 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { useFieldContext } from "../field/useFieldContext";
 import type { TimekeepingService } from "../api/timekeeping";
 import { JobClockPanel } from "../components/JobClockPanel";
+import { formatAuthoritativeTimestamp } from "../utils/formatting";
 
 function lifecycleAction(status: string | null) {
   if (status === "ready" || status === "active") return { action: "start" as const, label: "Start Work" };
@@ -41,7 +42,7 @@ function money(amount: number | null, currency: string | null) {
 }
 
 function formatWindow(value: string, timezone: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: timezone }).format(new Date(value));
+  return formatAuthoritativeTimestamp(value, timezone, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function locationLines(assignment: DayAssignment) {
@@ -160,7 +161,7 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
         </View>}
         {canReadAssets && context.equipment && <View accessibilityLabel="Assigned Job equipment">
           <Text style={styles.sectionTitle}>Equipment</Text>
-          {context.equipment.items.length === 0 ? <Text style={styles.line}>No equipment is related to this Job.</Text> : context.equipment.items.map((asset) => <View key={asset.asset_id} style={styles.contextCard}><Text style={styles.sectionTitle}>{asset.display_name}</Text><Text style={styles.line}>{[asset.manufacturer, asset.model].filter(Boolean).join(" · ") || "Equipment details unavailable"}</Text><Text style={styles.line}>Status: {asset.lifecycle.replaceAll("_", " ")}</Text><Text style={styles.line}>Installation evidence: {asset.installation_state?.replaceAll("_", " ") ?? "Unavailable"}</Text><Text style={styles.line}>Warranty evidence: {asset.warranty_state?.replaceAll("_", " ") ?? "Unavailable — coverage not determined"}</Text><Text style={styles.sectionTitle}>Recent service</Text>{asset.service_history.length ? asset.service_history.map((item, index) => <Text key={`${item.occurred_at}-${index}`} style={styles.line}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(item.occurred_at))} · {item.kind.replaceAll("_", " ")} · {item.state.replaceAll("_", " ")}</Text>) : <Text style={styles.line}>No related service evidence is available.</Text>}<Text style={styles.readOnly}>Showing up to {context.equipment?.history_limit ?? 10} related records.</Text><Text style={styles.line}>Protected evidence: {asset.evidence.some((item) => item.protected_document_available) ? "Available through ACP" : "None confirmed"}</Text></View>)}
+          {context.equipment.items.length === 0 ? <Text style={styles.line}>No equipment is related to this Job.</Text> : context.equipment.items.map((asset) => <View key={asset.asset_id} style={styles.contextCard}><Text style={styles.sectionTitle}>{asset.display_name}</Text><Text style={styles.line}>{[asset.manufacturer, asset.model].filter(Boolean).join(" · ") || "Equipment details unavailable"}</Text><Text style={styles.line}>Status: {asset.lifecycle.replaceAll("_", " ")}</Text><Text style={styles.line}>Installation evidence: {asset.installation_state?.replaceAll("_", " ") ?? "Unavailable"}</Text><Text style={styles.line}>Warranty evidence: {asset.warranty_state?.replaceAll("_", " ") ?? "Unavailable — coverage not determined"}</Text><Text style={styles.sectionTitle}>Recent service</Text>{asset.service_history.length ? asset.service_history.map((item, index) => <Text key={`${item.occurred_at}-${index}`} style={styles.line}>{formatAuthoritativeTimestamp(item.occurred_at, timezone, { dateStyle: "medium" })} · {item.kind.replaceAll("_", " ")} · {item.state.replaceAll("_", " ")}</Text>) : <Text style={styles.line}>No related service evidence is available.</Text>}<Text style={styles.readOnly}>Showing up to {context.equipment?.history_limit ?? 10} related records.</Text><Text style={styles.line}>Protected evidence: {asset.evidence.some((item) => item.protected_document_available) ? "Available through ACP" : "None confirmed"}</Text></View>)}
           <Text style={styles.readOnly}>Photos and documents aren't available yet. No device file is uploaded or retried.</Text>
         </View>}
         {canReadAssets && context.readiness && <View><Text style={styles.sectionTitle}>My field readiness</Text><Text style={styles.line}>Workforce profile: {context.readiness.workforce_profile_available ? "Available" : "Not configured"}</Text><Text style={styles.line}>Branch eligibility: {context.readiness.branch_eligible ? "Confirmed" : "Not confirmed"}</Text><Text style={styles.line}>Availability: {context.readiness.availability_state ?? "No current evidence"}</Text>{context.readiness.fleet.map((asset) => <Text key={asset.asset_id} style={styles.line}>{asset.display_name}: {asset.out_of_service ? "Out of service" : asset.readiness_state ?? "Readiness unavailable"}; inspection {asset.inspection_state ?? "unavailable"}; maintenance {asset.maintenance_state ?? "unavailable"}</Text>)}<Text style={styles.readOnly}>Vehicle inspection checklists aren't available yet.</Text></View>}

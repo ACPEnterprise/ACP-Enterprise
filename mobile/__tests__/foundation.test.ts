@@ -1,4 +1,5 @@
 import { ApiClient } from "../src/api/client";
+import { formatAuthoritativeTimestamp } from "../src/utils/formatting";
 import { ApiFailure, recoveryFor } from "../src/api/types";
 import { SessionRepository } from "../src/auth/sessionRepository";
 import type { Session } from "../src/auth/types";
@@ -24,6 +25,7 @@ describe("employee app foundation", () => {
     expect(() => readEnvironment({ environment: "preview", apiBaseUrl: "https://other.example.com", compatibilityVersion: "v1" })).toThrow();
   });
   it("requires an explicit activation flag even for a valid production URL", () => { expect(() => readEnvironment({ environment: "production", apiBaseUrl: "https://api.acpenterprise.com", compatibilityVersion: "v1", productionActivated: false })).toThrow("Production is inactive"); });
+  it("does not crash or reinterpret malformed server timezone data", () => { expect(formatAuthoritativeTimestamp("2026-09-16T12:00:00Z", "Not/AZone", { dateStyle: "medium" })).toBe("2026-09-16T12:00:00Z"); });
   it("accepts explicit development configuration", () => { expect(readEnvironment({ environment: "development", apiBaseUrl: "http://localhost:8000", compatibilityVersion: "v1" }).environment).toBe("development"); });
 });
 
