@@ -8,6 +8,7 @@ import {
   getRealRosterReadiness,
   getWorkforceEmployee,
   listWorkforceEmployees,
+  prepareEmployeeFieldReadiness,
   setEmployeeBranchGrant,
   setEmployeeMembershipStatus,
   setEmployeeRole,
@@ -34,7 +35,23 @@ export function useRealRosterReadiness(canBind: boolean) {
       ]);
     },
   });
-  return { query, bind, canBind };
+  const prepareFieldReadiness = useMutation({
+    mutationFn: ({ employeeId, branchId, windowStartAt, windowEndAt }: {
+      employeeId: string;
+      branchId: string;
+      windowStartAt: string;
+      windowEndAt: string;
+    }) => prepareEmployeeFieldReadiness(
+      employeeId, branchId, windowStartAt, windowEndAt,
+    ),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["real-workforce-roster"] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+      ]);
+    },
+  });
+  return { query, bind, prepareFieldReadiness, canBind };
 }
 
 export function useEmployeePasswordReset(userId: string | null, enabled: boolean) {

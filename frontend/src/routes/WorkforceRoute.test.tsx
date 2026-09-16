@@ -92,6 +92,7 @@ describe("WorkforceRoute", () => {
         },
       },
       bind: { isPending: false, mutate: vi.fn() },
+      prepareFieldReadiness: { isPending: false, mutate: vi.fn() },
       canBind: false,
     } as never);
     vi.mocked(workforceHooks.useWorkforceEligibility).mockReturnValue({

@@ -161,6 +161,22 @@ export async function bindRealRosterEmployee(
   ).data;
 }
 
+export async function prepareEmployeeFieldReadiness(
+  employeeId: string,
+  branchId: string,
+  windowStartAt: string,
+  windowEndAt: string,
+): Promise<void> {
+  await apiClient.put(
+    `/api/v1/workforce/administration/employees/${employeeId}/field-readiness`,
+    {
+      branch_id: branchId,
+      window_start_at: windowStartAt,
+      window_end_at: windowEndAt,
+    },
+  );
+}
+
 export async function getEmployeeAdministration(
   employeeId: string,
 ): Promise<EmployeeAdministrationDetail> {

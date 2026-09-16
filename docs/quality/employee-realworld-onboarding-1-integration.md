@@ -31,10 +31,11 @@ Company administration, role/permission administration, Price Book activation,
 payment collection/application/refund, Accounting posting, and Payroll management.
 
 `FIELD_TECH` does not itself assert availability. An authorized operator must use
-the existing **Confirm field-ready for this appointment** action for the exact
-Employee, MAIN Branch, and appointment window. That audited action establishes
-the canonical `technician` capability and bounded availability atomically.
-Office profiles never receive that capability automatically.
+**Record bounded field readiness** in Workforce for the exact Employee, MAIN
+Branch, and explicit time window. That audited action establishes the canonical
+`technician` capability and bounded availability atomically. Dispatch only consumes
+the resulting eligibility and cannot promote an ineligible person while assigning.
+Office profiles never receive technician capability automatically.
 
 The Workforce page now also exposes the eight-person owner-confirmed roster as a
 separate readiness projection. An unbound roster slot remains
@@ -61,9 +62,9 @@ linkage independently.
    then send the protected invitation.
 6. Record invitation, provider acceptance, delivery, activation, and login as
    distinct states. Do not copy activation secrets into evidence.
-7. For each of the five Field Techs, open a real sanctioned appointment and use
-   **Confirm field-ready for this appointment**, then refresh eligibility and
-   assign only after it reports eligible.
+7. For each of the five Field Techs, record an explicit bounded MAIN-Branch
+   readiness window in Workforce, then open a sanctioned appointment and assign
+   only after Dispatch reports the technician eligible.
 8. Verify each activated Field Tech sees only assigned work and own Timekeeping.
    Verify Lianne has office operations and no technician capability.
 
