@@ -49,6 +49,7 @@ vi.mock("../hooks/useLuminary", () => ({
   useLuminaryOwnerEconomics: () => ({
     isPending: false,
     data: {
+      currency: "USD",
       readiness: "READY",
       confidence: { score_percent: 90 },
       job_economics: [
@@ -141,9 +142,23 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText(/Accepted worked hours 1\.00/)).toBeVisible();
     expect(screen.getByText("What ACP knows by Job")).toBeVisible();
     expect(screen.getByText("Job J-100")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open supporting Job evidence" })).toHaveAttribute("href", "/jobs/job-1");
     expect(screen.getByText("What it means by service line")).toBeVisible();
     expect(screen.getAllByText("$125.50").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/certified direct wage cost/).length).toBeGreaterThan(0);
+  });
+
+  it("rejects a reversed period before requesting a misleading comparison", () => {
+    renderRoute();
+    fireEvent.change(screen.getByLabelText("Start date"), {
+      target: { value: "2026-09-20" },
+    });
+    fireEvent.change(screen.getByLabelText("End date"), {
+      target: { value: "2026-09-10" },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Choose a start date on or before the end date",
+    );
   });
 
   it("retries a temporary briefing failure without offering analysis", () => {

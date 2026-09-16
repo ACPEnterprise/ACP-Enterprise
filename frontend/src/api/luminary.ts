@@ -78,6 +78,7 @@ export interface LuminaryOwnerEconomics {
   company_id: string;
   branch_id: string | null;
   period: { start: string; end: string };
+  currency: string | null;
   readiness: string;
   confidence: { score_percent: number; method: string };
   job_economics: Array<{

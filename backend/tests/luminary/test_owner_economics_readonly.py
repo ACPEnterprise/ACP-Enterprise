@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
+
 from app.luminary.owner_economics import (
     AnalysisReadiness,
     ScenarioAssumption,
@@ -104,6 +105,7 @@ def test_fact_projection_is_deterministic_scoped_and_source_labeled() -> None:
     assert first == second
     assert first["packet_digest"] == second["packet_digest"]
     assert first["readiness"] == AnalysisReadiness.READY
+    assert first["currency"] == "USD"
     facts = first["facts"]
     assert isinstance(facts, list)
     revenue = next(item for item in facts if item["metric"] == "revenue")

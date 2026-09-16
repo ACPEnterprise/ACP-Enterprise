@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { isAxiosError } from "axios";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useHasPermission } from "../auth";
 import type {
   LuminaryFinding,
@@ -25,7 +25,9 @@ import {
   Spinner,
 } from "../ui";
 
-const today = new Date().toISOString().slice(0, 10);
+const localDate = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+const today = localDate(new Date());
 const monthStart = `${today.slice(0, 7)}-01`;
 const words = (value: string) => value.replaceAll("_", " ");
 const money = (item: LuminaryObservation) =>
@@ -35,12 +37,14 @@ const money = (item: LuminaryObservation) =>
         style: "currency",
         currency: item.currency,
       }).format(item.value_minor / 100);
-const minorMoney = (value: number | null) =>
+const minorMoney = (value: number | null, currency: string | null) =>
   value == null
     ? "Not yet available"
+    : !currency
+      ? "Currency unavailable"
     : new Intl.NumberFormat(undefined, {
         style: "currency",
-        currency: "USD",
+        currency,
       }).format(value / 100);
 
 function FindingCard({ finding }: { finding: LuminaryFinding }) {
@@ -174,6 +178,7 @@ export function LuminaryRoute() {
   const [scenarioKind, setScenarioKind] = useState("PRICE_PERCENT");
   const [scenarioChange, setScenarioChange] = useState("0");
   const [scenario, setScenario] = useState<{ kind: string; change: number }>();
+  const invalidPeriod = !start || !end || start > end;
   const briefing = useLuminaryBriefing(scope.start, scope.end, canRead);
   const readiness = useLuminarySourceReadiness(scope.start, scope.end, canRead);
   const ownerEconomics = useLuminaryOwnerEconomics(
@@ -215,6 +220,7 @@ export function LuminaryRoute() {
             className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
             onSubmit={(event) => {
               event.preventDefault();
+              if (invalidPeriod) return;
               setScope({ start, end });
             }}
           >
@@ -232,6 +238,11 @@ export function LuminaryRoute() {
             />
             <Button type="submit">View briefing</Button>
           </form>
+          {invalidPeriod ? (
+            <p className="mt-3 text-sm text-status-danger" role="alert">
+              Choose a start date on or before the end date. No comparison was requested.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
       {readiness.isPending ? (
@@ -259,6 +270,10 @@ export function LuminaryRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {(() => {
+              const currency = ownerEconomics.data.currency;
+              return (
+            <>
             <section aria-labelledby="job-economics-title" className="space-y-3">
               <div>
                 <h3 className="font-semibold" id="job-economics-title">What ACP knows by Job</h3>
@@ -273,14 +288,17 @@ export function LuminaryRoute() {
                         <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">{words(job.readiness)} · {job.confidence_percent}%</span>
                       </div>
                       <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                        <div><dt className="text-content-muted">Invoiced revenue</dt><dd className="font-semibold">{minorMoney(job.invoiced_revenue_minor)}</dd></div>
+                        <div><dt className="text-content-muted">Invoiced revenue</dt><dd className="font-semibold">{minorMoney(job.invoiced_revenue_minor, currency)}</dd></div>
                         <div><dt className="text-content-muted">Accepted work</dt><dd className="font-semibold">{job.accepted_worked_seconds == null ? "Not yet available" : `${(job.accepted_worked_seconds / 3600).toFixed(2)} hours`}</dd></div>
-                        <div><dt className="text-content-muted">Direct wage cost</dt><dd className="font-semibold">{minorMoney(job.direct_wage_cost_minor)}</dd></div>
-                        <div><dt className="text-content-muted">Actual material cost</dt><dd className="font-semibold">{minorMoney(job.actual_material_cost_minor)}</dd></div>
-                        <div><dt className="text-content-muted">Direct contribution</dt><dd className="font-semibold">{minorMoney(job.direct_contribution_minor)}</dd></div>
-                        <div><dt className="text-content-muted">Fully loaded profit</dt><dd className="font-semibold">{minorMoney(job.fully_loaded_profit_minor)}</dd></div>
+                        <div><dt className="text-content-muted">Direct wage cost</dt><dd className="font-semibold">{minorMoney(job.direct_wage_cost_minor, currency)}</dd></div>
+                        <div><dt className="text-content-muted">Actual material cost</dt><dd className="font-semibold">{minorMoney(job.actual_material_cost_minor, currency)}</dd></div>
+                        <div><dt className="text-content-muted">Direct contribution</dt><dd className="font-semibold">{minorMoney(job.direct_contribution_minor, currency)}</dd></div>
+                        <div><dt className="text-content-muted">Fully loaded profit</dt><dd className="font-semibold">{minorMoney(job.fully_loaded_profit_minor, currency)}</dd></div>
                       </dl>
                       <div className="mt-3"><p className="text-xs font-semibold">What ACP does not know</p><p className="text-xs text-content-muted">{job.missing_prerequisites.length ? job.missing_prerequisites.map(words).join(" · ") : "No required direct-contribution input is missing."}</p></div>
+                      <Link className="mt-3 inline-block text-sm font-semibold text-action-primary underline" to={`/jobs/${job.job_id}`}>
+                        Open supporting Job evidence
+                      </Link>
                     </article>
                   ))}
                 </div>
@@ -293,14 +311,17 @@ export function LuminaryRoute() {
                   <article className="rounded-lg border border-stroke p-3" key={service.service_category}>
                     <h4 className="font-semibold capitalize">{words(service.service_category)}</h4>
                     <p className="text-xs text-content-muted">{service.job_count} Jobs · {service.contribution_ready_job_count} contribution-ready</p>
-                    <p className="mt-2 text-sm">Invoiced {minorMoney(service.invoiced_revenue_minor)}</p>
-                    <p className="text-sm">Average ticket {minorMoney(service.average_invoiced_ticket_minor)}</p>
-                    <p className="text-sm">Direct contribution {minorMoney(service.direct_contribution_minor)}</p>
+                    <p className="mt-2 text-sm">Invoiced {minorMoney(service.invoiced_revenue_minor, currency)}</p>
+                    <p className="text-sm">Average ticket {minorMoney(service.average_invoiced_ticket_minor, currency)}</p>
+                    <p className="text-sm">Direct contribution {minorMoney(service.direct_contribution_minor, currency)}</p>
                     <p className="mt-2 text-xs text-content-muted">{service.missing_prerequisites.length ? `Still needed: ${service.missing_prerequisites.map(words).join(" · ")}` : "Complete for direct contribution."}</p>
                   </article>
                 ))}
               </div>
             </section>
+            </>
+              );
+            })()}
             {ownerEconomics.data.admitted_source_evidence ? (
               <section className="rounded-lg border border-stroke p-4" aria-labelledby="admitted-evidence-title">
                 <h3 className="font-semibold" id="admitted-evidence-title">Admitted source evidence</h3>
@@ -311,7 +332,7 @@ export function LuminaryRoute() {
                   <p className="mt-2 text-sm">
                     Jobs {ownerEconomics.data.admitted_source_evidence.summary.job_count}
                     {ownerEconomics.data.admitted_source_evidence.summary.invoiced_revenue_minor !== null
-                      ? ` · Invoiced revenue ${(ownerEconomics.data.admitted_source_evidence.summary.invoiced_revenue_minor / 100).toLocaleString(undefined, { style: "currency", currency: ownerEconomics.data.admitted_source_evidence.summary.currency ?? "USD" })}`
+                      ? ` · Invoiced revenue ${minorMoney(ownerEconomics.data.admitted_source_evidence.summary.invoiced_revenue_minor, ownerEconomics.data.admitted_source_evidence.summary.currency)}`
                       : " · Invoiced revenue unavailable"}
                     {ownerEconomics.data.admitted_source_evidence.summary.accepted_worked_seconds !== null
                       ? ` · Accepted worked hours ${(ownerEconomics.data.admitted_source_evidence.summary.accepted_worked_seconds / 3600).toFixed(2)}`
