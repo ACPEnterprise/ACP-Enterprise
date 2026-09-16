@@ -7,7 +7,6 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-
 from app.qbo_source.control_report_projection import (
     discover_registered_control_reports,
     project_registered_general_ledger_period,
