@@ -50,7 +50,7 @@ Use a sanctioned real completed/sold Job and real check/manual evidence only aft
 ## Enterprise Operations handoff
 
 1. Integrate the candidate onto current protected authority.
-2. Apply Alembic revision `o1q9r27h4u0v`.
+2. Apply Alembic revision `q3s1t29j6w2x`.
 3. Run Invoice, Payment, Customer, Job, authorization, idempotency, frontend, and migration qualification.
 4. Deploy through Enterprise release controls; OM2-B does not deploy.
 5. Verify the manual-payment POST route requires both permissions and its history GET route is tenant/Branch scoped.

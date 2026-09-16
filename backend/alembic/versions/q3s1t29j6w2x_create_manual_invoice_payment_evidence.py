@@ -1,7 +1,7 @@
 """create manual invoice payment evidence
 
-Revision ID: o1q9r27h4u0v
-Revises: n0p8q16g3t9u
+Revision ID: q3s1t29j6w2x
+Revises: p2r0s28i5v1w
 """
 
 from collections.abc import Sequence
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "o1q9r27h4u0v"
-down_revision: str | Sequence[str] | None = "n0p8q16g3t9u"
+revision: str = "q3s1t29j6w2x"
+down_revision: str | Sequence[str] | None = "p2r0s28i5v1w"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
