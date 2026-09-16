@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Fail-closed verification of Enterprise release security evidence."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+from pathlib import Path
+
+REQUIRED_CVES = {
+    "CVE-2025-69720",
+    "CVE-2026-12064",
+    "CVE-2026-8286",
+    "CVE-2026-8458",
+    "CVE-2026-8927",
+    "CVE-2026-16742",
+    "CVE-2026-54369",
+    "CVE-2026-66046",
+    "CVE-2026-76956",
+    "CVE-2026-76957",
+    "CVE-2026-76642",
+    "CVE-2026-78408",
+    "CVE-2026-78409",
+    "CVE-2026-78410",
+    "CVE-2026-9538",
+}
+REQUIRED_FIELDS = {
+    "package",
+    "installed_version",
+    "vulnerable_component",
+    "direct_invocation",
+    "transitive_invocation",
+    "runtime_reachability",
+    "attacker_primitive",
+    "attackability",
+    "authentication",
+    "privilege",
+    "file_write",
+    "network_access",
+    "container_escape",
+    "hardening",
+    "removable",
+    "slimmer_runtime",
+    "safe_package_source",
+    "vendor_fix",
+    "consequence",
+    "disposition",
+}
+
+
+def digest(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--packet", type=Path, required=True)
+    parser.add_argument("--artifact-root", type=Path)
+    parser.add_argument("--scanner-inventory", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    packet = json.loads(args.packet.read_text())
+    failures: list[str] = []
+    warnings: list[str] = []
+    records = packet.get("cves", [])
+    found = {row.get("cve") for row in records}
+    if found != REQUIRED_CVES:
+        failures.append(
+            f"CVE_SET_MISMATCH missing={sorted(REQUIRED_CVES - found)} extra={sorted(found - REQUIRED_CVES)}"
+        )
+    for row in records:
+        missing = sorted(REQUIRED_FIELDS - row.keys())
+        if missing:
+            failures.append(
+                f"{row.get('cve', 'UNKNOWN')}:MISSING_FIELDS:{','.join(missing)}"
+            )
+        if row.get("installed_version") == "EVIDENCE_REQUIRED":
+            failures.append(f"{row.get('cve')}:INSTALLED_VERSION_UNVERIFIED")
+    head = subprocess.check_output(("git", "rev-parse", "HEAD"), text=True).strip()
+    if head != packet["baseline"]["candidate_sha"]:
+        failures.append("CANDIDATE_SHA_MISMATCH")
+    expected = packet["immutable_artifacts"]
+    matched: dict[str, str] = {}
+    if args.artifact_root and args.artifact_root.is_dir():
+        by_digest = {
+            digest(path): str(path)
+            for path in args.artifact_root.rglob("*")
+            if path.is_file()
+        }
+        for key in ("backend_archive", "frontend_archive", "release_manifest"):
+            wanted = expected[key]
+            if wanted in by_digest:
+                matched[key] = by_digest[wanted]
+            else:
+                failures.append(f"{key.upper()}_DIGEST_NOT_FOUND")
+    else:
+        failures.append("SEALED_ARTIFACT_ROOT_UNAVAILABLE")
+    if not args.scanner_inventory or not args.scanner_inventory.is_file():
+        failures.append("SCANNER_INVENTORY_UNAVAILABLE")
+    else:
+        warnings.append(
+            "scanner inventory supplied; version reconciliation remains scanner-format-specific"
+        )
+    result = {
+        "contract": "enterprise-release-security-verification/v1",
+        "candidate_sha": head,
+        "packet_sha256": digest(args.packet),
+        "matched_artifacts": matched,
+        "failures": failures,
+        "warnings": warnings,
+        "decision": "PASS" if not failures else "BLOCKED",
+        "deployment_authorized": False,
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w") as stream:
+        json.dump(result, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+    print(json.dumps(result, sort_keys=True))
+    return 0 if not failures else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
