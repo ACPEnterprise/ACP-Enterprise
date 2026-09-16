@@ -123,4 +123,21 @@ describe("FinancialReportsRoute", () => {
     render(<FinancialReportsRoute />);
     expect(screen.getByText(/No posted account balances exist for this report scope/i)).toBeVisible();
   });
+
+  it("rejects reversed report periods before changing the authoritative request", () => {
+    allowed = true;
+    render(<FinancialReportsRoute />);
+    const requestBefore = vi.mocked(useFinancialReport).mock.calls.at(-1)?.[0];
+    fireEvent.change(screen.getByLabelText("Start date"), {
+      target: { value: "2026-09-20" },
+    });
+    fireEvent.change(screen.getByLabelText("End date"), {
+      target: { value: "2026-09-10" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Choose a start date on or before the end date",
+    );
+    expect(vi.mocked(useFinancialReport).mock.calls.at(-1)?.[0]).toEqual(requestBefore);
+  });
 });
