@@ -70,6 +70,15 @@ def _source(root: Path) -> Path:
                         "payment_method": "imported_from_quickbooks",
                     }
                 ],
+                "refunds": [
+                    {
+                        "id": None,
+                        "status": "succeeded",
+                        "amount": 2500,
+                        "refunded_at": "2026-05-20T12:00:00Z",
+                        "payment_method": "card",
+                    }
+                ],
             },
             {"id": "invoice-other", "job_id": "job-other", "payments": []},
         ],
@@ -84,7 +93,12 @@ def test_projects_exact_customer_history_without_accounting_promotion(
         _source(tmp_path), source_customer_id="customer-1"
     )
 
-    assert result["counts"] == {"estimates": 1, "invoices": 1, "payments": 1}
+    assert result["counts"] == {
+        "estimates": 1,
+        "invoices": 1,
+        "payments": 1,
+        "refunds": 1,
+    }
     assert result["accepted_as_acp_accounting"] is False
     assert result["mutation_authority"] == "none"
     assert result["estimates"][0]["source_id"] == "estimate-1"
@@ -92,6 +106,9 @@ def test_projects_exact_customer_history_without_accounting_promotion(
     assert payment["overlap_disposition"] == (
         "HOLD_FROM_AGGREGATION_PENDING_QBO_RECONCILIATION"
     )
+    refund = result["invoices"][0]["refunds"][0]
+    assert refund["identity_disposition"] == "SOURCE_BACKED_UNLINKED_REFUND"
+    assert refund["aggregation_safe"] is False
 
 
 def test_rejects_non_read_only_source_package(tmp_path: Path) -> None:

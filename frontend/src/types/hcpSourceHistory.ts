@@ -9,13 +9,13 @@ export type HcpSourcePayment = {
 };
 
 export type HcpCustomerSourceHistory = {
-  contract: "hcp-customer-source-history/v1";
+  contract: "hcp-customer-source-history/v2";
   authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY";
   accepted_as_acp_accounting: false;
   mutation_authority: "none";
   source_customer_id: string;
   source_manifest_sha256: string;
-  counts: { estimates: number; invoices: number; payments: number };
+  counts: { estimates: number; invoices: number; payments: number; refunds: number };
   estimates: Array<{
     source_id: string;
     number: string | null;
@@ -35,6 +35,16 @@ export type HcpCustomerSourceHistory = {
     invoice_date: string | null;
     service_date: string | null;
     payments: HcpSourcePayment[];
+    refunds: Array<{
+      source_id: string | null;
+      status: string;
+      amount_cents: number;
+      date: string | null;
+      payment_method: string | null;
+      identity_disposition: "EXACT_PROVIDER_REFUND_ID" | "SOURCE_BACKED_UNLINKED_REFUND";
+      aggregation_safe: false;
+      authority: "HCP_SOURCE_BACKED_REFUND_EVIDENCE_NOT_ACCOUNTING_POSTING";
+    }>;
     authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY";
   }>;
 };
