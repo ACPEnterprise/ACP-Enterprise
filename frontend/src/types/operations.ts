@@ -32,7 +32,6 @@ export interface ExistingJobScheduleInput {
   expected_duration_minutes: number;
   capacity_units: string;
   reserve_capacity: boolean;
-  employee_id: string | null;
 }
 
 export interface ExistingJobScheduleResult {

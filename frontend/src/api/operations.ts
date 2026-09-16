@@ -19,7 +19,7 @@ export async function createServiceRequest(
 
 export async function scheduleExistingJob(
   jobId: string,
-  input: Omit<ExistingJobScheduleInput, "employee_id">,
+  input: ExistingJobScheduleInput,
 ): Promise<ExistingJobScheduleResult> {
   return (
     await apiClient.post<ExistingJobScheduleResult>(

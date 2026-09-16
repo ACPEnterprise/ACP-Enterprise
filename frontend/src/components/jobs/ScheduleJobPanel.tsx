@@ -1,51 +1,37 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 
 import { useScheduleExistingJob } from "../../hooks/useOperations";
-import { useWorkforceDirectory } from "../../hooks/useWorkforce";
+import { zonedDateTimeInput, zonedDateTimeToIso } from "../dispatch/dispatchPresentation";
 import { schedulingReturnPath } from "../../routing/paths";
 import type { JobDetail } from "../../types/jobs";
-import { Alert, Button, Field, Input, Select } from "../../ui";
+import { Alert, Button, Field, Input } from "../../ui";
 import { schedulingMutationRecovery } from "../scheduling/schedulingRecovery";
 
-const localInput = (date: Date) => {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
-
-export function ScheduleJobPanel({ job, canAssign, returnTo }: {
+export function ScheduleJobPanel({ job, timeZone, returnTo }: {
   readonly job: JobDetail;
-  readonly canAssign: boolean;
+  readonly timeZone: string;
   readonly returnTo?: string;
 }) {
   const schedule = useScheduleExistingJob(job.id);
-  const workforce = useWorkforceDirectory();
-  const [startAt, setStartAt] = useState(() => localInput(new Date(Date.now() + 60 * 60 * 1000)));
-  const [endAt, setEndAt] = useState(() => localInput(new Date(Date.now() + 3 * 60 * 60 * 1000)));
+  const [startAt, setStartAt] = useState(() => zonedDateTimeInput(new Date(Date.now() + 60 * 60 * 1000).toISOString(), timeZone));
+  const [endAt, setEndAt] = useState(() => zonedDateTimeInput(new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(), timeZone));
   const [duration, setDuration] = useState(120);
-  const [employeeId, setEmployeeId] = useState("");
   const [lastAttempt, setLastAttempt] = useState<{ fingerprint: string; requestId: string } | null>(null);
-  const technicians = useMemo(
-    () => (workforce.data ?? []).filter((employee) =>
-      employee.technician && employee.employee_status === "active" &&
-      (!employee.home_branch_id || employee.home_branch_id === job.branch_id)),
-    [job.branch_id, workforce.data],
-  );
   const book = () => {
-    const start = new Date(startAt);
-    const end = new Date(endAt);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start || duration < 15) return;
+    const start = zonedDateTimeToIso(startAt, timeZone);
+    const end = zonedDateTimeToIso(endAt, timeZone);
+    if (end <= start || duration < 15) return;
     const intent = {
       expected_job_version: job.concurrency_version,
       branch_id: job.branch_id,
       customer_id: job.customer.id,
       service_location_id: job.service_location.id,
-      arrival_window_start_at: start.toISOString(),
-      arrival_window_end_at: end.toISOString(),
+      arrival_window_start_at: start,
+      arrival_window_end_at: end,
       expected_duration_minutes: duration,
       capacity_units: "1.00",
-      reserve_capacity: Boolean(employeeId),
-      employee_id: employeeId || null,
+      reserve_capacity: false,
     };
     const fingerprint = JSON.stringify(intent);
     const requestId = lastAttempt?.fingerprint === fingerprint ? lastAttempt.requestId : crypto.randomUUID();
@@ -62,15 +48,10 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
     {schedule.isSuccess ? <Alert className="mt-4" variant="success" title="Job scheduled">SUCCEEDED — The Appointment was linked to this Job and authoritative operating views were refreshed.{returnTo ? <div className="mt-2"><Link className="font-semibold underline" to={schedulingReturnPath(returnTo)}>Return to prior Schedule view</Link></div> : null}</Alert> : null}
     <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
       <Field label="Arrival window starts" required><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
-      <Field label="Arrival window ends" required helperText={startAt && endAt && new Date(endAt) <= new Date(startAt) ? "Arrival window must end after it starts." : "Customer-facing arrival window; separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
+      <Field label="Arrival window ends" required helperText={startAt && endAt && zonedDateTimeToIso(endAt, timeZone) <= zonedDateTimeToIso(startAt, timeZone) ? "Arrival window must end after it starts." : "Customer-facing arrival window; separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
       <Field label="Expected duration (minutes)" required><Input type="number" min={15} max={1440} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
-      <Field label="Technician" helperText={canAssign ? "Leave Unassigned when Dispatch should decide later." : "Dispatch assignment requires additional authority."} className="sm:col-span-2">
-        <Select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} disabled={!canAssign || workforce.isLoading}>
-          <option value="">Unassigned / Needs Scheduling</option>
-          {technicians.map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} — {employee.employee_number}</option>)}
-        </Select>
-      </Field>
-      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || !endAt || new Date(endAt) <= new Date(startAt) || duration < 15}>Book Appointment</Button></div>
+      <Alert className="sm:col-span-2" title="Technician assignment follows scheduling">The Appointment will enter Dispatch unassigned. Select a technician there using appointment-specific Branch, capability, availability, and conflict evidence.</Alert>
+      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || !endAt || zonedDateTimeToIso(endAt, timeZone) <= zonedDateTimeToIso(startAt, timeZone) || duration < 15}>Book Appointment</Button></div>
     </form>
   </section>;
 }

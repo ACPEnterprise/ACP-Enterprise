@@ -12,13 +12,14 @@ import { JobsErrorState, JobsLoadingState } from "../components/jobs/JobStates";
 import { LifecycleActionButtons } from "../components/jobs/LifecycleActionButtons";
 import { JobCompletionStatus } from "../components/jobs/JobCompletionStatus";
 import { ScheduleJobPanel } from "../components/jobs/ScheduleJobPanel";
-import { useHasPermission } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
 import { useJob } from "../hooks/useJobs";
 import { useJobAppointmentAssignments } from "../hooks/useDispatch";
 import { schedulingReturnPath } from "../routing/paths";
 import { Alert, Button } from "../ui";
 
 export function JobDetailRoute() {
+  const { activeCompany } = useAuth();
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -30,7 +31,6 @@ export function JobDetailRoute() {
   const canManageScheduling = useHasPermission("COMPANY_SCHEDULING_MANAGE");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const canSchedule = canManageScheduling && canManageJobs;
-  const canAssign = useHasPermission("COMPANY_DISPATCH_MANAGE");
   const canReadDispatch = useHasPermission("COMPANY_DISPATCH_READ");
   const query = useJob(jobId, canRead);
   const assignments = useJobAppointmentAssignments(
@@ -50,6 +50,8 @@ export function JobDetailRoute() {
     );
   }
   const job = query.data;
+  const branchTimeZone = activeCompany?.branches.find((branch) => branch.id === job.branch_id)?.timezone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -92,7 +94,7 @@ export function JobDetailRoute() {
         <ServiceLocationCard job={job} />
       </div>
       <JobOperationalDetails job={job} />
-      {canSchedule && job.appointments.length === 0 && !["completed", "cancelled"].includes(job.status) ? <ScheduleJobPanel job={job} canAssign={canAssign} returnTo={hasSchedulingReturn ? returnTo : undefined} /> : null}
+      {canSchedule && job.appointments.length === 0 && !["completed", "cancelled"].includes(job.status) ? <ScheduleJobPanel job={job} timeZone={branchTimeZone} returnTo={hasSchedulingReturn ? returnTo : undefined} /> : null}
       <AppointmentSummaryTable job={job} assignments={assignments.data} returnTo={hasSchedulingReturn ? returnTo : undefined} />
       <JobCompletionStatus jobId={job.id} />
     </div>

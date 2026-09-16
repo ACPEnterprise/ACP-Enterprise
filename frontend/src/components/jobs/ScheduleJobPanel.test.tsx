@@ -4,12 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useScheduleExistingJob } from "../../hooks/useOperations";
-import { useWorkforceDirectory } from "../../hooks/useWorkforce";
 import type { JobDetail } from "../../types/jobs";
 import { ScheduleJobPanel } from "./ScheduleJobPanel";
 
 vi.mock("../../hooks/useOperations");
-vi.mock("../../hooks/useWorkforce");
 
 const mutate = vi.fn();
 const job = {
@@ -19,44 +17,37 @@ const job = {
   service_location: { id: "location-1" }, appointments: [],
 } as unknown as JobDetail;
 
-function renderPanel(canAssign = true) {
-  return render(<QueryClientProvider client={new QueryClient()}><ScheduleJobPanel job={job} canAssign={canAssign} /></QueryClientProvider>);
+function renderPanel() {
+  return render(<QueryClientProvider client={new QueryClient()}><ScheduleJobPanel job={job} timeZone="America/New_York" /></QueryClientProvider>);
 }
 
 describe("ScheduleJobPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useScheduleExistingJob).mockReturnValue({ mutate, isPending: false, isSuccess: false, error: null } as never);
-    vi.mocked(useWorkforceDirectory).mockReturnValue({ isLoading: false, data: [
-      { employee_id: "employee-beta", employee_number: "SYN-BETA", display_name: "Synthetic Beta Employee", employee_status: "active", technician: true, home_branch_id: "branch-main" },
-      { employee_id: "employee-other", employee_number: "OTHER", display_name: "Other Branch", employee_status: "active", technician: true, home_branch_id: "branch-other" },
-    ] } as never);
   });
 
-  it("offers human-readable assignment or explicit Unassigned and keeps Job identities", async () => {
+  it("creates the Appointment first and routes technician choice through Dispatch eligibility", async () => {
     renderPanel();
     expect(screen.getByRole("heading", { name: "Schedule Job" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "Unassigned / Needs Scheduling" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "Synthetic Beta Employee — SYN-BETA" })).toBeVisible();
-    expect(screen.queryByRole("option", { name: /Other Branch/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Technician" })).not.toBeInTheDocument();
+    expect(screen.getByText(/appointment-specific Branch, capability, availability, and conflict evidence/i)).toBeVisible();
     await userEvent.clear(screen.getByLabelText(/^Arrival window starts/));
     await userEvent.type(screen.getByLabelText(/^Arrival window starts/), "2026-09-14T09:00");
     await userEvent.clear(screen.getByLabelText(/^Arrival window ends/));
     await userEvent.type(screen.getByLabelText(/^Arrival window ends/), "2026-09-14T12:00");
     await userEvent.clear(screen.getByLabelText(/^Expected duration \(minutes\)/));
     await userEvent.type(screen.getByLabelText(/^Expected duration \(minutes\)/), "90");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Technician" }), "employee-beta");
     await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       expected_job_version: 3,
       branch_id: "branch-main",
       customer_id: "customer-1",
       service_location_id: "location-1",
-      arrival_window_start_at: new Date("2026-09-14T09:00").toISOString(),
-      arrival_window_end_at: new Date("2026-09-14T12:00").toISOString(),
+      arrival_window_start_at: "2026-09-14T13:00:00.000Z",
+      arrival_window_end_at: "2026-09-14T16:00:00.000Z",
       expected_duration_minutes: 90,
-      employee_id: "employee-beta",
-      reserve_capacity: true,
+      reserve_capacity: false,
     }), expect.any(Object));
   });
 
@@ -75,15 +66,13 @@ describe("ScheduleJobPanel", () => {
     renderPanel();
     await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
-      employee_id: null,
       reserve_capacity: false,
     }), expect.any(Object));
   });
 
-  it("explains emergency work and permits scheduling without Dispatch authority", () => {
-    renderPanel(false);
+  it("explains emergency work and permits scheduling before Dispatch assignment", () => {
+    renderPanel();
     expect(screen.getByText(/supports emergency work before scheduling/i)).toBeVisible();
-    expect(screen.getByRole("combobox", { name: "Technician" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Book Appointment" })).toBeEnabled();
   });
 
