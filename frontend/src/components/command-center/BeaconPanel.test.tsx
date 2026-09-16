@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { BeaconSignal } from "../../api/beacon";
 import { BeaconPanel } from "./BeaconPanel";
+import { attentionWindow } from "./beaconAttention";
 
 const signal: BeaconSignal = {
   id: "signal-id",
@@ -102,6 +103,12 @@ const panelProps = {
 };
 
 describe("BeaconPanel", () => {
+  it("groups signals into deterministic owner attention windows", () => {
+    expect(attentionWindow(signal)).toBe("NOW");
+    expect(attentionWindow({ ...signal, severity: "important", priority: { ...signal.priority, band: "important" } })).toBe("TODAY");
+    expect(attentionWindow({ ...signal, severity: "attention", priority: { ...signal.priority, band: "monitor" } })).toBe("THIS WEEK");
+    expect(attentionWindow({ ...signal, severity: "information", priority: { ...signal.priority, band: "monitor" } })).toBe("WATCH");
+  });
   it("renders explainable signals and measured facts", () => {
     render(
       <BeaconPanel

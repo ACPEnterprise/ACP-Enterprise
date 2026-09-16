@@ -17,6 +17,7 @@ import {
 } from "../../api/beacon";
 import { Alert, Badge, Button, EmptyState, Input, Spinner } from "../../ui";
 import { CommandCenterPanel } from "./CommandCenterPrimitives";
+import { attentionWindow, attentionWindows } from "./beaconAttention";
 
 const severityPresentation: Record<
   BeaconSeverity,
@@ -576,23 +577,42 @@ export function BeaconPanel({
         />
       )}
       {!loading && !error && signals && signals.length > 0 && (
-        <ol aria-label="Owner attention queue">
-          {signals.map((signal) => (
-            <SignalRow
-              canReview={canReview}
-              canOwn={canOwn}
-              canAssign={canAssign}
-              currentUserId={currentUserId}
-              evaluatedAt={evaluatedAt}
-              key={signal.id}
-              lifecyclePending={lifecyclePending}
-              workflowPending={workflowPending}
-              signal={signal}
-              onLifecycleAction={onLifecycleAction}
-              onWorkflowAction={onWorkflowAction}
-            />
-          ))}
-        </ol>
+        <div className="space-y-ui-5" aria-label="Owner attention queue" role="list">
+          {attentionWindows.map((window) => {
+            const items = signals.filter(
+              (signal) => attentionWindow(signal) === window,
+            );
+            if (items.length === 0) return null;
+            return <section key={window} aria-labelledby={`beacon-${window.replaceAll(" ", "-").toLowerCase()}`}>
+              <div className="border-b border-stroke pb-ui-2">
+                <h3 className="text-title-s font-semibold text-content" id={`beacon-${window.replaceAll(" ", "-").toLowerCase()}`}>{window}</h3>
+                <p className="text-body-s text-content-muted">
+                  {window === "NOW" && "Critical or immediate evidence requiring prompt human review."}
+                  {window === "TODAY" && "Important evidence to review during today's operating cycle."}
+                  {window === "THIS WEEK" && "Active attention conditions without immediate urgency evidence."}
+                  {window === "WATCH" && "Informational conditions to monitor; no stronger urgency is inferred."}
+                </p>
+              </div>
+              <ol>
+                {items.map((signal) => (
+                  <SignalRow
+                    canReview={canReview}
+                    canOwn={canOwn}
+                    canAssign={canAssign}
+                    currentUserId={currentUserId}
+                    evaluatedAt={evaluatedAt}
+                    key={signal.id}
+                    lifecyclePending={lifecyclePending}
+                    workflowPending={workflowPending}
+                    signal={signal}
+                    onLifecycleAction={onLifecycleAction}
+                    onWorkflowAction={onWorkflowAction}
+                  />
+                ))}
+              </ol>
+            </section>;
+          })}
+        </div>
       )}
       {!loading &&
         !error &&

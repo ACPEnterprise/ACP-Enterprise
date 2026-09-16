@@ -1,10 +1,12 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.beacon.adapter_registry import CROSS_DOMAIN_ADAPTER_REGISTRY
+from app.beacon.briefing import build_morning_brief
 from app.beacon.catalog import (
     NATIVE_FINANCIAL_SIGNAL_CATALOG,
     OPERATIONAL_SIGNAL_CATALOG,
@@ -19,6 +21,7 @@ from app.beacon.errors import (
 )
 from app.beacon.escalation import ESCALATION_REGISTRY, escalation_service
 from app.beacon.evidence_evaluation import EVIDENCE_EVALUATION_REGISTRY
+from app.beacon.history import beacon_evaluation_history_service
 from app.beacon.intelligence import build_intelligence_packet
 from app.beacon.lifecycle import (
     RecordBeaconLifecycleAction,
@@ -26,10 +29,13 @@ from app.beacon.lifecycle import (
 )
 from app.beacon.quality import EVIDENCE_QUALITY_SERVICE
 from app.beacon.schemas import (
+    BeaconEvaluationDeltaResponse,
+    BeaconEvaluationRecordResponse,
     BeaconIntelligencePacketResponse,
     BeaconLifecycleCommandRequest,
     BeaconLifecycleEventResponse,
     BeaconLifecycleHistoryResponse,
+    BeaconMorningBriefResponse,
     BeaconSignalPage,
     BeaconSignalResponse,
     BeaconSnoozeCommandRequest,
@@ -38,6 +44,8 @@ from app.beacon.schemas import (
     BeaconWorkflowEventResponse,
     BeaconWorkflowHistoryResponse,
     BeaconWorkflowStateResponse,
+    CrossDomainAdapterRegistrationResponse,
+    CrossDomainAdapterRegistryResponse,
     DefinitionQualityRegistryResponse,
     DefinitionQualitySemanticsResponse,
     EscalationProjectionResponse,
@@ -86,6 +94,68 @@ BeaconOwnerOrAssigner = Annotated[
     AuthorizationContext,
     Depends(require_any_permission(BeaconPermission.OWN, BeaconPermission.ASSIGN)),
 ]
+
+
+@router.get(
+    "/cross-domain-adapters",
+    response_model=CrossDomainAdapterRegistryResponse,
+    summary="List admitted and gated cross-domain attention adapters",
+)
+async def cross_domain_adapter_registry(
+    context: BeaconReader,
+) -> CrossDomainAdapterRegistryResponse:
+    return CrossDomainAdapterRegistryResponse(
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        autonomous_action=False,
+        registrations=tuple(
+            CrossDomainAdapterRegistrationResponse.model_validate(
+                item, from_attributes=True
+            )
+            for item in CROSS_DOMAIN_ADAPTER_REGISTRY
+        ),
+    )
+
+
+@router.get(
+    "/evaluation-history/deltas",
+    response_model=BeaconEvaluationDeltaResponse,
+    summary="Read persisted Beacon changes for a bounded period",
+)
+async def evaluation_history_deltas(
+    session: DatabaseSession,
+    context: BeaconReader,
+    since: Annotated[datetime, Query()],
+    until: Annotated[datetime | None, Query()] = None,
+) -> BeaconEvaluationDeltaResponse:
+    end = until or datetime.now(timezone.utc)
+    if since.tzinfo is None or end.tzinfo is None or since >= end:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A valid timezone-aware history window is required.",
+        )
+    if end - since > timedelta(days=31):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Beacon history windows cannot exceed 31 days.",
+        )
+    branch_id = context.active_branch.id if context.active_branch else None
+    records = await beacon_evaluation_history_service.deltas(
+        session,
+        company_id=context.company.id,
+        branch_id=branch_id,
+        since=since,
+        until=end,
+    )
+    return BeaconEvaluationDeltaResponse(
+        company_id=context.company.id,
+        branch_id=branch_id,
+        since=since,
+        until=end,
+        items=tuple(
+            BeaconEvaluationRecordResponse.model_validate(item) for item in records
+        ),
+    )
 
 
 @router.get(
@@ -284,6 +354,7 @@ async def list_beacon_signals(
         context=context,
         now=evaluated_at,
     )
+
     workflows = await beacon_workflow_service.current_for_conditions(
         session,
         context=context,
@@ -315,6 +386,31 @@ async def list_beacon_signals(
         evaluated_at=evaluated_at,
         expires_at=evaluated_at + SIGNAL_TTL,
         lifecycle_commands_available=context.has_permission(BeaconPermission.REVIEW),
+    )
+
+
+@router.get(
+    "/morning-brief",
+    response_model=BeaconMorningBriefResponse,
+    summary="Read the deterministic owner attention brief",
+)
+async def morning_brief(
+    session: DatabaseSession,
+    context: BeaconReader,
+) -> BeaconMorningBriefResponse:
+    evaluated_at = datetime.now(timezone.utc)
+    queue = await beacon_query_service.get_attention_queue(
+        session, context=context, now=evaluated_at
+    )
+    return BeaconMorningBriefResponse.model_validate(
+        build_morning_brief(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id if context.active_branch else None,
+            active=queue.active,
+            snoozed=queue.snoozed,
+            evaluated_at=evaluated_at,
+        ),
+        from_attributes=True,
     )
 
 

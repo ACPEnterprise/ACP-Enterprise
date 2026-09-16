@@ -159,6 +159,34 @@ export interface BeaconSignalPage {
   lifecycle_commands_available: boolean;
 }
 
+export interface BeaconMorningBrief {
+  company_id: string;
+  branch_id: string | null;
+  evaluated_at: string;
+  groups: Array<{
+    window: "now" | "today" | "this_week" | "watch";
+    signal_ids: string[];
+  }>;
+  unresolved_count: number;
+  acknowledged_count: number;
+  snoozed_count: number;
+  urgent_today_count: number;
+  historical_comparison_available: boolean;
+  new_since_yesterday: number | null;
+  resolved_since_yesterday: number | null;
+  limitations: string[];
+  dashboard_ready: boolean;
+  mobile_inbox_ready: boolean;
+  external_delivery_ready: boolean;
+  brief_digest: string;
+}
+
+export async function getBeaconMorningBrief(): Promise<BeaconMorningBrief> {
+  return (
+    await apiClient.get<BeaconMorningBrief>("/api/v1/beacon/morning-brief")
+  ).data;
+}
+
 export async function getBeaconSignals(): Promise<BeaconSignalPage> {
   const [page, workflow] = await Promise.all([
     apiClient.get<BeaconSignalPage>("/api/v1/beacon/signals"),
