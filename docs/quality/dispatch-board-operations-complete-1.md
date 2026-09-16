@@ -34,6 +34,6 @@ Operational states are projections of the existing Appointment, Job, assignment 
 
 ## Real-data acceptance gate
 
-The public Preview release observed before this candidate remained behind protected authority and no sanctioned authenticated acceptance references were present. Therefore real Appointment and technician counts are `NOT_OBSERVABLE`, not zero, and no real assignment/reschedule/status mutation was attempted. Real-world closure requires a coherent Preview deployment, sanctioned owner/CSR and Employee authentication, and an explicitly sanctioned real record for mutation acceptance.
+The public Preview health endpoints were rechecked after protected reconciliation. Preview reported backend release `fd732c76dd6801dd4f651dc0f3f5fb8fc36a4808`, database connected, and Redis connected; its public frontend artifacts were `index-BFePUMoG.js` and `index-Dq9nZZRF.css`. No sanctioned authenticated acceptance references were present. Therefore real Appointment and technician counts are `NOT_OBSERVABLE`, not zero, and no real assignment/reschedule/status mutation was attempted. Real-world closure requires deployment of this candidate and the reconciled assignment candidates, sanctioned owner/CSR and Employee authentication, and an explicitly sanctioned real record for mutation acceptance.
 
 No synthetic acceptance records were used. Preview and Production were untouched.
