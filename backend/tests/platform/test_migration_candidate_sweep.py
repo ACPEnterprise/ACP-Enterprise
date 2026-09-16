@@ -40,3 +40,18 @@ def upgrade():
         "op.drop_column",
         "op.execute(DELETE)",
     ]
+
+
+def test_created_objects_ignore_downgrade_recreation() -> None:
+    content = """
+def upgrade():
+    op.create_table("jobs")
+    op.create_index("ix_jobs_status", "jobs", ["status"])
+
+def downgrade():
+    op.create_table("legacy_jobs")
+"""
+    assert module().created_schema_objects(content) == [
+        "index:ix_jobs_status",
+        "table:jobs",
+    ]
