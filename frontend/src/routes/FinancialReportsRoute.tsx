@@ -176,6 +176,7 @@ export function FinancialReportsRoute() {
     endDate,
     branchId: "",
   });
+  const invalidPeriod = !endDate || Boolean(startDate && startDate > endDate);
   const report = useFinancialReport(request, canRead);
   if (!canRead)
     return (
@@ -222,6 +223,7 @@ export function FinancialReportsRoute() {
               className="grid gap-3 md:grid-cols-5"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (invalidPeriod) return;
                 setRequest({
                   report: reportName,
                   startDate,
@@ -262,6 +264,11 @@ export function FinancialReportsRoute() {
               />
               <Button type="submit">Generate</Button>
             </form>
+            {invalidPeriod ? (
+              <p className="mt-3 text-sm text-status-danger" role="alert">
+                Choose a start date on or before the end date. No financial report was requested.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
         {report.isPending ? (
