@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class LiaSchema(BaseModel):
@@ -30,6 +30,38 @@ class AnswerAuthority(StrEnum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 
 
+class LiaTemporalContext(LiaSchema):
+    start_date: date
+    end_date: date
+    as_of: datetime
+    timezone: str = Field(min_length=1, max_length=64)
+    period_label: str = Field(min_length=1, max_length=100)
+    comparison_start: date | None = None
+    comparison_end: date | None = None
+    comparison_label: str | None = Field(default=None, max_length=100)
+    prior_start: date | None = None
+    prior_end: date | None = None
+    prior_label: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> LiaTemporalContext:
+        if self.end_date < self.start_date:
+            raise ValueError("temporal end_date must not precede start_date")
+        if (self.comparison_start is None) != (self.comparison_end is None):
+            raise ValueError(
+                "comparison_start and comparison_end must be supplied together"
+            )
+        if (
+            self.comparison_start is not None
+            and self.comparison_end is not None
+            and self.comparison_end < self.comparison_start
+        ):
+            raise ValueError("comparison_end must not precede comparison_start")
+        if (self.prior_start is None) != (self.prior_end is None):
+            raise ValueError("prior_start and prior_end must be supplied together")
+        return self
+
+
 class LiaContext(LiaSchema):
     domain: str | None = Field(default=None, max_length=64)
     entity_id: UUID | None = None
@@ -37,6 +69,7 @@ class LiaContext(LiaSchema):
     evidence_digest: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
     as_of: datetime | None = None
     topic_domains: tuple[str, ...] = Field(default=(), max_length=8)
+    temporal: LiaTemporalContext | None = None
 
 
 class LiaRequest(LiaSchema):
@@ -60,6 +93,11 @@ class EvidenceReference(LiaSchema):
     branch_ids: tuple[UUID, ...] = ()
     authorization_version: int | None = None
     limitations: tuple[str, ...] = ()
+    period_start: date | None = None
+    period_end: date | None = None
+    period_label: str | None = None
+    timezone: str | None = None
+    accounting_basis: str | None = None
 
 
 class NavigationSuggestion(LiaSchema):
@@ -102,6 +140,7 @@ class LiaResponse(LiaSchema):
     safe_next_action: str | None = None
     as_of: datetime
     generated_at: datetime
+    temporal: LiaTemporalContext | None = None
 
 
 class LiaReadiness(LiaSchema):

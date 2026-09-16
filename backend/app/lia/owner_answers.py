@@ -128,6 +128,23 @@ def compose_owner_answer(
         )
 
     if "accounting" in by_domain:
+        accounting_items = tuple(
+            item for item in evidence if item.domain == "accounting"
+        )
+        report = next(
+            (
+                item
+                for item in accounting_items
+                if item.authority == "ACP_POSTED_LEDGER_AUTHORITY"
+            ),
+            None,
+        )
+        if report is not None:
+            return OwnerAnswer(
+                f"ACP's posted-ledger report shows {report.state}. "
+                "These figures retain the report's period, basis, currency, and integrity authority.",
+                "Open Financial Reports",
+            )
         item = by_domain["accounting"]
         states = _states(item)
         unavailable = not states or item.count == 0
