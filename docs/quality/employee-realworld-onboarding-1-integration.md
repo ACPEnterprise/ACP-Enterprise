@@ -2,7 +2,7 @@
 
 ## Authority and boundary
 
-- Starting protected authority: `e9211fca8086c7fba333d8e5e2acaeaa191d56c2`.
+- Starting/current protected authority: `90af57abf5f4e2dbda75ed2680d4d420eb60410c`.
 - Owner-confirmed roster policy: Michael Fouse `ADMIN`; Lianne Hernandez
   `OFFICE_MANAGER`; Alex Donahue `OFFICE_STAFF`; Melvin Santiago, Adam Mari,
   Dareis Montgomery, Dakota Wilcox, and Jason Calci `FIELD_TECH`.
