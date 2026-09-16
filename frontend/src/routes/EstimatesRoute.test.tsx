@@ -82,7 +82,9 @@ vi.mock("../api/estimates", () => ({
 }));
 vi.mock("../api/priceBook", () => ({
   getPriceBook: vi.fn().mockResolvedValue({
-    categories: [],
+    categories: [
+      { id: "category-1", code: "DRAIN", name: "Drain Cleaning", status: "active" },
+    ],
     tax_classifications: [],
     option_groups: [],
     options: [],
@@ -165,6 +167,42 @@ describe("EstimatesRoute", () => {
     expect((await screen.findAllByText("Heating proposal"))[0]).toBeVisible();
     expect(screen.getAllByText("$97.20")).toHaveLength(2);
     expect(screen.getByLabelText("Discount type")).toBeVisible();
+  });
+  it("searches and filters the active Price Book during Estimate authoring", async () => {
+    permissions = new Set([
+      "COMPANY_ESTIMATE_READ",
+      "COMPANY_ESTIMATE_MANAGE",
+      "COMPANY_PRICE_BOOK_READ",
+    ]);
+    renderRoute();
+    fireEvent.change(screen.getByLabelText("Branch ID"), {
+      target: { value: "11111111-1111-4111-8111-111111111111" },
+    });
+    await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
+
+    fireEvent.change(screen.getByLabelText("Search active Price Book services"), {
+      target: { value: "drain" },
+    });
+    await waitFor(() =>
+      expect(priceBookApi.getPriceBook).toHaveBeenCalledWith(
+        "11111111-1111-4111-8111-111111111111",
+        expect.objectContaining({ search: "drain", itemStatus: "active" }),
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter active Price Book category"), {
+      target: { value: "category-1" },
+    });
+    await waitFor(() =>
+      expect(priceBookApi.getPriceBook).toHaveBeenCalledWith(
+        "11111111-1111-4111-8111-111111111111",
+        expect.objectContaining({
+          search: "drain",
+          categoryId: "category-1",
+          itemStatus: "active",
+        }),
+      ),
+    );
   });
   it("retains proposal evidence and hides backend details after rejection", async () => {
     permissions = new Set([

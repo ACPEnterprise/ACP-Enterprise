@@ -77,10 +77,21 @@ export function EstimatesRoute() {
   const [proposalLines, setProposalLines] = useState<
     Array<{ serviceItem: string; option: string; quantity: string }>
   >([]);
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [serviceCategory, setServiceCategory] = useState("");
   const priceBook = usePriceBook(
     form.branch || undefined,
     canManage && canReadPriceBook && form.branch.length === 36,
+    {
+      search: serviceSearch.trim() || undefined,
+      categoryId: serviceCategory || undefined,
+      itemStatus: "active",
+    },
   );
+  const activeServices =
+    priceBook.data?.service_items.filter(
+      (item) => item.status === "active" && item.current_version_id,
+    ) ?? [];
 
   if (!canRead)
     return (
@@ -398,6 +409,8 @@ export function EstimatesRoute() {
                 value={form.branch}
                 onChange={(event) => {
                   setProposalLines([]);
+                  setServiceSearch("");
+                  setServiceCategory("");
                   setForm({
                     ...form,
                     branch: event.target.value,
@@ -424,17 +437,52 @@ export function EstimatesRoute() {
                 }
                 placeholder="Required before Job conversion"
               />
+              <Input
+                aria-label="Search active Price Book services"
+                placeholder="Search by service name, code, or category"
+                value={serviceSearch}
+                onChange={(event) => {
+                  setServiceSearch(event.target.value);
+                  setForm({ ...form, serviceItem: "", option: "" });
+                }}
+                disabled={!canReadPriceBook || form.branch.length !== 36}
+              />
+              <Select
+                aria-label="Filter active Price Book category"
+                value={serviceCategory}
+                onChange={(event) => {
+                  setServiceCategory(event.target.value);
+                  setForm({
+                    ...form,
+                    serviceItem: "",
+                    optionGroup: "",
+                    option: "",
+                  });
+                }}
+                disabled={!canReadPriceBook || form.branch.length !== 36}
+              >
+                <option value="">All service categories</option>
+                {priceBook.data?.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </Select>
               <Select
                 aria-label="Customer option set"
                 value={form.optionGroup}
-                onChange={(event) =>
+                onChange={(event) => {
+                  if (event.target.value) {
+                    setServiceSearch("");
+                    setServiceCategory("");
+                  }
                   setForm({
                     ...form,
                     optionGroup: event.target.value,
                     option: "",
                     serviceItem: "",
-                  })
-                }
+                  });
+                }}
               >
                 <option value="">Choose an individual service</option>
                 {priceBook.data?.option_groups
@@ -496,18 +544,20 @@ export function EstimatesRoute() {
                       ? "Loading Price Book…"
                       : "Select active service"}
                   </option>
-                  {priceBook.data?.service_items
-                    .filter(
-                      (item) =>
-                        item.status === "active" && item.current_version_id,
-                    )
-                    .map((item) => (
+                  {activeServices.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.code} · {item.name}
                       </option>
                     ))}
                 </Select>
               )}
+              {!priceBook.isPending &&
+                form.branch.length === 36 &&
+                activeServices.length === 0 && (
+                  <Alert variant="warning">
+                    No active Price Book services match this search and category. Draft and held services must be reviewed and explicitly activated before they can be sold.
+                  </Alert>
+                )}
               <Input
                 aria-label="Quantity"
                 type="number"
