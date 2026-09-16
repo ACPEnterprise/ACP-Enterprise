@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
-
 from app.luminary.owner_economics import (
     AnalysisReadiness,
     ScenarioAssumption,
@@ -220,6 +219,19 @@ def test_native_evidence_produces_partial_confident_facts_without_margin() -> No
             },
             "jobs": [
                 {
+                    "job_id": "job-native-1",
+                    "job_number": "J-NATIVE-1",
+                    "job_status": "completed",
+                    "customer_id": "customer-1",
+                    "customer_name": "All County Customer",
+                    "branch_id": str(BRANCH),
+                    "branch_name": "Main",
+                    "service_category": "drain_cleaning",
+                    "invoiced_revenue_minor": 12_500,
+                    "settlement_applied_minor": None,
+                    "accepted_worked_seconds": 3_600,
+                    "material_quantity_evidence_count": 1,
+                    "material_cost_minor": None,
                     "references": [
                         {
                             "family": "REVENUE",
@@ -231,7 +243,7 @@ def test_native_evidence_produces_partial_confident_facts_without_margin() -> No
                             "record_id": "interval-1",
                             "digest": "b" * 64,
                         },
-                    ]
+                    ],
                 }
             ],
         },
@@ -251,5 +263,16 @@ def test_native_evidence_produces_partial_confident_facts_without_margin() -> No
     assert invoiced["authority"] == "accepted_native_invoiced_or_valued_fact"
     assert worked["value"] == 3_600
     assert margin["value"] is None
+    jobs = result["job_economics"]
+    assert jobs[0]["job_number"] == "J-NATIVE-1"
+    assert jobs[0]["readiness"] == "PARTIAL"
+    assert jobs[0]["invoiced_revenue_minor"] == 12_500
+    assert jobs[0]["direct_wage_cost_minor"] is None
+    assert "certified_direct_wage_cost" in jobs[0]["missing_prerequisites"]
+    assert jobs[0]["evidence_states"]["direct_wage_cost"] == "POLICY_REQUIRED"
+    service = result["service_line_economics"][0]
+    assert service["service_category"] == "drain_cleaning"
+    assert service["invoiced_revenue_minor"] == 12_500
+    assert service["direct_contribution_minor"] is None
     assert result["trend_support"]["state"] == "READY"
     assert result["recommendation_candidates"] == []
