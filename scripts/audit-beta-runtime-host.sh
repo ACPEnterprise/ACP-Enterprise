@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 backup_root=${BACKUP_ROOT:-/opt/acp-enterprise/backups}
 max_backup_age_hours=${MAX_BACKUP_AGE_HOURS:-26}
 disk_warning_percent=${DISK_WARNING_PERCENT:-85}
@@ -44,9 +45,8 @@ if [ "$backup_mode" != "600" ]; then
   exit 1
 fi
 
-scripts/verify-beta-connectivity.sh
+"$script_dir/verify-beta-connectivity.sh"
 echo "root_disk_percent=$disk_percent"
 echo "latest_preview_backup=$backup_path"
 echo "latest_preview_backup_age_hours=$backup_age_hours"
 echo "beta_runtime_host=healthy"
-

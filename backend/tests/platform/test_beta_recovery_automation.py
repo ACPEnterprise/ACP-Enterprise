@@ -36,7 +36,8 @@ def test_host_audit_fails_closed_for_runtime_disk_and_backup_drift() -> None:
     assert "(unhealthy\\)|Restarting" in script
     assert "MAX_BACKUP_AGE_HOURS:-26" in script
     assert '"$backup_mode" != "600"' in script
-    assert "scripts/verify-beta-connectivity.sh" in script
+    assert 'script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' in script
+    assert '"$script_dir/verify-beta-connectivity.sh"' in script
 
 
 def test_backup_timer_is_hardened_and_does_not_delete_history() -> None:
