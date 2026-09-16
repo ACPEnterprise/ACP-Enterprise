@@ -17,10 +17,12 @@ const formatTime = (value: string | null) => value ? new Date(value).toLocaleStr
 
 export function RealRosterActivationConsole() {
   const { activeCompany, permissionCodes = [] } = useAuth();
-  const canManage = permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE");
-  const roster = useRealRosterReadiness(canManage);
+  const hasManagePermission = permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE");
+  const roster = useRealRosterReadiness(hasManagePermission);
+  const canManage = hasManagePermission || roster.canBind;
   const directory = useWorkforceDirectory();
   const [selections, setSelections] = useState<Record<string, string>>({});
+  const [sourceSelections, setSourceSelections] = useState<Record<string, string>>({});
   const [deferred, setDeferred] = useState<Set<string>>(new Set());
   const [fieldWindowStart, setFieldWindowStart] = useState("");
   const [fieldWindowEnd, setFieldWindowEnd] = useState("");
@@ -74,5 +76,21 @@ export function RealRosterActivationConsole() {
         {person.blockers.length > 0 && <p className="mt-3 text-xs text-content-muted"><strong>Next actions:</strong> {person.blockers.map(label).join(" · ")}</p>}
       </article>;
     })}</div>
+    <section className="mt-4 rounded-lg border border-stroke p-3" aria-label="HCP Employee certification evidence">
+      <h4 className="font-semibold">Source Employee certification</h4>
+      <p className="mt-1 text-xs text-content-muted">Exact HCP identifiers and persisted ACP targets only. ACP never matches these records by name or email.</p>
+      <p className="mt-2 text-sm text-content-muted">{roster.query.data?.source_evidence_total ?? 0} sealed source identities · {roster.query.data?.source_only_total ?? 0} source-only · {roster.query.data?.certification_required_total ?? 0} certification actions remaining</p>
+      <div className="mt-3 space-y-2">{roster.query.data?.source_evidence?.map((source) => {
+        const sourceKey = `${source.source_system}-${source.source_employee_id}`;
+        const unboundRoster = roster.query.data?.items.filter((item) => item.employee_id === null) ?? [];
+        return <div className="rounded-md bg-surface-subtle p-2 text-xs" key={sourceKey}>
+          <div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{source.source_system} · {source.source_employee_id}</span><Badge variant={source.certification_state === "ACP_EMPLOYEE_BOUND" ? "success" : "neutral"}>{label(source.certification_state)}</Badge></div>
+          <p className="mt-1 text-content-muted">{label(source.source_disposition)} · evidence v{source.evidence_version}{source.roster_key ? ` · ${label(source.roster_key)}` : ""}</p>
+          {source.certification_state === "OWNER_CERTIFICATION_REQUIRED" && source.acp_employee_id && canManage && <div className="mt-2 flex flex-wrap gap-2"><select aria-label={`Certify ${source.source_system} ${source.source_employee_id}`} className="min-h-10 min-w-64 rounded-md border border-stroke bg-surface px-2" value={sourceSelections[sourceKey] ?? ""} onChange={(event) => setSourceSelections((current) => ({...current, [sourceKey]: event.target.value}))}><option value="">Select owner-confirmed roster identity</option>{unboundRoster.map((person) => <option key={person.roster_key} value={person.roster_key}>{person.display_name} · {label(person.operating_role)}</option>)}</select><Button variant="outline" disabled={!sourceSelections[sourceKey] || roster.bind.isPending} onClick={() => roster.bind.mutate({rosterKey: sourceSelections[sourceKey], employeeId: source.acp_employee_id as string})}>Confirm exact source target</Button></div>}
+          {source.certification_state === "SOURCE_ONLY" && permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && <Link className="mt-2 inline-block font-semibold text-action-primary" to="/administration/identity-onboarding">Create / onboard after owner certification</Link>}
+          {source.certification_state === "NOT_EMPLOYEE" && <p className="mt-2 font-medium text-content-muted">Legacy only — excluded from Employee onboarding.</p>}
+        </div>;
+      })}</div>
+    </section>
   </Card>;
 }

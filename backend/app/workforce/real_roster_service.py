@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.operational_migration.models import HcpEmployeeSourceCrosswalk
 from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
@@ -22,7 +24,11 @@ from app.workforce.real_roster import (
     REAL_ALL_COUNTY_ROSTER,
     REAL_ALL_COUNTY_ROSTER_BY_KEY,
 )
-from app.workforce.schemas import RealRosterReadiness, RealRosterReadinessItem
+from app.workforce.schemas import (
+    RealRosterReadiness,
+    RealRosterReadinessItem,
+    RealRosterSourceEvidence,
+)
 
 
 class RealRosterConflict(ValueError):
@@ -276,8 +282,17 @@ class RealRosterService:
                     blockers=tuple(blockers),
                 )
             )
+        source_evidence = await self._source_evidence(session, context, bindings)
+        source_only_total = sum(
+            item.certification_state == "SOURCE_ONLY" for item in source_evidence
+        )
+        certification_required_total = sum(
+            item.certification_state == "OWNER_CERTIFICATION_REQUIRED"
+            for item in source_evidence
+        ) + sum(item.employee_id is None for item in items)
         return RealRosterReadiness(
             items=tuple(items),
+            source_evidence=source_evidence,
             total=len(items),
             bound=sum(item.employee_id is not None for item in items),
             field_tech_total=sum(item.field_tech for item in items),
@@ -286,7 +301,99 @@ class RealRosterService:
                 and item.technician_capability_state == "TECHNICIAN_CAPABILITY_READY"
                 for item in items
             ),
+            source_evidence_total=len(source_evidence),
+            source_only_total=source_only_total,
+            certification_required_total=certification_required_total,
+            login_ready_total=sum(
+                item.credential_state == "ACP_LOGIN_READY" for item in items
+            ),
+            membership_ready_total=sum(
+                item.membership_state == "MEMBERSHIP_READY" for item in items
+            ),
+            branch_ready_total=sum(
+                item.branch_state == "MAIN_BRANCH_READY" for item in items
+            ),
+            mobile_ready_total=sum(
+                item.mobile_state == "MOBILE_READY" for item in items
+            ),
+            dispatch_ready_total=sum(
+                item.dispatch_state == "READY_FOR_WINDOW_EVALUATION" for item in items
+            ),
+            timekeeping_ready_total=sum(
+                item.timekeeping_state == "LINKED" for item in items
+            ),
+            payroll_identity_ready_total=sum(
+                item.payroll_linkage_state == "LINKED_INPUTS_NOT_EVALUATED"
+                for item in items
+            ),
         )
+
+    @staticmethod
+    async def _source_evidence(
+        session: AsyncSession,
+        context: AuthorizationContext,
+        bindings: dict[str, RealWorkforceRosterBinding],
+    ) -> tuple[RealRosterSourceEvidence, ...]:
+        records = tuple(
+            (
+                await session.scalars(
+                    select(HcpEmployeeSourceCrosswalk)
+                    .where(HcpEmployeeSourceCrosswalk.company_id == context.company.id)
+                    .order_by(
+                        HcpEmployeeSourceCrosswalk.native_employee_id,
+                        HcpEmployeeSourceCrosswalk.evidence_version.desc(),
+                    )
+                )
+            ).all()
+        )
+        latest: dict[str, HcpEmployeeSourceCrosswalk] = {}
+        for record in records:
+            latest.setdefault(record.native_employee_id, record)
+        roster_by_employee = {
+            binding.employee_id: roster_key for roster_key, binding in bindings.items()
+        }
+        return tuple(
+            RealRosterSourceEvidence(
+                source_system="HCP",
+                source_employee_id=record.native_employee_id,
+                source_disposition=record.disposition,
+                source_branch_id=record.branch_id,
+                acp_employee_id=record.employee_id,
+                roster_key=(
+                    roster_by_employee.get(record.employee_id)
+                    if record.employee_id is not None
+                    else None
+                ),
+                certification_state=RealRosterService._source_certification_state(
+                    disposition=record.disposition,
+                    employee_id=record.employee_id,
+                    roster_by_employee=roster_by_employee,
+                ),
+                evidence_version=record.evidence_version,
+                recorded_at=record.recorded_at,
+            )
+            for record in latest.values()
+        )
+
+    @staticmethod
+    def _source_certification_state(
+        *,
+        disposition: str,
+        employee_id: UUID | None,
+        roster_by_employee: dict[UUID, str],
+    ) -> Literal[
+        "ACP_EMPLOYEE_BOUND",
+        "SOURCE_ONLY",
+        "OWNER_CERTIFICATION_REQUIRED",
+        "NOT_EMPLOYEE",
+    ]:
+        if disposition == "EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS":
+            return "NOT_EMPLOYEE"
+        if employee_id is None:
+            return "SOURCE_ONLY"
+        if employee_id in roster_by_employee:
+            return "ACP_EMPLOYEE_BOUND"
+        return "OWNER_CERTIFICATION_REQUIRED"
 
     @staticmethod
     def _unbound(person, blocker: str = "OWNER_EMPLOYEE_BINDING_REQUIRED") -> RealRosterReadinessItem:

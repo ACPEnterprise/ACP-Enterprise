@@ -1,12 +1,13 @@
 """Protected Payroll cutover certification; contains no calculation or execution paths."""
 
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timezone
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -26,12 +27,26 @@ from app.payroll.permissions import PayrollPermission
 from app.payroll.setup_router import _input_cipher
 from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.employees.models import Employee
+from app.platform.idempotency.contracts import (
+    IdempotencyIdentity,
+    canonical_request_digest,
+)
+from app.platform.idempotency.errors import reliability_http_error
+from app.platform.idempotency.reliability import (
+    AuthoritativeOutcome,
+    MutationDisposition,
+    MutationReliabilityError,
+    MutationResult,
+    RetentionClass,
+    mutation_reliability_service,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(
     prefix="/api/v1/payroll/cutover-review", tags=["Payroll Cutover Review"]
 )
+T = TypeVar("T")
 Session = Annotated[AsyncSession, Depends(get_database_session)]
 Read = Annotated[
     AuthorizationContext, Depends(require_permission(PayrollPermission.CUTOVER_READ))
@@ -127,6 +142,7 @@ class ReviewCreate(BaseModel):
     proposed_legacy_period_end: date | None = None
     proposed_acp_period_start: date | None = None
     opening_ytd_effective_date: date | None = None
+    idempotency_key: str = Field(min_length=8, max_length=160)
 
 
 class FactWrite(BaseModel):
@@ -156,6 +172,7 @@ class BridgePeriodWrite(BaseModel):
 
 
 class BridgeFactWrite(BaseModel):
+    expected_period_version: int = Field(ge=1)
     employee_id: UUID | None = None
     source_employee_reference: str | None = Field(default=None, max_length=240)
     fact_key: str = Field(min_length=1, max_length=120)
@@ -167,22 +184,83 @@ class BridgeFactWrite(BaseModel):
 
 class BridgeCertification(BaseModel):
     certifier_role: Literal["owner", "accountant"]
+    expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+
+
+class CutoverApproval(BaseModel):
+    expected_review_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=8, max_length=160)
 
 
 async def _review(
-    session: AsyncSession, company_id: UUID, review_id: UUID | None = None
+    session: AsyncSession,
+    company_id: UUID,
+    review_id: UUID | None = None,
+    *,
+    for_update: bool = False,
 ) -> PayrollCutoverReviewRecord | None:
     query = select(PayrollCutoverReviewRecord).where(
         PayrollCutoverReviewRecord.company_id == company_id
     )
     if review_id is not None:
         query = query.where(PayrollCutoverReviewRecord.id == review_id)
-    return await session.scalar(
-        query.order_by(PayrollCutoverReviewRecord.version.desc())
+    query = query.order_by(PayrollCutoverReviewRecord.version.desc())
+    if for_update:
+        query = query.with_for_update()
+    return await session.scalar(query)
+
+
+def _request_digest(command: BaseModel, **path: object) -> str:
+    return canonical_request_digest(
+        {
+            **path,
+            **command.model_dump(mode="python", exclude={"idempotency_key"}),
+        }
     )
 
 
-def _fact_projection(value: PayrollCutoverFactRevision) -> dict[str, object]:
+async def _execute_reliable(
+    session: AsyncSession,
+    *,
+    context: AuthorizationContext,
+    operation: str,
+    idempotency_key: str,
+    request_digest: str,
+    mutate: Callable[[], Awaitable[AuthoritativeOutcome[T]]],
+    recover: Callable[[UUID], Awaitable[T | None]],
+) -> MutationResult[T]:
+    try:
+        return await mutation_reliability_service.execute(
+            session,
+            identity=IdempotencyIdentity(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id if context.active_branch else None,
+                operation=operation,
+                idempotency_key=idempotency_key,
+            ),
+            actor_user_id=context.user.id,
+            request_digest=request_digest,
+            retention_class=RetentionClass.FINANCIAL_AUDIT,
+            mutate=mutate,
+            recover=recover,
+        )
+    except MutationReliabilityError as error:
+        raise reliability_http_error(error) from error
+
+
+async def _lock_cutover_aggregate(
+    session: AsyncSession, company_id: UUID, aggregate: str
+) -> None:
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
+        {"identity": f"payroll-cutover:{company_id}:{aggregate}"},
+    )
+
+
+def _fact_projection(
+    value: PayrollCutoverFactRevision, *, original_state: str | None = None
+) -> dict[str, object]:
     return {
         "id": str(value.id),
         "employee_id": str(value.employee_id) if value.employee_id else None,
@@ -190,7 +268,7 @@ def _fact_projection(value: PayrollCutoverFactRevision) -> dict[str, object]:
         "candidate_reference": value.candidate_reference,
         "candidate_classification": value.candidate_classification,
         "action": value.action,
-        "certification_state": value.certification_state,
+        "certification_state": original_state or value.certification_state,
         "certifier_role": value.certifier_role,
         "certified_value": "••••" if value.protected_envelope_id else None,
         "certified_at": value.certified_at,
@@ -203,34 +281,55 @@ def _fact_projection(value: PayrollCutoverFactRevision) -> dict[str, object]:
 async def create_review(
     command: ReviewCreate, context: Owner, session: Session
 ) -> dict[str, object]:
-    existing = await _review(session, context.company.id)
-    if existing is not None:
-        return {
-            "id": str(existing.id),
-            "version": existing.version,
-            "lifecycle": existing.lifecycle,
-        }
-    value = PayrollCutoverReviewRecord(
-        company_id=context.company.id,
-        version=1,
-        lifecycle="draft",
-        proposed_legacy_period_end=command.proposed_legacy_period_end,
-        proposed_acp_period_start=command.proposed_acp_period_start,
-        opening_ytd_effective_date=command.opening_ytd_effective_date,
-        created_by_user_id=context.user.id,
-    )
-    session.add(value)
-    await session.flush()
-    _stage_evidence(
+    async def mutate() -> AuthoritativeOutcome[PayrollCutoverReviewRecord]:
+        await _lock_cutover_aggregate(session, context.company.id, "review")
+        existing = await _review(session, context.company.id, for_update=True)
+        if existing is not None:
+            raise HTTPException(
+                409, "A Payroll cutover review already exists for this Company."
+            )
+        value = PayrollCutoverReviewRecord(
+            company_id=context.company.id,
+            version=1,
+            lifecycle="draft",
+            proposed_legacy_period_end=command.proposed_legacy_period_end,
+            proposed_acp_period_start=command.proposed_acp_period_start,
+            opening_ytd_effective_date=command.opening_ytd_effective_date,
+            created_by_user_id=context.user.id,
+        )
+        session.add(value)
+        await session.flush()
+        _stage_evidence(
+            session,
+            context,
+            EventType.PAYROLL_CUTOVER_REVIEW_CREATED,
+            "payroll.cutover_review.created",
+            "payroll_cutover_review",
+            value.id,
+            {"version": value.version},
+        )
+        return AuthoritativeOutcome(value, "payroll_cutover_review", value.id, 200)
+
+    async def recover(result_id: UUID) -> PayrollCutoverReviewRecord | None:
+        return await session.scalar(
+            select(PayrollCutoverReviewRecord).where(
+                PayrollCutoverReviewRecord.company_id == context.company.id,
+                PayrollCutoverReviewRecord.id == result_id,
+            )
+        )
+
+    result = await _execute_reliable(
         session,
-        context,
-        EventType.PAYROLL_CUTOVER_REVIEW_CREATED,
-        "payroll.cutover_review.created",
-        "payroll_cutover_review",
-        value.id,
-        {"version": value.version},
+        context=context,
+        operation="payroll.cutover_review.create",
+        idempotency_key=command.idempotency_key,
+        request_digest=_request_digest(command),
+        mutate=mutate,
+        recover=recover,
     )
-    await session.commit()
+    value = result.value
+    if result.disposition is MutationDisposition.REPLAYED:
+        return {"id": str(value.id), "version": 1, "lifecycle": "draft"}
     return {"id": str(value.id), "version": value.version, "lifecycle": value.lifecycle}
 
 
@@ -326,6 +425,7 @@ async def get_review(context: Read, session: Session) -> dict[str, object]:
                 "certification_state": p.certification_state,
                 "source_reference": p.source_reference,
                 "coverage_complete": p.coverage_complete,
+                "version": p.version,
             }
             for p in periods
         ],
@@ -372,19 +472,12 @@ async def _write_fact(
     session: AsyncSession,
     *,
     certified: bool,
-) -> dict[str, object]:
-    review = await _review(session, context.company.id, command.review_id)
+) -> PayrollCutoverFactRevision:
+    review = await _review(
+        session, context.company.id, command.review_id, for_update=True
+    )
     if review is None:
         raise HTTPException(404, "Payroll cutover review was not found.")
-    existing = await session.scalar(
-        select(PayrollCutoverFactRevision).where(
-            PayrollCutoverFactRevision.company_id == context.company.id,
-            PayrollCutoverFactRevision.actor_user_id == context.user.id,
-            PayrollCutoverFactRevision.idempotency_key == command.idempotency_key,
-        )
-    )
-    if existing:
-        return _fact_projection(existing)
     if review.version != command.expected_review_version:
         raise HTTPException(
             409, "Payroll cutover review changed; refresh before saving."
@@ -511,15 +604,53 @@ async def _write_fact(
             "protected_value_present": envelope_id is not None,
         },
     )
-    await session.commit()
-    return _fact_projection(value)
+    return value
+
+
+async def _reliable_fact_write(
+    command: FactWrite,
+    context: AuthorizationContext,
+    session: AsyncSession,
+    *,
+    certified: bool,
+) -> dict[str, object]:
+    operation = (
+        "payroll.cutover_review.certify_fact"
+        if certified
+        else "payroll.cutover_review.save_fact"
+    )
+
+    async def mutate() -> AuthoritativeOutcome[PayrollCutoverFactRevision]:
+        value = await _write_fact(command, context, session, certified=certified)
+        return AuthoritativeOutcome(value, "payroll_cutover_fact", value.id, 200)
+
+    async def recover(result_id: UUID) -> PayrollCutoverFactRevision | None:
+        return await session.scalar(
+            select(PayrollCutoverFactRevision).where(
+                PayrollCutoverFactRevision.company_id == context.company.id,
+                PayrollCutoverFactRevision.id == result_id,
+            )
+        )
+
+    result = await _execute_reliable(
+        session,
+        context=context,
+        operation=operation,
+        idempotency_key=command.idempotency_key,
+        request_digest=_request_digest(command, certified=certified),
+        mutate=mutate,
+        recover=recover,
+    )
+    return _fact_projection(
+        result.value, original_state="certified" if certified else "draft"
+    )
 
 
 @router.post("/facts")
 async def save_fact(
     command: FactWrite, context: Owner, session: Session
 ) -> dict[str, object]:
-    return await _write_fact(command, context, session, certified=False)
+    return await _reliable_fact_write(command, context, session, certified=False)
 
 
 @router.post("/certifications")
@@ -533,7 +664,7 @@ async def certify_fact(
     )
     if not context.has_permission(permission):
         raise HTTPException(403, "Required cutover certification authority is missing.")
-    return await _write_fact(command, context, session, certified=True)
+    return await _reliable_fact_write(command, context, session, certified=True)
 
 
 @router.post("/bridge-periods")
@@ -545,43 +676,33 @@ async def create_bridge_period(
         or command.pay_date < command.period_end
     ):
         raise HTTPException(422, "Bridge Payroll dates are invalid.")
-    review = await _review(session, context.company.id, command.review_id)
-    if review is None:
-        raise HTTPException(404, "Payroll cutover review was not found.")
-    existing = await session.scalar(
-        select(PayrollCutoverBridgePeriodRecord).where(
-            PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
-            PayrollCutoverBridgePeriodRecord.actor_user_id == context.user.id,
-            PayrollCutoverBridgePeriodRecord.idempotency_key == command.idempotency_key,
+
+    async def mutate() -> AuthoritativeOutcome[PayrollCutoverBridgePeriodRecord]:
+        review = await _review(
+            session, context.company.id, command.review_id, for_update=True
         )
-    )
-    if existing is not None:
-        return {
-            "id": str(existing.id),
-            "certification_state": existing.certification_state,
-            "externally_calculated": True,
-        }
-    if review.version != command.expected_review_version:
-        raise HTTPException(
-            409, "Payroll cutover review changed; refresh before saving."
+        if review is None:
+            raise HTTPException(404, "Payroll cutover review was not found.")
+        if review.version != command.expected_review_version:
+            raise HTTPException(
+                409, "Payroll cutover review changed; refresh before saving."
+            )
+        overlap = await session.scalar(
+            select(PayrollCutoverBridgePeriodRecord.id).where(
+                PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
+                PayrollCutoverBridgePeriodRecord.review_id == review.id,
+                PayrollCutoverBridgePeriodRecord.certification_state != "superseded",
+                and_(
+                    PayrollCutoverBridgePeriodRecord.period_start <= command.period_end,
+                    PayrollCutoverBridgePeriodRecord.period_end >= command.period_start,
+                ),
+            )
         )
-    overlap = await session.scalar(
-        select(PayrollCutoverBridgePeriodRecord.id).where(
-            PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
-            PayrollCutoverBridgePeriodRecord.review_id == review.id,
-            PayrollCutoverBridgePeriodRecord.certification_state != "superseded",
-            and_(
-                PayrollCutoverBridgePeriodRecord.period_start <= command.period_end,
-                PayrollCutoverBridgePeriodRecord.period_end >= command.period_start,
-            ),
-        )
-    )
-    if overlap is not None:
-        raise HTTPException(
-            409, "Bridge Payroll period overlaps existing certified history."
-        )
-    if existing is None:
-        existing = PayrollCutoverBridgePeriodRecord(
+        if overlap is not None:
+            raise HTTPException(
+                409, "Bridge Payroll period overlaps existing certified history."
+            )
+        value = PayrollCutoverBridgePeriodRecord(
             company_id=context.company.id,
             review_id=review.id,
             period_start=command.period_start,
@@ -596,7 +717,7 @@ async def create_bridge_period(
             idempotency_key=command.idempotency_key,
             evidence_digest=canonical_digest(command.model_dump(mode="json")),
         )
-        session.add(existing)
+        session.add(value)
         review.version += 1
         review.updated_at = datetime.now(timezone.utc)
         await session.flush()
@@ -606,7 +727,7 @@ async def create_bridge_period(
             EventType.PAYROLL_CUTOVER_BRIDGE_REVISED,
             "payroll.cutover_bridge_period.drafted",
             "payroll_cutover_bridge_period",
-            existing.id,
+            value.id,
             {
                 "period_start": command.period_start.isoformat(),
                 "period_end": command.period_end.isoformat(),
@@ -614,10 +735,31 @@ async def create_bridge_period(
                 "source_type": command.source_type,
             },
         )
-        await session.commit()
+        return AuthoritativeOutcome(
+            value, "payroll_cutover_bridge_period", value.id, 200
+        )
+
+    async def recover(result_id: UUID) -> PayrollCutoverBridgePeriodRecord | None:
+        return await session.scalar(
+            select(PayrollCutoverBridgePeriodRecord).where(
+                PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
+                PayrollCutoverBridgePeriodRecord.id == result_id,
+            )
+        )
+
+    result = await _execute_reliable(
+        session,
+        context=context,
+        operation="payroll.cutover_review.create_bridge_period",
+        idempotency_key=command.idempotency_key,
+        request_digest=_request_digest(command),
+        mutate=mutate,
+        recover=recover,
+    )
+    existing = result.value
     return {
         "id": str(existing.id),
-        "certification_state": existing.certification_state,
+        "certification_state": "draft",
         "externally_calculated": True,
     }
 
@@ -638,118 +780,143 @@ async def write_bridge_fact(
             422,
             "Select exactly one ACP Employee or unresolved source Employee reference.",
         )
-    period = await session.scalar(
-        select(PayrollCutoverBridgePeriodRecord).where(
-            PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
-            PayrollCutoverBridgePeriodRecord.id == bridge_period_id,
+
+    async def mutate() -> AuthoritativeOutcome[
+        PayrollCutoverBridgeEmployeeFactRevision
+    ]:
+        period = await session.scalar(
+            select(PayrollCutoverBridgePeriodRecord)
+            .where(
+                PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
+                PayrollCutoverBridgePeriodRecord.id == bridge_period_id,
+            )
+            .with_for_update()
         )
-    )
-    if period is None:
-        raise HTTPException(404, "Bridge Payroll period was not found.")
-    if (
-        command.employee_id
-        and await session.scalar(
-            select(Employee.id).where(
-                Employee.company_id == context.company.id,
-                Employee.id == command.employee_id,
+        if period is None:
+            raise HTTPException(404, "Bridge Payroll period was not found.")
+        if period.version != command.expected_period_version:
+            raise HTTPException(
+                409, "Bridge Payroll period changed; refresh before saving."
+            )
+        if (
+            command.employee_id
+            and await session.scalar(
+                select(Employee.id).where(
+                    Employee.company_id == context.company.id,
+                    Employee.id == command.employee_id,
+                )
+            )
+            is None
+        ):
+            raise HTTPException(404, "Bridge Payroll Employee was not found.")
+        previous = await session.scalar(
+            select(PayrollCutoverBridgeEmployeeFactRevision)
+            .where(
+                PayrollCutoverBridgeEmployeeFactRevision.company_id
+                == context.company.id,
+                PayrollCutoverBridgeEmployeeFactRevision.bridge_period_id
+                == bridge_period_id,
+                PayrollCutoverBridgeEmployeeFactRevision.employee_id
+                == command.employee_id,
+                PayrollCutoverBridgeEmployeeFactRevision.source_employee_reference
+                == command.source_employee_reference,
+                PayrollCutoverBridgeEmployeeFactRevision.fact_key == command.fact_key,
+            )
+            .order_by(PayrollCutoverBridgeEmployeeFactRevision.revision.desc())
+            .with_for_update()
+        )
+        cipher = _input_cipher()
+        if cipher is None:
+            raise HTTPException(
+                503, "Protected Payroll input configuration is unavailable."
+            )
+        key_id, nonce, ciphertext, protected_digest = cipher.encrypt(
+            company_id=context.company.id, payload={"value": command.certified_value}
+        )
+        envelope = PayrollProtectedInputEnvelope(
+            company_id=context.company.id,
+            key_id=key_id,
+            nonce=nonce,
+            ciphertext=ciphertext,
+            content_digest=protected_digest,
+            created_by_user_id=context.user.id,
+        )
+        session.add(envelope)
+        await session.flush()
+        value = PayrollCutoverBridgeEmployeeFactRevision(
+            company_id=context.company.id,
+            bridge_period_id=bridge_period_id,
+            employee_id=command.employee_id,
+            source_employee_reference=command.source_employee_reference,
+            fact_key=command.fact_key,
+            protected_envelope_id=envelope.id,
+            certification_state="certified" if command.certify else "draft",
+            certifier_role=command.certifier_role,
+            actor_user_id=context.user.id,
+            revision=1 if previous is None else previous.revision + 1,
+            idempotency_key=command.idempotency_key,
+            evidence_digest=canonical_digest(
+                {
+                    "period": str(bridge_period_id),
+                    "employee": str(command.employee_id)
+                    if command.employee_id
+                    else None,
+                    "source_employee_reference": command.source_employee_reference,
+                    "fact_key": command.fact_key,
+                    "protected_digest": protected_digest,
+                }
+            ),
+        )
+        if previous:
+            previous.certification_state = "superseded"
+        session.add(value)
+        period.version += 1
+        await session.flush()
+        _stage_evidence(
+            session,
+            context,
+            EventType.PAYROLL_CUTOVER_BRIDGE_REVISED,
+            "payroll.cutover_bridge_fact.certified"
+            if command.certify
+            else "payroll.cutover_bridge_fact.drafted",
+            "payroll_cutover_bridge_fact",
+            value.id,
+            {
+                "bridge_period_id": str(bridge_period_id),
+                "employee_id": str(command.employee_id)
+                if command.employee_id
+                else None,
+                "fact_key": command.fact_key,
+                "revision": value.revision,
+                "protected_value_present": True,
+            },
+        )
+        return AuthoritativeOutcome(value, "payroll_cutover_bridge_fact", value.id, 200)
+
+    async def recover(
+        result_id: UUID,
+    ) -> PayrollCutoverBridgeEmployeeFactRevision | None:
+        return await session.scalar(
+            select(PayrollCutoverBridgeEmployeeFactRevision).where(
+                PayrollCutoverBridgeEmployeeFactRevision.company_id
+                == context.company.id,
+                PayrollCutoverBridgeEmployeeFactRevision.id == result_id,
             )
         )
-        is None
-    ):
-        raise HTTPException(404, "Bridge Payroll Employee was not found.")
-    existing = await session.scalar(
-        select(PayrollCutoverBridgeEmployeeFactRevision).where(
-            PayrollCutoverBridgeEmployeeFactRevision.company_id == context.company.id,
-            PayrollCutoverBridgeEmployeeFactRevision.actor_user_id == context.user.id,
-            PayrollCutoverBridgeEmployeeFactRevision.idempotency_key
-            == command.idempotency_key,
-        )
-    )
-    if existing:
-        return {
-            "id": str(existing.id),
-            "certification_state": existing.certification_state,
-            "certified_value": "••••",
-        }
-    previous = await session.scalar(
-        select(PayrollCutoverBridgeEmployeeFactRevision)
-        .where(
-            PayrollCutoverBridgeEmployeeFactRevision.company_id == context.company.id,
-            PayrollCutoverBridgeEmployeeFactRevision.bridge_period_id
-            == bridge_period_id,
-            PayrollCutoverBridgeEmployeeFactRevision.employee_id == command.employee_id,
-            PayrollCutoverBridgeEmployeeFactRevision.source_employee_reference
-            == command.source_employee_reference,
-            PayrollCutoverBridgeEmployeeFactRevision.fact_key == command.fact_key,
-        )
-        .order_by(PayrollCutoverBridgeEmployeeFactRevision.revision.desc())
-        .with_for_update()
-    )
-    cipher = _input_cipher()
-    if cipher is None:
-        raise HTTPException(
-            503, "Protected Payroll input configuration is unavailable."
-        )
-    key_id, nonce, ciphertext, protected_digest = cipher.encrypt(
-        company_id=context.company.id, payload={"value": command.certified_value}
-    )
-    envelope = PayrollProtectedInputEnvelope(
-        company_id=context.company.id,
-        key_id=key_id,
-        nonce=nonce,
-        ciphertext=ciphertext,
-        content_digest=protected_digest,
-        created_by_user_id=context.user.id,
-    )
-    session.add(envelope)
-    await session.flush()
-    value = PayrollCutoverBridgeEmployeeFactRevision(
-        company_id=context.company.id,
-        bridge_period_id=bridge_period_id,
-        employee_id=command.employee_id,
-        source_employee_reference=command.source_employee_reference,
-        fact_key=command.fact_key,
-        protected_envelope_id=envelope.id,
-        certification_state="certified" if command.certify else "draft",
-        certifier_role=command.certifier_role,
-        actor_user_id=context.user.id,
-        revision=1 if previous is None else previous.revision + 1,
-        idempotency_key=command.idempotency_key,
-        evidence_digest=canonical_digest(
-            {
-                "period": str(bridge_period_id),
-                "employee": str(command.employee_id) if command.employee_id else None,
-                "source_employee_reference": command.source_employee_reference,
-                "fact_key": command.fact_key,
-                "protected_digest": protected_digest,
-            }
-        ),
-    )
-    if previous:
-        previous.certification_state = "superseded"
-    session.add(value)
-    await session.flush()
-    _stage_evidence(
+
+    result = await _execute_reliable(
         session,
-        context,
-        EventType.PAYROLL_CUTOVER_BRIDGE_REVISED,
-        "payroll.cutover_bridge_fact.certified"
-        if command.certify
-        else "payroll.cutover_bridge_fact.drafted",
-        "payroll_cutover_bridge_fact",
-        value.id,
-        {
-            "bridge_period_id": str(bridge_period_id),
-            "employee_id": str(command.employee_id) if command.employee_id else None,
-            "fact_key": command.fact_key,
-            "revision": value.revision,
-            "protected_value_present": True,
-        },
+        context=context,
+        operation="payroll.cutover_review.write_bridge_fact",
+        idempotency_key=command.idempotency_key,
+        request_digest=_request_digest(command, bridge_period_id=bridge_period_id),
+        mutate=mutate,
+        recover=recover,
     )
-    await session.commit()
+    value = result.value
     return {
         "id": str(value.id),
-        "certification_state": value.certification_state,
+        "certification_state": "certified" if command.certify else "draft",
         "certified_value": "••••",
     }
 
@@ -770,70 +937,114 @@ async def certify_bridge_period(
         raise HTTPException(
             403, "Required bridge-period certification authority is missing."
         )
-    period = await session.scalar(
-        select(PayrollCutoverBridgePeriodRecord)
-        .where(
-            PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
-            PayrollCutoverBridgePeriodRecord.id == bridge_period_id,
-        )
-        .with_for_update()
-    )
-    if period is None:
-        raise HTTPException(404, "Bridge Payroll period was not found.")
-    facts = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(PayrollCutoverBridgeEmployeeFactRevision)
+
+    async def mutate() -> AuthoritativeOutcome[PayrollCutoverBridgePeriodRecord]:
+        period = await session.scalar(
+            select(PayrollCutoverBridgePeriodRecord)
             .where(
-                PayrollCutoverBridgeEmployeeFactRevision.company_id
-                == context.company.id,
-                PayrollCutoverBridgeEmployeeFactRevision.bridge_period_id
-                == bridge_period_id,
-                PayrollCutoverBridgeEmployeeFactRevision.certification_state
-                == "certified",
+                PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
+                PayrollCutoverBridgePeriodRecord.id == bridge_period_id,
+            )
+            .with_for_update()
+        )
+        if period is None:
+            raise HTTPException(404, "Bridge Payroll period was not found.")
+        if period.version != command.expected_version:
+            raise HTTPException(
+                409, "Bridge Payroll period changed; refresh before certifying."
+            )
+        facts = int(
+            await session.scalar(
+                select(func.count())
+                .select_from(PayrollCutoverBridgeEmployeeFactRevision)
+                .where(
+                    PayrollCutoverBridgeEmployeeFactRevision.company_id
+                    == context.company.id,
+                    PayrollCutoverBridgeEmployeeFactRevision.bridge_period_id
+                    == bridge_period_id,
+                    PayrollCutoverBridgeEmployeeFactRevision.certification_state
+                    == "certified",
+                )
+            )
+            or 0
+        )
+        if facts == 0:
+            raise HTTPException(
+                409, "Bridge Employee facts must be certified before period coverage."
+            )
+        now = datetime.now(timezone.utc)
+        if command.certifier_role == "owner":
+            period.owner_certified_by_user_id = context.user.id
+            period.owner_certified_at = now
+        else:
+            period.accountant_certified_by_user_id = context.user.id
+            period.accountant_certified_at = now
+        period.coverage_complete = (
+            period.owner_certified_at is not None
+            and period.accountant_certified_at is not None
+        )
+        period.certification_state = (
+            "certified"
+            if period.coverage_complete
+            else f"{command.certifier_role}_certified"
+        )
+        period.version += 1
+        _stage_evidence(
+            session,
+            context,
+            EventType.PAYROLL_CUTOVER_BRIDGE_REVISED,
+            "payroll.cutover_bridge_period.certified",
+            "payroll_cutover_bridge_period",
+            period.id,
+            {
+                "version": period.version,
+                "certified_fact_count": facts,
+                "externally_calculated": True,
+            },
+        )
+        return AuthoritativeOutcome(
+            period, "payroll_cutover_bridge_period", period.id, 200
+        )
+
+    async def recover(result_id: UUID) -> PayrollCutoverBridgePeriodRecord | None:
+        return await session.scalar(
+            select(PayrollCutoverBridgePeriodRecord).where(
+                PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
+                PayrollCutoverBridgePeriodRecord.id == result_id,
             )
         )
-        or 0
-    )
-    if facts == 0:
-        raise HTTPException(
-            409, "Bridge Employee facts must be certified before period coverage."
-        )
-    now = datetime.now(timezone.utc)
-    if command.certifier_role == "owner":
-        period.owner_certified_by_user_id = context.user.id
-        period.owner_certified_at = now
-    else:
-        period.accountant_certified_by_user_id = context.user.id
-        period.accountant_certified_at = now
-    period.coverage_complete = (
-        period.owner_certified_at is not None
-        and period.accountant_certified_at is not None
-    )
-    period.certification_state = (
-        "certified"
-        if period.coverage_complete
-        else f"{command.certifier_role}_certified"
-    )
-    period.version += 1
-    _stage_evidence(
+
+    result = await _execute_reliable(
         session,
-        context,
-        EventType.PAYROLL_CUTOVER_BRIDGE_REVISED,
-        "payroll.cutover_bridge_period.certified",
-        "payroll_cutover_bridge_period",
-        period.id,
-        {
-            "version": period.version,
-            "certified_fact_count": facts,
-            "externally_calculated": True,
-        },
+        context=context,
+        operation="payroll.cutover_review.certify_bridge_period",
+        idempotency_key=command.idempotency_key,
+        request_digest=_request_digest(command, bridge_period_id=bridge_period_id),
+        mutate=mutate,
+        recover=recover,
     )
-    await session.commit()
+    period = result.value
+    role_timestamp = (
+        period.owner_certified_at
+        if command.certifier_role == "owner"
+        else period.accountant_certified_at
+    )
+    other_timestamp = (
+        period.accountant_certified_at
+        if command.certifier_role == "owner"
+        else period.owner_certified_at
+    )
+    original_complete = bool(
+        role_timestamp is not None
+        and other_timestamp is not None
+        and other_timestamp <= role_timestamp
+    )
     return {
         "id": str(period.id),
-        "certification_state": period.certification_state,
-        "coverage_complete": period.coverage_complete,
+        "certification_state": (
+            "certified" if original_complete else f"{command.certifier_role}_certified"
+        ),
+        "coverage_complete": original_complete,
         "externally_calculated": True,
     }
 
@@ -897,26 +1108,51 @@ async def gates(context: Read, session: Session) -> dict[str, object]:
 
 
 @router.post("/approve")
-async def approve(context: Approver, session: Session) -> dict[str, object]:
-    result = await _gates(context, session)
-    if result["status"] != "READY_FOR_CUTOVER_APPROVAL":
-        raise HTTPException(409, "Payroll cutover gates remain incomplete.")
-    review = await _review(session, context.company.id)
-    assert review is not None
-    review.lifecycle = "approved"
-    review.approved_by_user_id = context.user.id
-    review.approved_at = datetime.now(timezone.utc)
-    review.version += 1
-    _stage_evidence(
+async def approve(
+    command: CutoverApproval, context: Approver, session: Session
+) -> dict[str, object]:
+    async def mutate() -> AuthoritativeOutcome[PayrollCutoverReviewRecord]:
+        result = await _gates(context, session)
+        if result["status"] != "READY_FOR_CUTOVER_APPROVAL":
+            raise HTTPException(409, "Payroll cutover gates remain incomplete.")
+        review = await _review(session, context.company.id, for_update=True)
+        assert review is not None
+        if review.version != command.expected_review_version:
+            raise HTTPException(
+                409, "Payroll cutover review changed; refresh before approval."
+            )
+        review.lifecycle = "approved"
+        review.approved_by_user_id = context.user.id
+        review.approved_at = datetime.now(timezone.utc)
+        review.version += 1
+        _stage_evidence(
+            session,
+            context,
+            EventType.PAYROLL_CUTOVER_REVIEW_APPROVED,
+            "payroll.cutover_review.approved",
+            "payroll_cutover_review",
+            review.id,
+            {"version": review.version, "payroll_execution_enabled": False},
+        )
+        return AuthoritativeOutcome(review, "payroll_cutover_review", review.id, 200)
+
+    async def recover(result_id: UUID) -> PayrollCutoverReviewRecord | None:
+        return await session.scalar(
+            select(PayrollCutoverReviewRecord).where(
+                PayrollCutoverReviewRecord.company_id == context.company.id,
+                PayrollCutoverReviewRecord.id == result_id,
+            )
+        )
+
+    await _execute_reliable(
         session,
-        context,
-        EventType.PAYROLL_CUTOVER_REVIEW_APPROVED,
-        "payroll.cutover_review.approved",
-        "payroll_cutover_review",
-        review.id,
-        {"version": review.version, "payroll_execution_enabled": False},
+        context=context,
+        operation="payroll.cutover_review.approve",
+        idempotency_key=command.idempotency_key,
+        request_digest=_request_digest(command),
+        mutate=mutate,
+        recover=recover,
     )
-    await session.commit()
     return {"status": "APPROVED", "payroll_execution_enabled": False}
 
 
