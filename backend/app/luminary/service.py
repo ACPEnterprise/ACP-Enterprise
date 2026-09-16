@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.business_economics.conversion_readiness import ConversionReadinessService
 from app.business_economics.models import EconomicsProfitabilityResultRecord
 from app.business_economics.workspace import EconomicsWorkspaceService
 from app.events.schemas import BusinessEventCreate
@@ -14,6 +15,7 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import EstimatePermission
 
 from .contracts import (
     LUMINARY_BRIEFING_VERSION,
@@ -52,6 +54,20 @@ class LuminaryService:
             period_start=period_start,
             period_end=period_end,
         )
+        if EstimatePermission.READ in getattr(context, "permission_codes", frozenset()):
+            workspace[
+                "conversion_evidence"
+            ] = await ConversionReadinessService().project(
+                session,
+                context=context,
+                period_start=period_start,
+                period_end=period_end,
+            )
+        else:
+            workspace["conversion_evidence"] = {
+                "readiness": "REQUIRES_OWNER_INPUT",
+                "exact_blocker": EstimatePermission.READ,
+            }
         return project_owner_economics(
             workspace,
             company_id=context.company.id,
@@ -376,11 +392,7 @@ class LuminaryService:
             if record.branch_id is not None
             else query.where(LuminaryFindingRecord.branch_id.is_(None))
         )
-        records = tuple(
-            (
-                await session.scalars(query)
-            ).all()
-        )
+        records = tuple((await session.scalars(query)).all())
         by_id = {item.id: item for item in records}
         if len(by_id) != len(ids) or len(record.finding_digests) != len(ids):
             raise RuntimeError("Luminary briefing finding authority is incomplete.")
