@@ -3,7 +3,7 @@ import type { JobListItem } from "../../types/jobs";
 import type { AppointmentDetail } from "../../types/scheduling";
 
 export const CURRENT_CALENDAR_SOURCE_BASELINE = {
-  contract: "hcp-current-overlay/v1",
+  contract: "hcp-source4-realworld-acceptance-snapshot/v1",
   asOf: "2026-09-12",
   customers: 11,
   locations: 11,
