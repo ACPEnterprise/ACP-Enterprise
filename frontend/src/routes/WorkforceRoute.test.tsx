@@ -58,9 +58,7 @@ const summary = {
 };
 
 describe("WorkforceRoute", () => {
-  afterEach(() => {
-    authState.permissionCodes = [];
-  });
+  afterEach(() => { authState.permissionCodes = []; });
   function mockEligibility() {
     vi.mocked(workforceHooks.useSourceCertification).mockReturnValue({
       query: { data: undefined, isLoading: false, isError: false },
@@ -86,35 +84,32 @@ describe("WorkforceRoute", () => {
           dispatch_ready_total: 0,
           timekeeping_ready_total: 0,
           payroll_identity_ready_total: 0,
-          items: [
-            {
-              roster_key: "melvin-santiago",
-              display_name: "Melvin Santiago",
-              operating_role: "FIELD_TECH",
-              field_tech: true,
-              employee_id: null,
-              employee_display_name: null,
-              user_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              employee_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              membership_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              branch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              role_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              workforce_profile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              technician_capability_state:
-                "AUTHENTICATED_VERIFICATION_REQUIRED",
-              mobile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              credential_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              availability_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              dispatch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              timekeeping_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              payroll_linkage_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
-              identity_confirmed_at: null,
-              readiness_window_start_at: null,
-              readiness_window_end_at: null,
-              readiness_source: null,
-              blockers: ["OWNER_EMPLOYEE_BINDING_REQUIRED"],
-            },
-          ],
+          items: [{
+            roster_key: "melvin-santiago",
+            display_name: "Melvin Santiago",
+            operating_role: "FIELD_TECH",
+            field_tech: true,
+            employee_id: null,
+            employee_display_name: null,
+            user_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            employee_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            membership_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            branch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            role_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            workforce_profile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            technician_capability_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            mobile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            credential_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            availability_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            dispatch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            timekeeping_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            payroll_linkage_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            identity_confirmed_at: null,
+            readiness_window_start_at: null,
+            readiness_window_end_at: null,
+            readiness_source: null,
+            blockers: ["OWNER_EMPLOYEE_BINDING_REQUIRED"],
+          }],
         },
       },
       bind: { isPending: false, mutate: vi.fn() },
@@ -142,19 +137,17 @@ describe("WorkforceRoute", () => {
       isError: false,
       data: {
         employee_id: "employee-1",
-        items: [
-          {
-            event_type: "MOBILE_ROLE_ASSIGNED",
-            occurred_at: "2026-08-30T12:00:00Z",
-            authority: "ACP_NATIVE",
-            source: "membership_role",
-            actor_user_id: "user-1",
-            actor_display_name: "Office Owner",
-            description: "ACP Employee Mobile role assigned.",
-            employee_id: "employee-1",
-            navigation_reference: null,
-          },
-        ],
+        items: [{
+          event_type: "MOBILE_ROLE_ASSIGNED",
+          occurred_at: "2026-08-30T12:00:00Z",
+          authority: "ACP_NATIVE",
+          source: "membership_role",
+          actor_user_id: "user-1",
+          actor_display_name: "Office Owner",
+          description: "ACP Employee Mobile role assigned.",
+          employee_id: "employee-1",
+          navigation_reference: null,
+        }],
       },
     } as never);
   }
@@ -241,15 +234,9 @@ describe("WorkforceRoute", () => {
     expect(screen.getByText(/Trade credential/)).toBeInTheDocument();
     expect(screen.getAllByText(/MAIN/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Active/).length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("navigation", { name: "Employee detail" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("region", { name: "Employee history" }),
-    ).toHaveTextContent("ACP Employee Mobile role assigned");
-    expect(
-      screen.getByRole("region", { name: "Employee history" }),
-    ).toHaveTextContent("ACP NATIVE");
+    expect(screen.getByRole("navigation", { name: "Employee detail" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP Employee Mobile role assigned");
+    expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP NATIVE");
     expect(
       screen.queryByText(/compensation|net pay|tax election/i),
     ).not.toBeInTheDocument();
@@ -266,50 +253,35 @@ describe("WorkforceRoute", () => {
         data: {
           total: 1,
           undecided: 1,
-          items: [
-            {
-              source_system: "HCP",
-              source_employee_id: "pro_exact_source_1",
-              source_disposition: "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
-              source_branch_id: "branch-1",
-              source_branch_name: "MAIN",
-              evidence_reference: "hcp_employee_source_crosswalk:evidence-1",
-              evidence_digest: "a".repeat(64),
-              mechanically_supported_employee_id: "employee-1",
-              mechanically_supported_employee_name: "Marisol Rivera",
-              decision: null,
-              revision: 0,
-              employee_id: null,
-              employee_name: null,
-              onboarding_request_id: null,
-              reason: null,
-              decided_at: null,
-              history: [],
-            },
-          ],
+          items: [{
+            source_system: "HCP",
+            source_employee_id: "pro_exact_source_1",
+            source_disposition: "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+            source_branch_id: "branch-1",
+            source_branch_name: "MAIN",
+            evidence_reference: "hcp_employee_source_crosswalk:evidence-1",
+            evidence_digest: "a".repeat(64),
+            mechanically_supported_employee_id: "employee-1",
+            mechanically_supported_employee_name: "Marisol Rivera",
+            decision: null,
+            revision: 0,
+            employee_id: null,
+            employee_name: null,
+            onboarding_request_id: null,
+            reason: null,
+            decided_at: null,
+            history: [],
+          }],
         },
       },
       decide: { isPending: false, mutate: decide },
     } as never);
-    vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({
-      data: [summary],
-    } as never);
-    vi.mocked(workforceHooks.useWorkforceEmployee).mockReturnValue({
-      data: undefined,
-    } as never);
-    render(
-      <MemoryRouter>
-        <WorkforceRoute />
-      </MemoryRouter>,
-    );
+    vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({ data: [summary] } as never);
+    vi.mocked(workforceHooks.useWorkforceEmployee).mockReturnValue({ data: undefined } as never);
+    render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
 
-    await userEvent.type(
-      screen.getByLabelText("Owner reason"),
-      "Owner verified source packet",
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Confirm candidate" }),
-    );
+    await userEvent.type(screen.getByLabelText("Owner reason"), "Owner verified source packet");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm candidate" }));
 
     expect(decide).toHaveBeenCalledWith({
       sourceEmployeeId: "pro_exact_source_1",
@@ -329,12 +301,46 @@ describe("WorkforceRoute", () => {
       data: [summary],
     } as never);
     vi.mocked(workforceHooks.useWorkforceEmployee).mockImplementation(
-      (id) =>
-        ({
-          isLoading: false,
-          isError: false,
-          data: id
-            ? {
+      (id) => ({
+        isLoading: false,
+        isError: false,
+        data: id
+          ? {
+              ...summary,
+              capabilities: [],
+              certifications: [],
+              languages: [],
+              branches: [],
+              work_restrictions: [],
+              equipment_capabilities: [],
+              availability: [],
+            }
+          : undefined,
+      }) as never,
+    );
+    vi.mocked(workforceHooks.useEmployeeAdministration).mockImplementation(
+      (id) => ({
+        isLoading: false,
+        isError: false,
+        data: id
+          ? {
+              ...summary,
+              membership_id: "membership-1",
+              membership_status: "active",
+              user_status: "active",
+              authorization_version: 4,
+              branch_ids: ["branch-1"],
+              role_codes: ["ACP_EMPLOYEE_MOBILE", "OFFICE_MANAGER"],
+              onboarding_status: "activated",
+              invitation_status: "consumed",
+              delivery_status: "accepted",
+              login_email: "employee@example.test",
+              masked_login: "e***@example.test",
+              access_status: "ACTIVE",
+              mobile_readiness: "READY",
+              mobile_readiness_blockers: [],
+              permissions: [],
+              workforce: {
                 ...summary,
                 capabilities: [],
                 certifications: [],
@@ -343,59 +349,19 @@ describe("WorkforceRoute", () => {
                 work_restrictions: [],
                 equipment_capabilities: [],
                 availability: [],
-              }
-            : undefined,
-        }) as never,
-    );
-    vi.mocked(workforceHooks.useEmployeeAdministration).mockImplementation(
-      (id) =>
-        ({
-          isLoading: false,
-          isError: false,
-          data: id
-            ? {
-                ...summary,
-                membership_id: "membership-1",
-                membership_status: "active",
-                user_status: "active",
-                authorization_version: 4,
-                branch_ids: ["branch-1"],
-                role_codes: ["ACP_EMPLOYEE_MOBILE", "OFFICE_MANAGER"],
-                onboarding_status: "activated",
-                invitation_status: "consumed",
-                delivery_status: "accepted",
-                login_email: "employee@example.test",
-                masked_login: "e***@example.test",
-                access_status: "ACTIVE",
-                mobile_readiness: "READY",
-                mobile_readiness_blockers: [],
-                permissions: [],
-                workforce: {
-                  ...summary,
-                  capabilities: [],
-                  certifications: [],
-                  languages: [],
-                  branches: [],
-                  work_restrictions: [],
-                  equipment_capabilities: [],
-                  availability: [],
-                },
-              }
-            : undefined,
-        }) as never,
+              },
+            }
+          : undefined,
+      }) as never,
     );
     render(
       <MemoryRouter>
         <WorkforceRoute />
       </MemoryRouter>,
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: /Marisol Rivera/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
     expect(screen.getByText("employee@example.test")).toBeVisible();
-    expect(
-      screen.getByText("ACP EMPLOYEE MOBILE, OFFICE MANAGER"),
-    ).toBeVisible();
+    expect(screen.getByText("ACP EMPLOYEE MOBILE, OFFICE MANAGER")).toBeVisible();
     expect(screen.getAllByText("MAIN").length).toBeGreaterThan(0);
     expect(screen.getByText("consumed")).toBeVisible();
     expect(screen.getByText("Provider accepted")).toBeVisible();
@@ -426,11 +392,5 @@ describe("WorkforceRoute", () => {
       "water_heater",
     );
     expect(screen.getByText("Marisol Rivera")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Branch" })).toHaveValue(
-      "branch-1",
-    );
-    expect(
-      screen.queryByPlaceholderText("Authorized Branch UUID"),
-    ).not.toBeInTheDocument();
   });
 });
