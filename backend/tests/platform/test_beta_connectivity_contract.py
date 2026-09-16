@@ -33,7 +33,9 @@ def test_beta_edge_preserves_preview_and_blocks_internal_surfaces() -> None:
 
     assert "preview.allcountyhomeservices.com {" in caddy
     assert "beta.twelve-hats.com {" in caddy
-    assert "respond @internal 404" in caddy
+    assert "handle @internal {" in caddy
+    assert "respond 404" in caddy
+    assert "respond @internal 404" not in caddy
     for path in (
         "/mission-control*",
         "/engineering*",
