@@ -225,6 +225,8 @@ class BeaconMorningBriefResponse(BaseModel):
     historical_comparison_available: bool
     new_since_yesterday: int | None
     resolved_since_yesterday: int | None
+    changed_since_yesterday: int | None
+    expired_since_yesterday: int | None
     limitations: tuple[str, ...]
     dashboard_ready: bool
     mobile_inbox_ready: bool
