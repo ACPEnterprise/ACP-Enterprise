@@ -32,6 +32,10 @@ used by Needs Scheduling: terminal history remains preserved, but it does not
 represent current assignment authority. Crew members are included in technician
 filtering only while their assignment is active.
 
+Appointment detail applies the same rule. A terminal assignment now appears as
+retained history with its terminal state and release time rather than labeling
+the former Employee as the current primary technician.
+
 ### Nested overlap undercount
 
 Capacity previously compared each window only with the immediately preceding

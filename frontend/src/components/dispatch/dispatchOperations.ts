@@ -7,14 +7,19 @@ import type { JobListItem } from "../../types/jobs";
 export type DispatchBoardFilter =
   "all" | "unassigned" | "active" | "exception" | "completed";
 
+export const isActiveDispatchAssignment = (
+  assignment: DispatchAssignment | null | undefined,
+) =>
+  Boolean(
+    assignment &&
+    !["released", "replaced", "cancelled"].includes(assignment.status),
+  );
+
 export function activeDispatchAssignment(
   item: DispatchBoardItem,
 ): DispatchAssignment | null {
   const assignment = item.assignment;
-  return assignment &&
-    !["released", "replaced", "cancelled"].includes(assignment.status)
-    ? assignment
-    : null;
+  return isActiveDispatchAssignment(assignment) ? assignment : null;
 }
 
 export function operationalState(
