@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
+import { Link } from "react-router";
 
 import type { Estimate } from "../../types/estimates";
 import { Alert, Button, Field, Input, Textarea } from "../../ui";
@@ -183,7 +184,15 @@ export function EstimateDecisionControls({
           </div>
         </form>
       )}
-      {estimate.status === "approved" && (
+      {estimate.conversion ? (
+        <Alert variant="success">
+          Converted to Job{" "}
+          <Link className="font-semibold underline" to={`/jobs/${estimate.conversion.job_id}`}>
+            {estimate.conversion.job_number}
+          </Link>
+          . The sold Estimate snapshot remains preserved.
+        </Alert>
+      ) : estimate.status === "approved" && (
         <div className="grid gap-3 rounded-lg border border-stroke p-4 sm:grid-cols-2">
           {!estimate.service_location_id && (
             <Alert className="sm:col-span-2" variant="warning" role="alert">

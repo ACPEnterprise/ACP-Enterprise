@@ -23,6 +23,8 @@ export async function getPriceBook(
     search?: string;
     categoryId?: string;
     itemStatus?: string;
+    limit?: number;
+    offset?: number;
   } = {},
 ): Promise<PriceBookCatalog> {
   return (
@@ -32,7 +34,8 @@ export async function getPriceBook(
         ...(filters.search ? { search: filters.search } : {}),
         ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
         ...(filters.itemStatus ? { item_status: filters.itemStatus } : {}),
-        limit: 500,
+        limit: filters.limit ?? 500,
+        offset: filters.offset ?? 0,
       },
     })
   ).data;

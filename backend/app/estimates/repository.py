@@ -24,6 +24,7 @@ from app.estimates.models import (
     EstimateRevision,
 )
 from app.estimates.schemas import EstimateSummary
+from app.jobs.models import Job
 from app.price_book.models import PriceBookCommercialSnapshot
 
 
@@ -287,6 +288,26 @@ class EstimateRepository:
             if decision is not None
             else None
         )
+        conversion_row = await session.execute(
+            select(EstimateJobConversion, Job.job_number)
+            .join(
+                Job,
+                (Job.company_id == EstimateJobConversion.company_id)
+                & (Job.id == EstimateJobConversion.job_id),
+            )
+            .where(
+                EstimateJobConversion.company_id == company_id,
+                EstimateJobConversion.estimate_id == estimate.id,
+            )
+        )
+        conversion_result = conversion_row.one_or_none()
+        conversion_record = (
+            EstimateRepository.conversion_record(
+                conversion_result[0], job_number=conversion_result[1]
+            )
+            if conversion_result is not None
+            else None
+        )
         return EstimateRecord(
             id=estimate.id,
             company_id=estimate.company_id,
@@ -299,6 +320,7 @@ class EstimateRepository:
             version=estimate.version,
             current_revision=revision_record,
             customer_decision=decision_record,
+            conversion=conversion_record,
         )
 
     @staticmethod

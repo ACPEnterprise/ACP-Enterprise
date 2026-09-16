@@ -132,6 +132,7 @@ class EstimateItem(EstimateSchema):
     version: int
     current_revision: EstimateRevisionItem
     customer_decision: object | None
+    conversion: ConversionItem | None
 
 
 class EstimateSummary(EstimateSchema):
