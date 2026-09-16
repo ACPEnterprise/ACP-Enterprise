@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from fastapi import FastAPI
-
 from app.events.types import EventType
 from app.payments.router import router
 from app.platform.permissions.codes import PaymentPermission
+from fastapi import FastAPI
 
 app = FastAPI()
 app.include_router(router)
