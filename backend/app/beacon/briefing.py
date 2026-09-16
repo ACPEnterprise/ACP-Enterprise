@@ -102,6 +102,19 @@ def build_morning_brief(
             {"signal_id": str(signal.id), "evidence_digest": signal.evidence_digest}
             for signal in snoozed
         ],
+        "historical_comparison_available": historical_deltas is not None,
+        "historical_deltas": sorted(
+            (
+                str(item.id),
+                str(item.run_id),
+                str(item.condition_key),
+                item.evidence_digest,
+                item.disposition.value,
+                item.evaluated_at.isoformat(),
+                item.evidence_as_of.isoformat(),
+            )
+            for item in historical_deltas or ()
+        ),
     }
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()

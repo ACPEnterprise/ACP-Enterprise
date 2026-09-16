@@ -29,7 +29,7 @@ reused.
 | Timekeeping | Accepted revision work date | Accepted work is not automatically paid Payroll time |
 | Economics | Exact admitted result period | No LIA recomputation and no interpolation between periods |
 | Luminary | Exact persisted briefing period | No substitute briefing from another period |
-| Beacon | No accepted historical lifecycle query | Current attention queue is never presented as historical change evidence |
+| Beacon | Persisted evaluation dispositions over an explicit Company/Branch-scoped period | Evaluation history explains recorded new/changed/resolved/expired outcomes; it does not reconstruct an unrecorded timeline or replace current lifecycle state |
 | Migration | Master-run execution overlap and source timestamps | Run time does not prove source freshness beyond admitted evidence |
 
 ## Financial semantics
