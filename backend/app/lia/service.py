@@ -20,6 +20,7 @@ from .contracts import (
     NavigationSuggestion,
     TruthClassification,
 )
+from .owner_answers import compose_owner_answer
 from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
 from .retrieval import GovernedRetrievalService, permitted_domain_names
 from .security import (
@@ -277,13 +278,8 @@ class LiaService:
             )
             return response
 
-        lines = [f"{item.label}: {item.count} ({item.state})." for item in evidence]
-        answer = "Here is the current authorized ACP evidence: " + " ".join(lines)
-        if any(
-            word in question.casefold()
-            for word in ("why", "profit", "margin", "economics")
-        ):
-            answer += " A causal explanation requires an admitted Business Economics result; these operational counts alone do not establish cause or profitability."
+        owner_answer = compose_owner_answer(question, evidence)
+        answer = owner_answer.text
         limitations = (
             "This deterministic response summarizes current ACP records; no external AI provider was invoked.",
             "Counts are not a substitute for domain approval, settlement, posting, or payroll authority.",
@@ -305,6 +301,7 @@ class LiaService:
             evidence=evidence,
             limitations=limitations,
             navigation=navigation,
+            safe_next_action=owner_answer.next_action,
         )
         return response
 
@@ -321,6 +318,7 @@ class LiaService:
         limitations=(),
         navigation=(),
         proposals=(),
+        safe_next_action: str | None = None,
     ) -> LiaResponse:
         digest = _evidence_digest(evidence)
         evidence_as_of = max(
@@ -363,11 +361,8 @@ class LiaService:
             subject_id=request.context.entity_id if request.context else None,
             source_systems=tuple(sorted({item.domain for item in evidence})),
             missing_evidence=missing,
-            safe_next_action=(
-                navigation[0].label
-                if navigation
-                else "Refresh authoritative ACP evidence"
-            ),
+            safe_next_action=safe_next_action
+            or (navigation[0].label if navigation else "Refresh authoritative ACP evidence"),
             as_of=evidence_as_of,
             generated_at=datetime.now(timezone.utc),
         )
