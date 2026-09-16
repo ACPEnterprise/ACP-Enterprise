@@ -1360,16 +1360,6 @@
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "workforce",
-      "mechanism": "Unique Company roster key and Employee binding with contradictory-rebind rejection",
-      "method": "PUT",
-      "operation_id": "bind_real_roster_employee_api_v1_workforce_real_roster__roster_key__binding_put",
-      "path": "/api/v1/workforce/real-roster/{roster_key}/binding",
-      "reason": "Exact owner-confirmed binding replay converges while reuse or rebinding fails closed.",
-      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
-    },
-    {
-      "classification": "NATURALLY_IDEMPOTENT",
-      "domain": "workforce",
       "mechanism": "Existing profile, canonical technician capability, and exact Branch/time-window evidence converge",
       "method": "PUT",
       "operation_id": "prepare_field_readiness_api_v1_workforce_administration_employees__employee_id__field_readiness_put",
@@ -2917,8 +2907,88 @@
       "path": "/api/v1/assets/operationalization/import-preview",
       "reason": "Import preview replay cannot duplicate candidates or silently overwrite changed source evidence.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, aggregate locking, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "create_review_api_v1_payroll_cutover_review_post",
+      "path": "/api/v1/payroll/cutover-review",
+      "reason": "Cutover review creation establishes durable Payroll certification authority without executing Payroll.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical protected request digest, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "save_fact_api_v1_payroll_cutover_review_facts_post",
+      "path": "/api/v1/payroll/cutover-review/facts",
+      "reason": "Fact drafts revise protected cutover authority and exact replay must not duplicate revisions or events.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical protected request digest, role authorization, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "certify_fact_api_v1_payroll_cutover_review_certifications_post",
+      "path": "/api/v1/payroll/cutover-review/certifications",
+      "reason": "Human certification creates durable owner or accountant authority but never Payroll execution authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, review locking, overlap validation, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "create_bridge_period_api_v1_payroll_cutover_review_bridge_periods_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods",
+      "reason": "Externally calculated bridge-period evidence changes cutover coverage authority and must replay without duplication.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical protected request digest, period locking, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "write_bridge_fact_api_v1_payroll_cutover_review_bridge_periods__bridge_period_id__facts_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods/{bridge_period_id}/facts",
+      "reason": "Protected bridge Employee facts revise certified historical evidence and cannot duplicate revisions or events on replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, period locking, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "certify_bridge_period_api_v1_payroll_cutover_review_bridge_periods__bridge_period_id__certify_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods/{bridge_period_id}/certify",
+      "reason": "Bridge coverage certification is a durable authority transition without Payroll execution or external side effects.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "payroll_cutover",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, review locking, optimistic concurrency, and immutable audit evidence",
+      "method": "POST",
+      "operation_id": "approve_api_v1_payroll_cutover_review_approve_post",
+      "path": "/api/v1/payroll/cutover-review/approve",
+      "reason": "Cutover approval is a durable certification transition that does not calculate or execute Payroll.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Unique Company roster key and Employee binding with contradictory-rebind rejection",
+      "method": "PUT",
+      "operation_id": "bind_real_roster_employee_api_v1_workforce_real_roster__roster_key__binding_put",
+      "path": "/api/v1/workforce/real-roster/{roster_key}/binding",
+      "reason": "Exact owner-confirmed binding replay converges while reuse or rebinding fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "6f3008fa912a6690fd8a078684a43e8c09c5ae712f0639f2bd5adf675e597adb",
+  "fingerprint": "540ff0363393b7023de901b7ac356e40b25d31e3e3c68dc6a2e19591f7f721e4",
   "schema_version": "1"
 }
