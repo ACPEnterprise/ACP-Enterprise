@@ -36,13 +36,14 @@ export function useRealRosterReadiness(canBind: boolean) {
     },
   });
   const prepareFieldReadiness = useMutation({
-    mutationFn: ({ employeeId, branchId, windowStartAt, windowEndAt }: {
+    mutationFn: ({ employeeId, branchId, windowStartAt, windowEndAt, reason }: {
       employeeId: string;
       branchId: string;
       windowStartAt: string;
       windowEndAt: string;
+      reason: string;
     }) => prepareEmployeeFieldReadiness(
-      employeeId, branchId, windowStartAt, windowEndAt,
+      employeeId, branchId, windowStartAt, windowEndAt, reason,
     ),
     onSuccess: async () => {
       await Promise.all([

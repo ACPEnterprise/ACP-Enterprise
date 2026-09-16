@@ -193,7 +193,7 @@ class RealRosterService:
             availability = None
             if profile is not None and main_branch is not None:
                 availability = await session.scalar(
-                    select(WorkforceWorkingAvailability.id)
+                    select(WorkforceWorkingAvailability)
                     .where(
                         WorkforceWorkingAvailability.company_id == context.company.id,
                         WorkforceWorkingAvailability.profile_id == profile.id,
@@ -269,6 +269,10 @@ class RealRosterService:
                     dispatch_state="READY_FOR_WINDOW_EVALUATION" if dispatch_ready else "NOT_DISPATCHABLE",
                     timekeeping_state="LINKED" if employee_ready and user_ready and membership_ready else "IDENTITY_LINKAGE_REQUIRED",
                     payroll_linkage_state="LINKED_INPUTS_NOT_EVALUATED" if employee_ready else "EMPLOYEE_BINDING_REQUIRED",
+                    identity_confirmed_at=binding.created_at,
+                    readiness_window_start_at=availability.start_at if availability else None,
+                    readiness_window_end_at=availability.end_at if availability else None,
+                    readiness_source=availability.source if availability else None,
                     blockers=tuple(blockers),
                 )
             )
@@ -306,6 +310,10 @@ class RealRosterService:
             dispatch_state="AUTHENTICATED_VERIFICATION_REQUIRED",
             timekeeping_state="AUTHENTICATED_VERIFICATION_REQUIRED",
             payroll_linkage_state="AUTHENTICATED_VERIFICATION_REQUIRED",
+            identity_confirmed_at=None,
+            readiness_window_start_at=None,
+            readiness_window_end_at=None,
+            readiness_source=None,
             blockers=(blocker,),
         )
 

@@ -77,11 +77,11 @@ async def test_field_readiness_atomically_creates_canonical_evidence(
     async with factory() as session:
         first = await service.prepare_field_readiness(
             session, context=context, employee_id=employee_id, branch_id=branch_id,
-            start_at=start, end_at=start + timedelta(hours=2),
+            start_at=start, end_at=start + timedelta(hours=2), reason="Owner confirmed shift",
         )
         second = await service.prepare_field_readiness(
             session, context=context, employee_id=employee_id, branch_id=branch_id,
-            start_at=start, end_at=start + timedelta(hours=2),
+            start_at=start, end_at=start + timedelta(hours=2), reason="Owner confirmed shift",
         )
         assert first == second
         profile = await session.scalar(
@@ -125,7 +125,7 @@ async def test_field_readiness_rolls_back_profile_when_catalog_conflicts(
         with pytest.raises(ValueError, match="category conflicts"):
             await service.prepare_field_readiness(
                 session, context=context, employee_id=employee_id, branch_id=branch_id,
-                start_at=start, end_at=start + timedelta(hours=1),
+                start_at=start, end_at=start + timedelta(hours=1), reason="Owner confirmed shift",
             )
         assert await session.scalar(
             select(WorkforceCapabilityProfile).where(
@@ -141,6 +141,7 @@ async def test_field_readiness_requires_both_workforce_permissions() -> None:
         branch_id=uuid4(),
         window_start_at=datetime.now(timezone.utc),
         window_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        reason="Owner confirmed shift",
     )
     with pytest.raises(HTTPException) as captured:
         await prepare_field_readiness(uuid4(), request, context, object())

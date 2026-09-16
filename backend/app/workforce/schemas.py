@@ -133,6 +133,10 @@ class RealRosterReadinessItem(WorkforceSchema):
     dispatch_state: str
     timekeeping_state: str
     payroll_linkage_state: str
+    identity_confirmed_at: datetime | None
+    readiness_window_start_at: datetime | None
+    readiness_window_end_at: datetime | None
+    readiness_source: str | None
     blockers: tuple[str, ...]
 
 
@@ -221,6 +225,7 @@ class FieldReadinessRequest(WorkforceSchema):
     branch_id: UUID
     window_start_at: datetime
     window_end_at: datetime
+    reason: str = Field(min_length=3, max_length=240)
 
 
 class FieldReadinessResponse(WorkforceSchema):
