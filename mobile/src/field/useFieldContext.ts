@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FieldEquipment, FieldEstimate, FieldJobSources, FieldPriceBookItem, FieldReadiness, FieldService } from "../api/fieldService";
+import type { FieldEquipment, FieldEstimate, FieldJobSources, FieldPriceBook, FieldReadiness, FieldService } from "../api/fieldService";
 import { ApiFailure } from "../api/types";
 import type { NetworkMonitor } from "../network/networkMonitor";
 
@@ -10,7 +10,7 @@ export function useFieldContext(service: FieldService, network: NetworkMonitor, 
   const [estimate, setEstimate] = useState<FieldEstimate | null>(null);
   const [readiness, setReadiness] = useState<FieldReadiness | null>(null);
   const [jobSources, setJobSources] = useState<FieldJobSources | null>(null);
-  const [priceBookItems, setPriceBookItems] = useState<FieldPriceBookItem[]>([]);
+  const [priceBookItems, setPriceBookItems] = useState<FieldPriceBook | null>(null);
   const [status, setStatus] = useState<ContextStatus>("idle");
   const hasConfirmed = useRef(false);
   const refresh = useCallback(async () => {
@@ -23,12 +23,12 @@ export function useFieldContext(service: FieldService, network: NetworkMonitor, 
         estimates && service.estimate ? service.estimate(jobId) : Promise.resolve(null),
         assets && service.readiness ? service.readiness() : Promise.resolve(null),
         sources && service.sources ? service.sources(jobId) : Promise.resolve(null),
-        priceBook && service.priceBook ? service.priceBook(jobId) : Promise.resolve([]),
+        priceBook && service.priceBook ? service.priceBook(jobId) : Promise.resolve(null),
       ]);
       setEquipment(nextEquipment); setEstimate(nextEstimate); setReadiness(nextReadiness); setJobSources(nextSources); setPriceBookItems(nextPriceBook); hasConfirmed.current = true; setStatus("live");
     } catch (error) {
       const denied = error instanceof ApiFailure && (error.kind === "forbidden" || error.kind === "not_found");
-      if (denied) { setEquipment(null); setEstimate(null); setReadiness(null); setJobSources(null); setPriceBookItems([]); hasConfirmed.current = false; }
+      if (denied) { setEquipment(null); setEstimate(null); setReadiness(null); setJobSources(null); setPriceBookItems(null); hasConfirmed.current = false; }
       setStatus(denied ? "denied" : hasConfirmed.current ? "stale" : "unavailable");
     }
   }, [assets, estimates, jobId, network, priceBook, service, sources]);

@@ -11,8 +11,8 @@ export const estimateSchema = z.object({ job_id: z.string().uuid(), available: z
 export const historySchema = z.object({ days: z.number().int(), limit: z.number().int(), items: z.array(z.object({ job_id: z.string().uuid(), job_number: z.string(), completed_at: z.string(), customer_display_name: z.string(), service_location_label: z.string() })) });
 export const readinessSchema = z.object({ fleet: z.array(z.object({ asset_id: z.string().uuid(), display_name: z.string(), lifecycle: z.string(), readiness_state: z.string().nullable(), inspection_state: z.string().nullable(), maintenance_state: z.string().nullable(), out_of_service: z.boolean(), custody_state: z.string().nullable() })), workforce_profile_available: z.boolean(), branch_eligible: z.boolean(), availability_state: z.string().nullable(), inspection_interaction: z.enum(["policy_required", "source_required"]), notification_inbox: z.literal("source_required"), push_provider: z.literal("external_provider_required"), payment_collection: z.literal("not_authorized") });
 export const jobSourcesSchema = z.object({ job_id: z.string().uuid(), assignment_id: z.string().uuid(), assignment_version: z.number().int().positive(), customer_id: z.string().uuid(), service_location_id: z.string().uuid(), contact: z.object({ contact_id: z.string().uuid(), display_name: z.string(), phone: z.string().nullable(), email: z.string().nullable(), can_approve_work: z.boolean() }).nullable(), invoice: z.object({ invoice_id: z.string().uuid(), invoice_number: z.string(), status: z.string(), version: z.number().int().positive(), open_amount: z.coerce.number(), currency: z.string() }).nullable(), payment: z.object({ state: z.string(), invoice_id: z.string().uuid().nullable(), open_amount: z.coerce.number().nullable(), currency: z.string().nullable(), receipt_status: z.string().nullable() }), communications: z.array(z.object({ communication_id: z.string().uuid(), message_class: z.string(), channel: z.string(), state: z.string(), created_at: z.string() })), completion: fieldJobStateSchema });
-export const priceBookItemSchema = z.object({ item_id: z.string().uuid(), code: z.string(), name: z.string(), customer_description: z.string(), price_version_id: z.string().uuid(), unit_price: z.coerce.number(), currency: z.string() });
-export type ItineraryItem = z.infer<typeof itineraryItemSchema>; export type FieldJobState = z.infer<typeof fieldJobStateSchema>; export type FieldEquipment = z.infer<typeof equipmentSchema>; export type FieldEstimate = z.infer<typeof estimateSchema>; export type FieldHistory = z.infer<typeof historySchema>; export type FieldReadiness = z.infer<typeof readinessSchema>; export type FieldJobSources = z.infer<typeof jobSourcesSchema>; export type FieldPriceBookItem = z.infer<typeof priceBookItemSchema>;
+export const priceBookSchema = z.array(z.object({ item_id: z.string().uuid(), code: z.string(), name: z.string(), customer_description: z.string(), price_version_id: z.string().uuid(), unit_price: z.coerce.number(), currency: z.string() }));
+export type ItineraryItem = z.infer<typeof itineraryItemSchema>; export type FieldJobState = z.infer<typeof fieldJobStateSchema>; export type FieldEquipment = z.infer<typeof equipmentSchema>; export type FieldEstimate = z.infer<typeof estimateSchema>; export type FieldHistory = z.infer<typeof historySchema>; export type FieldReadiness = z.infer<typeof readinessSchema>; export type FieldJobSources = z.infer<typeof jobSourcesSchema>; export type FieldPriceBook = z.infer<typeof priceBookSchema>;
 export type JobAction = "start" | "pause" | "resume" | "complete";
 export interface FieldService {
   itinerary(serviceDate: string): Promise<z.infer<typeof itinerarySchema>>; state(jobId: string): Promise<FieldJobState>;
@@ -24,8 +24,8 @@ export interface FieldService {
   approval(jobId: string, disposition: "approved" | "unavailable" | "refused", jobVersion: number, assignmentVersion: number): Promise<FieldJobState>;
   refreshHandoff(jobId: string, jobVersion: number, assignmentVersion: number): Promise<FieldJobState>;
   equipment?(jobId: string): Promise<FieldEquipment>; estimate?(jobId: string): Promise<FieldEstimate>;
-  sources?(jobId: string): Promise<FieldJobSources>; priceBook?(jobId: string, limit?: number): Promise<FieldPriceBookItem[]>;
   history?(days?: number, limit?: number): Promise<FieldHistory>; readiness?(): Promise<FieldReadiness>;
+  sources?(jobId: string): Promise<FieldJobSources>; priceBook?(jobId: string, limit?: number): Promise<FieldPriceBook>;
 }
 const key = (operation: string) => `mobile-field:${operation}:${Crypto.randomUUID()}`;
 export const fieldIdempotencyKey = key;
@@ -42,9 +42,9 @@ export function createFieldService(client: ApiClient): FieldService {
     refreshHandoff: (job, jobVersion, assignmentVersion) => client.request(`/api/v1/technician/jobs/${encodeURIComponent(job)}/invoice-handoff`, fieldJobStateSchema, { method: "POST", body: JSON.stringify({ expected_job_version: jobVersion, expected_assignment_version: assignmentVersion, idempotency_key: key("invoice-handoff") }) }),
     equipment: (job) => client.request(`/api/v1/technician/jobs/${encodeURIComponent(job)}/equipment`, equipmentSchema),
     estimate: (job) => client.request(`/api/v1/technician/jobs/${encodeURIComponent(job)}/estimate`, estimateSchema),
-    sources: (job) => client.request(`/api/v1/technician/jobs/${encodeURIComponent(job)}/sources`, jobSourcesSchema),
-    priceBook: (job, limit = 50) => client.request(`/api/v1/technician/jobs/${encodeURIComponent(job)}/price-book?limit=${Math.min(Math.max(limit, 1), 100)}`, z.array(priceBookItemSchema)),
     history: (days = 30, limit = 20) => client.request(`/api/v1/technician/history?days=${days}&limit=${limit}`, historySchema),
     readiness: () => client.request("/api/v1/technician/readiness", readinessSchema),
+    sources: (job) => client.request(`/api/v1/technician/jobs/${encodeURIComponent(job)}/sources`, jobSourcesSchema),
+    priceBook: (job, limit = 50) => client.request(`/api/v1/technician/jobs/${encodeURIComponent(job)}/price-book?limit=${Math.min(Math.max(limit, 1), 100)}`, priceBookSchema),
   };
 }
