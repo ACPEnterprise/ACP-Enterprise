@@ -245,6 +245,10 @@ class EventType(str, Enum):
     FIELD_INVOICE_HANDOFF_REQUESTED = "field.invoice_handoff_requested"
     FIELD_INVOICE_HANDOFF_COMPLETED = "field.invoice_handoff_completed"
     FIELD_ARTIFACT_RECORDED = "field.artifact_recorded"
+    FIELD_PURCHASE_RECORDED = "field.purchase.recorded"
+    FIELD_PURCHASE_EXTRACTION_RECORDED = "field.purchase.extraction_recorded"
+    FIELD_PURCHASE_DISPOSITION_CONFIRMED = "field.purchase.disposition_confirmed"
+    FIELD_PURCHASE_VENDOR_MAPPING_CERTIFIED = "field.purchase.vendor_mapping_certified"
 
     # Price Book
     PRICE_BOOK_PRICE_VERSION_ACTIVATED = "price_book.price_version_activated"

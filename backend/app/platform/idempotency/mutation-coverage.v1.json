@@ -3027,8 +3027,48 @@
       "path": "/api/v1/workforce/real-roster/{roster_key}/binding",
       "reason": "Exact owner-confirmed binding replay converges while reuse or rebinding fails closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "field_purchase",
+      "mechanism": "Company-scoped command key, canonical evidence digest, assignment binding, and unique receipt artifact",
+      "method": "POST",
+      "operation_id": "create_field_purchase_api_v1_technician_jobs__job_id__field_purchases_post",
+      "path": "/api/v1/technician/jobs/{job_id}/field-purchases",
+      "reason": "Receipt-backed field purchase creation is replay-safe and cannot duplicate one protected artifact.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "field_purchase",
+      "mechanism": "Company-scoped extraction digest uniqueness and optimistic field-purchase version",
+      "method": "POST",
+      "operation_id": "record_field_purchase_extraction_api_v1_technician_jobs__job_id__field_purchases__purchase_id__extractions_post",
+      "path": "/api/v1/technician/jobs/{job_id}/field-purchases/{purchase_id}/extractions",
+      "reason": "Exact extraction replay converges while conflicting receipt reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "field_purchase",
+      "mechanism": "Company-scoped per-disposition command keys, quantity bounds, and optimistic field-purchase version",
+      "method": "POST",
+      "operation_id": "submit_field_purchase_dispositions_api_v1_technician_jobs__job_id__field_purchases__purchase_id__dispositions_post",
+      "path": "/api/v1/technician/jobs/{job_id}/field-purchases/{purchase_id}/dispositions",
+      "reason": "Split disposition replay cannot duplicate confirmed material decisions.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "field_purchase",
+      "mechanism": "Exact Company/vendor/code mapping, explicit supersession identity, and evidence digest",
+      "method": "POST",
+      "operation_id": "certify_vendor_mapping_api_v1_field_purchases_vendor_mappings_post",
+      "path": "/api/v1/field-purchases/vendor-mappings",
+      "reason": "Exact mapping replay converges while contradictory remapping requires explicit supersession.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "25bd0d647e1aa086e8213c1f66c3d8a3eb9fdd76dfb1dc424c6e9178936a75ab",
+  "fingerprint": "80c88a8eaf1fdc2297eae55c7aaa5696194b4662c5cc7d1659b9e3ddc95c8e0d",
   "schema_version": "1"
 }
