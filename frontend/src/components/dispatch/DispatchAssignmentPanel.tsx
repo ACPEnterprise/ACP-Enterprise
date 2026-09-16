@@ -17,7 +17,7 @@ import {
   Select,
   Spinner,
 } from "../../ui";
-import { isDispatchSelectable } from "./dispatchEligibility";
+import { dispatchReadiness, isDispatchSelectable } from "./dispatchEligibility";
 
 const label = (value: string) => value.replaceAll("_", " ");
 export function DispatchAssignmentPanel({
@@ -61,7 +61,9 @@ export function DispatchAssignmentPanel({
     mutations.crew.error ||
     mutations.reconcile.error ||
     mutations.exception.error;
-  const recovery = error ? schedulingMutationRecovery(error, "Dispatch assignment") : null;
+  const recovery = error
+    ? schedulingMutationRecovery(error, "Dispatch assignment")
+    : null;
   const complete = () => {
     setConfirm(null);
     onClose();
@@ -196,7 +198,8 @@ export function DispatchAssignmentPanel({
         )}
       {recovery && (
         <Alert variant="danger" title={recovery.title}>
-          <strong>{recovery.state.replaceAll("_", " ")}</strong> — {recovery.message}
+          <strong>{recovery.state.replaceAll("_", " ")}</strong> —{" "}
+          {recovery.message}
         </Alert>
       )}
       {technicians.isLoading ? (
@@ -217,8 +220,7 @@ export function DispatchAssignmentPanel({
                   value={t.employee_id}
                   disabled={!isDispatchSelectable(t)}
                 >
-                  {t.display_name} —{" "}
-                  {t.eligible ? "Eligible" : label(t.decision)}
+                  {t.display_name} — {dispatchReadiness(t).replaceAll("_", " ")}
                 </option>
               ))}
             </Select>
@@ -302,7 +304,10 @@ export function DispatchAssignmentPanel({
                 >
                   <strong>{t.display_name}</strong>
                   <span className="block text-content-muted">
-                    {t.eligible ? "Eligible" : t.reasons.map(label).join(" · ")}
+                    {dispatchReadiness(t).replaceAll("_", " ")} ·{" "}
+                    {t.reasons.length
+                      ? t.reasons.map(label).join(" · ")
+                      : "Workforce did not provide a readiness reason"}
                   </span>
                 </li>
               ))}
@@ -359,7 +364,7 @@ function Eligibility({ item }: { readonly item: TechnicianEligibility }) {
     >
       {item.eligible
         ? "Active, Branch eligible, qualified, available, and conflict-free."
-        : item.reasons.map(label).join(" · ")}
+        : `${dispatchReadiness(item).replaceAll("_", " ")} · ${item.reasons.map(label).join(" · ")}`}
     </Alert>
   );
 }

@@ -553,6 +553,34 @@ async def test_arrival_and_controlled_exception_evidence_is_idempotent(
 
 
 @pytest.mark.asyncio
+async def test_assignment_history_is_tenant_scoped_and_names_actor(dispatch_fixture):
+    factory, context, appointment, technician, _ = dispatch_fixture
+    service = DispatchService()
+    async with factory() as session:
+        assert await service.history(
+            session, context=context, appointment_id=appointment.id
+        ) == ()
+    async with factory() as session:
+        assigned = await service.assign(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            employee_id=technician.id,
+            reason="Primary coverage",
+            idempotency_key="history-primary-coverage",
+        )
+    async with factory() as session:
+        history = await service.history(
+            session, context=context, appointment_id=appointment.id
+        )
+    assert len(history) == 1
+    assert history[0].event_type == "created"
+    assert history[0].actor_display_name == "Dispatch Owner"
+    assert history[0].reason == "Primary coverage"
+    assert history[0].version == assigned.version
+
+
+@pytest.mark.asyncio
 async def test_unassigned_employee_cannot_record_arrival(dispatch_fixture):
     factory, context, appointment, _, unlinked = dispatch_fixture
     service = DispatchService()

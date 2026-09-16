@@ -9,6 +9,11 @@ import {
   useJobForAppointment,
 } from "../hooks/useJobs";
 import { useAppointment } from "../hooks/useScheduling";
+import {
+  useDispatchAssignment,
+  useDispatchAssignmentHistory,
+  useEligibleTechnicians,
+} from "../hooks/useDispatch";
 import type { AppointmentDetail } from "../types/scheduling";
 import { AppointmentDetailRoute } from "./AppointmentDetailRoute";
 
@@ -17,6 +22,7 @@ let permissions = new Set([
   "COMPANY_JOB_READ",
   "COMPANY_JOB_MANAGE",
   "COMPANY_CUSTOMER_READ",
+  "COMPANY_DISPATCH_READ",
 ]);
 vi.mock("../auth", () => ({
   useAuth: () => ({
@@ -29,6 +35,7 @@ vi.mock("../auth", () => ({
 vi.mock("../hooks/useCustomers");
 vi.mock("../hooks/useJobs");
 vi.mock("../hooks/useScheduling");
+vi.mock("../hooks/useDispatch");
 
 const appointment = {
   id: "appointment-1",
@@ -62,6 +69,7 @@ describe("AppointmentDetailRoute", () => {
       "COMPANY_JOB_READ",
       "COMPANY_JOB_MANAGE",
       "COMPANY_CUSTOMER_READ",
+      "COMPANY_DISPATCH_READ",
     ]);
     vi.clearAllMocks();
     vi.mocked(useAppointment).mockReturnValue({
@@ -73,6 +81,18 @@ describe("AppointmentDetailRoute", () => {
       mutate: vi.fn(),
       isPending: false,
       error: null,
+    } as never);
+    vi.mocked(useDispatchAssignment).mockReturnValue({
+      isLoading: false,
+      data: undefined,
+    } as never);
+    vi.mocked(useDispatchAssignmentHistory).mockReturnValue({
+      isLoading: false,
+      data: [],
+    } as never);
+    vi.mocked(useEligibleTechnicians).mockReturnValue({
+      isLoading: false,
+      data: [],
     } as never);
     vi.mocked(useCustomerDetail).mockReturnValue({
       data: {
@@ -146,6 +166,58 @@ describe("AppointmentDetailRoute", () => {
       "href",
       expect.stringContaining("#service-location-location-1"),
     );
+  });
+  it("shows assignment, crew, Workforce readiness, and durable actor history", () => {
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [] },
+    } as never);
+    vi.mocked(useDispatchAssignment).mockReturnValue({
+      isLoading: false,
+      data: {
+        primary_employee_name: "Melvin Santiago",
+        status: "assigned",
+        arrival_state: "pending",
+        version: 3,
+        crew_members: [
+          {
+            id: "crew-1",
+            employee_id: "employee-2",
+            display_name: "Adam Mari",
+          },
+        ],
+      },
+    } as never);
+    vi.mocked(useEligibleTechnicians).mockReturnValue({
+      data: [
+        {
+          employee_id: "employee-3",
+          display_name: "Dakota Wilcox",
+          eligible: false,
+          reasons: ["availability_unknown"],
+        },
+      ],
+    } as never);
+    vi.mocked(useDispatchAssignmentHistory).mockReturnValue({
+      data: [
+        {
+          event_type: "replaced",
+          prior_status: "assigned",
+          new_status: "assigned",
+          actor_display_name: "Lianne Hernandez",
+          reason: "Coverage change",
+          version: 3,
+          occurred_at: "2026-07-23T14:00:00Z",
+        },
+      ],
+    } as never);
+    renderRoute();
+    expect(screen.getByText("Melvin Santiago")).toBeVisible();
+    expect(screen.getByText("Adam Mari")).toBeVisible();
+    expect(screen.getByText(/AVAILABILITY NOT READY/)).toBeVisible();
+    expect(screen.getByText(/Lianne Hernandez/)).toBeVisible();
+    expect(screen.getByText(/Coverage change/)).toBeVisible();
   });
   it("preserves a validated Scheduling return path through Appointment and Job detail", () => {
     vi.mocked(useJobForAppointment).mockReturnValue({
@@ -232,6 +304,7 @@ describe("AppointmentDetailRoute", () => {
     expect(screen.getByRole("heading", { name: "APT-000001" })).toBeVisible();
     expect(useJobForAppointment).toHaveBeenCalledWith("appointment-1", false);
     expect(useCustomerDetail).toHaveBeenCalledWith("customer-1", false);
+    expect(useDispatchAssignment).toHaveBeenCalledWith("appointment-1", false);
     expect(
       screen.getByText("Job details require Job read authority."),
     ).toBeVisible();

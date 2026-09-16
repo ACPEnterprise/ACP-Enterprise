@@ -9,6 +9,12 @@ import { useCustomerDetail } from "../hooks/useCustomers";
 import { useJobForAppointment } from "../hooks/useJobs";
 import { useAppointment } from "../hooks/useScheduling";
 import {
+  useDispatchAssignment,
+  useDispatchAssignmentHistory,
+  useEligibleTechnicians,
+} from "../hooks/useDispatch";
+import { dispatchReadiness } from "../components/dispatch/dispatchEligibility";
+import {
   customerDetailPath,
   customerLocationPath,
   jobDetailPath,
@@ -41,6 +47,7 @@ export function AppointmentDetailRoute() {
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
+  const canReadDispatch = useHasPermission("COMPANY_DISPATCH_READ");
   const appointmentQuery = useAppointment(appointmentId, canRead);
   const relatedQuery = useJobForAppointment(
     appointmentId,
@@ -49,6 +56,17 @@ export function AppointmentDetailRoute() {
   const [creating, setCreating] = useState(false);
   const { activeCompany } = useAuth();
   const appointment = appointmentQuery.data;
+  const assignmentQuery = useDispatchAssignment(
+    appointmentId,
+    canRead && canReadDispatch,
+  );
+  const assignmentHistoryQuery = useDispatchAssignmentHistory(
+    appointmentId,
+    canRead && canReadDispatch,
+  );
+  const eligibilityQuery = useEligibleTechnicians(
+    canRead && canReadDispatch ? appointmentId : undefined,
+  );
   const customerQuery = useCustomerDetail(
     appointment?.customer_id ?? null,
     canRead && canReadCustomers,
@@ -197,6 +215,79 @@ export function AppointmentDetailRoute() {
         </Card>
       </div>
       <Card className="p-ui-4 sm:p-ui-6">
+        <h3 className="font-semibold">Dispatch assignment and readiness</h3>
+        {!canReadDispatch ? (
+          <p className="mt-3 text-sm text-content-muted">
+            Assignment evidence requires Dispatch read authority.
+          </p>
+        ) : assignmentQuery.isLoading ? (
+          <p className="mt-3 text-sm text-content-muted">
+            Loading assignment evidence…
+          </p>
+        ) : assignmentQuery.data ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <dl className="grid gap-3 text-sm">
+              <div>
+                <dt className="text-content-muted">Primary technician</dt>
+                <dd>
+                  {assignmentQuery.data.primary_employee_name ?? "Unassigned"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Assignment state</dt>
+                <dd className="capitalize">
+                  {displayStatus(assignmentQuery.data.status)} ·{" "}
+                  {displayStatus(assignmentQuery.data.arrival_state)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Version</dt>
+                <dd>{assignmentQuery.data.version}</dd>
+              </div>
+            </dl>
+            <div>
+              <h4 className="text-sm font-semibold">Additional crew</h4>
+              {assignmentQuery.data.crew_members.length ? (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {assignmentQuery.data.crew_members.map((member) => (
+                    <li key={member.id}>{member.display_name}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-content-muted">
+                  No additional crew assigned.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-content-muted">
+            No current assignment evidence is available for this Appointment.
+          </p>
+        )}
+        {canReadDispatch && eligibilityQuery.data && (
+          <div className="mt-5 border-t border-stroke pt-4">
+            <h4 className="text-sm font-semibold">Workforce readiness</h4>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              {eligibilityQuery.data.map((technician) => (
+                <li
+                  className="rounded-md bg-surface-muted p-3 text-sm"
+                  key={technician.employee_id}
+                >
+                  <strong>{technician.display_name}</strong>
+                  <span className="block text-content-muted">
+                    {dispatchReadiness(technician).replaceAll("_", " ")}
+                    {technician.reasons.length
+                      ? ` · ${technician.reasons.map(displayStatus).join(" · ")}`
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+      <Card className="p-ui-4 sm:p-ui-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="font-semibold">Scheduling history and source</h3>
@@ -249,6 +340,43 @@ export function AppointmentDetailRoute() {
           for supported commercial context.
         </p>
       </Card>
+      {canReadDispatch && (
+        <Card className="p-ui-4 sm:p-ui-6">
+          <h3 className="font-semibold">Assignment history</h3>
+          <p className="mt-1 text-sm text-content-muted">
+            Durable assignment, reassignment, crew, arrival, and exception
+            evidence.
+          </p>
+          {assignmentHistoryQuery.data?.length ? (
+            <ol className="mt-4 space-y-3">
+              {assignmentHistoryQuery.data.map((entry) => (
+                <li
+                  className="rounded-md border border-stroke p-3 text-sm"
+                  key={`${entry.version}-${entry.occurred_at}`}
+                >
+                  <p className="font-semibold capitalize">
+                    {displayStatus(entry.event_type)}
+                  </p>
+                  <p className="mt-1 text-content-muted">
+                    {entry.actor_display_name} · {timestamp(entry.occurred_at)}{" "}
+                    · version {entry.version}
+                  </p>
+                  <p className="mt-1">
+                    {entry.prior_status
+                      ? `${displayStatus(entry.prior_status)} → `
+                      : ""}
+                    {displayStatus(entry.new_status)} · {entry.reason}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-3 text-sm text-content-muted">
+              No assignment history is available.
+            </p>
+          )}
+        </Card>
+      )}
       <Card className="p-ui-4 sm:p-ui-6">
         <h3 className="font-semibold">Related Job</h3>
         {relatedJob ? (

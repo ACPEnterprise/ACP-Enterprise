@@ -51,6 +51,17 @@ class AssignmentItem(DispatchSchema):
     crew_members: tuple[CrewMemberItem, ...] = ()
 
 
+class AssignmentHistoryItem(DispatchSchema):
+    event_type: str
+    prior_status: str | None
+    new_status: str
+    primary_employee_id: UUID | None
+    actor_display_name: str
+    reason: str
+    version: int
+    occurred_at: datetime
+
+
 class DispatchBoardItem(DispatchSchema):
     appointment_id: UUID
     appointment_number: str

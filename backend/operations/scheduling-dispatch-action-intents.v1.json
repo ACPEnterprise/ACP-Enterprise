@@ -1,0 +1,39 @@
+{
+  "contract": "scheduling.dispatch.action-intents.v1",
+  "mutation_authority": "none",
+  "lia_execution": "prohibited",
+  "actions": {
+    "ASSIGN": {
+      "subject": ["appointment_id", "job_id"],
+      "requested_change": ["primary_employee_id", "reason"],
+      "current_version": ["appointment_version", "assignment_version"],
+      "permissions": ["COMPANY_SCHEDULING_READ", "COMPANY_DISPATCH_MANAGE"],
+      "confirmation": "authorized_human_explicit",
+      "audit": ["actor_user_id", "occurred_at", "prior_state", "new_state", "reason", "idempotency_key"]
+    },
+    "REASSIGN": {
+      "subject": ["appointment_id", "job_id", "current_primary_employee_id"],
+      "requested_change": ["replacement_employee_id", "reason"],
+      "current_version": ["appointment_version", "assignment_version"],
+      "permissions": ["COMPANY_SCHEDULING_READ", "COMPANY_DISPATCH_MANAGE"],
+      "confirmation": "authorized_human_explicit",
+      "audit": ["actor_user_id", "occurred_at", "prior_state", "new_state", "reason", "idempotency_key"]
+    },
+    "RESCHEDULE": {
+      "subject": ["appointment_id", "job_id"],
+      "requested_change": ["arrival_window_start_at", "arrival_window_end_at", "reason_code", "reason"],
+      "current_version": ["appointment_version"],
+      "permissions": ["COMPANY_SCHEDULING_MANAGE"],
+      "confirmation": "authorized_human_explicit",
+      "audit": ["actor_user_id", "occurred_at", "prior_state", "new_state", "reason", "idempotency_key"]
+    },
+    "CANCEL_APPOINTMENT": {
+      "subject": ["appointment_id", "job_id"],
+      "requested_change": ["cancellation_reason_code", "reason"],
+      "current_version": ["appointment_version"],
+      "permissions": ["COMPANY_SCHEDULING_MANAGE"],
+      "confirmation": "authorized_human_explicit",
+      "audit": ["actor_user_id", "occurred_at", "prior_state", "new_state", "reason", "idempotency_key"]
+    }
+  }
+}

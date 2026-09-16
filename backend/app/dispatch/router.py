@@ -16,6 +16,7 @@ from app.dispatch.intelligence import TimeWindow
 from app.dispatch.intelligence_runtime import dispatch_recommendation_service
 from app.dispatch.schemas import (
     ArrivalStateRequest,
+    AssignmentHistoryItem,
     AssignmentItem,
     AssignmentReasonRequest,
     AssignPrimaryRequest,
@@ -180,6 +181,21 @@ async def detail(
 ) -> AssignmentItem:
     try:
         return await dispatch_service.detail(
+            session, context=context, appointment_id=appointment_id
+        )
+    except DispatchError as error:
+        raise dispatch_http(error) from error
+
+
+@router.get(
+    "/appointments/{appointment_id}/assignment/history",
+    response_model=tuple[AssignmentHistoryItem, ...],
+)
+async def history(
+    appointment_id: UUID, context: ReadContext, session: DatabaseSession
+) -> tuple[AssignmentHistoryItem, ...]:
+    try:
+        return await dispatch_service.history(
             session, context=context, appointment_id=appointment_id
         )
     except DispatchError as error:
