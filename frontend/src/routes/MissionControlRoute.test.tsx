@@ -14,8 +14,11 @@ vi.mock("../components/RevenueTrendChart", () => ({
 }));
 
 const data = {
-  cash_collected: { name: "Cash Collected", value: "1250", event_count: 2 },
-  booked_revenue: { name: "Booked Revenue", value: "2300", event_count: 3 },
+  period_start: "2026-09-16T04:00:00Z",
+  period_end: "2026-09-17T03:59:59Z",
+  timezone: "America/New_York",
+  cash_collected: { name: "Cash Collected", value: "1250", event_count: 2, observed_event_count: 2, excluded_event_count: 0, completeness: "COMPLETE" },
+  booked_revenue: { name: "Booked Revenue", value: "2300", event_count: 3, observed_event_count: 3, excluded_event_count: 0, completeness: "COMPLETE" },
   new_customers: { name: "New Customers", value: 4 },
   appointments_booked: { name: "Appointments Booked", value: 5 },
   total_events: { name: "Total Events", value: 14 },
@@ -79,5 +82,29 @@ describe("MissionControlRoute", () => {
     expect(analyticsHook.useAnalyticsSummary).toHaveBeenCalledWith(false);
     expect(screen.getByText(/not authorized to view Mission Control/i)).toBeInTheDocument();
     expect(screen.queryByText("Analytics API available")).not.toBeInTheDocument();
+  });
+
+  it("does not turn excluded monetary evidence into zero", () => {
+    vi.mocked(analyticsHook.useAnalyticsSummary).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        ...data,
+        cash_collected: {
+          name: "Cash Collected",
+          value: null,
+          event_count: 0,
+          observed_event_count: 1,
+          excluded_event_count: 1,
+          completeness: "PARTIAL",
+        },
+      },
+      dataUpdatedAt: Date.now(),
+    } as never);
+    render(<MissionControlRoute />);
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/0 admitted of 1 payment events · PARTIAL/)).toBeInTheDocument();
+    expect(screen.getByText("Some monetary events were excluded")).toBeInTheDocument();
+    expect(screen.getByText(/missing amounts were not treated as zero/)).toBeInTheDocument();
   });
 });
