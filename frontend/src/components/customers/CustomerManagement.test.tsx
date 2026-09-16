@@ -264,4 +264,14 @@ describe("CustomerManagement", () => {
 
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ query: searchValue, status: "active", page: 1 }));
   });
+
+  it("keeps archived Customers outside the default roster and exposes an explicit filter", async () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 } } as never);
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ record_state: "current" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Customer record state" }), "archived");
+    expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ record_state: "archived", page: 1 }));
+    expect(screen.getByText("No admitted Customers match these filters.")).toBeVisible();
+  });
 });

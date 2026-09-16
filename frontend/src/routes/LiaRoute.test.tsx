@@ -190,6 +190,27 @@ describe("LIA workspace", () => {
     );
   });
 
+  it("passes screen domain context without inventing an entity identifier", () => {
+    render(
+      <MemoryRouter initialEntries={["/lia?contextDomain=dispatch"]}>
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/minimum-necessary Dispatch context/i)).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox", { name: "Ask LIA a question" }), {
+      target: { value: "Who is unassigned?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(state.askMutate).toHaveBeenLastCalledWith(
+      {
+        question: "Who is unassigned?",
+        conversation_id: undefined,
+        context: { domain: "dispatch" },
+      },
+      expect.any(Object),
+    );
+  });
+
   it("preserves a server-resolved Employee referent for payroll follow-up", () => {
     const employeeId = "33333333-3333-4333-8333-333333333333";
     render(

@@ -8,7 +8,7 @@ import { IdentityOnboardingRoute } from "./IdentityOnboardingRoute";
 vi.mock("./api");
 const roles = [["company-admin", "COMPANY_ADMINISTRATOR", "Company Administrator"], ["manager", "OFFICE_MANAGER", "Office Manager"], ["csr", "SERVICE_CSR", "Service CSR"], ["technician", "TECHNICIAN", "Technician"], ["mobile", "ACP_EMPLOYEE_MOBILE", "ACP Employee Mobile"]].map(([id, code, name]) => ({ id, code, name, company_id: "company-1", description: null, status: "active", is_system: true }));
 const context: AuthenticationContextValue = { status: "authenticated", activeCompany: { id: "company-1", code: "ACP", name: "All County", membership_id: "membership-1", default_branch_id: "main", has_all_branch_access: false, branches: [{ id: "main", code: "MAIN", name: "Main Branch", is_primary: true }] }, permissionCodes: ["COMPANY_IDENTITY_ONBOARDING_MANAGE"], user: null, signIn: vi.fn(), signOut: vi.fn(), signOutAll: vi.fn(), requireReauthentication: vi.fn() };
-function renderPage(authentication = context) { const router = createMemoryRouter([{ path: "/administration/identity-onboarding", Component: IdentityOnboardingRoute }], { initialEntries: ["/administration/identity-onboarding"] }); render(<AuthenticationContext.Provider value={authentication}><RouterProvider router={router} /></AuthenticationContext.Provider>); }
+function renderPage(authentication = context, entry = "/administration/identity-onboarding") { const router = createMemoryRouter([{ path: "/administration/identity-onboarding", Component: IdentityOnboardingRoute }], { initialEntries: [entry] }); render(<AuthenticationContext.Provider value={authentication}><RouterProvider router={router} /></AuthenticationContext.Provider>); }
 describe("IdentityOnboardingRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks(); vi.mocked(api.listRoles).mockResolvedValue(roles);
@@ -31,6 +31,13 @@ describe("IdentityOnboardingRoute", () => {
     renderPage(); const select = (await screen.findAllByRole("combobox"))[0];
     for (const label of ["ADMIN", "OFFICE MANAGER", "OFFICE STAFF", "FIELD TECH"]) expect(select).toHaveTextContent(label);
     expect(select).not.toHaveTextContent("SUPPORT"); expect(select).not.toHaveTextContent("ACP EMPLOYEE MOBILE");
+  });
+  it("prefills owner-confirmed roster facts but never invents login email", async () => {
+    renderPage(context, "/administration/identity-onboarding?name=Melvin%20Santiago&profile=FIELD_TECH&branch=MAIN");
+    expect(await screen.findByLabelText("First name")).toHaveValue("Melvin");
+    expect(screen.getByLabelText("Last name")).toHaveValue("Santiago");
+    expect(screen.getByLabelText("Email")).toHaveValue("");
+    expect((await screen.findAllByRole("combobox"))[0]).toHaveValue("FIELD_TECH");
   });
   it("does not mutate when identity planning finds a conflict", async () => {
     vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({ classification: "DUPLICATE_CONFLICT", safe_to_apply: false, masked_login: "l***@example.com", user_action: "REUSE_REVIEW_REQUIRED", membership_action: "NO_CHANGE", employee_action: "NO_CHANGE", branch_action: "NO_CHANGE", employee_number_prefix: "ACP-", employee_number_width: 4, role_codes: ["TECHNICIAN"], additional_permission_codes: [], readiness_stages: { IDENTITY: "REVIEW_REQUIRED" }, blockers: ["employee_identity_already_exists"] });

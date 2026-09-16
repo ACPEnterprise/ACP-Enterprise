@@ -29,6 +29,8 @@ from app.platform.permissions.codes import (
     SchedulingPermission,
 )
 from app.scheduling.models import Appointment
+from app.timekeeping.models import JobWorkedIntervalRevision
+from app.timekeeping.permissions import TimekeepingPermission
 
 CONTRACT_VERSION = "JOB.LIA_CONTEXT.v1"
 MAX_APPOINTMENTS = 10
@@ -61,6 +63,8 @@ class JobLiaContext(BaseModel):
     estimate_origin: JobContextItem | None
     invoice_states: dict[str, int] | None
     payment_states: dict[str, int] | None
+    worked_time_states: dict[str, int] | None
+    worked_minutes: int | None
     limitations: tuple[str, ...]
     observed_at: datetime
     evidence_digest: str
@@ -74,6 +78,7 @@ class JobLiaContext(BaseModel):
             ("Dispatch", self.dispatch_states),
             ("Invoice", self.invoice_states),
             ("Payment receipt", self.payment_states),
+            ("Worked-time evidence", self.worked_time_states),
         ):
             if states is not None:
                 value = (
@@ -81,10 +86,49 @@ class JobLiaContext(BaseModel):
                     or "none"
                 )
                 parts.append(f"{label} states: {value}.")
+        if self.worked_minutes is not None:
+            parts.append(f"Accepted Job worked minutes: {self.worked_minutes}.")
         return " ".join(parts)
 
 
 class JobLiaContextService:
+    async def resolve_job_number(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        job_number: str,
+    ) -> tuple[UUID, ...]:
+        """Resolve an exact authorized native Job number."""
+        if not context.has_permission(JobPermission.READ):
+            return ()
+        branch_ids = (
+            (context.active_branch.id,)
+            if context.active_branch is not None
+            else tuple(sorted(context.authorized_branch_ids, key=str))
+        )
+        if not branch_ids:
+            return ()
+        normalized = job_number.strip().upper()
+        digits = normalized.removeprefix("JOB-")
+        if digits.isdigit():
+            normalized = f"JOB-{digits.zfill(6)}"
+        return tuple(
+            (
+                await session.scalars(
+                    select(Job.id)
+                    .where(
+                        Job.company_id == context.company.id,
+                        Job.branch_id.in_(branch_ids),
+                        func.upper(func.trim(Job.job_number))
+                        == normalized,
+                    )
+                    .order_by(Job.id)
+                    .limit(2)
+                )
+            ).all()
+        )
+
     async def project(
         self,
         session: AsyncSession,
@@ -237,6 +281,43 @@ class JobLiaContextService:
                 ),
             )
 
+        worked_time_states = None
+        worked_minutes = None
+        if context.has_permission(TimekeepingPermission.ADMIN_READ):
+            worked_rows = (
+                await session.execute(
+                    select(
+                        JobWorkedIntervalRevision.validity,
+                        JobWorkedIntervalRevision.confidence,
+                        func.count(),
+                        func.sum(JobWorkedIntervalRevision.duration_minutes),
+                    )
+                    .where(
+                        JobWorkedIntervalRevision.company_id == context.company.id,
+                        JobWorkedIntervalRevision.branch_id == job.branch_id,
+                        JobWorkedIntervalRevision.job_id == job.id,
+                        JobWorkedIntervalRevision.correction_state != "superseded",
+                    )
+                    .group_by(
+                        JobWorkedIntervalRevision.validity,
+                        JobWorkedIntervalRevision.confidence,
+                    )
+                    .order_by(
+                        JobWorkedIntervalRevision.validity,
+                        JobWorkedIntervalRevision.confidence,
+                    )
+                )
+            ).all()
+            worked_time_states = {
+                f"{validity}:{confidence}": int(count)
+                for validity, confidence, count, _minutes in worked_rows
+            }
+            worked_minutes = sum(
+                int(minutes or 0)
+                for validity, confidence, _count, minutes in worked_rows
+                if validity == "valid" and confidence == "authoritative"
+            )
+
         limitations = tuple(
             label
             for permission, label in (
@@ -246,6 +327,7 @@ class JobLiaContextService:
                 (EstimatePermission.READ, "estimate_context_not_authorized"),
                 (InvoicePermission.READ, "invoice_context_not_authorized"),
                 (PaymentPermission.READ, "payment_context_not_authorized"),
+                (TimekeepingPermission.ADMIN_READ, "timekeeping_context_not_authorized"),
             )
             if not context.has_permission(permission)
         )
@@ -269,6 +351,8 @@ class JobLiaContextService:
             else None,
             "invoice_states": invoice_states,
             "payment_states": payment_states,
+            "worked_time_states": worked_time_states,
+            "worked_minutes": worked_minutes,
             "limitations": limitations,
         }
         digest = hashlib.sha256(
@@ -290,6 +374,8 @@ class JobLiaContextService:
             estimate_origin=estimate_origin,
             invoice_states=invoice_states,
             payment_states=payment_states,
+            worked_time_states=worked_time_states,
+            worked_minutes=worked_minutes,
             limitations=limitations,
             observed_at=observed_at,
             evidence_digest=digest,

@@ -16,7 +16,7 @@ import { JobMaterialsCard } from "../components/jobs/JobMaterialsCard";
 import { useHasPermission } from "../auth";
 import { useJob } from "../hooks/useJobs";
 import { useJobMaterials } from "../hooks/useInventory";
-import { schedulingReturnPath } from "../routing/paths";
+import { customerReturnPath, schedulingReturnPath } from "../routing/paths";
 import { Alert, Button } from "../ui";
 
 export function JobDetailRoute() {
@@ -25,6 +25,9 @@ export function JobDetailRoute() {
   const [searchParams] = useSearchParams();
   const returnTo = schedulingReturnPath(searchParams.get("returnTo"));
   const hasSchedulingReturn = searchParams.has("returnTo") && returnTo !== "/scheduling";
+  const customerReturn = customerReturnPath(searchParams.get("returnTo"));
+  const backPath = customerReturn ?? (hasSchedulingReturn ? returnTo : "/jobs");
+  const backLabel = customerReturn ? "Back to Customer" : hasSchedulingReturn ? "Back to Schedule" : "Back to Jobs";
   const canRead = useHasPermission("COMPANY_JOB_READ");
   const canReadCustomer = useHasPermission("COMPANY_CUSTOMER_READ");
   const canExecute = useHasPermission("COMPANY_JOB_EXECUTE");
@@ -53,9 +56,9 @@ export function JobDetailRoute() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           className="inline-flex min-h-11 items-center gap-2 text-sm text-action-primary"
-          to={hasSchedulingReturn ? returnTo : "/jobs"}
+          to={backPath}
         >
-          <ArrowLeft size={16} /> {hasSchedulingReturn ? "Back to Schedule" : "Back to Jobs"}
+          <ArrowLeft size={16} /> {backLabel}
         </Link>
         {canReadCustomer && jobId ? (
           <Button
