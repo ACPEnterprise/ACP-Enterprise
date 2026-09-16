@@ -564,6 +564,155 @@ def _owner_question_answers(
     }
 
 
+def _direction(value: int) -> str:
+    return "increased" if value > 0 else "decreased" if value < 0 else "did not change"
+
+
+def _delta_explanation(
+    workspace: dict[str, object],
+    *,
+    company_id: UUID,
+    branch_id: UUID | None,
+    generated_at: datetime,
+) -> dict[str, object]:
+    period = _mapping(workspace.get("period"))
+    prior_period = _mapping(workspace.get("prior_period"))
+    comparison = _mapping(workspace.get("comparison"))
+    native_comparison = _mapping(workspace.get("native_evidence_comparison"))
+    scope = {
+        "company_id": str(company_id),
+        "branch_id": str(branch_id) if branch_id else None,
+    }
+    common = {
+        "period": period,
+        "prior_period": prior_period or None,
+        "scope": scope,
+        "as_of": generated_at.isoformat(),
+        "freshness": str(workspace.get("quality_state", "unavailable")),
+        "currency": workspace.get("currency"),
+        "causality_boundary": "Arithmetic decomposition identifies measured contributors, not operational cause.",
+    }
+    if comparison.get("state") == "available":
+        keys = (
+            ("revenue", "revenue_change_minor", 1),
+            ("direct_labor_cost", "labor_change_minor", -1),
+            ("direct_material_cost", "materials_change_minor", -1),
+            ("other_direct_cost", "other_direct_cost_change_minor", -1),
+        )
+        if not all(isinstance(comparison.get(key), int) for _, key, _ in keys):
+            return {
+                **common,
+                "state": "INCOMPLETE",
+                "reason": "Comparable periods lack a complete admitted component decomposition.",
+                "components": [],
+                "unexplained_change_minor": None,
+            }
+        contribution = comparison.get("contribution_change_minor")
+        if not isinstance(contribution, int):
+            return {
+                **common,
+                "state": "INCOMPLETE",
+                "reason": "Comparable periods lack admitted contribution evidence.",
+                "components": [],
+                "unexplained_change_minor": None,
+            }
+        components = [
+            {
+                "component": name,
+                "change_minor": cast(int, comparison[key]),
+                "contribution_effect_minor": cast(int, comparison[key]) * sign,
+                "classification": "DETERMINISTIC_DERIVED_CALCULATION",
+                "authority": "admitted_immutable_economics_results",
+            }
+            for name, key, sign in keys
+        ]
+        explained = sum(
+            cast(int, item["contribution_effect_minor"]) for item in components
+        )
+        current = _mapping(comparison.get("current"))
+        prior = _mapping(comparison.get("prior"))
+        contribution_margin_change_basis_points = None
+        if (
+            all(
+                isinstance(value, int)
+                for value in (
+                    current.get("revenue_minor"),
+                    current.get("contribution_minor"),
+                    prior.get("revenue_minor"),
+                    prior.get("contribution_minor"),
+                )
+            )
+            and cast(int, current["revenue_minor"])
+            and cast(int, prior["revenue_minor"])
+        ):
+            contribution_margin_change_basis_points = cast(
+                int, current["contribution_minor"]
+            ) * 10_000 // cast(int, current["revenue_minor"]) - cast(
+                int, prior["contribution_minor"]
+            ) * 10_000 // cast(int, prior["revenue_minor"])
+        return {
+            **common,
+            "state": "EXPLAINED" if explained == contribution else "INCOMPLETE",
+            "authority": "equal_length_admitted_economics_results",
+            "classification": "DETERMINISTIC_DERIVED_CALCULATION",
+            "headline": (
+                f"Contribution {_direction(contribution)} by {abs(contribution)} minor currency units."
+            ),
+            "explanation": "The contribution change is the arithmetic effect of measured revenue and admitted direct-cost changes; it does not establish an operational cause.",
+            "contribution_change_minor": contribution,
+            "contribution_margin_change_basis_points": contribution_margin_change_basis_points,
+            "components": components,
+            "explained_change_minor": explained,
+            "unexplained_change_minor": contribution - explained,
+            "evidence_references": comparison.get("evidence_references", {}),
+            "missing_evidence": [],
+        }
+    if native_comparison.get("state") == "AVAILABLE":
+        revenue_change = native_comparison.get("invoiced_revenue_change_minor")
+        return {
+            **common,
+            "state": "PARTIAL",
+            "authority": "accepted_native_invoiced_evidence",
+            "classification": "MEASURED_PERIOD_DIFFERENCE",
+            "headline": (
+                f"Invoiced revenue {_direction(revenue_change)} by {abs(revenue_change)} minor currency units."
+                if isinstance(revenue_change, int)
+                else "Invoiced revenue comparison is incomplete."
+            ),
+            "explanation": "ACP can measure invoiced revenue change but cannot explain contribution change without admitted direct costs.",
+            "components": (
+                [
+                    {
+                        "component": "invoiced_revenue",
+                        "change_minor": revenue_change,
+                        "contribution_effect_minor": None,
+                        "classification": "MEASURED_PERIOD_DIFFERENCE",
+                        "authority": "accepted_native_invoiced_evidence",
+                    }
+                ]
+                if isinstance(revenue_change, int)
+                else []
+            ),
+            "unexplained_change_minor": None,
+            "missing_evidence": [
+                "admitted_direct_labor_cost",
+                "admitted_direct_material_cost",
+                "other_direct_cost_completeness",
+                "admitted_direct_contribution",
+            ],
+        }
+    quality = str(workspace.get("quality_state", "unavailable"))
+    return {
+        **common,
+        "state": "CONFLICTING" if quality == "conflicting" else "NOT_COMPARABLE",
+        "reason": comparison.get("reason")
+        or "Equal-length periods do not both contain comparable admitted evidence.",
+        "components": [],
+        "unexplained_change_minor": None,
+        "missing_evidence": ["comparable_period_evidence"],
+    }
+
+
 def _recommendations(
     workspace: dict[str, object],
     *,
@@ -805,6 +954,12 @@ def project_owner_economics(
             "authority": "equal_length_single_authority_periods_only",
             "mixed_authority_periods": "labeled_and_not_combined",
         },
+        "delta_explanation": _delta_explanation(
+            workspace,
+            company_id=company_id,
+            branch_id=branch_id,
+            generated_at=generated_at,
+        ),
         "market_evidence": {
             "state": "INSUFFICIENT_MARKET_EVIDENCE",
             "reason": "no admitted competitive or market-price evidence",
