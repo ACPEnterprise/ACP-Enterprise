@@ -35,7 +35,15 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("jobs", ("job", "work order", "service history", "open work")),
     (
         "scheduling",
-        ("schedule", "scheduling", "appointment", "unscheduled", "unassigned"),
+        (
+            "schedule",
+            "scheduling",
+            "appointment",
+            "unscheduled",
+            "unassigned",
+            "tomorrow look like",
+            "busy is",
+        ),
     ),
     ("dispatch", ("dispatch", "assigned", "technician conflict")),
     ("estimates", ("estimate", "proposal")),
@@ -58,7 +66,7 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("timekeeping", ("timekeeping", "time entry", "labor hours", "clock")),
-    ("payroll", ("payroll", "ytd", "direct deposit", "pay statement")),
+    ("payroll", ("payroll", "pay period", "ytd", "direct deposit", "pay statement")),
     (
         "accounting",
         (
@@ -94,6 +102,7 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "material cost",
             "costs are missing",
             "what changed",
+            "how did",
         ),
     ),
     ("luminary", ("luminary", "recommendation", "finding", "why did")),
@@ -198,6 +207,22 @@ def _named_subject(question: str) -> tuple[str, str] | None:
         match = re.fullmatch(pattern, question, re.IGNORECASE)
         if match:
             value = " ".join(match.group(1).strip(" .?!").split())
+            if domain == "identity" and any(
+                term in value.casefold()
+                for term in (
+                    "schedule",
+                    "appointment",
+                    "invoice",
+                    "estimate",
+                    "payroll",
+                    "financial",
+                    "p&l",
+                    "profit",
+                    "migration",
+                    "beacon",
+                )
+            ):
+                continue
             return (domain, value) if value else None
     return None
 
