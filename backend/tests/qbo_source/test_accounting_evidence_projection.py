@@ -205,6 +205,9 @@ def test_projection_matches_om2b_contract_without_promoting_accounting_truth(
     assert result["accounts"][0]["balance"]["amount"] == "10.00"
     assert result["invoices"][0]["open_balance"]["amount"] == "2.00"
     assert result["ar"]["total_open"]["amount"] == "2.00"
+    assert result["ar"]["invoice_evidence_count"] == 1
+    assert result["ar"]["open_invoice_count"] == 1
+    assert result["ar"]["closed_invoice_count"] == 0
     assert result["ar"]["overdue"]["amount"] is None
     assert result["payments"][0]["applied_document_ids"] == ["i-1"]
     assert result["vendors"][0]["source_evidence_only"] is True

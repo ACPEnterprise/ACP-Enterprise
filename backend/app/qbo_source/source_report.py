@@ -8,6 +8,56 @@ from datetime import datetime, timezone
 from app.qbo_source.accounting_evidence_projection import QboEvidenceProjectionError
 
 
+def project_aged_receivables(
+    document: Mapping[str, object], *, realm_id: str, expected_company_name: str
+) -> dict[str, object]:
+    """Project QBO's net A/R total, including customer credits/payments."""
+    header = document.get("Header")
+    rows = document.get("Rows")
+    if not isinstance(header, Mapping) or not isinstance(rows, Mapping):
+        raise QboEvidenceProjectionError("qbo_aged_receivables_invalid")
+    if header.get("ReportName") != "AgedReceivables":
+        raise QboEvidenceProjectionError("qbo_aged_receivables_identity_invalid")
+    total = _find_grand_total(rows.get("Row"))
+    canonical = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+    return {
+        "contract_version": "qbo-source-backed-ar-summary/v1",
+        "authority": "QBO_SOURCE_BACKED",
+        "provider_environment": "production",
+        "source": "QuickBooks Online A/R Aging Summary",
+        "source_company": expected_company_name,
+        "realm_id": realm_id,
+        "report_date": _required_text(header, "EndPeriod"),
+        "currency": _optional_text(header.get("Currency")),
+        "source_as_of": _optional_text(header.get("Time")),
+        "acquired_at": datetime.now(timezone.utc).isoformat(),
+        "net_open_ar": total,
+        "includes_customer_credits_and_unapplied_payments": True,
+        "source_digest": hashlib.sha256(canonical).hexdigest(),
+        "accepted_as_acp_accounting": False,
+        "mutation_authority": "none",
+    }
+
+
+def _find_grand_total(value: object) -> str:
+    if not isinstance(value, list):
+        raise QboEvidenceProjectionError("qbo_aged_receivables_total_missing")
+    for row in value:
+        if not isinstance(row, Mapping) or row.get("group") != "GrandTotal":
+            continue
+        summary = row.get("Summary")
+        if not isinstance(summary, Mapping):
+            continue
+        columns = summary.get("ColData")
+        if isinstance(columns, list) and columns:
+            final = columns[-1]
+            if isinstance(final, Mapping):
+                result = _optional_text(final.get("value"))
+                if result is not None:
+                    return result
+    raise QboEvidenceProjectionError("qbo_aged_receivables_total_missing")
+
+
 def project_profit_and_loss(
     document: Mapping[str, object],
     *,
@@ -18,7 +68,11 @@ def project_profit_and_loss(
     header = document.get("Header")
     columns = document.get("Columns")
     rows = document.get("Rows")
-    if not isinstance(header, Mapping) or not isinstance(columns, Mapping) or not isinstance(rows, Mapping):
+    if (
+        not isinstance(header, Mapping)
+        or not isinstance(columns, Mapping)
+        or not isinstance(rows, Mapping)
+    ):
         raise QboEvidenceProjectionError("qbo_profit_and_loss_invalid")
     if header.get("ReportName") not in {"ProfitAndLoss", "Profit and Loss"}:
         raise QboEvidenceProjectionError("qbo_profit_and_loss_identity_invalid")

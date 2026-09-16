@@ -53,6 +53,9 @@ def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, obj
         "invoices": [],
         "ar": {
             "total_open": unavailable,
+            "invoice_evidence_count": 0,
+            "open_invoice_count": 0,
+            "closed_invoice_count": 0,
             "current": unavailable,
             "overdue": unavailable,
         },
@@ -112,6 +115,9 @@ def project_latest_qbo_workspace(
         limitations.add("current_provider_authorization_unverified_historical_snapshot")
     accounts = [_account(row) for row in rows.get("account", [])]
     invoices = [_invoice(row) for row in rows.get("invoice", [])]
+    open_invoices = [
+        invoice for invoice in invoices if _positive_amount(invoice.get("open_balance"))
+    ]
     payments = [_payment(row) for row in rows.get("payment", [])]
     vendors = [_vendor(row) for row in rows.get("vendor", [])]
     bills = [_bill(row) for row in rows.get("bill", [])]
@@ -179,7 +185,10 @@ def project_latest_qbo_workspace(
         "accounts": accounts,
         "invoices": invoices,
         "ar": {
-            "total_open": _sum_amounts(invoices, "open_balance"),
+            "total_open": _sum_amounts(open_invoices, "open_balance"),
+            "invoice_evidence_count": len(invoices),
+            "open_invoice_count": len(open_invoices),
+            "closed_invoice_count": len(invoices) - len(open_invoices),
             "current": _amount(None, None),
             "overdue": _amount(None, None),
         },
@@ -362,6 +371,15 @@ def _invoice(row: Mapping[str, object]) -> dict[str, object]:
         "total": _amount(row.get("TotalAmt"), currency),
         "open_balance": _amount(row.get("Balance"), currency),
     }
+
+
+def _positive_amount(value: object) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    try:
+        return Decimal(str(value.get("amount"))) > 0
+    except (InvalidOperation, TypeError, ValueError):
+        return False
 
 
 def _payment(row: Mapping[str, object]) -> dict[str, object]:
