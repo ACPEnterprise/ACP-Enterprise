@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.operational_migration.hcp_employee_attachment_packets import (
     build_attachment_packet,
     build_employee_packet,
