@@ -304,6 +304,46 @@ export function LuminaryRoute() {
                 Authority: {words(ownerEconomics.data.trend_support.authority)}. Mixed-authority periods are labeled and never combined.
               </p>
             </section>
+            <section aria-labelledby="delta-explanation-title" className="rounded-lg border border-stroke p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="delta-explanation-title">Why the measured economics changed</h3>
+                  <p className="mt-1 text-sm text-content-muted">{ownerEconomics.data.delta_explanation.headline ?? ownerEconomics.data.delta_explanation.reason ?? "No comparable explanation is available."}</p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">{words(ownerEconomics.data.delta_explanation.state)}</span>
+              </div>
+              {ownerEconomics.data.delta_explanation.components.length ? (
+                <dl className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {ownerEconomics.data.delta_explanation.components.map((component) => (
+                    <div className="rounded-md bg-surface-muted p-3" key={component.component}>
+                      <dt className="text-xs font-semibold uppercase tracking-wide">{words(component.component)}</dt>
+                      <dd className="text-sm font-semibold">Measured change {signedMinorMoney(component.change_minor, ownerEconomics.data.delta_explanation.currency ?? "USD")}</dd>
+                      <dd className="text-xs text-content-muted">Contribution effect {signedMinorMoney(component.contribution_effect_minor ?? undefined, ownerEconomics.data.delta_explanation.currency ?? "USD")}</dd>
+                      <dd className="mt-1 text-xs text-content-muted">{words(component.classification)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+              {ownerEconomics.data.delta_explanation.explanation ? <p className="mt-3 text-sm">{ownerEconomics.data.delta_explanation.explanation}</p> : null}
+              {ownerEconomics.data.delta_explanation.state === "EXPLAINED" ? (
+                <p className="mt-2 text-sm font-medium">
+                  Explained contribution change {signedMinorMoney(ownerEconomics.data.delta_explanation.explained_change_minor, ownerEconomics.data.delta_explanation.currency ?? "USD")}
+                  {ownerEconomics.data.delta_explanation.contribution_margin_change_basis_points != null
+                    ? ` · Contribution margin ${ownerEconomics.data.delta_explanation.contribution_margin_change_basis_points > 0 ? "+" : ""}${(ownerEconomics.data.delta_explanation.contribution_margin_change_basis_points / 100).toFixed(2)} percentage points`
+                    : ""}
+                </p>
+              ) : null}
+              {ownerEconomics.data.delta_explanation.missing_evidence?.length ? (
+                <p className="mt-3 text-sm text-content-muted">ACP cannot yet explain: {ownerEconomics.data.delta_explanation.missing_evidence.map(words).join(" · ")}.</p>
+              ) : null}
+              <p className="mt-3 text-xs text-content-muted">{ownerEconomics.data.delta_explanation.causality_boundary}</p>
+              <details className="mt-3 text-xs text-content-muted">
+                <summary className="cursor-pointer font-medium">Supporting period evidence</summary>
+                <p className="mt-2">Scope: Company {ownerEconomics.data.delta_explanation.scope.company_id}{ownerEconomics.data.delta_explanation.scope.branch_id ? ` · Branch ${ownerEconomics.data.delta_explanation.scope.branch_id}` : " · Company-wide"}</p>
+                <p>As of {new Date(ownerEconomics.data.delta_explanation.as_of).toLocaleString()} · {words(ownerEconomics.data.delta_explanation.freshness)}</p>
+                <p>{(ownerEconomics.data.delta_explanation.evidence_references?.current?.length ?? 0)} current and {(ownerEconomics.data.delta_explanation.evidence_references?.prior?.length ?? 0)} prior immutable result reference(s).</p>
+              </details>
+            </section>
             <section aria-labelledby="measurement-freshness-title" className="rounded-lg border border-stroke p-4">
               <h3 className="font-semibold" id="measurement-freshness-title">Measurement freshness and authority</h3>
               <p className="mt-1 text-sm text-content-muted">Generated as of {new Date(ownerEconomics.data.generated_at).toLocaleString()} from admitted evidence for the selected period.</p>
