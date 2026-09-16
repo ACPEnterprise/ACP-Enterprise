@@ -5,6 +5,7 @@ from uuid import UUID
 from app.beacon.briefing import OwnerAttentionWindow, build_morning_brief
 from app.beacon.contracts import BeaconPriorityBand, BeaconSeverity
 from app.beacon.evaluation import signal_evaluation_service
+from app.beacon.history import BeaconEvaluationRecord, EvaluationDisposition
 from tests.beacon.test_beacon import snapshot
 
 COMPANY_ID = UUID("10000000-0000-0000-0000-000000000001")
@@ -78,3 +79,51 @@ def test_morning_brief_is_deterministic_and_company_scoped() -> None:
     )
     assert first == replay
     assert first.brief_digest != other_company.brief_digest
+
+
+def test_morning_brief_uses_persisted_history_deltas() -> None:
+    evaluated_at = datetime(2026, 9, 15, 12, tzinfo=timezone.utc)
+    signals = signal_evaluation_service.evaluate_signals(
+        replace(snapshot(), measured_at=evaluated_at)
+    )
+    records = tuple(
+        BeaconEvaluationRecord(
+            id=UUID(int=index + 10),
+            run_id=UUID(int=1),
+            company_id=COMPANY_ID,
+            branch_id=None,
+            condition_key=UUID(int=index + 20),
+            signal_id=UUID(int=index + 30),
+            definition_id="qualification.definition",
+            definition_version=1,
+            evidence_digest=f"{index + 1:064x}",
+            evaluated_at=evaluated_at,
+            evidence_as_of=evaluated_at,
+            signal_expires_at=evaluated_at,
+            evaluator_version="qualification.v1",
+            disposition=disposition,
+            prior_evaluation_id=None,
+        )
+        for index, disposition in enumerate(
+            (
+                EvaluationDisposition.NEW,
+                EvaluationDisposition.RESOLVED,
+                EvaluationDisposition.CHANGED,
+                EvaluationDisposition.EXPIRED,
+            )
+        )
+    )
+    brief = build_morning_brief(
+        company_id=COMPANY_ID,
+        branch_id=None,
+        active=signals,
+        snoozed=(),
+        evaluated_at=evaluated_at,
+        historical_deltas=records,
+    )
+
+    assert brief.historical_comparison_available
+    assert brief.new_since_yesterday == 1
+    assert brief.resolved_since_yesterday == 1
+    assert brief.changed_since_yesterday == 1
+    assert brief.expired_since_yesterday == 1
