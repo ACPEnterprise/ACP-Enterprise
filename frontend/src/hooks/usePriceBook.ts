@@ -3,14 +3,19 @@ import * as api from "../api/priceBook";
 
 export const priceBookKeys = {
   all: ["price-book"] as const,
-  catalog: (branch?: string) => ["price-book", "catalog", branch] as const,
+  catalog: (branch?: string, filters: Record<string, unknown> = {}) =>
+    ["price-book", "catalog", branch, filters] as const,
   candidateReview: (params: Record<string, unknown>) =>
     ["price-book", "candidate-review", params] as const,
 };
-export function usePriceBook(branch?: string, enabled = true) {
+export function usePriceBook(
+  branch?: string,
+  enabled = true,
+  filters: Parameters<typeof api.getPriceBook>[1] = {},
+) {
   return useQuery({
-    queryKey: priceBookKeys.catalog(branch),
-    queryFn: () => api.getPriceBook(branch),
+    queryKey: priceBookKeys.catalog(branch, filters),
+    queryFn: () => api.getPriceBook(branch, filters),
     enabled,
   });
 }

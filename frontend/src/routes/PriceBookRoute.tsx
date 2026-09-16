@@ -56,7 +56,14 @@ export function PriceBookRoute() {
   const canActivate = useHasPermission("COMPANY_PRICE_BOOK_ACTIVATE");
   const canApproveTax = useHasPermission("COMPANY_ACCOUNTING_FINANCE_APPROVE");
   const [branch, setBranch] = useState("");
-  const catalog = usePriceBook(branch || undefined, canRead);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const catalog = usePriceBook(branch || undefined, canRead, {
+    search: search.trim() || undefined,
+    categoryId: categoryFilter === "all" ? undefined : categoryFilter,
+    itemStatus: statusFilter === "all" ? undefined : statusFilter,
+  });
   const mutations = usePriceBookMutations();
   const [category, setCategory] = useState({ code: "", name: "" });
   const [tax, setTax] = useState({ code: "", name: "", taxable: true });
@@ -93,7 +100,7 @@ export function PriceBookRoute() {
     componentQuantity: "1",
     componentCost: "",
   });
-  const [search, setSearch] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [reviewVersionId, setReviewVersionId] = useState<string>();
   const activationReadiness = useActivationReadiness(reviewVersionId);
   const reviewAudit = usePriceBookAudit(reviewVersionId);
@@ -101,8 +108,13 @@ export function PriceBookRoute() {
     { search: search.trim() || undefined, limit: 200 },
     canRead && Boolean(activeCompany),
   );
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const selectedService = catalog.data?.service_items.find(
+    (service) => service.id === selectedServiceId,
+  );
+  const selectedCandidate = useCandidateReview(
+    { search: selectedService?.code, limit: 10 },
+    canRead && Boolean(activeCompany) && Boolean(selectedService),
+  );
   const [reviewType, setReviewType] = useState<
     | "commercial_content"
     | "candidate_prices"
@@ -408,12 +420,21 @@ export function PriceBookRoute() {
   const versions = catalog.data?.versions ?? [];
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredServices = services.filter((service) => {
+    const serviceCategory = catalog.data?.categories.find(
+      (category) => category.id === service.category_id,
+    );
     const matchesCategory =
       categoryFilter === "all" || service.category_id === categoryFilter;
     const matchesSearch =
       !normalizedSearch ||
-      [service.code, service.name, service.customer_description].some((value) =>
-        value.toLocaleLowerCase().includes(normalizedSearch),
+      [
+        service.code,
+        service.name,
+        service.customer_description,
+        serviceCategory?.code,
+        serviceCategory?.name,
+      ].some((value) =>
+        value?.toLocaleLowerCase().includes(normalizedSearch),
       );
     return (
       matchesCategory &&
@@ -421,6 +442,14 @@ export function PriceBookRoute() {
       (statusFilter === "all" || service.status === statusFilter)
     );
   });
+  const selectedCategory = catalog.data?.categories.find(
+    (category) => category.id === selectedService?.category_id,
+  );
+  const selectedEvidence = selectedCandidate.data?.items.find(
+    (candidate) =>
+      candidate.native_service_item_id === selectedService?.id ||
+      candidate.service_code === selectedService?.code,
+  );
   const activeCount = services.filter(
     (service) => service.status === "active",
   ).length;
@@ -1228,6 +1257,48 @@ export function PriceBookRoute() {
               <p className="mb-3 text-sm text-content-muted" aria-live="polite">
                 Showing {filteredServices.length} of {services.length} services.
               </p>
+              {selectedService && (
+                <section
+                  aria-label="Selected service details"
+                  className="mb-4 rounded-lg border border-stroke bg-surface-muted p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-content-muted">
+                        {selectedCategory?.name ?? "Category unavailable"} · {selectedService.code}
+                      </p>
+                      <h3 className="text-lg font-semibold">{selectedService.name}</h3>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setSelectedServiceId(undefined)}
+                    >
+                      Back to results
+                    </Button>
+                  </div>
+                  <p className="mt-2">{selectedService.customer_description}</p>
+                  {selectedCandidate.isPending ? (
+                    <Spinner label="Loading service evidence" />
+                  ) : selectedCandidate.isError || !selectedEvidence ? (
+                    <Alert variant="warning">
+                      Native service details are available, but source evidence could not be loaded.
+                    </Alert>
+                  ) : (
+                    <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                      <div><dt className="text-content-muted">Status</dt><dd>{selectedEvidence.admission_status === "held" ? "Held — source conflict" : "Draft — ready for review"}</dd></div>
+                      <div><dt className="text-content-muted">Candidate price</dt><dd>${selectedEvidence.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
+                      <div><dt className="text-content-muted">Source</dt><dd>{selectedEvidence.source_sheet}, row {selectedEvidence.source_row}</dd></div>
+                      <div><dt className="text-content-muted">Remaining review</dt><dd>{selectedEvidence.review_flags.length ? selectedEvidence.review_flags.map((flag) => flag.replaceAll("_", " ").toLocaleLowerCase()).join(" · ") : "No review flags"}</dd></div>
+                    </dl>
+                  )}
+                </section>
+              )}
+              {!catalog.isPending && filteredServices.length === 0 && (
+                <Alert variant="warning">
+                  No Price Book services match this search and filter combination.
+                </Alert>
+              )}
               <ul className="space-y-3">
                 {filteredServices.map((service) => {
                   const itemVersions = versions.filter(
@@ -1264,6 +1335,14 @@ export function PriceBookRoute() {
                           <p className="mt-1 text-sm text-content-muted">
                             {service.customer_description}
                           </p>
+                          <Button
+                            className="mt-2"
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setSelectedServiceId(service.id)}
+                          >
+                            Open service details
+                          </Button>
                           {canManage && (
                             <Button
                               className="mt-2"

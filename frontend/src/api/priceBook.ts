@@ -19,10 +19,21 @@ import type {
 const path = "/api/v1/price-book";
 export async function getPriceBook(
   branchId?: string,
+  filters: {
+    search?: string;
+    categoryId?: string;
+    itemStatus?: string;
+  } = {},
 ): Promise<PriceBookCatalog> {
   return (
     await apiClient.get<PriceBookCatalog>(path, {
-      params: { ...(branchId ? { branch_id: branchId } : {}), limit: 500 },
+      params: {
+        ...(branchId ? { branch_id: branchId } : {}),
+        ...(filters.search ? { search: filters.search } : {}),
+        ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
+        ...(filters.itemStatus ? { item_status: filters.itemStatus } : {}),
+        limit: 500,
+      },
     })
   ).data;
 }
