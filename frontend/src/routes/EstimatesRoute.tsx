@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useHasPermission } from "../auth";
 import {
   useEstimate,
@@ -22,6 +22,7 @@ import {
   Spinner,
 } from "../ui";
 import { EstimateDecisionControls } from "../components/estimates/EstimateDecisionControls";
+import { customerReturnPath } from "../routing/paths";
 
 function money(value: string, currency = "USD") {
   return new Intl.NumberFormat(undefined, {
@@ -53,6 +54,7 @@ export function EstimatesRoute() {
   const canManage = useHasPermission("COMPANY_ESTIMATE_MANAGE");
   const canReadPriceBook = useHasPermission("COMPANY_PRICE_BOOK_READ");
   const id = params.get("id") ?? "";
+  const returnTo = customerReturnPath(params.get("returnTo"));
   const estimate = useEstimate(id, canRead && Boolean(id));
   const mutations = useEstimateMutations();
   const priceBookMutations = usePriceBookMutations();
@@ -277,6 +279,9 @@ export function EstimatesRoute() {
           estimate.data && (
             <Card>
               <CardHeader>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  {returnTo ? <Link className="text-action-primary hover:underline" to={returnTo}>← Back to Customer</Link> : <Link className="text-action-primary hover:underline" to={`/customers/${estimate.data.customer_id}`}>Open Customer</Link>}
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle>
                     {estimate.data.current_revision.proposal_title}
