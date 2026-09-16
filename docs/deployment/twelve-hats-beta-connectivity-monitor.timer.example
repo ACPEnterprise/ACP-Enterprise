@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Twelve Hats Beta connectivity verification every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=twelve-hats-beta-connectivity-monitor.service
+
+[Install]
+WantedBy=timers.target
