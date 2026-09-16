@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""Deterministic Alembic lineage evidence for ENTERPRISE.RELEASE."""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import hashlib
+import json
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+CONTRACT_VERSION = "enterprise-release.migration-lineage.v1"
+
+
+@dataclass(frozen=True)
+class Revision:
+    revision: str
+    parents: tuple[str, ...]
+    path: Path
+    digest: str
+    commit: str | None
+
+
+def literal_assignment(tree: ast.Module, name: str) -> object | None:
+    for node in tree.body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+            and node.value is not None
+        ):
+            return ast.literal_eval(node.value)
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in node.targets
+        ):
+            return ast.literal_eval(node.value)
+    return None
+
+
+def git_commit(root: Path, path: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "log", "-1", "--format=%H", "--", str(path.relative_to(root))],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() or None
+
+
+def load_revisions(root: Path, versions: Path) -> tuple[list[Revision], list[dict[str, str]]]:
+    revisions: list[Revision] = []
+    parse_errors: list[dict[str, str]] = []
+    for path in sorted(versions.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        try:
+            content = path.read_bytes()
+            tree = ast.parse(content, filename=str(path))
+            revision = literal_assignment(tree, "revision")
+            down = literal_assignment(tree, "down_revision")
+            if not isinstance(revision, str) or not revision:
+                raise ValueError("revision must be a non-empty string literal")
+            if down is None:
+                parents: tuple[str, ...] = ()
+            elif isinstance(down, str):
+                parents = (down,)
+            elif isinstance(down, (tuple, list)) and all(isinstance(item, str) for item in down):
+                parents = tuple(down)
+            else:
+                raise ValueError("down_revision must be None, a string, or string sequence")
+            revisions.append(
+                Revision(
+                    revision,
+                    parents,
+                    path.relative_to(root),
+                    hashlib.sha256(content).hexdigest(),
+                    git_commit(root, path),
+                )
+            )
+        except (OSError, SyntaxError, ValueError) as error:
+            parse_errors.append({"path": str(path.relative_to(root)), "error": str(error)})
+    return revisions, parse_errors
+
+
+def cycle_nodes(nodes: dict[str, Revision]) -> list[str]:
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    found: set[str] = set()
+
+    def visit(revision: str) -> None:
+        if revision in visiting:
+            found.add(revision)
+            return
+        if revision in visited:
+            return
+        visiting.add(revision)
+        for parent in nodes[revision].parents:
+            if parent in nodes:
+                visit(parent)
+        visiting.remove(revision)
+        visited.add(revision)
+
+    for revision in nodes:
+        visit(revision)
+    return sorted(found)
+
+
+def topological_order(
+    nodes: dict[str, Revision], children: dict[str, set[str]]
+) -> list[str]:
+    indegree = {
+        revision: sum(parent in nodes for parent in item.parents)
+        for revision, item in nodes.items()
+    }
+    ready = sorted(revision for revision, count in indegree.items() if count == 0)
+    ordered: list[str] = []
+    while ready:
+        revision = ready.pop(0)
+        ordered.append(revision)
+        for child in sorted(children[revision]):
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                ready.append(child)
+                ready.sort()
+    return ordered
+
+
+def build_report(root: Path, versions: Path) -> dict[str, object]:
+    revisions, parse_errors = load_revisions(root, versions)
+    grouped: dict[str, list[Revision]] = {}
+    for item in revisions:
+        grouped.setdefault(item.revision, []).append(item)
+    duplicates = {
+        revision: [str(item.path) for item in items]
+        for revision, items in grouped.items()
+        if len(items) > 1
+    }
+    nodes = {revision: items[0] for revision, items in grouped.items()}
+    children: dict[str, set[str]] = {revision: set() for revision in nodes}
+    missing_parents: list[dict[str, str]] = []
+    for item in nodes.values():
+        for parent in item.parents:
+            if parent not in nodes:
+                missing_parents.append({"revision": item.revision, "missing_parent": parent})
+            else:
+                children[parent].add(item.revision)
+    heads = sorted(revision for revision, values in children.items() if not values)
+    roots = sorted(revision for revision, item in nodes.items() if not item.parents)
+    branchpoints = {
+        revision: sorted(values) for revision, values in children.items() if len(values) > 1
+    }
+    merges = {
+        revision: list(item.parents) for revision, item in nodes.items() if len(item.parents) > 1
+    }
+    cycles = cycle_nodes(nodes)
+    ordering = topological_order(nodes, children)
+    risks: list[str] = []
+    if len(heads) != 1:
+        risks.append("HEAD_COUNT_NOT_ONE")
+    if duplicates:
+        risks.append("DUPLICATE_REVISION_IDENTIFIERS")
+    if missing_parents:
+        risks.append("MISSING_DOWN_REVISION")
+    if cycles:
+        risks.append("REVISION_CYCLE")
+    if len(roots) != 1:
+        risks.append("ROOT_COUNT_NOT_ONE")
+    if len(ordering) != len(nodes):
+        risks.append("ORDERING_INCOMPLETE")
+    records = [
+        {
+            "revision": item.revision,
+            "down_revision": list(item.parents),
+            "path": str(item.path),
+            "sha256": item.digest,
+            "source_commit": item.commit,
+            "is_head": item.revision in heads,
+            "is_merge": len(item.parents) > 1,
+        }
+        for item in sorted(nodes.values(), key=lambda value: str(value.path))
+    ]
+    canonical = {
+        "contract_version": CONTRACT_VERSION,
+        "revision_count": len(records),
+        "roots": roots,
+        "heads": heads,
+        "branchpoints": branchpoints,
+        "merge_revisions": merges,
+        "duplicate_revisions": duplicates,
+        "missing_down_revisions": missing_parents,
+        "cycle_revisions": cycles,
+        "topological_order": ordering,
+        "parse_errors": parse_errors,
+        "risks": risks,
+        "release_ready": not risks,
+        "revisions": records,
+    }
+    return {
+        **canonical,
+        "lineage_digest": hashlib.sha256(
+            json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--versions", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--require-single-head", action="store_true")
+    args = parser.parse_args()
+    root = args.repo_root.resolve()
+    versions = (args.versions or root / "backend/alembic/versions").resolve()
+    report = build_report(root, versions)
+    encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    if args.output:
+        args.output.write_text(encoded)
+    else:
+        sys.stdout.write(encoded)
+    if args.require_single_head and not report["release_ready"]:
+        raise SystemExit(2)
+
+
+if __name__ == "__main__":
+    main()
