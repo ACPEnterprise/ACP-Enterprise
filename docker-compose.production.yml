@@ -14,14 +14,14 @@ x-backend-environment: &backend-environment
   ACCESS_TOKEN_KEYS: ${ACCESS_TOKEN_KEYS:?Inject the Production signing keyring}
   ACCESS_TOKEN_ACTIVE_KID: ${ACCESS_TOKEN_ACTIVE_KID:?Set the active Production signing key}
   ACCESS_TOKEN_ALGORITHM: ${ACCESS_TOKEN_ALGORITHM:-HS256}
-  ACCESS_TOKEN_ISSUER: ${ACCESS_TOKEN_ISSUER:-acp-enterprise-production}
-  ACCESS_TOKEN_AUDIENCE: ${ACCESS_TOKEN_AUDIENCE:-acp-enterprise-production-api}
+  ACCESS_TOKEN_ISSUER: ${ACCESS_TOKEN_ISSUER:-twelve-hats-production}
+  ACCESS_TOKEN_AUDIENCE: ${ACCESS_TOKEN_AUDIENCE:-twelve-hats-production-api}
   SECURITY_TOKEN_HMAC_KEY: ${SECURITY_TOKEN_HMAC_KEY:?Inject the Production security HMAC key}
-  IDENTITY_ONBOARDING_DELIVERY_KEY_FILE: /run/secrets/acp/identity-onboarding-delivery-keyring.json
+  IDENTITY_ONBOARDING_DELIVERY_KEY_FILE: /run/secrets/twelve-hats/identity-onboarding-delivery-keyring.json
   IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID: ${IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID:?Set the Production delivery key ID}
   IDENTITY_ONBOARDING_DELIVERY_PROVIDER: ${IDENTITY_ONBOARDING_DELIVERY_PROVIDER:-owner-mediated-production}
   IDENTITY_EMAIL_ACTIVATION_ORIGIN: https://${PRODUCTION_HOSTNAME:?Set the owner-approved Production hostname}
-  PAYROLL_INPUT_ENCRYPTION_KEY_FILE: /run/secrets/acp/payroll-input-encryption-keyring.json
+  PAYROLL_INPUT_ENCRYPTION_KEY_FILE: /run/secrets/twelve-hats/payroll-input-encryption-keyring.json
   PAYROLL_INPUT_ACTIVE_KID: ${PAYROLL_INPUT_ACTIVE_KID:?Set the Production protected-input key ID}
   COMMUNICATIONS_DELIVERY_ENABLED: "false"
   COMMUNICATIONS_WEBHOOK_ENABLED: "false"
@@ -34,8 +34,8 @@ x-backend-environment: &backend-environment
   TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-["172.31.0.0/24"]}
   QBO_SANDBOX_ENABLED: "false"
   QBO_PRODUCTION_ENABLED: "false"
-  QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-evidence/qbo-production-readonly
-  HCP_SOURCE4_EVIDENCE_ROOT: /var/lib/acp-evidence/hcp/source4
+  QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/twelve-hats-evidence/qbo-production-readonly
+  HCP_SOURCE4_EVIDENCE_ROOT: /var/lib/twelve-hats-evidence/hcp/source4
 
 x-default-logging: &default-logging
   driver: json-file
@@ -45,11 +45,16 @@ x-default-logging: &default-logging
 
 x-backend-runtime: &backend-runtime
   image: ${ACP_BACKEND_IMAGE:?Set an immutable backend image digest}
+  init: true
+  stop_grace_period: 30s
+  cpus: ${BACKEND_CPUS:-2.0}
+  mem_limit: ${BACKEND_MEMORY_LIMIT:-2g}
+  pids_limit: ${BACKEND_PIDS_LIMIT:-256}
   environment: *backend-environment
   volumes:
-    - ${PRODUCTION_PROTECTED_SECRET_DIR_HOST:?Set the Production secret directory}:/run/secrets/acp:ro
+    - ${PRODUCTION_PROTECTED_SECRET_DIR_HOST:?Set the Production secret directory}:/run/secrets/twelve-hats:ro
     - ${PRODUCTION_REDIS_SECRET_DIR_HOST:?Set the Production Redis secret directory}:/run/secrets/redis:ro
-    - ${PRODUCTION_EVIDENCE_DIR_HOST:?Set the Production evidence directory}:/var/lib/acp-evidence:ro
+    - ${PRODUCTION_EVIDENCE_DIR_HOST:?Set the Production evidence directory}:/var/lib/twelve-hats-evidence:ro
   read_only: true
   tmpfs:
     - /tmp:size=64m,mode=1777
@@ -69,6 +74,7 @@ services:
 
   backend:
     <<: *backend-runtime
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "${BACKEND_WORKERS:-2}", "--no-access-log"]
     expose:
       - "8000"
     depends_on:
@@ -93,6 +99,15 @@ services:
 
   frontend:
     image: ${ACP_FRONTEND_IMAGE:?Set an immutable frontend image digest}
+    init: true
+    stop_grace_period: 15s
+    cpus: ${FRONTEND_CPUS:-1.0}
+    mem_limit: ${FRONTEND_MEMORY_LIMIT:-512m}
+    pids_limit: ${FRONTEND_PIDS_LIMIT:-128}
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=4m,mode=0755
     ports:
       - "127.0.0.1:${PRODUCTION_HTTP_PORT:-8081}:80"
     depends_on:
