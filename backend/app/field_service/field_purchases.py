@@ -432,7 +432,7 @@ class FieldPurchaseService:
             context,
             EventType.FIELD_PURCHASE_VENDOR_MAPPING_CERTIFIED,
             mapping.id,
-            context.active_branch.id,
+            None,
             {
                 "vendor_id": str(payload.vendor_id),
                 "inventory_item_id": str(payload.inventory_item_id),
@@ -564,7 +564,7 @@ class FieldPurchaseService:
         context: AuthorizationContext,
         event_type: EventType,
         entity_id: UUID,
-        branch_id: UUID,
+        branch_id: UUID | None,
         payload: dict[str, object],
     ) -> None:
         BusinessEventService.stage(

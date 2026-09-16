@@ -1,7 +1,7 @@
 """create field purchase receipt intelligence
 
 Revision ID: a2c4e6g8i175
-Revises: o5q7s9u1w3y5
+Revises: p6r8t0v2x4z6
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "a2c4e6g8i175"
-down_revision: str | Sequence[str] | None = "o5q7s9u1w3y5"
+down_revision: str | Sequence[str] | None = "p6r8t0v2x4z6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
