@@ -87,4 +87,26 @@ describe("Operations recovery", () => {
       `schedule-assignment:${request.request_id}`,
     );
   });
+
+  it("preserves a successfully booked Appointment when optional assignment fails", async () => {
+    vi.mocked(operationsApi.scheduleExistingJob).mockResolvedValue({
+      request_id: request.request_id,
+      appointment: { id: "appointment-1", appointment_number: "APT-1" },
+      job: { id: "job-1", job_number: "JOB-1" },
+    });
+    vi.mocked(assignPrimary).mockRejectedValue(new Error("technician no longer eligible"));
+    const { wrapper } = setup();
+    const result = renderHook(() => useScheduleExistingJob("job-1"), { wrapper });
+    result.result.current.mutate({
+      ...request,
+      expected_job_version: 3,
+      reserve_capacity: true,
+      employee_id: "employee-1",
+    });
+    await waitFor(() => expect(result.result.current.isSuccess).toBe(true));
+    expect(result.result.current.data).toEqual(expect.objectContaining({
+      appointment: { id: "appointment-1", appointment_number: "APT-1" },
+      assignmentState: "FAILED",
+    }));
+  });
 });
