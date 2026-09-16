@@ -28,7 +28,7 @@ def test_matrix_distinguishes_admitted_inputs_from_policy_and_partial_seams() ->
     value = source_completeness_matrix(workspace())
     assert states(value) == {
         "revenue": "AVAILABLE",
-        "settlement": "POLICY_REQUIRED",
+        "settlement": "SOURCE_REQUIRED",
         "direct_labor": "AVAILABLE",
         "employer_burden": "PARTIAL",
         "materials": "AVAILABLE",
@@ -84,3 +84,48 @@ def test_exception_center_prioritizes_blockers_without_mutation_authority() -> N
         and item["owning_domain"] == "jobs_assets"
         for item in exceptions
     )
+
+
+def test_native_evidence_replaces_false_zero_without_claiming_profitability() -> None:
+    value = source_completeness_matrix(
+        {
+            "period": {"start": "2026-09-01", "end": "2026-09-30"},
+            "quality_state": "unavailable",
+            "source_result_count": 0,
+            "job_count": 0,
+            "jobs": [],
+            "totals": None,
+            "readiness": {"policy_gaps": []},
+            "native_evidence": {
+                "families": {
+                    "REVENUE": {"state": "AVAILABLE", "reference_count": 3},
+                    "JOB_IDENTITY": {"state": "AVAILABLE", "reference_count": 4},
+                    "CUSTOMER_ATTRIBUTION": {
+                        "state": "AVAILABLE",
+                        "reference_count": 4,
+                    },
+                    "BRANCH_ATTRIBUTION": {"state": "AVAILABLE", "reference_count": 4},
+                    "SERVICE_CATEGORY": {"state": "PARTIAL", "reference_count": 3},
+                    "DIRECT_LABOR": {"state": "AVAILABLE", "reference_count": 2},
+                    "WORKFORCE_ATTRIBUTION": {
+                        "state": "AVAILABLE",
+                        "reference_count": 2,
+                    },
+                    "DIRECT_MATERIAL": {"state": "PARTIAL", "reference_count": 1},
+                    "ACCOUNTING": {"state": "PARTIAL", "reference_count": 0},
+                    "SETTLEMENT": {"state": "AVAILABLE", "reference_count": 1},
+                }
+            },
+        }
+    )
+    matrix = {item["source"]: item for item in value["sources"]}
+    assert matrix["revenue"]["state"] == "PARTIAL"
+    assert matrix["revenue"]["evidence_count"] == 3
+    assert matrix["job_identity_lifecycle"]["state"] == "AVAILABLE"
+    assert matrix["customer_attribution"]["evidence_count"] == 4
+    assert matrix["direct_labor"]["state"] == "PARTIAL"
+    assert matrix["materials"]["state"] == "PARTIAL"
+    assert matrix["service_category"]["state"] == "PARTIAL"
+    assert matrix["workforce_attribution"]["state"] == "AVAILABLE"
+    assert matrix["settlement"]["state"] == "AVAILABLE"
+    assert value["complete_for_direct_contribution"] is False
