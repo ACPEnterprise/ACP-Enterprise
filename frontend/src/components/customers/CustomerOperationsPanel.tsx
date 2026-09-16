@@ -6,8 +6,10 @@ import { useCustomerBalance, useInvoiceWorkspace } from "../../hooks/useInvoices
 import { useJobs } from "../../hooks/useJobs";
 import { usePayments } from "../../hooks/usePayments";
 import { useAppointments } from "../../hooks/useScheduling";
+import type { CustomerProperty } from "../../types/customers";
 import type { JobListItem } from "../../types/jobs";
 import { Alert, Badge, Card, Spinner } from "../../ui";
+import { CustomerHistoryWorkspace } from "./CustomerHistoryWorkspace";
 
 function windowBoundary(days: number) {
   const value = new Date();
@@ -33,7 +35,7 @@ function JobList({ jobs, empty, customerId }: { readonly jobs: readonly JobListI
   ));
 }
 
-export function CustomerOperationsPanel({ customerId }: { customerId: string }) {
+export function CustomerOperationsPanel({ customerId, locations }: { customerId: string; locations: readonly CustomerProperty[] }) {
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canReadScheduling = useHasPermission("COMPANY_SCHEDULING_READ");
@@ -58,6 +60,13 @@ export function CustomerOperationsPanel({ customerId }: { customerId: string }) 
   const nativeEvidence = evidence.find((item) => item.source_system === "acp_native");
   const sourceEvidence = evidence.filter((item) => item.source_system !== "acp_native");
   const nativeAvailable = nativeEvidence && nativeEvidence.classification !== "UNAVAILABLE";
+  const unavailableDomains = [
+    ...(!canReadJobs || currentJobs.isError || historicalJobs.isError ? ["Jobs"] : []),
+    ...(!canReadScheduling || appointments.isError ? ["Appointments"] : []),
+    ...(!canReadEstimates || estimates.isError ? ["Estimates"] : []),
+    ...(!canReadInvoices || invoices.isError ? ["Invoices"] : []),
+    ...(!canReadPayments || payments.isError ? ["Payments"] : []),
+  ];
 
   return (
     <Card className="p-ui-4 sm:p-ui-6">
@@ -71,6 +80,18 @@ export function CustomerOperationsPanel({ customerId }: { customerId: string }) 
       </div>
       {queries.some((query) => query.isLoading) && <div className="mt-4"><Spinner label="Loading related work" /></div>}
       {queries.some((query) => query.isError) && <Alert className="mt-4" variant="warning" title="Related work is partial">One or more owning domains are unavailable. Customer identity remains usable, but do not treat missing sections or amounts as complete.</Alert>}
+      {!queries.some((query) => query.isLoading) && <CustomerHistoryWorkspace
+        customerId={customerId}
+        locations={locations}
+        currentJobs={currentJobs.data?.items ?? []}
+        historicalJobs={historicalJobs.data?.items ?? []}
+        appointments={appointments.data?.items ?? []}
+        estimates={estimates.data?.items ?? []}
+        invoices={invoices.data ?? []}
+        payments={payments.data ?? []}
+        evidence={evidence}
+        unavailableDomains={unavailableDomains}
+      />}
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         {canReadJobs && <section className="rounded-xl border border-stroke p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Current Jobs</h4><Link to={`/jobs?customerId=${encodeURIComponent(customerId)}`} className="text-xs text-action-primary">View all related Jobs</Link></div>{currentJobs.data && <p className="mt-1 text-xs text-content-muted">Showing {currentJobs.data.items.length} of {currentJobs.data.total_count} current linked Jobs.</p>}<div className="mt-3 space-y-2"><JobList customerId={customerId} jobs={currentJobs.data?.items ?? []} empty="No current Jobs are linked in native Job authority." /></div></section>}
         {canReadJobs && <section className="rounded-xl border border-stroke p-4"><h4 className="font-semibold">Historical Jobs</h4>{historicalJobs.data && <p className="mt-1 text-xs text-content-muted">Showing {historicalJobs.data.items.length} of {historicalJobs.data.total_count} completed or cancelled linked Jobs.</p>}<div className="mt-3 space-y-2"><JobList customerId={customerId} jobs={historicalJobs.data?.items ?? []} empty="No historical Jobs are present in native Job authority." /></div></section>}

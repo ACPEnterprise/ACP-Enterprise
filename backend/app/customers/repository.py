@@ -12,7 +12,12 @@ from app.customers.models import (
     CustomerNumberSequence,
     ServiceLocation,
 )
-from app.customers.schemas import CustomerSearchQuery, CustomerSortField, SortDirection
+from app.customers.schemas import (
+    CustomerRecordState,
+    CustomerSearchQuery,
+    CustomerSortField,
+    SortDirection,
+)
 
 
 class CustomerRepository:
@@ -135,7 +140,6 @@ class CustomerRepository:
             .where(
                 Customer.id == customer_id,
                 Customer.company_id == company_id,
-                Customer.archived_at.is_(None),
             )
             .options(
                 joinedload(Customer.primary_contact),
@@ -145,6 +149,21 @@ class CustomerRepository:
             )
         )
         return await session.scalar(statement)
+
+    @staticmethod
+    async def get_including_archived(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        customer_id: UUID,
+    ) -> Customer | None:
+        """Resolve a Company-scoped Customer for read-only historical views."""
+        return await session.scalar(
+            select(Customer).where(
+                Customer.id == customer_id,
+                Customer.company_id == company_id,
+            )
+        )
 
     @staticmethod
     async def list_customers(
@@ -191,10 +210,11 @@ class CustomerRepository:
         company_id: UUID,
         criteria: CustomerSearchQuery,
     ) -> tuple[list[Customer], int]:
-        filters = [
-            Customer.company_id == company_id,
-            Customer.archived_at.is_(None),
-        ]
+        filters = [Customer.company_id == company_id]
+        if criteria.record_state is CustomerRecordState.CURRENT:
+            filters.append(Customer.archived_at.is_(None))
+        elif criteria.record_state is CustomerRecordState.ARCHIVED:
+            filters.append(Customer.archived_at.is_not(None))
         preferred_contact_exists = exists(
             select(1).where(
                 CustomerContact.customer_id == Customer.id,

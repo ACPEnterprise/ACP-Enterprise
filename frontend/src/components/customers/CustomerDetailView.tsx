@@ -151,7 +151,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
         This workspace shows related records admitted to native ACP authority. Each section states its own page or time boundary. Missing or source-only history is not treated as none or zero.
       </Alert>
 
-      <CustomerOperationsPanel customerId={customerId} />
+      <CustomerOperationsPanel customerId={customerId} locations={customer.properties} />
       {canReadCommunications && <CustomerCommunicationHistory customerId={customerId} />}
 
       <Card className="p-ui-4 sm:p-ui-6">
