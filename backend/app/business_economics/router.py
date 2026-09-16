@@ -24,6 +24,7 @@ from app.operational_measurement.productive_hour_readiness import (
 from app.operational_measurement.productive_hour_readiness import (
     downstream_contract as productive_hour_downstream_contract,
 )
+from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AccountingPermission,
@@ -45,6 +46,7 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 from .break_even_readiness import break_even_input_contract
 from .capability_readiness import capability_readiness_matrix
 from .cash_operational_service import CashOperationalEconomicsService
+from .employer_burden_readiness import EmployerBurdenReadinessService
 from .operational_sources import OperationalSourceEconomicsService
 from .owner_intelligence import (
     OwnerIntelligenceQuery,
@@ -90,6 +92,15 @@ OperationalSourceReader = Annotated[
         )
     ),
 ]
+EmployerBurdenReader = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            EconomicsPolicyPermission.MEASUREMENT_READ,
+            PayrollPermission.TAX_RESULT_READ,
+        )
+    ),
+]
 
 
 @router.get("/capabilities", response_model=dict[str, object])
@@ -100,6 +111,29 @@ async def economics_capabilities(context: Reader) -> dict[str, object]:
         "company_id": str(context.company.id),
         "branch_id": str(context.active_branch.id) if context.active_branch else None,
     }
+
+
+@router.get("/employer-burden-readiness", response_model=dict[str, object])
+async def employer_burden_readiness(
+    session: Session,
+    context: EmployerBurdenReader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    try:
+        return await EmployerBurdenReadinessService().project(
+            session, context=context, period_start=start, period_end=end
+        )
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Employer burden readiness request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error
 
 
 @router.get("/measurement-foundation", response_model=dict[str, object])
