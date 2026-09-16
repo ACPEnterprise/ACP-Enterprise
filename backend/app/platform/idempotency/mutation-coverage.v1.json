@@ -1663,6 +1663,26 @@
     {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "inventory",
+      "mechanism": "Company-scoped material issue command identity and allocation uniqueness",
+      "method": "POST",
+      "operation_id": "issue_material_api_v1_inventory_reservations__reservation_id__issues_post",
+      "path": "/api/v1/inventory/reservations/{reservation_id}/issues",
+      "reason": "Exact replay returns one immutable Job consumption issue and cannot double-decrement stock.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped reversal command identity and original-issue uniqueness",
+      "method": "POST",
+      "operation_id": "reverse_material_issue_api_v1_inventory_material_issues__issue_id__reversal_post",
+      "path": "/api/v1/inventory/material-issues/{issue_id}/reversal",
+      "reason": "Exact replay returns one compensating reversal and cannot restore stock twice.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
       "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
       "operation_id": "transfer_api_v1_inventory_transfers_post",
@@ -2989,6 +3009,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "540ff0363393b7023de901b7ac356e40b25d31e3e3c68dc6a2e19591f7f721e4",
+  "fingerprint": "ccf9a0423e9ab510e4d6a88c63c83e9eefa3479fe3c48ce42e1a3bc2d4227df3",
   "schema_version": "1"
 }

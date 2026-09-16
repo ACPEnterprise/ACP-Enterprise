@@ -166,6 +166,8 @@ class EventType(str, Enum):
     INVENTORY_CYCLE_COUNT_COMPLETED = "inventory.cycle_count_completed"
     INVENTORY_RESERVATION_CREATED = "inventory.reservation_created"
     INVENTORY_RESERVATION_RELEASED = "inventory.reservation_released"
+    INVENTORY_MATERIAL_ISSUED = "inventory.material_issued"
+    INVENTORY_MATERIAL_ISSUE_REVERSED = "inventory.material_issue_reversed"
     INVENTORY_PURCHASE_RECEIPT_POSTED = "inventory.purchase_receipt.posted"
     INVENTORY_PURCHASE_RETURN_POSTED = "inventory.purchase_return.posted"
 

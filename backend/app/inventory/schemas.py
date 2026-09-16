@@ -53,6 +53,23 @@ class ReservationRelease(InventorySchema):
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
+class MaterialIssueCreate(InventorySchema):
+    branch_id: UUID
+    allocation_id: UUID
+    item_id: UUID
+    location_id: UUID
+    expected_reservation_version: int = Field(ge=1)
+    occurred_at: AwareDatetime
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class MaterialIssueReverse(InventorySchema):
+    branch_id: UUID
+    expected_reservation_version: int = Field(ge=1)
+    occurred_at: AwareDatetime
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
 class AdjustmentCreate(InventorySchema):
     branch_id: UUID
     item_id: UUID
@@ -165,6 +182,27 @@ class AllocationResponse(InventorySchema):
     allocated_at: datetime
 
 
+class MaterialIssueResponse(InventorySchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    reservation_id: UUID
+    allocation_id: UUID
+    issue_type: str
+    item_id: UUID
+    location_id: UUID
+    quantity: Decimal
+    stocking_unit: str
+    occurred_at: datetime
+    posted_at: datetime
+    actor_user_id: UUID
+    idempotency_key: str
+    movement_id: UUID
+    reversal_of_issue_id: UUID | None
+    external_reference_type: str | None
+    external_reference_id: UUID | None
+
+
 class AdjustmentResponse(InventorySchema):
     id: UUID
     company_id: UUID
@@ -218,3 +256,5 @@ class InventoryOverview(InventorySchema):
     locations: tuple[LocationResponse, ...]
     quantities: tuple[QuantityResponse, ...]
     reservations: tuple[ReservationResponse, ...]
+    allocations: tuple[AllocationResponse, ...] = ()
+    material_issues: tuple[MaterialIssueResponse, ...] = ()

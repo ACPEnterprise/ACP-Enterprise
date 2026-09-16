@@ -22,6 +22,9 @@ from app.inventory.schemas import (
     InventoryOverview,
     LocationCreate,
     LocationResponse,
+    MaterialIssueCreate,
+    MaterialIssueResponse,
+    MaterialIssueReverse,
     MovementResponse,
     ReservationAllocate,
     ReservationCreate,
@@ -178,6 +181,51 @@ async def release(
         return ReservationResponse.model_validate(
             await inventory_service.release(
                 session, context=context, reservation_id=reservation_id, data=data
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/reservations/{reservation_id}/issues",
+    response_model=MaterialIssueResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def issue_material(
+    reservation_id: UUID,
+    data: MaterialIssueCreate,
+    context: ReserveContext,
+    session: DatabaseSession,
+) -> MaterialIssueResponse:
+    try:
+        return MaterialIssueResponse.model_validate(
+            await inventory_service.issue_material(
+                session,
+                context=context,
+                reservation_id=reservation_id,
+                data=data,
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/material-issues/{issue_id}/reversal",
+    response_model=MaterialIssueResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def reverse_material_issue(
+    issue_id: UUID,
+    data: MaterialIssueReverse,
+    context: ReserveContext,
+    session: DatabaseSession,
+) -> MaterialIssueResponse:
+    try:
+        return MaterialIssueResponse.model_validate(
+            await inventory_service.reverse_material_issue(
+                session, context=context, issue_id=issue_id, data=data
             )
         )
     except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:

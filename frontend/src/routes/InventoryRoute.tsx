@@ -132,6 +132,8 @@ export function InventoryRoute() {
     mutations.createReservation,
     mutations.allocate,
     mutations.release,
+    mutations.issueMaterial,
+    mutations.reverseIssue,
   ].find((mutation) => mutation.isError);
   const runReservationMutation = async (operation: () => Promise<unknown>) => {
     try {
@@ -473,7 +475,20 @@ export function InventoryRoute() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-3">
-                {inventory.data?.reservations.map((reservation) => (
+                {inventory.data?.reservations.map((reservation) => {
+                  const allocations = (inventory.data.allocations ?? []).filter(
+                    (allocation) => allocation.reservation_id === reservation.id,
+                  );
+                  const issues = (inventory.data.material_issues ?? []).filter(
+                    (issue) => issue.reservation_id === reservation.id,
+                  );
+                  const issuedAllocationIds = new Set(
+                    issues.filter((issue) => issue.issue_type === "issue").map((issue) => issue.allocation_id),
+                  );
+                  const reversedIssueIds = new Set(
+                    issues.filter((issue) => issue.issue_type === "reversal").map((issue) => issue.reversal_of_issue_id),
+                  );
+                  return (
                   <li
                     key={reservation.id}
                     className="flex flex-col gap-3 rounded-lg border border-stroke p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -488,6 +503,38 @@ export function InventoryRoute() {
                           {reservation.quantity} {reservation.stocking_unit}
                         </span>
                       </div>
+                      {reservation.demand_type === "job" ? (
+                        <div className="mt-1 text-xs text-content-muted">
+                          Job {reservation.demand_id}
+                        </div>
+                      ) : null}
+                      {issues.length > 0 ? (
+                        <div className="mt-2 text-sm">
+                          {issues.map((issue) => (
+                            <div key={issue.id}>
+                              {issue.issue_type === "issue" ? "Consumed" : "Returned to stock"}: {issue.quantity} {issue.stocking_unit}
+                              {canReserve && issue.issue_type === "issue" && !reversedIssueIds.has(issue.id) ? (
+                                <Button
+                                  className="ml-2"
+                                  variant="secondary"
+                                  onClick={() => void runReservationMutation(() => mutations.reverseIssue.mutateAsync({
+                                    issueId: issue.id,
+                                    data: {
+                                      branch_id: reservation.branch_id,
+                                      expected_reservation_version: reservation.version,
+                                      occurred_at: new Date().toISOString(),
+                                      idempotency_key: crypto.randomUUID(),
+                                    },
+                                  }))}
+                                  loading={mutations.reverseIssue.isPending}
+                                >
+                                  Return unused
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     {canReserve &&
                       [
@@ -531,10 +578,33 @@ export function InventoryRoute() {
                           >
                             Release
                           </Button>
+                          {reservation.demand_type === "job" && allocations
+                            .filter((allocation) => !issuedAllocationIds.has(allocation.id))
+                            .map((allocation) => (
+                              <Button
+                                key={allocation.id}
+                                onClick={() => void runReservationMutation(() => mutations.issueMaterial.mutateAsync({
+                                  reservationId: reservation.id,
+                                  data: {
+                                    branch_id: reservation.branch_id,
+                                    allocation_id: allocation.id,
+                                    item_id: reservation.item_id,
+                                    location_id: reservation.location_id,
+                                    expected_reservation_version: reservation.version,
+                                    occurred_at: new Date().toISOString(),
+                                    idempotency_key: crypto.randomUUID(),
+                                  },
+                                }))}
+                                loading={mutations.issueMaterial.isPending}
+                              >
+                                Issue {allocation.quantity} {reservation.stocking_unit} to Job
+                              </Button>
+                            ))}
                         </div>
                       )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </CardContent>
           </Card>

@@ -9,6 +9,9 @@ import type {
   InventoryLocation,
   InventoryLocationCreate,
   InventoryOverview,
+  InventoryMaterialIssue,
+  InventoryMaterialIssueCreate,
+  InventoryMaterialIssueReverse,
   InventoryReservation,
   InventoryReservationAllocate,
   InventoryReservationCreate,
@@ -68,6 +71,30 @@ export async function releaseInventoryReservation(
     expected_version: version,
     idempotency_key: crypto.randomUUID(),
   });
+}
+
+export async function issueInventoryMaterial(
+  reservationId: string,
+  data: InventoryMaterialIssueCreate,
+): Promise<InventoryMaterialIssue> {
+  return (
+    await apiClient.post<InventoryMaterialIssue>(
+      `${ROOT}/reservations/${reservationId}/issues`,
+      data,
+    )
+  ).data;
+}
+
+export async function reverseInventoryMaterialIssue(
+  issueId: string,
+  data: InventoryMaterialIssueReverse,
+): Promise<InventoryMaterialIssue> {
+  return (
+    await apiClient.post<InventoryMaterialIssue>(
+      `${ROOT}/material-issues/${issueId}/reversal`,
+      data,
+    )
+  ).data;
 }
 
 export async function postInventoryAdjustment(

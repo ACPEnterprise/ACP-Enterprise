@@ -6,15 +6,19 @@ import {
   createInventoryReservation,
   getInventoryOverview,
   getCycleCounts,
+  issueInventoryMaterial,
   postInventoryAdjustment,
   postInventoryTransfer,
   releaseInventoryReservation,
+  reverseInventoryMaterialIssue,
   recordCycleCount,
   startCycleCount,
 } from "../api/inventory";
 import type {
   CycleCountRecord,
   InventoryReservationAllocate,
+  InventoryMaterialIssueCreate,
+  InventoryMaterialIssueReverse,
 } from "../types/inventory";
 
 const inventoryKeys = {
@@ -70,6 +74,26 @@ export function useInventoryMutations() {
     release: useMutation({
       mutationFn: ({ id, version }: { id: string; version: number }) =>
         releaseInventoryReservation(id, version),
+      onSuccess: refresh,
+    }),
+    issueMaterial: useMutation({
+      mutationFn: ({
+        reservationId,
+        data,
+      }: {
+        reservationId: string;
+        data: InventoryMaterialIssueCreate;
+      }) => issueInventoryMaterial(reservationId, data),
+      onSuccess: refresh,
+    }),
+    reverseIssue: useMutation({
+      mutationFn: ({
+        issueId,
+        data,
+      }: {
+        issueId: string;
+        data: InventoryMaterialIssueReverse;
+      }) => reverseInventoryMaterialIssue(issueId, data),
       onSuccess: refresh,
     }),
     adjust: useMutation({
