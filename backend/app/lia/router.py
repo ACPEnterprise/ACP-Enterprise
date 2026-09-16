@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
-from app.platform.permissions.dependencies import ResolvedAuthorization
+from app.employee_operations.permissions import EmployeeOperationsPermission
+from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.dependencies import (
+    ResolvedAuthorization,
+    require_permission,
+)
 
 from .contracts import (
     LiaFeedback,
@@ -14,11 +19,16 @@ from .contracts import (
     LiaRequest,
     LiaResponse,
 )
+from .employee_safe import employee_safe_lia_service
 from .foundation import FoundationReadiness, foundation_readiness
 from .service import POLICY_VERSION, lia_service
 
 router = APIRouter(prefix="/api/v1/lia", tags=["LIA"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
+EmployeeSafeLiaRead = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(EmployeeOperationsPermission.OWN_LIA_READ)),
+]
 
 
 @router.get("/readiness", response_model=LiaReadiness)
@@ -88,6 +98,18 @@ async def ask(
     session: Session,
 ) -> LiaResponse:
     return await lia_service.ask(session, context=context, request=payload)
+
+
+@router.post("/employee/ask", response_model=LiaResponse)
+async def employee_ask(
+    payload: LiaRequest,
+    context: EmployeeSafeLiaRead,
+    session: Session,
+) -> LiaResponse:
+    """Answer from the authenticated Employee's assignment-safe evidence only."""
+    return await employee_safe_lia_service.ask(
+        session, context=context, request=payload
+    )
 
 
 @router.get("/briefing", response_model=LiaResponse)
