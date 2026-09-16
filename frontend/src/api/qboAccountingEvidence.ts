@@ -82,7 +82,14 @@ export interface QboAccountingEvidenceWorkspace {
   accounts: QboAccountEvidence[];
   invoices: QboInvoiceEvidence[];
   bills: QboBillEvidence[];
-  ar: { total_open: QboAmount; current: QboAmount; overdue: QboAmount };
+  ar: {
+    total_open: QboAmount;
+    invoice_evidence_count: number;
+    open_invoice_count: number;
+    closed_invoice_count: number;
+    current: QboAmount;
+    overdue: QboAmount;
+  };
   payments: QboPaymentEvidence[];
   reports: QboReportEvidence[];
   conflicts: QboSourceConflict[];
@@ -116,6 +123,24 @@ export interface QboSourceBackedProfitAndLoss {
   mutation_authority: "none";
 }
 
+export interface QboSourceBackedArSummary {
+  contract_version: "qbo-source-backed-ar-summary/v1";
+  authority: "QBO_SOURCE_BACKED";
+  provider_environment: "production";
+  source: "QuickBooks Online A/R Aging Summary";
+  source_company: string;
+  realm_id: string;
+  report_date: string;
+  currency: string | null;
+  source_as_of: string | null;
+  acquired_at: string;
+  net_open_ar: string;
+  includes_customer_credits_and_unapplied_payments: true;
+  source_digest: string;
+  accepted_as_acp_accounting: false;
+  mutation_authority: "none";
+}
+
 export async function getQboAccountingEvidence(
   basis: "cash" | "accrual",
 ): Promise<QboAccountingEvidenceWorkspace> {
@@ -142,6 +167,17 @@ export async function getQboSourceBackedProfitAndLoss(request: {
           basis: request.basis,
         },
       },
+    )
+  ).data;
+}
+
+export async function getQboSourceBackedArSummary(
+  reportDate: string,
+): Promise<QboSourceBackedArSummary> {
+  return (
+    await apiClient.get<QboSourceBackedArSummary>(
+      "/api/v1/accounting/source-evidence/qbo/reports/aged-receivables",
+      { params: { report_date: reportDate } },
     )
   ).data;
 }

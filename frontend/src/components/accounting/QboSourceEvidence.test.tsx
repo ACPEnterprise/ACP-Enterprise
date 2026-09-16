@@ -2,12 +2,14 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useQboAccountingEvidence,
+  useQboSourceBackedArSummary,
   useQboSourceBackedProfitAndLoss,
 } from "../../hooks/useQboAccountingEvidence";
 import { QboSourceEvidence } from "./QboSourceEvidence";
 
 vi.mock("../../hooks/useQboAccountingEvidence", () => ({
   useQboAccountingEvidence: vi.fn(),
+  useQboSourceBackedArSummary: vi.fn(),
   useQboSourceBackedProfitAndLoss: vi.fn(),
 }));
 
@@ -43,7 +45,14 @@ const value = {
   ],
   invoices: [],
   bills: [],
-  ar: { total_open: unavailable, current: unavailable, overdue: unavailable },
+  ar: {
+    total_open: unavailable,
+    invoice_evidence_count: 0,
+    open_invoice_count: 0,
+    closed_invoice_count: 0,
+    current: unavailable,
+    overdue: unavailable,
+  },
   payments: [],
   conflicts: [
     {
@@ -73,6 +82,10 @@ const value = {
 
 describe("QboSourceEvidence", () => {
   beforeEach(() => {
+    vi.mocked(useQboSourceBackedArSummary).mockReturnValue({
+      isLoading: false,
+      data: undefined,
+    } as unknown as ReturnType<typeof useQboSourceBackedArSummary>);
     vi.mocked(useQboSourceBackedProfitAndLoss).mockReturnValue({
       isPending: false,
       isError: false,

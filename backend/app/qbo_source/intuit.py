@@ -704,6 +704,29 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
         )
         return response.json()
 
+    async def read_aged_receivables(
+        self, *, report_date: date, minor_version: int
+    ) -> dict[str, object]:
+        """Read QBO's provider-authored A/R aging summary without writes."""
+        if minor_version < 1:
+            raise ValueError("minor version must be positive")
+        await self._verify_bound_company(minor_version)
+        url = (
+            f"{self.endpoints.api_base}/{self.binding.realm_id}/reports/"
+            "AgedReceivables?"
+            + urlencode(
+                {
+                    "report_date": report_date.isoformat(),
+                    "minorversion": minor_version,
+                }
+            )
+        )
+        response = await self._get(
+            url,
+            request_identity=f"aged_receivables:{report_date.isoformat()}",
+        )
+        return response.json()
+
     async def _verify_company(self, request: AcquisitionRequest) -> dict[str, object]:
         return await self._verify_bound_company(request.snapshot.api_minor_version)
 
@@ -831,9 +854,7 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
                 self.max_backoff_seconds,
             )
             await self.clock.sleep(delay)
-        raise IntuitRequestError(
-            "api_retry_exhausted", provider_status=response.status
-        )
+        raise IntuitRequestError("api_retry_exhausted", provider_status=response.status)
 
     def _backoff(self, request_identity: str, attempt: int) -> float:
         seed = hashlib.sha256(f"{request_identity}:{attempt}".encode()).digest()[0]
