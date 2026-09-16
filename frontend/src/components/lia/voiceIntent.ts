@@ -9,7 +9,10 @@ const mutationPatterns: ReadonlyArray<[RegExp, string]> = [
   [/\b(approve|run|execute)\b.*\bpayroll\b/i, "PAYROLL_EXECUTION"],
   [/\b(raise|change|activate)\b.*\b(price|pricing)\b/i, "PRICE_BOOK_CHANGE"],
   [/\b(post)\b.*\b(journal|accounting)\b/i, "ACCOUNTING_POST"],
-  [/\b(pay|refund|collect)\b/i, "MONEY_MOVEMENT"],
+  [
+    /^\s*(?:please\s+)?(?:pay|refund|collect|initiate ach)\b/i,
+    "MONEY_MOVEMENT",
+  ],
   [/\b(grant|revoke|change)\b.*\b(permissions?|roles?)\b/i, "SECURITY_ADMIN"],
 ];
 

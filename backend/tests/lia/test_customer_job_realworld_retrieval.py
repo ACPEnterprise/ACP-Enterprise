@@ -17,11 +17,14 @@ from app.lia.contracts import (
 from app.lia.planner import plan_question
 from app.lia.retrieval import GovernedRetrievalService
 from app.lia.service import ROUTES, LiaService
+from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.codes import (
     CustomerPermission,
     JobPermission,
     SchedulingPermission,
+    WorkforcePermission,
 )
+from app.workforce.service import workforce_operations_service
 
 
 def _context(*permissions: str) -> SimpleNamespace:
@@ -70,6 +73,19 @@ def test_named_customer_and_job_plans_are_bounded() -> None:
     assert job.subject_domain == "jobs"
     assert job.subject_query == "306"
     assert job.domains == frozenset({"jobs"})
+
+    spoken_job = plan_question("Show me job three thirteen")
+    assert spoken_job.subject_domain == "jobs"
+    assert spoken_job.subject_query == "three thirteen"
+
+    open_employee = plan_question("Open Lianne Hernandez")
+    assert open_employee.subject_domain == "identity"
+    assert open_employee.subject_query == "Lianne Hernandez"
+
+    payroll_employee = plan_question("Is Lianne Hernandez ready for payroll?")
+    assert payroll_employee.subject_domain == "workforce"
+    assert payroll_employee.subject_query == "Lianne Hernandez"
+    assert payroll_employee.domains == frozenset({"workforce", "payroll"})
 
     employee = plan_question("Show me Employee Lianne Hernandez")
     assert employee.subject_domain == "workforce"
@@ -271,6 +287,61 @@ async def test_initial_domain_question_binds_safe_follow_up_topic() -> None:
     assert response.subject_id is None
     assert response.temporal is not None
     assert response.temporal.period_label == "today"
+
+
+@pytest.mark.asyncio
+async def test_direct_named_payroll_question_uses_employee_specific_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    employee_id = uuid4()
+    monkeypatch.setattr(
+        workforce_operations_service,
+        "resolve_display_name",
+        AsyncMock(return_value=(employee_id,)),
+    )
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="workforce",
+            label="Minimum-necessary Workforce readiness context",
+            authority="WORKFORCE.LIA_CONTEXT.v1",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=employee_id,
+            evidence_digest="w" * 64,
+            count=1,
+            state="Employee Lianne Hernandez is active",
+        ),
+        EvidenceReference(
+            domain="payroll",
+            label="Payroll readiness for Lianne Hernandez",
+            authority="PAYROLL.PERIOD.OPERATIONS.v1",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=employee_id,
+            evidence_digest="p" * 64,
+            count=1,
+            state="blocker:TIME_EVIDENCE_MISSING",
+        ),
+    )
+
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(
+            WorkforcePermission.READ,
+            PayrollPermission.REPORTING_READ,
+        ),
+        request=LiaRequest(question="Is Lianne Hernandez ready for payroll?"),
+    )
+
+    assert response.subject_domain == "workforce"
+    assert response.subject_id == employee_id
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {
+        "workforce",
+        "payroll",
+    }
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] == employee_id
+    assert response.answer.startswith("ACP's native authorized records show: No.")
 
 
 @pytest.mark.asyncio

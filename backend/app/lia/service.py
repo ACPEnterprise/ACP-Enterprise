@@ -399,13 +399,18 @@ class LiaService:
                     ),
                 )
             resolved_domain, entity_id = subject_matches[0]
-            selected = {resolved_domain}
+            selected = (
+                {"workforce", "payroll"}
+                if resolved_domain == "workforce" and "payroll" in selected
+                else {resolved_domain}
+            )
             effective_request = request.model_copy(
                 update={
                     "context": LiaContext(
                         domain=resolved_domain,
                         entity_id=entity_id,
                         authorization_version=context.authorization_version,
+                        topic_domains=tuple(sorted(selected)),
                         temporal=temporal,
                     )
                 }
@@ -929,20 +934,43 @@ def _period_answer(
         f"{temporal.period_label} ({temporal.start_date.isoformat()} through "
         f"{temporal.end_date.isoformat()}, {temporal.timezone})"
     )
-    prefix = f"For {period}, "
-    if temporal.comparison_start is not None:
-        comparison_end = temporal.comparison_end or temporal.comparison_start
-        prefix = (
-            f"Comparing {period} with {temporal.comparison_label} "
-            f"({temporal.comparison_start.isoformat()} through "
-            f"{comparison_end.isoformat()}), "
-        )
     suffix = ""
     if unavailable:
         suffix = (
             " Historical filtering is unavailable for: "
             + ", ".join(sorted({item.domain for item in unavailable}))
             + "."
+        )
+    prefix = f"For {period}, "
+    if temporal.comparison_start is not None:
+        comparison_end = temporal.comparison_end or temporal.comparison_start
+        primary_evidence = tuple(
+            item
+            for item in supported
+            if item.period_start == temporal.start_date
+            and item.period_end == temporal.end_date
+        )
+        comparison_evidence = tuple(
+            item
+            for item in supported
+            if item.period_start == temporal.comparison_start
+            and item.period_end == comparison_end
+        )
+        if primary_evidence and comparison_evidence:
+            return (
+                f"Comparing {period} with {temporal.comparison_label} "
+                f"({temporal.comparison_start.isoformat()} through "
+                f"{comparison_end.isoformat()}), the authorized evidence reports "
+                f"{temporal.period_label}: {_period_evidence_summary(primary_evidence)} "
+                f"{temporal.comparison_label}: "
+                f"{_period_evidence_summary(comparison_evidence)} "
+                "LIA did not manufacture a difference, percentage, or causal explanation."
+                + suffix
+            )
+        prefix = (
+            f"Comparing {period} with {temporal.comparison_label} "
+            f"({temporal.comparison_start.isoformat()} through "
+            f"{comparison_end.isoformat()}), "
         )
     if not supported:
         return (
@@ -951,6 +979,13 @@ def _period_answer(
             + suffix
         )
     return prefix + answer[0].lower() + answer[1:] + suffix
+
+
+def _period_evidence_summary(evidence: tuple[EvidenceReference, ...]) -> str:
+    return "; ".join(
+        f"{item.label} — {item.state or f'{item.count or 0} accepted records'}."
+        for item in evidence
+    )
 
 
 def _unavailable_period_answer(
