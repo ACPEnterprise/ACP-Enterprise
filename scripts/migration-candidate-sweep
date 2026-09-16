@@ -97,6 +97,8 @@ def candidate_report(
     module: object,
 ) -> dict[str, object]:
     merge_base = git(root, "merge-base", protected, candidate)
+    protected_sha = git(root, "rev-parse", protected)
+    candidate_sha = git(root, "rev-parse", candidate)
     ahead = int(git(root, "rev-list", "--count", f"{protected}..{candidate}"))
     behind = int(git(root, "rev-list", "--count", f"{candidate}..{protected}"))
     paths = git(
@@ -120,14 +122,15 @@ def candidate_report(
     risks = list(cast(list[str], candidate_lineage["risks"]))
     if changed_history:
         risks.append("PROTECTED_REVISION_CONTENT_CHANGED")
-    if merge_base != git(root, "rev-parse", protected):
+    integrated = merge_base == candidate_sha
+    if merge_base not in {protected_sha, candidate_sha}:
         risks.append("CANDIDATE_BEHIND_PROTECTED")
     destructive = destructive_operations(root, merge_base, candidate)
     if destructive:
         risks.append("DESTRUCTIVE_OPERATION_REVIEW_REQUIRED")
     return {
         "candidate": candidate,
-        "sha": git(root, "rev-parse", candidate),
+        "sha": candidate_sha,
         "merge_base": merge_base,
         "ahead": ahead,
         "behind": behind,
@@ -139,6 +142,7 @@ def candidate_report(
         "destructive_operations": destructive,
         "risks": sorted(set(risks)),
         "reline_required": bool(risks),
+        "integrated": integrated,
     }
 
 
