@@ -754,11 +754,25 @@ async def test_receipt_listing_is_stably_bounded_and_service_enforced(
             limit=2,
             offset=2,
         )
+        customer_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            customer_id=customer.id,
+        )
+        foreign_customer_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            customer_id=uuid4(),
+        )
     assert len(first_page) == 2
     assert {row.id for row in first_page}.isdisjoint({row.id for row in second_page})
     assert receipt_ids.issubset(
         {row.id for row in first_page} | {row.id for row in second_page}
     )
+    assert {row.id for row in customer_page} == receipt_ids
+    assert foreign_customer_page == ()
 
     async with factory() as session:
         with pytest.raises(PaymentValidation, match="page is invalid"):
