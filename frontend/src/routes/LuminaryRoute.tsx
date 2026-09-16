@@ -318,6 +318,11 @@ export function LuminaryRoute() {
                   </article>
                 ))}
               </div>
+              {ownerEconomics.data.service_line_economics.length === 0 ? (
+                <Alert variant="warning">
+                  No authoritative service-category evidence exists for this period. ACP did not infer categories from Job descriptions.
+                </Alert>
+              ) : null}
             </section>
             </>
               );

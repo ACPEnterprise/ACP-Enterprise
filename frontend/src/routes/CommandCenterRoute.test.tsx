@@ -100,6 +100,7 @@ describe("CommandCenterRoute", () => {
 
     render(<MemoryRouter><CommandCenterRoute /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Command Center", level: 2 })).toBeInTheDocument();
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent("Architecture Available");
     expect(screen.getByText("$1,250")).toBeInTheDocument();
     expect(screen.getByText("No critical issues requiring attention.")).toBeInTheDocument();
     expect(screen.getByText("No active Beacon signals")).toBeInTheDocument();
@@ -146,6 +147,7 @@ describe("CommandCenterRoute", () => {
 
     render(<MemoryRouter><CommandCenterRoute /></MemoryRouter>);
     expect(screen.getAllByText("No Data Available").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent("No Data Available");
     expect(screen.queryByText("$0")).not.toBeInTheDocument();
     expect(screen.queryByText("0%")).not.toBeInTheDocument();
     expect(screen.getByText("Beacon signals unavailable")).toBeInTheDocument();

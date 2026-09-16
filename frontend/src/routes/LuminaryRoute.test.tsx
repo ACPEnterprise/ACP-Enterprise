@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   error: undefined as unknown,
   refetch: vi.fn(),
   analyze: vi.fn(),
+  emptyServices: false,
 }));
 
 vi.mock("../auth", () => ({
@@ -66,7 +67,7 @@ vi.mock("../hooks/useLuminary", () => ({
           confidence_percent: 70,
         },
       ],
-      service_line_economics: [
+      service_line_economics: state.emptyServices ? [] : [
         {
           service_category: "drain_cleaning", job_count: 1,
           contribution_ready_job_count: 0, invoiced_revenue_minor: 12550,
@@ -128,6 +129,7 @@ describe("Luminary workspace recovery", () => {
     state.canRead = true;
     state.canAnalyze = true;
     state.error = undefined;
+    state.emptyServices = false;
     state.refetch.mockReset();
     state.analyze.mockReset();
   });
@@ -159,6 +161,15 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Choose a start date on or before the end date",
     );
+  });
+
+  it("explains an empty service-line result without inventing categories", () => {
+    state.emptyServices = true;
+    renderRoute();
+    expect(
+      screen.getByText(/No authoritative service-category evidence exists for this period/i),
+    ).toBeVisible();
+    expect(screen.getByText(/did not infer categories from Job descriptions/i)).toBeVisible();
   });
 
   it("retries a temporary briefing failure without offering analysis", () => {

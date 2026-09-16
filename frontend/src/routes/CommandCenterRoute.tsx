@@ -63,6 +63,17 @@ export function CommandCenterRoute() {
   const beaconLifecycle = useBeaconLifecycleActions();
   const beaconWorkflow = useBeaconWorkflowActions();
   const jobs = useJobs({ page: 1, pageSize: 1 }, canReadJobs);
+  const commandCenterState =
+    analytics.isLoading || beacon.isLoading || beaconBrief.isLoading || jobs.isLoading
+      ? "awaiting-integration"
+      : !canReadAnalytics ||
+          !canReadJobs ||
+          analytics.isError ||
+          beacon.isError ||
+          beaconBrief.isError ||
+          jobs.isError
+        ? "no-data"
+        : "available";
   const revenue = analytics.data
     ? { value: formatCurrency(analytics.data.booked_revenue.value) }
     : metricState(analytics.isLoading, analytics.isError, undefined);
@@ -90,7 +101,7 @@ export function CommandCenterRoute() {
               reported; unavailable systems remain clearly identified.
             </p>
           </div>
-          <IntegrationStateBadge state="available" />
+          <IntegrationStateBadge state={commandCenterState} />
         </div>
       </header>
 

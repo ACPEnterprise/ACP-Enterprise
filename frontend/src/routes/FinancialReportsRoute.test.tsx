@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFinancialReport } from "../hooks/useFinancialReporting";
@@ -81,5 +81,22 @@ describe("FinancialReportsRoute", () => {
     expect(
       screen.getByText(/did not infer zeros or substitute native\/HCP data/i),
     ).toBeVisible();
+  });
+
+  it("rejects reversed report periods before changing the authoritative request", () => {
+    allowed = true;
+    render(<FinancialReportsRoute />);
+    const requestBefore = vi.mocked(useFinancialReport).mock.calls.at(-1)?.[0];
+    fireEvent.change(screen.getByLabelText("Start date"), {
+      target: { value: "2026-09-20" },
+    });
+    fireEvent.change(screen.getByLabelText("End date"), {
+      target: { value: "2026-09-10" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Choose a start date on or before the end date",
+    );
+    expect(vi.mocked(useFinancialReport).mock.calls.at(-1)?.[0]).toEqual(requestBefore);
   });
 });
