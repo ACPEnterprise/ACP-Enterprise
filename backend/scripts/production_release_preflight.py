@@ -13,6 +13,17 @@ PRODUCTION_HOSTNAME = "app.twelve-hats.com"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_IMAGE_PATTERN = re.compile(r"^\S+@sha256:[0-9a-f]{64}$")
 PLACEHOLDER_MARKERS = ("set_", "replace", "change-before-use", "not-for-production")
+REQUIRED_PLATFORM_RESOURCES = {
+    "runtime",
+    "postgresql",
+    "redis",
+    "object_storage",
+    "registry",
+    "backup_pitr",
+    "monitoring",
+    "alert_delivery",
+    "dns_tls",
+}
 
 
 @dataclass(frozen=True)
@@ -266,14 +277,102 @@ def inspect(env_file: Path) -> list[Finding]:
     return findings
 
 
+def inspect_platform_manifest(path: Path, *, expected_sha: str) -> list[Finding]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    findings: list[Finding] = []
+    findings.append(
+        Finding(
+            "platform_manifest_contract",
+            "READY"
+            if payload.get("contract") == "twelve-hats-production-platform/v1"
+            else "BLOCKED",
+            "platform manifest contract is recognized"
+            if payload.get("contract") == "twelve-hats-production-platform/v1"
+            else "unrecognized platform manifest contract",
+        )
+    )
+    manifest_sha = payload.get("release_candidate_sha")
+    findings.append(
+        Finding(
+            "platform_release_identity",
+            "READY" if manifest_sha == expected_sha else "BLOCKED",
+            "platform manifest matches APP_VERSION"
+            if manifest_sha == expected_sha
+            else "platform manifest release candidate does not match APP_VERSION",
+        )
+    )
+    resources = payload.get("resources", {})
+    missing = sorted(REQUIRED_PLATFORM_RESOURCES - set(resources))
+    unready = sorted(
+        name
+        for name in REQUIRED_PLATFORM_RESOURCES & set(resources)
+        if resources[name].get("state") != "PROVISIONED_AND_VERIFIED"
+    )
+    findings.append(
+        Finding(
+            "platform_resources",
+            "READY" if not missing and not unready else "BLOCKED",
+            "all closed-traffic resources are provisioned and verified"
+            if not missing and not unready
+            else f"missing={','.join(missing) or 'none'}; unready={','.join(unready) or 'none'}",
+        )
+    )
+    controls = payload.get("authorities", {})
+    required_controls = {"release", "security", "incident", "backup", "restore", "secret_recovery"}
+    unresolved = sorted(
+        name for name in required_controls if not controls.get(name, {}).get("principal")
+    )
+    findings.append(
+        Finding(
+            "named_operational_authorities",
+            "READY" if not unresolved else "BLOCKED",
+            "all operational authorities are named"
+            if not unresolved
+            else f"unnamed authorities: {','.join(unresolved)}",
+        )
+    )
+    decisions = payload.get("owner_decisions", {})
+    undecided = sorted(
+        name for name in ("rpo", "rto", "retention", "region", "geographic_separation", "alert_destination")
+        if not decisions.get(name)
+    )
+    findings.append(
+        Finding(
+            "owner_operational_decisions",
+            "READY" if not undecided else "BLOCKED",
+            "required owner operational decisions are recorded"
+            if not undecided
+            else f"unresolved decisions: {','.join(undecided)}",
+        )
+    )
+    return findings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Fail-closed Twelve Hats Production release preflight"
     )
     parser.add_argument("--env-file", required=True, type=Path)
+    parser.add_argument("--platform-manifest", type=Path)
     parser.add_argument("--report", type=Path)
     arguments = parser.parse_args()
     findings = inspect(arguments.env_file.resolve(strict=True))
+    if arguments.platform_manifest:
+        values = load_environment(arguments.env_file.resolve(strict=True))
+        findings.extend(
+            inspect_platform_manifest(
+                arguments.platform_manifest.resolve(strict=True),
+                expected_sha=values.get("APP_VERSION", ""),
+            )
+        )
+    else:
+        findings.append(
+            Finding(
+                "platform_manifest",
+                "BLOCKED",
+                "closed-traffic preflight requires --platform-manifest",
+            )
+        )
     report = {
         "contract": "twelve-hats-production-release-preflight/v1",
         "safe_to_continue": all(

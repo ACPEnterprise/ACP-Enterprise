@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
+from scripts.production_release_preflight import inspect_platform_manifest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -124,3 +125,17 @@ def test_permanent_edge_uses_twelve_hats_platform_domain() -> None:
     assert "app.twelve-hats.com {" in caddy
     assert "allcountyhomeservices.com" not in environment
     assert "allcountyhomeservices.com" not in caddy
+
+
+def test_unprovisioned_platform_manifest_blocks_closed_traffic() -> None:
+    findings = inspect_platform_manifest(
+        REPOSITORY_ROOT / "docs/deployment/production-platform-manifest.example.json",
+        expected_sha="d5148f60ba842f9b4e7c9e83f16d1d3301372491",
+    )
+    by_check = {finding.check: finding for finding in findings}
+
+    assert by_check["platform_manifest_contract"].status == "READY"
+    assert by_check["platform_release_identity"].status == "READY"
+    assert by_check["platform_resources"].status == "BLOCKED"
+    assert by_check["named_operational_authorities"].status == "BLOCKED"
+    assert by_check["owner_operational_decisions"].status == "BLOCKED"
