@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,12 @@ from app.customers.models import Customer
 from app.data_quality.catalog import QUALITY_CATALOG
 from app.dispatch.models import DispatchAssignment
 from app.estimates.models import Estimate
+from app.financial_reporting.errors import (
+    ReportingIntegrityError,
+    ReportingNotFound,
+    ReportingRequestError,
+)
+from app.financial_reporting.service import financial_reporting_service
 from app.inventory.models import InventoryItem
 from app.invoicing.models import Invoice
 from app.jobs.lia_context import job_lia_context_service
@@ -62,7 +69,7 @@ from app.timekeeping.permissions import TimekeepingPermission
 from app.workforce.lia_context import workforce_lia_context_service
 from app.workforce.service import workforce_operations_service
 
-from .contracts import EvidenceReference
+from .contracts import EvidenceReference, LiaTemporalContext
 
 
 @dataclass(frozen=True)
@@ -72,6 +79,9 @@ class AdapterSpec:
     permission: str
     model: Any
     state_column: Any
+    temporal_start_column: Any | None = None
+    temporal_end_column: Any | None = None
+    temporal_kind: str | None = None
 
 
 ADAPTERS = (
@@ -89,6 +99,9 @@ ADAPTERS = (
         SchedulingPermission.READ,
         Appointment,
         Appointment.status,
+        Appointment.arrival_window_start_at,
+        Appointment.arrival_window_end_at,
+        "datetime_overlap",
     ),
     AdapterSpec(
         "dispatch",
@@ -96,12 +109,29 @@ ADAPTERS = (
         DispatchPermission.READ,
         DispatchAssignment,
         DispatchAssignment.status,
+        DispatchAssignment.window_start_at,
+        DispatchAssignment.window_end_at,
+        "datetime_overlap",
     ),
     AdapterSpec(
-        "estimates", "Estimates", EstimatePermission.READ, Estimate, Estimate.status
+        "estimates",
+        "Estimates",
+        EstimatePermission.READ,
+        Estimate,
+        Estimate.status,
+        Estimate.created_at,
+        None,
+        "datetime_start",
     ),
     AdapterSpec(
-        "invoicing", "Invoices", InvoicePermission.READ, Invoice, Invoice.status
+        "invoicing",
+        "Invoices",
+        InvoicePermission.READ,
+        Invoice,
+        Invoice.status,
+        Invoice.issue_date,
+        None,
+        "date_start",
     ),
     AdapterSpec(
         "payments",
@@ -109,6 +139,9 @@ ADAPTERS = (
         PaymentPermission.READ,
         PaymentReceipt,
         PaymentReceipt.status,
+        PaymentReceipt.captured_at,
+        None,
+        "datetime_start",
     ),
     AdapterSpec(
         "purchasing",
@@ -133,6 +166,9 @@ ADAPTERS = (
         TimekeepingPermission.ADMIN_READ,
         WorkdayTimeEntryRevision,
         WorkdayTimeEntryRevision.state,
+        WorkdayTimeEntryRevision.work_date,
+        None,
+        "date_start",
     ),
     AdapterSpec(
         "accounting",
@@ -140,6 +176,9 @@ ADAPTERS = (
         AccountingPermission.REPORT_READ,
         AccountingPeriod,
         AccountingPeriod.status,
+        AccountingPeriod.start_date,
+        AccountingPeriod.end_date,
+        "date_overlap",
     ),
     AdapterSpec(
         "price-book",
@@ -166,12 +205,14 @@ class GovernedRetrievalService:
         context: AuthorizationContext,
         domains: set[str] | None = None,
         entity_id: Any | None = None,
+        temporal: LiaTemporalContext | None = None,
+        requested_accounting_basis: str | None = None,
     ) -> tuple[EvidenceReference, ...]:
         contextual_domains = (
             {"customers", "jobs", "assets", "workforce"} & domains if domains else set()
         )
         contextual_reference: EvidenceReference | None = None
-        if entity_id is not None and len(contextual_domains) == 1:
+        if entity_id is not None and len(contextual_domains) == 1 and temporal is None:
             domain = next(iter(contextual_domains))
             if domain == "customers":
                 customer_projection = await customer_lia_context_service.for_customer(
@@ -264,6 +305,7 @@ class GovernedRetrievalService:
             if context.has_permission(adapter.permission)
             and (domains is None or adapter.domain in domains)
             and not (entity_id is not None and adapter.domain in contextual_domains)
+            and (temporal is None or adapter.temporal_kind is not None)
         )
         observed_at = datetime.now(timezone.utc)
         evidence: list[EvidenceReference] = (
@@ -287,6 +329,8 @@ class GovernedRetrievalService:
                 evidence_branch_ids = tuple(sorted(branch_ids, key=str))
             if entity_id is not None:
                 predicates.append(adapter.model.id == entity_id)
+            if temporal is not None:
+                predicates.extend(_temporal_predicates(adapter, temporal))
             rows = (
                 await session.execute(
                     select(adapter.state_column, func.count())
@@ -304,6 +348,7 @@ class GovernedRetrievalService:
                 else None,
                 "domain": adapter.domain,
                 "counts": counts,
+                "period": _temporal_canonical(temporal),
             }
             digest = hashlib.sha256(
                 json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
@@ -326,9 +371,43 @@ class GovernedRetrievalService:
                     company_id=context.company.id,
                     branch_ids=evidence_branch_ids,
                     authorization_version=context.authorization_version,
+                    period_start=temporal.start_date if temporal else None,
+                    period_end=temporal.end_date if temporal else None,
+                    period_label=temporal.period_label if temporal else None,
+                    timezone=temporal.timezone if temporal else None,
                 )
             )
-        if context.has_permission(LaunchPlatformPermission.AUDIT_READ):
+        if temporal is not None:
+            supported = {adapter.domain for adapter in permitted}
+            for adapter in ADAPTERS:
+                if (
+                    adapter.domain in (domains or set())
+                    and context.has_permission(adapter.permission)
+                    and adapter.domain not in supported
+                ):
+                    evidence.append(
+                        _period_unavailable(
+                            adapter.domain, adapter.label, temporal, observed_at
+                        )
+                    )
+        if (
+            temporal is not None
+            and (domains is None or "accounting" in domains)
+            and context.has_permission(AccountingPermission.REPORT_READ)
+        ):
+            evidence.append(
+                await self._financial_report(
+                    session,
+                    context,
+                    observed_at,
+                    temporal,
+                    requested_accounting_basis,
+                )
+            )
+        if (
+            context.has_permission(LaunchPlatformPermission.AUDIT_READ)
+            and temporal is None
+        ):
             for domain, label in (
                 ("data-quality", "Data-quality readiness rules"),
                 ("launch-readiness", "Real-world launch readiness evidence"),
@@ -369,6 +448,11 @@ class GovernedRetrievalService:
                 else context.authorized_branch_ids
             )
             query = query.where(LuminaryBriefingRecord.branch_id.in_(branch_ids))
+            if temporal is not None:
+                query = query.where(
+                    LuminaryBriefingRecord.period_start == temporal.start_date,
+                    LuminaryBriefingRecord.period_end == temporal.end_date,
+                )
             if entity_id is not None:
                 query = query.where(LuminaryBriefingRecord.id == entity_id)
             briefing = await session.scalar(query)
@@ -384,31 +468,62 @@ class GovernedRetrievalService:
                         evidence_digest=briefing.briefing_digest,
                         count=len(briefing.finding_ids),
                         state=briefing.completeness,
+                        period_start=briefing.period_start,
+                        period_end=briefing.period_end,
+                        period_label=temporal.period_label if temporal else None,
+                        timezone=temporal.timezone if temporal else None,
+                    )
+                )
+            elif temporal is not None:
+                evidence.append(
+                    _period_unavailable(
+                        "luminary", "Luminary owner briefing", temporal, observed_at
                     )
                 )
         if context.has_permission(EconomicsPolicyPermission.MEASUREMENT_READ) and (
             domains is None or "business-economics" in domains
         ):
-            evidence.extend(await self._economics(session, context, observed_at))
+            evidence.extend(
+                await self._economics(session, context, observed_at, temporal)
+            )
         if context.has_permission(AnalyticsPermission.READ) and (
             domains is None or "beacon" in domains
         ):
-            evidence.extend(await self._beacon(session, context, observed_at))
+            if temporal is None:
+                evidence.extend(await self._beacon(session, context, observed_at))
+            else:
+                evidence.append(
+                    _period_unavailable(
+                        "beacon", "Beacon lifecycle history", temporal, observed_at
+                    )
+                )
         if context.has_permission(AdministrationPermission.COMPANY_ADMINISTER) and (
             domains is None or "migration" in domains
         ):
-            evidence.extend(await self._migration(session, context, observed_at))
+            evidence.extend(
+                await self._migration(session, context, observed_at, temporal)
+            )
         if (
             context.has_permission(PayrollPermission.REPORTING_READ)
             or context.has_permission(PayrollPermission.STATEMENT_OWN_READ)
         ) and (domains is None or "payroll" in domains):
-            evidence.extend(
-                await self._payroll(session, context, observed_at, entity_id=entity_id)
-            )
+            if temporal is None:
+                evidence.extend(
+                    await self._payroll(
+                        session, context, observed_at, entity_id=entity_id
+                    )
+                )
+            else:
+                evidence.extend(
+                    await self._payroll_period(
+                        session, context, observed_at, temporal, entity_id
+                    )
+                )
         if (
             context.has_permission(WorkforcePermission.READ)
             and (domains is None or "workforce" in domains)
             and not (entity_id is not None and "workforce" in contextual_domains)
+            and temporal is None
         ):
             directory = await workforce_operations_service.directory(
                 session, context=context
@@ -432,8 +547,10 @@ class GovernedRetrievalService:
                     states=states,
                 )
             )
-        if context.has_permission(CommunicationsPermission.READ) and (
-            domains is None or "communications" in domains
+        if (
+            context.has_permission(CommunicationsPermission.READ)
+            and temporal is None
+            and (domains is None or "communications" in domains)
         ):
             branch_ids = (
                 frozenset({context.active_branch.id})
@@ -484,7 +601,10 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _economics(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        temporal: LiaTemporalContext | None,
     ) -> tuple[EvidenceReference, ...]:
         query = (
             select(EconomicsProfitabilityResultRecord)
@@ -506,6 +626,11 @@ class GovernedRetrievalService:
         query = query.where(
             EconomicsProfitabilityResultRecord.branch_id.in_(branch_ids)
         )
+        if temporal is not None:
+            query = query.where(
+                EconomicsProfitabilityResultRecord.period_start == temporal.start_date,
+                EconomicsProfitabilityResultRecord.period_end == temporal.end_date,
+            )
         rows = tuple((await session.scalars(query)).all())
         states: dict[str, int] = {}
         for row in rows:
@@ -526,6 +651,7 @@ class GovernedRetrievalService:
                 observed_at=max((row.created_at for row in rows), default=observed_at),
                 rows=tuple((str(row.id), row.result_digest) for row in rows),
                 states=states,
+                temporal=temporal,
             ),
         )
 
@@ -554,7 +680,10 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _migration(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        temporal: LiaTemporalContext | None,
     ) -> tuple[EvidenceReference, ...]:
         query = (
             select(HcpMigrationMasterRun)
@@ -568,6 +697,15 @@ class GovernedRetrievalService:
             else context.authorized_branch_ids
         )
         query = query.where(HcpMigrationMasterRun.branch_id.in_(branch_ids))
+        if temporal is not None:
+            start_at, end_at = _datetime_bounds(temporal)
+            query = query.where(
+                HcpMigrationMasterRun.started_at < end_at,
+                func.coalesce(
+                    HcpMigrationMasterRun.completed_at, HcpMigrationMasterRun.started_at
+                )
+                >= start_at,
+            )
         rows = tuple((await session.scalars(query)).all())
         states: dict[str, int] = {}
         for row in rows:
@@ -580,6 +718,7 @@ class GovernedRetrievalService:
                 observed_at=max((row.started_at for row in rows), default=observed_at),
                 rows=tuple((str(row.id), row.package_digest) for row in rows),
                 states=states,
+                temporal=temporal,
             ),
         )
 
@@ -748,6 +887,124 @@ class GovernedRetrievalService:
             ),
         )
 
+    @staticmethod
+    async def _payroll_period(
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        temporal: LiaTemporalContext,
+        entity_id: Any | None,
+    ) -> tuple[EvidenceReference, ...]:
+        if not context.has_permission(PayrollPermission.REPORTING_READ):
+            return (
+                _period_unavailable(
+                    "payroll",
+                    "Historical Payroll period evidence",
+                    temporal,
+                    observed_at,
+                ),
+            )
+        period = await session.scalar(
+            select(PayPeriod).where(
+                PayPeriod.company_id == context.company.id,
+                PayPeriod.period_start == temporal.start_date,
+                PayPeriod.period_end == temporal.end_date,
+            )
+        )
+        if period is None:
+            return (
+                _period_unavailable(
+                    "payroll",
+                    "Historical Payroll period evidence",
+                    temporal,
+                    observed_at,
+                ),
+            )
+        operations = await PayrollOperationsService().period(
+            session, context=context, pay_period_id=period.id
+        )
+        employees = tuple(
+            item
+            for item in operations.employees
+            if entity_id is None or item.employee_id == entity_id
+        )
+        states: dict[str, int] = {}
+        for employee in employees:
+            key = f"review:{employee.payroll_review_status}"
+            states[key] = states.get(key, 0) + 1
+            for code in employee.exception_codes:
+                blocker = f"blocker:{code}"
+                states[blocker] = states.get(blocker, 0) + 1
+        return (
+            _reference(
+                domain="payroll",
+                label="Payroll period readiness metadata",
+                authority=operations.contract_version,
+                observed_at=observed_at,
+                rows=tuple(
+                    (str(item.employee_id), item.payroll_review_status)
+                    for item in employees
+                ),
+                states=states,
+                temporal=temporal,
+                limitations=("protected_payroll_values_excluded",),
+            ),
+        )
+
+    @staticmethod
+    async def _financial_report(
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        temporal: LiaTemporalContext,
+        requested_basis: str | None,
+    ) -> EvidenceReference:
+        try:
+            result = await financial_reporting_service.income_statement(
+                session,
+                context=context,
+                start_date=temporal.start_date,
+                end_date=temporal.end_date,
+                branch_id=context.active_branch.id if context.active_branch else None,
+            )
+        except (ReportingIntegrityError, ReportingNotFound, ReportingRequestError):
+            return _period_unavailable(
+                "accounting", "Native income statement", temporal, observed_at
+            )
+        basis = result.manifest.accounting_basis
+        if requested_basis is not None and requested_basis != basis:
+            return _period_unavailable(
+                "accounting",
+                f"Requested {requested_basis} income statement",
+                temporal,
+                observed_at,
+                limitation=f"available_native_basis:{basis}",
+                accounting_basis=basis,
+            )
+        return EvidenceReference(
+            domain="accounting",
+            label="Native income statement",
+            authority="ACP_POSTED_LEDGER_AUTHORITY",
+            observed_at=result.manifest.generated_at,
+            freshness=result.quality.freshness,
+            evidence_digest=result.manifest.checksum,
+            count=len(result.revenue) + len(result.expenses),
+            state=(
+                f"{result.manifest.currency} total revenue={result.total_revenue}; "
+                f"total expenses={result.total_expenses}; net income={result.net_income}; "
+                f"basis={basis}; integrity={result.quality.integrity}"
+            ),
+            source_contract_version=result.manifest.definition_version,
+            company_id=context.company.id,
+            branch_ids=(context.active_branch.id,) if context.active_branch else (),
+            authorization_version=context.authorization_version,
+            period_start=temporal.start_date,
+            period_end=temporal.end_date,
+            period_label=temporal.period_label,
+            timezone=temporal.timezone,
+            accounting_basis=basis,
+        )
+
 
 def _reference(
     *,
@@ -757,8 +1014,17 @@ def _reference(
     observed_at: datetime,
     rows: tuple[tuple[str, str], ...],
     states: dict[str, int],
+    temporal: LiaTemporalContext | None = None,
+    limitations: tuple[str, ...] = (),
+    accounting_basis: str | None = None,
 ) -> EvidenceReference:
-    canonical = {"domain": domain, "rows": sorted(rows), "states": states}
+    canonical = {
+        "domain": domain,
+        "rows": sorted(rows),
+        "states": states,
+        "period": _temporal_canonical(temporal),
+        "accounting_basis": accounting_basis,
+    }
     digest = hashlib.sha256(
         json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -772,6 +1038,89 @@ def _reference(
         evidence_digest=digest,
         count=len(rows),
         state=state or "no accepted evidence",
+        limitations=limitations,
+        period_start=temporal.start_date if temporal else None,
+        period_end=temporal.end_date if temporal else None,
+        period_label=temporal.period_label if temporal else None,
+        timezone=temporal.timezone if temporal else None,
+        accounting_basis=accounting_basis,
+    )
+
+
+def _temporal_predicates(
+    adapter: AdapterSpec, temporal: LiaTemporalContext
+) -> tuple[Any, ...]:
+    start_column = adapter.temporal_start_column
+    end_column = adapter.temporal_end_column
+    if start_column is None:
+        return ()
+    if adapter.temporal_kind == "date_start":
+        return (
+            start_column >= temporal.start_date,
+            start_column <= temporal.end_date,
+        )
+    if adapter.temporal_kind == "date_overlap":
+        if end_column is None:
+            return ()
+        return (
+            start_column <= temporal.end_date,
+            end_column >= temporal.start_date,
+        )
+    start_at, end_at = _datetime_bounds(temporal)
+    if adapter.temporal_kind == "datetime_start":
+        return (
+            start_column >= start_at,
+            start_column < end_at,
+        )
+    if adapter.temporal_kind == "datetime_overlap":
+        if end_column is None:
+            return ()
+        return (
+            start_column < end_at,
+            end_column >= start_at,
+        )
+    return ()
+
+
+def _datetime_bounds(temporal: LiaTemporalContext) -> tuple[datetime, datetime]:
+    zone = ZoneInfo(temporal.timezone)
+    start_at = datetime.combine(temporal.start_date, time.min, zone).astimezone(UTC)
+    end_at = datetime.combine(
+        temporal.end_date + timedelta(days=1), time.min, zone
+    ).astimezone(UTC)
+    return start_at, end_at
+
+
+def _temporal_canonical(temporal: LiaTemporalContext | None) -> dict[str, str] | None:
+    if temporal is None:
+        return None
+    return {
+        "start_date": temporal.start_date.isoformat(),
+        "end_date": temporal.end_date.isoformat(),
+        "period_label": temporal.period_label,
+        "timezone": temporal.timezone,
+    }
+
+
+def _period_unavailable(
+    domain: str,
+    label: str,
+    temporal: LiaTemporalContext,
+    observed_at: datetime,
+    *,
+    limitation: str = "authoritative_historical_filter_unavailable",
+    accounting_basis: str | None = None,
+) -> EvidenceReference:
+    return _reference(
+        domain=domain,
+        label=label,
+        authority="PERIOD_AUTHORITY_UNAVAILABLE",
+        observed_at=observed_at,
+        rows=(),
+        states={"period_unavailable": 1},
+        temporal=temporal,
+        limitations=(limitation,),
+        accounting_basis=accounting_basis,
     )
 
 

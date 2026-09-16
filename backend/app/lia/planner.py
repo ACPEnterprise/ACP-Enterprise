@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .conversation import ResolvedPeriod, ResponseMode, interpret_conversation
+
 
 class QuestionIntent(StrEnum):
     CUSTOMER_HISTORY = "CUSTOMER_HISTORY"
@@ -28,6 +30,8 @@ class QuestionPlan:
     required_sources: tuple[str, ...]
     subject_domain: str | None = None
     subject_query: str | None = None
+    response_mode: ResponseMode = ResponseMode.NORMAL
+    resolved_period: ResolvedPeriod | None = None
 
 
 DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -35,12 +39,21 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("jobs", ("job", "work order", "service history", "open work")),
     (
         "scheduling",
-        ("schedule", "scheduling", "appointment", "unscheduled", "unassigned"),
+        (
+            "schedule",
+            "scheduling",
+            "appointment",
+            "unscheduled",
+            "unassigned",
+            "where is",
+            "tomorrow look like",
+            "busy is",
+        ),
     ),
-    ("dispatch", ("dispatch", "assigned", "technician conflict")),
+    ("dispatch", ("dispatch", "assigned", "technician conflict", "who has")),
     ("estimates", ("estimate", "proposal")),
     ("invoicing", ("invoice", "outstanding", "open ar", "revenue")),
-    ("payments", ("payment", "settlement", "cash collected")),
+    ("payments", ("payment", "settlement", "cash collected", "paid us", "collect")),
     ("communications", ("communication", "message delivery", "bounce")),
     ("assets", ("asset", "equipment", "fleet", "warranty")),
     (
@@ -58,7 +71,17 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("timekeeping", ("timekeeping", "time entry", "labor hours", "clock")),
-    ("payroll", ("payroll", "ytd", "direct deposit", "pay statement")),
+    (
+        "payroll",
+        (
+            "payroll",
+            "pay period",
+            "ytd",
+            "direct deposit",
+            "pay statement",
+            "holding payroll",
+        ),
+    ),
     (
         "accounting",
         (
@@ -70,6 +93,11 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "quickbooks",
             "source-backed",
             "control account",
+            "may numbers",
+            "sales",
+            "revenue",
+            "collected",
+            "owed to us",
         ),
     ),
     (
@@ -82,8 +110,8 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "completeness",
         ),
     ),
-    ("price-book", ("price book", "pricing review")),
-    ("beacon", ("beacon", "signal", "needs attention")),
+    ("price-book", ("price book", "pricing review", "what did we charge")),
+    ("beacon", ("beacon", "signal", "needs attention", "worried about")),
     (
         "business-economics",
         (
@@ -94,6 +122,8 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "material cost",
             "costs are missing",
             "what changed",
+            "make money",
+            "how did",
         ),
     ),
     ("luminary", ("luminary", "recommendation", "finding", "why did")),
@@ -122,6 +152,8 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "what requires accountant input",
             "what requires apple",
             "what requires engineering",
+            "what's broken",
+            "what still needs me",
         ),
     ),
     ("audit", ("audit history", "business event")),
@@ -132,6 +164,11 @@ BRIEFING_PHRASES = (
     "what needs my attention",
     "what happened today",
     "owner briefing",
+    "how's business",
+    "what's going on today",
+    "morning briefing",
+    "before i leave",
+    "since lunch",
 )
 
 OWNER_BRIEFING_DOMAINS = frozenset(
@@ -151,13 +188,24 @@ def plan_question(
     context_domain: str | None = None,
     topic_domains: tuple[str, ...] = (),
 ) -> QuestionPlan:
-    normalized = question.casefold()
+    conversation = interpret_conversation(question)
+    normalized = conversation.normalized
     subject = _named_subject(question) if context_domain is None else None
+    corrected_context_subject = bool(
+        conversation.corrected_subject and context_domain == "workforce"
+    )
+    if corrected_context_subject:
+        subject = ("workforce", conversation.corrected_subject or "")
     subject_domain, subject_query = subject if subject is not None else (None, None)
     if subject_domain == "identity":
         domains = frozenset({"customers", "workforce"})
     elif subject_domain is not None:
-        domains = frozenset({subject_domain})
+        explicit_subject_domains = frozenset(
+            domain
+            for domain, terms in DOMAIN_TERMS
+            if any(term in normalized for term in terms)
+        )
+        domains = frozenset({subject_domain, *explicit_subject_domains})
     elif context_domain:
         question_domains = (
             frozenset(
@@ -168,7 +216,25 @@ def plan_question(
             if topic_domains
             else frozenset()
         )
-        domains = frozenset({context_domain, *topic_domains, *question_domains})
+        related_followups = {
+            "customers": {"customers", "jobs", "invoicing", "payments"},
+            "jobs": {"jobs", "dispatch", "invoicing", "payments", "scheduling"},
+            "workforce": {"workforce", "payroll", "timekeeping", "dispatch"},
+        }.get(context_domain, {context_domain})
+        explicit_switch = bool(question_domains - related_followups) and not conversation.pronouns
+        domains = (
+            question_domains
+            if explicit_switch
+            else frozenset(
+                {
+                    context_domain,
+                    *( () if corrected_context_subject else topic_domains),
+                    *question_domains,
+                }
+                if context_domain == "workforce"
+                else {context_domain}
+            )
+        )
     else:
         if any(phrase in normalized for phrase in BRIEFING_PHRASES):
             domains = OWNER_BRIEFING_DOMAINS
@@ -185,6 +251,8 @@ def plan_question(
         required_sources=tuple(sorted(domains)),
         subject_domain=subject_domain,
         subject_query=subject_query,
+        response_mode=conversation.response_mode,
+        resolved_period=conversation.period,
     )
 
 
@@ -192,12 +260,31 @@ def _named_subject(question: str) -> tuple[str, str] | None:
     patterns = (
         ("jobs", r"\s*show\s+me\s+job\s+([A-Z0-9-]+)[?.!]?\s*"),
         ("customers", r"\s*show\s+me\s+customer\s+(.+?)[?.!]?\s*"),
-        ("identity", r"\s*show\s+me\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){1,7})[?.!]?\s*"),
+        (
+            "identity",
+            r"\s*(?:uh\s+)?(?:show me|find|actually,?\s*show me)\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){0,7})[?.!]?\s*",
+        ),
     )
     for domain, pattern in patterns:
         match = re.fullmatch(pattern, question, re.IGNORECASE)
         if match:
             value = " ".join(match.group(1).strip(" .?!").split())
+            if domain == "identity" and any(
+                term in value.casefold()
+                for term in (
+                    "schedule",
+                    "appointment",
+                    "invoice",
+                    "estimate",
+                    "payroll",
+                    "financial",
+                    "p&l",
+                    "profit",
+                    "migration",
+                    "beacon",
+                )
+            ):
+                continue
             return (domain, value) if value else None
     return None
 
