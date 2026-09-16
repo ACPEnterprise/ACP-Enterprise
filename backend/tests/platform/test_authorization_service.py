@@ -495,6 +495,7 @@ async def test_accessible_companies_router_uses_authenticated_identity(
                     "code": "AUTHZDISCOVERYBR1",
                     "name": "Authorized Branch",
                     "is_primary": True,
+                    "timezone": "America/New_York",
                 }
             ],
         }

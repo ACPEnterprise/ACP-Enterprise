@@ -12,6 +12,7 @@ class AccessibleBranchResponse(StrictSchema):
     code: str
     name: str
     is_primary: bool
+    timezone: str
 
 
 class AccessibleCompanyResponse(StrictSchema):

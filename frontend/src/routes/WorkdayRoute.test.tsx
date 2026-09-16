@@ -72,7 +72,7 @@ const auth = (permissions = ["COMPANY_TIMEKEEPING_OWN_READ", "COMPANY_TIMEKEEPIN
     membership_id: "membership",
     default_branch_id: "branch",
     has_all_branch_access: false,
-    branches: [{ id: "branch", code: "MAIN", name: "Main", is_primary: true }],
+    branches: [{ id: "branch", code: "MAIN", name: "Main", is_primary: true, timezone: "America/New_York" }],
   },
   permissionCodes: permissions,
   signIn: vi.fn(),

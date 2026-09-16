@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dayRange, localDateValue, moveDate, operationalJobStatuses } from "./dispatchPresentation";
+import { dayRange, localDateValue, moveDate, operationalJobStatuses, zonedDateTimeInput, zonedDateTimeToIso } from "./dispatchPresentation";
 
 describe("Dispatch presentation scope", () => {
   it("builds a half-open local-day range and handles date rollover", () => {
@@ -15,14 +15,25 @@ describe("Dispatch presentation scope", () => {
       ["2026-03-08", "2026-03-09"],
       ["2026-11-01", "2026-11-02"],
     ] as const) {
-      const range = dayRange(dateValue);
-      expect(localDateValue(new Date(range.startAt))).toBe(dateValue);
-      expect(localDateValue(new Date(range.endAt))).toBe(nextDate);
+      const range = dayRange(dateValue, "America/New_York");
+      expect(localDateValue(new Date(range.startAt), "America/New_York")).toBe(dateValue);
+      expect(localDateValue(new Date(range.endAt), "America/New_York")).toBe(nextDate);
       expect([23, 24, 25]).toContain(
         (new Date(range.endAt).getTime() - new Date(range.startAt).getTime()) /
           3_600_000,
       );
     }
+  });
+  it("uses the Branch timezone rather than the device timezone", () => {
+    expect(dayRange("2026-07-23", "America/New_York")).toEqual({
+      startAt: "2026-07-23T04:00:00.000Z",
+      endAt: "2026-07-24T04:00:00.000Z",
+    });
+  });
+  it("round-trips an operator-entered Branch-local appointment time", () => {
+    const instant = zonedDateTimeToIso("2026-07-23T09:30", "America/New_York");
+    expect(instant).toBe("2026-07-23T13:30:00.000Z");
+    expect(zonedDateTimeInput(instant, "America/New_York")).toBe("2026-07-23T09:30");
   });
   it("uses only nonterminal Job lifecycle states for operational presentation", () => {
     expect(operationalJobStatuses).toEqual(["draft", "ready", "in_progress", "paused"]);

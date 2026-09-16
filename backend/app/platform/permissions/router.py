@@ -102,6 +102,7 @@ async def list_accessible_companies(
                     code=branch.code,
                     name=branch.name,
                     is_primary=branch.is_primary,
+                    timezone=branch.timezone,
                 )
                 for branch in item.authorized_branches
             ],

@@ -3,6 +3,7 @@ export interface AccessibleBranch {
   code: string;
   name: string;
   is_primary: boolean;
+  timezone: string;
 }
 
 export interface AccessibleCompany {

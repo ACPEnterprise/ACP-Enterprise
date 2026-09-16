@@ -32,7 +32,14 @@ export function DispatchRoute() {
   const [selectedWork, setSelectedWork] = useState<DispatchBoardItem | null>(
     null,
   );
-  const range = dayRange(date);
+  const selectedBranch = activeCompany?.branches.find((branch) => branch.id === branchId);
+  const defaultBranch = activeCompany?.branches.find((branch) => branch.id === activeCompany.default_branch_id)
+    ?? activeCompany?.branches.find((branch) => branch.is_primary)
+    ?? activeCompany?.branches[0];
+  const operatingTimeZone = selectedBranch?.timezone
+    ?? defaultBranch?.timezone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const range = dayRange(date, operatingTimeZone);
   const dispatch = useDispatchBoard(
     range.startAt,
     range.endAt,
@@ -91,6 +98,7 @@ export function DispatchRoute() {
         date={date}
         branchId={branchId}
         branches={activeCompany.branches}
+        timeZone={operatingTimeZone}
         onDateChange={changeDate}
         onBranchChange={changeBranch}
       />
