@@ -4,6 +4,7 @@ import { useAuth, useHasPermission } from "../auth";
 import { InventoryCountAdjustmentWorkbench } from "../components/InventoryCountAdjustmentWorkbench";
 import { MaterialCostReadinessCard } from "../components/MaterialCostReadinessCard";
 import { useInventory, useInventoryMutations, useMaterialCostReadiness } from "../hooks/useInventory";
+import { useJobs } from "../hooks/useJobs";
 import {
   Alert,
   Badge,
@@ -43,9 +44,14 @@ export function InventoryRoute() {
   const canReserve = useHasPermission("COMPANY_INVENTORY_RESERVE");
   const canAdjust = useHasPermission("COMPANY_INVENTORY_ADJUST");
   const canCount = useHasPermission("COMPANY_INVENTORY_COUNT");
+  const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const [branch, setBranch] = useState("");
   const inventory = useInventory(branch || undefined, canRead);
   const costReadiness = useMaterialCostReadiness(canRead);
+  const jobs = useJobs(
+    { branchId: branch || undefined, page: 1, pageSize: 100, sortField: "updated_at", sortDirection: "desc" },
+    canRead && canReadJobs,
+  );
   const mutations = useInventoryMutations();
   const [location, setLocation] = useState({
     code: "",
@@ -397,19 +403,8 @@ export function InventoryRoute() {
                     }
                     required
                   />
-                  <Input
-                    aria-label="Demand type"
-                    value={reservation.demand_type}
-                    onChange={(event) =>
-                      setReservation({
-                        ...reservation,
-                        demand_type: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                  <Input
-                    aria-label="Demand ID"
+                  <Select
+                    aria-label="Job material demand"
                     value={reservation.demand_id}
                     onChange={(event) =>
                       setReservation({
@@ -418,7 +413,15 @@ export function InventoryRoute() {
                       })
                     }
                     required
-                  />
+                    disabled={!canReadJobs}
+                  >
+                    <option value="">Select Job</option>
+                    {jobs.data?.items.map((job) => (
+                      <option key={job.id} value={job.id}>
+                        {job.job_number} — {job.customer_display_name}
+                      </option>
+                    ))}
+                  </Select>
                   <Button
                     type="submit"
                     loading={mutations.createReservation.isPending}

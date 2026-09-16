@@ -8,6 +8,7 @@ import {
   useMaterialCostReadiness,
 } from "../hooks/useInventory";
 import { InventoryRoute } from "./InventoryRoute";
+import { useJobs } from "../hooks/useJobs";
 
 let permissions = new Set<string>();
 vi.mock("../auth", () => ({
@@ -25,6 +26,7 @@ vi.mock("../hooks/useInventory", () => ({
   useInventoryMutations: vi.fn(),
   useMaterialCostReadiness: vi.fn(),
 }));
+vi.mock("../hooks/useJobs", () => ({ useJobs: vi.fn() }));
 
 const mutateAsync = {
   createLocation: vi.fn(),
@@ -108,6 +110,11 @@ describe("InventoryRoute", () => {
       isError: false,
       data: { evidence: [], readiness: [] },
     } as never);
+    vi.mocked(useJobs).mockReturnValue({
+      data: {
+        items: [{ id: "job-1", job_number: "JOB-000001", customer_display_name: "Taylor Home" }],
+      },
+    } as never);
     vi.mocked(useInventoryMutations).mockReturnValue(
       inventoryMutations() as never,
     );
@@ -172,6 +179,7 @@ describe("InventoryRoute", () => {
 
   it("creates and allocates reservations without changing on-hand", async () => {
     permissions.add("COMPANY_INVENTORY_RESERVE");
+    permissions.add("COMPANY_JOB_READ");
     render(<InventoryRoute />);
     fireEvent.change(screen.getByLabelText("Inventory Branch"), {
       target: { value: "branch-1" },
@@ -185,8 +193,8 @@ describe("InventoryRoute", () => {
     fireEvent.change(screen.getByLabelText("Reservation quantity"), {
       target: { value: "2" },
     });
-    fireEvent.change(screen.getByLabelText("Demand ID"), {
-      target: { value: "00000000-0000-0000-0000-000000000001" },
+    fireEvent.change(screen.getByLabelText("Job material demand"), {
+      target: { value: "job-1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create reservation" }));
     await waitFor(() =>
