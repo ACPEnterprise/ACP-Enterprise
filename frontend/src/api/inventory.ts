@@ -16,9 +16,14 @@ import type {
   InventoryReservationAllocate,
   InventoryReservationCreate,
   InventoryTransfer,
+  MaterialCostReadiness,
 } from "../types/inventory";
 
 const ROOT = "/api/v1/inventory";
+
+export async function getMaterialCostReadiness(): Promise<MaterialCostReadiness> {
+  return (await apiClient.get<MaterialCostReadiness>(`${ROOT}/cost-readiness`)).data;
+}
 
 export async function getInventoryOverview(
   branchId?: string,

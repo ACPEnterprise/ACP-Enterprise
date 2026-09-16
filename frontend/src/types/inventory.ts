@@ -137,6 +137,35 @@ export interface InventoryMaterialIssueReverse {
   occurred_at: string;
   idempotency_key: string;
 }
+export interface MaterialCostEvidence {
+  inventory_item_id: string;
+  vendor_id: string;
+  vendor_name: string;
+  purchase_order_id: string;
+  purchase_order_line_id: string;
+  receipt_id: string;
+  receipt_line_id: string;
+  received_at: string;
+  effective_date: string;
+  accepted_quantity: string;
+  unit: string;
+  unit_cost: string;
+  currency: string;
+  source_reference: string | null;
+  authority_state: "ACTUAL_RECEIPT";
+}
+export interface MaterialValuationReadiness {
+  inventory_item_id: string;
+  on_hand_quantity: string;
+  actual_receipt_cost_available: boolean;
+  currencies: readonly string[];
+  readiness_state: string;
+  blockers: readonly string[];
+}
+export interface MaterialCostReadiness {
+  evidence: readonly MaterialCostEvidence[];
+  readiness: readonly MaterialValuationReadiness[];
+}
 
 export interface InventoryAdjustmentCreate {
   branch_id: string;

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -258,3 +258,35 @@ class InventoryOverview(InventorySchema):
     reservations: tuple[ReservationResponse, ...]
     allocations: tuple[AllocationResponse, ...] = ()
     material_issues: tuple[MaterialIssueResponse, ...] = ()
+
+
+class MaterialCostEvidenceResponse(InventorySchema):
+    inventory_item_id: UUID
+    vendor_id: UUID
+    vendor_name: str
+    purchase_order_id: UUID
+    purchase_order_line_id: UUID
+    receipt_id: UUID
+    receipt_line_id: UUID
+    received_at: datetime
+    effective_date: date
+    accepted_quantity: Decimal
+    unit: str
+    unit_cost: Decimal
+    currency: str
+    source_reference: str | None
+    authority_state: str = "ACTUAL_RECEIPT"
+
+
+class MaterialValuationReadinessResponse(InventorySchema):
+    inventory_item_id: UUID
+    on_hand_quantity: Decimal
+    actual_receipt_cost_available: bool
+    currencies: tuple[str, ...]
+    readiness_state: str
+    blockers: tuple[str, ...]
+
+
+class MaterialCostReadinessResponse(InventorySchema):
+    evidence: tuple[MaterialCostEvidenceResponse, ...]
+    readiness: tuple[MaterialValuationReadinessResponse, ...]

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.inventory.costing import material_costing_service
 from app.inventory.errors import (
     InventoryConflict,
     InventoryNotFound,
@@ -22,6 +23,7 @@ from app.inventory.schemas import (
     InventoryOverview,
     LocationCreate,
     LocationResponse,
+    MaterialCostReadinessResponse,
     MaterialIssueCreate,
     MaterialIssueResponse,
     MaterialIssueReverse,
@@ -99,6 +101,14 @@ async def overview(
         )
     except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
         raise translate(error) from error
+
+
+@router.get("/cost-readiness", response_model=MaterialCostReadinessResponse)
+async def cost_readiness(
+    context: ReadContext,
+    session: DatabaseSession,
+) -> MaterialCostReadinessResponse:
+    return await material_costing_service.readiness(session, context=context)
 
 
 @router.post(

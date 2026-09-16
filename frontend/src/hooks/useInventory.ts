@@ -5,6 +5,7 @@ import {
   createInventoryLocation,
   createInventoryReservation,
   getInventoryOverview,
+  getMaterialCostReadiness,
   getCycleCounts,
   issueInventoryMaterial,
   postInventoryAdjustment,
@@ -26,6 +27,7 @@ const inventoryKeys = {
   overview: (branch?: string) => ["inventory", "overview", branch] as const,
   cycleCounts: (branch?: string) =>
     ["inventory", "cycle-counts", branch] as const,
+  costReadiness: ["inventory", "cost-readiness"] as const,
 };
 
 export function useInventory(branch?: string, enabled = true) {
@@ -40,6 +42,14 @@ export function useCycleCounts(branch?: string, enabled = true) {
   return useQuery({
     queryKey: inventoryKeys.cycleCounts(branch),
     queryFn: () => getCycleCounts(branch),
+    enabled,
+  });
+}
+
+export function useMaterialCostReadiness(enabled = true) {
+  return useQuery({
+    queryKey: inventoryKeys.costReadiness,
+    queryFn: getMaterialCostReadiness,
     enabled,
   });
 }

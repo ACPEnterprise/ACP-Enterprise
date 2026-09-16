@@ -5,6 +5,7 @@ import {
   useCycleCounts,
   useInventory,
   useInventoryMutations,
+  useMaterialCostReadiness,
 } from "../hooks/useInventory";
 import { InventoryRoute } from "./InventoryRoute";
 
@@ -22,6 +23,7 @@ vi.mock("../hooks/useInventory", () => ({
   useInventory: vi.fn(),
   useCycleCounts: vi.fn(),
   useInventoryMutations: vi.fn(),
+  useMaterialCostReadiness: vi.fn(),
 }));
 
 const mutateAsync = {
@@ -100,6 +102,11 @@ describe("InventoryRoute", () => {
           entries: [],
         },
       ],
+    } as never);
+    vi.mocked(useMaterialCostReadiness).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: { evidence: [], readiness: [] },
     } as never);
     vi.mocked(useInventoryMutations).mockReturnValue(
       inventoryMutations() as never,

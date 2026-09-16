@@ -2,7 +2,8 @@ import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { InventoryCountAdjustmentWorkbench } from "../components/InventoryCountAdjustmentWorkbench";
-import { useInventory, useInventoryMutations } from "../hooks/useInventory";
+import { MaterialCostReadinessCard } from "../components/MaterialCostReadinessCard";
+import { useInventory, useInventoryMutations, useMaterialCostReadiness } from "../hooks/useInventory";
 import {
   Alert,
   Badge,
@@ -44,6 +45,7 @@ export function InventoryRoute() {
   const canCount = useHasPermission("COMPANY_INVENTORY_COUNT");
   const [branch, setBranch] = useState("");
   const inventory = useInventory(branch || undefined, canRead);
+  const costReadiness = useMaterialCostReadiness(canRead);
   const mutations = useInventoryMutations();
   const [location, setLocation] = useState({
     code: "",
@@ -465,6 +467,11 @@ export function InventoryRoute() {
               </div>
             </CardContent>
           </Card>
+          {costReadiness.data ? (
+            <MaterialCostReadinessCard data={costReadiness.data} items={inventory.data?.items ?? []} />
+          ) : costReadiness.isError ? (
+            <Alert variant="warning">Material cost readiness is currently unavailable.</Alert>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle>Reservations</CardTitle>
