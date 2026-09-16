@@ -9,9 +9,9 @@
   "cycle_revisions": [],
   "duplicate_revisions": {},
   "heads": [
-    "n0p8q16g3t9u"
+    "q3s1t29j6w2x"
   ],
-  "lineage_digest": "c0649a311addef635e6c5580902e7b713ff4013c1a3d7e58d94600ab6929a6a1",
+  "lineage_digest": "dbf0c5032f0b32d105cccd28633994a835b4d8b50bc289e5bb0f989fc5023754",
   "merge_revisions": {
     "e3c2a71f8d4b": [
       "19i4k89084j8",
@@ -21,7 +21,7 @@
   "missing_down_revisions": [],
   "parse_errors": [],
   "release_ready": true,
-  "revision_count": 174,
+  "revision_count": 177,
   "revisions": [
     {
       "down_revision": [
@@ -1511,7 +1511,7 @@
       "down_revision": [
         "a2c4e6g8i175"
       ],
-      "is_head": true,
+      "is_head": false,
       "is_merge": false,
       "path": "backend/alembic/versions/n0p8q16g3t9u_add_price_book_activation_review.py",
       "revision": "n0p8q16g3t9u",
@@ -1586,6 +1586,17 @@
     },
     {
       "down_revision": [
+        "n0p8q16g3t9u"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/o1q9r27h4u0v_add_price_book_candidate_admission.py",
+      "revision": "o1q9r27h4u0v",
+      "sha256": "e7cf0bdc0ad1718b1e6d2e28d26f5814afd54abf9abc4fbf8c0ab26bbf8dcd9d",
+      "source_commit": "1f45352c4d6cfc0ccbda0aff910819a4c9e72425"
+    },
+    {
+      "down_revision": [
         "p5r7t9v1x3z5"
       ],
       "is_head": false,
@@ -1616,6 +1627,17 @@
       "revision": "p1f3a5c7d942",
       "sha256": "11f9418779f93fb96489687d8f45541ae226227df9705f6d81802b688c9e690c",
       "source_commit": "27495125e9e70edeea7e682a1b12021ad39be663"
+    },
+    {
+      "down_revision": [
+        "o1q9r27h4u0v"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/p2r0s28i5v1w_add_price_book_activation_reviews.py",
+      "revision": "p2r0s28i5v1w",
+      "sha256": "707447f107eef2c8dd6b8c5590192717937f507532f56b21a8a2a3923786c656",
+      "source_commit": "90f0b995e2fcebbeae4dc31230807f7f9ba78ee8"
     },
     {
       "down_revision": [
@@ -1671,6 +1693,17 @@
       "revision": "q2g4b6d8e053",
       "sha256": "1a5b836b126a026a5c408f21538cd5dead79ede9fb056ccf012681425e472686",
       "source_commit": "e97dc408742e0037330b79156cd0a5ba583c6649"
+    },
+    {
+      "down_revision": [
+        "p2r0s28i5v1w"
+      ],
+      "is_head": true,
+      "is_merge": false,
+      "path": "backend/alembic/versions/q3s1t29j6w2x_create_manual_invoice_payment_evidence.py",
+      "revision": "q3s1t29j6w2x",
+      "sha256": "598884dbc13e0abe961f495479917a2bd3992b1f872768645eaf047904a77b38",
+      "source_commit": "fcf2930427d6de67767396bbcafeea3809b800a3"
     },
     {
       "down_revision": [
@@ -2115,6 +2148,9 @@
     "o5q7s9u1w3y5",
     "p6r8t0v2x4z6",
     "a2c4e6g8i175",
-    "n0p8q16g3t9u"
+    "n0p8q16g3t9u",
+    "o1q9r27h4u0v",
+    "p2r0s28i5v1w",
+    "q3s1t29j6w2x"
   ]
 }
