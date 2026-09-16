@@ -10,6 +10,7 @@ import type {
   InventoryItem,
   InventoryItemCreate,
   InventoryLocationCreate,
+  JobMaterials,
   InventoryOverview,
   InventoryReservation,
   InventoryReservationAllocate,
@@ -18,6 +19,14 @@ import type {
 } from "../types/inventory";
 
 const ROOT = "/api/v1/inventory";
+
+export async function getJobMaterials(jobId: string): Promise<JobMaterials> {
+  return (
+    await apiClient.get<JobMaterials>(
+      `${ROOT}/jobs/${encodeURIComponent(jobId)}/materials`,
+    )
+  ).data;
+}
 
 export async function getInventoryOverview(
   branchId?: string,

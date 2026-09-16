@@ -6,6 +6,7 @@ import {
   createInventoryItem,
   createInventoryReservation,
   getInventoryOverview,
+  getJobMaterials,
   getCycleCounts,
   postInventoryAdjustment,
   postInventoryTransfer,
@@ -23,7 +24,16 @@ const inventoryKeys = {
   overview: (branch?: string) => ["inventory", "overview", branch] as const,
   cycleCounts: (branch?: string) =>
     ["inventory", "cycle-counts", branch] as const,
+  jobMaterials: (jobId?: string) => ["inventory", "jobs", jobId, "materials"] as const,
 };
+
+export function useJobMaterials(jobId?: string, enabled = true) {
+  return useQuery({
+    queryKey: inventoryKeys.jobMaterials(jobId),
+    queryFn: () => getJobMaterials(jobId!),
+    enabled: enabled && Boolean(jobId),
+  });
+}
 
 export function useInventory(branch?: string, enabled = true) {
   return useQuery({

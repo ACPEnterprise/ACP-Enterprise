@@ -62,6 +62,29 @@ export interface InventoryOverview {
   quantities: readonly InventoryQuantity[];
   reservations: readonly InventoryReservation[];
 }
+export interface JobMaterialRequirement {
+  component_code: string | null;
+  label: string;
+  requirement_type: string;
+  expected_quantity: string;
+  inventory_item_id: string | null;
+  stocking_unit: string | null;
+  on_hand_quantity: string | null;
+  reserved_quantity: string | null;
+  available_quantity: string | null;
+  consumed_quantity: string | null;
+  readiness_state: string;
+  blockers: readonly string[];
+  source_snapshot_ids: readonly string[];
+  source_snapshot_digests: readonly string[];
+}
+export interface JobMaterials {
+  job_id: string;
+  branch_id: string;
+  requirements: readonly JobMaterialRequirement[];
+  readiness_state: string;
+  blockers: readonly string[];
+}
 export interface InventoryTransfer {
   branch_id: string;
   item_id: string;

@@ -99,6 +99,31 @@ class ItemResponse(InventorySchema):
     version: int
 
 
+class JobMaterialRequirementResponse(InventorySchema):
+    component_code: str | None
+    label: str
+    requirement_type: str
+    expected_quantity: Decimal
+    inventory_item_id: UUID | None
+    stocking_unit: str | None
+    on_hand_quantity: Decimal | None
+    reserved_quantity: Decimal | None
+    available_quantity: Decimal | None
+    consumed_quantity: Decimal | None
+    readiness_state: str
+    blockers: tuple[str, ...]
+    source_snapshot_ids: tuple[UUID, ...]
+    source_snapshot_digests: tuple[str, ...]
+
+
+class JobMaterialsResponse(InventorySchema):
+    job_id: UUID
+    branch_id: UUID
+    requirements: tuple[JobMaterialRequirementResponse, ...]
+    readiness_state: str
+    blockers: tuple[str, ...]
+
+
 class LocationResponse(InventorySchema):
     id: UUID
     company_id: UUID

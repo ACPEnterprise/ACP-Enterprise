@@ -12,8 +12,10 @@ import { JobsErrorState, JobsLoadingState } from "../components/jobs/JobStates";
 import { LifecycleActionButtons } from "../components/jobs/LifecycleActionButtons";
 import { JobCompletionStatus } from "../components/jobs/JobCompletionStatus";
 import { ScheduleJobPanel } from "../components/jobs/ScheduleJobPanel";
+import { JobMaterialsCard } from "../components/jobs/JobMaterialsCard";
 import { useHasPermission } from "../auth";
 import { useJob } from "../hooks/useJobs";
+import { useJobMaterials } from "../hooks/useInventory";
 import { schedulingReturnPath } from "../routing/paths";
 import { Alert, Button } from "../ui";
 
@@ -30,7 +32,9 @@ export function JobDetailRoute() {
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const canSchedule = canManageScheduling && canManageJobs;
   const canAssign = useHasPermission("COMPANY_DISPATCH_MANAGE");
+  const canReadInventory = useHasPermission("COMPANY_INVENTORY_READ");
   const query = useJob(jobId, canRead);
+  const materialsQuery = useJobMaterials(jobId, canRead && canReadInventory);
   if (!canRead) {
     return <Alert variant="danger">You are not authorized to view this Job.</Alert>;
   }
@@ -86,6 +90,12 @@ export function JobDetailRoute() {
         <ServiceLocationCard job={job} />
       </div>
       <JobOperationalDetails job={job} />
+      {canReadInventory && materialsQuery.data ? (
+        <JobMaterialsCard materials={materialsQuery.data} />
+      ) : null}
+      {canReadInventory && materialsQuery.isError ? (
+        <Alert variant="warning">Job material readiness is currently unavailable.</Alert>
+      ) : null}
       {canSchedule && job.appointments.length === 0 && !["completed", "cancelled"].includes(job.status) ? <ScheduleJobPanel job={job} canAssign={canAssign} returnTo={hasSchedulingReturn ? returnTo : undefined} /> : null}
       <AppointmentSummaryTable job={job} returnTo={hasSchedulingReturn ? returnTo : undefined} />
       <JobCompletionStatus jobId={job.id} />
