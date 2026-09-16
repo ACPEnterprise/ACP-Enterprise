@@ -7,7 +7,10 @@ import type {
   InventoryAdjustment,
   InventoryAdjustmentCreate,
   InventoryLocation,
+  InventoryItem,
+  InventoryItemCreate,
   InventoryLocationCreate,
+  JobMaterials,
   InventoryOverview,
   InventoryReservation,
   InventoryReservationAllocate,
@@ -17,6 +20,14 @@ import type {
 
 const ROOT = "/api/v1/inventory";
 
+export async function getJobMaterials(jobId: string): Promise<JobMaterials> {
+  return (
+    await apiClient.get<JobMaterials>(
+      `${ROOT}/jobs/${encodeURIComponent(jobId)}/materials`,
+    )
+  ).data;
+}
+
 export async function getInventoryOverview(
   branchId?: string,
 ): Promise<InventoryOverview> {
@@ -24,6 +35,18 @@ export async function getInventoryOverview(
     await apiClient.get<InventoryOverview>(`${ROOT}/overview`, {
       params: { branch_id: branchId },
     })
+  ).data;
+}
+
+export async function createInventoryItem(
+  data: InventoryItemCreate,
+): Promise<InventoryItem> {
+  const { code, ...body } = data;
+  return (
+    await apiClient.put<InventoryItem>(
+      `${ROOT}/items/${encodeURIComponent(code.trim().toUpperCase())}`,
+      body,
+    )
   ).data;
 }
 

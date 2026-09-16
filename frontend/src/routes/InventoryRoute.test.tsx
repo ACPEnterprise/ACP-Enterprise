@@ -25,6 +25,7 @@ vi.mock("../hooks/useInventory", () => ({
 }));
 
 const mutateAsync = {
+  createItem: vi.fn(),
   createLocation: vi.fn(),
   transfer: vi.fn(),
   createReservation: vi.fn(),
@@ -44,6 +45,7 @@ const mutation = (fn: ReturnType<typeof vi.fn>, error: unknown = null) => ({
 });
 
 const inventoryMutations = (locationError: unknown = null) => ({
+  createItem: mutation(mutateAsync.createItem),
   createLocation: mutation(mutateAsync.createLocation, locationError),
   transfer: mutation(mutateAsync.transfer),
   createReservation: mutation(mutateAsync.createReservation),
@@ -131,6 +133,18 @@ describe("InventoryRoute", () => {
     expect(screen.queryByText("Create stock location")).not.toBeInTheDocument();
     expect(screen.queryByText("Create reservation")).not.toBeInTheDocument();
     expect(screen.queryByText("Allocate available")).not.toBeInTheDocument();
+  });
+
+  it("creates an authoritative material item without vendor or cost guesses", async () => {
+    permissions.add("COMPANY_INVENTORY_MANAGE");
+    render(<InventoryRoute />);
+    fireEvent.change(screen.getByLabelText("Material SKU"), { target: { value: "filter-20" } });
+    fireEvent.change(screen.getByLabelText("Material name"), { target: { value: "Twenty inch filter" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create material item" }));
+    await waitFor(() => expect(mutateAsync.createItem).toHaveBeenCalledWith({
+      code: "filter-20", name: "Twenty inch filter", stocking_unit: "each", allow_fractional: false,
+    }));
+    expect(screen.getByText(/Vendor identity, current cost/)).toBeVisible();
   });
 
   it("creates a Branch-scoped location through the existing command", async () => {

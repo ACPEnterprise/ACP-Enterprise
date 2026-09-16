@@ -45,6 +45,12 @@ export function InventoryRoute() {
   const [branch, setBranch] = useState("");
   const inventory = useInventory(branch || undefined, canRead);
   const mutations = useInventoryMutations();
+  const [item, setItem] = useState({
+    code: "",
+    name: "",
+    stocking_unit: "each",
+    allow_fractional: false,
+  });
   const [location, setLocation] = useState({
     code: "",
     name: "",
@@ -106,6 +112,15 @@ export function InventoryRoute() {
       // Retain the location evidence for correction or retry.
     }
   };
+  const submitItem = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      await mutations.createItem.mutateAsync(item);
+      setItem({ code: "", name: "", stocking_unit: "each", allow_fractional: false });
+    } catch {
+      // Retain authoritative item inputs for correction or safe retry.
+    }
+  };
   const submitReservation = async (event: FormEvent) => {
     event.preventDefault();
     if (!branch) return;
@@ -127,6 +142,7 @@ export function InventoryRoute() {
     }
   };
   const failedMutation = [
+    mutations.createItem,
     mutations.createLocation,
     mutations.transfer,
     mutations.createReservation,
@@ -189,6 +205,26 @@ export function InventoryRoute() {
             <Alert variant="danger" role="alert" aria-live="assertive">
               {inventoryRecoveryMessage(failedMutation.error)}
             </Alert>
+          )}
+          {canManage && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Material item master</CardTitle>
+                <CardDescription>
+                  Create one authoritative Company SKU. Vendor identity, current cost,
+                  and valuation remain separate evidence and are never guessed here.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="grid gap-3 md:grid-cols-4" onSubmit={(event) => void submitItem(event)}>
+                  <Input aria-label="Material SKU" required value={item.code} onChange={(event) => setItem({...item, code: event.target.value})} />
+                  <Input aria-label="Material name" required value={item.name} onChange={(event) => setItem({...item, name: event.target.value})} />
+                  <Input aria-label="Stocking unit" required value={item.stocking_unit} onChange={(event) => setItem({...item, stocking_unit: event.target.value})} />
+                  <label className="flex min-h-11 items-center gap-2 text-sm font-medium"><input type="checkbox" checked={item.allow_fractional} onChange={(event) => setItem({...item, allow_fractional: event.target.checked})} />Allow fractional quantity</label>
+                  <Button type="submit" loading={mutations.createItem.isPending}>Create material item</Button>
+                </form>
+              </CardContent>
+            </Card>
           )}
           {canManage && branch && (
             <Card>

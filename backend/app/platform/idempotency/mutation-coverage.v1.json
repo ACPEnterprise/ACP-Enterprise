@@ -268,6 +268,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "inventory",
+      "mechanism": "Company-scoped unique SKU with exact-value replay convergence",
+      "method": "PUT",
+      "operation_id": "create_item_api_v1_inventory_items__code__put",
+      "path": "/api/v1/inventory/items/{code}",
+      "reason": "The same normalized SKU and item facts return one authority; contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "accounting",
       "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
@@ -2999,6 +3009,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "894980effcc92ae74e86a4bd4f96bcca4bbb6ec54007e57e334cbaed03e40601",
+  "fingerprint": "55fbf80c43eee5c03b0ea551f47f09ce8a4e8738b9cd23e781765db2ae29f289",
   "schema_version": "1"
 }

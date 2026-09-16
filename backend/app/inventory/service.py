@@ -11,10 +11,12 @@ from app.inventory.contracts import (
     AdjustmentRecord,
     AllocateReservation,
     AllocationRecord,
+    CreateInventoryItem,
     CreateReservation,
     CreateStockLocation,
     CycleCountEntryRecord,
     CycleCountSessionRecord,
+    InventoryItemRecord,
     PostInventoryAdjustment,
     PostStockMovement,
     RecordCycleCount,
@@ -33,6 +35,7 @@ from app.inventory.schemas import (
     CycleCountSessionResponse,
     CycleCountStart,
     InventoryOverview,
+    ItemCreate,
     ItemResponse,
     LocationCreate,
     LocationResponse,
@@ -67,6 +70,7 @@ class InventoryService:
         branches = (
             tuple(context.authorized_branch_ids) if branch_id is None else (branch_id,)
         )
+
         if branch_id is not None:
             self._branch(context, branch_id)
         return InventoryOverview(
@@ -95,6 +99,42 @@ class InventoryService:
                 )
             ),
         )
+
+    async def create_item(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        code: str,
+        data: ItemCreate,
+    ) -> InventoryItemRecord:
+        async with session.begin():
+            existing = await self.repository.get_item_by_code(
+                session, company_id=context.company.id, code=code
+            )
+            if existing is not None:
+                if (
+                    existing.name != data.name.strip()
+                    or existing.stocking_unit != data.stocking_unit.strip()
+                    or existing.allow_fractional != data.allow_fractional
+                ):
+                    from app.inventory.errors import InventoryConflict
+
+                    raise InventoryConflict(
+                        "Item code already identifies different material authority"
+                    )
+                return existing
+            return await self.repository.create_item(
+                session,
+                spec=CreateInventoryItem(
+                    company_id=context.company.id,
+                    code=code,
+                    name=data.name,
+                    stocking_unit=data.stocking_unit,
+                    allow_fractional=data.allow_fractional,
+                    actor_user_id=context.user.id,
+                ),
+            )
 
     async def create_location(
         self,

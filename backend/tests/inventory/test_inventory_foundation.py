@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -28,6 +29,8 @@ from app.inventory.models import (
     StockMovement,
 )
 from app.inventory.repository import InventoryRepository
+from app.inventory.schemas import ItemCreate
+from app.inventory.service import InventoryService
 from app.platform.branch.models import Branch
 from app.platform.company import membership_models  # noqa: F401
 from app.platform.company.models import Company
@@ -115,6 +118,23 @@ async def seed_foundation(factory, company, branch, actor):
             ),
         )
     return repository, item, warehouse, truck
+
+
+@pytest.mark.asyncio
+async def test_item_master_creation_is_exact_code_replay_safe(inventory_fixture) -> None:
+    factory, company, _, _, actor = inventory_fixture
+    context = SimpleNamespace(company=company, user=actor)
+    payload = ItemCreate(name="Tankless isolation valve", stocking_unit="each", allow_fractional=False)
+    async with factory() as session:
+        first = await InventoryService().create_item(
+            session, context=context, code="valve-isolation", data=payload
+        )
+        second = await InventoryService().create_item(
+            session, context=context, code="VALVE-ISOLATION", data=payload
+        )
+    assert first.id == second.id
+    assert first.code == "VALVE-ISOLATION"
+    assert first.status == "active"
 
 
 def opening_spec(company, branch, actor, item, warehouse) -> PostStockMovement:

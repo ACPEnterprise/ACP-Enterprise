@@ -9,6 +9,12 @@ class InventorySchema(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, from_attributes=True)
 
 
+class ItemCreate(InventorySchema):
+    name: str = Field(min_length=1, max_length=240)
+    stocking_unit: str = Field(min_length=1, max_length=40)
+    allow_fractional: bool = True
+
+
 class LocationCreate(InventorySchema):
     branch_id: UUID
     code: str = Field(min_length=1, max_length=64)
@@ -91,6 +97,31 @@ class ItemResponse(InventorySchema):
     allow_fractional: bool
     status: str
     version: int
+
+
+class JobMaterialRequirementResponse(InventorySchema):
+    component_code: str | None
+    label: str
+    requirement_type: str
+    expected_quantity: Decimal
+    inventory_item_id: UUID | None
+    stocking_unit: str | None
+    on_hand_quantity: Decimal | None
+    reserved_quantity: Decimal | None
+    available_quantity: Decimal | None
+    consumed_quantity: Decimal | None
+    readiness_state: str
+    blockers: tuple[str, ...]
+    source_snapshot_ids: tuple[UUID, ...]
+    source_snapshot_digests: tuple[str, ...]
+
+
+class JobMaterialsResponse(InventorySchema):
+    job_id: UUID
+    branch_id: UUID
+    requirements: tuple[JobMaterialRequirementResponse, ...]
+    readiness_state: str
+    blockers: tuple[str, ...]
 
 
 class LocationResponse(InventorySchema):

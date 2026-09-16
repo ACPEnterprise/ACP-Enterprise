@@ -10,6 +10,7 @@ from app.inventory.errors import (
     InventoryNotFound,
     InventoryValidation,
 )
+from app.inventory.job_materials import job_materials_service
 from app.inventory.schemas import (
     AdjustmentCreate,
     AdjustmentResponse,
@@ -20,6 +21,9 @@ from app.inventory.schemas import (
     CycleCountSessionResponse,
     CycleCountStart,
     InventoryOverview,
+    ItemCreate,
+    ItemResponse,
+    JobMaterialsResponse,
     LocationCreate,
     LocationResponse,
     MovementResponse,
@@ -93,6 +97,34 @@ async def overview(
     try:
         return await inventory_service.overview(
             session, context=context, branch_id=branch_id
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.get("/jobs/{job_id}/materials", response_model=JobMaterialsResponse)
+async def job_materials(
+    job_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> JobMaterialsResponse:
+    try:
+        return await job_materials_service.projection(
+            session, context=context, job_id=job_id
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.put("/items/{code}", response_model=ItemResponse)
+async def create_item(
+    code: str, data: ItemCreate, context: ManageContext, session: DatabaseSession
+) -> ItemResponse:
+    try:
+        return ItemResponse.model_validate(
+            await inventory_service.create_item(
+                session, context=context, code=code, data=data
+            )
         )
     except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
         raise translate(error) from error
