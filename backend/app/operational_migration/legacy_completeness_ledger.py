@@ -79,6 +79,8 @@ class LegacyCompletenessLedger:
             raise ValueError("legacy completeness ledger family coverage mismatch")
         for family in self.families.values():
             counts = family["counts"]
+            if not isinstance(counts, dict):
+                raise TypeError("legacy completeness ledger counts must be a mapping")
             if set(counts) != set(COUNT_FIELDS):
                 raise ValueError("legacy completeness ledger count coverage mismatch")
 

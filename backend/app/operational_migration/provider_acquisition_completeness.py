@@ -113,7 +113,7 @@ def build_provider_completeness_manifest(
         int(artifact.get("http_status") or 0) != 200
         for artifact in appointments.get("artifacts") or []
     )
-    hcp = {
+    hcp: dict[str, object] = {
         "provider": "housecall_pro",
         "company_or_realm": "All County Plumbing and Leak",
         "environment": collection.get("source_environment") or "production",
@@ -156,7 +156,7 @@ def build_provider_completeness_manifest(
     counts = {kind: sum(value.get("kind") == kind for value in registrations) for kind in kinds}
     missing = tuple(sorted(set(QBO_REQUESTED) - set(kinds)))
     realms = sorted({str(value.get("realm_id") or value.get("realm") or "UNAVAILABLE") for value in registrations})
-    qbo = {
+    qbo: dict[str, object] = {
         "provider": "quickbooks_online",
         "company_or_realm": realms,
         "environment": "production_source_evidence",
