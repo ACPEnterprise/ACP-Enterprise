@@ -1,11 +1,35 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-15 23:03 America/New_York
+Snapshot: 2026-09-15 23:09 America/New_York
 
 ## Authority and deployed state
 
-- Protected authority: `ab5d5c5b593658bfc4a6349445c472919a275b6d`
-- Protected tip: PR #342 LIA real-world usefulness and read-only voice, merged
+- Protected authority: `15287f82f3c5a40a97baf2da4505beb24a7b58c3`
+- Protected tip: PR #346 source-backed financial history and reconciliation,
+  merged from `1935a776fc731bcdb37f3245f9bfd666df6b86b2` at 23:08:25 with
+  no checks, statuses or reviews. It integrates and supersedes PR/head chains
+  #310/`1b43468f...`, #319/`0b7b5fad...`, #324/`5d8feb30...`,
+  #326/`c354d024...` and #328/`0490f984...`. The protected tree now contains a
+  guarded Production QBO GET/token-refresh acquisition command and an accountant
+  packet writer; their integration is not authorization to execute either. The
+  HCP source-history runtime trusts page globs after checking only manifest
+  contract/method, without binding page inventory or file digests to the manifest.
+  The packet writer retains parent-chmod/symlink/private-root concerns. Keep QBO
+  acquisition, accountant packet generation and Migration admission disabled
+  pending repaired evidence binding, custody validation and explicit owner gate.
+- Immediately preceding protected tip: PR #344 complete Customer History product,
+  merged from
+  `78197e393c3825bd63c0ae7d7f893ea605e50a06` at 23:03:43 with no checks,
+  statuses or reviews. It contains no schema migration and includes the earlier
+  Customer acceptance head `4065e3ab...`, which is now superseded. Its repository
+  change removes the archived filter from the general `CustomerRepository.get()`
+  used by update, note, consent and other mutation services, even though the new
+  `get_including_archived()` method already supplies the intended Timeline-only
+  historical read. Treat protected #344 as a release blocker: restore current-only
+  semantics to general `get()`, retain the explicit historical getter, and add
+  archived-Customer denial tests for every mutation path before acceptance.
+- Immediately preceding protected tip: PR #342 LIA real-world usefulness and
+  read-only voice, merged
   from `0e338dc84bbf1d3237c0de34940723f5524400cd` at 22:59:56. It follows PR
   #338 at `fd732c76...`. PR #342 had no checks, statuses or reviews and does not
   contain a schema migration. Its exact 27-file delta globally changes the
@@ -33,10 +57,12 @@ Snapshot: 2026-09-15 23:03 America/New_York
   and the cutover acceptance script writes an arbitrary output path non-atomically
   with ambient permissions. Keep invitation, activation, assignment and acceptance
   execution disabled pending exact deployed PostgreSQL/auth/private-output proof.
-- Deployed Preview: `ab5d5c5b593658bfc4a6349445c472919a275b6d` as of 23:02,
-  with consecutive healthy exact-SHA responses at 23:02 and 23:03 and
-  PostgreSQL/Redis connected. Authenticated read-only text acceptance may proceed;
-  microphone acceptance remains separately gated.
+- Deployed Preview: `15287f82f3c5a40a97baf2da4505beb24a7b58c3` with
+  consecutive healthy exact-SHA responses at 23:10 and 23:11 and
+  PostgreSQL/Redis connected. Stop Customer and financial-history acceptance until
+  the protected #344 regression is repaired; prior LIA
+  read-only text qualification remains valid, while microphone acceptance stays
+  separately gated.
 - Prior Preview health history: on old #279, SSL connection attempts timed out at
   20:35–20:40; healthy responses returned at 20:41/20:42, HTTP 502 recurred at
   20:43, then recovered from 20:44 onward. Preserve that earlier sequence alongside
@@ -362,7 +388,7 @@ mandatory before accepting this deployment or guarded execution. PR #265 then
 integrated the runtime inventory without GitHub checks and with the operational
 defects recorded above.
 
-## 23:02 queue refresh — execution authority
+## 23:09 queue refresh — execution authority
 
 This section overrides older behind/ahead and merge-tree values later in the
 packet. Those detailed qualifications remain the rationale ledger; recompute any
@@ -371,23 +397,28 @@ protected authority.
 
 | Order | Candidate | Exact head / PR | Current classification | Enterprise action |
 |---:|---|---|---|---|
-| 1 | Protected PR #342 LIA stack | `ab5d5c5b...` / merged #342 | Protected and exact deployed healthy twice | Perform authenticated read-only text acceptance before any microphone test. Microphone requires explicit privacy/browser/accessibility approval and physical owner consent. |
-| 2 | Customer history acceptance evidence | `4065e3ab...` / no PR | Documentation-only; rebase required | Carry independently in Wave A; it does not qualify Customer product or absent real corpus. |
+| 0 | Protected PR #346 financial-history stack | `15287f82...` / merged #346 | Protected and exact deployed healthy twice; guarded commands present | Do not run Production QBO acquisition or accountant packet commands. Repair manifest-to-page/digest binding, filesystem custody, minimum-necessary source-history fields and real-control/Company/Branch authorization evidence before acceptance. |
+| 1 | Protected PR #344 Customer History | `4574d17a...` / merged #344 | Protected and exact deployed healthy twice; operationally blocked | Repair general archived-Customer lookup semantics before Wave A acceptance. Require authenticated current/archived/all search, bounded-history truth, cross-Company denial, and archived mutation denial. `4065e3ab...` is integrated/superseded. |
+| 1a | Protected PR #342 LIA stack | `ab5d5c5b...` / merged #342 | Protected predecessor, exact deployed healthy twice | Perform authenticated read-only text acceptance before any microphone test. Microphone requires explicit privacy/browser/accessibility approval and physical owner consent. |
 | 3 | Scheduling calendar UI | `636e2e99...` / no PR | Stale, reconcilable | Compose with required behavior from conflicting `69bb0193...`; prove complete pagination/timezone truth and keep real reschedule outside qualification. |
-| 4 | Dispatch operator board | `acdfb2c398c0829d221219cef95b070c691b0124` / no PR | 13 behind, 2 ahead, merge-clean at `abda708c...`; schema-free | Repair the 20-row Job-page dependency before Wave A: board work without a Job in that page currently loses Job state/customer/location and can be omitted from state/search semantics. Then rerun 12 focused tests/build and authenticated Branch/date/permission acceptance. |
-| 5 | Beacon owner morning brief | `9185c780795f8787e49d625e455fc0542b6f48a7` / no PR | 13 behind, 1 ahead, merge-clean at `c964b005...`; read-only/schema-free | Rebase, keep historical comparisons explicitly unavailable, rerun 2 focused tests plus auth/Company/Branch/zero-write checks, and place after authoritative source lanes rather than claiming delivery/mobile readiness. |
-| 6 | Inventory material item authority | `38a9bdaa8cf98c8c3056106a52970ae230d071a8` / PR #340 | 22 behind, 1 ahead, merge-clean at `4f6c859e...`; no migration in delta | Rebase after current schema head, rerun 10 registry tests and all 11 PostgreSQL inventory/replay/concurrency cases. Bound path `code` length/normalization at HTTP validation and prove concurrent create returns convergent replay/conflict rather than an integrity 500. Do not expose mutation before database evidence. |
-| 7 | Workforce durable source certification | `6757fd89c2d4ac9f77b0e4319a4b74bad41d7609` / PR #341 | 13 behind, 1 ahead, merge-clean at `d0f7ae35...`; new Alembic head `o5q7s9u1w3y5` after `n4p6r8t0v2x4` | Hold Wave B. Rebase and repair source-evidence drift/replay binding, concurrent first-write conflict handling, CREATE_ONBOARD source/Branch binding, and database immutability of claimed append-only revisions. Then run zero-to-head/current=head/downgrade and PostgreSQL tenant/replay/concurrency tests. It must not activate, invite or create an Employee. |
-| 7a | Workforce notification targeting | `f17d7f211b79c8bfb7f2845a29c8ce7dcc0eb3e2` / PR #343 | Current, 0 behind/1 ahead, merge-clean at `f7774981...`; read-only/schema-free | Hold for Mobile/Workforce reconciliation. Validate requested Branch existence and Company scope, decide whether an authorized non-home assignment Branch must work, narrow disclosure of internal membership/user/auth-version identifiers, and prove an actual authorized inbox consumer exists before calling the target READY. No enqueue/push/provider action. |
-| 8 | LIA conversation quality | `59a438d4d73e79658746fd962475d12418f41038` / no PR | 13 behind, 1 ahead; conflicts in `backend/app/lia/planner.py` and `service.py` | Do not merge. Reconcile only the effective conversation behavior onto protected #342, preserving its entity resolution, Payroll guidance, evidence bounds and voice safety; rerun both complete LIA suites. |
+| 4 | Dispatch operator board | `acdfb2c398c0829d221219cef95b070c691b0124` / no PR | 33 behind, 2 ahead, merge-clean at `963be4cd...`; schema-free | Repair the 20-row Job-page dependency before Wave A: board work without a Job in that page currently loses Job state/customer/location and can be omitted from state/search semantics. Then rerun 12 focused tests/build and authenticated Branch/date/permission acceptance. |
+| 5 | Beacon owner morning brief | `9185c780795f8787e49d625e455fc0542b6f48a7` / no PR | 33 behind, 1 ahead, merge-clean at `6f0b86ad...`; read-only/schema-free | Rebase, keep historical comparisons explicitly unavailable, rerun 2 focused tests plus auth/Company/Branch/zero-write checks, and place after authoritative source lanes rather than claiming delivery/mobile readiness. |
+| 6 | Inventory item authority + Job material projection | `cbed6fdaf2f8ad63fe5cec16c1d523cee8e56ff0` / PR #340 | Rewritten head, 15 behind/3 ahead, merge-clean at `d4ac6154...`; no migration | Hold. Preserve item-create repair gates, then bind snapshot digests to actual snapshot content, preserve optional/required material semantics instead of hard-coding required, prove service-quantity multiplication is not double counted, and test incomplete/missing snapshot references. Twelve projection/registry tests pass; PostgreSQL inventory/replay/concurrency remains required. |
+| 7 | Workforce durable source certification | `6757fd89c2d4ac9f77b0e4319a4b74bad41d7609` / PR #341 | 33 behind, 1 ahead, merge-clean at `8a90612a...`; new Alembic head `o5q7s9u1w3y5` after `n4p6r8t0v2x4` | Hold Wave B. Rebase and repair source-evidence drift/replay binding, concurrent first-write conflict handling, CREATE_ONBOARD source/Branch binding, and database immutability of claimed append-only revisions. Then run zero-to-head/current=head/downgrade and PostgreSQL tenant/replay/concurrency tests. It must not activate, invite or create an Employee. |
+| 7a | Workforce notification targeting | `f17d7f211b79c8bfb7f2845a29c8ce7dcc0eb3e2` / PR #343 | 20 behind, 1 ahead, merge-clean at `aaaa1bbe...`; read-only/schema-free | Hold for Mobile/Workforce reconciliation. Validate requested Branch existence and Company scope, decide whether an authorized non-home assignment Branch must work, narrow disclosure of internal membership/user/auth-version identifiers, and prove an actual authorized inbox consumer exists before calling the target READY. No enqueue/push/provider action. |
+| 7b | Workforce Employee timeline | `e01be856de72f99ded4fed749915ecc668c7e8fc` / PR #347 | 15 behind, 1 ahead, merge-clean at `41bc388c...`; read-only/schema-free | Hold. The broad Workforce read route fetches an Employee by Company without checking authorized Branch, returns every role assignment plus actor IDs/names, and loads unbounded Dispatch/Timekeeping history. Add Branch denial, minimum-necessary role/actor policy, pagination/caps and PostgreSQL zero-write/query-count acceptance before Wave B/D composition. |
+| 8 | LIA conversation quality | `59a438d4d73e79658746fd962475d12418f41038` / no PR | 33 behind, 1 ahead; conflicts in `backend/app/lia/planner.py` and `service.py` | Do not merge. Reconcile only the effective conversation behavior onto protected #342, preserving its entity resolution, Payroll guidance, evidence bounds and voice safety; rerun both complete LIA suites. |
 | 9 | Migration ledgers/completeness | PRs #336 `4a479f28...`, #339 `47c9ec15...`, then #328 stack | Stale but previously merge-clean; read-only intent | Recompute after #342, compose #336/#339, repair manifest-to-page/digest binding and private atomic output before Wave C. No guarded generator/executor/provider call. |
 | 10 | ECO/Luminary policy and read projections | #325 -> reconciled #329/#330 -> #327; #334 + #335/#337 | Stacked/read-only candidates with known authority defects | Reconcile policy certification first; never promote CONFIGURED/caller assertions to CERTIFIED. Repair Luminary false 80 confidence and partial-total semantics before its clean sibling composition. |
 | 11 | Identity/Mobile | PR #302 plus current Mobile successor(s) | Stale but independent of LIA deploy | Reconcile after authoritative Job Clock/Workforce contracts. Keep Apple signing/upload, credentials and Production out of qualification. |
 | 12 | QBO/Price Book | QBO reporting stack and incoming Price Book readiness | Owner/provider gated | Preserve OAuth owner gate. No token refresh, Production GET, upload or authorization during qualification. |
+| 12a | Price Book + Estimating sales workflow | `d231298606932033b46f7b53260ec5e1c69bb7a9` / PR #345 | 15 behind/10 ahead, merge-clean at `6c10523e...`; schema head `n0p8q16g3t9u` from `n4p6r8t0v2x4`; supersedes conflicting PR #290 | Hold as a large schema/runtime wave. Rebase in deliberate order with PR #341: both introduce sibling Alembic heads and conflict in mutation-registry evidence. Repair both scripts' arbitrary non-private, non-atomic output writes; validate the 34k-line candidate/config corpus provenance; rerun zero-to-head/current=head/downgrade, full PostgreSQL commercial/idempotency suites, frontend suites/build and authenticated owner/read-only acceptance. Never activate real prices during qualification. |
 
-Immediate release recommendation: do not add #340 or #341 to the in-flight LIA
-deployment. First accept exact protected #342 as read-only text functionality.
-Prepare Wave A from repaired Scheduling + Dispatch + Customer evidence; prepare
+Immediate release recommendation: stop Wave A acceptance on deployed #344 until
+the archived-Customer mutation regression is repaired. Do not add #340, #341 or
+#345 to that repair deployment. Prior exact #342 may continue read-only text
+acceptance independently. Prepare the rest of Wave A from repaired Scheduling +
+Dispatch + Customer evidence; prepare
 Wave B independently from the source-certification repair and existing
 Workforce/Payroll gates. Beacon can join the first wave whose admitted source
 evidence it summarizes. Inventory is safer as its own schema-independent runtime
@@ -398,8 +429,16 @@ Local qualification at this refresh: exact protected #342 passed 42 focused
 backend tests, 14 focused frontend tests and a production build; Beacon 2/2
 passed; Dispatch 12/12 and production build passed; Workforce notification
 targeting 4/4 passed; Inventory registry 10/10 passed, while its 11 database
-cases could not connect because host `postgres` is unavailable; all inspected
-new candidate diffs pass `git diff --check`. No guarded operation ran.
+cases could not connect because host `postgres` is unavailable. Updated PR #340
+passes 12 projection/registry tests. Protected #344 has 6 non-database contract
+passes; 13 PostgreSQL-backed Customer/Payment cases could not connect to the same
+host. PR #345 has 21 non-database backend passes; 34 PostgreSQL-backed cases could
+not connect to that host; its 14 focused frontend tests and production build pass.
+Protected #344 passes 55 focused frontend tests and a production build despite
+the independently inspected backend regression. All inspected new candidate diffs
+pass `git diff --check`. Protected #346 passes 13 focused backend and 12 focused
+frontend tests plus a production build without executing either guarded command.
+No guarded operation ran.
 
 ## Protected integration policy
 
