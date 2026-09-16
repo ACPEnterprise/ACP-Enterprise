@@ -306,3 +306,20 @@ class FieldReadinessResponse(WorkforceSchema):
     profile_id: UUID
     capability_evidence_id: UUID
     availability_evidence_id: UUID
+
+
+class EmployeeTimelineItem(WorkforceSchema):
+    event_type: str
+    occurred_at: datetime
+    authority: Literal["ACP_NATIVE", "SOURCE_BACKED"]
+    source: str
+    actor_user_id: UUID | None
+    actor_display_name: str | None
+    description: str
+    employee_id: UUID
+    navigation_reference: str | None = None
+
+
+class EmployeeTimeline(WorkforceSchema):
+    employee_id: UUID
+    items: tuple[EmployeeTimelineItem, ...]

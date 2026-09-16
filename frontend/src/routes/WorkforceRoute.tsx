@@ -8,7 +8,7 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Spinner } from "../ui";
 
@@ -46,6 +46,7 @@ export function WorkforceRoute() {
   const [statusFilter, setStatusFilter] = useState("");
   const [readinessFilter, setReadinessFilter] = useState("");
   const detail = useWorkforceEmployee(selected);
+  const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
   const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
   const passwordReset = useEmployeePasswordReset(
@@ -694,6 +695,7 @@ export function WorkforceRoute() {
               <a className="text-action-primary underline" href="#employee-access-heading">Role / Permissions</a>
               {canReviewTime && <a className="text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Time / Attendance</a>}
               {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Payroll setup</Link>}
+              <a className="text-action-primary underline" href="#employee-history">History</a>
             </nav>
             <section id="employee-personal" className="mt-4 scroll-mt-4" aria-label="Employee personal and work identity">
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
@@ -1009,6 +1011,24 @@ export function WorkforceRoute() {
                 </div>
               </section>
             </div>
+            <section id="employee-history" className="mt-5 scroll-mt-4 rounded-xl border border-stroke p-4" aria-label="Employee history">
+              <h4 className="font-semibold">Employee history</h4>
+              <p className="mt-1 text-sm text-content-muted">Canonical ACP events are labeled by authority. Source-backed evidence remains explicitly source-backed when available.</p>
+              {timeline.isLoading && <div className="mt-3"><Spinner label="Loading Employee history" /></div>}
+              {timeline.isError && <div className="mt-3"><Alert variant="warning">Employee history is unavailable. No historical event was inferred.</Alert></div>}
+              {timeline.data && <ol className="mt-3 space-y-3">
+                {timeline.data.items.map((item, index) => <li className="rounded-lg bg-surface-subtle p-3 text-sm" key={`${item.event_type}-${item.occurred_at}-${index}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <strong>{item.event_type.replaceAll("_", " ")}</strong>
+                    <Badge variant={item.authority === "ACP_NATIVE" ? "success" : "neutral"}>{item.authority.replaceAll("_", " ")}</Badge>
+                  </div>
+                  <p className="mt-1">{item.description}</p>
+                  <p className="mt-1 text-xs text-content-muted">{new Date(item.occurred_at).toLocaleString()} · {item.source.replaceAll("_", " ")}{item.actor_display_name ? ` · ${item.actor_display_name}` : ""}</p>
+                  {item.navigation_reference && <Link className="mt-2 inline-block font-semibold text-action-primary" to={item.navigation_reference}>Open related workspace</Link>}
+                </li>)}
+                {timeline.data.items.length === 0 && <li className="text-sm text-content-muted">No canonical Employee history is available.</li>}
+              </ol>}
+            </section>
       </Card>
         )}
       {confirmPasswordReset && administration.data?.user_id && (

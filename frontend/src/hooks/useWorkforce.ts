@@ -6,6 +6,7 @@ import {
   decideSourceCertification,
   getEmployeeAdministration,
   getEmployeePasswordReset,
+  getEmployeeTimeline,
   getRealRosterReadiness,
   getSourceCertificationLedger,
   getWorkforceEmployee,
@@ -101,6 +102,14 @@ export function useWorkforceEmployee(employeeId: string | null) {
   return useQuery({
     queryKey: ["workforce-employee", employeeId],
     queryFn: () => getWorkforceEmployee(employeeId as string),
+    enabled: Boolean(employeeId),
+  });
+}
+
+export function useEmployeeTimeline(employeeId: string | null) {
+  return useQuery({
+    queryKey: ["employee-timeline", employeeId],
+    queryFn: () => getEmployeeTimeline(employeeId as string),
     enabled: Boolean(employeeId),
   });
 }

@@ -132,6 +132,24 @@ describe("WorkforceRoute", () => {
       isError: false,
       mutate: vi.fn(),
     } as never);
+    vi.mocked(workforceHooks.useEmployeeTimeline).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        employee_id: "employee-1",
+        items: [{
+          event_type: "MOBILE_ROLE_ASSIGNED",
+          occurred_at: "2026-08-30T12:00:00Z",
+          authority: "ACP_NATIVE",
+          source: "membership_role",
+          actor_user_id: "user-1",
+          actor_display_name: "Office Owner",
+          description: "ACP Employee Mobile role assigned.",
+          employee_id: "employee-1",
+          navigation_reference: null,
+        }],
+      },
+    } as never);
   }
 
   it("provides a visible operational profile without Payroll data", async () => {
@@ -217,6 +235,8 @@ describe("WorkforceRoute", () => {
     expect(screen.getAllByText(/MAIN/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Active/).length).toBeGreaterThan(0);
     expect(screen.getByRole("navigation", { name: "Employee detail" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP Employee Mobile role assigned");
+    expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP NATIVE");
     expect(
       screen.queryByText(/compensation|net pay|tax election/i),
     ).not.toBeInTheDocument();
