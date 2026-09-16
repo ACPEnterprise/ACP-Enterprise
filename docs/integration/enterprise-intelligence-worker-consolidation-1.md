@@ -145,3 +145,8 @@ required escalation.
   lint, config validation, and iOS/Android Expo exports passed. The unsigned
   Xcode Simulator Release build was attempted but requires missing generated
   CocoaPods `Pods-ACPEmployee.release.xcconfig`.
+
+- Final fetch after reconciliation observed protected authority at
+  `2777f1bbb1fe3aa5145d4b4bd9a8bc7759073706`; the intervening Price Book
+  presentation-only OM2 change was incorporated as protected ancestry and did
+  not alter Intelligence source contracts.
