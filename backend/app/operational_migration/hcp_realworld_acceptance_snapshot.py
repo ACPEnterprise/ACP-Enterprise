@@ -15,32 +15,50 @@ CONTRACT: Final = "hcp-source4-realworld-acceptance-snapshot/v1"
 SOURCE: Final = "housecall_pro_source4"
 
 _FAMILIES: Final = {
-    "customers": ("customer_source_identities", "customers", "customer_id"),
+    "customers": (
+        "customer_source_identities",
+        "customers",
+        "customer_id",
+        "n.company_id = i.company_id",
+    ),
     "locations": (
         "service_location_source_identities",
         "service_locations",
         "service_location_id",
+        (
+            "EXISTS (SELECT 1 FROM customers owner "
+            "WHERE owner.id = n.customer_id AND owner.company_id = i.company_id)"
+        ),
     ),
-    "jobs": ("operational_migration_job_source_identities", "jobs", "job_id"),
+    "jobs": (
+        "operational_migration_job_source_identities",
+        "jobs",
+        "job_id",
+        "n.company_id = i.company_id",
+    ),
     "appointments": (
         "operational_migration_appointment_source_identities",
         "appointments",
         "appointment_id",
+        "n.company_id = i.company_id",
     ),
     "estimates": (
         "operational_migration_estimate_source_identities",
         "estimates",
         "estimate_id",
+        "n.company_id = i.company_id",
     ),
     "invoices": (
         "operational_migration_invoice_source_identities",
         "invoices",
         "invoice_id",
+        "n.company_id = i.company_id",
     ),
     "payments": (
         "operational_migration_payment_source_identities",
         "payments",
         "payment_id",
+        "n.company_id = i.company_id",
     ),
 }
 
@@ -56,7 +74,12 @@ async def build_realworld_snapshot(
     await session.execute(text("SET TRANSACTION READ ONLY"))
     scope = {"company_id": company_id, "branch_id": branch_id, "source": SOURCE}
     families: dict[str, object] = {}
-    for family, (identity_table, native_table, target_column) in _FAMILIES.items():
+    for family, (
+        identity_table,
+        native_table,
+        target_column,
+        native_scope,
+    ) in _FAMILIES.items():
         branch_filter = "AND i.branch_id = :branch_id" if family != "customers" else ""
         row = (
             await session.execute(
@@ -67,7 +90,7 @@ async def build_realworld_snapshot(
                     FROM {identity_table} i
                     LEFT JOIN {native_table} n
                       ON n.id = i.{target_column}
-                     AND n.company_id = i.company_id
+                     AND {native_scope}
                     WHERE i.company_id = :company_id
                       AND i.source_system = :source
                       {branch_filter}

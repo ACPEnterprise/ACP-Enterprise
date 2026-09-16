@@ -95,3 +95,6 @@ async def test_snapshot_is_read_only_and_accounts_native_continuity() -> None:
         word in " ".join(session.statements).upper()
         for word in ("INSERT ", "UPDATE ", "DELETE ")
     )
+    assert any(
+        "owner.id = n.customer_id" in statement for statement in session.statements
+    )
