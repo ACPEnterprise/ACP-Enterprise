@@ -2,6 +2,7 @@ import type { DispatchBoardItem } from "../../types/dispatch";
 import type { JobListItem } from "../../types/jobs";
 import { Alert, Badge, Card, Input, Select } from "../../ui";
 import {
+  activeDispatchAssignment,
   operationalState,
   technicianLoads,
   type DispatchBoardFilter,
@@ -29,12 +30,15 @@ export function DispatchOperationsOverview({
   const technicians = Array.from(
     new Set(
       items
-        .flatMap((item) => [
-          item.assignment?.primary_employee_name,
-          ...(item.assignment?.crew_members ?? []).map(
-            (member) => member.display_name,
-          ),
-        ])
+        .flatMap((item) => {
+          const assignment = activeDispatchAssignment(item);
+          return [
+            assignment?.primary_employee_name,
+            ...(assignment?.crew_members ?? []).map(
+              (member) => member.display_name,
+            ),
+          ];
+        })
         .filter((name): name is string => Boolean(name)),
     ),
   ).sort();
@@ -52,7 +56,9 @@ export function DispatchOperationsOverview({
     ],
     [
       "Exceptions",
-      items.filter((item) => item.assignment?.active_exception_code).length,
+      items.filter(
+        (item) => activeDispatchAssignment(item)?.active_exception_code,
+      ).length,
     ],
     ["Completed", states.filter((state) => state === "COMPLETED").length],
   ] as const;
@@ -169,16 +175,20 @@ export function DispatchOperationsOverview({
           </p>
         )}
       </Card>
-      {items.some((item) => item.assignment?.active_exception_code) && (
+      {items.some(
+        (item) => activeDispatchAssignment(item)?.active_exception_code,
+      ) && (
         <Alert
           variant="warning"
           title="Dispatch exceptions require human review"
         >
           {items
-            .filter((item) => item.assignment?.active_exception_code)
+            .filter(
+              (item) => activeDispatchAssignment(item)?.active_exception_code,
+            )
             .map(
               (item) =>
-                `${item.appointment_number}: ${item.assignment?.active_exception_code?.replaceAll("_", " ")}`,
+                `${item.appointment_number}: ${activeDispatchAssignment(item)?.active_exception_code?.replaceAll("_", " ")}`,
             )
             .join(" · ")}
         </Alert>

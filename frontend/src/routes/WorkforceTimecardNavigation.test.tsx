@@ -16,8 +16,23 @@ vi.mock("../features/administration/hooks", () => ({
   useRoles: () => ({ data: [] }),
 }));
 vi.mock("../hooks/useWorkforce", () => ({
+  useSourceCertification: () => ({
+    query: { data: undefined, isLoading: false, isError: false },
+    decide: { mutate: vi.fn(), isPending: false },
+  }),
+  useRealRosterReadiness: () => ({
+    query: { data: undefined, isLoading: false, isError: false },
+    bind: { mutate: vi.fn(), isPending: false },
+    prepareFieldReadiness: { mutate: vi.fn(), isPending: false },
+    canBind: false,
+  }),
   useWorkforceDirectory: () => ({ data: [], isLoading: false, isError: false }),
   useWorkforceEmployee: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
+  useEmployeeTimeline: () => ({
     data: undefined,
     isLoading: false,
     isError: false,
@@ -121,7 +136,9 @@ describe("Workforce timecard navigation", () => {
   it("opens the Employee requested by the Payroll register link", () => {
     render(
       <MemoryRouter
-        initialEntries={["/employees?employee=employee-1&period=period-1#timecard-operations"]}
+        initialEntries={[
+          "/employees?employee=employee-1&period=period-1#timecard-operations",
+        ]}
       >
         <WorkforceRoute />
       </MemoryRouter>,
@@ -130,13 +147,26 @@ describe("Workforce timecard navigation", () => {
       .getByText("Sanctioned Employee")
       .closest("details");
     expect(disclosure).toHaveAttribute("open");
-    expect(screen.getByRole("heading", { name: "Weekly totals" })).toBeVisible();
-    expect(screen.getByText("8.00 supported · 8.00 accepted hours")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Weekly totals" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("8.00 supported · 8.00 accepted hours"),
+    ).toBeVisible();
     expect(screen.getByText("Revision 2 · verified")).toBeVisible();
     expect(screen.queryByText("Pay period required")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Review Payroll period" })).toHaveAttribute("href", "/payroll?period=period-1");
-    expect(screen.getByRole("navigation", { name: "Team workspace" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Employees" })).toHaveAttribute("href", "#employee-roster");
-    expect(screen.getByRole("link", { name: "Time & Attendance" })).toHaveAttribute("href", "#timecard-operations");
+    expect(
+      screen.getByRole("link", { name: "Review Payroll period" }),
+    ).toHaveAttribute("href", "/payroll?period=period-1");
+    expect(
+      screen.getByRole("navigation", { name: "Team workspace" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Employees" })).toHaveAttribute(
+      "href",
+      "#employee-roster",
+    );
+    expect(
+      screen.getByRole("link", { name: "Time & Attendance" }),
+    ).toHaveAttribute("href", "#timecard-operations");
   });
 });
