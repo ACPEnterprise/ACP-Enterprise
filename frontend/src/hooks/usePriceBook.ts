@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import * as api from "../api/priceBook";
 
 export const priceBookKeys = {
@@ -17,6 +22,7 @@ export function usePriceBook(
     queryKey: priceBookKeys.catalog(branch, filters),
     queryFn: () => api.getPriceBook(branch, filters),
     enabled,
+    placeholderData: keepPreviousData,
   });
 }
 export function useCandidateReview(
