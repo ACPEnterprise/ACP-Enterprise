@@ -50,3 +50,26 @@ required escalation.
 - OM1 owns final protected integration, schema reline, Preview/Production
   deployment, and release authorization.
 
+## Batch 2 addendum
+
+- Current protected SHA observed before Batch 2 reconciliation:
+  `d5148f60ba842f9b4e7c9e83f16d1d3301372491`.
+- Laptop-A Batch 2 candidate:
+  `origin/work/lia-beacon-owner-intelligence-2` at
+  `82ab4dbd581165404b58db6d2766b2885c80c6c1`. Its prior Beacon-history
+  commit was already present in protected ancestry; only the new LIA-to-bounded
+  Beacon-history composition was retained.
+- Laptop-B Batch 2 candidate:
+  `origin/work/luminary-economics-presentation-2` at
+  `14c9ca49ea8545298769df38cb3459682198e70c`, based directly on the then-current
+  protected SHA. Integrated with no migration.
+- Phone/C Batch 2 candidate:
+  `origin/work/laptop1-phone-lia-mobile-interaction-1` at
+  `41300801dbf94fb588c6dcb18cc458bbae74b32c`. Documentation-only server
+  contract; Mobile implementation remains blocked until the employee-safe route
+  exists.
+- Protected authority had already absorbed the previous Intelligence checkpoint;
+  rebase preserved that work and a non-force merge reconciled the remote branch
+  history.
+- Final consolidated branch head is recorded in the release handoff; it is a
+  protected ancestor and has zero remote integration divergence.
