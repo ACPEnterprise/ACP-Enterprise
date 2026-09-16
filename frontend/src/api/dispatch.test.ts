@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { assignPrimary, reportDispatchException } from "./dispatch";
+import {
+  assignPrimary,
+  getDispatchAssignment,
+  getDispatchAssignmentHistory,
+  reportDispatchException,
+} from "./dispatch";
 
 vi.mock("./client", () => ({
-  apiClient: { post: vi.fn(), put: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }));
 
 describe("Dispatch API", () => {
@@ -37,7 +42,9 @@ describe("Dispatch API", () => {
   });
 
   it("accepts a caller-owned idempotency identity for composite scheduling", async () => {
-    vi.mocked(apiClient.post).mockResolvedValue({ data: { id: "assignment-1" } });
+    vi.mocked(apiClient.post).mockResolvedValue({
+      data: { id: "assignment-1" },
+    });
     await assignPrimary(
       "appointment-1",
       "employee-1",
@@ -47,7 +54,29 @@ describe("Dispatch API", () => {
     );
     expect(apiClient.post).toHaveBeenCalledWith(
       "/api/v1/dispatch/appointments/appointment-1/assignment",
-      expect.objectContaining({ idempotency_key: "schedule-assignment:request-1" }),
+      expect.objectContaining({
+        idempotency_key: "schedule-assignment:request-1",
+      }),
+    );
+  });
+
+  it("reads current assignment and immutable history without mutation", async () => {
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({ data: { id: "assignment-1" } })
+      .mockResolvedValueOnce({ data: [{ event_type: "created" }] });
+    await expect(getDispatchAssignment("appointment-1")).resolves.toEqual({
+      id: "assignment-1",
+    });
+    await expect(
+      getDispatchAssignmentHistory("appointment-1"),
+    ).resolves.toEqual([{ event_type: "created" }]);
+    expect(apiClient.get).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/dispatch/appointments/appointment-1/assignment",
+    );
+    expect(apiClient.get).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/dispatch/appointments/appointment-1/assignment/history",
     );
   });
 });
