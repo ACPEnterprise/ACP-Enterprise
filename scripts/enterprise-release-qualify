@@ -53,9 +53,16 @@ class Result:
 
 def checks() -> tuple[Check, ...]:
     py = "python"
+    execution_profiles = (
+        "local",
+        "database",
+        "preview",
+        "postdeploy",
+        "commissioning",
+    )
     return (
-        Check("repository_cleanliness", "Repository cleanliness", ("local",), ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
-        Check("repository_provenance", "Repository provenance", ("local", "preview", "postdeploy"), ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
+        Check("repository_cleanliness", "Repository cleanliness", execution_profiles, ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
+        Check("repository_provenance", "Repository provenance", execution_profiles, ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
         Check("backend_dependencies", "Backend dependency/install verification", ("local",), (py, "-m", "pip", "check"), "No broken requirements", (py,)),
         Check("frontend_dependencies", "Frontend dependency/install verification", ("local",), ("npm", "ci", "--prefix", "frontend", "--ignore-scripts"), "Lockfile install succeeds", ("npm",), "workspace_dependencies"),
         Check("backend_lint", "Backend Ruff", ("local",), (py, "-m", "ruff", "check", "backend"), "All checks passed", (py,)),
@@ -77,7 +84,7 @@ def checks() -> tuple[Check, ...]:
         Check("redis_health", "Redis health", ("preview", "postdeploy"), None, "Authenticated health user returns PONG"),
         Check("preview_configuration", "Preview configuration", ("preview",), ("docker", "compose", "--env-file", ".env.preview", "-f", "docker-compose.preview.yml", "config", "--quiet"), "Compose interpolation succeeds without printing secrets", ("docker",)),
         Check("secret_custody", "Secrets required but not exposed", ("local", "preview"), ("python3", "scripts/release-secret-custody-check.py", "--env-example", ".env.preview.example"), "Required secret names exist; tracked files contain no runtime secrets", ("python3",)),
-        Check("release_revision", "Release revision/provenance capture", ("local", "preview", "postdeploy"), ("git", "show", "-s", "--format=%H%n%T%n%P%n%aI", "HEAD"), "Commit, tree, parents, and timestamp recorded", ("git",)),
+        Check("release_revision", "Release revision/provenance capture", execution_profiles, ("git", "show", "-s", "--format=%H%n%T%n%P%n%aI", "HEAD"), "Commit, tree, parents, and timestamp recorded", ("git",)),
         Check("rollback_readiness", "Rollback readiness", ("preview",), None, "Backup digest and verified restore receipt are present and match authority"),
         Check("postdeploy_routes", "Post-deployment route smoke", ("postdeploy",), None, "Health, SPA routes, API revision, auth, and RBAC checks pass"),
     )

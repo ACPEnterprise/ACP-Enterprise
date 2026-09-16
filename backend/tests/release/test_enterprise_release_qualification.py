@@ -52,6 +52,15 @@ def test_release_catalog_covers_required_gates() -> None:
     } <= keys
 
 
+def test_every_executed_profile_is_bound_to_clean_candidate_provenance() -> None:
+    module = _module()
+    by_key = {check.key: check for check in module.checks()}
+    expected = {"local", "database", "preview", "postdeploy", "commissioning"}
+
+    for key in ("repository_cleanliness", "repository_provenance", "release_revision"):
+        assert set(by_key[key].profiles) == expected
+
+
 def test_status_vocabulary_is_closed() -> None:
     module = _module()
     assert module.STATUSES == {
