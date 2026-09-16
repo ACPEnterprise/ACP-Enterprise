@@ -35,3 +35,16 @@ Enterprise must provide an authenticated owner/CSR session and deploy this candi
 11. Exercise technician, date, status, Branch, window, and Needs Scheduling filters and record any source-only or readiness gaps.
 
 Real-world closure requires the entire script against current All County records. Automated qualification alone is not operator acceptance.
+
+## Owner acceptance gate snapshot — 2026-09-15
+
+- Protected authority remains `90af57abf5f4e2dbda75ed2680d4d420eb60410c`.
+- Preview remains healthy at `60035693a51ec66328625dfcc78e7cd2dfead824`, with PostgreSQL and Redis connected.
+- No sanctioned Preview acceptance token or attestation exists under `/run/secrets/acp-preview-acceptance` or `/var/run/secrets/acp-preview-acceptance` on this runner.
+- OM2-B's Workforce candidate is `work/om2b-real-technician-activation-support-1` at `57852bdf20ed9e45a5dbaaad48540358b5c9dcf1`. It is four commits ahead of protected and is not integrated or deployed.
+- That candidate requires exact existing-identity binding or owner-supplied onboarding for each real field technician, followed by a bounded MAIN-Branch readiness window. It does not claim those real records are already eligible.
+- No real Job or Appointment has been designated as sanctioned for mutation. Source history or a display name is not mutation authority.
+
+Enterprise must reconcile the two candidates rather than merge them blindly. Both intentionally change `frontend/src/api/dispatch.ts`, `DispatchAssignmentPanel.tsx` and its test, the Dispatch eligibility helper, `useDispatch.ts`, and an onboarding test fixture. The resolved contract must preserve OM2-C's Job/Appointment assignment reads and Branch timezone fixture while adopting OM2-B's rule that selection requires the backend's complete `eligible` decision. Dispatch must not create Workforce readiness.
+
+After integration and deployment, the minimum owner action is: establish a fresh authorized owner/CSR session; select one named real Appointment; explicitly sanction assignment of one currently eligible real technician; save in the ordinary UI; refresh; then compare the Appointment, Dispatch board, and Job projections. Until those prerequisites exist, the result is `BLOCKED_WORKFORCE`, `BLOCKED_DEPLOYMENT`, `BLOCKED_AUTH`, and `BLOCKED_OWNER_SANCTION`, not a product failure and not real-world closure.
