@@ -43,6 +43,8 @@ def test_beta_edge_preserves_preview_and_blocks_internal_surfaces() -> None:
     ):
         assert path in caddy
     assert "app.twelve-hats.com" not in caddy
+    assert caddy.count("@browser_secret_path path /activate /reset-password") == 2
+    assert caddy.count("log_skip @browser_secret_path") == 2
 
 
 def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
@@ -104,3 +106,14 @@ def test_frontend_proxy_emits_one_security_header_policy() -> None:
         "Strict-Transport-Security",
     ):
         assert f"proxy_hide_header {header};" in nginx
+
+
+def test_frontend_proxy_does_not_log_browser_borne_credentials() -> None:
+    nginx = (REPOSITORY_ROOT / "frontend/nginx.preview.conf").read_text(
+        encoding="utf-8"
+    )
+
+    for route in ("/activate", "/reset-password"):
+        location = nginx.split(f"location = {route} {{", 1)[1].split("}", 1)[0]
+        assert "access_log off;" in location
+        assert "try_files $uri /index.html;" in location
