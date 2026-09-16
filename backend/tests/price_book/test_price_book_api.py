@@ -20,6 +20,16 @@ def test_price_book_permissions_and_openapi_are_bounded() -> None:
     assert "/api/v1/price-book/versions/{version_id}/archive" in paths
     assert "/api/v1/price-book/snapshots/{snapshot_id}" in paths
     assert "/api/v1/price-book/audit" in paths
+    assert "/api/v1/price-book/activation-readiness/review-batches" in paths
+    assert (
+        "/api/v1/price-book/activation-readiness/review-batches/{batch_id}/decision"
+        in paths
+    )
+    assert "/api/v1/price-book/activation-readiness/adjustment-proposals" in paths
+    assert (
+        "/api/v1/price-book/activation-readiness/adjustment-proposals/{proposal_id}/decision"
+        in paths
+    )
 
 
 @pytest.mark.asyncio

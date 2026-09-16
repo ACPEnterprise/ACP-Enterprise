@@ -3,16 +3,29 @@ import * as api from "../api/estimates";
 
 export const estimateKeys = {
   all: ["estimates"] as const,
-  list: (status?: string, customerId?: string) => ["estimates", "list", status ?? "all", customerId ?? "all"] as const,
+  list: (status?: string, customerId?: string) =>
+    ["estimates", "list", status ?? "all", customerId ?? "all"] as const,
   detail: (id: string) => ["estimates", id] as const,
 };
 
-export function useEstimates(status?: string, customerId?: string, enabled = true) {
-  return useQuery({ queryKey: estimateKeys.list(status, customerId), queryFn: () => api.listEstimates(status, customerId), enabled });
+export function useEstimates(
+  status?: string,
+  customerId?: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: estimateKeys.list(status, customerId),
+    queryFn: () => api.listEstimates(status, customerId),
+    enabled,
+  });
 }
 
 export function useEstimate(id: string, enabled = true) {
-  return useQuery({ queryKey: estimateKeys.detail(id), queryFn: () => api.getEstimate(id), enabled });
+  return useQuery({
+    queryKey: estimateKeys.detail(id),
+    queryFn: () => api.getEstimate(id),
+    enabled,
+  });
 }
 
 export function useEstimateMutations() {
@@ -24,10 +37,49 @@ export function useEstimateMutations() {
   return {
     create: useMutation({ mutationFn: api.createEstimate, onSuccess: update }),
     revise: useMutation({
-      mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.reviseEstimate>[1] }) => api.reviseEstimate(id, input),
+      mutationFn: ({
+        id,
+        input,
+      }: {
+        id: string;
+        input: Parameters<typeof api.reviseEstimate>[1];
+      }) => api.reviseEstimate(id, input),
       onSuccess: update,
     }),
-    transition: useMutation({ mutationFn: ({ id, action, input }: { id: string; action: "send" | "view" | "expire"; input: Parameters<typeof api.transitionEstimate>[2] }) => api.transitionEstimate(id, action, input), onSuccess: update }),
-    decide: useMutation({ mutationFn: ({ id, action, input }: { id: string; action: "approve" | "reject"; input: Parameters<typeof api.decideEstimate>[2] }) => api.decideEstimate(id, action, input), onSuccess: update }),
+    transition: useMutation({
+      mutationFn: ({
+        id,
+        action,
+        input,
+      }: {
+        id: string;
+        action: "send" | "view" | "expire";
+        input: Parameters<typeof api.transitionEstimate>[2];
+      }) => api.transitionEstimate(id, action, input),
+      onSuccess: update,
+    }),
+    decide: useMutation({
+      mutationFn: ({
+        id,
+        action,
+        input,
+      }: {
+        id: string;
+        action: "approve" | "reject";
+        input: Parameters<typeof api.decideEstimate>[2];
+      }) => api.decideEstimate(id, action, input),
+      onSuccess: update,
+    }),
+    convert: useMutation({
+      mutationFn: ({
+        id,
+        input,
+      }: {
+        id: string;
+        input: Parameters<typeof api.convertEstimateToJob>[1];
+      }) => api.convertEstimateToJob(id, input),
+      onSuccess: () =>
+        void client.invalidateQueries({ queryKey: estimateKeys.all }),
+    }),
   };
 }

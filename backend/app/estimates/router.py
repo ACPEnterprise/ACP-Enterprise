@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.estimates.contracts import (
+    ConvertEstimateToJobSpec,
     CreateEstimateRevisionSpec,
     CreateEstimateSpec,
     EstimateDecisionSpec,
@@ -20,6 +21,8 @@ from app.estimates.errors import (
     EstimateValidationError,
 )
 from app.estimates.schemas import (
+    ConversionInput,
+    ConversionItem,
     DecisionInput,
     EstimateItem,
     EstimateList,
@@ -306,6 +309,37 @@ async def _decision(
             ),
         )
         return EstimateItem.model_validate(result)
+    except EstimateError as error:
+        raise _error(error) from error
+
+
+@router.post(
+    "/{estimate_id}/convert-to-job", response_model=ConversionItem
+)
+async def convert_estimate_to_job(
+    estimate_id: UUID,
+    payload: ConversionInput,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ConversionItem:
+    _branch(context, payload.branch_id)
+    try:
+        return ConversionItem.model_validate(
+            await estimate_service.convert_to_job(
+                session,
+                spec=ConvertEstimateToJobSpec(
+                    company_id=context.company.id,
+                    branch_id=payload.branch_id,
+                    estimate_id=estimate_id,
+                    expected_version=payload.expected_version,
+                    actor_user_id=context.user.id,
+                    idempotency_key=payload.idempotency_key,
+                    job_type_code=payload.job_type_code,
+                    customer_reported_problem=payload.customer_reported_problem,
+                    internal_description=payload.internal_description,
+                ),
+            )
+        )
     except EstimateError as error:
         raise _error(error) from error
 

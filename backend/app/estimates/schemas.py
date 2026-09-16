@@ -46,6 +46,30 @@ class DecisionInput(TransitionInput):
     evidence_reference: str | None = Field(default=None, max_length=500)
 
 
+class ConversionInput(EstimateSchema):
+    branch_id: UUID
+    expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+    job_type_code: str | None = Field(default=None, max_length=80)
+    customer_reported_problem: str | None = Field(default=None, max_length=4000)
+    internal_description: str | None = Field(default=None, max_length=4000)
+
+
+class ConversionItem(EstimateSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    estimate_id: UUID
+    estimate_revision_id: UUID
+    job_id: UUID
+    job_number: str
+    estimate_version: int
+    snapshot_lineage_digest: str
+    idempotency_key: str
+    converted_by_user_id: UUID
+    converted_at: datetime
+
+
 class TaxPolicyInput(EstimateSchema):
     branch_id: UUID | None = None
     tax_classification_id: UUID

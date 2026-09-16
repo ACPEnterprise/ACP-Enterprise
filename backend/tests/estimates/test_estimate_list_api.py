@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.estimates.router import list_estimates
 from app.estimates.schemas import EstimateSummary
 from app.estimates.service import estimate_service
