@@ -1,0 +1,37 @@
+{
+  "contract": "real-workforce-cutover.v1",
+  "expected_roster": [
+    {"key": "michael-fouse", "display_name": "Michael Fouse", "classification": "ADMIN", "required_roles": ["COMPANY_ADMINISTRATOR"]},
+    {"key": "lianne-hernandez", "display_name": "Lianne Hernandez", "classification": "OFFICE_MANAGER", "required_roles": ["OFFICE_MANAGER"]},
+    {"key": "alex-donahue", "display_name": "Alex Donahue", "classification": "OFFICE_STAFF", "required_roles": ["SERVICE_CSR"]},
+    {"key": "melvin-santiago", "display_name": "Melvin Santiago", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
+    {"key": "adam-mari", "display_name": "Adam Mari", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
+    {"key": "dareis-montgomery", "display_name": "Dareis Montgomery", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
+    {"key": "dakota-wilcox", "display_name": "Dakota Wilcox", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
+    {"key": "jason-calci", "display_name": "Jason Calci", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]}
+  ],
+  "mobile_permissions": [
+    "COMPANY_TIMEKEEPING_OWN_READ",
+    "COMPANY_TIMEKEEPING_OWN_PUNCH",
+    "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+    "COMPANY_JOB_READ",
+    "COMPANY_JOB_EXECUTE"
+  ],
+  "field_forbidden_permission_prefixes": [
+    "COMPANY_ACCOUNTING_",
+    "COMPANY_PAYROLL_",
+    "COMPANY_PAYMENT_",
+    "COMPANY_PRICE_BOOK_",
+    "COMPANY_ADMIN"
+  ],
+  "payroll_non_identity_categories": [
+    "COMPENSATION",
+    "TIME",
+    "W4",
+    "JURISDICTION",
+    "DEDUCTIONS",
+    "YTD",
+    "BRIDGE_HISTORY",
+    "ACCOUNTANT"
+  ]
+}

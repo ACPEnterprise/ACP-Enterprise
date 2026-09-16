@@ -136,12 +136,40 @@ class RealRosterReadinessItem(WorkforceSchema):
     blockers: tuple[str, ...]
 
 
+class RealRosterSourceEvidence(WorkforceSchema):
+    source_system: Literal["HCP"]
+    source_employee_id: str
+    source_disposition: str
+    source_branch_id: UUID
+    acp_employee_id: UUID | None
+    roster_key: str | None
+    certification_state: Literal[
+        "ACP_EMPLOYEE_BOUND",
+        "SOURCE_ONLY",
+        "OWNER_CERTIFICATION_REQUIRED",
+        "NOT_EMPLOYEE",
+    ]
+    evidence_version: int
+    recorded_at: datetime
+
+
 class RealRosterReadiness(WorkforceSchema):
     items: tuple[RealRosterReadinessItem, ...]
+    source_evidence: tuple[RealRosterSourceEvidence, ...]
     total: int
     bound: int
     field_tech_total: int
     field_tech_capability_ready: int
+    source_evidence_total: int
+    source_only_total: int
+    certification_required_total: int
+    login_ready_total: int
+    membership_ready_total: int
+    branch_ready_total: int
+    mobile_ready_total: int
+    dispatch_ready_total: int
+    timekeeping_ready_total: int
+    payroll_identity_ready_total: int
 
 
 class EmployeeAdministrationSummary(WorkforceEmployeeSummary):
