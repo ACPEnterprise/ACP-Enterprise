@@ -205,6 +205,70 @@ describe("WorkforceRoute", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("certifies an exact persisted source target without name matching", async () => {
+    mockEligibility();
+    const bind = vi.fn();
+    vi.mocked(workforceHooks.useRealRosterReadiness).mockReturnValue({
+      query: {
+        isLoading: false,
+        isError: false,
+        data: {
+          total: 8,
+          bound: 0,
+          field_tech_total: 5,
+          field_tech_capability_ready: 0,
+          source_evidence_total: 1,
+          source_only_total: 0,
+          certification_required_total: 8,
+          source_evidence: [{
+            source_system: "HCP",
+            source_employee_id: "pro_exact_source_1",
+            source_disposition: "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+            source_branch_id: "branch-1",
+            acp_employee_id: "employee-exact-target",
+            roster_key: null,
+            certification_state: "OWNER_CERTIFICATION_REQUIRED",
+            evidence_version: 1,
+            recorded_at: "2026-09-01T00:00:00Z",
+          }],
+          items: [{
+            roster_key: "melvin-santiago",
+            display_name: "Melvin Santiago",
+            operating_role: "FIELD_TECH",
+            field_tech: true,
+            employee_id: null,
+            employee_display_name: null,
+            user_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            employee_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            membership_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            branch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            role_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            workforce_profile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            technician_capability_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            mobile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            credential_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            availability_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            dispatch_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            timekeeping_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            payroll_linkage_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+            blockers: ["OWNER_EMPLOYEE_BINDING_REQUIRED"],
+          }],
+        },
+      },
+      bind: { isPending: false, mutate: bind },
+      prepareFieldReadiness: { isPending: false, mutate: vi.fn() },
+      canBind: true,
+    } as never);
+    vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({ data: [] } as never);
+    vi.mocked(workforceHooks.useWorkforceEmployee).mockReturnValue({ data: undefined } as never);
+    render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Certify HCP pro_exact_source_1" }), "melvin-santiago");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm exact source target" }));
+
+    expect(bind).toHaveBeenCalledWith({ rosterKey: "melvin-santiago", employeeId: "employee-exact-target" });
+  });
+
   it("shows ordinary office identity, delivery, and access status", async () => {
     mockEligibility();
     vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({

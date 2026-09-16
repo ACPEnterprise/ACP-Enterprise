@@ -30,11 +30,20 @@ The owner-facing Workforce view shows exact source IDs and these states beside t
 eight-person owner-confirmed roster. Source evidence remains read-only; the only
 binding operation is PR #299's audited exact-Employee selection control.
 
+For a source candidate with a persisted ACP Employee target, the source card now
+lets the owner select an unbound owner-confirmed roster identity and submit that
+exact target through the same audited binding command. The Employee target is
+prepopulated from sealed source evidence; the owner does not retype it and ACP does
+not search by name or email. Source-only candidates route to normal protected
+identity onboarding after owner certification. Explicitly excluded evidence is
+shown as legacy-only and cannot enter Employee onboarding from this workflow.
+
 ## Qualification
 
 - Focused source classification and roster contract tests: passed (5; the
   PostgreSQL binding case was separately qualified by PR #299).
-- Workforce operator-route tests: passed (3).
+- Workforce operator-route tests: passed (4), including exact persisted source
+  target certification.
 - Ruff, MyPy, Python compilation, TypeScript, ESLint, production build and
   `git diff --check`: passed.
 - Schema impact: none.

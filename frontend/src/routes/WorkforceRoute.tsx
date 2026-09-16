@@ -37,6 +37,7 @@ export function WorkforceRoute() {
   const directory = useWorkforceDirectory();
   const realRoster = useRealRosterReadiness(permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE"));
   const [rosterSelections, setRosterSelections] = useState<Record<string, string>>({});
+  const [sourceRosterSelections, setSourceRosterSelections] = useState<Record<string, string>>({});
   const [fieldWindowStart, setFieldWindowStart] = useState("");
   const [fieldWindowEnd, setFieldWindowEnd] = useState("");
   const [selected, setSelected] = useState<string | null>(linkedEmployeeId);
@@ -149,7 +150,27 @@ export function WorkforceRoute() {
               <p className="mt-1 text-xs text-content-muted">Exact HCP identifiers and persisted ACP targets only. ACP never matches these records by name or email.</p>
               <p className="mt-2 text-sm text-content-muted">{realRoster.query.data?.source_evidence_total ?? 0} sealed source identities · {realRoster.query.data?.source_only_total ?? 0} source-only · {realRoster.query.data?.certification_required_total ?? 0} certification actions remaining</p>
               <div className="mt-3 space-y-2">
-                {realRoster.query.data?.source_evidence.map((source) => <div className="rounded-md bg-surface-subtle p-2 text-xs" key={`${source.source_system}-${source.source_employee_id}`}><div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{source.source_system} · {source.source_employee_id}</span><Badge variant={source.certification_state === "ACP_EMPLOYEE_BOUND" ? "success" : "neutral"}>{source.certification_state.replaceAll("_", " ")}</Badge></div><p className="mt-1 text-content-muted">{source.source_disposition.replaceAll("_", " ")} · evidence v{source.evidence_version}{source.roster_key ? ` · ${source.roster_key.replaceAll("-", " ")}` : ""}</p></div>)}
+                {realRoster.query.data?.source_evidence.map((source) => {
+                  const sourceKey = `${source.source_system}-${source.source_employee_id}`;
+                  const unboundRoster = realRoster.query.data?.items.filter((item) => item.employee_id === null) ?? [];
+                  return (
+                    <div className="rounded-md bg-surface-subtle p-2 text-xs" key={sourceKey}>
+                      <div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{source.source_system} · {source.source_employee_id}</span><Badge variant={source.certification_state === "ACP_EMPLOYEE_BOUND" ? "success" : "neutral"}>{source.certification_state.replaceAll("_", " ")}</Badge></div>
+                      <p className="mt-1 text-content-muted">{source.source_disposition.replaceAll("_", " ")} · evidence v{source.evidence_version}{source.roster_key ? ` · ${source.roster_key.replaceAll("-", " ")}` : ""}</p>
+                      {source.certification_state === "OWNER_CERTIFICATION_REQUIRED" && source.acp_employee_id && realRoster.canBind && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <select aria-label={`Certify ${source.source_system} ${source.source_employee_id}`} className="min-h-10 min-w-64 rounded-md border border-stroke bg-surface px-2" value={sourceRosterSelections[sourceKey] ?? ""} onChange={(event) => setSourceRosterSelections((current) => ({ ...current, [sourceKey]: event.target.value }))}>
+                            <option value="">Select owner-confirmed roster identity</option>
+                            {unboundRoster.map((person) => <option key={person.roster_key} value={person.roster_key}>{person.display_name} · {person.operating_role.replaceAll("_", " ")}</option>)}
+                          </select>
+                          <Button variant="outline" disabled={!sourceRosterSelections[sourceKey] || realRoster.bind.isPending} onClick={() => realRoster.bind.mutate({ rosterKey: sourceRosterSelections[sourceKey], employeeId: source.acp_employee_id as string })}>Confirm exact source target</Button>
+                        </div>
+                      )}
+                      {source.certification_state === "SOURCE_ONLY" && permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && <Link className="mt-2 inline-block font-semibold text-action-primary" to="/administration/identity-onboarding">Create / onboard after owner certification</Link>}
+                      {source.certification_state === "NOT_EMPLOYEE" && <p className="mt-2 font-medium text-content-muted">Legacy only — excluded from Employee onboarding.</p>}
+                    </div>
+                  );
+                })}
               </div>
             </section>
           </div>
