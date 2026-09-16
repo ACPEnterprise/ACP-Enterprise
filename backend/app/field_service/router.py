@@ -12,6 +12,13 @@ from app.field_service.errors import (
     FieldServiceError,
     FieldServiceNotFound,
 )
+from app.field_service.field_purchase_schemas import (
+    FieldPurchaseCreate,
+    FieldPurchaseDispositionInput,
+    FieldPurchaseExtractionInput,
+    FieldPurchaseOut,
+)
+from app.field_service.field_purchases import field_purchase_service
 from app.field_service.mobile_context import mobile_field_context
 from app.field_service.schemas import (
     ApprovalInput,
@@ -243,9 +250,7 @@ async def job_sources(
         raise field_error(error) from error
 
 
-@router.get(
-    "/jobs/{job_id}/price-book", response_model=tuple[FieldPriceBookItem, ...]
-)
+@router.get("/jobs/{job_id}/price-book", response_model=tuple[FieldPriceBookItem, ...])
 async def field_price_book(
     job_id: UUID, context: PriceBookRead, session: Session, limit: int = 50
 ) -> tuple[FieldPriceBookItem, ...]:
@@ -293,6 +298,66 @@ async def finalize_artifact(
             context=context,
             job_id=job_id,
             intent_id=intent_id,
+            payload=payload,
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post(
+    "/jobs/{job_id}/field-purchases", response_model=FieldPurchaseOut, status_code=201
+)
+async def create_field_purchase(
+    job_id: UUID, payload: FieldPurchaseCreate, context: Execute, session: Session
+) -> FieldPurchaseOut:
+    try:
+        return await field_purchase_service.create(
+            session, context=context, job_id=job_id, payload=payload
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post(
+    "/jobs/{job_id}/field-purchases/{purchase_id}/extractions",
+    response_model=FieldPurchaseOut,
+)
+async def record_field_purchase_extraction(
+    job_id: UUID,
+    purchase_id: UUID,
+    payload: FieldPurchaseExtractionInput,
+    context: Execute,
+    session: Session,
+) -> FieldPurchaseOut:
+    try:
+        return await field_purchase_service.record_extraction(
+            session,
+            context=context,
+            job_id=job_id,
+            purchase_id=purchase_id,
+            payload=payload,
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post(
+    "/jobs/{job_id}/field-purchases/{purchase_id}/dispositions",
+    response_model=FieldPurchaseOut,
+)
+async def submit_field_purchase_dispositions(
+    job_id: UUID,
+    purchase_id: UUID,
+    payload: FieldPurchaseDispositionInput,
+    context: Execute,
+    session: Session,
+) -> FieldPurchaseOut:
+    try:
+        return await field_purchase_service.dispose(
+            session,
+            context=context,
+            job_id=job_id,
+            purchase_id=purchase_id,
             payload=payload,
         )
     except FieldServiceError as error:

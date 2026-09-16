@@ -40,6 +40,7 @@ DOMAIN_REPLAY_EVIDENCE = {
     "engineering": "tests/engineering_control/repository_operation/test_repository_operation.py",
     "engineering_commands": "tests/engineering_control/test_mobile_engineering_api.py",
     "engineering_executions": "tests/engineering_execution/test_engineering_execution.py",
+    "field_purchase": "tests/field_service/test_field_purchase_contract.py",
     "identity_onboarding": "tests/platform/test_identity_onboarding.py",
     "inventory": "tests/inventory/test_inventory_adjustments.py",
     "invoices": "tests/invoicing/test_invoice_ar.py",
@@ -89,7 +90,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 307
+    assert len(operations) == len(coverage) == 311
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -103,7 +104,7 @@ def test_required_operations_expose_an_accepted_request_identity() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
     )
-    assert len(required) == 130
+    assert len(required) == 132
     for entry in required:
         operation = operations[entry.identity]
         schema = (
