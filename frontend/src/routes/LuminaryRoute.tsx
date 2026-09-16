@@ -252,6 +252,34 @@ export function LuminaryRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {ownerEconomics.data.admitted_source_evidence ? (
+              <section className="rounded-lg border border-stroke p-4" aria-labelledby="admitted-evidence-title">
+                <h3 className="font-semibold" id="admitted-evidence-title">Admitted source evidence</h3>
+                <p className="mt-1 text-sm text-content-muted">
+                  {ownerEconomics.data.admitted_source_evidence.admitted_reference_count} accepted native reference(s). Source facts remain separate from calculated profitability.
+                </p>
+                {ownerEconomics.data.admitted_source_evidence.summary ? (
+                  <p className="mt-2 text-sm">
+                    Jobs {ownerEconomics.data.admitted_source_evidence.summary.job_count}
+                    {ownerEconomics.data.admitted_source_evidence.summary.invoiced_revenue_minor !== null
+                      ? ` · Invoiced revenue ${(ownerEconomics.data.admitted_source_evidence.summary.invoiced_revenue_minor / 100).toLocaleString(undefined, { style: "currency", currency: ownerEconomics.data.admitted_source_evidence.summary.currency ?? "USD" })}`
+                      : " · Invoiced revenue unavailable"}
+                    {ownerEconomics.data.admitted_source_evidence.summary.accepted_worked_seconds !== null
+                      ? ` · Accepted worked hours ${(ownerEconomics.data.admitted_source_evidence.summary.accepted_worked_seconds / 3600).toFixed(2)}`
+                      : " · Accepted worked hours unavailable"}
+                  </p>
+                ) : null}
+                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {Object.entries(ownerEconomics.data.admitted_source_evidence.families).map(([family, item]) => (
+                    <div className="rounded-md bg-surface-muted p-3" key={family}>
+                      <dt className="text-xs font-semibold uppercase tracking-wide">{words(family)}</dt>
+                      <dd className="text-sm">{words(item.state)} · {item.reference_count} reference(s)</dd>
+                      <dd className="text-xs text-content-muted">{item.limitation}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ) : null}
             <section className="rounded-lg border border-stroke p-4" aria-labelledby="scenario-title">
               <h3 className="font-semibold" id="scenario-title">Read-only scenario</h3>
               <p className="mt-1 text-sm text-content-muted">Hypothetical decision support only. Evaluating a scenario cannot change pricing or operations.</p>
