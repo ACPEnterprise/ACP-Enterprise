@@ -169,7 +169,17 @@ def build_invoice_identity_inventory(
         "qbo_records": tuple(qbo_records),
         "authority": authority,
     }
-    return InvoiceIdentityInventory(**payload, digest=_digest(payload))
+    return InvoiceIdentityInventory(
+        contract=CONTRACT,
+        hcp_manifest_sha256=str(payload["hcp_manifest_sha256"]),
+        qbo_registration_sha256=str(payload["qbo_registration_sha256"]),
+        qbo_raw_sha256=qbo_raw_sha256,
+        counts=counts,
+        hcp_records=tuple(hcp_records),
+        qbo_records=tuple(qbo_records),
+        authority=authority,
+        digest=_digest(payload),
+    )
 
 
 def _qbo_invoice_rows(path: Path, hcp_invoice_ids: set[str]) -> list[dict[str, object]]:

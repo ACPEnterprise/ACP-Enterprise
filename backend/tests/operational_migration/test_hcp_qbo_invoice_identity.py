@@ -119,9 +119,9 @@ def test_private_control_invoice_number_is_never_exact_identity(tmp_path: Path) 
     incoming = controls / "incoming"
     incoming.mkdir(parents=True)
     content = (
-        "Job ID,Customer ID,Invoice Number,Payment Type\n"
-        "private-job,private-customer,10,payment imported from quickbooks\n"
-    ).encode()
+        b"Job ID,Customer ID,Invoice Number,Payment Type\n"
+        b"private-job,private-customer,10,payment imported from quickbooks\n"
+    )
     (incoming / "payments.csv").write_bytes(content)
     (controls / "hcp-control-manifest-v1.json").write_text(
         json.dumps(
