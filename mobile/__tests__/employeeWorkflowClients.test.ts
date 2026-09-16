@@ -31,4 +31,22 @@ describe("employee workflow clients", () => {
     expect(capabilitiesFromPermissions(["COMPANY_JOB_READ", "COMPANY_JOB_EXECUTE", "COMPANY_PAYROLL_STATEMENT_OWN_READ"])).toEqual(expect.arrayContaining(["jobs.view", "jobs.execute", "pay.self.view"]));
     expect(capabilitiesFromPermissions(["SUPERVISOR", "SALARIED", "TECHNICIAN"])).toEqual(["home.view"]);
   });
+
+  it("reads contact and Price Book only through assignment-scoped technician contracts", async () => {
+    const field = createFieldService(client); (client.request as jest.Mock).mockResolvedValue({});
+    const job = "30000000-0000-4000-8000-000000000001";
+    await field.sources!(job); await field.priceBook!(job, 25);
+    expect((client.request as jest.Mock).mock.calls.map((call) => call[0])).toEqual([
+      `/api/v1/technician/jobs/${job}/sources`,
+      `/api/v1/technician/jobs/${job}/price-book?limit=25`,
+    ]);
+    expect((client.request as jest.Mock).mock.calls.map((call) => call[0]).join(" ")).not.toMatch(/employee_id|customer_id|branch_id/i);
+  });
+
+  it("requires the complete protected source permission set before exposing customer contact", () => {
+    const complete = ["COMPANY_JOB_READ", "COMPANY_CUSTOMER_READ", "COMPANY_INVOICE_READ", "COMPANY_PAYMENT_READ", "COMPANY_COMMUNICATIONS_READ"];
+    expect(capabilitiesFromPermissions(complete)).toContain("job.sources.view");
+    expect(capabilitiesFromPermissions(complete.slice(0, -1))).not.toContain("job.sources.view");
+    expect(capabilitiesFromPermissions(["COMPANY_PRICE_BOOK_READ"])).toContain("price_book.view");
+  });
 });
