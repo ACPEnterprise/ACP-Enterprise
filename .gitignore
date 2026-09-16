@@ -4,6 +4,7 @@
 .env.*
 !.env.example
 !.env.preview.example
+!.env.production.example
 !mobile/.env.example
 !mobile/.env.preview.example
 !mobile/.env.production.example

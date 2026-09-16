@@ -1,0 +1,30 @@
+{
+  "contract": "acp-production-monitoring-alerts/v1",
+  "alert_destination": "OWNER_ACTION_REQUIRED",
+  "responsible_humans": {
+    "incident_authority": "OWNER_ACTION_REQUIRED",
+    "release_operator": "OWNER_ACTION_REQUIRED",
+    "security_contact": "OWNER_ACTION_REQUIRED"
+  },
+  "checks": [
+    {"check": "frontend_https", "severity": "CRITICAL", "threshold": "2 failures in 60 seconds", "action": "remove Production traffic and invoke release rollback"},
+    {"check": "backend_readiness", "severity": "CRITICAL", "threshold": "2 failures in 60 seconds", "action": "block mutations and invoke release rollback"},
+    {"check": "postgresql_readiness", "severity": "CRITICAL", "threshold": "unavailable for 30 seconds", "action": "block all authoritative mutations; database restore requires separate authority"},
+    {"check": "redis_readiness", "severity": "CRITICAL", "threshold": "unavailable for 60 seconds", "action": "block authentication, rate limiting, and coordination-sensitive mutations"},
+    {"check": "migration", "severity": "CRITICAL", "threshold": "any nonzero exit or schema mismatch", "action": "do not open Production traffic"},
+    {"check": "application_errors", "severity": "CRITICAL", "threshold": "5 percent 5xx responses for 5 minutes or any repeated integrity error", "action": "block affected mutations and evaluate rollback"},
+    {"check": "authentication_failures", "severity": "WARNING", "threshold": "20 failures across 5 or more accounts in 5 minutes", "action": "security review and credential-abuse triage"},
+    {"check": "authentication_failures", "severity": "CRITICAL", "threshold": "50 failures in 5 minutes or repeated administrator targeting", "action": "security incident; block affected access and rotate only with authority"},
+    {"check": "disk_capacity", "severity": "WARNING", "threshold": "less than 20 percent free", "action": "add capacity; preserve databases, evidence, and backups"},
+    {"check": "disk_capacity", "severity": "CRITICAL", "threshold": "less than 10 percent free", "action": "stop growth-heavy operations and block deployment"},
+    {"check": "backup", "severity": "CRITICAL", "threshold": "scheduled backup or integrity verification failure", "action": "block schema-changing deployment"},
+    {"check": "backup_freshness", "severity": "WARNING", "threshold": "no verified off-host recovery point within approved RPO", "action": "create and verify a new recovery point"}
+  ],
+  "invariants": {
+    "secret_values_in_alerts": false,
+    "customer_values_in_alerts": false,
+    "automatic_database_restore": false,
+    "automatic_schema_downgrade": false,
+    "automatic_business_mutation": false
+  }
+}
