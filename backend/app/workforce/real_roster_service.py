@@ -332,6 +332,28 @@ class RealRosterService:
             source_evidence_total=len(source_evidence),
             source_only_total=source_only_total,
             certification_required_total=certification_required_total,
+            login_ready_total=sum(
+                item.credential_state == "ACP_LOGIN_READY" for item in items
+            ),
+            membership_ready_total=sum(
+                item.membership_state == "MEMBERSHIP_READY" for item in items
+            ),
+            branch_ready_total=sum(
+                item.branch_state == "MAIN_BRANCH_READY" for item in items
+            ),
+            mobile_ready_total=sum(
+                item.mobile_state == "MOBILE_READY" for item in items
+            ),
+            dispatch_ready_total=sum(
+                item.dispatch_state == "READY_FOR_WINDOW_EVALUATION" for item in items
+            ),
+            timekeeping_ready_total=sum(
+                item.timekeeping_state == "LINKED" for item in items
+            ),
+            payroll_identity_ready_total=sum(
+                item.payroll_linkage_state == "LINKED_INPUTS_NOT_EVALUATED"
+                for item in items
+            ),
         )
 
     @staticmethod

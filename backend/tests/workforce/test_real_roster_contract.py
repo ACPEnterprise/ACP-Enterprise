@@ -170,3 +170,10 @@ async def test_exact_employee_binding_is_durable_and_does_not_name_match(
         assert melvin.employee_display_name == "Exact Employee"
         assert melvin.user_state == "USER_MISSING_OR_INACTIVE"
         assert "USER_NOT_READY" in melvin.blockers
+        assert result.login_ready_total == 0
+        assert result.membership_ready_total == 0
+        assert result.branch_ready_total == 0
+        assert result.mobile_ready_total == 0
+        assert result.dispatch_ready_total == 0
+        assert result.timekeeping_ready_total == 0
+        assert result.payroll_identity_ready_total == 1

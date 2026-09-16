@@ -38,6 +38,16 @@ not search by name or email. Source-only candidates route to normal protected
 identity onboarding after owner certification. Explicitly excluded evidence is
 shown as legacy-only and cannot enter Employee onboarding from this workflow.
 
+Source-only onboarding remains fail-closed: the current identity-onboarding model
+does not persist a source-system/source-employee reference. A URL hint or random
+request key is not authoritative lineage, so this candidate does not pretend to
+complete that crosswalk. Enterprise must add a tenant-scoped, audited source
+reference to onboarding before source-only onboarding can close automatically.
+
+The real-roster projection also reports machine-derived aggregate totals for
+login, Membership, MAIN Branch, Mobile, Dispatch-window, Timekeeping identity and
+Payroll identity readiness. Payroll inputs are not evaluated or calculated.
+
 ## Qualification
 
 - Focused source classification and roster contract tests: passed (5; the

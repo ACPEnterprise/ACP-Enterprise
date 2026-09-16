@@ -163,6 +163,13 @@ class RealRosterReadiness(WorkforceSchema):
     source_evidence_total: int
     source_only_total: int
     certification_required_total: int
+    login_ready_total: int
+    membership_ready_total: int
+    branch_ready_total: int
+    mobile_ready_total: int
+    dispatch_ready_total: int
+    timekeeping_ready_total: int
+    payroll_identity_ready_total: int
 
 
 class EmployeeAdministrationSummary(WorkforceEmployeeSummary):

@@ -137,6 +137,15 @@ export function WorkforceRoute() {
         {realRoster.query.isLoading ? <Spinner label="Loading real roster readiness" /> : realRoster.query.isError ? <Alert variant="danger">Real roster readiness is unavailable. No Employee state was inferred.</Alert> : (
           <div className="mt-4 space-y-3">
             <p className="text-sm text-content-muted">{realRoster.query.data?.bound ?? 0} of {realRoster.query.data?.total ?? 8} identities bound · {realRoster.query.data?.field_tech_capability_ready ?? 0} of {realRoster.query.data?.field_tech_total ?? 5} Field Tech capabilities ready</p>
+            <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4" aria-label="Real workforce readiness totals">
+              <p className="rounded-md bg-surface-subtle p-2">Login ready: <strong>{realRoster.query.data?.login_ready_total ?? 0}</strong></p>
+              <p className="rounded-md bg-surface-subtle p-2">Membership ready: <strong>{realRoster.query.data?.membership_ready_total ?? 0}</strong></p>
+              <p className="rounded-md bg-surface-subtle p-2">MAIN Branch ready: <strong>{realRoster.query.data?.branch_ready_total ?? 0}</strong></p>
+              <p className="rounded-md bg-surface-subtle p-2">Mobile ready: <strong>{realRoster.query.data?.mobile_ready_total ?? 0}</strong></p>
+              <p className="rounded-md bg-surface-subtle p-2">Dispatch window ready: <strong>{realRoster.query.data?.dispatch_ready_total ?? 0}</strong></p>
+              <p className="rounded-md bg-surface-subtle p-2">Timekeeping identity ready: <strong>{realRoster.query.data?.timekeeping_ready_total ?? 0}</strong></p>
+              <p className="rounded-md bg-surface-subtle p-2">Payroll identity ready: <strong>{realRoster.query.data?.payroll_identity_ready_total ?? 0}</strong></p>
+            </div>
             {realRoster.canBind && <div className="grid gap-2 rounded-lg bg-surface-subtle p-3 sm:grid-cols-2"><label className="text-sm font-medium">Field-readiness start<Input className="mt-1" type="datetime-local" value={fieldWindowStart} onChange={(event) => setFieldWindowStart(event.target.value)} /></label><label className="text-sm font-medium">Field-readiness end<Input className="mt-1" type="datetime-local" value={fieldWindowEnd} onChange={(event) => setFieldWindowEnd(event.target.value)} /></label><p className="text-xs text-content-muted sm:col-span-2">This records bounded MAIN availability and technician capability. It does not assign work or create all-dates availability.</p></div>}
             {realRoster.query.data?.items.map((person) => (
               <div key={person.roster_key} className="rounded-lg border border-stroke p-3">

@@ -95,6 +95,13 @@ export interface RealRosterReadiness {
   source_evidence_total: number;
   source_only_total: number;
   certification_required_total: number;
+  login_ready_total: number;
+  membership_ready_total: number;
+  branch_ready_total: number;
+  mobile_ready_total: number;
+  dispatch_ready_total: number;
+  timekeeping_ready_total: number;
+  payroll_identity_ready_total: number;
 }
 
 export interface EmployeePermissionExplanation {
