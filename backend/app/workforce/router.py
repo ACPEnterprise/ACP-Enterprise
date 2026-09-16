@@ -15,12 +15,14 @@ from app.workforce.administration_commands import (
     workforce_administration_service,
 )
 from app.workforce.employee_administration import employee_administration_service
+from app.workforce.employee_timeline import employee_timeline_service
 from app.workforce.real_roster_service import RealRosterConflict, real_roster_service
 from app.workforce.schemas import (
     AvailabilityEvidenceRequest,
     CapabilityEvidenceRequest,
     CertificationEvidenceRequest,
     EmployeeAdministrationDetail,
+    EmployeeTimeline,
     FieldReadinessRequest,
     FieldReadinessResponse,
     LanguageEvidenceRequest,
@@ -119,6 +121,18 @@ async def detail(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "Workforce profile was not found."
         )
+    return result
+
+
+@router.get("/employees/{employee_id}/timeline", response_model=EmployeeTimeline)
+async def employee_timeline(
+    employee_id: UUID, context: ReadContext, session: Session
+) -> EmployeeTimeline:
+    result = await employee_timeline_service.read(
+        session, context=context, employee_id=employee_id
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
     return result
 
 
