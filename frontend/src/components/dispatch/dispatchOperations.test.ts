@@ -68,6 +68,21 @@ describe("dispatch operations", () => {
       filterDispatchBoard([assigned, unassigned], jobs, "unassigned", "", ""),
     ).toEqual([unassigned]);
   });
+  it("treats terminal assignment history as unassigned operating work", () => {
+    const released = item("2", "2026-09-15T14:00:00Z", "2026-09-15T15:00:00Z");
+    if (!released.assignment) throw new Error("assignment fixture required");
+    released.assignment.status = "released";
+    released.assignment.active_exception_code = "technician_unavailable";
+
+    expect(operationalState(released)).toBe("UNASSIGNED");
+    expect(filterDispatchBoard([released], jobs, "unassigned", "", "")).toEqual(
+      [released],
+    );
+    expect(
+      filterDispatchBoard([released], jobs, "all", "", "Tech One"),
+    ).toEqual([]);
+    expect(technicianLoads([released], jobs)).toEqual([]);
+  });
   it("summarizes bounded load and overlapping work without claiming availability", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-15T12:00:00Z"));
@@ -86,5 +101,16 @@ describe("dispatch operations", () => {
       nextJob: "JOB-1",
     });
     vi.useRealTimers();
+  });
+  it("keeps a long-running window active while detecting nested conflicts", () => {
+    const loads = technicianLoads(
+      [
+        item("1", "2026-09-15T09:00:00Z", "2026-09-15T12:00:00Z"),
+        item("2", "2026-09-15T10:00:00Z", "2026-09-15T11:00:00Z"),
+        item("3", "2026-09-15T11:30:00Z", "2026-09-15T13:00:00Z"),
+      ],
+      jobs,
+    );
+    expect(loads[0].overlaps).toBe(2);
   });
 });

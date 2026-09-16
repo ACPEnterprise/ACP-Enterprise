@@ -14,6 +14,7 @@ import { getOperatorApiError } from "../api/errors";
 import { useAuth, useHasPermission } from "../auth";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
 import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
+import { activeDispatchAssignment } from "../components/dispatch/dispatchOperations";
 import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
 import { CalendarReadinessCard } from "../components/scheduling/CalendarReadinessCard";
 import {
@@ -145,20 +146,32 @@ function appointmentState(
   dispatch?: DispatchBoardItem,
   job?: JobListItem,
 ) {
+  const assignment = dispatch ? activeDispatchAssignment(dispatch) : null;
   if (item.status === "cancelled") return "CANCELED";
   if (item.status === "completed" || job?.status === "completed")
     return "COMPLETED";
   if (job?.status === "cancelled") return "CANCELED";
   if (job?.status === "in_progress") return "IN PROGRESS";
   if (job?.status === "paused") return "PAUSED";
-  if (dispatch?.assignment?.arrival_state === "arrived") return "ARRIVED";
-  if (dispatch?.assignment?.arrival_state === "en_route") return "EN ROUTE";
+  if (assignment?.arrival_state === "arrived") return "ARRIVED";
+  if (assignment?.arrival_state === "en_route") return "EN ROUTE";
   return item.status === "draft"
     ? "NEEDS SCHEDULING"
-    : dispatch?.assignment
+    : assignment
       ? "SCHEDULED"
       : "UNASSIGNED";
 }
+
+const primaryTechnicianName = (dispatch?: DispatchBoardItem) =>
+  dispatch ? activeDispatchAssignment(dispatch)?.primary_employee_name : null;
+
+const assignedTechnicianNames = (dispatch?: DispatchBoardItem) => {
+  const assignment = dispatch ? activeDispatchAssignment(dispatch) : null;
+  return [
+    assignment?.primary_employee_name,
+    ...(assignment?.crew_members ?? []).map((member) => member.display_name),
+  ].filter((name): name is string => Boolean(name));
+};
 
 export function SchedulingRoute({
   initialPerspective = "schedule",
@@ -289,9 +302,9 @@ export function SchedulingRoute({
     () =>
       Array.from(
         new Set(
-          (dispatch.data?.items ?? [])
-            .map((item) => item.assignment?.primary_employee_name)
-            .filter((name): name is string => Boolean(name)),
+          (dispatch.data?.items ?? []).flatMap((item) =>
+            assignedTechnicianNames(item),
+          ),
         ),
       ).sort(),
     [dispatch.data?.items],
@@ -317,12 +330,12 @@ export function SchedulingRoute({
             : undefined;
           const haystack =
             `${item.appointment_number} ${job?.job_number ?? ""} ${job?.customer_display_name ?? ""} ${job?.service_location_label ?? ""}`.toLowerCase();
-          const assignedName = dispatchItem?.assignment?.primary_employee_name;
+          const assignedNames = assignedTechnicianNames(dispatchItem);
           const matchesTechnician =
             !technician ||
             (technician === "__unassigned"
-              ? !assignedName
-              : assignedName === technician);
+              ? !assignedNames.length
+              : assignedNames.includes(technician));
           return (
             matchesTechnician &&
             (!serviceCategory || job?.job_type_code === serviceCategory) &&
@@ -340,7 +353,10 @@ export function SchedulingRoute({
     ],
   );
   const issues = useMemo(
-    () => canDispatch && canReadJobs ? calendarIssues(visible, dispatchByAppointment, jobsById) : [],
+    () =>
+      canDispatch && canReadJobs
+        ? calendarIssues(visible, dispatchByAppointment, jobsById)
+        : [],
     [canDispatch, canReadJobs, dispatchByAppointment, jobsById, visible],
   );
   const currentSelection = selectedId
@@ -851,8 +867,8 @@ function DayCalendar({
       new Set(
         items.map(
           (item) =>
-            dispatchByAppointment.get(item.id)?.assignment
-              ?.primary_employee_name ?? "Unassigned",
+            primaryTechnicianName(dispatchByAppointment.get(item.id)) ??
+            "Unassigned",
         ),
       ),
     ).sort((a, b) =>
@@ -899,7 +915,7 @@ function DayCalendar({
               </span>
               <span className="block truncate text-xs text-content-muted">
                 {job?.service_location_label ?? "Location context unavailable"}{" "}
-                · {dispatch?.assignment?.primary_employee_name ?? "Unassigned"}
+                · {primaryTechnicianName(dispatch) ?? "Unassigned"}
               </span>
             </button>
           );
@@ -957,9 +973,7 @@ function DayCalendar({
               const dispatch = dispatchByAppointment.get(item.id);
               const lane = Math.max(
                 0,
-                lanes.indexOf(
-                  dispatch?.assignment?.primary_employee_name ?? "Unassigned",
-                ),
+                lanes.indexOf(primaryTechnicianName(dispatch) ?? "Unassigned"),
               );
               const start = item.arrival_window_start_at
                 ? new Date(item.arrival_window_start_at)
@@ -982,7 +996,7 @@ function DayCalendar({
               return (
                 <button
                   type="button"
-                  aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${dispatch?.assignment?.primary_employee_name ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
+                  aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${primaryTechnicianName(dispatch) ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
                   onClick={() => onSelect(item)}
                   key={item.id}
                   className="absolute overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm hover:bg-action-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
@@ -1234,9 +1248,8 @@ function MonthCalendar({
                       {job?.customer_display_name ?? "Customer unavailable"}
                     </span>
                     <span className="block truncate text-content-muted">
-                      {dispatch?.assignment?.primary_employee_name ??
-                        "Unassigned"}{" "}
-                      · {appointmentState(item, dispatch, job)}
+                      {primaryTechnicianName(dispatch) ?? "Unassigned"} ·{" "}
+                      {appointmentState(item, dispatch, job)}
                     </span>
                   </button>
                 );
@@ -1333,8 +1346,7 @@ function WeekCalendar({
                       {job?.job_number ?? item.appointment_number}
                     </strong>
                     <span className="block truncate text-xs text-content-muted">
-                      {dispatch?.assignment?.primary_employee_name ??
-                        "Unassigned"}
+                      {primaryTechnicianName(dispatch) ?? "Unassigned"}
                     </span>
                   </button>
                 );
@@ -1435,9 +1447,7 @@ function AppointmentPanel({
         </div>
         <div>
           <dt className="text-content-muted">Technician</dt>
-          <dd>
-            {dispatchItem?.assignment?.primary_employee_name ?? "Unassigned"}
-          </dd>
+          <dd>{primaryTechnicianName(dispatchItem) ?? "Unassigned"}</dd>
         </div>
         <div>
           <dt className="text-content-muted">Operational state</dt>

@@ -8,6 +8,7 @@ import type { AppointmentDetail } from "../../types/scheduling";
 import type { DispatchBoardItem } from "../../types/dispatch";
 import { Alert, Button, Card, EmptyState, Spinner } from "../../ui";
 import { JobPriorityBadge, JobStatusBadge } from "../jobs/JobBadges";
+import { activeDispatchAssignment } from "./dispatchOperations";
 
 const time = (value: string | null) =>
   value
@@ -299,6 +300,7 @@ export function DispatchWorkQueue({
           <div className="divide-y divide-stroke">
             {items.map((item) => {
               const job = item.job_id ? jobsById.get(item.job_id) : undefined;
+              const assignment = activeDispatchAssignment(item);
               return (
                 <article
                   className="flex flex-col gap-3 p-ui-4 sm:flex-row sm:items-center sm:justify-between"
@@ -325,28 +327,25 @@ export function DispatchWorkQueue({
                     )}
                     <p className="mt-1 text-sm text-content-muted">
                       {time(item.window_start_at)} – {time(item.window_end_at)}{" "}
-                      · {item.assignment?.primary_employee_name ?? "Unassigned"}
+                      · {assignment?.primary_employee_name ?? "Unassigned"}
                     </p>
                     <p className="mt-1 text-xs font-semibold capitalize text-content-secondary">
-                      {item.assignment?.status.replaceAll("_", " ") ??
+                      {assignment?.status.replaceAll("_", " ") ??
                         "Assignment needed"}
-                      {item.assignment
-                        ? ` · ${item.assignment.arrival_state.replaceAll("_", " ")}`
+                      {assignment
+                        ? ` · ${assignment.arrival_state.replaceAll("_", " ")}`
                         : ""}
                     </p>
-                    {item.assignment?.active_exception_code && (
+                    {assignment?.active_exception_code && (
                       <p className="mt-1 text-xs font-semibold capitalize text-status-danger-text">
                         Exception:{" "}
-                        {item.assignment.active_exception_code.replaceAll(
-                          "_",
-                          " ",
-                        )}
+                        {assignment.active_exception_code.replaceAll("_", " ")}
                       </p>
                     )}
-                    {item.assignment?.crew_members.length ? (
+                    {assignment?.crew_members.length ? (
                       <p className="mt-1 text-xs text-content-muted">
                         Crew:{" "}
-                        {item.assignment.crew_members
+                        {assignment.crew_members
                           .map((member) => member.display_name)
                           .join(", ")}
                       </p>
@@ -354,9 +353,7 @@ export function DispatchWorkQueue({
                   </div>
                   {canManage && (
                     <Button onClick={() => onSelect(item)}>
-                      {item.assignment
-                        ? "Manage assignment"
-                        : "Assign technician"}
+                      {assignment ? "Manage assignment" : "Assign technician"}
                     </Button>
                   )}
                 </article>

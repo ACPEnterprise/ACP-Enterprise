@@ -1,22 +1,36 @@
-import type { DispatchBoardItem } from "../../types/dispatch";
+import type {
+  DispatchAssignment,
+  DispatchBoardItem,
+} from "../../types/dispatch";
 import type { JobListItem } from "../../types/jobs";
 
 export type DispatchBoardFilter =
   "all" | "unassigned" | "active" | "exception" | "completed";
 
+export function activeDispatchAssignment(
+  item: DispatchBoardItem,
+): DispatchAssignment | null {
+  const assignment = item.assignment;
+  return assignment &&
+    !["released", "replaced", "cancelled"].includes(assignment.status)
+    ? assignment
+    : null;
+}
+
 export function operationalState(
   item: DispatchBoardItem,
   job?: JobListItem,
 ): string {
+  const assignment = activeDispatchAssignment(item);
   if (item.status === "cancelled" || job?.status === "cancelled")
     return "CANCELED";
   if (item.status === "completed" || job?.status === "completed")
     return "COMPLETED";
   if (job?.status === "in_progress") return "STARTED";
   if (job?.status === "paused") return "PAUSED";
-  if (item.assignment?.arrival_state === "arrived") return "ARRIVED";
-  if (item.assignment?.arrival_state === "en_route") return "ON_MY_WAY";
-  return item.assignment ? "ASSIGNED" : "UNASSIGNED";
+  if (assignment?.arrival_state === "arrived") return "ARRIVED";
+  if (assignment?.arrival_state === "en_route") return "ON_MY_WAY";
+  return assignment ? "ASSIGNED" : "UNASSIGNED";
 }
 
 export function filterDispatchBoard(
@@ -28,21 +42,19 @@ export function filterDispatchBoard(
 ): readonly DispatchBoardItem[] {
   const needle = search.trim().toLowerCase();
   return items.filter((item) => {
+    const assignment = activeDispatchAssignment(item);
     const job = item.job_id ? jobsById.get(item.job_id) : undefined;
     const state = operationalState(item, job);
     const assignedNames = [
-      item.assignment?.primary_employee_name,
-      ...(item.assignment?.crew_members ?? []).map(
-        (member) => member.display_name,
-      ),
+      assignment?.primary_employee_name,
+      ...(assignment?.crew_members ?? []).map((member) => member.display_name),
     ].filter(Boolean) as string[];
     const matchesFilter =
       filter === "all" ||
-      (filter === "unassigned" && !item.assignment) ||
+      (filter === "unassigned" && !assignment) ||
       (filter === "active" &&
         ["ON_MY_WAY", "ARRIVED", "STARTED", "PAUSED"].includes(state)) ||
-      (filter === "exception" &&
-        Boolean(item.assignment?.active_exception_code)) ||
+      (filter === "exception" && Boolean(assignment?.active_exception_code)) ||
       (filter === "completed" && state === "COMPLETED");
     const matchesTechnician = !technician || assignedNames.includes(technician);
     const haystack =
@@ -73,11 +85,10 @@ export function technicianLoads(
     Array<{ item: DispatchBoardItem; start: number; end: number }>
   >();
   for (const item of items) {
+    const assignment = activeDispatchAssignment(item);
     const names = [
-      item.assignment?.primary_employee_name,
-      ...(item.assignment?.crew_members ?? []).map(
-        (member) => member.display_name,
-      ),
+      assignment?.primary_employee_name,
+      ...(assignment?.crew_members ?? []).map((member) => member.display_name),
     ].filter(Boolean) as string[];
     const start = Date.parse(item.window_start_at);
     const end = Date.parse(item.window_end_at);
@@ -94,8 +105,11 @@ export function technicianLoads(
           ),
       );
       let overlaps = 0;
-      for (let index = 1; index < rows.length; index += 1)
-        if (rows[index].start < rows[index - 1].end) overlaps += 1;
+      let latestPriorEnd = rows[0]?.end ?? Number.NEGATIVE_INFINITY;
+      for (let index = 1; index < rows.length; index += 1) {
+        if (rows[index].start < latestPriorEnd) overlaps += 1;
+        latestPriorEnd = Math.max(latestPriorEnd, rows[index].end);
+      }
       const next = rows.find((row) => row.end >= Date.now()) ?? rows[0];
       const job = next?.item.job_id
         ? jobsById.get(next.item.job_id)
