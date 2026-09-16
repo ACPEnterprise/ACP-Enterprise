@@ -259,6 +259,7 @@ function SectionError({
 
 export function DispatchWorkQueue({
   items,
+  jobsById,
   loading,
   error,
   onRetry,
@@ -266,6 +267,7 @@ export function DispatchWorkQueue({
   canManage,
 }: {
   readonly items?: readonly DispatchBoardItem[];
+  readonly jobsById: ReadonlyMap<string, JobListItem>;
   readonly loading: boolean;
   readonly error: unknown;
   readonly onRetry: () => void;
@@ -295,39 +297,71 @@ export function DispatchWorkQueue({
           </div>
         ) : items?.length ? (
           <div className="divide-y divide-stroke">
-            {items.map((item) => (
-              <article
-                className="flex flex-col gap-3 p-ui-4 sm:flex-row sm:items-center sm:justify-between"
-                key={item.appointment_id}
-              >
-                <div>
-                  <p className="font-semibold">{item.appointment_number}</p>
-                  <p className="mt-1 text-sm text-content-muted">
-                    {time(item.window_start_at)} – {time(item.window_end_at)} ·{" "}
-                    {item.assignment?.primary_employee_name ?? "Unassigned"}
-                  </p>
-                  <p className="mt-1 text-xs font-semibold capitalize text-content-secondary">
-                    {item.assignment?.status.replaceAll("_", " ") ??
-                      "Assignment needed"}
-                    {item.assignment
-                      ? ` · ${item.assignment.arrival_state.replaceAll("_", " ")}`
-                      : ""}
-                  </p>
-                  {item.assignment?.active_exception_code && (
-                    <p className="mt-1 text-xs font-semibold capitalize text-status-danger-text">
-                      Exception:{" "}
-                      {item.assignment.active_exception_code.replaceAll(
-                        "_",
-                        " ",
-                      )}
+            {items.map((item) => {
+              const job = item.job_id ? jobsById.get(item.job_id) : undefined;
+              return (
+                <article
+                  className="flex flex-col gap-3 p-ui-4 sm:flex-row sm:items-center sm:justify-between"
+                  key={item.appointment_id}
+                >
+                  <div className="min-w-0">
+                    <Link
+                      className="font-semibold text-action-primary hover:underline"
+                      to={appointmentDetailPath(item.appointment_id)}
+                    >
+                      {item.appointment_number}
+                    </Link>
+                    {job && (
+                      <p className="mt-1 break-words text-sm">
+                        <Link
+                          className="font-semibold text-action-primary hover:underline"
+                          to={jobDetailPath(job.id)}
+                        >
+                          {job.job_number}
+                        </Link>{" "}
+                        · {job.customer_display_name} ·{" "}
+                        {job.service_location_label}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm text-content-muted">
+                      {time(item.window_start_at)} – {time(item.window_end_at)}{" "}
+                      · {item.assignment?.primary_employee_name ?? "Unassigned"}
                     </p>
+                    <p className="mt-1 text-xs font-semibold capitalize text-content-secondary">
+                      {item.assignment?.status.replaceAll("_", " ") ??
+                        "Assignment needed"}
+                      {item.assignment
+                        ? ` · ${item.assignment.arrival_state.replaceAll("_", " ")}`
+                        : ""}
+                    </p>
+                    {item.assignment?.active_exception_code && (
+                      <p className="mt-1 text-xs font-semibold capitalize text-status-danger-text">
+                        Exception:{" "}
+                        {item.assignment.active_exception_code.replaceAll(
+                          "_",
+                          " ",
+                        )}
+                      </p>
+                    )}
+                    {item.assignment?.crew_members.length ? (
+                      <p className="mt-1 text-xs text-content-muted">
+                        Crew:{" "}
+                        {item.assignment.crew_members
+                          .map((member) => member.display_name)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+                  {canManage && (
+                    <Button onClick={() => onSelect(item)}>
+                      {item.assignment
+                        ? "Manage assignment"
+                        : "Assign technician"}
+                    </Button>
                   )}
-                </div>
-                {canManage && <Button onClick={() => onSelect(item)}>
-                  {item.assignment ? "Manage assignment" : "Assign technician"}
-                </Button>}
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         ) : (
           <EmptyState

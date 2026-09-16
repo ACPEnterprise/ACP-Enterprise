@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import { useAuth, useHasPermission } from "../auth";
@@ -11,6 +11,11 @@ import { DispatchRecommendationPanel } from "../components/dispatch/DispatchReco
 import { DispatchScopeControls } from "../components/dispatch/DispatchScopeControls";
 import { DispatchSummary } from "../components/dispatch/DispatchSummary";
 import { DispatchWorkspaceLayout } from "../components/dispatch/DispatchWorkspaceLayout";
+import { DispatchOperationsOverview } from "../components/dispatch/DispatchOperationsOverview";
+import {
+  filterDispatchBoard,
+  type DispatchBoardFilter,
+} from "../components/dispatch/dispatchOperations";
 import {
   dayRange,
   localDateValue,
@@ -29,6 +34,9 @@ export function DispatchRoute() {
   const [date, setDate] = useState(() => localDateValue(new Date()));
   const [branchId, setBranchId] = useState("");
   const [jobPage, setJobPage] = useState(1);
+  const [boardFilter, setBoardFilter] = useState<DispatchBoardFilter>("all");
+  const [search, setSearch] = useState("");
+  const [technician, setTechnician] = useState("");
   const [selectedWork, setSelectedWork] = useState<DispatchBoardItem | null>(
     null,
   );
@@ -49,6 +57,18 @@ export function DispatchRoute() {
       sortDirection: "desc",
     },
     canRead && canReadJobs,
+  );
+  const jobsById = useMemo(
+    () => new Map((jobs.data?.items ?? []).map((job) => [job.id, job])),
+    [jobs.data?.items],
+  );
+  const dispatchItems = dispatch.data?.items ?? [];
+  const visibleDispatchItems = filterDispatchBoard(
+    dispatchItems,
+    jobsById,
+    boardFilter,
+    search,
+    technician,
   );
   if (!activeCompany)
     return (
@@ -99,6 +119,16 @@ export function DispatchRoute() {
         jobTotal={jobs.data?.total_count ?? 0}
         visibleJobs={jobs.data?.items ?? []}
       />
+      <DispatchOperationsOverview
+        items={dispatchItems}
+        jobsById={jobsById}
+        filter={boardFilter}
+        search={search}
+        technician={technician}
+        onFilterChange={setBoardFilter}
+        onSearchChange={setSearch}
+        onTechnicianChange={setTechnician}
+      />
       {selectedWork && canManage && (
         <DispatchAssignmentPanel
           item={selectedWork}
@@ -111,7 +141,8 @@ export function DispatchRoute() {
       <DispatchWorkspaceLayout
         appointments={
           <DispatchWorkQueue
-            items={dispatch.data?.items}
+            items={visibleDispatchItems}
+            jobsById={jobsById}
             loading={dispatch.isLoading}
             error={dispatch.error}
             onRetry={() => void dispatch.refetch()}

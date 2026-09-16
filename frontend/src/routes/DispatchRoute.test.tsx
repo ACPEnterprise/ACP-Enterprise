@@ -6,7 +6,11 @@ import { useDispatchBoard } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
 import { DispatchRoute } from "./DispatchRoute";
 
-let permissions = new Set(["COMPANY_DISPATCH_READ", "COMPANY_DISPATCH_MANAGE", "COMPANY_JOB_READ"]);
+let permissions = new Set([
+  "COMPANY_DISPATCH_READ",
+  "COMPANY_DISPATCH_MANAGE",
+  "COMPANY_JOB_READ",
+]);
 vi.mock("../auth", () => ({
   useAuth: () => ({
     activeCompany: {
@@ -50,7 +54,11 @@ const job = {
 
 describe("DispatchRoute", () => {
   beforeEach(() => {
-    permissions = new Set(["COMPANY_DISPATCH_READ", "COMPANY_DISPATCH_MANAGE", "COMPANY_JOB_READ"]);
+    permissions = new Set([
+      "COMPANY_DISPATCH_READ",
+      "COMPANY_DISPATCH_MANAGE",
+      "COMPANY_JOB_READ",
+    ]);
     vi.clearAllMocks();
     vi.mocked(useDispatchBoard).mockReturnValue({
       isLoading: false,
@@ -75,16 +83,38 @@ describe("DispatchRoute", () => {
       screen.getByRole("heading", { name: "Dispatch" }),
     ).toBeInTheDocument();
     expect(screen.getByText("APT-000001")).toBeInTheDocument();
+    expect(screen.getByText("Taylor Home · 10 Main Street")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Assign technician" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "JOB-000001" })).toHaveAttribute(
-      "href",
-      "/jobs/job-1",
-    );
+    expect(
+      screen.getAllByRole("link", { name: "JOB-000001" })[0],
+    ).toHaveAttribute("href", "/jobs/job-1");
     expect(
       screen.queryByText("Technician assignment unavailable"),
     ).not.toBeInTheDocument();
+  });
+  it("supports bounded operator search and state filters", () => {
+    render(
+      <MemoryRouter>
+        <DispatchRoute />
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Dispatch" }), {
+      target: { value: "missing customer" },
+    });
+    expect(screen.getByText("No scheduled work")).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Dispatch" }), {
+      target: { value: "Taylor" },
+    });
+    expect(screen.getByText("APT-000001")).toBeVisible();
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Dispatch operating state" }),
+      {
+        target: { value: "completed" },
+      },
+    );
+    expect(screen.getByText("No scheduled work")).toBeVisible();
   });
   it("updates authoritative Dispatch scope", () => {
     render(
@@ -111,19 +141,34 @@ describe("DispatchRoute", () => {
   });
   it("disables Dispatch and Job queries without Dispatch read authority", () => {
     permissions = new Set();
-    render(<MemoryRouter><DispatchRoute /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <DispatchRoute />
+      </MemoryRouter>,
+    );
     expect(screen.getByText(/not authorized to view Dispatch/i)).toBeVisible();
     expect(useDispatchBoard).toHaveBeenCalledWith(
-      expect.any(String), expect.any(String), undefined, false,
+      expect.any(String),
+      expect.any(String),
+      undefined,
+      false,
     );
     expect(useJobs).toHaveBeenCalledWith(expect.any(Object), false);
   });
   it("separates Dispatch read, manage, and Job read authority", () => {
     permissions = new Set(["COMPANY_DISPATCH_READ"]);
-    render(<MemoryRouter><DispatchRoute /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <DispatchRoute />
+      </MemoryRouter>,
+    );
     expect(screen.getByText("APT-000001")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Assign technician" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Operational Jobs require Job read authority/i)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Assign technician" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Operational Jobs require Job read authority/i),
+    ).toBeVisible();
     expect(useJobs).toHaveBeenCalledWith(expect.any(Object), false);
   });
   it("isolates a failed Dispatch board from Jobs", () => {
