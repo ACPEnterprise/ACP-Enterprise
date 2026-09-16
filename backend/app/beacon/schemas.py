@@ -3,8 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.beacon.briefing import OwnerAttentionWindow
 from app.beacon.adapter_registry import AdapterStatus, AttentionResponsibility
+from app.beacon.briefing import OwnerAttentionWindow
 from app.beacon.catalog import (
     OperationalConflictPolicy,
     OperationalSignalAdmission,
