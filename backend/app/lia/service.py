@@ -77,13 +77,13 @@ ROUTES = {
     "inventory": "/inventory",
     "assets": "/assets",
     "workforce": "/employees",
-    "communications": "/communications",
-    "accounting": "/reports",
+    "communications": "/administration/communications",
+    "accounting": "/financial-reports",
     "data-quality": "/data-quality",
     "launch-readiness": "/administration",
     "price-book": "/price-book",
     "audit": "/audit",
-    "timekeeping": "/employees/time-attendance",
+    "timekeeping": "/employees",
 }
 
 
@@ -427,6 +427,45 @@ class LiaService:
                     )
                 }
             )
+        if plan.subject_query is None and selected:
+            prior_context = request.context
+            selected_domain = (
+                next(iter(selected))
+                if len(selected) == 1
+                else prior_context.domain
+                if prior_context is not None and prior_context.domain in selected
+                else None
+            )
+            if selected_domain is not None:
+                same_subject = bool(
+                    prior_context is not None
+                    and prior_context.domain == selected_domain
+                )
+                prior_entity_id = (
+                    prior_context.entity_id
+                    if prior_context is not None and same_subject
+                    else None
+                )
+                prior_evidence_digest = (
+                    prior_context.evidence_digest
+                    if prior_context is not None
+                    and same_subject
+                    and not period_changed
+                    else None
+                )
+                entity_id = prior_entity_id
+                effective_request = request.model_copy(
+                    update={
+                        "context": LiaContext(
+                            domain=selected_domain,
+                            entity_id=entity_id,
+                            authorization_version=context.authorization_version,
+                            evidence_digest=prior_evidence_digest,
+                            topic_domains=tuple(sorted(selected)),
+                            temporal=temporal,
+                        )
+                    }
+                )
         requested_basis = _requested_accounting_basis(question)
         if temporal is None:
             evidence = await self.retrieval.retrieve(
