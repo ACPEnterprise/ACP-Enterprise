@@ -1308,6 +1308,43 @@ export function PriceBookRoute() {
           )}
           <Card>
             <CardHeader>
+              <CardTitle>Customer option sets</CardTitle>
+              <CardDescription>
+                Good/Better/Best and other genuine alternatives connected to Price Book services.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {catalog.data?.option_groups.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {catalog.data.option_groups.map((group) => {
+                    const groupOptions = catalog.data?.options
+                      .filter((candidate) => candidate.option_group_id === group.id)
+                      .sort((left, right) => left.position - right.position) ?? [];
+                    return (
+                      <section key={group.id} className="rounded-lg border border-stroke p-4" aria-label={`Option set ${group.name}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div><p className="text-xs text-content-muted">{group.code}</p><h3 className="font-semibold">{group.name}</h3></div>
+                          <Badge variant={group.status === "active" ? "success" : "neutral"}>{group.status}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-content-muted">Choose at least {group.minimum_selections} and at most {group.maximum_selections}.</p>
+                        <ol className="mt-3 space-y-2">
+                          {groupOptions.map((choice) => {
+                            const service = catalog.data?.service_items.find((item) => item.id === choice.service_item_id);
+                            return <li key={choice.id} className="rounded-md bg-surface-muted p-3 text-sm"><strong>{choice.label}</strong><span className="text-content-muted"> · {service ? `${service.code} · ${service.name}` : "Connected service unavailable"}</span></li>;
+                          })}
+                        </ol>
+                        {groupOptions.length === 0 && <p className="mt-3 text-sm text-content-muted">No service choices are connected yet.</p>}
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-stroke p-4 text-sm text-content-muted">No customer option sets are configured.</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
               <CardTitle>Service prices</CardTitle>
               <CardDescription>
                 Search by customer language or service code. Activation remains

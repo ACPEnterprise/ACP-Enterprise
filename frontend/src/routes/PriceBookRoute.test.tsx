@@ -108,9 +108,11 @@ vi.mock("../hooks/usePriceBook", () => ({
         },
       ],
       option_groups: [
-        { id: "group-1", name: "Service level", code: "SERVICE-LEVEL" },
+        { id: "group-1", name: "Service level", code: "SERVICE-LEVEL", minimum_selections: 1, maximum_selections: 1, status: "active" },
       ],
-      options: [],
+      options: [
+        { id: "option-1", option_group_id: "group-1", service_item_id: "item-1", label: "Better", position: 2 },
+      ],
     },
   }),
   usePriceBookMutations: () => ({
@@ -258,6 +260,7 @@ describe("PriceBookRoute", () => {
       </MemoryRouter>,
     );
     expect(screen.getAllByText("Drain clearing")).not.toHaveLength(0);
+    expect(screen.getByRole("region", { name: "Option set Service level" })).toHaveTextContent("Better · DRAIN-CLEAR · Drain clearing");
     expect(
       screen.queryByRole("button", { name: "Create category" }),
     ).not.toBeInTheDocument();
