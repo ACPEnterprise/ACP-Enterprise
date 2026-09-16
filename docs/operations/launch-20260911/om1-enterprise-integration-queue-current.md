@@ -1,14 +1,14 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-15 19:18 America/New_York
+Snapshot: 2026-09-15 20:53 America/New_York
 
 ## Authority and deployed state
 
-- Protected authority: `e9211fca8086c7fba333d8e5e2acaeaa191d56c2`
-- Protected tip: PR #297, QBO provider report basis-casing correction, stacked after #295/#296
+- Protected authority: `90af57abf5f4e2dbda75ed2680d4d420eb60410c`
+- Protected tip: PR #298, QBO invoice/open-A/R presentation and live A/R Aging Summary GET, stacked after #295-#297
 - Deployed Preview: `60035693a51ec66328625dfcc78e7cd2dfead824`
-- Preview health: recovered on old #279. After five SSL timeouts and HTTP 502 from 16:28-16:34, healthy responses resumed; another HTTP 502 occurred at 16:43:40 during the protected #295-#297 sequence. Five consecutive responses from 16:44:42 through 16:48:51 again reported `60035693...` healthy with PostgreSQL and Redis connected. Preserve both incident windows; neither closes the protected deployment gap.
-- Deployment gap: protected #280-#289, #291, and #294-#297 are not yet observed in Preview; deployed remains old #279. Preview returned HTTP 502 again at 16:43:40 during the new protected rollout.
+- Preview health: old #279. After the earlier recorded incident/recovery windows, SSL connection attempts timed out at 20:35, 20:36, 20:37, 20:38, and 20:40. Healthy old-SHA responses returned at 20:41 and 20:42, HTTP 502 recurred at 20:43, then healthy old-SHA responses returned from 20:44 through 20:53 with PostgreSQL and Redis connected. Preserve the complete new incident/recovery sequence; health does not close the protected deployment gap.
+- Deployment gap: protected #280-#289, #291, and #294-#298 are not yet observed in Preview; deployed remains old #279. Preview returned HTTP 502 again at 16:43:40 during the #295-#297 protected sequence; #298 merged without a Preview SHA change.
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
   exact SHA `b4bf00d3...` with healthy application and connected PostgreSQL and
@@ -275,6 +275,20 @@ Snapshot: 2026-09-15 19:18 America/New_York
   PostgreSQL test was added. Keep Luminary operationally disabled, do not use
   downgrade across this revision, and require a bounded forward repair/rollback
   strategy plus exact deployed role-matrix acceptance.
+- PR #298 merged at 20:31 on 2026-09-15 as protected `90af57ab...` from
+  exact-base head `b65c288e...`, with no checks, statuses, reviews, comments, or
+  linked qualification log. Its 11-file, 396-addition/37-deletion delta adds no
+  schema, migration, secret, or config. It separates complete invoice history
+  from positive-balance invoices and adds a production GET-only QBO A/R Aging
+  Summary projection. Local exact-protected qualification passed 48 focused
+  backend tests, one frontend suite/two tests, TypeScript, ESLint, and diff-check.
+  Keep it disabled: the UI automatically issues the new production A/R GET when
+  any workspace has `as_of`, including historical workspaces; the contract and
+  existing fixture permit timestamp-shaped `as_of` while the endpoint requires a
+  date, producing a 422/unavailable total. No new test covers the adapter request,
+  router/permission/error matrix, automatic-read policy, timestamp normalization,
+  or displayed gross/net/offset arithmetic. Require a bounded repair successor
+  and the expanded owner-approved QBO acceptance below.
 
 Independent qualification on 2026-09-12 covered the earlier #257-#260 tranche,
 not later #261-#289 or #291. That bounded run passed PostgreSQL zero-to-head, 20 affected
@@ -323,18 +337,23 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 | Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
 |---|---|---|---|---:|---|---|
-| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 53/46 | `e1af534b46fd523a563626d835414c6eeb3f2c7b` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
-| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 58/1 | `e9bb58ce5666496f1ce841f81149ece7b1ad6778` | Stale but reconcilable; merge-clean; documentation-only |
-| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 68/1 | `75d00731b448cc3f8877601e4db70f325ee0eeb0` | Stale but reconcilable; merge-clean; metadata edit required |
-| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 52/1 | `9ff59a7bc631429a07e9d2a29f880f8d03724e15` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
-| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 60/13 | `42a215e5baded103a36b915a8456d4e3d50b1cd4` | Merge-clean but schema-blocked; rebase and assign a unique revision downstream of protected `l2n4o6q8s0u2` |
-| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/MERGEABLE | 79/1 | conflict | Stale and conflicting in `frontend/src/api/qboAccountingEvidence.ts` after #295; reconcile its Payroll projection with protected QBO contracts, then rerun combined suites |
-| Accounting navigation grouping | `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` | None | 36/1 | `de6821dd4404efafdfe6ae6786b3cb444e14c239` | Thirty-six protected commits stale but reconcilable; merge-clean; no schema/config; qualify after rebase |
-| Mobile employee operations completion | `work/mobile-employee-operations-complete-1` | `bbd19b26fa33d2ea7aa48fc3b915e1de1e8768f4` | None | 23/20 | `8d7885c69d32ca3383e1303254b05a88d0daeb7e` | Stacked on and supersedes `323f1121...`; twenty-three protected commits stale and merge-clean. Local 19-suite/147-test, typecheck, lint, config, Apple-preflight, and diff-check pass, but Expo Doctor fails two native checks, audit reports 13 moderate findings, Apple authority remains self-asserted, and physical/owner acceptance is absent |
-| Price Book real-world completion | `work/pricebook-realworld-complete-1` | `de6fbb2106c62f09ef140e731aacb7c5d69d466f` | #290 open/MERGEABLE | 13/8 | `8bf3067d9bba353d7ddb56d427465a6e0650c56e` | Stale but merge-clean; held for evidence integrity, actor separation, PostgreSQL qualification, source-data review, safe rollback, and migration rebase downstream of `l2n4o6q8s0u2` |
-| Historical QBO activity UI | `work/financial-reports-realworld-activation-1` | `fe22277048cf3d7ddeb12801b67b30454f871523` | #292 open/MERGEABLE | 11/1 | conflict | Stale and conflicting in `QboSourceEvidence.test.tsx` after protected #295; reconcile its sealed-snapshot activity UI with the protected live-report UI and require one explicit authority model |
-| May 2026 registered QBO report projection | `work/om1-qbo-may2026-source-reporting-1` | `7fe4c7363b5729b7be2514e173f013a3f8cb8b37` | None | 11/1 | `52d84349fdd07ccc13a32995f549ecb99f9b1b49` | Eleven protected commits stale but merge-clean; independent registered-control fallback held for real-workbook/account-sign qualification and owner/accountant review |
-| Luminary native evidence composite | `work/realworld-activation-sprint-1` | `b11151c3b54a1148024d36afbc7c575d30eab7a2` | #293 open/MERGEABLE | 11/3 | conflict | QBO portion is superseded by protected #295-#297; branch conflicts in the QBO router and Preview compose file. Extract/reconcile only native Economics/Luminary evidence after the protected Luminary repair |
+| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 55/46 | `2308b85e903e116cf03789b220033db8c6d5d8d3` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
+| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 60/1 | `89471cfe65cc28afd72a0367040067ee022f58f7` | Stale but reconcilable; merge-clean; documentation-only |
+| SOURCE.4 real-world acceptance snapshot | `work/om1-source4-realworld-acceptance-1` | `7b598041e50700018c3b7ab1e56690369d58497d` | #303 open/MERGEABLE | 0/1 | `e66ec4f3c7cf1ccbc9650fb6498e028b4ba2be32` | Current and merge-clean, but held: Customer family counts omit Branch scope, output contains customer/source IDs and display names, direct output can be partial on interruption, and only a mocked one-test query shape—not protected PostgreSQL—was qualified |
+| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 70/1 | `4f7258745cf3d0880b2fb29a3ef0f0dba103a491` | Stale but reconcilable; merge-clean; metadata edit required |
+| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 54/1 | `b9dfff88a29e5b6b1817614e1aee4b5c8fe572c7` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
+| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 62/13 | `a7e5fa5c8fe574363bc811de543d574be5b2b74f` | Merge-clean but schema-blocked; rebase and assign a unique revision downstream of protected `l2n4o6q8s0u2` |
+| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/MERGEABLE | 81/1 | conflict | Stale and conflicting in `frontend/src/api/qboAccountingEvidence.ts` after #295/#298; reconcile its Payroll projection with protected QBO contracts, then rerun combined suites |
+| Accounting navigation grouping | `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` | None | 38/1 | `cb67b2cbff64e9db0c2e6d4991be4889ed956650` | Thirty-eight protected commits stale but reconcilable; merge-clean; no schema/config; qualify after rebase |
+| Mobile employee operations completion | `work/mobile-employee-operations-complete-1` | `bbd19b26fa33d2ea7aa48fc3b915e1de1e8768f4` | None | 25/20 | `aec02842552b88b4583f0cb2c1061319ed807601` | Stacked on and supersedes `323f1121...`; twenty-five protected commits stale and merge-clean. Local 19-suite/147-test, typecheck, lint, config, Apple-preflight, and diff-check pass, but Expo Doctor fails two native checks, audit reports 13 moderate findings, Apple authority remains self-asserted, and physical/owner acceptance is absent |
+| Price Book real-world completion | `work/pricebook-realworld-complete-1` | `de6fbb2106c62f09ef140e731aacb7c5d69d466f` | #290 open/MERGEABLE | 15/8 | `cbef253c9fe1180c983384958c228be1f329ff06` | Stale but merge-clean; held for evidence integrity, actor separation, PostgreSQL qualification, source-data review, safe rollback, and migration rebase downstream of `l2n4o6q8s0u2` |
+| Historical QBO activity UI | `work/financial-reports-realworld-activation-1` | `fe22277048cf3d7ddeb12801b67b30454f871523` | #292 open/MERGEABLE | 13/1 | conflict | Stale and conflicting in `QboSourceEvidence.test.tsx` after protected #295/#298; reconcile its sealed-snapshot activity UI with both protected live-report surfaces and require one explicit authority model |
+| May 2026 registered QBO report projection | `work/om1-qbo-may2026-source-reporting-1` | `7fe4c7363b5729b7be2514e173f013a3f8cb8b37` | None | 13/1 | `d3c4d7ec6329d9535e2e247526a916ecf6548f1d` | Thirteen protected commits stale but merge-clean; independent registered-control fallback held for real-workbook/account-sign qualification and owner/accountant review |
+| Luminary native evidence successor | `work/realworld-activation-sprint-1-reconciled` | `734d2685371074b468319d06c857b7fb6562c805` | #300 open/MERGEABLE | 0/3 | `5a129e6cc05693e3d71ee091f6d61f98cc1cc930` | Current, QBO-free and merge-clean; supersedes conflicting #293. Held behind protected Luminary quality/response/rollback repair and real PostgreSQL scope, truncation, query-count and zero-write qualification |
+| Mobile contact/Price Book increment | `work/om1-phone-mobile-employee-operations-complete-1` | `7e68677627671e87c9278315e4b069059f5c6c3a` | #301 open/MERGEABLE | 0/1 | `79864f27a2fa675459d7a046f3395113754bad6f` | Current and merge-clean but independent of `bbd19b26...`; cannot replace it. Standard Field Tech lacks the broad permissions used to expose contact/Price Book, so reconcile with the broader Mobile head and a narrower assignment-scoped server capability before acceptance |
+| Mobile account recovery | `work/om1-phone-mobile-account-recovery-1` | `5b69b3df3f22411a6fc7173c513588fc34c47be0` | #302 open/MERGEABLE | 0/1 | `620bc3780194ff8048861c0e37784892a3466719` | Current, merge-clean and frontend/mobile-only; uses existing public audited reset endpoint with non-enumerating copy. Reconcile with both non-ancestor Mobile heads and prove backend rate-limit/audit/delivery, URL/environment and enumeration parity before Wave D |
+| Employee operating profiles | `work/om2b-real-technician-activation-support-1` | `b2f4929ee85d98c6894f750f0d496cc2a4f6e21d` | #299 open/MERGEABLE | 0/1 | `a48dd3090b0d1ba31581eb1a4c7a83e506c005b4` | Current and merge-clean, but held: broad Office Manager privilege expansion, unsafe Price Book activation rollback, unsupported PostgreSQL claims, and a field-tech activation sequence that depends on the Dispatch action removed by the Scheduling successor |
+| Scheduling real-world activation | `work/om2c-realworld-scheduling-activation-1` | `af51b3f0da97a91bd0cbe77089aed5244949d835` | None | 0/2 | `e8446fb3242d55260f6f6cd78cab4f36a0a69260` | Current and merge-clean; removes Dispatch field-readiness mutation and restricts assignment selection to established technician capability. Blocked until a separate qualified capability/availability workflow exists and #299's contradictory handoff is repaired |
 
 ## Named launch queue coverage
 
@@ -346,29 +365,34 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1-B Customer office UX | `8516b08b...` conflicts in one add/add reliability test, while current-authority reconciliation `174fcd4e...` composes to zero delta. Superseded by #242 and #257. |
 | Workforce / Payroll #216 | Merged as `d52d1178...`; already protected. |
 | Workforce / Payroll #221, stacked #222, and #223 | Closed; their current successors are protected through #229, #231, and #235 respectively. |
-| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but fifty-three protected commits stale. Reconcile it to `e9211fca...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
+| Current OM2 Workforce successor | PR #299 at exact-base `b2f4929e...` is the current employee-profile candidate. Hold for privilege, migration rollback, PostgreSQL evidence, and Scheduling workflow reconciliation. |
+| Current OM2 Scheduling successor | `af51b3f0...` is the current assignment-safety candidate. It removes the Dispatch readiness mutation and therefore blocks #299's stated field-tech activation sequence until a separate operator workflow is qualified. |
+| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but fifty-five protected commits stale. Reconcile it to `90af57ab...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
 | Payroll tax rule | Reconciled `9a44f714...` composes to zero delta; superseded by protected #236. |
 | Identity #227 and #230 | Still open but superseded by protected #256 and #258; close, do not integrate. |
-| Identity recovery successor | `4cf7bdf4...` composes to zero delta; protected #256 is authoritative. |
-| Laptop1 Phone distribution readiness | `bf28a61c...`, owner packet `0183eaec...`, rollout `a027b3e9...`, and three-day head `323f1121...` are ancestors of active operations-completion head `bbd19b26...`. PR #274 fixes #273's selector, #275 grants administrator authority, and #276 makes backend creation atomic. Dispatch assignability remains disabled pending visible-error and concurrent-create/API qualification. Apple upload/Team/processing claims require authenticated owner evidence. |
+| Identity recovery successor | Earlier `4cf7bdf4...` composes to zero delta against protected #256. New Mobile UI successor PR #302 at exact-base `5b69b3df...` calls that protected audited endpoint and is current, but must reconcile with the other Mobile heads and pass backend/public-route acceptance. |
+| Laptop1 Phone distribution readiness | `bf28a61c...`, owner packet `0183eaec...`, rollout `a027b3e9...`, and three-day head `323f1121...` are ancestors of active operations-completion head `bbd19b26...`. PR #301 at independent exact-base head `7e686776...` adds contact/Price Book presentation and must be reconciled rather than treated as its successor. Dispatch assignability remains disabled pending the Workforce/Scheduling repair; Apple upload/Team/processing claims require authenticated owner evidence. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
-| QBO `5fe11183...` | Superseded by protected #243. PR #295-#297 now protect the live provider P&L, Preview Company binding, and basis-casing fix without checks/reviews; this still does not authorize OAuth or acceptance. PR #292 conflicts while adding sealed-snapshot activity UI; `7fe4c736...` independently projects the May control; #293's QBO portion is superseded. PR #282 remains separate. |
+| QBO `5fe11183...` | Superseded by protected #243. PR #295-#298 now protect live provider P&L and A/R GETs, Preview Company binding, basis casing, and invoice/A/R presentation without GitHub qualification; this still does not authorize automatic reads, OAuth, or acceptance. PR #292 conflicts while adding sealed-snapshot activity UI; `7fe4c736...` independently projects the May control; #293's QBO portion is superseded. PR #282 remains separate. |
 | Payroll cutover permission seed | PR #284 is a one-file successor to protected #283. Do not integrate its edit to already-protected revision `i9k1m3o5q7s9`; replace it with a new downstream repair migration and a separated role grant policy. |
 | Company Administrator cutover grants | PR #285 is protected through `j0l2n4p6r8t0`, but it still edits prior migration `i9k1m3o5q7s9` and grants the same role owner-certify plus approve. Keep disabled; repair downstream. |
 | LIA owner intelligence successor | PR #294 integrated `617d8952...` plus authorization-version invalidation `df2c2a96...` as protected `cd92abf5...`; it supersedes `b46560fa...`. Keep the feature operationally disabled until authority, scope, time, pay-period, PostgreSQL, effective-role, and downgrade-cache gates pass after exact-SHA deployment. |
 | Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, native binding, runtime inventory, v4 completeness, the v4 executor, Location lookup, exact-replay repair, authority-successor verifier, and mapped-row repair are protected through #262-#272. Recovery, builder, cohort authority, runtime repair, v4 repair, a complete executor repair, and a verifier repair remain preparation. PR #271/#272 assume an execution already occurred and cannot authorize one. Protected executor and verifier are not qualified. Do not run their generators, executor command, guarded admission, or replay verifier. |
-| Price Book operator readiness | PR #290 at `de6fbb21...` remains the current successor and supersedes `49e852aa...` and `c1c90a0a...`. It is two protected commits stale and mechanically clean but held on schema rebase, authority, evidence-integrity, database, source-data, and rollback gates. |
+| Price Book operator readiness | PR #290 at `de6fbb21...` remains the current successor and supersedes `49e852aa...` and `c1c90a0a...`. It is fifteen protected commits stale and mechanically clean but held on schema rebase, authority, evidence-integrity, database, source-data, and rollback gates. |
 
 Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-Nine of twelve remaining effective deltas are textually merge-clean against protected.
-PR #215 conflicts in `qboAccountingEvidence.ts`, #292 conflicts in
-`QboSourceEvidence.test.tsx`, and #293 conflicts in the QBO router and Preview
-compose file after #295-#297. The sole protected schema head remains
+Fifteen of seventeen remaining effective deltas are textually merge-clean against protected.
+PR #215 conflicts in `qboAccountingEvidence.ts` and #292 conflicts in
+`QboSourceEvidence.test.tsx`. Reconciled PR #300 supersedes conflicting #293 and
+contains no stale QBO/config delta. The sole protected schema head remains
 `l2n4o6q8s0u2`, while Price Book and ECO still branch from older
-schema lineage. ECO and cohort authority
+schema lineage. PR #299 adds candidate `m3n5p7r9t1v3` directly after the
+protected head. If its repaired successor lands first, rebase Price Book and ECO
+downstream of it; otherwise rebase #299 after whichever schema candidate lands.
+Never admit sibling heads in one wave. ECO and cohort authority
 are not admissible, and Mobile is blocked on a complete repair to
 protected #273-#276: ECO's
 differently named migration still declares protected revision `g7i9k1m3o5q7`
@@ -384,7 +408,7 @@ serialization. Protected #273 adds independently defective Dispatch readiness;
 #274 fixes its selector, #275 expands administrator permissions, and #276 makes
 backend creation atomic but leaves visible-error and concurrency evidence gaps.
 Every candidate effective tree and behind/ahead count above was recomputed from
-protected `e9211fca...`. Mobile `bbd19b26...` and the May projection remain
+protected `90af57ab...`. Mobile `bbd19b26...` and the May projection remain
 merge-clean and diff-check clean. Recompute all trees after
 protected movement or packet edits.
 
@@ -396,6 +420,10 @@ operational order:
 1. OM2-C persona contract and acceptance harness; integrate tooling independently,
    but do not attempt persona issuance until the missing platform primitive exists.
 2. SOURCE.4 artifact recovery and safe-tranche builder preparation.
+2a. Hold PR #303 until its snapshot is Branch-consistent, sanitized, and written
+   atomically into a validated private directory. Qualify exact SQL on supported
+   PostgreSQL. It is post-admission/read-only evidence and never authorizes
+   SOURCE.4 execution.
 3. Preserve #264 as the Wave C schema/runtime checkpoint and attach its exact
    qualification evidence. Treat protected #265 and #266 as rejected for
    operational use; repair and qualify cohort authority, then stack a read-only
@@ -448,24 +476,47 @@ operational order:
 15. Preserve #274's selector fix, audit #275's role expansion, and preserve #276's
    atomic transaction; surface mutation failure and qualify concurrent canonical
    creation with real PostgreSQL API/idempotency/rollback coverage.
-16. Treat protected #295-#297 as disabled pending deployment qualification. The
-   QBO evidence screen automatically issues the default May cash-basis live GET
-   when enabled, so merely opening it can verify Company and refresh an existing
-   token. Require an explicit operator action or separately approved auto-read
-   policy, plus exact Company/realm/config and zero-write evidence. Reconcile #292
-   over that UI deliberately; it is no longer a merge-ready standalone unit.
+15a. Hold PR #299. Repair the Office Manager migration so upgrade/downgrade
+   preserves pre-existing Price Book activation grants and provenance; explicitly
+   approve the expanded membership, onboarding, invoice, payment-read, Workforce,
+   and Branch authority; rerun its claimed PostgreSQL zero-to-head/replay and
+   role/API matrices. Do not invite or activate real Employees during qualification.
+15b. Reconcile Scheduling head `af51b3f0...` with #299 before Waves A/B. Preserve
+   its rule that Dispatch consumes established technician capability, but provide
+   and qualify a separate bounded operator workflow for capability plus exact
+   appointment availability. #299 directs operators to a Dispatch action this
+   candidate removes; neither may be accepted with that contradiction.
+16. Treat protected #295-#298 as disabled pending a bounded #298 repair and
+   deployment qualification. The QBO evidence screen automatically issues both
+   the default May cash-basis P&L GET and #298's A/R Aging Summary GET when
+   enabled, so merely opening it can verify Company and refresh an existing
+   token. #298 also forwards workspace `as_of` directly to a date-only endpoint,
+   although the contract permits timestamps. Require explicit operator actions
+   or a separately approved auto-read policy, normalize/validate the date, and
+   prove exact Company/realm/config, GET-only transport, failure visibility and
+   zero writes. Reconcile #292 over that UI deliberately.
 17. Treat `7fe4c736...` as an independent May accrual control projection. Validate
    the real registered workbook, QBO debit/credit sign convention, account
    classification and totals with the owner/accountant, fail-closed tamper and
    absent-control behavior, then open a fresh PR. It may follow #292 without OAuth.
-18. Do not integrate #293 as the present three-commit composite. Its live QBO
-   commit is superseded by protected #295-#297 and now conflicts. Extract only
-   the native-evidence portion, retain period/Company/Branch authority, prove
-   truncation/completeness and real PostgreSQL query behavior, and stack only on a
-   successor that first repairs #288/#289/#291's fail-open recommendation gates.
+18. Close superseded #293 and hold its QBO-free successor PR #300. Preserve its
+   period/Company/Branch and source-authority boundaries, but prove truncation,
+   settlement/invoice/Employee attribution, real PostgreSQL query behavior and
+   zero writes. Integrate only after a successor repairs #288/#289/#291's
+   fail-open quality, response, scenario, downgrade and cache gates.
 19. Repair operations-completion head `bbd19b26...`, reconcile its manifests after the complete
    #273-#276 successor is protected, and independently verify every Apple action
    claim. Then integrate Mobile in Wave D; authoritative Job Clock `d52d1178` is protected.
+19a. Reconcile PR #301's contact/Price Book increment with `bbd19b26...`; neither
+   is an ancestor of the other. Replace its broad permission-derived contact gate
+   with an assignment-scoped server capability suitable for the sanctioned Field
+   Tech profile, prove permission revocation/offline/link safety, and retain all
+   broader Mobile readiness and owner gates.
+19b. Reconcile account-recovery PR #302 with both Mobile heads. Preserve its
+   existing public audited endpoint and non-enumerating copy; prove email
+   normalization, absent/existing parity, rate limiting, audit/delivery behavior,
+   Preview URL binding and no tenant/password/token leakage. Do not send a real
+   reset during pre-integration qualification.
 
 Do not execute Migration admission, authorize QBO, execute Payroll, or sign or
 upload an Apple build as part of integration.
@@ -474,7 +525,8 @@ upload an Apple build as part of integration.
 
 ```mermaid
 flowchart LR
-    A[Protected e9211fca through QBO basis fix] -->|reconcile| R[SOURCE.4 recovery]
+    A[Protected 90af57ab through QBO AR presentation] -->|reconcile| R[SOURCE.4 recovery]
+    A --> R303[PR 303 SOURCE.4 acceptance snapshot repair]
     A --> C[OM2-C persona contract]
     A --> L[Protected #262 through #266 qualification]
     A --> K[Cohort authority repair]
@@ -492,15 +544,25 @@ flowchart LR
     A --> Z2[Protected LIA acceptance and repair]
     A --> N[Accounting navigation grouping]
     A --> M[Mobile operations-completion packet]
+    A --> W299[PR 299 employee profiles]
+    A --> SNEW[Scheduling af51b3f0]
+    W299 -->|repair role migration| WOK[Qualified Workforce onboarding]
+    SNEW -->|separate readiness workflow| WOK
+    WOK --> M
     A --> PB[PR 290 Price Book repair and qualification]
     A --> Q292[PR 292 sealed QBO activity UI]
     A --> QM[May registered-control projection]
-    A --> Q293[PR 293 split and reconcile]
-    O --> Q293
+    A --> Q300[PR 300 native evidence successor]
+    O --> Q300
     A --> F[Protected PR 273-276 field-readiness repair]
     F --> M
+    A --> M301[PR 301 Mobile contact increment]
+    A --> M302[PR 302 Mobile recovery]
+    M -->|reconcile non-ancestor heads| M301
+    M -->|reconcile non-ancestor heads| M302
     R -.->|operational evidence order| B
     R --> I[Enterprise per-lane PR integration]
+    R303 --> I
     B --> I
     E --> I
     P --> I
@@ -514,7 +576,9 @@ flowchart LR
     PB --> I
     Q292 --> I
     QM --> I
-    Q293 --> I
+    Q300 --> I
+    M301 --> I
+    M302 --> I
     C --> I
     U --> I
     V --> I
@@ -525,7 +589,6 @@ flowchart LR
     H --> QA[QBO read-only acceptance]
     Q292 --> QA
     QM --> QA
-    Q293 --> QA
     H --> MA[Mobile readiness acceptance]
     H --> XA[Migration artifact acceptance]
     U --> XA
@@ -559,17 +622,18 @@ then-current sole protected schema head.
 
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
-| Acceptance tooling | Reconcile `1fb0481a...` to `e9211fca...`, update schema/release bindings through `l2n4o6q8s0u2`, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Current deployed acceptance | Keep acceptance stopped and wait for consecutive exact-`e9211fca...` responses. Preserve the incident/recovery sequence, old-#279 state, unobserved #280-#289/#291/#294-#297 merges, and all earlier evidence; attach or rerun missing #261-#297 qualification; keep protected Migration commands/verifier, field/payroll/Luminary/LIA operations, and #295 live QBO reads disabled | A timeout/HTTP error or dependency regression recurs, deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, or defective tooling is exercised |
+| Acceptance tooling | Reconcile `1fb0481a...` to `90af57ab...`, update schema/release bindings through `l2n4o6q8s0u2`, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
+| Current deployed acceptance | Keep acceptance stopped and wait for consecutive exact-`90af57ab...` responses. Preserve the incident/recovery sequence, old-#279 state, unobserved #280-#289/#291/#294-#298 merges, and all earlier evidence; attach or rerun missing #261-#298 qualification; keep protected Migration commands/verifier, field/payroll/Luminary/LIA operations, and #295/#298 live QBO reads disabled | A timeout/HTTP error or dependency regression recurs, deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, or defective tooling is exercised |
 | Wave C preparation | Treat #264-#272 as integrated, but #265/#266, the executor through #270, and verifier through #272 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently; repair #271/#272 only as post-execution verification tooling | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, nondeterministic or overbroad replay evidence, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Assign ECO a unique revision downstream of protected `l2n4o6q8s0u2`, requalify, then integrate/deploy independently | Sibling/duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Protected Luminary read-only checkpoint | Keep #288/#289/#291 disabled. Repair fail-open quality and per-Job evidence gates, strict response model, unsupported scenario UI, zero-write evidence, #291 downgrade safety, and administrator-role acceptance, then deploy independently; it has no ECO schema dependency | Unknown quality becomes READY, incomplete/unbound Job yields a recommendation, unsupported scenario errors instead of reporting its blocker, cross-scope data appears, digest/evidence is unstable or unbound, mutation/provider call occurs, response contract drifts, pre-existing grant is deleted, or authorization cache remains stale |
 | Protected LIA read-only checkpoint | PR #294 is integrated at `cd92abf5...`; preserve its exact-name resolver, fail-closed name cases, scoped-query assertion, Payroll follow-up, unique `l2n4o6q8s0u2`, and upgrade invalidation. Before enablement, enforce `as_of`, explicit source authority, nullable-Branch policy, authoritative pay-period selection, minimum-necessary output, approved role expansion, and downgrade invalidation; prove permission-before-query, zero-write behavior, and PostgreSQL upgrade/downgrade/replay | Stale context succeeds, source evidence becomes ACP-authoritative, Branch-null scope widens, future/draft pay period is selected, briefing retrieves unrelated domains, unauthorized query executes, downgrade leaves cached authorization valid or deletes a pre-existing deterministic grant, protected values appear, or mutation/provider call occurs |
-| Wave B | Preserve #279 readback, audit its admin-role expansion, preserve #280 selected-period navigation and #281 metadata-only readiness UI; repair #278's projection mismatch and prove #281's intended role matrix, then accept #277-#281 without Payroll execution and reconcile PR #215. Keep protected #282 disabled until a repaired successor passes. #292 may join as a separately reviewable frontend commit after its gates; the May projection should follow only after accountant reconciliation. Split #293 and defer its Luminary-native portion behind the Luminary repair | Either route/service permission contract is inconsistent, unexplained broad-suite failure remains, selected period is lost or warning/readiness is contradictory, protected Payroll values appear, protected #282 or its successor accepts unbound/duplicate evidence or weakens approved ACP authority, QBO report signs/classification or Company/realm binding fail, pay-period replay/readback/overlap/audit test fails, Payroll/provider mutation occurs, OAuth is initiated, or QBO/shared-route behavior regresses |
+| Wave B | Preserve #279 readback, audit its admin-role expansion, preserve #280 selected-period navigation and #281 metadata-only readiness UI; repair #278's projection mismatch and prove #281's intended role matrix, then accept #277-#281 without Payroll execution and reconcile PR #215. Keep protected #282 disabled until a repaired successor passes. #292 may join as a separately reviewable frontend commit after its gates; the May projection should follow only after accountant reconciliation. Hold QBO-free #300 behind the protected Luminary repair | Either route/service permission contract is inconsistent, unexplained broad-suite failure remains, selected period is lost or warning/readiness is contradictory, protected Payroll values appear, protected #282 or its successor accepts unbound/duplicate evidence or weakens approved ACP authority, QBO report signs/classification or Company/realm binding fail, pay-period replay/readback/overlap/audit test fails, Payroll/provider mutation occurs, OAuth is initiated, or QBO/shared-route behavior regresses |
+| Workforce onboarding / Scheduling bridge | Hold PR #299 and `af51b3f0...` as a coupled repair checkpoint spanning Waves A/B. Preserve capability-required assignment, establish one separately authorized capability/availability workflow, repair migration rollback/provenance, approve the Office Manager role delta, and prove PostgreSQL upgrade/downgrade/replay, effective-role/session invalidation, duplicate identity, invitation-state, and assignment matrices. No real invitation or Employee activation during qualification | Dispatch action referenced by the handoff is absent, arbitrary office Employee becomes assignable, Field Tech cannot become assignable through an approved path, pre-existing Price Book grant is deleted/recreated, rollback adds authority that was absent, role scope exceeds owner approval, auth version/session remains stale, duplicate identity is created, or real invitation/activation occurs |
 | Protected Payroll cutover checkpoint | Keep #283-#286 mutations disabled. Put permission repair downstream of `l2n4o6q8s0u2`; separate certify/approve actors and grants; define accountant provisioning; require exactly one head, zero drift, full PostgreSQL/API/concurrency/replay/rollback evidence, then deploy and accept synthetic certification only—never Payroll execution | Protected migration rewrite is relied upon, same actor can certify and approve, reader sees mutation controls/source IDs, a role can self-select authority, any Employee/fact/bridge coverage is omitted, changed replay succeeds, protected value leaks, partial/racy state, multiple heads/drift, or execution/ACH/provider action |
 | Accounting navigation UI | Open a fresh exact-head PR; run permission filtering, direct/deep-link, active-state, keyboard, narrow/mobile, full frontend, lint, and build checks. It may join Wave B only as a separately reviewable frontend commit | Any route becomes broader than its existing permission, operational links disappear without an equivalent Accounting path, deep links/back-forward break, hidden unsupported feature appears, mobile/keyboard navigation regresses, or the candidate claims financial/QBO/Payroll behavior |
-| Wave D | Keep protected #273-#276 operator action disabled; audit administrator permissions, preserve #276 atomicity, surface mutation errors, and qualify concurrent/API behavior before Mobile. Treat operations-completion head `bbd19b26...` as held until authenticated Apple authority/processing evidence, Expo native-sync/tooling failures, dependency audit findings, clean exports/archive qualification, and physical acceptance reconcile | Unexpected role privilege, partial readiness persists on failure, mutation error is hidden, PostgreSQL/API/concurrency/idempotency/rollback test fails, Mobile manifests contradict, Apple action is self-authorized or only repository-asserted, native config is not synchronized, audit/export/archive fails, runtime/dependency evidence is stale, or physical acceptance is claimed without owner evidence |
-| Price Book checkpoint | Hold PR #290. Rebase it to `e9211fca...` and move `n0p8q16g3t9u` downstream of protected `l2n4o6q8s0u2`; require server-derived review/proposal digests, actor separation, supported-PostgreSQL replay/concurrency evidence, source review, and safe rollback. Deploy it as an isolated checkpoint; if it lands before ECO, rebase ECO downstream of it | Stale schema parent remains, caller-supplied digest is accepted without recomputation, actor separation fails, source classifications/prices are unapproved, PostgreSQL one-head/drift fails, or downgrade violates the restored constraint |
+| Wave D | Keep protected #273-#276 operator action disabled; complete the Workforce/Scheduling bridge, surface mutation errors, and qualify concurrent/API behavior before Mobile. Reconcile non-ancestor `bbd19b26...`, PR #301 contact/Price Book, and PR #302 recovery deltas into one candidate. Hold it until the narrow server capability, recovery parity/rate/audit evidence, authenticated Apple authority/processing, Expo native-sync/tooling failures, dependency audit findings, clean exports/archive, and physical acceptance reconcile | Unexpected role privilege, no sanctioned readiness workflow, broad financial permissions expose contact, recovery enumerates or leaks identity, non-ancestor delta is lost, mutation error is hidden, API/concurrency/idempotency/rollback test fails, Mobile manifests contradict, Apple action is self-authorized, native config is unsynchronized, audit/export/archive fails, runtime evidence is stale, or physical acceptance lacks owner evidence |
+| Price Book checkpoint | Hold PR #290. Rebase it to `90af57ab...` and move `n0p8q16g3t9u` downstream of protected `l2n4o6q8s0u2`; require server-derived review/proposal digests, actor separation, supported-PostgreSQL replay/concurrency evidence, source review, and safe rollback. Deploy it as an isolated checkpoint; if it lands before ECO, rebase ECO downstream of it | Stale schema parent remains, caller-supplied digest is accepted without recomputation, actor separation fails, source classifications/prices are unapproved, PostgreSQL one-head/drift fails, or downgrade violates the restored constraint |
 
 After every protected integration, stop before integrating another candidate and
 run this read-only checkpoint in a clone containing the remaining remote branch:
@@ -607,7 +671,7 @@ pushes, or merges the protected branch.
 ```bash
 git fetch origin --prune
 test "$(git rev-parse origin/customer-management-v1)" = \
-  e9211fca8086c7fba333d8e5e2acaeaa191d56c2
+  90af57abf5f4e2dbda75ed2680d4d420eb60410c
 
 lane=work/REPLACE_WITH_LANE
 expected=REPLACE_WITH_FULL_HEAD
@@ -624,6 +688,7 @@ packet if either SHA guard fails or the merge conflicts.
 |---|---|
 | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` |
 | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` |
+| `work/om1-source4-realworld-acceptance-1` | `7b598041e50700018c3b7ab1e56690369d58497d` |
 | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` |
 | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` |
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
@@ -633,7 +698,11 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/pricebook-realworld-complete-1` | `de6fbb2106c62f09ef140e731aacb7c5d69d466f` |
 | `work/financial-reports-realworld-activation-1` | `fe22277048cf3d7ddeb12801b67b30454f871523` |
 | `work/om1-qbo-may2026-source-reporting-1` | `7fe4c7363b5729b7be2514e173f013a3f8cb8b37` |
-| `work/realworld-activation-sprint-1` | `b11151c3b54a1148024d36afbc7c575d30eab7a2` |
+| `work/realworld-activation-sprint-1-reconciled` | `734d2685371074b468319d06c857b7fb6562c805` |
+| `work/om2b-real-technician-activation-support-1` | `b2f4929ee85d98c6894f750f0d496cc2a4f6e21d` |
+| `work/om2c-realworld-scheduling-activation-1` | `af51b3f0da97a91bd0cbe77089aed5244949d835` |
+| `work/om1-phone-mobile-employee-operations-complete-1` | `7e68677627671e87c9278315e4b069059f5c6c3a` |
+| `work/om1-phone-mobile-account-recovery-1` | `5b69b3df3f22411a6fc7173c513588fc34c47be0` |
 
 After the lane-specific edits and tests below, commit and push only that lane,
 then open or refresh its PR into `customer-management-v1`. Enterprise must
@@ -1043,6 +1112,30 @@ test "$(shasum -a 256 "$SOURCE_ROOT/current-operational-hold-dispositions.json" 
 ENVIRONMENT=test PYTHONPATH=backend python -c 'from pathlib import Path; from app.operational_migration.hcp_current_overlay import CurrentOverlayManifest; p=Path("/Users/michaelbfouse/.acp-enterprise/migration/housecall-pro/hcp-current-admission-packet-20260912T170000Z/current-overlay-merge-packet.json"); m=CurrentOverlayManifest.load(p); assert m.digest == "e23b7bcf5ac34ea650184afacc711af0c7028e83a6b1f7405e2ae17e13441eb2"'
 ```
 
+### SOURCE.4 real-world acceptance snapshot
+
+PR #303 is exact-base head `7b598041e50700018c3b7ab1e56690369d58497d`,
+zero behind/one ahead and merge-clean at tree
+`e66ec4f3c7cf1ccbc9650fb6498e028b4ba2be32`, with no GitHub checks, reviews,
+comments, or linked log. It adds a transaction-read-only SOURCE.4 continuity
+snapshot and no schema or product mutation. Local exact-head qualification passed
+its single mocked test and diff-check; no supported-PostgreSQL query plan or
+real-schema execution was performed.
+
+Hold it unchanged. The Customer family deliberately omits `branch_id` while the
+document declares one Branch, so family totals can include other Branches and
+disagree with the Branch-filtered journey list. The output includes source
+Customer IDs, ACP UUIDs/numbers and display names, which cannot enter sanitized
+acceptance evidence. The CLI creates a `0600` file exclusively, but does not
+validate a private regular parent, write/rename atomically, fsync, or prevent a
+partial artifact on interruption. Repair scope symmetry, replace journeys with
+bounded opaque digests/counts or keep a separately controlled private appendix,
+and use the packet's safe-output contract. Prove read-only transaction state,
+Company/Branch isolation, absent/foreign family rows, holds, current/future
+cutoffs, deterministic digest, query cardinality/performance and zero writes on
+supported PostgreSQL. This report may observe a separately authorized admission;
+it never authorizes or executes one.
+
 ### HCP historical safe-tranche builder
 
 Update the packet authority to `cd92abf5...` and state that
@@ -1116,22 +1209,37 @@ revision and no new upgrade operations from `alembic check`.
 ### Current QBO reporting candidates
 
 PR #295 merged `69416d3d...` as protected `231d6232...`; PR #296 immediately
-merged the Preview binding `30d2c3ab...` as `977d174f...`; PR #297 then changed
-the provider `accounting_method` parameter from lowercase to `Cash`/`Accrual`
-and merged as current protected `e9211fca...`. None has checks, reviews, comments,
-or linked logs. Together they add a
-live production QBO Profit & Loss GET, projection and UI plus a default Preview
-ACP Company UUID. They add no schema migration and label output
-`QBO_SOURCE_BACKED`, but the screen's enabled query automatically runs the
-default May cash report before the operator presses “Run source-backed report.”
-This can perform Company verification and refresh an existing production token.
-Keep the surface disabled until Enterprise approves that read trigger and proves
-exact ACP Company/realm/expected-name binding, GET-only transport, requested vs
-returned period/basis, report limits, safe error/rate behavior, no payload logs,
-and before/after provider, token-metadata, ACP ledger and audit state. Deployment
-does not authorize OAuth consent or a provider write.
+merged the Preview binding `30d2c3ab...` as `977d174f...`; PR #297 changed the
+provider `accounting_method` parameter to `Cash`/`Accrual` and merged as
+`e9211fca...`. PR #298 then merged `b65c288e...` as current protected
+`90af57ab...`. None has checks, reviews, comments, or linked logs. #295-#297 add
+a live production QBO Profit & Loss GET, projection/UI, and default Preview ACP
+Company UUID. #298 separates full invoice history from positive-balance invoices
+and adds a live production QBO A/R Aging Summary GET and net-A/R projection. They
+add no schema migration and label live report output `QBO_SOURCE_BACKED`.
 
-PR #292 is now nine protected commits stale and conflicts in its QBO component
+Both live queries are automatic: the default May cash P&L runs before the
+operator presses “Run source-backed report,” and #298's A/R hook runs whenever
+the workspace has `as_of`, including historical workspaces. Each can verify the
+Company and refresh an existing production token. Moreover, #298 passes `as_of`
+unchanged to a date-only endpoint while the existing contract/test fixture uses
+`2026-09-10T12:00:00Z`; that request returns 422 and the UI silently renders A/R
+unavailable. Its new tests cover only source projection and an existing component
+path, not the adapter GET, production reader, router permission/error behavior,
+hook invocation/date normalization, automatic-read policy, or gross/net/offset
+display math. Keep both live surfaces disabled pending a bounded repair.
+
+Local exact-`90af57ab...` qualification passed 48 focused backend tests, one
+frontend suite/two tests, TypeScript, ESLint, and `git diff --check` under an
+isolated Python 3.12 environment. This is bounded evidence, not owner acceptance.
+Require explicit operator actions or an approved auto-read policy, canonical
+date handling, visible failure state, exact ACP Company/realm/expected-name
+binding, GET-only transport, requested-vs-returned date/basis, provider totals,
+report limits, safe error/rate behavior, no payload logs, and before/after
+provider, token-metadata, ACP ledger and audit state. Deployment does not
+authorize OAuth consent or a provider write.
+
+PR #292 is now thirteen protected commits stale and conflicts in its QBO component
 test. It is frontend-only and filters the
 already sealed QBO evidence workspace client-side for invoice, bill, and payment
 activity and labels it source evidence rather than ACP Accounting. Local focused
@@ -1143,7 +1251,7 @@ secret, config, OAuth, provider call, or rollback data operation is introduced;
 rollback is the prior frontend image. Reconcile its activity UI with protected
 #295 deliberately and keep sealed activity distinct from the live report.
 
-`7fe4c736...` is nine protected commits stale, merge-clean, and has no PR. It derives a May 2026 accrual
+`7fe4c736...` is thirteen protected commits stale, merge-clean, and has no PR. It derives a May 2026 accrual
 report from a digest-registered General Ledger workbook only when the sealed
 entity snapshot is absent. The static
 account-family map and arithmetic require owner/accountant reconciliation against
@@ -1154,13 +1262,16 @@ complete QBO evidence suite with valid, absent, tampered, foreign, duplicate and
 changed control registrations. It adds no schema/config/secret and must read only
 the pre-existing evidence root; it does not authorize OAuth or provider access.
 
-PR #293 is nine protected commits stale and conflicts in the QBO router and
-Preview compose file. Its live P&L/config portion is superseded by #295-#297.
-The remaining useful delta is native Job/Customer/Branch,
-issued-Invoice, authoritative worked-interval, and job-demand material queries;
-and Luminary/source-completeness display. Local focused Vitest previously passed
-2 files/6 tests, but GitHub has no checks or reviews. Replace the branch with a
-fresh protected-base successor containing only that remaining delta.
+PR #300 at exact head `734d2685371074b468319d06c857b7fb6562c805`
+supersedes conflicting #293. It is zero behind/three ahead, QBO-free and
+merge-clean at tree `5a129e6cc05693e3d71ee091f6d61f98cc1cc930`, with no
+GitHub checks, reviews, comments, or linked logs. It adds native
+Job/Customer/Branch, issued-Invoice, authoritative worked-interval, valued
+material, Employee attribution, verified payment-application and posted Invoice
+Accounting evidence plus Luminary/source-completeness display. Local exact-head
+qualification passed eight focused backend tests, four frontend tests,
+TypeScript, ESLint, and diff-check. The PR body's broader 252-test/build claims
+remain self-reported. Close #293 rather than reconciling its stale QBO delta.
 
 The native-evidence portion performs four additional database reads per Economics
 workspace and caps each family at 5,000 rows. Require real PostgreSQL/API tests for
@@ -1168,11 +1279,11 @@ Company/authorized-Branch isolation, active-Branch behavior, overlapping interva
 and reversal semantics, Invoice lifecycle/currency, job-period identity,
 pagination/truncation surfaced as partial rather than complete, deterministic
 digests, query count/performance, and zero flush/commit/event/provider activity.
-It does not repair protected Luminary's unknown-quality, per-Job completeness,
+PR #300 does not repair protected Luminary's unknown-quality, per-Job completeness,
 strict-response, unsupported-scenario, or #291 rollback/cache defects, so its
 Luminary exposure remains blocked behind that repair. No schema migration is
 present. Roll back a future native-only successor by restoring the previous
-application image. For protected #295-#297, disable the surface/runtime or restore
+application image. For protected #295-#298, disable the surface/runtime or restore
 the previous image; do not delete credentials, tokens, realm markers, or evidence.
 
 ### Luminary owner economics read-only projection
@@ -1716,6 +1827,51 @@ destination permission and one no-permission persona at desktop and phone width.
 Do not authorize QBO, execute Payroll, or infer feature completion from the new
 grouping.
 
+### PR #299 Employee operating profiles and Scheduling successor
+
+PR #299 is exact-base head `b2f4929ee85d98c6894f750f0d496cc2a4f6e21d`,
+zero behind/one ahead, merge-clean at tree
+`a48dd3090b0d1ba31581eb1a4c7a83e506c005b4`, with no GitHub checks, reviews,
+comments, or linked logs. Its six-file delta adds candidate schema head
+`m3n5p7r9t1v3` directly after protected `l2n4o6q8s0u2`, four onboarding profiles,
+Field Tech's `TECHNICIAN` plus `ACP_EMPLOYEE_MOBILE` roles, and a broad Office
+Manager operating bundle. The latter newly includes membership/Branch access,
+identity onboarding, Workforce capability/availability, Estimate/Invoice issue,
+payment read, Communications, and Timekeeping administration while removing
+Price Book activation. Require explicit owner approval and effective-role
+negative tests for every excluded owner/Payroll/Accounting/payment authority.
+
+The migration unconditionally deletes any existing Office Manager Price Book
+activation association. Downgrade inserts a deterministic replacement whether
+or not that grant existed before upgrade and cannot restore the original row's
+assignment provenance. Do not integrate it unchanged: repair with provenance-
+preserving forward/backward semantics and PostgreSQL upgrade/downgrade/exact-
+replay tests. Static Alembic inspection reports sole candidate head
+`m3n5p7r9t1v3`; this is not zero-to-head database proof. Local exact-head
+qualification passed 17 non-database backend launch-control tests, four frontend
+onboarding tests, TypeScript, ESLint, and diff-check. Two database tests could not
+run because the required PostgreSQL service was unavailable, so the PR body's
+43-backend-test and migration claims remain unsubstantiated here.
+
+Scheduling successor `work/om2c-realworld-scheduling-activation-1` is merge head
+`af51b3f0da97a91bd0cbe77089aed5244949d835`, zero behind/two ahead and merge-clean
+at tree `e8446fb3242d55260f6f6cd78cab4f36a0a69260`. Its effective five-file,
+frontend-only delta removes the Dispatch field-readiness API/mutation/button and
+filters assignment choices to Employees already carrying `technician`
+capability. Local exact-head qualification passed its two focused tests,
+TypeScript, and ESLint. It adds no schema, secret, or config and correctly avoids
+turning an arbitrary office Employee into a technician during assignment.
+
+The candidates nevertheless conflict operationally: #299 assigns Field Tech
+roles but not capability/availability and tells the operator to use the existing
+Dispatch readiness action; Scheduling removes that action. Require a separate,
+permissioned Workforce workflow that establishes the canonical capability and
+bounded appointment availability atomically, with visible failure, concurrency,
+idempotency, cross-scope and audit evidence. Sequence the repaired #299 migration
+and role policy before that workflow, then Scheduling, then Mobile. Rollback must
+restore the prior application while retaining the repaired role migration; never
+use the current downgrade across real grants.
+
 ### Mobile
 
 PR #273 integrated `work/om1-phone-dispatch-assignability-1` head
@@ -1772,15 +1928,43 @@ concurrent first-use requests cannot race on absent canonical rows, plus the
 permission/cross-scope/invalid-window/API failure matrix, before enabling use.
 
 The current successor is `work/mobile-employee-operations-complete-1` at exact
-head `bbd19b26fa33d2ea7aa48fc3b915e1de1e8768f4`, twenty-three protected commits
-stale from `e9211fca...`. It is one commit stacked directly on and supersedes
+head `bbd19b26fa33d2ea7aa48fc3b915e1de1e8768f4`, twenty-five protected commits
+stale from `90af57ab...`. It is one commit stacked directly on and supersedes
 three-day head `323f1121...`. Its 20-commit effective delta changes 51 files and
-composes merge-clean at tree `8d7885c69d32ca3383e1303254b05a88d0daeb7e`.
+composes merge-clean at tree `aec02842552b88b4583f0cb2c1061319ed807601`.
 The new commit adds assignment-scoped Customer/commercial status and active Price
 Book reads, workday summary and elapsed/period/Jobsite time displays, build 3
 metadata, and an operations-completion contract. The protected backend already
 contains the matching assignment-scoped routes and exact all-of permission
 dependencies, but protected is not deployed to Preview. It has no PR.
+
+PR #301 is a separate exact-base head
+`7e68677627671e87c9278315e4b069059f5c6c3a`, zero behind/one ahead and
+merge-clean at tree `79864f27a2fa675459d7a046f3395113754bad6f`. It is not a
+descendant of `bbd19b26...` and cannot supersede that broader Mobile package. It
+adds call/email device links and read-only Price Book presentation using protected
+technician routes. Local exact-head qualification passed two suites/nine tests,
+TypeScript, ESLint, and diff-check; `npm ci` again reported 13 moderate findings.
+The current capability gate requires Job, Customer, Invoice, Payment, and
+Communications reads for contact plus Price Book read separately. The sanctioned
+Field Tech profile in #299 does not receive that broad office/financial bundle,
+and #301's own handoff requests a narrower assignment-scoped server projection.
+Hold it until that server capability exists, permission/revocation and stale/
+offline/link negatives pass, and its delta is reconciled with `bbd19b26...`.
+
+PR #302 is another independent exact-base Mobile head,
+`5b69b3df3f22411a6fc7173c513588fc34c47be0`, zero behind/one ahead and
+merge-clean at tree `620bc3780194ff8048861c0e37784892a3466719`. It adds a
+Forgot Password action calling the existing unauthenticated, audited
+`/api/v1/auth/password-reset/request` endpoint with email only and renders
+non-enumerating success copy. Local exact-head qualification passed two suites/28
+tests, TypeScript, ESLint and diff-check. It adds no schema, native dependency,
+secret, build number or new server path. Reconcile it with both other Mobile
+heads; then prove normalized/invalid email handling, identical existing/absent/
+disabled-account response and timing, device retry/double-submit behavior,
+backend rate-limit and audit/delivery outcomes, Preview endpoint binding, safe
+logs, and no token/password/tenant scope. Do not send a real reset merely to
+qualify the UI.
 
 Do not integrate or execute this head unchanged. Its evidence contradicts
 itself: `apple-owner-release-packet.v1.json` says Apple mutation, signing, and
@@ -1810,7 +1994,7 @@ folders prevent EAS from syncing app-config fields. `npm audit` reported 13
 moderate findings, including `decode-uri-component` denial of service and `uuid`
 buffer-bounds advisories. Resolve or explicitly risk-accept those findings, prove
 native/config parity, then run clean unsigned archive and Hermes exports plus
-endpoint/secret scans. Update all protected/manifests through #297 plus the
+endpoint/secret scans. Update all protected/manifests through #298 plus the
 eventual #273-#276 repair successor. Signing/upload and TestFlight group changes
 remain owner actions and must not be repeated merely to create evidence.
 
@@ -1880,9 +2064,9 @@ back through this queue refresh before Enterprise integrates it.
 ## Held candidate
 
 Price Book PR #290, branch `work/pricebook-realworld-complete-1`, remains at
-`de6fbb2106c62f09ef140e731aacb7c5d69d466f`: thirteen behind/eight ahead of
-protected `e9211fca...`, GitHub-mergeable, diff-check clean, and effective tree
-`8bf3067d9bba353d7ddb56d427465a6e0650c56e`. Its 34-file delta includes 218
+`de6fbb2106c62f09ef140e731aacb7c5d69d466f`: fifteen behind/eight ahead of
+protected `90af57ab...`, GitHub-mergeable, diff-check clean, and effective tree
+`cbef253c9fe1180c983384958c228be1f329ff06`. Its 34-file delta includes 218
 service configurations and 361 material candidates, catalog and maintenance
 APIs, manager cost readiness, non-activating bulk successor-draft workflows,
 Estimate selection, and migration `n0p8q16g3t9u` directly downstream of old
@@ -1931,11 +2115,19 @@ Estimate/Job/Invoice values.
 ## Secrets and owner gates
 
 - Preserve the QBO OAuth owner gate. #292 and `7fe4c736...` use sealed evidence
-  only. Protected #295's live GET requires the existing owner-authorized production token,
+  only. Protected #295/#298 live GETs require the existing owner-authorized production token,
   verified realm/company binding, `QBO_PRODUCTION_ENABLED`, runtime/evidence roots,
-  API minor version, and #296's Preview-default `QBO_PRODUCTION_ACP_COMPANY_ID`; it does not authorize
+  API minor version, and #296's Preview-default `QBO_PRODUCTION_ACP_COMPANY_ID`; this does not authorize
   creating/refreshing consent. Token refresh caused by an authorized read must be
   evidenced without exposing token content.
+- PR #299 requires owner-supplied exact login emails and the existing invitation
+  provider/config. Do not invent contact data, log roster PII or activation
+  links, send a real invitation, or activate an Employee during qualification.
+- PR #302 uses the existing recovery provider/config. Keep emails and reset tokens
+  out of logs/evidence and do not send a real recovery message during qualification.
+- PR #303 currently exports Customer/source identifiers and names. Treat any such
+  run as private protected-data evidence; the integration packet may contain only
+  sanitized counts/digests and references, never its raw payload.
 - No active candidate rotates secrets.
 - Preview fixture defaults disabled. Authorized use requires Preview environment,
   `PREVIEW_ACCEPTANCE_FIXTURE_ENABLED=true`, an access token read from stdin,
@@ -2019,16 +2211,20 @@ links, Payroll values, provider payloads, Apple credentials, or Customer PII.
 | ECO | Alembic current/head output; governed policy create/read/update correlation IDs; immutable event IDs and ordering | Wrong/multiple head, drift, mutable/missing audit event, cross-Company visibility, or unexplained calculation variance |
 | PR #215 / QBO | Payroll evidence projection and QBO source-evidence response; role-negative result; before/after provider connection state | OAuth prompt/change, provider write, fabricated readiness, unauthorized financial visibility, or `mutation_authority` other than `none` |
 | PR #282 QBO/Payroll planner | Repaired candidate/merge/deployed SHA; expected sealed run/manifest/realm/cutoff; manifest and deterministic inventory digests; entity counts reconciled to bounded records; zero identifiers/values; crosswalk/fact authority chain; duplicate/tamper/foreign-scope negatives; approved ACP preservation; before/after QBO, Payroll, and provider state | Unbound/self-asserted authority, digest/count mismatch, unsafe evidence path, duplicate silently accepted, approved ACP value weakened, protected identifier/value disclosure, draft/approval/import/provider mutation, OAuth, or Payroll execution |
+| PR #299 Workforce onboarding | Repaired candidate/merge/deployed SHA; sole schema head; migration upgrade/downgrade/exact-replay and pre-existing-grant provenance; owner-approved Office Manager permission diff; authorization-version/session refresh; exact-identity duplicate/conflict plan; synthetic invitation lifecycle; Field Tech dual-role plan with no capability assertion; before/after Employee, invitation, role, Payroll and provider state | Price Book grant/provenance is lost or invented on rollback, role exceeds approval, stale session retains authority, duplicate identity is created, Field Tech becomes assignable without separate capability/availability evidence, activation secret/PII appears, real invitation/activation occurs, or Payroll/provider state changes |
+| Scheduling `af51b3f0...` | Repaired bridge plus exact candidate/merge/deployed SHA; only established `technician` capability appears in Dispatch; separate bounded readiness action with permission, Company/Branch/Employee/window, concurrency/idempotency/rollback/audit and visible-error matrix; #299 handoff updated | Arbitrary office Employee appears, sanctioned Field Tech has no approved route to readiness, Dispatch recreates capability implicitly, mutation failure is hidden, scope/window/audit differs, or #299 still references the removed button |
 | PR #292 QBO activity UI | Exact candidate/merge/deployed SHA; sealed snapshot/run/digest; source authority, basis/as-of/acquired-at and limitation labels; invoice/bill/payment date-boundary, empty and partial cases; permission-negative result; exact displayed-source reconciliation; before/after provider state | ACP-native promotion, missing values shown as zero, reversed/invalid range accepted, out-of-period row, hidden limitation, unauthorized financial visibility, provider call/write, OAuth change, or payload/identifier leakage |
 | May registered QBO report | Candidate/merge/deployed SHA; registered/raw digests and file modes; accountant-approved account/sign matrix; exact May totals and coverage; accrual-only/absent/tamper/foreign/duplicate/change negatives; no sealed snapshot overwrite; before/after provider state | Cash relabeling, sign/classification mismatch, unregistered or changed workbook accepted, uncategorized posting hidden, missing treated as zero, ACP-native promotion, provider/OAuth activity, or evidence mutation |
-| Protected #295-#297 QBO live report | Exact `e9211fca...` deployed SHA; owner-approved ACP Company/realm/expected-name/config binding; explicit-vs-automatic read decision; GET-only trace and safe token-refresh metadata; exact requested/returned date/basis/digest, including `Cash`/`Accrual` provider parameter; permission and wrong-Company negatives; before/after provider, ACP ledger and audit state | Automatic read lacks approval, wrong Company/realm, OAuth consent initiated, provider mutation/payload logging, stale/foreign or mismatched report, ACP-native promotion, or any accounting write |
-| PR #293 native successor | Fresh protected-base native-only candidate/merge/deployed SHAs; Company/Branch/period/truncation/query-count matrix; Luminary repair dependency; zero database/provider writes | Superseded QBO code retained, conflict unresolved, truncated evidence reported complete, cross-scope row, native facts promoted to profitability, protected Luminary defect remains reachable, or mutation/event side effect |
+| Protected #295-#298 QBO live reports | Repaired successor plus exact candidate/merge/deployed SHAs at or after `90af57ab...`; owner-approved ACP Company/realm/expected-name/config binding; separate explicit-vs-automatic decisions for P&L and A/R; canonical date-only A/R request from date or timestamp workspace cutoff; visible 422/503 state; GET-only traces and safe token-refresh metadata; exact requested/returned date/basis/digest/provider totals, including `Cash`/`Accrual`; invoice-history/open/closed counts and gross/net/credit-offset reconciliation; permission, historical-workspace, wrong-Company, malformed/absent-total and rate/error negatives; before/after provider, ACP ledger and audit state | Automatic read lacks approval, timestamp cutoff produces a hidden unavailable total, gross/net/offset arithmetic is false or NaN, wrong Company/realm, OAuth consent initiated, provider mutation/payload logging, stale/foreign or mismatched report, ACP-native promotion, or any accounting write |
+| PR #300 native successor | Exact `734d2685...` or repaired candidate/merge/deployed SHAs; Company/Branch/period/truncation/query-count matrix; Job/Invoice/work/Employee/material/settlement authority and reversal cases; protected Luminary repair dependency; zero database/provider writes | Truncated evidence reported complete, cross-scope or unbound Employee/settlement row, operational Invoice or receipt promoted to earned/accounting truth, protected Luminary defect remains reachable, or mutation/event side effect |
+| PR #303 SOURCE.4 snapshot | Repaired candidate/merge/deployed SHA; exact Company/Branch/observed-at and admitted/projected/hold/current/future counts; opaque journey digests or separately controlled private appendix; safe atomic output mode/path; supported-PostgreSQL read-only/query-plan/zero-write evidence; separately authorized admission receipt if one exists | Customer totals omit Branch, identifiers/names enter sanitized evidence, partial or unsafe file is accepted, digest/query result is nondeterministic, read-only state is absent, admission is inferred or executed, or any write/lock side effect occurs |
 | Luminary owner economics | Repaired #288/#289/#291-successor candidate/merge/deployed SHA; exact Company/Branch/period/input snapshot/generated-at; strict contract/digest; unknown/per-Job incomplete/conflicting/missing negatives; every supported and unsupported scenario baseline/delta/blocker; effective administrator permission diff; pre-existing-grant-preserving rollback; zero flush/commit/audit/event/command/provider evidence | Unknown quality becomes READY, incomplete/unbound Job produces a candidate, CLOSE_RATE/ADD_TRUCK request fails instead of returning its blocker, protected/cross-scope data appears, scenario is actual, digest unbound, operational instruction appears, pre-existing grant is deleted, authorization cache remains stale, or mutation/provider call occurs |
 | LIA owner intelligence | Completed successor/merge/deployed SHA derived from `617d8952...`; exact Company/Branch/subject/question/auth-version/evidence-digest/as-of; explicit authority mapping; authoritative selected pay-period ID/state/window; effective role-grant and authorization-version diff; PostgreSQL migration upgrade/downgrade/replay; permission-before-query SQL trace; null-Branch adapter matrix; exact/ambiguous/missing-name and stale auth/evidence/time negatives; protected-data masking; zero flush/commit/audit/event/command/provider evidence | Stale `as_of` succeeds, source evidence is promoted, context domain/entity mismatch succeeds, future/draft/non-authoritative pay period is selected, null-Branch or briefing fallback widens scope, role grant is broader than approved or leaves cache stale, unauthorized query executes, protected value appears, unsupported answer is invented, or mutation/provider call occurs |
 | Accounting navigation | Candidate/merge/deployed SHA; permission-to-destination matrix; direct/deep-link and active/breadcrumb results; desktop/phone screenshots; keyboard/focus and no-permission evidence | Broadened access, missing prior destination, broken deep link/history, unsupported feature represented as available, inaccessible navigation, responsive regression, or implied financial mutation authority |
 | Payroll cutover review | Repaired #283-#286-successor candidate/merge/deployed SHA; protected migration immutability; sole head; permission catalog/role/actor separation matrix; every in-scope Employee/fact and bridge-coverage result; changed/exact replay; concurrency/rollback; encryption key readiness without secret content; immutable revision, business-event, and audit IDs; before/after Payroll/QBO/provider state | Protected migration rewritten, conflicting catalog row ignored, shared certify/approve actor, reader mutation controls/source IDs, accountant path unspecified, client-selected authority, incomplete Employee/fact/bridge coverage, changed replay, metadata/value leak, partial/racy state, schema drift/multiple heads, real approval, Payroll/ACH, or provider/QBO mutation |
 | Pay-period office operations | Exact #277-#282 repair-successor candidate/merge/deployed SHA; policy-manager create/readback and reporting-only denial; projection route/service matrix; selected historical-period navigation/warning evidence; exact-period readiness intended/partial-role matrix and protected-value absence; admin time-evidence scope; created/replayed period ID; overlap rejection; single audit ID; before/after Payroll/provider state | Route/service mismatch, unexplained suite failure, selected-period loss or contradictory warning/readiness, protected input disclosure, unintended admin/cross-Company visibility, duplicate period/audit, unauthorized success, changed-overlap acceptance, stale readiness, or any Payroll/provider execution |
-| Mobile / Dispatch readiness | Complete #273-#276 successor API/transaction evidence; repaired rollout candidate/merge SHA; consistent Apple authority manifest; immutable owner upload receipt if it exists; exact Team/bundle/version/build/processing state; dependency/native qualification; Preview target; permission/Job Clock/offline evidence; physical acceptance under separate authority | Contradictory/self-authorized Apple state, build reuse, receipt or processing unverified, diff/dependency/native test failure, Production target, unauthorized/cross-scope or partial field mutation, hidden failure, stale authority, duplicate clock mutation, new signing/upload/tester/DNS action without owner authority, or protected data in evidence |
+| Mobile / Dispatch readiness | Complete #273-#276 plus Workforce/Scheduling successor API/transaction evidence; reconciled `bbd19b26...`/PR #301 candidate and merge SHA; assignment-scoped contact/Price Book permission and revocation matrix; safe phone/email URL and offline/stale behavior; consistent Apple authority manifest; immutable owner upload receipt if it exists; exact Team/bundle/version/build/processing state; dependency/native qualification; Preview target; permission/Job Clock evidence; physical acceptance under separate authority | Broad office/financial permissions are granted merely to expose contact, non-ancestor Mobile deltas are lost, unsafe link or stale protected contact appears, contradictory/self-authorized Apple state, build reuse, receipt/processing unverified, dependency/native failure, Production target, unauthorized/cross-scope or partial field mutation, hidden failure, duplicate clock mutation, or new Apple/DNS action without owner authority |
+| PR #302 Mobile recovery | Reconciled candidate/merge/deployed SHA; Preview API target; normalized/invalid/existing/absent/disabled email parity and timing; rate-limit/offline/double-submit behavior; sanitized audit and provider-delivery outcome; no authenticated scope, secret, password or reset token in request/log/evidence | Account enumeration by copy/status/timing, wrong environment, duplicate reset burst, rate limit bypass, raw email/token/password logged, tenant scope sent, provider delivery claimed without evidence, or real reset sent during qualification |
 | Migration lineage | Exactly one schema head; v2 authority SHA/file mode; SOURCE.4 package identity; 503 assertions; 1,389 canonical holds; deterministic master/child IDs; `completed_current_operational`; receipt/replay and rollback evidence | Duplicate/multiple revision, changed hold/scope/digest, canonical admission enabled, lineage conflict, partial rows/native graph, non-idempotent replay, missing backup/restore receipt, or execution without separate owner authority |
 | Migration native binding | Head `h8j0l2n4p6r8`; 280-UPDATE database inventory and disposition counts; eight current-calendar dependencies; exact immutable binding/evidence IDs; replay and transaction rollback results | Missing/ambiguous/conflicting/cross-scope/graph-inconsistent binding, count mismatch, partial evidence/native mutation, wrong head, or guarded execution without separate owner authority |
 | Migration cohort authority | Candidate/merge SHA; all accepted input digests; generated file/internal digest; exact 280 unique UPDATE keys and 20/254/6 domain plus 8/37/235 cohort counts; regular mode-0600 file evidence | Input/digest/count drift, inferred native identity, mutation authority, unsafe overwrite/symlink, non-deterministic bytes, or incomplete contract verification |
@@ -2084,6 +2280,8 @@ authority and recomputing their compositions.
 ## Superseded open PRs
 
 PR #267 is already closed and superseded by protected #268; do not reopen it.
+Close PR #293 because current exact-base PR #300 supersedes its useful native
+evidence delta without the stale QBO/config conflicts.
 
 Close, do not integrate: #255, #252, #249, #248, #247, #246, #245, #244,
 #240, #239, #238, #234, #233, #232, #230, #228, #227, #226, #225, #198,
