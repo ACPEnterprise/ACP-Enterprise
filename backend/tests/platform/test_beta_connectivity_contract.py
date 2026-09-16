@@ -58,6 +58,12 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "/api/v1/auth/session" in verifier
     assert "access-control-allow-origin" in verifier
     assert "openssl s_client" in verifier
+    assert 'openssl x509 -in "$certificate_file" -noout -checkend 1209600' in verifier
+    assert "Preview and Beta backend health projections differ" in verifier
+    assert "https://untrusted.invalid" in verifier
+    assert "require_single_header content-security-policy" in verifier
+    assert "require_https_redirect beta.twelve-hats.com" in verifier
+    assert "REQUIRE_PUBLIC_METADATA" in verifier
     assert "mission-control" in verifier
     assert "app.twelve-hats.com" not in verifier
 
