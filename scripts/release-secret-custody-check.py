@@ -17,10 +17,16 @@ def main() -> int:
         for line in args.env_example.read_text(encoding="utf-8").splitlines()
         if line and not line.startswith("#") and "=" in line
     }
-    required = {"DATABASE_URL", "ACCESS_TOKEN_KEYS", "PLATFORM_CONTRACT_EXPECTED_FINGERPRINT"}
+    required = {
+        "DATABASE_URL",
+        "ACCESS_TOKEN_KEYS",
+        "PLATFORM_CONTRACT_EXPECTED_FINGERPRINT",
+    }
     missing = sorted(required - names)
     tracked = subprocess.check_output(("git", "ls-files"), text=True).splitlines()
-    forbidden = sorted(path for path in tracked if path in {".env", ".env.preview", ".env.production"})
+    forbidden = sorted(
+        path for path in tracked if path in {".env", ".env.preview", ".env.production"}
+    )
     if missing or forbidden:
         if missing:
             print("Missing required secret declarations: " + ", ".join(missing))

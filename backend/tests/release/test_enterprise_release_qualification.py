@@ -8,7 +8,9 @@ from pathlib import Path
 
 def _module():
     path = Path(__file__).parents[3] / "scripts" / "enterprise-release-qualify"
-    loader = importlib.machinery.SourceFileLoader("enterprise_release_qualify", str(path))
+    loader = importlib.machinery.SourceFileLoader(
+        "enterprise_release_qualify", str(path)
+    )
     spec = importlib.util.spec_from_loader(loader.name, loader)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
@@ -50,4 +52,10 @@ def test_release_catalog_covers_required_gates() -> None:
 
 def test_status_vocabulary_is_closed() -> None:
     module = _module()
-    assert module.STATUSES == {"PASS", "FAIL", "BLOCKED", "NOT APPLICABLE", "NOT YET EXECUTED"}
+    assert module.STATUSES == {
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "NOT APPLICABLE",
+        "NOT YET EXECUTED",
+    }
