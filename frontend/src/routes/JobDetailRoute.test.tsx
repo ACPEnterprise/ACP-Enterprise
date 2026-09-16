@@ -66,4 +66,14 @@ describe("JobDetailRoute", () => {
     expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute("href", "/customers/customer-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dweek");
     expect(screen.getByRole("link", { name: "APT-000001" })).toHaveAttribute("href", "/appointments/appointment-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dweek");
   });
+  it("returns a Customer-opened historical Job to the same Customer", () => {
+    vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: job } as never);
+    renderRoute("/jobs/job-1?returnTo=%2Fcustomers%2Fcustomer-1");
+    expect(screen.getByRole("link", { name: "Back to Customer" })).toHaveAttribute("href", "/customers/customer-1");
+  });
+  it("rejects a foreign return target", () => {
+    vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: job } as never);
+    renderRoute("/jobs/job-1?returnTo=https%3A%2F%2Fevil.example%2Fcustomers%2Fcustomer-1");
+    expect(screen.getByRole("link", { name: "Back to Jobs" })).toHaveAttribute("href", "/jobs");
+  });
 });

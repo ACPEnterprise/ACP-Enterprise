@@ -7,6 +7,10 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
@@ -38,9 +42,6 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling.models import Appointment  # noqa: F401
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class CountingFakeProvider(DeterministicFakeProvider):
@@ -754,11 +755,25 @@ async def test_receipt_listing_is_stably_bounded_and_service_enforced(
             limit=2,
             offset=2,
         )
+        customer_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            customer_id=customer.id,
+        )
+        foreign_customer_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            customer_id=uuid4(),
+        )
     assert len(first_page) == 2
     assert {row.id for row in first_page}.isdisjoint({row.id for row in second_page})
     assert receipt_ids.issubset(
         {row.id for row in first_page} | {row.id for row in second_page}
     )
+    assert {row.id for row in customer_page} == receipt_ids
+    assert foreign_customer_page == ()
 
     async with factory() as session:
         with pytest.raises(PaymentValidation, match="page is invalid"):

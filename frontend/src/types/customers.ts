@@ -69,6 +69,7 @@ export interface CustomerSearchCriteria {
   has_active_service_locations?: boolean;
   sort_by?: "customer_number" | "display_name" | "created_at" | "updated_at" | "status";
   sort_direction?: "asc" | "desc";
+  record_state?: "current" | "archived" | "all";
   page: number;
   page_size: number;
 }

@@ -5,8 +5,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from app.core.config import settings
-from app.events.models import BusinessEvent
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -14,6 +12,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from app.core.config import settings
+from app.events.models import BusinessEvent
 from tests.customers.test_api import build_app, seed_customer_fixture
 
 
@@ -171,6 +171,44 @@ async def test_enterprise_customer_search_filter_sort_and_pagination(
             "total_pages": 2,
         }
         assert body["items"][0]["id"] == prospect["id"]
+
+
+@pytest.mark.asyncio
+async def test_archived_customer_search_is_explicit_and_detail_remains_restorable(
+    search_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = search_database
+    fixture = await seed_customer_fixture(factory, "ARCHIVED-SEARCH")
+    app = build_app(factory, fixture.context)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        customer, _ = await create_search_records(client)
+        archived = await client.post(f"/api/v1/customers/{customer['id']}/archive")
+        assert archived.status_code == 200, archived.text
+
+        current = await client.get(
+            "/api/v1/customers/search", params={"query": "Acme Plumbing"}
+        )
+        archived_only = await client.get(
+            "/api/v1/customers/search",
+            params={"query": "Acme Plumbing", "record_state": "archived"},
+        )
+        all_records = await client.get(
+            "/api/v1/customers/search",
+            params={"query": "Acme Plumbing", "record_state": "all"},
+        )
+        detail = await client.get(f"/api/v1/customers/{customer['id']}")
+        timeline = await client.get(f"/api/v1/customers/{customer['id']}/timeline")
+
+    assert current.json()["total_count"] == 0
+    assert [item["id"] for item in archived_only.json()["items"]] == [customer["id"]]
+    assert archived_only.json()["items"][0]["archived_at"] is not None
+    assert [item["id"] for item in all_records.json()["items"]] == [customer["id"]]
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["archived_at"] is not None
+    assert timeline.status_code == 200, timeline.text
+    assert any(item["event_type"] == "customer.archived" for item in timeline.json()["items"])
 
 
 @pytest.mark.asyncio

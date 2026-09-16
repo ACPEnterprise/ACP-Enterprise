@@ -44,7 +44,7 @@ describe("Customer operations reliability", () => {
   });
 
   it("shows a truthful no-current-Job fixture without hiding the Customer", () => {
-    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-no-job" /></MemoryRouter>);
+    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-no-job" locations={[]} /></MemoryRouter>);
 
     expect(jobHooks.useJobs).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: "customer-no-job" }),
@@ -62,7 +62,7 @@ describe("Customer operations reliability", () => {
       error: { isAxiosError: true, response: { status: 503 } },
     } as never);
 
-    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-partial" /></MemoryRouter>);
+    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-partial" locations={[]} /></MemoryRouter>);
 
     expect(screen.getByText("Related work is partial")).toBeInTheDocument();
     expect(screen.getByText(/Customer identity remains usable/)).toBeInTheDocument();

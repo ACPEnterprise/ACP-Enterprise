@@ -80,6 +80,7 @@ async def list_receipts(
     session: Session,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
+    customer_id: UUID | None = None,
 ) -> list[ReceiptItem]:
     rows = await payment_service.list_receipts(
         session,
@@ -87,6 +88,7 @@ async def list_receipts(
         context.authorized_branch_ids,
         limit=limit,
         offset=offset,
+        customer_id=customer_id,
     )
     return [ReceiptItem.model_validate(row) for row in rows]
 

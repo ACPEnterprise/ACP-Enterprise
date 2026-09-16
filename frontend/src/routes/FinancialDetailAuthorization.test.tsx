@@ -59,4 +59,13 @@ describe("financial object-detail authorization", () => {
     expect(screen.getByText(/not authorized to view this Payment/i)).toBeVisible();
     expect(paymentsApi.getPaymentReceipt).not.toHaveBeenCalled();
   });
+
+  it("returns from an authorized Payment to its authoritative Customer", async () => {
+    permissions = new Set(["COMPANY_PAYMENT_READ"]);
+    vi.mocked(paymentsApi.getPaymentReceipt).mockResolvedValue({
+      id: "receipt-1", branch_id: "branch-1", customer_id: "customer-1", intent_id: "intent-1", currency: "USD", status: "settled", captured_amount: "25.00", available_amount: "0.00", applied_amount: "25.00", refunded_amount: "0.00", disputed_amount: "0.00", version: 1, captured_at: "2026-09-01T00:00:00Z",
+    });
+    renderDetail("/payments/receipt-1");
+    expect(await screen.findByRole("link", { name: "Back to Customer" })).toHaveAttribute("href", "/customers/customer-1");
+  });
 });
