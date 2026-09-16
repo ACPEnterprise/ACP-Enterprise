@@ -15,6 +15,7 @@ const mutationState = vi.hoisted(() => ({
   categoryError: null as unknown,
   categoryMutate: vi.fn(),
   categoryUpdateMutate: vi.fn(),
+  versionMutate: vi.fn(),
 }));
 const candidateReviewState = vi.hoisted(() => ({
   calls: [] as Array<Record<string, unknown>>,
@@ -158,7 +159,7 @@ vi.mock("../hooks/usePriceBook", () => ({
       isPending: false,
       isError: false,
       error: null,
-      mutateAsync: vi.fn(),
+      mutateAsync: mutationState.versionMutate,
     },
     activate: { isError: false, error: null, mutateAsync: vi.fn() },
     optionGroup: {
@@ -219,6 +220,7 @@ describe("PriceBookRoute", () => {
     catalogQueryState.calls = [];
     mutationState.categoryMutate.mockReset();
     mutationState.categoryUpdateMutate.mockReset();
+    mutationState.versionMutate.mockReset();
   });
 
   it("edits category hierarchy and lifecycle through governed authority", async () => {
@@ -245,6 +247,33 @@ describe("PriceBookRoute", () => {
         }),
       }),
     );
+  });
+
+  it("stages labor and material inputs in one draft price version", async () => {
+    mutationState.versionMutate.mockResolvedValueOnce({});
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+
+    fireEvent.change(screen.getByLabelText("Price service item"), { target: { value: "item-1" } });
+    fireEvent.change(screen.getByLabelText("Tax classification"), { target: { value: "tax-1" } });
+    fireEvent.change(screen.getByLabelText("Unit price"), { target: { value: "199" } });
+    fireEvent.change(screen.getByLabelText("Effective time"), { target: { value: "2026-10-01T08:00" } });
+    fireEvent.change(screen.getByLabelText("Component label"), { target: { value: "Expected labor" } });
+    fireEvent.change(screen.getByLabelText("Expected component quantity"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Expected component unit cost"), { target: { value: "80" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add expected input" }));
+    fireEvent.change(screen.getByLabelText("Component type"), { target: { value: "material" } });
+    fireEvent.change(screen.getByLabelText("Component label"), { target: { value: "Expected fittings" } });
+    fireEvent.change(screen.getByLabelText("Expected component quantity"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+
+    await waitFor(() => expect(mutationState.versionMutate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        components: [
+          expect.objectContaining({ component_type: "labor", label: "Expected labor", quantity: "2", unit_cost: "80" }),
+          expect.objectContaining({ component_type: "material", label: "Expected fittings", quantity: "3", unit_cost: undefined }),
+        ],
+      }),
+    })));
   });
 
   it("pages through the native service catalog", async () => {

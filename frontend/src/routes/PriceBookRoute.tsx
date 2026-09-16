@@ -113,6 +113,12 @@ export function PriceBookRoute() {
     componentQuantity: "1",
     componentCost: "",
   });
+  const [draftComponents, setDraftComponents] = useState<Array<{
+    component_type: "labor" | "material" | "other_direct";
+    label: string;
+    quantity: string;
+    unit_cost?: string;
+  }>>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [candidateOffset, setCandidateOffset] = useState(0);
   const candidatePageSize = 50;
@@ -283,6 +289,14 @@ export function PriceBookRoute() {
   };
   const submitDraft = async (event: FormEvent) => {
     event.preventDefault();
+    const pendingComponent = draft.componentLabel
+      ? [{
+          component_type: draft.componentType,
+          label: draft.componentLabel,
+          quantity: draft.componentQuantity,
+          unit_cost: draft.componentCost || undefined,
+        }]
+      : [];
     await performMutation(() =>
       mutations.version.mutateAsync({
         itemId: draft.itemId,
@@ -292,16 +306,10 @@ export function PriceBookRoute() {
           currency: "USD",
           unit_price: draft.price,
           effective_at: new Date(draft.effective).toISOString(),
-          components: [
-            {
-              component_type: draft.componentType,
-              label: draft.componentLabel,
-              quantity: draft.componentQuantity,
-              unit_cost: draft.componentCost || undefined,
-            },
-          ],
+          components: [...draftComponents, ...pendingComponent],
         },
       }),
+      () => setDraftComponents([]),
     );
   };
   const saveVisibleReview = async () => {
@@ -1190,7 +1198,7 @@ export function PriceBookRoute() {
                       onChange={(e) =>
                         setDraft({ ...draft, componentLabel: e.target.value })
                       }
-                      required
+                      required={draftComponents.length === 0}
                     />
                     <Input
                       aria-label="Expected component quantity"
@@ -1217,6 +1225,41 @@ export function PriceBookRoute() {
                     <p className="text-xs text-content-muted">
                       Expected inputs support planning only. They do not prove purchased or consumed materials, and missing cost is never treated as zero.
                     </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      fullWidth
+                      disabled={!draft.componentLabel || !draft.componentQuantity}
+                      onClick={() => {
+                        setDraftComponents([
+                          ...draftComponents,
+                          {
+                            component_type: draft.componentType,
+                            label: draft.componentLabel,
+                            quantity: draft.componentQuantity,
+                            unit_cost: draft.componentCost || undefined,
+                          },
+                        ]);
+                        setDraft({
+                          ...draft,
+                          componentLabel: "",
+                          componentQuantity: "1",
+                          componentCost: "",
+                        });
+                      }}
+                    >
+                      Add expected input
+                    </Button>
+                    {draftComponents.length > 0 && (
+                      <ul className="space-y-2 text-sm" aria-label="Staged expected inputs">
+                        {draftComponents.map((component, index) => (
+                          <li key={`${component.component_type}:${component.label}:${index}`} className="flex items-center justify-between gap-3 rounded-md bg-surface-muted p-2">
+                            <span>{component.component_type.replaceAll("_", " ")} · {component.label} · {component.quantity}{component.unit_cost ? ` × USD ${component.unit_cost}` : " · cost evidence missing"}</span>
+                            <Button type="button" variant="ghost" onClick={() => setDraftComponents(draftComponents.filter((_, candidate) => candidate !== index))}>Remove</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <Button
                       fullWidth
                       type="submit"
