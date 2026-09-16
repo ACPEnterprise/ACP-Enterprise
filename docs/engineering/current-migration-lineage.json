@@ -1,0 +1,2120 @@
+{
+  "branchpoints": {
+    "b0ff279c5aeb": [
+      "18h3j78973i7",
+      "c1a0e38d6bfc"
+    ]
+  },
+  "contract_version": "enterprise-release.migration-lineage.v1",
+  "cycle_revisions": [],
+  "duplicate_revisions": {},
+  "heads": [
+    "n0p8q16g3t9u"
+  ],
+  "lineage_digest": "c0649a311addef635e6c5580902e7b713ff4013c1a3d7e58d94600ab6929a6a1",
+  "merge_revisions": {
+    "e3c2a71f8d4b": [
+      "19i4k89084j8",
+      "d2b1f49e7c0a"
+    ]
+  },
+  "missing_down_revisions": [],
+  "parse_errors": [],
+  "release_ready": true,
+  "revision_count": 174,
+  "revisions": [
+    {
+      "down_revision": [
+        "d1u3q5s7v942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/11a6e01206c0_create_payroll_remittance_foundation.py",
+      "revision": "11a6e01206c0",
+      "sha256": "d1b99f35c561d99dd7469f5a7acdcf5701532606f8ae7048a3bede9e7edb018b",
+      "source_commit": "0402c5510edb36de81d0fb6924a0dc896eebb81e"
+    },
+    {
+      "down_revision": [
+        "c6e8a0b2d435"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/12b7f12317d1_finalize_payroll_accounting_posting.py",
+      "revision": "12b7f12317d1",
+      "sha256": "ecb5d40f30eb5c886da2aff632e34c182e5fb3df2220922c618a646dceafb9c7",
+      "source_commit": "81230b811ce61e1ffee9b492e1d005b1bc93a9a2"
+    },
+    {
+      "down_revision": [
+        "12b7f12317d1"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/13c8f23428e2_create_pay_statement_authority.py",
+      "revision": "13c8f23428e2",
+      "sha256": "32c9ad60520896bbaca69cf0e6b78898d2dd5bb81e3f302eb97eeb13b89a9c4a",
+      "source_commit": "31e488feb6bbc10e077960fea303970336e01740"
+    },
+    {
+      "down_revision": [
+        "13c8f23428e2"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/14d9f34539f3_create_pay_statement_experience.py",
+      "revision": "14d9f34539f3",
+      "sha256": "93e8a86626f89fbffef17fb12641c26a12e8acabae6b6fa49a746d5ad69a95e9",
+      "source_commit": "1356c9aeaf3293114992d0c02cd8c85b9bc714f9"
+    },
+    {
+      "down_revision": [
+        "d1t3p5r7v942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/15e0g45640f4_add_inventory_receiving_composition.py",
+      "revision": "15e0g45640f4",
+      "sha256": "4cde631bafa5b2517b420b5dfe1cd94e274536ae31a0b80aef1bb1016d675a13",
+      "source_commit": "1676f658b804c876e13b389623034b8f41999685"
+    },
+    {
+      "down_revision": [
+        "cb4c29cf0e3c"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/16f1h56751g5_create_procurement_three_way_matching.py",
+      "revision": "16f1h56751g5",
+      "sha256": "972ffb9b578181d960c31396bc6b072440e4e1f8bd62935e80a7b96e65aaf591",
+      "source_commit": "ec89d068e3f99da2a9babf3c6bc1205e231f738a"
+    },
+    {
+      "down_revision": [
+        "16f1h56751g5"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/17g2i67862h6_version_procurement_match_evidence.py",
+      "revision": "17g2i67862h6",
+      "sha256": "e647eba85fc89062e1ba1e8039968eb4c393d6a853a457652dba683c45ced2ec",
+      "source_commit": "e58f824daa97e05da7156a33b63e4797e82f9f26"
+    },
+    {
+      "down_revision": [
+        "b0ff279c5aeb"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/18h3j78973i7_create_supply_chain_demand_policy.py",
+      "revision": "18h3j78973i7",
+      "sha256": "6d926eafd3bad78a2e68ecc55786969a5088fc2055eddc15785ebcf8d3a05d0d",
+      "source_commit": "2b81e9d0c119a1913ddbaa26dee9b61f8e5ccc71"
+    },
+    {
+      "down_revision": [
+        "18h3j78973i7"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/19i4k89084j8_create_purchasing_document_custody.py",
+      "revision": "19i4k89084j8",
+      "sha256": "a87954fc6464b4b564051b1f22450978e5f2c573b109df99a28cf8e006e1f466",
+      "source_commit": "dd7cb0a3267339eb95cdd1c88b6c94eeeba9be7e"
+    },
+    {
+      "down_revision": [],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/218775b8a49c_create_business_events_table.py",
+      "revision": "218775b8a49c",
+      "sha256": "a08fe1ec51f2d2b8b786afb8387d67604d3e8a667372b411ea1e5d7f34a571d1",
+      "source_commit": "70ad9f8701f9a1a718b56648f20cb8ad3c0fc9cf"
+    },
+    {
+      "down_revision": [
+        "218775b8a49c"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/8f3c2d1a9b47_create_customer_management_tables.py",
+      "revision": "8f3c2d1a9b47",
+      "sha256": "5ab9eff3fdfab09314c5604b1688103c5249ffb7f485696ef252e554d1fd4c5f",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "17g2i67862h6"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/99abf7192edf_complete_payroll_compliance_experience_.py",
+      "revision": "99abf7192edf",
+      "sha256": "0c68a1c9c102cf738f9a5ff3cec7b7bd65b18673d047fa801e89b1ffb7423168",
+      "source_commit": "cda87891e5147241b4d9b4269f69c990b4f347bf"
+    },
+    {
+      "down_revision": [
+        "f9c1d3e5a728"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a0d2e4f6b839_add_provider_runtime_readiness.py",
+      "revision": "a0d2e4f6b839",
+      "sha256": "728e8bbca16a064253dd925282d1c508ee72fd88d7160d354fffcb01e732441d",
+      "source_commit": "4414a0ff497ccd6194a7f729e3e23004dd15aa14"
+    },
+    {
+      "down_revision": [
+        "f7a9c2e4d681"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a1c3e5f7b902_create_engineering_execution_bridge.py",
+      "revision": "a1c3e5f7b902",
+      "sha256": "97e44200279e7b5e372510b3d375534bd4efea415703adbf7ae9437393a8f004",
+      "source_commit": "2e8fec510cec0608250de3b7c2a6513e6c81fb50"
+    },
+    {
+      "down_revision": [
+        "b2d4f6h8j0l2"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a1c3e5g7i9k1_create_operational_measurement_snapshots.py",
+      "revision": "a1c3e5g7i9k1",
+      "sha256": "fb68aa173d88b05845f98508516d3aa8b6395273f4c800247026663e81b6c336",
+      "source_commit": "b4cbc4a0e00f7ba6ed7a0f4f5f4f577da79ddbd2"
+    },
+    {
+      "down_revision": [
+        "p6r8t0v2x4z6"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a2c4e6g8i175_create_field_purchase_receipt_intelligence.py",
+      "revision": "a2c4e6g8i175",
+      "sha256": "ae1172d497c4fcc185c979a398a9d1f83deb1fd6341091ada831afc02372aaeb",
+      "source_commit": "a0d4950546b94e367e8f457add93951b3c8b000e"
+    },
+    {
+      "down_revision": [
+        "f1c7d9e3b825"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a2d8e4f6c930_add_operational_migration_foundation.py",
+      "revision": "a2d8e4f6c930",
+      "sha256": "cc46ab7b46d53382d97d10d09d0daf73b2f7e26f6ef5b22d01777830562c96ee",
+      "source_commit": "3eb27257f008a972d32748e791622963f579cc8d"
+    },
+    {
+      "down_revision": [
+        "z1q3l5n7r942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a2r4m6p8s053_close_field_completion_contract.py",
+      "revision": "a2r4m6p8s053",
+      "sha256": "7791b3d9cc05c0b85d0a3a836b805538db11ef05f4fcc52d50a8f15673f16be3",
+      "source_commit": "4ad60c0d29c43493bb5b37893522fc28c7225ce9"
+    },
+    {
+      "down_revision": [
+        "f3a5c7e9b102"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a4c6e8f0b213_add_hcp_child_repair_admission.py",
+      "revision": "a4c6e8f0b213",
+      "sha256": "c87fae9f477c09d5f0a6145d96d59df92502150607b3bc7c06b0a593ebbf9f82",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "f3b7d9e1a624"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a4c8e0f2b735_add_hcp_migration_2b_contracts.py",
+      "revision": "a4c8e0f2b735",
+      "sha256": "14375f27d86c14a4cc4ae07550faa9a3d5549bb5aa3653fef31a5813a0bbb5a4",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "d1v3x5z7b942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a6c2e8f4b917_add_native_location_identity_evidence.py",
+      "revision": "a6c2e8f4b917",
+      "sha256": "61b987daa3904d5c28b3cb2056d56c77bd64642c84918d0192442197b090ea16",
+      "source_commit": "27e6b89cad036bd5cb5587215b0a1849f4d0de99"
+    },
+    {
+      "down_revision": [
+        "f5b8d0c3e729"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a6c9e1f4b830_add_user_email_verification_state.py",
+      "revision": "a6c9e1f4b830",
+      "sha256": "be2f156bcf4da85f82b163bd8dd7a8c881feecf335f1a89703e1a996eeec9f44",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "z7q9m1o3r508"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a8r0n2p4s619_create_payroll_payment_execution.py",
+      "revision": "a8r0n2p4s619",
+      "sha256": "73a9b37dcb72d979ff37d1ec13201d1c571649c7f1bebc6692a35267493e51a8",
+      "source_commit": "b30ecf9c1ba49219f61e591d5835bd86bc683d33"
+    },
+    {
+      "down_revision": [
+        "f2c8a4e6b193"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/a9d4e6f2c781_create_scheduling_persistence.py",
+      "revision": "a9d4e6f2c781",
+      "sha256": "27e56dac3d544cdca734bd092adb48d137b6dd6870096b2fdfa0c8b5c0565021",
+      "source_commit": "2e9f1e9121577c6d12839ca21d7705a314f985b9"
+    },
+    {
+      "down_revision": [
+        "99abf7192edf"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b0ff279c5aeb_complete_business_economics_owner_.py",
+      "revision": "b0ff279c5aeb",
+      "sha256": "b2f890fddde3991d4dc46326f1fcbb89dd0ff90bc00702630730ed567d777c75",
+      "source_commit": "02a38913e1bc35cfa4f2b860c0987c88d4adb1d1"
+    },
+    {
+      "down_revision": [
+        "a0d2e4f6b839"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b1e3f5a7c940_create_engineering_owner_reviews.py",
+      "revision": "b1e3f5a7c940",
+      "sha256": "3d384f11e3b9f6ad3ca715caed3f1ed1fb11b04c641a68bf2e5576d543d3cf3f",
+      "source_commit": "08f6a240548de6f7012f182e4b04d4d72802d467"
+    },
+    {
+      "down_revision": [
+        "a1c3e5f7b902"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b2d4f6a8c013_create_worker_control_plane.py",
+      "revision": "b2d4f6a8c013",
+      "sha256": "b1bc7ae1c18ad108fd3128927ae126b8b5fc55f77699df44714ff702ef1febff",
+      "source_commit": "c2525884474cf449066e8b15041b1ee64c436dff"
+    },
+    {
+      "down_revision": [
+        "n0p8r16g3t9u"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b2d4f6h8j0l2_create_scheduler_delegations.py",
+      "revision": "b2d4f6h8j0l2",
+      "sha256": "72cc0dbec31220e239fca0fe9e6eaf8557be874871583be0cef4e912864701b9",
+      "source_commit": "4c40aa17710e80a63f80b26f5b7b5303c13b3392"
+    },
+    {
+      "down_revision": [
+        "a1c3e5g7i9k1"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b2d4f6h8j0m3_create_job_worked_time_authority.py",
+      "revision": "b2d4f6h8j0m3",
+      "sha256": "822787ce613f64cdd70b325ef5937cfdd73089c3c98b0d53a5ac1639cd5c9267",
+      "source_commit": "0f788308093da15ad6585fef9505e7ef1fc7d43a"
+    },
+    {
+      "down_revision": [
+        "a2d8e4f6c930"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b3e9f5a7d041_add_financial_migration_foundation.py",
+      "revision": "b3e9f5a7d041",
+      "sha256": "96042a849e975ecc4b517b68d880ea4b3e41ca62c54b74edbe395c43a937b1cf",
+      "source_commit": "3eb27257f008a972d32748e791622963f579cc8d"
+    },
+    {
+      "down_revision": [
+        "a2r4m6p8s053"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b3s5n7q9t164_create_purchasing_foundation.py",
+      "revision": "b3s5n7q9t164",
+      "sha256": "b8961a92295982bd03622b5882b3a507c33f032057630706accdad3eaf8b565d",
+      "source_commit": "88285c7c0879d8df7b42659a9d25c64e5b58a27b"
+    },
+    {
+      "down_revision": [
+        "a9d4e6f2c781"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b4e7c9d1f305_create_jobs_persistence.py",
+      "revision": "b4e7c9d1f305",
+      "sha256": "0389e0286ac2f7df79a79e1b7c47721fc2c09120c4cc5e91a32c32acedbbed0d",
+      "source_commit": "991da81679c21ab40d673379f2e309080c42c9b7"
+    },
+    {
+      "down_revision": [
+        "a4c6e8f0b213"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b5d7f9a1c324_add_hcp_appointment_sequence_corrections.py",
+      "revision": "b5d7f9a1c324",
+      "sha256": "cdc947368719d98871c5e0d1e793ebb2958f6ab39e8972b868fa6b432f81c197",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "a4c8e0f2b735"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b5d9f1a3c846_bind_hcp_master_child_runs.py",
+      "revision": "b5d9f1a3c846",
+      "sha256": "1382b224dfb43eb3103cdab687d6f0c2d206c9a4d35a878532b244698cc06c2d",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "a6c9e1f4b830"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b7d2f4a6c951_create_enterprise_audit_records.py",
+      "revision": "b7d2f4a6c951",
+      "sha256": "cabc79bc9ec63e6a5862e80d37c4de7e8b90496f2457f8fddb48a64872178a46",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "a6c2e8f4b917"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b7d3f9a5c028_add_native_location_reconciliation.py",
+      "revision": "b7d3f9a5c028",
+      "sha256": "e0bda378f194d7a07dd69dd5426495c7e1eddf8ebb20a3c3b55b693970bc4bbe",
+      "source_commit": "27e6b89cad036bd5cb5587215b0a1849f4d0de99"
+    },
+    {
+      "down_revision": [
+        "a8r0n2p4s619"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/b9s1o3q5t720_protect_replenishment_decision_evidence.py",
+      "revision": "b9s1o3q5t720",
+      "sha256": "3a5702af10c7663feb3a251e2e4a4130adf84327623c0e83c71efa24687053e1",
+      "source_commit": "a6af6ed6a9fbee0f12c13e3489012787275bd09d"
+    },
+    {
+      "down_revision": [
+        "c0t2q4s6u831"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c0t2p4r6u831_create_payroll_adjustment_authority.py",
+      "revision": "c0t2p4r6u831",
+      "sha256": "b3559ea4e224c9c12cdcc9eecdd5b04f70dad3f8d85d5940bea6ad5628e943cb",
+      "source_commit": "47dfc11b7cc237d90f8ac7672e1f29c682c12e43"
+    },
+    {
+      "down_revision": [
+        "b9s1o3q5t720"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c0t2q4s6u831_create_payroll_accounting_authority.py",
+      "revision": "c0t2q4s6u831",
+      "sha256": "94605a972d9f497fb94c692e1783b3665f96bce50d730399f21ff28995be8671",
+      "source_commit": "10be81257e5e3eb03bf11173f4e2d9c0cd7c81d4"
+    },
+    {
+      "down_revision": [
+        "b0ff279c5aeb"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c1a0e38d6bfc_scope_economics_results_to_branch.py",
+      "revision": "c1a0e38d6bfc",
+      "sha256": "5a7ed5a1318ed432fe369c81a0638909b0c318a2f32ebdf8c234c20ca4df0447",
+      "source_commit": "538d0fd66dacf1d828d358e9e30f139f04e1ad0b"
+    },
+    {
+      "down_revision": [
+        "b2d4f6h8j0m3"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c2e4g6i8k0m2_add_payroll_run_blocker_codes.py",
+      "revision": "c2e4g6i8k0m2",
+      "sha256": "f48cd4241320344328eabeba2c6fd0ab9ee2e6cc0bc2a4aeae654565b02998a2",
+      "source_commit": "567556ec5978124b41f769703d0cecc41bd05141"
+    },
+    {
+      "down_revision": [
+        "b1e3f5a7c940"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c2f4a6b8d051_create_repository_authorizations.py",
+      "revision": "c2f4a6b8d051",
+      "sha256": "5ab38b5785e3e487af5d875b6a7bef330884e0edbbf78d4c951387f3e9fc7aad",
+      "source_commit": "529813471e314e1ce4c8950428bf49b1f9c273ef"
+    },
+    {
+      "down_revision": [
+        "b2d4f6a8c013"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c3e5a7b9d124_create_worker_transport_persistence.py",
+      "revision": "c3e5a7b9d124",
+      "sha256": "e79c4704839837302b852803974a9e83594954fba5a58ebd16cc285b12b61e62",
+      "source_commit": "70ad9f8701f9a1a718b56648f20cb8ad3c0fc9cf"
+    },
+    {
+      "down_revision": [
+        "c2e4g6i8k0m2"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c3e5g7i9k1m3_add_time_correction_classification.py",
+      "revision": "c3e5g7i9k1m3",
+      "sha256": "4b5c1d2879f660197a5117d76ecbe94d415990fa4ddd9fc8829c33607b4c6191",
+      "source_commit": "d2dededd841da2c7c7dd4a04bd2c04bbec478764"
+    },
+    {
+      "down_revision": [
+        "c3e5a7b9d124"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c4e6a8b0d215_create_worker_identity_credentials.py",
+      "revision": "c4e6a8b0d215",
+      "sha256": "f5d1b15073fcfa446080685ef26af9042c0bd67e815206449513aac9ae75bc90",
+      "source_commit": "70ad9f8701f9a1a718b56648f20cb8ad3c0fc9cf"
+    },
+    {
+      "down_revision": [
+        "b3e9f5a7d041"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c4f0a6b8e152_add_cutover_migration_foundation.py",
+      "revision": "c4f0a6b8e152",
+      "sha256": "759416560e2e7d74b3d376cdbae2ccce698f0d40e1cdfd9526f766053391ef5a",
+      "source_commit": "3eb27257f008a972d32748e791622963f579cc8d"
+    },
+    {
+      "down_revision": [
+        "b3s5n7q9t164"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c4t6p8r0u275_create_economics_policy_authority.py",
+      "revision": "c4t6p8r0u275",
+      "sha256": "e4687e718c65d35a76d3b91f306370260aade44e3466ac1183905b6d974a79cb",
+      "source_commit": "766d45416ec3705eb750d88620d30cbaaf8f93ca"
+    },
+    {
+      "down_revision": [
+        "b4e7c9d1f305"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c6a1d3e5f709_amend_job_lifecycle_history_constraints.py",
+      "revision": "c6a1d3e5f709",
+      "sha256": "6d17e7845539cd1ffce56f2888ec016e180f8cb3da4bb52ce637f0634ee69f9a",
+      "source_commit": "f074ff7b951490180de47708ce90a1e7e6d52e66"
+    },
+    {
+      "down_revision": [
+        "b5d9f1a3c846"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c6e0a2b4d957_reject_hcp_master_input_forks.py",
+      "revision": "c6e0a2b4d957",
+      "sha256": "b86c392b2c05499f261930ee6177410428389cce8fa1261323035f46782d3115",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "b5d7f9a1c324"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c6e8a0b2d435_add_hcp_generation2_repair_lineage.py",
+      "revision": "c6e8a0b2d435",
+      "sha256": "dcf7e07911c08d6afaad79081b53bcb8d448f3966180251bd4cfac1b5b8125e2",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "8f3c2d1a9b47"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c7b9e1d4a632_create_companies_and_branches.py",
+      "revision": "c7b9e1d4a632",
+      "sha256": "df12ece7fafee0a540d571b19c74dc0e041492b6fde595616feebb59043e9230",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "b7d2f4a6c951"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c8e3a5b7d062_evolve_customer_domain_foundation.py",
+      "revision": "c8e3a5b7d062",
+      "sha256": "abb7293efd4fa9454af7a6055a782c74f59cfe7c5790fbeb2768ba095c795c2d",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "b7d3f9a5c028"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/c8e4a0b6d139_add_native_customer_consolidation.py",
+      "revision": "c8e4a0b6d139",
+      "sha256": "c9eab50ff664c664307e1327dcb4d19a60a43f83a9589bcd8bf2fdd03a09ee8b",
+      "source_commit": "27e6b89cad036bd5cb5587215b0a1849f4d0de99"
+    },
+    {
+      "down_revision": [
+        "ed6ce4a21942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/cb4c29cf0e3c_persist_admitted_economics_profitability.py",
+      "revision": "cb4c29cf0e3c",
+      "sha256": "e641245be057626ad23f69110951530e358934a7d39306a3bbc11f3fa4b1f66c",
+      "source_commit": "9f9903e4bffcb5ba34fca969b35062d3260421a7"
+    },
+    {
+      "down_revision": [
+        "14d9f34539f3"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d1t3p5r7v942_create_platform_mutation_receipts.py",
+      "revision": "d1t3p5r7v942",
+      "sha256": "0cbfd27cea7c5895e389fea685503fbe6788c054cf99e49945ec4df6cb205120",
+      "source_commit": "a971b3250065f330c1c8775e792c7c1f8054d661"
+    },
+    {
+      "down_revision": [
+        "c0t2p4r6u831"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d1u3q5s7v942_create_payroll_adjustment_results.py",
+      "revision": "d1u3q5s7v942",
+      "sha256": "2d2eee9cc4f6490aa04a14746312bf743fdb0d0a36b582918943c7f82a3dfa61",
+      "source_commit": "100072cfa70c8ecd3d9d75bf4bc1adf8742e3b8b"
+    },
+    {
+      "down_revision": [
+        "11a6e01206c0"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d1v3x5z7b942_create_branch_purchasing_policies.py",
+      "revision": "d1v3x5z7b942",
+      "sha256": "b310393e3d495ec9c8d7dd5f99b5969e1c66325b2e29d55300ffdf943a932927",
+      "source_commit": "559536c7bec0b6ffa18de3f2bdf72e3c7f35a3d5"
+    },
+    {
+      "down_revision": [
+        "c1a0e38d6bfc"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d2b1f49e7c0a_bind_dispatch_replay_to_request.py",
+      "revision": "d2b1f49e7c0a",
+      "sha256": "9a1b3bb643390e3b103f3a8d2455d4711d5d3bdddd6d3cb8a94f1d773607f203",
+      "source_commit": "d3c847cb214cf492df6946335dd83e0d7dff249c"
+    },
+    {
+      "down_revision": [
+        "c7b9e1d4a632"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d2e6f8a1b405_create_identity_and_employee_tables.py",
+      "revision": "d2e6f8a1b405",
+      "sha256": "73aaa0cd7c5f5923bed71a6387b504d69d7b4b4f70b67c2198067cd0b8bf1483",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "c2f4a6b8d051"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d3f5a7c9e162_create_repository_operations.py",
+      "revision": "d3f5a7c9e162",
+      "sha256": "26e5e67b6fa501332688c12e925b14007d24f9cf68c81f6dd03ea4c88d3dd864",
+      "source_commit": "3ed9241bd217b708ad34700c407019c79fb19b98"
+    },
+    {
+      "down_revision": [
+        "c3e5g7i9k1m3"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d4f6h8j0l2n4_complete_job_clock_operations.py",
+      "revision": "d4f6h8j0l2n4",
+      "sha256": "be5878bfe978659cb67901418ad699912ebec7eb6c022e5b8858a6c95bb95ce7",
+      "source_commit": "f4fa8fe775f3a4b215b98ad9c6d4ac295a7b561a"
+    },
+    {
+      "down_revision": [
+        "c4f0a6b8e152"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d5a1b7c9f263_add_customer_adapter_staging.py",
+      "revision": "d5a1b7c9f263",
+      "sha256": "0ec0393c76161104c7c8676e59d38c11fc6b910c5167158231edb7ff6a40f0a6",
+      "source_commit": "e627eed4c6494f49ef1ede2add1941e36f4f8180"
+    },
+    {
+      "down_revision": [
+        "c4e6a8b0d215"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d5f7a9c1e326_bind_worker_identity_to_orchestration.py",
+      "revision": "d5f7a9c1e326",
+      "sha256": "70c01b7cbe4f5cce414763b4c10025d98be57c1b348b0e51175b99dbbd618c4e",
+      "source_commit": "70ad9f8701f9a1a718b56648f20cb8ad3c0fc9cf"
+    },
+    {
+      "down_revision": [
+        "c4t6p8r0u275"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d5u7q9s1v386_expand_economics_policy_authority.py",
+      "revision": "d5u7q9s1v386",
+      "sha256": "4698d19f152c5f43f990fd8e7baa5c6c3d80e43a1a3a352d102da8465f31cb6a",
+      "source_commit": "ca4f7151f7091617ccee1567b91dd28a982e0802"
+    },
+    {
+      "down_revision": [
+        "c6e0a2b4d957"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d7f1b3c5e068_bind_source4_history_child_run.py",
+      "revision": "d7f1b3c5e068",
+      "sha256": "6b6ec203551ecbdc1bb206978e067ddf7d95a518d2b2045eefba03e3146ac585",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "c6a1d3e5f709"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d8f2a4c6e810_create_workforce_capability_framework.py",
+      "revision": "d8f2a4c6e810",
+      "sha256": "c25eef1981430827e47490494e95e4d1a7dd384f305d4a13dc0dd817ab734f09",
+      "source_commit": "123252a63fe557eb942f2e74a8cb91b1195f287c"
+    },
+    {
+      "down_revision": [
+        "c8e3a5b7d062"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d9f4b6c8e173_add_customer_search_timeline_indexes.py",
+      "revision": "d9f4b6c8e173",
+      "sha256": "d17d0257ae48996abc9787b0d2310cb01b437091defae459074d6f426c7b2d87",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "c8e4a0b6d139"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/d9f5b1c7e240_add_cutover_readiness_evidence.py",
+      "revision": "d9f5b1c7e240",
+      "sha256": "23dbddc1f085e0a74526dc825b1b89893121cdc67dd775e211f480b3bee47591",
+      "source_commit": "27e6b89cad036bd5cb5587215b0a1849f4d0de99"
+    },
+    {
+      "down_revision": [
+        "15e0g45640f4"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/dbb3f829f4dc_create_payroll_reporting_authority.py",
+      "revision": "dbb3f829f4dc",
+      "sha256": "927648fff701115cd194a0503486de1e62e630b89a880e281e0d7ae2f90b3782",
+      "source_commit": "a02589574bbe42912b123a001dd24c8e01748977"
+    },
+    {
+      "down_revision": [
+        "d9f4b6c8e173"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e0a5c7d9f284_add_identity_administration_persistence.py",
+      "revision": "e0a5c7d9f284",
+      "sha256": "1f0f14736557fd5c6f5746ae74f88499b237ec428df3146ebe2329104d859241",
+      "source_commit": "e3ed0f1cf316d71b39f9d2dcd9d81e526f35657b"
+    },
+    {
+      "down_revision": [
+        "d9f5b1c7e240"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e0a6c2d8f351_add_deterministic_cutover_plan.py",
+      "revision": "e0a6c2d8f351",
+      "sha256": "d4dc4f760ab7051f15e2905663180fe5908ac046276a273fe4325bafa83f3505",
+      "source_commit": "27e6b89cad036bd5cb5587215b0a1849f4d0de99"
+    },
+    {
+      "down_revision": [
+        "d3f5a7c9e162"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e1b3d5f7a940_create_controlled_execution.py",
+      "revision": "e1b3d5f7a940",
+      "sha256": "cec4bf6f4dc200816b1182ed726ab0d4583a17c0b617481f55282d39c1b4fc1f",
+      "source_commit": "ecf0f6ee56cf1428d9ae4a59162f55dce03a84fe"
+    },
+    {
+      "down_revision": [
+        "d7f1b3c5e068"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e2f4a6b8c091_bind_hcp_customer_staging.py",
+      "revision": "e2f4a6b8c091",
+      "sha256": "cd5e1d61bb56695f1540e82a03980d74620da0006ea059d5824d05b8adcf2ea4",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "19i4k89084j8",
+        "d2b1f49e7c0a"
+      ],
+      "is_head": false,
+      "is_merge": true,
+      "path": "backend/alembic/versions/e3c2a71f8d4b_merge_supply_chain_and_quality_heads.py",
+      "revision": "e3c2a71f8d4b",
+      "sha256": "fa7d53a0d08ad5eb3c18aeb4a5ccc00280a2e31adf725a8e64823abc922b2549",
+      "source_commit": "aaf8aec8878dd4db0bff0e17bdbf6c1073092cd6"
+    },
+    {
+      "down_revision": [
+        "d2e6f8a1b405"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e4a7c9b2d618_create_roles_and_permissions.py",
+      "revision": "e4a7c9b2d618",
+      "sha256": "b7244eebcee478e6479bef59d65164d7fc58fef3dfd5f9b75784ce6d43cba94d",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "d4f6h8j0l2n4"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e5g7i9k1m3o5_create_payroll_proration_policy.py",
+      "revision": "e5g7i9k1m3o5",
+      "sha256": "6f6726dfb165d7b66d2ce63084ef71c36d2bb9211927597efab40ac457859aaa",
+      "source_commit": "36fe3eeaa85905ef282b07ea8b7cc5482c335794"
+    },
+    {
+      "down_revision": [
+        "d5a1b7c9f263"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e6b2c8d0f374_create_beacon_signal_review_events.py",
+      "revision": "e6b2c8d0f374",
+      "sha256": "11001417237d917f891e8859c8d10f120fd88897b76d9cdc6d382365cbd9435c",
+      "source_commit": "be3e8266b53f07a7c9702830662965f2af636ad9"
+    },
+    {
+      "down_revision": [
+        "d5u7q9s1v386"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e6v8r0t2w497_register_economics_policy_gaps.py",
+      "revision": "e6v8r0t2w497",
+      "sha256": "415abd9730761300751718eec7b93bd920a5a0e8bf83a6547a31d13f03764781",
+      "source_commit": "e55cc71994c4efac81562bbebfcfbb63fedf49d0"
+    },
+    {
+      "down_revision": [
+        "d5f7a9c1e326"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e7a9c1d3f526_create_execution_composition_foundation.py",
+      "revision": "e7a9c1d3f526",
+      "sha256": "337f50d355a5562e38122e0ab2a532e1927a78dadf2c2631618f7e7dbb4e7a43",
+      "source_commit": "ecbfae593499010b146673a08f2945a1463e9310"
+    },
+    {
+      "down_revision": [
+        "e1b3d5f7a940"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/e8b4c6d2a917_create_customer_migration_control.py",
+      "revision": "e8b4c6d2a917",
+      "sha256": "08c51715fbc62af9c61c5d3a30b7e9480bba845f51b9d7abc975d2b41f5c84d6",
+      "source_commit": "3eb27257f008a972d32748e791622963f579cc8d"
+    },
+    {
+      "down_revision": [
+        "dbb3f829f4dc"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/ed6ce4a21942_bind_authoritative_ytd_to_pay_statements.py",
+      "revision": "ed6ce4a21942",
+      "sha256": "1320f6ed228b57a88f5529c1e20b022b0e3a6a6818aa4474628ed8efd66bc3f6",
+      "source_commit": "7222234988b118f34af99da2fd5ed36dd5dafc5e"
+    },
+    {
+      "down_revision": [
+        "e6b2c8d0f374"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f0a2c4e6b831_create_workstream_controls.py",
+      "revision": "f0a2c4e6b831",
+      "sha256": "5cc0bba82ed69bd7479487600517c5ef0de9eceb6a2947524cb853908dc7b7e7",
+      "source_commit": "096c1133f39b3f49d2b9873cd6ef942204bfce93"
+    },
+    {
+      "down_revision": [
+        "e8b4c6d2a917"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f1c7d9e3b825_add_customer_migration_phase2.py",
+      "revision": "f1c7d9e3b825",
+      "sha256": "fff4477aaabc177765c2abf7e14169082b967eb0675fb145615066cdfb4d45ba",
+      "source_commit": "3eb27257f008a972d32748e791622963f579cc8d"
+    },
+    {
+      "down_revision": [
+        "e0a5c7d9f284"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f2c8a4e6b193_create_notification_outbox.py",
+      "revision": "f2c8a4e6b193",
+      "sha256": "7abe79e2ae6395596703b5415ecc9e66476abc5bb93f7eddb2d306368bfc8d73",
+      "source_commit": "d24877fb7e6f93fe20c05344d55be31bcab59329"
+    },
+    {
+      "down_revision": [
+        "n2l1j60i7g3e"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f2e0d28y5w1u_classify_cutover_evidence_mutation.py",
+      "revision": "f2e0d28y5w1u",
+      "sha256": "834567c0f2bc6e43b274b7c6d597db4be79827a0f2f55d6c179d6821966d021b",
+      "source_commit": "d628471a1cfbe0e1683d76fead619df710ef88e2"
+    },
+    {
+      "down_revision": [
+        "e2f4a6b8c091"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f3a5c7e9b102_add_hcp_plan_outcomes.py",
+      "revision": "f3a5c7e9b102",
+      "sha256": "492e34ade48e62cd9b7a8fe178c5eaaeaededf764793d699e8f7af952a080363",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "e0a6c2d8f351"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f3b7d9e1a624_add_hcp_migration_2a_foundation.py",
+      "revision": "f3b7d9e1a624",
+      "sha256": "b05a5f89b661fdd2c666b6b0e07833c9b2752e753ea69cc429f45af811796819",
+      "source_commit": "d97eebb7f3e82b6cea063483cf2807642b04f8ad"
+    },
+    {
+      "down_revision": [
+        "e3c2a71f8d4b"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f4d3b82a9e5c_bind_requisition_job_scope.py",
+      "revision": "f4d3b82a9e5c",
+      "sha256": "7672c72deb645b752abd248dea8c1c57afd0fa128be4475adf36d9c5d050d10c",
+      "source_commit": "f9e3890a5fe4f8a8850ac16189d50e4b1f0ebf35"
+    },
+    {
+      "down_revision": [
+        "e4a7c9b2d618"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f5b8d0c3e729_create_authentication_persistence.py",
+      "revision": "f5b8d0c3e729",
+      "sha256": "107fff21512a2ec48bd0508622e797544afa9798d81267117863487456618427",
+      "source_commit": "25c031c18615817171a44378c26a9c7b6018d5a4"
+    },
+    {
+      "down_revision": [
+        "e5g7i9k1m3o5"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f6h8j0l2n4p6_create_password_reset_delivery.py",
+      "revision": "f6h8j0l2n4p6",
+      "sha256": "66a337d26aa64d52d157f5f21419f04207bba0efdca7cf5ba118cdcf33a92abe",
+      "source_commit": "52dc336766a67fc0c4698244b9894bab0fe65913"
+    },
+    {
+      "down_revision": [
+        "d8f2a4c6e810"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f7a9c2e4d681_create_engineering_command_persistence.py",
+      "revision": "f7a9c2e4d681",
+      "sha256": "073972f44347a0143c1aa97f6e1540eac5e9f18f0c1d5997d7cedf2d2bbff0a3",
+      "source_commit": "c7f7427343d67efd99fd179881aee44f8714593b"
+    },
+    {
+      "down_revision": [
+        "e6v8r0t2w497"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f7w9s1u3x508_create_evidence_acceptance.py",
+      "revision": "f7w9s1u3x508",
+      "sha256": "c68facdcf43230a05fb8be2d7493a352c0056c3970d00bf0da62825e44fb8f33",
+      "source_commit": "eacfe1b3cda5ef931ed4626697d24f0cee4989b0"
+    },
+    {
+      "down_revision": [
+        "e7a9c1d3f526"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/f9c1d3e5a728_create_live_client_supervision.py",
+      "revision": "f9c1d3e5a728",
+      "sha256": "500b7d50c5074703e71fc0eac56a6031f82b8cb7239f659b6447f00377f17f70",
+      "source_commit": "c06819f0019d726cabc6f950ef6b4bea2b25ef8c"
+    },
+    {
+      "down_revision": [
+        "f0a2c4e6b831"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/g1b3d5f7a942_create_workstream_runtime.py",
+      "revision": "g1b3d5f7a942",
+      "sha256": "3c52e76b031378afc72907fceb791af65663c4b4251d3fd0fbb1080588adecb7",
+      "source_commit": "6772af11ddca077019ff0045d16471ab00b1f015"
+    },
+    {
+      "down_revision": [
+        "g1b3d5f7a942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/g2c4e6a8b153_add_workstream_event_notifications.py",
+      "revision": "g2c4e6a8b153",
+      "sha256": "da1cf1cd04ad62fa6b7419d88ee98ef7543bd5a1990b74ecff57223101309938",
+      "source_commit": "a870526fe761baefd69bafa518ac5d2bd9b4ec6a"
+    },
+    {
+      "down_revision": [
+        "f2e0d28y5w1u"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/g3f1e39z6x2v_protect_cutover_readiness_history.py",
+      "revision": "g3f1e39z6x2v",
+      "sha256": "de0007c6b8bc98439640063842038d0d55012c22fa4429380023e17f2af8eebf",
+      "source_commit": "13d6ad9fef571b384e99a15c35e1017d006d5a02"
+    },
+    {
+      "down_revision": [
+        "f4d3b82a9e5c"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/g5e4c93b0f6d_create_luminary_intelligence.py",
+      "revision": "g5e4c93b0f6d",
+      "sha256": "2a41d24136ecd49bc220e2ad65e9ce0353b19a7c3efb06e9db6a121d52f7f642",
+      "source_commit": "e3efd369a2b54f41f0b1b679a4b936725a32d3a4"
+    },
+    {
+      "down_revision": [
+        "f6h8j0l2n4p6"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/g7i9k1m3o5q7_allow_bounded_current_overlay_master.py",
+      "revision": "g7i9k1m3o5q7",
+      "sha256": "f50d0c1d0ac1df3868b734da391a56de9bfd9d58271dda0bb76270bfbbf6ba78",
+      "source_commit": "efbe85fa1b5a5213e334d55532f48ffc48e0d016"
+    },
+    {
+      "down_revision": [
+        "f7w9s1u3x508"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/g8x0t2v4y619_create_worker_recovery_acknowledgements.py",
+      "revision": "g8x0t2v4y619",
+      "sha256": "7e692c7b2580e96ae83a01fd9ca34cd582e9ac78fa8052de3851def3e7579ff7",
+      "source_commit": "3938f82868095875a524757f51bb4753eae210ef"
+    },
+    {
+      "down_revision": [
+        "g2c4e6a8b153"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/h3d5f7a9c264_create_mission_notifications.py",
+      "revision": "h3d5f7a9c264",
+      "sha256": "0d141b03ba9e4c91b3392488ab71786d10bab84091106c0c6f0d9b41a44aa766",
+      "source_commit": "ae55168d6d090f3e418920bf5d3d519edf27284d"
+    },
+    {
+      "down_revision": [
+        "g3f1e39z6x2v"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/h4g2f40a7y3w_protect_native_identity_history.py",
+      "revision": "h4g2f40a7y3w",
+      "sha256": "c715ea4a10c543c9a1a04cd6fabacbf2e3b1b88a3b1ba42812df58ef497a7163",
+      "source_commit": "d9f4e52e0a20ceec74d547f2a5c53e64c939d871"
+    },
+    {
+      "down_revision": [
+        "k4s6a8g0r234"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/h6f5d04c1a7e_bind_payment_intent_objects.py",
+      "revision": "h6f5d04c1a7e",
+      "sha256": "b8b45f349bd61bf39557a76f484e8bfc020859f437a965c6dcebe0b6c44834b8",
+      "source_commit": "d66cb1128bbea8f12ce8b4e82c630fb39d0be3d7"
+    },
+    {
+      "down_revision": [
+        "i5h3g51b8z4x"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/h6f7d04c2a8b_create_operational_asset_authority.py",
+      "revision": "h6f7d04c2a8b",
+      "sha256": "4c9066a8686414048bb17868138a8b23f980ff6300f5b3788265cbe14f558612",
+      "source_commit": "3787e8d57f0219a33e762cd6c90ad3615094fab3"
+    },
+    {
+      "down_revision": [
+        "l0j9h48g5e1c"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/h6f8j0l2n497_immutable_economics_result_history.py",
+      "revision": "h6f8j0l2n497",
+      "sha256": "28eb85d414d642c0ac89875279bc9d8c1273d431c307ef98039034174e00ac13",
+      "source_commit": "437764a44b56efa03b430636fb29f299a8fc2b70"
+    },
+    {
+      "down_revision": [
+        "g7i9k1m3o5q7"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/h8j0l2n4p6r8_create_source4_native_binding_evidence.py",
+      "revision": "h8j0l2n4p6r8",
+      "sha256": "1eb075c703466d73813d2d57401031a89a5b3935031bc3c9cb918d5de83bf8e5",
+      "source_commit": "b296cc6b30a834a978618d49973bfb7419f4f026"
+    },
+    {
+      "down_revision": [
+        "g8x0t2v4y619"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/h9y1u3w5z720_create_partial_receiving.py",
+      "revision": "h9y1u3w5z720",
+      "sha256": "1443d1135e3c959e9988a10af3c804793a97c83f4adafd163e852c76889e637b",
+      "source_commit": "04d74278b914b73ca96838128980218fced32546"
+    },
+    {
+      "down_revision": [
+        "h9y1u3w5z720"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/i0z2v4x6a831_create_workday_time_authority.py",
+      "revision": "i0z2v4x6a831",
+      "sha256": "fe5bfdb6275d811b492f6b141597e685bfb3da19246fe5a1d9a7114e741034ed",
+      "source_commit": "2d47f3bb838c6e5943629c3fe82fd1131241cef2"
+    },
+    {
+      "down_revision": [
+        "h3d5f7a9c264"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/i4e6a8b0d375_enrich_mission_notifications.py",
+      "revision": "i4e6a8b0d375",
+      "sha256": "4f9fd1d664e9814d14505b429842e493c96518dc01c109aedafca04f75d7a638",
+      "source_commit": "caabcc0028ff414467a49edff098596da6b61038"
+    },
+    {
+      "down_revision": [
+        "h4g2f40a7y3w"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/i5h3g51b8z4x_protect_timekeeping_history.py",
+      "revision": "i5h3g51b8z4x",
+      "sha256": "329333e49bafbbaa061874ce22937b00a15bc39da32f4e8de6bdcb977f439c81",
+      "source_commit": "8a7ed81b4ad0dfd7d293b4a690a3e2169c449c04"
+    },
+    {
+      "down_revision": [
+        "h6f5d04c1a7e"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/i7g6e15d2b8f_bind_payment_dispute_replay.py",
+      "revision": "i7g6e15d2b8f",
+      "sha256": "7af463e33e028fee9a2b78dda53ea7d119ce3842b6c999588f6d9e05a117c33c",
+      "source_commit": "52da534c9c55716f3137eb24c64065329e291da2"
+    },
+    {
+      "down_revision": [
+        "h8j0l2n4p6r8"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/i9k1m3o5q7s9_create_payroll_cutover_review.py",
+      "revision": "i9k1m3o5q7s9",
+      "sha256": "5242806dee470f05244cbceebbaa5015193382cd3197c1577fc399642afb5edf",
+      "source_commit": "b726b387df08c5676ca5e286efd4b93c46228446"
+    },
+    {
+      "down_revision": [
+        "i9k1m3o5q7s9"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/j0l2n4p6r8t0_seed_existing_cutover_administrators.py",
+      "revision": "j0l2n4p6r8t0",
+      "sha256": "f4d05795f5d06e9fb5af52e5f3836526c694578783ddf786698640ac04595c36",
+      "source_commit": "e181bfa1434ad36bbc3128f796d91f8f657335a3"
+    },
+    {
+      "down_revision": [
+        "i0z2v4x6a831"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/j1a3w5y7b942_add_timekeeping_api_idempotency.py",
+      "revision": "j1a3w5y7b942",
+      "sha256": "87fa1285cb11943f9450cda79310535a161a433dd5732d441646af624862ecfd",
+      "source_commit": "ec4f5c1ab3f3e750622a29967c929ef4c754dcf1"
+    },
+    {
+      "down_revision": [
+        "i4e6a8b0d375"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/j5f7b9c1e486_create_mission_roadmaps.py",
+      "revision": "j5f7b9c1e486",
+      "sha256": "7a19dbc3eb06bcddcb4e007245848257b2d015c42abdd9b057eba280e4a13ec8",
+      "source_commit": "585839dcfd6c17cc0d792a632ce08e4054b257bb"
+    },
+    {
+      "down_revision": [
+        "h6f7d04c2a8b"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/j6k4m72c9p5q_add_notification_provider_acceptance.py",
+      "revision": "j6k4m72c9p5q",
+      "sha256": "4c9990a49cf7f4fe11736983cb95c9530ecae11c242e719399131af843dd82ad",
+      "source_commit": "e66b5c1144430bb099f1a475879517bfc86c7ac5"
+    },
+    {
+      "down_revision": [
+        "i7g6e15d2b8f"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/j8h7f26e3c9a_bind_onboarding_request_tenant_objects.py",
+      "revision": "j8h7f26e3c9a",
+      "sha256": "ab3f7c18000668cc3740aa52701ff46d23a296b16ca1161d88340ea30b9bca8b",
+      "source_commit": "fc602fdd957b2b4b356895c01daa44722318bee6"
+    },
+    {
+      "down_revision": [
+        "j0l2n4p6r8t0"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k1m3o5q7s9u1_seed_luminary_owner_read.py",
+      "revision": "k1m3o5q7s9u1",
+      "sha256": "ae7a988fa60272e1c7a054e654f1c510a330c46bda2f28dabf766cffbc1a1584",
+      "source_commit": "aec0d297835bc5772d1e0f4e954e73462b67f537"
+    },
+    {
+      "down_revision": [
+        "g5e4c93b0f6d"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k1s3a5g7r901_create_service_agreements.py",
+      "revision": "k1s3a5g7r901",
+      "sha256": "09eaf8a4026c7673d0825891c598363de62a6663cf9cea1042d5144b426d79e3",
+      "source_commit": "f822b3094c1baa6ffbb1105230ab7d8cc549112a"
+    },
+    {
+      "down_revision": [
+        "j1a3w5y7b942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k2b4x6z8c053_create_purchase_returns.py",
+      "revision": "k2b4x6z8c053",
+      "sha256": "13d41c016dbbf950ec7475518d26c2ce7136616faa2e16ec120336fc06caa6c1",
+      "source_commit": "624c69152e54364acb4d157143870d8024c698da"
+    },
+    {
+      "down_revision": [
+        "k1s3a5g7r901"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k2s4a6g8r012_add_service_agreement_lifecycle_and_.py",
+      "revision": "k2s4a6g8r012",
+      "sha256": "f68cd0d72356f64e8c19ce5cad33f87309dd8c62a7ed11c317e929f5a7e21981",
+      "source_commit": "f822b3094c1baa6ffbb1105230ab7d8cc549112a"
+    },
+    {
+      "down_revision": [
+        "k2s4a6g8r012"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k3s5a7g9r123_add_service_agreement_renewal_lineage.py",
+      "revision": "k3s5a7g9r123",
+      "sha256": "b4b074305b1bf56f6dc45c573b93195c0fa985822bc8f3ec00e0d6cf8d571171",
+      "source_commit": "f822b3094c1baa6ffbb1105230ab7d8cc549112a"
+    },
+    {
+      "down_revision": [
+        "k3s5a7g9r123"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k4s6a8g0r234_make_agreement_plan_commands_idempotent.py",
+      "revision": "k4s6a8g0r234",
+      "sha256": "7a282e128e9c70b59733a18f99ea2f847923df2c3b8a81e1e1e3c7767ee5026d",
+      "source_commit": "f822b3094c1baa6ffbb1105230ab7d8cc549112a"
+    },
+    {
+      "down_revision": [
+        "j5f7b9c1e486"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k6a8c0d2f597_enrich_mission_roadmap_truth.py",
+      "revision": "k6a8c0d2f597",
+      "sha256": "65380af512f4dd18a68dc91b6628a7368f9b3aad5e4a7ea56b52cabe4e88b5b8",
+      "source_commit": "ecf939ea43495c0cbf1939f4000ff91074b8dbb8"
+    },
+    {
+      "down_revision": [
+        "j6k4m72c9p5q"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k7l5n83d0q6r_add_operational_asset_program_evidence.py",
+      "revision": "k7l5n83d0q6r",
+      "sha256": "a57ca74fd7ecf12cd8b8e770413968236d46f508e6a2827591609c885fc7d3d4",
+      "source_commit": "1fc68b104e50e845876b3b602b8d6446650eb1f0"
+    },
+    {
+      "down_revision": [
+        "j8h7f26e3c9a"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/k9i8g37f4d0b_restore_procurement_match_constraints.py",
+      "revision": "k9i8g37f4d0b",
+      "sha256": "935d841cdb9351382ac4aeecc3602894548a5527c5db1cfa6f78bff29d555012",
+      "source_commit": "c670b743122bdaa734508a81ff49f4188ac7327b"
+    },
+    {
+      "down_revision": [
+        "k9i8g37f4d0b"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/l0j9h48g5e1c_protect_luminary_tenant_lineage.py",
+      "revision": "l0j9h48g5e1c",
+      "sha256": "189758b2bd329f66cfa8317910fdb79c49dcf9387e7521e72454f4f9dccc031b",
+      "source_commit": "0ad46c0ea864ec96b8b840d52ca79f1b237e19e9"
+    },
+    {
+      "down_revision": [
+        "k1m3o5q7s9u1"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/l2n4o6q8s0u2_grant_owner_workforce_read.py",
+      "revision": "l2n4o6q8s0u2",
+      "sha256": "da427cc69384e1c0653b782daf496dabff34c6e3f9f0e6f898a09c151f6a07f1",
+      "source_commit": "df2c2a96ca6139c1f7ca516c0c6042564f3e5573"
+    },
+    {
+      "down_revision": [
+        "k2b4x6z8c053"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/l3c5y7a9d164_add_beacon_signal_ownership.py",
+      "revision": "l3c5y7a9d164",
+      "sha256": "7f9d17ef68c68cc338534bc2245a5091a7618a838180f06d1b1c144efa2ed361",
+      "source_commit": "64e2cc6ce850529ad52682802cb47f5184a2de02"
+    },
+    {
+      "down_revision": [
+        "k6a8c0d2f597"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/l7b9d1e3a608_create_external_milestone_adoption.py",
+      "revision": "l7b9d1e3a608",
+      "sha256": "0343416dd1ee6f4872d2014e66870d118e8d07c0ebc127290f3946b2dbc76824",
+      "source_commit": "705012c72404e0e8c7998fd10debfa5ec0452125"
+    },
+    {
+      "down_revision": [
+        "k7l5n83d0q6r"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/l8m6p94e1r7s_operationalize_asset_import_and_policy.py",
+      "revision": "l8m6p94e1r7s",
+      "sha256": "eeba0355861cdce83716fa0e1c5a881c63d239494a2b8ed2fd6800ba8eaf3376",
+      "source_commit": "c33f2327ea64e1fa5874dd26efece1ef64fbfbb3"
+    },
+    {
+      "down_revision": [
+        "h6f8j0l2n497"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/m1k0i59h6f2d_protect_business_event_scope.py",
+      "revision": "m1k0i59h6f2d",
+      "sha256": "62a8fd4a24d70df68741a11dbf2563d8727550ef3de7be657b84cb6da94d5e89",
+      "source_commit": "faa2fbff7a1bdaf9c3c740ab1aa4009d0dea77a4"
+    },
+    {
+      "down_revision": [
+        "l2n4o6q8s0u2"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/m3n5p7r9t1v3_reconcile_office_manager_operations.py",
+      "revision": "m3n5p7r9t1v3",
+      "sha256": "0684342f604c9e19ca1810abccacdfae92055a50ccbd61411142485b6f0b8318",
+      "source_commit": "b2f4929ee85d98c6894f750f0d496cc2a4f6e21d"
+    },
+    {
+      "down_revision": [
+        "l3c5y7a9d164"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/m4d6z8b0e275_create_payroll_policy_authority.py",
+      "revision": "m4d6z8b0e275",
+      "sha256": "cfc6534ada477694c169d1d87a0ca2d61126a3ca5637370eb1ec7b3570683823",
+      "source_commit": "82f84caf90195557266c885061569fe14268daa5"
+    },
+    {
+      "down_revision": [
+        "l7b9d1e3a608"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/m8c0e2f4b719_align_owner_attention_notifications.py",
+      "revision": "m8c0e2f4b719",
+      "sha256": "d1d697ee81dfe48d2cd045a98c69dc15aca7799132d9d6f419c50678acf815d7",
+      "source_commit": "3d61fff1a7ca7e38f027f8546441d36f94146b4a"
+    },
+    {
+      "down_revision": [
+        "l8m6p94e1r7s"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/m9n7q05f2s8t_add_field_artifact_custody.py",
+      "revision": "m9n7q05f2s8t",
+      "sha256": "4fe85359c430f5e01a6ba557a6590063d2d3bf0458b50c96fae224c27d0950cb",
+      "source_commit": "31f0000079d5d3d399309c92565468c062a2899c"
+    },
+    {
+      "down_revision": [
+        "a2c4e6g8i175"
+      ],
+      "is_head": true,
+      "is_merge": false,
+      "path": "backend/alembic/versions/n0p8q16g3t9u_add_price_book_activation_review.py",
+      "revision": "n0p8q16g3t9u",
+      "sha256": "2db74dd43a72c81f615d54e1f617df507e328e7dbda6ed246deaf1bebdc36679",
+      "source_commit": "9eb7cff3b40f4dba4517f7d9655ccbd7cfc61e44"
+    },
+    {
+      "down_revision": [
+        "m9n7q05f2s8t"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/n0p8r16g3t9u_create_communication_recipient_controls.py",
+      "revision": "n0p8r16g3t9u",
+      "sha256": "cefaac33aa85c3050993e11b8c074d38c887c5d7c94f80743188025df1146803",
+      "source_commit": "11ec7df5e404c7b5695d32006e635e7ce26cd5bb"
+    },
+    {
+      "down_revision": [
+        "m1k0i59h6f2d"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/n2l1j60i7g3e_bind_economics_result_branch_lineage.py",
+      "revision": "n2l1j60i7g3e",
+      "sha256": "818844db3d0034a9ce3db5a0fb55b28c47c08ecf9e3e7ed2d8bbfc9b33858797",
+      "source_commit": "4e45450e135fc945804fd0b799e43b0046271b51"
+    },
+    {
+      "down_revision": [
+        "m3n5p7r9t1v3"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/n4p6r8t0v2x4_create_real_workforce_roster_bindings.py",
+      "revision": "n4p6r8t0v2x4",
+      "sha256": "508b946146bddac4427b7fa4cb24d94107a607adbb297dad8f298ee8080537d3",
+      "source_commit": "6a90cc379f536d0e9a003dd59545d93f85932a41"
+    },
+    {
+      "down_revision": [
+        "m4d6z8b0e275"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/n5e7a9c1f386_harden_business_event_delivery.py",
+      "revision": "n5e7a9c1f386",
+      "sha256": "f85a214cebfc0d9dbabf0daff48d63409baa13c122d7720bd443a0c4c65723de",
+      "source_commit": "e874fc2aa1c2060fea7706ab7521e779997c2948"
+    },
+    {
+      "down_revision": [
+        "m8c0e2f4b719"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/n9d1f3a5c820_create_controlled_code_execution.py",
+      "revision": "n9d1f3a5c820",
+      "sha256": "51d769c5ac442d81d3c034baed7acbf2ac37a707489cdb41d4a969489aa3fb88",
+      "source_commit": "6c3755c1b19fd6745092dd811a2463e5151a2cb6"
+    },
+    {
+      "down_revision": [
+        "n9d1f3a5c820"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/o0e2f4a6c931_create_engineering_capacity.py",
+      "revision": "o0e2f4a6c931",
+      "sha256": "4c4dc30dda209ca4596d28cb747f4038629ce6b474af54421d970c2e266e395a",
+      "source_commit": "99ab63538028510ae8fe662dd094d1cc4b96ccb0"
+    },
+    {
+      "down_revision": [
+        "p5r7t9v1x3z5"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/o5q7s9u1w3y5_create_workforce_source_certifications.py",
+      "revision": "o5q7s9u1w3y5",
+      "sha256": "cc7ba75ce8a9b540daed85ea7e3423138e871ae1652c450699d2d35b5512dc63",
+      "source_commit": "0d877d108c0adb1e08f1732e395046b372c16027"
+    },
+    {
+      "down_revision": [
+        "n5e7a9c1f386"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/o6f8b0d2g497_add_purchase_order_change_controls.py",
+      "revision": "o6f8b0d2g497",
+      "sha256": "eb6fdc7b9f77f8cb80daf6222be92e58862d05408869470d4d688dbe09ee9221",
+      "source_commit": "f94a95816904d0f84ba9e35da81cad24bafe9814"
+    },
+    {
+      "down_revision": [
+        "o0e2f4a6c931"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/p1f3a5c7d942_create_dispatch_assignments.py",
+      "revision": "p1f3a5c7d942",
+      "sha256": "11f9418779f93fb96489687d8f45541ae226227df9705f6d81802b688c9e690c",
+      "source_commit": "27495125e9e70edeea7e682a1b12021ad39be663"
+    },
+    {
+      "down_revision": [
+        "n4p6r8t0v2x4"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/p5r7t9v1x3z5_create_job_direct_expense_authority.py",
+      "revision": "p5r7t9v1x3z5",
+      "sha256": "5ad02982eb78b64a9e1c66f26dafe390f482663cd003252919e0f6f010b5d63c",
+      "source_commit": "b777e624ca729a49157031a6b66280892a78cf74"
+    },
+    {
+      "down_revision": [
+        "o5q7s9u1w3y5"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/p6r8t0v2x4z6_create_beacon_evaluation_history.py",
+      "revision": "p6r8t0v2x4z6",
+      "sha256": "dae87f7ce4b82af986d22ae8b0a7c6d8b91a2863d961153149c5597c864edb4f",
+      "source_commit": "30cc2549aa117c22b1009d44137f5f356953b848"
+    },
+    {
+      "down_revision": [
+        "p7g9c1e3h608"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/p7g9c1e3h508_harden_notification_outbox.py",
+      "revision": "q8h0d2f4i619",
+      "sha256": "58567bde2b9210aa3c797ddcb5c3a33962cb164240892fb5ad5752eefd290897",
+      "source_commit": "f77cc2fb68372ec439271321120b17230f8567b7"
+    },
+    {
+      "down_revision": [
+        "o6f8b0d2g497"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/p7g9c1e3h608_align_purchase_order_change_constraints.py",
+      "revision": "p7g9c1e3h608",
+      "sha256": "677d2ae8789b4e3a119cad57df7f8d7ef8b4ec68949d038fdb8c523e32767a37",
+      "source_commit": "a95cf5ea85c3c0e26f87babf76d00a4e90a0ffd5"
+    },
+    {
+      "down_revision": [
+        "p1f3a5c7d942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/q2g4b6d8e053_create_price_book_foundation.py",
+      "revision": "q2g4b6d8e053",
+      "sha256": "1a5b836b126a026a5c408f21538cd5dead79ede9fb056ccf012681425e472686",
+      "source_commit": "e97dc408742e0037330b79156cd0a5ba583c6649"
+    },
+    {
+      "down_revision": [
+        "q2g4b6d8e053"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/r3h5c7d9f164_create_estimate_foundation.py",
+      "revision": "r3h5c7d9f164",
+      "sha256": "4fcc6a456cadd3d2ed99c48194d658fa87e92aae220507268ebb722dbd654a0f",
+      "source_commit": "e0f68972f65bfec7272dd133060b348375497b3e"
+    },
+    {
+      "down_revision": [
+        "q8h0d2f4i619"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/r9h1d3f5j720_add_purchase_order_disposition_evidence.py",
+      "revision": "r9h1d3f5j720",
+      "sha256": "c2e86282c56ad7534088e384f6b9b1881800b4a213491382ebfb9c9dc8f16d54",
+      "source_commit": "43e95bc6e394d2deb2e73aaea9155fc4596a035f"
+    },
+    {
+      "down_revision": [
+        "r9h1d3f5j720"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/r9i1e3g5j720_create_identity_onboarding_authority.py",
+      "revision": "r9i1e3g5j720",
+      "sha256": "04aad1f50d515a3478c7bc497f622616c7570948ef689d46272d34d2352f316b",
+      "source_commit": "2b9fcb1823b185ea351d89918b4e193998801ae0"
+    },
+    {
+      "down_revision": [
+        "r9i1e3g5j720"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/s0j2f4h6k831_scope_outbox_idempotency_by_company.py",
+      "revision": "s0j2f4h6k831",
+      "sha256": "d8da53e031bdd22b4ee092e1a633fa9c398f2f9e4b70a0ec435f4e7db04341ba",
+      "source_commit": "e37a1ffca0e61f80ca5f7c87e81784276e88b614"
+    },
+    {
+      "down_revision": [
+        "r3h5c7d9f164"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/s4i6d8e0a275_create_estimate_approval_workflow.py",
+      "revision": "s4i6d8e0a275",
+      "sha256": "8202543d98fc768859bd67d8d70ef9a95a6457ddd4bf28317be62b58df00d059",
+      "source_commit": "f52b184634acb89e21816533148cb3110fdce31e"
+    },
+    {
+      "down_revision": [
+        "s4i6d8e0a275"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/s4i6d8f0h275_create_inventory_foundation.py",
+      "revision": "s4i6d8f0h275",
+      "sha256": "b024329055a739d9bb079c304e5877642a86c7728350611030e07bae62764654",
+      "source_commit": "2389af0415161fd685c3c73b8751df2ad440f701"
+    },
+    {
+      "down_revision": [
+        "s0j2f4h6k831"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/t1k3g5i7l942_align_purchase_order_disposition_constraint.py",
+      "revision": "t1k3g5i7l942",
+      "sha256": "ac9d15c6ece428cb994b1779aeed385645edd064cd1adedd4012f97c238bb9d0",
+      "source_commit": "76f58871db4961e944907ddaa09eda53a1cc5056"
+    },
+    {
+      "down_revision": [
+        "s4i6d8f0h275"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/t5j7e9g1i386_add_inventory_adjustments_cycle_counts.py",
+      "revision": "t5j7e9g1i386",
+      "sha256": "63f2f2fae411c692b1fb9dbf4833fa23cce8a143e5d6e690a05fe04c352f0745",
+      "source_commit": "303548a7ecba9bc8b5a788237cc3a81a233c0d48"
+    },
+    {
+      "down_revision": [
+        "t5j7e9g1i386"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/t5j7f9b1c386_create_estimate_job_conversions.py",
+      "revision": "t5j7f9b1c386",
+      "sha256": "6117142bf3a52d09fbe0bfbdcfc48c83f38782d9eaa99a9541ac620b9112a54b",
+      "source_commit": "7ebad9c90c7d511c0cca82395ef4210b0deea750"
+    },
+    {
+      "down_revision": [
+        "t1k3g5i7l942"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/u2l4h6j8m053_create_payroll_gross_result_authority.py",
+      "revision": "u2l4h6j8m053",
+      "sha256": "7fa031a24fd85b699e92b6668771f5a87cfd9ca80658f027c8be0f0749f5b763",
+      "source_commit": "2c087ad5354c080e29793e27015ed6a707838b49"
+    },
+    {
+      "down_revision": [
+        "v7l9h1d3e508"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/u6k8f0h2j497_add_reservation_allocation_material_issue.py",
+      "revision": "u6k8f0h2j497",
+      "sha256": "09e13bb8332f30ae529b386bc888a4962c14bbfbe026656c8626b0dda1da92e3",
+      "source_commit": "d892cf96249083908317bc814f6b460940a91def"
+    },
+    {
+      "down_revision": [
+        "t5j7f9b1c386"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/u6k8g0c2d497_create_durable_mmq_scheduler.py",
+      "revision": "u6k8g0c2d497",
+      "sha256": "a98bdd0f80fa55e02544025535a700bafa1a069ad4bc59ab320d969f53eba237",
+      "source_commit": "d218c12eaf3e8df158f85a2e3005e60abeb44056"
+    },
+    {
+      "down_revision": [
+        "u2l4h6j8m053"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/v3m5i7k9n164_create_replenishment_decisions.py",
+      "revision": "v3m5i7k9n164",
+      "sha256": "041baa1ba2cc179763c7b1bb6ea185bc15bdd8dbcc0c0129f7bf9e3c6b679dce",
+      "source_commit": "e9483c9b238b5627b7b97db4ab6497c599d8841a"
+    },
+    {
+      "down_revision": [
+        "u6k8g0c2d497"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/v7l9h1d3e508_add_estimate_options_discounts_tax.py",
+      "revision": "v7l9h1d3e508",
+      "sha256": "19f6567ef80ef79128664066a2839fc2abc4e63c9f7ae63c3d80478416ed3e8a",
+      "source_commit": "62c0d84cd33cd5851a9a70db3dfbde67a09ce343"
+    },
+    {
+      "down_revision": [
+        "v3m5i7k9n164"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/w4n6i8k0p275_allow_pre_execution_terminal_timestamps.py",
+      "revision": "w4n6i8k0p275",
+      "sha256": "fc828fe62eea8839d4c9c61f0adda9b7ec9575fa1464c3d957c65d368e607afa",
+      "source_commit": "bdfe6c340c72060df724285b35753a9dcbdb6055"
+    },
+    {
+      "down_revision": [
+        "w4n6i8k0p275"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/w4n6j8l0o275_create_payroll_input_authority.py",
+      "revision": "w4n6j8l0o275",
+      "sha256": "0428186c0e540323a6c1e9a0951976199d96610466011b8bcb6452295cd7f048",
+      "source_commit": "3664023adb153b8efa967519bb902d6719005154"
+    },
+    {
+      "down_revision": [
+        "u6k8f0h2j497"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/w8m0i2e4f619_create_internal_accounting_core.py",
+      "revision": "w8m0i2e4f619",
+      "sha256": "721b3e680854e801a8fd3984f5dc0492547f5cafa3b54aba19d6b6efa39006ea",
+      "source_commit": "ee87e572d0f0e53fbc826978ab4d3a8ff489120a"
+    },
+    {
+      "down_revision": [
+        "w8m0i2e4f619"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/w8m0i2k4n619_create_invoice_accounts_receivable_.py",
+      "revision": "w8m0i2k4n619",
+      "sha256": "59d925dfe2e533fee85bdb11acb40f85fe245f4d70005e528a05591a4fa26319",
+      "source_commit": "5f6649527d793a3f40d1a60d41af5e5c5c943ea7"
+    },
+    {
+      "down_revision": [
+        "w4n6j8l0o275"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/x5o7k9m1p386_create_payroll_tax_result_authority.py",
+      "revision": "x5o7k9m1p386",
+      "sha256": "8ed7eb8dcf2c8879ba7a44323ff8b530ddcd657734689048e76572b7761d8cd6",
+      "source_commit": "604c19abc75cbdccf986f879d375c5e530921d96"
+    },
+    {
+      "down_revision": [
+        "w8m0i2k4n619"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/x9n1j3l5p720_create_day_one_payments_runtime.py",
+      "revision": "x9n1j3l5p720",
+      "sha256": "497ce856ca02de7069a64fdc7ec0db08cffb715d0364d126455f1cee0b1f766b",
+      "source_commit": "1e631689bddddc1ff8fd763bb2d8fd6016eacc7b"
+    },
+    {
+      "down_revision": [
+        "x9n1j3l5p720"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/y0p2k4m6q831_create_day_one_accounts_payable_runtime.py",
+      "revision": "y0p2k4m6q831",
+      "sha256": "5a12849fb8b634e5b9e760d9cab3fd85718a94f61f1f9b9103bc7d5f28b187a2",
+      "source_commit": "6260b006f7e40a1cc9283ab7a7f069c58090f29f"
+    },
+    {
+      "down_revision": [
+        "x5o7k9m1p386"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/y6p8l0n2q497_create_payroll_run_authority.py",
+      "revision": "y6p8l0n2q497",
+      "sha256": "796b64d6037fca8143b95c0fd89b3e285178b4ae4f8bc6ad948836eb5d55f520",
+      "source_commit": "29d5398920bad068e58fd28d6c9b27bea7ebcc89"
+    },
+    {
+      "down_revision": [
+        "y0p2k4m6q831"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/z1q3l5n7r942_create_technician_field_evidence.py",
+      "revision": "z1q3l5n7r942",
+      "sha256": "ffc8fd453c519a4c04f09f43d7a845916f4b3d5a04c01bfd327c5240fb9b255a",
+      "source_commit": "4ed07803e8ad8b220c96ffcd1980db9af0a63ddc"
+    },
+    {
+      "down_revision": [
+        "y6p8l0n2q497"
+      ],
+      "is_head": false,
+      "is_merge": false,
+      "path": "backend/alembic/versions/z7q9m1o3r508_create_payroll_payment_authority.py",
+      "revision": "z7q9m1o3r508",
+      "sha256": "7c71eb7cad4f47259dcb78fca2290b292056759e01b8164627218082cd8c393d",
+      "source_commit": "c4d0211e6b2efcd7a5ef4f158da32200bf14817a"
+    }
+  ],
+  "risks": [],
+  "roots": [
+    "218775b8a49c"
+  ],
+  "topological_order": [
+    "218775b8a49c",
+    "8f3c2d1a9b47",
+    "c7b9e1d4a632",
+    "d2e6f8a1b405",
+    "e4a7c9b2d618",
+    "f5b8d0c3e729",
+    "a6c9e1f4b830",
+    "b7d2f4a6c951",
+    "c8e3a5b7d062",
+    "d9f4b6c8e173",
+    "e0a5c7d9f284",
+    "f2c8a4e6b193",
+    "a9d4e6f2c781",
+    "b4e7c9d1f305",
+    "c6a1d3e5f709",
+    "d8f2a4c6e810",
+    "f7a9c2e4d681",
+    "a1c3e5f7b902",
+    "b2d4f6a8c013",
+    "c3e5a7b9d124",
+    "c4e6a8b0d215",
+    "d5f7a9c1e326",
+    "e7a9c1d3f526",
+    "f9c1d3e5a728",
+    "a0d2e4f6b839",
+    "b1e3f5a7c940",
+    "c2f4a6b8d051",
+    "d3f5a7c9e162",
+    "e1b3d5f7a940",
+    "e8b4c6d2a917",
+    "f1c7d9e3b825",
+    "a2d8e4f6c930",
+    "b3e9f5a7d041",
+    "c4f0a6b8e152",
+    "d5a1b7c9f263",
+    "e6b2c8d0f374",
+    "f0a2c4e6b831",
+    "g1b3d5f7a942",
+    "g2c4e6a8b153",
+    "h3d5f7a9c264",
+    "i4e6a8b0d375",
+    "j5f7b9c1e486",
+    "k6a8c0d2f597",
+    "l7b9d1e3a608",
+    "m8c0e2f4b719",
+    "n9d1f3a5c820",
+    "o0e2f4a6c931",
+    "p1f3a5c7d942",
+    "q2g4b6d8e053",
+    "r3h5c7d9f164",
+    "s4i6d8e0a275",
+    "s4i6d8f0h275",
+    "t5j7e9g1i386",
+    "t5j7f9b1c386",
+    "u6k8g0c2d497",
+    "v7l9h1d3e508",
+    "u6k8f0h2j497",
+    "w8m0i2e4f619",
+    "w8m0i2k4n619",
+    "x9n1j3l5p720",
+    "y0p2k4m6q831",
+    "z1q3l5n7r942",
+    "a2r4m6p8s053",
+    "b3s5n7q9t164",
+    "c4t6p8r0u275",
+    "d5u7q9s1v386",
+    "e6v8r0t2w497",
+    "f7w9s1u3x508",
+    "g8x0t2v4y619",
+    "h9y1u3w5z720",
+    "i0z2v4x6a831",
+    "j1a3w5y7b942",
+    "k2b4x6z8c053",
+    "l3c5y7a9d164",
+    "m4d6z8b0e275",
+    "n5e7a9c1f386",
+    "o6f8b0d2g497",
+    "p7g9c1e3h608",
+    "q8h0d2f4i619",
+    "r9h1d3f5j720",
+    "r9i1e3g5j720",
+    "s0j2f4h6k831",
+    "t1k3g5i7l942",
+    "u2l4h6j8m053",
+    "v3m5i7k9n164",
+    "w4n6i8k0p275",
+    "w4n6j8l0o275",
+    "x5o7k9m1p386",
+    "y6p8l0n2q497",
+    "z7q9m1o3r508",
+    "a8r0n2p4s619",
+    "b9s1o3q5t720",
+    "c0t2q4s6u831",
+    "c0t2p4r6u831",
+    "d1u3q5s7v942",
+    "11a6e01206c0",
+    "d1v3x5z7b942",
+    "a6c2e8f4b917",
+    "b7d3f9a5c028",
+    "c8e4a0b6d139",
+    "d9f5b1c7e240",
+    "e0a6c2d8f351",
+    "f3b7d9e1a624",
+    "a4c8e0f2b735",
+    "b5d9f1a3c846",
+    "c6e0a2b4d957",
+    "d7f1b3c5e068",
+    "e2f4a6b8c091",
+    "f3a5c7e9b102",
+    "a4c6e8f0b213",
+    "b5d7f9a1c324",
+    "c6e8a0b2d435",
+    "12b7f12317d1",
+    "13c8f23428e2",
+    "14d9f34539f3",
+    "d1t3p5r7v942",
+    "15e0g45640f4",
+    "dbb3f829f4dc",
+    "ed6ce4a21942",
+    "cb4c29cf0e3c",
+    "16f1h56751g5",
+    "17g2i67862h6",
+    "99abf7192edf",
+    "b0ff279c5aeb",
+    "18h3j78973i7",
+    "19i4k89084j8",
+    "c1a0e38d6bfc",
+    "d2b1f49e7c0a",
+    "e3c2a71f8d4b",
+    "f4d3b82a9e5c",
+    "g5e4c93b0f6d",
+    "k1s3a5g7r901",
+    "k2s4a6g8r012",
+    "k3s5a7g9r123",
+    "k4s6a8g0r234",
+    "h6f5d04c1a7e",
+    "i7g6e15d2b8f",
+    "j8h7f26e3c9a",
+    "k9i8g37f4d0b",
+    "l0j9h48g5e1c",
+    "h6f8j0l2n497",
+    "m1k0i59h6f2d",
+    "n2l1j60i7g3e",
+    "f2e0d28y5w1u",
+    "g3f1e39z6x2v",
+    "h4g2f40a7y3w",
+    "i5h3g51b8z4x",
+    "h6f7d04c2a8b",
+    "j6k4m72c9p5q",
+    "k7l5n83d0q6r",
+    "l8m6p94e1r7s",
+    "m9n7q05f2s8t",
+    "n0p8r16g3t9u",
+    "b2d4f6h8j0l2",
+    "a1c3e5g7i9k1",
+    "b2d4f6h8j0m3",
+    "c2e4g6i8k0m2",
+    "c3e5g7i9k1m3",
+    "d4f6h8j0l2n4",
+    "e5g7i9k1m3o5",
+    "f6h8j0l2n4p6",
+    "g7i9k1m3o5q7",
+    "h8j0l2n4p6r8",
+    "i9k1m3o5q7s9",
+    "j0l2n4p6r8t0",
+    "k1m3o5q7s9u1",
+    "l2n4o6q8s0u2",
+    "m3n5p7r9t1v3",
+    "n4p6r8t0v2x4",
+    "p5r7t9v1x3z5",
+    "o5q7s9u1w3y5",
+    "p6r8t0v2x4z6",
+    "a2c4e6g8i175",
+    "n0p8q16g3t9u"
+  ]
+}
