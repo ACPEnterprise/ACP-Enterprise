@@ -67,7 +67,7 @@ def project_registered_general_ledger_period(
     ]
     if not candidates:
         raise EvidenceStoreError("registered_general_ledger_period_unavailable")
-    selected = sorted(candidates, key=lambda item: str(item["control_id"]))[-1]
+    selected = max(candidates, key=lambda item: str(item["control_id"]))
     raw_sha256 = str(selected["raw_sha256"])
     workbook_path = (
         evidence_root.expanduser().resolve()
@@ -116,7 +116,7 @@ def _period_metrics(path: Path, *, start_date: date, end_date: date) -> dict[str
     accounts: set[str] = set()
     names: set[str] = set()
     numbers: set[str] = set()
-    total = Decimal("0")
+    total = Decimal(0)
     count = 0
     for row in rows:
         transaction_date = _date(row.get(columns["Transaction date"], ""))
