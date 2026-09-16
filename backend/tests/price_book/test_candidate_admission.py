@@ -6,6 +6,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
@@ -27,8 +30,6 @@ from app.price_book.models import (
 )
 from app.price_book.schemas import PriceVersionCreate, TaxClassificationCreate
 from app.price_book.service import PriceBookService
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 ROOT = Path(__file__).parents[3]
 CONFIGURATION = (
