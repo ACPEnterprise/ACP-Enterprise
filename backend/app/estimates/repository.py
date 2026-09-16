@@ -39,6 +39,7 @@ class EstimateRepository:
         customer_id: UUID | None = None,
         status: str | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> tuple[EstimateSummary, ...]:
         statement = (
             select(Estimate, EstimateRevision)
@@ -58,7 +59,9 @@ class EstimateRepository:
             statement = statement.where(Estimate.status == status)
         rows = (
             await session.execute(
-                statement.order_by(Estimate.updated_at.desc(), Estimate.id).limit(limit)
+                statement.order_by(Estimate.updated_at.desc(), Estimate.id)
+                .limit(limit)
+                .offset(offset)
             )
         ).all()
         return tuple(
@@ -79,6 +82,25 @@ class EstimateRepository:
             )
             for estimate, revision in rows
         )
+
+    @staticmethod
+    async def count_summaries(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: frozenset[UUID],
+        customer_id: UUID | None = None,
+        status: str | None = None,
+    ) -> int:
+        statement = select(func.count()).select_from(Estimate).where(
+            Estimate.company_id == company_id,
+            Estimate.branch_id.in_(branch_ids),
+        )
+        if customer_id is not None:
+            statement = statement.where(Estimate.customer_id == customer_id)
+        if status is not None:
+            statement = statement.where(Estimate.status == status)
+        return int(await session.scalar(statement) or 0)
 
     @staticmethod
     async def next_estimate_number(session: AsyncSession, *, company_id: UUID) -> str:

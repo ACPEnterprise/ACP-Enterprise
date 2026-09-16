@@ -3,8 +3,8 @@ import * as api from "../api/estimates";
 
 export const estimateKeys = {
   all: ["estimates"] as const,
-  list: (status?: string, customerId?: string) =>
-    ["estimates", "list", status ?? "all", customerId ?? "all"] as const,
+  list: (status?: string, customerId?: string, limit = 25, offset = 0) =>
+    ["estimates", "list", status ?? "all", customerId ?? "all", limit, offset] as const,
   detail: (id: string) => ["estimates", id] as const,
 };
 
@@ -12,10 +12,12 @@ export function useEstimates(
   status?: string,
   customerId?: string,
   enabled = true,
+  limit = 25,
+  offset = 0,
 ) {
   return useQuery({
-    queryKey: estimateKeys.list(status, customerId),
-    queryFn: () => api.listEstimates(status, customerId),
+    queryKey: estimateKeys.list(status, customerId, limit, offset),
+    queryFn: () => api.listEstimates(status, customerId, limit, offset),
     enabled,
   });
 }

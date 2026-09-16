@@ -127,8 +127,18 @@ vi.mock("../api/priceBook", () => ({
       { id: "category-1", code: "DRAIN", name: "Drain Cleaning", status: "active" },
     ],
     tax_classifications: [],
-    option_groups: [],
-    options: [],
+    option_groups: [
+      { id: "group-1", code: "CHOICE", name: "Good / Better / Best", status: "active" },
+    ],
+    options: [
+      {
+        id: "option-1",
+        option_group_id: "group-1",
+        service_item_id: "service-1",
+        label: "Better",
+        position: 2,
+      },
+    ],
     service_items: [
       {
         id: "service-1",
@@ -196,6 +206,46 @@ describe("EstimatesRoute", () => {
     expect(screen.getByText("Selected customer option")).toBeVisible();
     expect(screen.getByText("Estimate pipeline")).toBeVisible();
     expect(screen.getByText("EST-000001")).toBeVisible();
+    expect(estimatesApi.listEstimates).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      25,
+      0,
+    );
+  });
+  it("pages the Estimate pipeline without hiding older records", async () => {
+    permissions = new Set(["COMPANY_ESTIMATE_READ"]);
+    vi.mocked(estimatesApi.listEstimates).mockResolvedValueOnce({
+      total: 30,
+      items: [
+        {
+          id: "estimate-1",
+          branch_id: "branch-1",
+          customer_id: "customer-1",
+          service_location_id: null,
+          estimate_number: "EST-000001",
+          status: "draft",
+          acceptance_status: "not_requested",
+          version: 1,
+          proposal_title: "Heating proposal",
+          currency: "USD",
+          total_amount: "97.20",
+          expires_at: null,
+          updated_at: "2026-08-30T12:00:00Z",
+        },
+      ],
+    });
+    renderRoute();
+    expect(await screen.findByText("Showing 1–1 of 30 Estimates.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Next Estimates" }));
+    await waitFor(() =>
+      expect(estimatesApi.listEstimates).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        25,
+        25,
+      ),
+    );
   });
   it("renders mobile-safe management controls with totals", async () => {
     permissions = new Set([
@@ -303,5 +353,23 @@ describe("EstimatesRoute", () => {
     expect(
       screen.queryByText(/sql-provider-secret-canary/),
     ).not.toBeInTheDocument();
+  });
+  it("keeps the customer-facing option label when staging an Estimate line", async () => {
+    permissions = new Set([
+      "COMPANY_ESTIMATE_READ",
+      "COMPANY_ESTIMATE_MANAGE",
+      "COMPANY_PRICE_BOOK_READ",
+      "COMPANY_CUSTOMER_READ",
+    ]);
+    renderRoute();
+    await screen.findByRole("option", { name: "Good / Better / Best" });
+    fireEvent.change(screen.getByLabelText("Customer option set"), {
+      target: { value: "group-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("Price Book option"), {
+      target: { value: "option-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add another service" }));
+    expect(screen.getByText(/Better · Heating service/)).toBeVisible();
   });
 });

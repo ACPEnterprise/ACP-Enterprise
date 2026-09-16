@@ -61,7 +61,15 @@ export function EstimatesRoute() {
   const mutations = useEstimateMutations();
   const priceBookMutations = usePriceBookMutations();
   const [statusFilter, setStatusFilter] = useState("");
-  const estimates = useEstimates(statusFilter || undefined, undefined, canRead);
+  const [estimateOffset, setEstimateOffset] = useState(0);
+  const estimatePageSize = 25;
+  const estimates = useEstimates(
+    statusFilter || undefined,
+    undefined,
+    canRead,
+    estimatePageSize,
+    estimateOffset,
+  );
   const [lookup, setLookup] = useState(id);
   const [form, setForm] = useState({
     branch:
@@ -157,7 +165,7 @@ export function EstimatesRoute() {
         });
         lines.push({
           snapshot_id: snapshot.id,
-          title: service.name,
+          title: option ? `${option.label} · ${service.name}` : service.name,
           description: service.customer_description,
         });
       }
@@ -207,7 +215,10 @@ export function EstimatesRoute() {
             <Select
               aria-label="Estimate status filter"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                setEstimateOffset(0);
+              }}
             >
               <option value="">All states</option>
               <option value="draft">Draft</option>
@@ -269,6 +280,15 @@ export function EstimatesRoute() {
                   ))}
                 </tbody>
               </table>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-content-muted">
+                  Showing {estimateOffset + 1}–{Math.min(estimateOffset + estimates.data.items.length, estimates.data.total)} of {estimates.data.total} Estimates.
+                </p>
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" disabled={estimateOffset === 0} onClick={() => setEstimateOffset((offset) => Math.max(0, offset - estimatePageSize))}>Previous Estimates</Button>
+                  <Button type="button" variant="ghost" disabled={estimateOffset + estimates.data.items.length >= estimates.data.total} onClick={() => setEstimateOffset((offset) => offset + estimatePageSize)}>Next Estimates</Button>
+                </div>
+              </div>
             </div>
           ) : (
             <p className="rounded-lg border border-dashed border-stroke p-5 text-sm text-content-muted">
@@ -698,11 +718,12 @@ export function EstimatesRoute() {
                         className="flex justify-between gap-3"
                       >
                         <span>
-                          {
-                            priceBook.data?.service_items.find(
-                              (item) => item.id === line.serviceItem,
-                            )?.name
-                          }{" "}
+                          {line.option
+                            ? `${priceBook.data?.options.find((option) => option.id === line.option)?.label ?? "Selected option"} · `
+                            : ""}
+                          {priceBook.data?.service_items.find(
+                            (item) => item.id === line.serviceItem,
+                          )?.name}{" "}
                           × {line.quantity}
                         </span>
                         <Button
