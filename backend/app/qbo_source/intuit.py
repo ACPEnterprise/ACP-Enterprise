@@ -704,6 +704,55 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
         )
         return response.json()
 
+    async def read_financial_report(
+        self,
+        *,
+        report_name: str,
+        start_date: date,
+        end_date: date,
+        accounting_method: str,
+        minor_version: int,
+    ) -> dict[str, object]:
+        """Read one allowlisted provider report without exposing a write surface."""
+        allowed = {
+            "BalanceSheet",
+            "TrialBalance",
+            "GeneralLedger",
+            "AgedReceivables",
+            "AgedPayables",
+            "CustomerBalance",
+            "VendorBalance",
+        }
+        if report_name not in allowed:
+            raise ValueError("unsupported financial report")
+        if start_date > end_date:
+            raise ValueError("report start date must not follow end date")
+        method = accounting_method.lower()
+        if method not in {"cash", "accrual"}:
+            raise ValueError("unsupported accounting method")
+        if minor_version < 1:
+            raise ValueError("minor version must be positive")
+        await self._verify_bound_company(minor_version)
+        url = (
+            f"{self.endpoints.api_base}/{self.binding.realm_id}/reports/{report_name}?"
+            + urlencode(
+                {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "accounting_method": method.title(),
+                    "minorversion": minor_version,
+                }
+            )
+        )
+        response = await self._get(
+            url,
+            request_identity=(
+                f"financial_report:{report_name}:{start_date.isoformat()}:"
+                f"{end_date.isoformat()}:{method}"
+            ),
+        )
+        return response.json()
+
     async def read_aged_receivables(
         self, *, report_date: date, minor_version: int
     ) -> dict[str, object]:
