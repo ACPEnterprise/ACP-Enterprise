@@ -171,13 +171,6 @@ _QUESTIONS: dict[str, tuple[str, ...]] = {
 
 
 _GATED = {
-    # Pending qualified candidates are deliberately not duplicated on this branch.
-    ("customer", 0): "CUSTOMER_JOB_RETRIEVAL_CANDIDATE_PENDING_INTEGRATION",
-    ("job", 0): "CUSTOMER_JOB_RETRIEVAL_CANDIDATE_PENDING_INTEGRATION",
-    **{
-        ("payroll", index): "PAYROLL_ACTIONABILITY_CANDIDATE_PENDING_INTEGRATION"
-        for index in range(8)
-    },
     # Current bounded Accounting adapter exposes readiness, not historical figures.
     **{
         ("finance", index): "FINANCIAL_STATEMENT_AUTHORITY_NOT_ADMITTED"
