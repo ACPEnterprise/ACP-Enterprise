@@ -116,7 +116,9 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
 
 def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> None:
     role = next(
-        value for value in LAUNCH_ROLE_MATRIX if value.code is LaunchRoleCode.SERVICE_CSR
+        value
+        for value in LAUNCH_ROLE_MATRIX
+        if value.code is LaunchRoleCode.SERVICE_CSR
     )
     assert role.branch_access_required is True
     assert role.permission_codes == frozenset(
@@ -160,7 +162,8 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
 
 def test_office_manager_has_normal_operations_without_owner_hard_gates() -> None:
     role = next(
-        value for value in LAUNCH_ROLE_MATRIX
+        value
+        for value in LAUNCH_ROLE_MATRIX
         if value.code is LaunchRoleCode.OFFICE_MANAGER
     )
     assert role.permission_codes == OFFICE_MANAGER_OPERATIONAL_PERMISSIONS
@@ -225,6 +228,7 @@ def test_acp_employee_mobile_role_has_only_approved_field_authority() -> None:
     assert role.permission_codes == frozenset(
         {
             EmployeeOperationsPermission.OWN_DAY_READ,
+            EmployeeOperationsPermission.OWN_LIA_READ,
             TimekeepingPermission.OWN_PUNCH,
             TimekeepingPermission.OWN_READ,
             JobPermission.READ,
