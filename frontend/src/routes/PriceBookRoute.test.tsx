@@ -72,6 +72,7 @@ vi.mock("../hooks/usePriceBook", () => ({
       service_items: [
         {
           id: "item-1",
+          category_id: "category-1",
           name: "Drain clearing",
           code: "DRAIN-CLEAR",
           status: "draft",
@@ -205,7 +206,7 @@ describe("PriceBookRoute", () => {
         <PriceBookRoute />
       </MemoryRouter>,
     );
-    expect(screen.getByText("Drain clearing")).toBeVisible();
+    expect(screen.getAllByText("Drain clearing")).not.toHaveLength(0);
     expect(
       screen.queryByRole("button", { name: "Create category" }),
     ).not.toBeInTheDocument();
@@ -303,6 +304,50 @@ describe("PriceBookRoute", () => {
     expect(
       screen.queryByText(/sql-provider-secret-canary/),
     ).not.toBeInTheDocument();
+  });
+
+  it("searches draft services and opens connected owner details", () => {
+    render(
+      <MemoryRouter>
+        <PriceBookRoute />
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByLabelText("Search Price Book"), {
+      target: { value: "drain" },
+    });
+    expect(screen.getAllByText("Drain clearing")).not.toHaveLength(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open service details" }),
+    );
+    expect(
+      screen.getByRole("region", { name: "Selected service details" }),
+    ).toHaveTextContent("Drain · DRAIN-CLEAR");
+    expect(
+      screen.getByRole("region", { name: "Selected service details" }),
+    ).toHaveTextContent("Service Calls, row 5");
+    expect(
+      screen.getByRole("region", { name: "Selected service details" }),
+    ).toHaveTextContent("Draft — ready for review");
+    fireEvent.click(screen.getByRole("button", { name: "Back to results" }));
+    expect(
+      screen.queryByRole("region", { name: "Selected service details" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows an explicit empty state for unmatched searches", () => {
+    render(
+      <MemoryRouter>
+        <PriceBookRoute />
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByLabelText("Search Price Book"), {
+      target: { value: "not-a-real-service" },
+    });
+    expect(
+      screen.getByText(
+        "No Price Book services match this search and filter combination.",
+      ),
+    ).toBeVisible();
   });
 
   it("retains commercial evidence when a command rejects", async () => {

@@ -159,11 +159,17 @@ class PriceBookService:
             item_query = item_query.where(PriceBookServiceItem.status == item_status)
         if search:
             term = f"%{search.strip()}%"
+            item_query = item_query.join(
+                PriceBookCategory,
+                PriceBookCategory.id == PriceBookServiceItem.category_id,
+            )
             item_query = item_query.where(
                 or_(
                     PriceBookServiceItem.code.ilike(term),
                     PriceBookServiceItem.name.ilike(term),
                     PriceBookServiceItem.customer_description.ilike(term),
+                    PriceBookCategory.code.ilike(term),
+                    PriceBookCategory.name.ilike(term),
                 )
             )
         total_items = int(
