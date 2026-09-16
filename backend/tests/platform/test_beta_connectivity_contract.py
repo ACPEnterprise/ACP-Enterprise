@@ -99,3 +99,12 @@ def test_frontend_proxy_emits_one_security_header_policy() -> None:
         "Strict-Transport-Security",
     ):
         assert f"proxy_hide_header {header};" in nginx
+
+
+def test_owner_assets_route_does_not_collide_with_static_asset_directory() -> None:
+    nginx = (REPOSITORY_ROOT / "frontend/nginx.preview.conf").read_text(
+        encoding="utf-8"
+    )
+
+    assert "location = /assets {\n        try_files /index.html =404;\n    }" in nginx
+    assert "location = /assets/ {\n        try_files /index.html =404;\n    }" in nginx

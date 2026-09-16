@@ -18,6 +18,9 @@ const mutationState = vi.hoisted(() => ({
 const candidateReviewState = vi.hoisted(() => ({
   calls: [] as Array<Record<string, unknown>>,
 }));
+const catalogQueryState = vi.hoisted(() => ({
+  calls: [] as Array<Record<string, unknown>>,
+}));
 
 vi.mock("../auth", () => ({
   useAuth: () => ({
@@ -69,7 +72,9 @@ vi.mock("../hooks/usePriceBook", () => ({
     },
     });
   },
-  usePriceBook: () => ({
+  usePriceBook: (_branch: string | undefined, _enabled: boolean, filters: Record<string, unknown>) => {
+    catalogQueryState.calls.push(filters);
+    return ({
     isPending: false,
     isError: false,
     data: {
@@ -94,14 +99,29 @@ vi.mock("../hooks/usePriceBook", () => ({
           unit_price: "149.95",
           status: "draft",
           version: 1,
+          components: [
+            {
+              component_type: "material",
+              code: null,
+              label: "Expected fitting",
+              quantity: "2",
+              unit_cost: "4.50",
+              extended_cost: "9.00",
+              position: 1,
+            },
+          ],
         },
       ],
       option_groups: [
-        { id: "group-1", name: "Service level", code: "SERVICE-LEVEL" },
+        { id: "group-1", name: "Service level", code: "SERVICE-LEVEL", minimum_selections: 1, maximum_selections: 1, status: "active" },
       ],
-      options: [],
+      options: [
+        { id: "option-1", option_group_id: "group-1", service_item_id: "item-1", label: "Better", position: 2 },
+      ],
+      total_service_items: 75,
     },
-  }),
+    });
+  },
   usePriceBookMutations: () => ({
     category: {
       isPending: false,
@@ -189,7 +209,21 @@ describe("PriceBookRoute", () => {
   beforeEach(() => {
     mutationState.categoryError = null;
     candidateReviewState.calls = [];
+    catalogQueryState.calls = [];
     mutationState.categoryMutate.mockReset();
+  });
+
+  it("pages through the native service catalog", async () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+
+    expect(screen.getByText("Showing 1–1 of 75 services.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next services" }));
+
+    await waitFor(() =>
+      expect(catalogQueryState.calls).toContainEqual(
+        expect.objectContaining({ limit: 50, offset: 50 }),
+      ),
+    );
   });
 
   it("pages through every candidate instead of hiding records past the first page", async () => {
@@ -201,6 +235,26 @@ describe("PriceBookRoute", () => {
     await waitFor(() =>
       expect(candidateReviewState.calls).toContainEqual(
         expect.objectContaining({ limit: 50, offset: 50 }),
+      ),
+    );
+  });
+  it("filters coherent candidate review cohorts without activating them", async () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+
+    fireEvent.change(screen.getByLabelText("Filter candidate admission state"), {
+      target: { value: "held" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter candidate review requirement"), {
+      target: { value: "MATERIAL_MAPPING_REQUIRED" },
+    });
+
+    await waitFor(() =>
+      expect(candidateReviewState.calls).toContainEqual(
+        expect.objectContaining({
+          admission_status: "held",
+          review_flag: "MATERIAL_MAPPING_REQUIRED",
+          offset: 0,
+        }),
       ),
     );
   });
@@ -227,11 +281,12 @@ describe("PriceBookRoute", () => {
       </MemoryRouter>,
     );
     expect(screen.getAllByText("Drain clearing")).not.toHaveLength(0);
+    expect(screen.getByRole("region", { name: "Option set Service level" })).toHaveTextContent("Better · DRAIN-CLEAR · Drain clearing");
     expect(
       screen.queryByRole("button", { name: "Create category" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Activate version" }),
+      screen.queryByRole("button", { name: "Review activation" }),
     ).not.toBeInTheDocument();
   });
 
@@ -251,6 +306,9 @@ describe("PriceBookRoute", () => {
     expect(
       screen.queryByRole("button", { name: "Activate version" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Expected component quantity")).toBeVisible();
+    expect(screen.getByLabelText("Expected component unit cost")).toBeVisible();
+    expect(screen.getByText(/Expected fitting/)).toBeVisible();
     unmount();
     authState.permissionCodes = [
       "COMPANY_PRICE_BOOK_READ",
@@ -265,7 +323,7 @@ describe("PriceBookRoute", () => {
       screen.queryByRole("button", { name: "Create category" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Activate version" }),
+      screen.getByRole("button", { name: "Review activation" }),
     ).toBeVisible();
   });
 
@@ -295,7 +353,7 @@ describe("PriceBookRoute", () => {
       screen.getByRole("button", { name: "Create option group" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Activate version" }),
+      screen.getByRole("button", { name: "Review activation" }),
     ).toBeVisible();
     expect(screen.getByText("Standard service call")).toBeVisible();
     expect(screen.getByText(/not active/i)).toBeVisible();

@@ -59,10 +59,14 @@ export function PriceBookRoute() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [catalogOffset, setCatalogOffset] = useState(0);
+  const catalogPageSize = 50;
   const catalog = usePriceBook(branch || undefined, canRead, {
     search: search.trim() || undefined,
     categoryId: categoryFilter === "all" ? undefined : categoryFilter,
     itemStatus: statusFilter === "all" ? undefined : statusFilter,
+    limit: catalogPageSize,
+    offset: catalogOffset,
   });
   const mutations = usePriceBookMutations();
   const [category, setCategory] = useState({ code: "", name: "" });
@@ -103,12 +107,18 @@ export function PriceBookRoute() {
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [candidateOffset, setCandidateOffset] = useState(0);
   const candidatePageSize = 50;
+  const [candidateCategory, setCandidateCategory] = useState("");
+  const [candidateAdmission, setCandidateAdmission] = useState<"" | "admitted" | "held">("");
+  const [candidateReviewFlag, setCandidateReviewFlag] = useState("");
   const [reviewVersionId, setReviewVersionId] = useState<string>();
   const activationReadiness = useActivationReadiness(reviewVersionId);
   const reviewAudit = usePriceBookAudit(reviewVersionId);
   const candidateReview = useCandidateReview(
     {
       search: search.trim() || undefined,
+      category: candidateCategory.trim() || undefined,
+      admission_status: candidateAdmission || undefined,
+      review_flag: candidateReviewFlag || undefined,
       limit: candidatePageSize,
       offset: candidateOffset,
     },
@@ -572,6 +582,43 @@ export function PriceBookRoute() {
                     <div><strong>{candidateReview.data?.counts.material_mapping_required ?? 0}</strong><p className="text-sm text-content-muted">Need material mapping</p></div>
                     <div><strong>{candidateReview.data?.counts.activation_ready ?? 0}</strong><p className="text-sm text-content-muted">Activation ready</p></div>
                   </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Input
+                      aria-label="Filter candidate category"
+                      placeholder="Candidate category"
+                      value={candidateCategory}
+                      onChange={(event) => {
+                        setCandidateCategory(event.target.value);
+                        setCandidateOffset(0);
+                      }}
+                    />
+                    <Select
+                      aria-label="Filter candidate admission state"
+                      value={candidateAdmission}
+                      onChange={(event) => {
+                        setCandidateAdmission(event.target.value as "" | "admitted" | "held");
+                        setCandidateOffset(0);
+                      }}
+                    >
+                      <option value="">All candidate states</option>
+                      <option value="admitted">Draft — ready for review</option>
+                      <option value="held">Held — source conflict</option>
+                    </Select>
+                    <Select
+                      aria-label="Filter candidate review requirement"
+                      value={candidateReviewFlag}
+                      onChange={(event) => {
+                        setCandidateReviewFlag(event.target.value);
+                        setCandidateOffset(0);
+                      }}
+                    >
+                      <option value="">All review requirements</option>
+                      <option value="PRICE_EVIDENCE_REVIEW_REQUIRED">Price review required</option>
+                      <option value="TAX_REVIEW_REQUIRED">Tax review required</option>
+                      <option value="MATERIAL_MAPPING_REQUIRED">Material mapping required</option>
+                      <option value="SOURCE_CONFLICT">Source conflict</option>
+                    </Select>
+                  </div>
                   <div className="space-y-3" aria-label="All County candidate services">
                     {(candidateReview.data?.items ?? []).map((candidate) => (
                       <article
@@ -660,6 +707,7 @@ export function PriceBookRoute() {
                       {canApproveTax && !activationReadiness.data.tax_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "tax", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized finance reviewer approved the selected tax classification for this exact draft." })}>Approve tax classification</Button>}
                       {canManage && !activationReadiness.data.effective_date_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "effective-date", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the effective date shown for this exact draft." })}>Approve effective date</Button>}
                       {canActivate && !activationReadiness.data.activation_authorized && <Button disabled={!activationReadiness.data.price_approved || !activationReadiness.data.tax_approved || !activationReadiness.data.effective_date_approved} onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "activation-authorization", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized owner approved this exact draft for a later explicit activation command." })}>Authorize later activation</Button>}
+                      {canActivate && activationReadiness.data.activation_ready && <Button onClick={() => void performMutation(() => mutations.activate.mutateAsync({ id: reviewVersionId, version: activationReadiness.data!.draft_version }))}>Activate reviewed version</Button>}
                     </div>
                     <div>
                       <h3 className="font-semibold">Review and activation history</h3>
@@ -1042,6 +1090,31 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Expected component quantity"
+                      type="number"
+                      min="0.0001"
+                      step="0.0001"
+                      value={draft.componentQuantity}
+                      onChange={(e) =>
+                        setDraft({ ...draft, componentQuantity: e.target.value })
+                      }
+                      required
+                    />
+                    <Input
+                      aria-label="Expected component unit cost"
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      placeholder="Leave blank when cost evidence is unavailable"
+                      value={draft.componentCost}
+                      onChange={(e) =>
+                        setDraft({ ...draft, componentCost: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-content-muted">
+                      Expected inputs support planning only. They do not prove purchased or consumed materials, and missing cost is never treated as zero.
+                    </p>
                     <Button
                       fullWidth
                       type="submit"
@@ -1240,6 +1313,43 @@ export function PriceBookRoute() {
           )}
           <Card>
             <CardHeader>
+              <CardTitle>Customer option sets</CardTitle>
+              <CardDescription>
+                Good/Better/Best and other genuine alternatives connected to Price Book services.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {catalog.data?.option_groups.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {catalog.data.option_groups.map((group) => {
+                    const groupOptions = catalog.data?.options
+                      .filter((candidate) => candidate.option_group_id === group.id)
+                      .sort((left, right) => left.position - right.position) ?? [];
+                    return (
+                      <section key={group.id} className="rounded-lg border border-stroke p-4" aria-label={`Option set ${group.name}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div><p className="text-xs text-content-muted">{group.code}</p><h3 className="font-semibold">{group.name}</h3></div>
+                          <Badge variant={group.status === "active" ? "success" : "neutral"}>{group.status}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-content-muted">Choose at least {group.minimum_selections} and at most {group.maximum_selections}.</p>
+                        <ol className="mt-3 space-y-2">
+                          {groupOptions.map((choice) => {
+                            const service = catalog.data?.service_items.find((item) => item.id === choice.service_item_id);
+                            return <li key={choice.id} className="rounded-md bg-surface-muted p-3 text-sm"><strong>{choice.label}</strong><span className="text-content-muted"> · {service ? `${service.code} · ${service.name}` : "Connected service unavailable"}</span></li>;
+                          })}
+                        </ol>
+                        {groupOptions.length === 0 && <p className="mt-3 text-sm text-content-muted">No service choices are connected yet.</p>}
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-stroke p-4 text-sm text-content-muted">No customer option sets are configured.</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
               <CardTitle>Service prices</CardTitle>
               <CardDescription>
                 Search by customer language or service code. Activation remains
@@ -1255,12 +1365,16 @@ export function PriceBookRoute() {
                   onChange={(event) => {
                     setSearch(event.target.value);
                     setCandidateOffset(0);
+                    setCatalogOffset(0);
                   }}
                 />
                 <Select
                   aria-label="Filter Price Book category"
                   value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  onChange={(event) => {
+                    setCategoryFilter(event.target.value);
+                    setCatalogOffset(0);
+                  }}
                 >
                   <option value="all">All categories</option>
                   {catalog.data?.categories.map((category) => (
@@ -1272,7 +1386,10 @@ export function PriceBookRoute() {
                 <Select
                   aria-label="Filter Price Book status"
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setCatalogOffset(0);
+                  }}
                 >
                   <option value="all">All states</option>
                   <option value="draft">Draft</option>
@@ -1285,7 +1402,10 @@ export function PriceBookRoute() {
                 <Button
                   type="button"
                   variant={categoryFilter === "all" ? "primary" : "ghost"}
-                  onClick={() => setCategoryFilter("all")}
+                  onClick={() => {
+                    setCategoryFilter("all");
+                    setCatalogOffset(0);
+                  }}
                 >
                   All categories
                 </Button>
@@ -1294,14 +1414,17 @@ export function PriceBookRoute() {
                     key={category.id}
                     type="button"
                     variant={categoryFilter === category.id ? "primary" : "ghost"}
-                    onClick={() => setCategoryFilter(category.id)}
+                    onClick={() => {
+                      setCategoryFilter(category.id);
+                      setCatalogOffset(0);
+                    }}
                   >
                     {category.name}
                   </Button>
                 ))}
               </nav>
               <p className="mb-3 text-sm text-content-muted" aria-live="polite">
-                Showing {filteredServices.length} of {services.length} services.
+                Showing {catalog.data?.total_service_items ? catalogOffset + 1 : 0}–{Math.min(catalogOffset + services.length, catalog.data?.total_service_items ?? 0)} of {catalog.data?.total_service_items ?? 0} services.
               </p>
               {selectedService && (
                 <section
@@ -1437,6 +1560,16 @@ export function PriceBookRoute() {
                                   Expected direct cost {version.currency} {version.expected_direct_cost} · Expected direct contribution {version.currency} {version.expected_direct_contribution}
                                 </p>
                               )}
+                              {canManage && version.components.length > 0 && (
+                                <ul className="mt-2 space-y-1 text-xs text-content-muted" aria-label={`Expected inputs for revision ${version.revision}`}>
+                                  {version.components.map((component) => (
+                                    <li key={`${component.position}:${component.label}`}>
+                                      {component.component_type.replaceAll("_", " ")} · {component.label} · {component.quantity}
+                                      {component.unit_cost == null ? " · cost evidence missing" : ` × ${version.currency} ${component.unit_cost}`}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                               {version.status === "draft" && itemVersions.some((candidate) => candidate.status === "active") && (
                                 <p className="text-xs font-medium text-content-muted">
                                   Change from active: {version.currency} {(Number(version.unit_price) - Number(itemVersions.find((candidate) => candidate.status === "active")?.unit_price ?? 0)).toFixed(2)}
@@ -1444,18 +1577,7 @@ export function PriceBookRoute() {
                               )}
                             </div>
                             {canActivate && version.status === "draft" && (
-                              <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button><Button
-                                onClick={() =>
-                                  void performMutation(() =>
-                                    mutations.activate.mutateAsync({
-                                      id: version.id,
-                                      version: version.version,
-                                    }),
-                                  )
-                                }
-                              >
-                                Activate version
-                              </Button></div>
+                              <Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button>
                             )}
                           </div>
                         ))}
@@ -1464,6 +1586,24 @@ export function PriceBookRoute() {
                   );
                 })}
               </ul>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={catalogOffset === 0}
+                  onClick={() => setCatalogOffset((offset) => Math.max(0, offset - catalogPageSize))}
+                >
+                  Previous services
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={catalogOffset + services.length >= (catalog.data?.total_service_items ?? 0)}
+                  onClick={() => setCatalogOffset((offset) => offset + catalogPageSize)}
+                >
+                  Next services
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </>

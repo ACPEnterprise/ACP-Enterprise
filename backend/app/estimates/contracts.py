@@ -159,3 +159,4 @@ class EstimateRecord:
     version: int
     current_revision: EstimateRevisionRecord
     customer_decision: EstimateCustomerDecisionRecord | None
+    conversion: EstimateConversionRecord | None

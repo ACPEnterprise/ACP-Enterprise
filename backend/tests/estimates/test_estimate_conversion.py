@@ -17,6 +17,7 @@ from app.estimates.errors import (
     EstimateValidationError,
 )
 from app.estimates.models import EstimateJobConversion, EstimateRevision
+from app.estimates.repository import EstimateRepository
 from app.estimates.service import EstimateService
 from app.events.models import BusinessEvent
 from app.jobs.models import Job
@@ -107,6 +108,13 @@ async def test_approved_estimate_converts_once_with_snapshot_lineage(estimate_fi
         )
         assert event is not None
         assert event.payload["job_id"] == str(job.id)
+        reopened = await EstimateRepository.get(
+            session, company_id=company.id, estimate_id=record.id
+        )
+        assert reopened is not None
+        assert reopened.conversion is not None
+        assert reopened.conversion.job_id == job.id
+        assert reopened.conversion.job_number == "JOB-000001"
 
 
 @pytest.mark.asyncio

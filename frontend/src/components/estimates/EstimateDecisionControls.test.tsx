@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Estimate } from "../../types/estimates";
@@ -9,7 +10,14 @@ const estimate = {
   branch_id: "branch-1",
   status: "sent",
   version: 3,
-} as Estimate;
+  current_revision: {
+    proposal_title: "Proposal",
+    customer_message: null,
+    terms: null,
+    expires_at: null,
+    lines: [],
+  },
+} as unknown as Estimate;
 const mutations = (decisionError: unknown = null) => ({
   transition: {
     mutate: vi.fn(),
@@ -30,9 +38,95 @@ const mutations = (decisionError: unknown = null) => ({
     error: null,
     data: null,
   },
+  revise: {
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  },
 });
 
 describe("EstimateDecisionControls", () => {
+  it("creates an immutable presentation revision from sealed lines", () => {
+    const controls = mutations();
+    render(
+      <EstimateDecisionControls
+        estimate={{
+          ...estimate,
+          customer_id: "customer-1",
+          service_location_id: "location-1",
+          current_revision: {
+            proposal_title: "Original proposal",
+            customer_message: "Original message",
+            terms: "Original terms",
+            expires_at: null,
+            lines: [
+              {
+                snapshot_id: "snapshot-1",
+                title: "Drain service",
+                description: "Clear the drain",
+              },
+            ],
+          },
+        } as Estimate}
+        mutations={controls as never}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Revise customer presentation" }));
+    fireEvent.change(screen.getByLabelText("Proposal title"), {
+      target: { value: "Updated proposal" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create revised Draft" }));
+
+    expect(controls.revise.mutate).toHaveBeenCalledWith({
+      id: "estimate-1",
+      input: expect.objectContaining({
+        expected_version: 3,
+        proposal_title: "Updated proposal",
+        lines: [
+          {
+            snapshot_id: "snapshot-1",
+            title: "Drain service",
+            description: "Clear the drain",
+          },
+        ],
+      }),
+    });
+  });
+
+  it("shows persistent Job lineage and does not offer duplicate conversion", () => {
+    const controls = mutations();
+    render(
+      <MemoryRouter>
+        <EstimateDecisionControls
+          estimate={{
+            ...estimate,
+            status: "approved",
+            service_location_id: "location-1",
+            conversion: {
+              id: "conversion-1",
+              estimate_id: "estimate-1",
+              estimate_revision_id: "revision-1",
+              job_id: "job-1",
+              job_number: "JOB-000001",
+              snapshot_lineage_digest: "a".repeat(64),
+              converted_at: "2026-09-16T12:00:00Z",
+            },
+          } as Estimate}
+          mutations={controls as never}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "JOB-000001" })).toHaveAttribute(
+      "href",
+      "/jobs/job-1",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Convert approved Estimate to Job" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("binds a viewed transition to current branch and version", () => {
     const controls = mutations();
     render(

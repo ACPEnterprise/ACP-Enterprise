@@ -1391,6 +1391,7 @@ function AppointmentPanel({
     appointment.expected_duration_minutes ?? 60,
   );
   const [confirmMove, setConfirmMove] = useState(false);
+  const canReschedule = ["scheduled", "confirmed"].includes(appointment.status);
   const validWindow = Boolean(start && end && new Date(end) > new Date(start));
   const requestMove = (event: FormEvent) => {
     event.preventDefault();
@@ -1482,7 +1483,12 @@ function AppointmentPanel({
           Open Customer
         </Link>
       </div>
-      {canManage && appointment.status !== "cancelled" && (
+      {canManage && !canReschedule && (
+        <Alert className="mt-5" variant="warning" title="Appointment cannot be moved">
+          This Appointment is {appointment.status.replaceAll("_", " ")}. Only scheduled or confirmed Appointments can be rescheduled; its history remains available from Appointment detail.
+        </Alert>
+      )}
+      {canManage && canReschedule && (
         <form
           className="mt-5 space-y-3 border-t border-stroke pt-4"
           onSubmit={requestMove}
