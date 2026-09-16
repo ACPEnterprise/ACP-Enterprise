@@ -178,3 +178,20 @@ required escalation.
   Mobile `139 passed`, typecheck, lint, config validation, and iOS/Android
   Expo exports passed. Unsigned Xcode simulator Release remains blocked by
   missing generated CocoaPods `Pods-ACPEmployee.release.xcconfig`.
+
+## Maximum 2 currentness refresh
+
+- Protected authority advanced through OM2/OM1 operational integrations to
+  `9dbdea7933a69ea8b147a63ed6cc6437d5401825`. The Intelligence branch was
+  rebased onto it and its prior qualified content preserved. No protected
+  branch or operational source-domain implementation was modified.
+- Current worker heads: Laptop-A `cccfc26991f5c94f2f8f4edcd35d081168118c78`;
+  Laptop-B `825eb42f89071aad47366a04d5bae6945668a9dc`; Phone/C
+  `298ba14f87674ed463772de960c70a57ddefe5b0`. A remains contained; B’s
+  duplicate cumulative patches were skipped by patch identity while new
+  presentation protections were retained; Phone/C’s malformed-time patches
+  were retained.
+- The final subsequent protected refresh was
+  `e4947b66f5ef3bb6f6e095fd42d29ce14fa650d2` before the latest OM2 scheduling
+  and dispatch authority, with no Intelligence file overlap. Final fetch
+  currentness is recorded in the release handoff.
