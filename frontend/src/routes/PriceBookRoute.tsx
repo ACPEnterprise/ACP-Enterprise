@@ -119,6 +119,7 @@ export function PriceBookRoute() {
     quantity: string;
     unit_cost?: string;
   }>>([]);
+  const [editDraft, setEditDraft] = useState<{ id: string; version: number } | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [candidateOffset, setCandidateOffset] = useState(0);
   const candidatePageSize = 50;
@@ -298,7 +299,19 @@ export function PriceBookRoute() {
         }]
       : [];
     await performMutation(() =>
-      mutations.version.mutateAsync({
+      editDraft
+        ? mutations.versionUpdate.mutateAsync({
+            versionId: editDraft.id,
+            data: {
+              expected_version: editDraft.version,
+              tax_classification_id: draft.taxId,
+              currency: "USD",
+              unit_price: draft.price,
+              effective_at: new Date(draft.effective).toISOString(),
+              components: [...draftComponents, ...pendingComponent],
+            },
+          })
+        : mutations.version.mutateAsync({
         itemId: draft.itemId,
         data: {
           branch_id: branch || undefined,
@@ -308,8 +321,11 @@ export function PriceBookRoute() {
           effective_at: new Date(draft.effective).toISOString(),
           components: [...draftComponents, ...pendingComponent],
         },
-      }),
-      () => setDraftComponents([]),
+          }),
+      () => {
+        setDraftComponents([]);
+        setEditDraft(null);
+      },
     );
   };
   const saveVisibleReview = async () => {
@@ -1119,7 +1135,7 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>Draft price version</CardTitle>
+                  <CardTitle>{editDraft ? "Edit draft price version" : "Draft price version"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form
@@ -1263,10 +1279,15 @@ export function PriceBookRoute() {
                     <Button
                       fullWidth
                       type="submit"
-                      loading={mutations.version.isPending}
+                      loading={mutations.version.isPending || mutations.versionUpdate.isPending}
                     >
-                      Create draft
+                      {editDraft ? "Save draft price version" : "Create draft"}
                     </Button>
+                    {editDraft && (
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditDraft(null); setDraftComponents([]); }}>
+                        Cancel draft edit
+                      </Button>
+                    )}
                   </form>
                 </CardContent>
               </Card>
@@ -1723,6 +1744,50 @@ export function PriceBookRoute() {
                             </div>
                             {canActivate && version.status === "draft" && (
                               <Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button>
+                            )}
+                            {canManage && version.status === "draft" && (
+                              <Button
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditDraft({ id: version.id, version: version.version });
+                                  setDraft({
+                                    itemId: version.service_item_id,
+                                    taxId: version.tax_classification_id,
+                                    price: version.unit_price,
+                                    effective: version.effective_at.slice(0, 16),
+                                    componentType: "labor",
+                                    componentLabel: "",
+                                    componentQuantity: "1",
+                                    componentCost: "",
+                                  });
+                                  setDraftComponents(version.components.map((component) => ({
+                                    component_type: component.component_type,
+                                    label: component.label,
+                                    quantity: component.quantity,
+                                    unit_cost: component.unit_cost,
+                                  })));
+                                }}
+                              >
+                                Edit draft price
+                              </Button>
+                            )}
+                            {canActivate && version.status === "active" && (
+                              <Button
+                                variant="ghost"
+                                loading={mutations.versionLifecycle.isPending}
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "inactivate", expectedVersion: version.version })}
+                              >
+                                Inactivate price version
+                              </Button>
+                            )}
+                            {canActivate && version.status === "inactive" && (
+                              <Button
+                                variant="ghost"
+                                loading={mutations.versionLifecycle.isPending}
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "archive", expectedVersion: version.version })}
+                              >
+                                Archive price version
+                              </Button>
                             )}
                           </div>
                         ))}

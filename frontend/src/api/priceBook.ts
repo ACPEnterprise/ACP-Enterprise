@@ -191,6 +191,37 @@ export async function activatePriceVersion(
     )
   ).data;
 }
+export async function updateDraftPriceVersion(
+  versionId: string,
+  data: {
+    expected_version: number;
+    tax_classification_id: string;
+    currency: string;
+    unit_price: string;
+    effective_at: string;
+    components: Array<{
+      component_type: "labor" | "material" | "other_direct";
+      code?: string;
+      label: string;
+      quantity: string;
+      unit_cost?: string;
+    }>;
+  },
+): Promise<PriceBookVersion> {
+  return (await apiClient.put<PriceBookVersion>(`${path}/versions/${versionId}/draft`, data)).data;
+}
+export async function transitionPriceVersion(
+  versionId: string,
+  action: "inactivate" | "archive",
+  expectedVersion: number,
+): Promise<PriceBookVersion> {
+  return (
+    await apiClient.post<PriceBookVersion>(`${path}/versions/${versionId}/${action}`, {
+      expected_version: expectedVersion,
+      reason: `Owner explicitly requested ${action} through Price Book maintenance.`,
+    })
+  ).data;
+}
 export async function createOptionGroup(data: {
   code: string;
   name: string;
