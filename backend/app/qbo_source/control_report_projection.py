@@ -52,11 +52,19 @@ def discover_registered_control_reports(
 
 
 def project_registered_general_ledger_period(
-    *, evidence_root: Path, start_date: date, end_date: date, basis: str = "accrual"
+    *,
+    evidence_root: Path,
+    start_date: date,
+    end_date: date,
+    basis: str = "accrual",
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict[str, object]:
     """Summarize an exact date range from a sealed registered General Ledger."""
     if start_date > end_date:
         raise ValueError("start_date must not follow end_date")
+    if not 1 <= limit <= 100 or offset < 0:
+        raise ValueError("bounded ledger pagination is required")
     reports = discover_registered_control_reports(evidence_root=evidence_root)
     candidates = [
         report
@@ -75,7 +83,13 @@ def project_registered_general_ledger_period(
         / "raw"
         / f"{raw_sha256}.xlsx"
     )
-    metrics = _period_metrics(workbook_path, start_date=start_date, end_date=end_date)
+    metrics = _period_metrics(
+        workbook_path,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        offset=offset,
+    )
     return {
         "contract_version": "qbo-source-backed-ledger-period/v1",
         "source": "quickbooks_online",
@@ -99,7 +113,9 @@ def project_registered_general_ledger_period(
     }
 
 
-def _period_metrics(path: Path, *, start_date: date, end_date: date) -> dict[str, object]:
+def _period_metrics(
+    path: Path, *, start_date: date, end_date: date, limit: int, offset: int
+) -> dict[str, object]:
     try:
         with ZipFile(path) as workbook:
             rows = _sheet_rows(workbook, _shared_strings(workbook))
@@ -118,6 +134,7 @@ def _period_metrics(path: Path, *, start_date: date, end_date: date) -> dict[str
     numbers: set[str] = set()
     total = Decimal(0)
     count = 0
+    detail: list[dict[str, str | None]] = []
     for row in rows:
         transaction_date = _date(row.get(columns["Transaction date"], ""))
         account = row.get(columns["Distribution account"], "")
@@ -139,6 +156,21 @@ def _period_metrics(path: Path, *, start_date: date, end_date: date) -> dict[str
             names.add(row[columns["Name"]])
         if "Num" in columns and row.get(columns["Num"], ""):
             numbers.add(row[columns["Num"]])
+        detail.append(
+            {
+                "date": transaction_date.isoformat(),
+                "account": account,
+                "transaction_type": row.get(columns["Transaction type"], "")
+                or "UNSPECIFIED",
+                "counterparty": row.get(columns.get("Name", -1), "") or None,
+                "transaction_number": row.get(columns.get("Num", -1), "") or None,
+                "description": row.get(
+                    columns.get("Memo/Description", columns.get("Memo", -1)), ""
+                )
+                or None,
+                "amount": str(amount),
+            }
+        )
     return {
         "ledger_row_count": count,
         "distribution_account_count": len(accounts),
@@ -146,6 +178,10 @@ def _period_metrics(path: Path, *, start_date: date, end_date: date) -> dict[str
         "transaction_number_count": len(numbers),
         "transaction_type_counts": dict(sorted(types.items())),
         "source_reported_row_amount_sum": str(total),
+        "total_count": count,
+        "limit": limit,
+        "offset": offset,
+        "rows": detail[offset : offset + limit],
     }
 
 
@@ -182,12 +218,16 @@ def main() -> None:
     parser.add_argument("--start-date", required=True, type=date.fromisoformat)
     parser.add_argument("--end-date", required=True, type=date.fromisoformat)
     parser.add_argument("--basis", choices=("cash", "accrual"), default="accrual")
+    parser.add_argument("--limit", type=int, default=50)
+    parser.add_argument("--offset", type=int, default=0)
     arguments = parser.parse_args()
     result = project_registered_general_ledger_period(
         evidence_root=arguments.evidence_root,
         start_date=arguments.start_date,
         end_date=arguments.end_date,
         basis=arguments.basis,
+        limit=arguments.limit,
+        offset=arguments.offset,
     )
     print(json.dumps(result, sort_keys=True))
 

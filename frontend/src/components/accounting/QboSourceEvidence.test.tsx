@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useQboAccountingEvidence,
   useQboSourceBackedArSummary,
+  useQboSourceBackedGeneralLedger,
   useQboSourceBackedProfitAndLoss,
 } from "../../hooks/useQboAccountingEvidence";
 import { QboSourceEvidence } from "./QboSourceEvidence";
@@ -10,6 +11,7 @@ import { QboSourceEvidence } from "./QboSourceEvidence";
 vi.mock("../../hooks/useQboAccountingEvidence", () => ({
   useQboAccountingEvidence: vi.fn(),
   useQboSourceBackedArSummary: vi.fn(),
+  useQboSourceBackedGeneralLedger: vi.fn(),
   useQboSourceBackedProfitAndLoss: vi.fn(),
 }));
 
@@ -24,6 +26,9 @@ const value = {
   mode: "historical" as const,
   provider_environment: "historical_control" as const,
   company_identity_sha256: "c".repeat(64),
+  realm_company_identity: "c".repeat(64),
+  source_company_label: "All County Plumbing and Leak Detection",
+  source_company_id_masked: "…1234",
   company_info_verified_at: "2026-09-10T11:59:00Z",
   source_manifest_sha256: "d".repeat(64),
   completeness: "partial" as const,
@@ -31,15 +36,28 @@ const value = {
   as_of: "2026-09-10T12:00:00Z",
   acquired_at: "2026-09-10T12:05:00Z",
   refresh_state: "stale" as const,
+  provider_authorization: "unverified" as const,
+  evidence_mode: "historical_snapshot" as const,
+  entity_counts: { account: 1, invoice: 0, payment: 0 },
+  page_counts: { account: 1 },
+  catalog_dispositions: [
+    {
+      entity_kind: "time_activity",
+      disposition: "PROVIDER_FAMILY_UNAVAILABLE",
+    },
+  ],
   snapshot_id: "snapshot-1",
   snapshot_digest: "a".repeat(64),
   limitations: ["HCP reconciliation remains separate."],
   accounts: [
     {
       source_id: "1",
+      account_number: "1010",
       name: "Checking",
+      fully_qualified_name: "Assets:Checking",
       account_type: "Bank",
       account_subtype: null,
+      active: true,
       balance: unavailable,
     },
   ],
@@ -70,9 +88,13 @@ const value = {
   reports: [
     {
       report_key: "balance-sheet",
+      report_type: "balance_sheet",
       label: "Balance Sheet",
       basis: "cash" as const,
+      start_date: null,
       as_of: "2026-09-10T12:00:00Z",
+      acquired_at: "2026-09-10T12:05:00Z",
+      source_digest: "f".repeat(64),
       state: "available" as const,
       limitation: null,
     },
@@ -82,6 +104,11 @@ const value = {
 
 describe("QboSourceEvidence", () => {
   beforeEach(() => {
+    vi.mocked(useQboSourceBackedGeneralLedger).mockReturnValue({
+      isPending: false,
+      isError: true,
+      data: undefined,
+    } as unknown as ReturnType<typeof useQboSourceBackedGeneralLedger>);
     vi.mocked(useQboSourceBackedArSummary).mockReturnValue({
       isLoading: false,
       data: undefined,
@@ -123,13 +150,13 @@ describe("QboSourceEvidence", () => {
       screen.getByText(/sealed snapshot, not live synchronization/i),
     ).toBeVisible();
     expect(
-      screen.getByText(/not posted ACP General Ledger truth/i),
-    ).toBeVisible();
+      screen.getAllByText(/not posted ACP General Ledger truth/i).length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
     expect(
       screen.getByText(/HCP reconciliation remains separate/i),
-    ).toBeVisible();
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/QBO, HCP, and ACP assertions remain separate/i),
     ).toBeVisible();
@@ -140,6 +167,16 @@ describe("QboSourceEvidence", () => {
       screen.getByText(/Production realm 9130357972400696/i),
     ).toBeVisible();
     expect(screen.getByText(/accepted as ACP Accounting: no/i)).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "QuickBooks Source Center" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("All County Plumbing and Leak Detection"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("General Ledger", { selector: "strong" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Search source accounts")).toBeVisible();
   });
 
   it("keeps cash and accrual requests explicit", () => {

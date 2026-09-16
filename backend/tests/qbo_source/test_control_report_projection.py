@@ -92,8 +92,28 @@ def test_discovers_and_projects_bounded_source_only_period(tmp_path: Path) -> No
     assert result["ledger_row_count"] == 2
     assert result["transaction_type_counts"] == {"Invoice": 1, "Payment": 1}
     assert result["source_reported_row_amount_sum"] == "100.00"
+    assert result["total_count"] == 2
+    assert result["rows"][0] == {
+        "date": "2026-05-01",
+        "account": "Sales",
+        "transaction_type": "Invoice",
+        "counterparty": "Customer A",
+        "transaction_number": "100",
+        "description": None,
+        "amount": "125.50",
+    }
     assert result["accepted_as_acp_accounting"] is False
     assert result["mutation_authority"] == "none"
+
+    second_page = project_registered_general_ledger_period(
+        evidence_root=root,
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 5, 31),
+        limit=1,
+        offset=1,
+    )
+    assert second_page["total_count"] == 2
+    assert second_page["rows"][0]["transaction_type"] == "Payment"
 
 
 def test_rejects_changed_raw_report(tmp_path: Path) -> None:

@@ -128,11 +128,7 @@ def project_latest_qbo_workspace(
     catalog_dispositions = _catalog_dispositions(
         manifest.get("catalog_dispositions", [])
     )
-    reports, incompatible_report_date = _report_controls(
-        root, basis, as_of=_text(snapshot.get("accounting_date_cutoff"))
-    )
-    if incompatible_report_date:
-        limitations.add("incompatible_report_date_excluded")
+    reports = _report_controls(root, basis)
     company_identity = _company_identity_sha256(snapshot, company)
     refresh_state = (
         "available"
@@ -352,9 +348,12 @@ def _account(row: Mapping[str, object]) -> dict[str, object]:
     currency = _currency(row)
     return {
         "source_id": _required_id(row),
+        "account_number": _text(row.get("AcctNum")),
         "name": _text(row.get("Name")) or "Unnamed source account",
+        "fully_qualified_name": _text(row.get("FullyQualifiedName")),
         "account_type": _text(row.get("AccountType")) or "unclassified",
         "account_subtype": _text(row.get("AccountSubType")),
+        "active": row.get("Active") if isinstance(row.get("Active"), bool) else None,
         "balance": _amount(row.get("CurrentBalance"), currency),
     }
 
@@ -418,33 +417,37 @@ def _bill(row: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def _report_controls(
-    root: Path, basis: Basis, *, as_of: str | None
-) -> tuple[list[dict[str, object]], bool]:
+def _report_controls(root: Path, basis: Basis) -> list[dict[str, object]]:
     reports = []
-    incompatible_date = False
     for path in sorted((root / "controls").glob("*.json")):
         control = _read_json(path)
         control_basis = str(control.get("accounting_basis", "")).lower()
         if control.get("schema_version") != "qbo-control-registration/v1":
             continue
-        if control_basis == basis and control.get("report_end_date") != as_of:
-            incompatible_date = True
-            continue
         if control_basis == basis:
+            parameters = control.get("safe_report_parameters")
+            start_date = (
+                parameters.get("start_date")
+                if isinstance(parameters, Mapping)
+                else None
+            )
             reports.append(
                 {
                     "report_key": control.get("control_id"),
+                    "report_type": control.get("kind"),
                     "label": str(control.get("kind", "source_report"))
                     .replace("_", " ")
                     .title(),
                     "basis": control_basis,
+                    "start_date": start_date,
                     "as_of": control.get("report_end_date"),
+                    "acquired_at": control.get("generated_at"),
+                    "source_digest": control.get("raw_sha256"),
                     "state": "available",
                     "limitation": "registered_source_report_not_posted_acp_ledger",
                 }
             )
-    return reports, incompatible_date
+    return reports
 
 
 def _sum_amounts(rows: list[dict[str, object]], field: str) -> dict[str, object]:

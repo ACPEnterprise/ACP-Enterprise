@@ -9,9 +9,12 @@ export interface QboAmount {
 }
 export interface QboAccountEvidence {
   source_id: string;
+  account_number: string | null;
   name: string;
+  fully_qualified_name: string | null;
   account_type: string;
   account_subtype: string | null;
+  active: boolean | null;
   balance: QboAmount;
 }
 export interface QboInvoiceEvidence {
@@ -57,9 +60,13 @@ export interface QboPaymentEvidence {
 }
 export interface QboReportEvidence {
   report_key: string;
+  report_type: string;
   label: string;
   basis: "cash" | "accrual" | null;
   as_of: string | null;
+  start_date: string | null;
+  acquired_at: string | null;
+  source_digest: string | null;
   state: QboEvidenceState;
   limitation: string | null;
 }
@@ -69,6 +76,9 @@ export interface QboAccountingEvidenceWorkspace {
   mode: "live" | "historical" | "blocked";
   provider_environment: "production" | "historical_control";
   company_identity_sha256: string | null;
+  realm_company_identity: string | null;
+  source_company_label: string;
+  source_company_id_masked: string;
   company_info_verified_at: string | null;
   source_manifest_sha256: string | null;
   completeness: "complete" | "partial" | "unavailable";
@@ -76,6 +86,19 @@ export interface QboAccountingEvidenceWorkspace {
   as_of: string | null;
   acquired_at: string | null;
   refresh_state: QboEvidenceState;
+  provider_authorization: "verified_current" | "unverified";
+  evidence_mode:
+    "current_authorized_snapshot" | "historical_snapshot" | "unavailable";
+  entity_counts: Record<string, number>;
+  page_counts: Record<string, number>;
+  catalog_dispositions: Array<{
+    entity_kind: string;
+    requirement?: string;
+    disposition?: string;
+    provider_status_classification?: string;
+    error_classification?: string;
+    observed_at?: string;
+  }>;
   snapshot_id: string | null;
   snapshot_digest: string | null;
   limitations: string[];
@@ -141,6 +164,32 @@ export interface QboSourceBackedArSummary {
   mutation_authority: "none";
 }
 
+export interface QboSourceBackedGeneralLedger {
+  contract_version: "qbo-source-backed-ledger-period/v1";
+  source: "quickbooks_online";
+  authority: "qbo_source_reported";
+  accepted_as_acp_accounting: false;
+  mutation_authority: "none";
+  control_id: string;
+  registration_sha256: string;
+  raw_sha256: string;
+  accounting_basis: "cash" | "accrual";
+  period: { start_date: string; end_date: string };
+  limitations: string[];
+  total_count: number;
+  limit: number;
+  offset: number;
+  rows: Array<{
+    date: string;
+    account: string;
+    transaction_type: string;
+    counterparty: string | null;
+    transaction_number: string | null;
+    description: string | null;
+    amount: string;
+  }>;
+}
+
 export async function getQboAccountingEvidence(
   basis: "cash" | "accrual",
 ): Promise<QboAccountingEvidenceWorkspace> {
@@ -178,6 +227,29 @@ export async function getQboSourceBackedArSummary(
     await apiClient.get<QboSourceBackedArSummary>(
       "/api/v1/accounting/source-evidence/qbo/reports/aged-receivables",
       { params: { report_date: reportDate } },
+    )
+  ).data;
+}
+
+export async function getQboSourceBackedGeneralLedger(request: {
+  startDate: string;
+  endDate: string;
+  basis: "cash" | "accrual";
+  limit: number;
+  offset: number;
+}): Promise<QboSourceBackedGeneralLedger> {
+  return (
+    await apiClient.get<QboSourceBackedGeneralLedger>(
+      "/api/v1/accounting/source-evidence/qbo/reports/general-ledger",
+      {
+        params: {
+          start_date: request.startDate,
+          end_date: request.endDate,
+          basis: request.basis,
+          limit: request.limit,
+          offset: request.offset,
+        },
+      },
     )
   ).data;
 }

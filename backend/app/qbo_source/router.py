@@ -25,6 +25,8 @@ from .accounting_evidence_projection import (
     unavailable_qbo_workspace,
 )
 from .callback import CALLBACK_PATH
+from .control_report_projection import project_registered_general_ledger_period
+from .evidence import EvidenceStoreError
 from .intuit import IntuitAuthenticationError, IntuitError, IntuitProtocolError
 from .production import (
     ProductionAgedReceivablesRequest,
@@ -64,6 +66,9 @@ ACCOUNTING_EVIDENCE_PATH = "/api/v1/accounting/source-evidence/qbo"
 PROFIT_AND_LOSS_PATH = "/api/v1/accounting/source-evidence/qbo/reports/profit-and-loss"
 AGED_RECEIVABLES_PATH = (
     "/api/v1/accounting/source-evidence/qbo/reports/aged-receivables"
+)
+GENERAL_LEDGER_EVIDENCE_PATH = (
+    "/api/v1/accounting/source-evidence/qbo/reports/general-ledger"
 )
 _PRODUCTION_CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com"
@@ -163,6 +168,59 @@ async def qbo_source_backed_profit_and_loss(
         )
     return JSONResponse(
         content=workspace, headers={"Cache-Control": "private, no-store"}
+    )
+
+
+@router.get(GENERAL_LEDGER_EVIDENCE_PATH, name="qbo-source-backed-general-ledger")
+async def qbo_source_backed_general_ledger(
+    start_date: date,
+    end_date: date,
+    basis: Basis,
+    authorization: _ReportRead,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> JSONResponse:
+    """Project a bounded period from digest-verified sealed QBO GL evidence."""
+    if (
+        not settings.qbo_production_acp_company_id
+        or settings.qbo_production_acp_company_id != authorization.company.id
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "QBO General Ledger evidence is not available."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    if start_date > end_date:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": "Report start date must not follow end date."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    if not settings.qbo_production_evidence_root:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Sealed QBO General Ledger evidence is unavailable."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        result = project_registered_general_ledger_period(
+            evidence_root=Path(settings.qbo_production_evidence_root),
+            start_date=start_date,
+            end_date=end_date,
+            basis=basis,
+            limit=limit,
+            offset=offset,
+        )
+    except (OSError, ValueError, EvidenceStoreError):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": "No sealed QBO General Ledger covers the requested period and basis."
+            },
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return JSONResponse(
+        content=result, headers={"Cache-Control": "private, no-store"}
     )
 
 

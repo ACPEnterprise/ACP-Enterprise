@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.qbo_source.accounting_evidence_projection import (
     QboEvidenceProjectionError,
     project_latest_qbo_workspace,
@@ -367,7 +366,7 @@ def test_projection_uses_only_bounded_included_entities(tmp_path: Path) -> None:
     assert [row["source_id"] for row in result["invoices"]] == ["i-1"]
 
 
-def test_report_control_with_incompatible_date_is_not_composed(
+def test_report_history_preserves_controls_from_prior_dates(
     tmp_path: Path,
 ) -> None:
     root, runtime = _evidence_root(tmp_path)
@@ -386,5 +385,9 @@ def test_report_control_with_incompatible_date_is_not_composed(
         evidence_root=root, runtime_root=runtime, basis="cash"
     )
 
-    assert [report["report_key"] for report in result["reports"]] == ["p-and-l"]
-    assert "incompatible_report_date_excluded" in result["limitations"]
+    assert [report["report_key"] for report in result["reports"]] == [
+        "older-cash-report",
+        "p-and-l",
+    ]
+    assert result["reports"][0]["as_of"] == "2026-08-31"
+    assert result["reports"][0]["report_type"] == "profit_and_loss"
