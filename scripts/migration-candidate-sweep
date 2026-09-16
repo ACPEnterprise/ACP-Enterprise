@@ -44,7 +44,20 @@ def git(root: Path, *arguments: str) -> str:
 
 
 def report_for_ref(root: Path, ref: str, module: object) -> dict[str, object]:
-    if git(root, "rev-parse", ref) == git(root, "rev-parse", "HEAD"):
+    migration_delta = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--quiet",
+            ref,
+            "HEAD",
+            "--",
+            "backend/alembic/versions",
+        ],
+        cwd=root,
+        check=False,
+    )
+    if migration_delta.returncode == 0:
         return module.build_report(  # type: ignore[attr-defined,no-any-return]
             root, root / "backend/alembic/versions"
         )
