@@ -34,7 +34,7 @@ def _canonical_digest(value: object) -> str:
 def _load(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_bytes())
     if not isinstance(value, dict):
-        raise ValueError(f"expected JSON object: {path}")
+        raise TypeError(f"expected JSON object: {path}")
     return value
 
 
@@ -123,8 +123,8 @@ def build_readiness(*, source_root: Path) -> dict[str, object]:
     seen_appointments: set[str] = set()
     for artifact in relationships["artifacts"]:
         job_hash = artifact["job_identity_sha256"]
-        job = jobs_by_hash.get(job_hash)
-        if job is None:
+        relationship_job = jobs_by_hash.get(job_hash)
+        if relationship_job is None:
             raise ValueError("Appointment relationship references unknown Job")
         effective_digest = artifact.get("effective_retry_sha256")
         effective_status = 200 if effective_digest else artifact["http_status"]
@@ -141,8 +141,8 @@ def build_readiness(*, source_root: Path) -> dict[str, object]:
             if appointments
             else "AUTHORITATIVE_EMPTY_RELATIONSHIP"
         ] += 1
-        customer_id = (job.get("customer") or {}).get("id")
-        location_id = (job.get("address") or {}).get("id")
+        customer_id = (relationship_job.get("customer") or {}).get("id")
+        location_id = (relationship_job.get("address") or {}).get("id")
         for appointment in appointments:
             source_id = appointment.get("id")
             if not source_id or source_id in seen_appointments:
@@ -159,7 +159,7 @@ def build_readiness(*, source_root: Path) -> dict[str, object]:
             appointment_records.append(
                 {
                     "source_appointment_id": source_id,
-                    "source_job_id": job["id"],
+                    "source_job_id": relationship_job["id"],
                     "source_customer_id": customer_id,
                     "source_location_id": location_id,
                     "start_time": appointment.get("start_time"),

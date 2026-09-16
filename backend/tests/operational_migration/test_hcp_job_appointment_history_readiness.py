@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.operational_migration.hcp_job_appointment_history_readiness import (
     build_readiness,
 )
