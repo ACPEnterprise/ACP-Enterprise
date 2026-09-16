@@ -60,6 +60,14 @@ class ProductionAgedReceivablesRequest:
     report_date: date
 
 
+@dataclass(frozen=True)
+class ProductionFinancialReportRequest:
+    report_name: str
+    start_date: date
+    end_date: date
+    accounting_method: str
+
+
 async def read_production_profit_and_loss(
     request: ProductionProfitAndLossRequest,
     configuration: Settings = settings,
@@ -165,6 +173,65 @@ async def read_production_aged_receivables(
     try:
         report = await adapter.read_aged_receivables(
             report_date=request.report_date,
+            minor_version=configuration.qbo_production_api_minor_version,
+        )
+        return report, marker
+    finally:
+        await transport.client.aclose()
+
+
+async def read_production_financial_report(
+    request: ProductionFinancialReportRequest,
+    configuration: Settings = settings,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Run one allowlisted GET-only financial report read."""
+    if not configuration.qbo_production_enabled:
+        raise SandboxRuntimeError("production_report_read_disabled")
+    root = _production_runtime_root(configuration)
+    repository = Path(configuration.qbo_repository_root).resolve()
+    provider = ProtectedProductionSecretProvider(
+        root=root / "secrets", repository_root=repository
+    )
+    registry = SandboxConnectionRegistry(root / "connections", environment="production")
+    marker = _read_verified_marker(registry)
+    expected_name = ProtectedSandboxCompanyBinding(root / "configuration").read()
+    realm_id = marker.get("realm_id")
+    if (
+        not isinstance(realm_id, str)
+        or not realm_id
+        or marker.get("company_name") != expected_name
+        or marker.get("acquisition_eligible") is not True
+        or marker.get("api_minor_version")
+        != configuration.qbo_production_api_minor_version
+    ):
+        raise SandboxRuntimeError("production_company_not_verified")
+    transport = IntuitHttpTransport()
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.PRODUCTION,
+        transport=transport,
+        secrets=provider,
+        credential_reference=provider.CLIENT_REFERENCE,
+    )
+    binding = RealmBinding(
+        environment=IntuitEnvironment.PRODUCTION,
+        realm_id=realm_id,
+        expected_company_name=expected_name,
+        credential_reference=provider.CLIENT_REFERENCE,
+        token_reference=provider.TOKEN_REFERENCE,
+    )
+    adapter = IntuitReadOnlyAdapter(
+        binding=binding,
+        token_manager=SerializedTokenManager(
+            oauth=oauth, secrets=provider, binding=binding
+        ),
+        transport=transport,
+    )
+    try:
+        report = await adapter.read_financial_report(
+            report_name=request.report_name,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            accounting_method=request.accounting_method,
             minor_version=configuration.qbo_production_api_minor_version,
         )
         return report, marker

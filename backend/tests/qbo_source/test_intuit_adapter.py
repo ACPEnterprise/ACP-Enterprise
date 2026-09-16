@@ -8,7 +8,6 @@ from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
-
 from app.qbo_source.contracts import AcquisitionRequest, EntityKind, SnapshotIdentity
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
@@ -639,6 +638,66 @@ async def test_company_mismatch_fails_before_entity_query() -> None:
             )
         ]
     assert len(transport.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_allowlisted_financial_report_is_get_only_and_exactly_scoped() -> None:
+    clock = FakeClock()
+    secrets = FakeSecrets(token(clock))
+    document = {
+        "Header": {
+            "ReportName": "GeneralLedger",
+            "StartPeriod": "2026-05-01",
+            "EndPeriod": "2026-05-31",
+            "ReportBasis": "Cash",
+        },
+        "Rows": {"Row": []},
+    }
+    transport = SequenceTransport(
+        [
+            response(
+                200,
+                {
+                    "CompanyInfo": {
+                        "Id": "synthetic-realm",
+                        "CompanyName": "Synthetic Plumbing Sandbox",
+                    }
+                },
+            ),
+            response(200, document),
+        ]
+    )
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.SANDBOX,
+        transport=transport,
+        secrets=secrets,
+        credential_reference="secret://synthetic/client",
+        clock=clock,
+    )
+    adapter = IntuitReadOnlyAdapter(
+        binding=binding(),
+        token_manager=SerializedTokenManager(
+            oauth=oauth, secrets=secrets, binding=binding(), clock=clock
+        ),
+        transport=transport,
+        clock=clock,
+    )
+
+    result = await adapter.read_financial_report(
+        report_name="GeneralLedger",
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 5, 31),
+        accounting_method="cash",
+        minor_version=75,
+    )
+
+    assert result == document
+    assert all(item["method"] == "GET" for item in transport.requests)
+    report_url = str(transport.requests[-1]["url"])
+    assert "/reports/GeneralLedger?" in report_url
+    assert "start_date=2026-05-01" in report_url
+    assert "end_date=2026-05-31" in report_url
+    assert "accounting_method=Cash" in report_url
 
 
 @pytest.mark.asyncio
