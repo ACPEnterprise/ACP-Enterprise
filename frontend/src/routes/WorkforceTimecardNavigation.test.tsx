@@ -16,8 +16,23 @@ vi.mock("../features/administration/hooks", () => ({
   useRoles: () => ({ data: [] }),
 }));
 vi.mock("../hooks/useWorkforce", () => ({
+  useSourceCertification: () => ({
+    query: { data: undefined, isLoading: false, isError: false },
+    decide: { mutate: vi.fn(), isPending: false },
+  }),
+  useRealRosterReadiness: () => ({
+    query: { data: { items: [] }, isLoading: false, isError: false },
+    bind: { mutate: vi.fn(), isPending: false },
+    prepareFieldReadiness: { mutate: vi.fn(), isPending: false },
+    canBind: false,
+  }),
   useWorkforceDirectory: () => ({ data: [], isLoading: false, isError: false }),
   useWorkforceEmployee: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
+  useEmployeeTimeline: () => ({
     data: undefined,
     isLoading: false,
     isError: false,

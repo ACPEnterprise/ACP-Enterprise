@@ -22,7 +22,7 @@ describe("RealRosterActivationConsole", () => {
       canBind: true,
       bind: { isPending: false, mutate: vi.fn() },
       prepareFieldReadiness: { isPending: false, mutate },
-      query: { isLoading: false, isError: false, data: { total: 8, bound: 1, field_tech_total: 5, field_tech_capability_ready: 1, items: [{
+      query: { isLoading: false, isError: false, data: { total: 8, bound: 2, field_tech_total: 5, field_tech_capability_ready: 1, items: [{
         roster_key: "melvin-santiago", display_name: "Melvin Santiago", operating_role: "FIELD_TECH", field_tech: true,
         employee_id: "employee-melvin", employee_display_name: "Melvin Santiago", user_state: "USER_READY", employee_state: "EMPLOYEE_READY",
         membership_state: "MEMBERSHIP_READY", branch_state: "MAIN_BRANCH_READY", role_state: "ROLE_READY", workforce_profile_state: "WORKFORCE_PROFILE_READY",
@@ -30,10 +30,22 @@ describe("RealRosterActivationConsole", () => {
         availability_state: "EXPLICIT_WINDOW_REQUIRED", dispatch_state: "READY_FOR_WINDOW_EVALUATION", timekeeping_state: "LINKED",
         payroll_linkage_state: "LINKED_INPUTS_NOT_EVALUATED", identity_confirmed_at: "2026-09-15T00:00:00Z",
         readiness_window_start_at: null, readiness_window_end_at: null, readiness_source: null, blockers: [],
+      }, {
+        roster_key: "lianne-hernandez", display_name: "Lianne Hernandez", operating_role: "OFFICE_MANAGER", field_tech: false,
+        employee_id: "employee-lianne", employee_display_name: "Lianne Hernandez", user_state: "USER_READY", employee_state: "EMPLOYEE_READY",
+        membership_state: "MEMBERSHIP_READY", branch_state: "MAIN_BRANCH_READY", role_state: "ROLE_READY", workforce_profile_state: "WORKFORCE_PROFILE_READY",
+        technician_capability_state: "NOT_APPLICABLE", mobile_state: "MOBILE_READY", credential_state: "ACP_LOGIN_READY",
+        availability_state: "NOT_APPLICABLE", dispatch_state: "NOT_APPLICABLE", timekeeping_state: "LINKED",
+        payroll_linkage_state: "LINKED_INPUTS_NOT_EVALUATED", identity_confirmed_at: "2026-09-15T00:00:00Z",
+        readiness_window_start_at: null, readiness_window_end_at: null, readiness_source: null, blockers: [],
       }] } },
     } as never);
     const user = userEvent.setup();
     render(<MemoryRouter><RealRosterActivationConsole /></MemoryRouter>);
+    expect(screen.getAllByRole("link", { name: "Open access, capabilities and history" }).map((link) => link.getAttribute("href"))).toEqual([
+      "/employees?employee=employee-melvin",
+      "/employees?employee=employee-lianne",
+    ]);
     const action = screen.getByRole("button", { name: "Record this employee’s bounded readiness" });
     expect(action).toBeDisabled();
     const [start, end] = screen.getAllByDisplayValue("");

@@ -24,6 +24,7 @@ vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job deta
 vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
 vi.mock("../routes/DispatchRoute", () => ({ DispatchRoute: () => <div>Dispatch route content</div> }));
 vi.mock("../routes/TechnicianRoute", () => ({ TechnicianRoute: () => <div>Technician route content</div> }));
+vi.mock("../routes/WorkforceRoute", () => ({ WorkforceRoute: () => <div>Employee access and history route content</div> }));
 vi.mock("../features/engineering-mobile/MobileEngineeringListPage", () => ({ MobileEngineeringListPage: () => <div>Engineering route content</div> }));
 vi.mock("../features/engineering-mobile/MobileEngineeringDetailPage", () => ({ MobileEngineeringDetailPage: () => <div>Engineering detail route content</div> }));
 
@@ -119,6 +120,24 @@ describe("application routing", () => {
     renderRoute("/dispatch");
     expect(await screen.findByText("Dispatch route content")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("loads Employee access and history directly and preserves browser navigation", async () => {
+    const router = renderRoute("/employees?employee=employee-lianne", {
+      ...authenticatedContext,
+      permissionCodes: ["COMPANY_WORKFORCE_READ"],
+    });
+    expect(await screen.findByText("Employee access and history route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/employees");
+    expect(router.state.location.search).toBe("?employee=employee-lianne");
+    expect(screen.getByRole("link", { name: "Employees" })).toHaveAttribute("aria-current", "page");
+    await router.navigate("/customers");
+    expect(await screen.findByText("Customer route content")).toBeInTheDocument();
+    await router.navigate(-1);
+    expect(await screen.findByText("Employee access and history route content")).toBeInTheDocument();
+    expect(router.state.location.search).toBe("?employee=employee-lianne");
+    await router.navigate(1);
+    expect(await screen.findByText("Customer route content")).toBeInTheDocument();
   });
 
   it("allows a field-capable user to load the technician shell", async () => {
