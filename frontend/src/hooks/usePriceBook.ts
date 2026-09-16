@@ -58,6 +58,11 @@ export function usePriceBookMutations() {
       mutationFn: api.createCategory,
       onSuccess: refresh,
     }),
+    categoryUpdate: useMutation({
+      mutationFn: ({ categoryId, data }: { categoryId: string; data: Parameters<typeof api.updateCategory>[1] }) =>
+        api.updateCategory(categoryId, data),
+      onSuccess: refresh,
+    }),
     tax: useMutation({ mutationFn: api.createTax, onSuccess: refresh }),
     item: useMutation({
       mutationFn: api.createServiceItem,

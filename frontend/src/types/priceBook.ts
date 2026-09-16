@@ -5,6 +5,7 @@ export interface PriceBookCategory {
   code: string;
   name: string;
   description: string | null;
+  position: number | null;
   status: string;
   version: number;
 }

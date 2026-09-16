@@ -14,6 +14,7 @@ const authState = vi.hoisted(() => ({
 const mutationState = vi.hoisted(() => ({
   categoryError: null as unknown,
   categoryMutate: vi.fn(),
+  categoryUpdateMutate: vi.fn(),
 }));
 const candidateReviewState = vi.hoisted(() => ({
   calls: [] as Array<Record<string, unknown>>,
@@ -78,7 +79,7 @@ vi.mock("../hooks/usePriceBook", () => ({
     isPending: false,
     isError: false,
     data: {
-      categories: [{ id: "category-1", name: "Drain", code: "DRAIN" }],
+      categories: [{ id: "category-1", name: "Drain", code: "DRAIN", description: "Drain services", parent_id: null, position: 1, status: "active", version: 2 }],
       tax_classifications: [{ id: "tax-1", name: "Taxable", code: "TAXABLE" }],
       service_items: [
         {
@@ -128,6 +129,12 @@ vi.mock("../hooks/usePriceBook", () => ({
       isError: Boolean(mutationState.categoryError),
       error: mutationState.categoryError,
       mutateAsync: mutationState.categoryMutate,
+    },
+    categoryUpdate: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: mutationState.categoryUpdateMutate,
     },
     tax: {
       isPending: false,
@@ -211,6 +218,33 @@ describe("PriceBookRoute", () => {
     candidateReviewState.calls = [];
     catalogQueryState.calls = [];
     mutationState.categoryMutate.mockReset();
+    mutationState.categoryUpdateMutate.mockReset();
+  });
+
+  it("edits category hierarchy and lifecycle through governed authority", async () => {
+    mutationState.categoryUpdateMutate.mockResolvedValueOnce({});
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+
+    fireEvent.change(screen.getByLabelText("Choose category to edit"), {
+      target: { value: "category-1" },
+    });
+    expect(screen.getByLabelText("Category description")).toHaveValue("Drain services");
+    fireEvent.change(screen.getByLabelText("Category status"), {
+      target: { value: "archived" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save category" }));
+
+    await waitFor(() =>
+      expect(mutationState.categoryUpdateMutate).toHaveBeenCalledWith({
+        categoryId: "category-1",
+        data: expect.objectContaining({
+          code: "DRAIN",
+          status: "archived",
+          expected_version: 2,
+          position: 1,
+        }),
+      }),
+    );
   });
 
   it("pages through the native service catalog", async () => {
