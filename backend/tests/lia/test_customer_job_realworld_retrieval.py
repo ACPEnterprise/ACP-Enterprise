@@ -16,7 +16,7 @@ from app.lia.contracts import (
 )
 from app.lia.planner import plan_question
 from app.lia.retrieval import GovernedRetrievalService
-from app.lia.service import ROUTES, LiaService
+from app.lia.service import ROUTES, LiaService, _evidence_route
 from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.codes import (
     CustomerPermission,
@@ -78,6 +78,10 @@ def test_named_customer_and_job_plans_are_bounded() -> None:
     assert spoken_job.subject_domain == "jobs"
     assert spoken_job.subject_query == "three thirteen"
 
+    embedded_job = plan_question("Who is assigned to Job JOB-000306?")
+    assert embedded_job.subject_domain == "jobs"
+    assert embedded_job.subject_query == "JOB-000306"
+
     open_employee = plan_question("Open Lianne Hernandez")
     assert open_employee.subject_domain == "identity"
     assert open_employee.subject_query == "Lianne Hernandez"
@@ -116,6 +120,22 @@ def test_navigation_targets_use_canonical_product_routes() -> None:
     assert ROUTES["accounting"] == "/financial-reports"
     assert ROUTES["timekeeping"] == "/employees"
     assert ROUTES["communications"] == "/administration/communications"
+    entity_id = uuid4()
+    for domain, expected in (
+        ("scheduling", f"/appointments/{entity_id}"),
+        ("invoicing", f"/invoices/{entity_id}"),
+        ("payments", f"/payments/{entity_id}"),
+    ):
+        evidence = EvidenceReference(
+            domain=domain,
+            label=domain,
+            authority="AUTHORITATIVE_FACT",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=entity_id,
+            evidence_digest="a" * 64,
+        )
+        assert _evidence_route(evidence) == expected
 
 
 @pytest.mark.asyncio
