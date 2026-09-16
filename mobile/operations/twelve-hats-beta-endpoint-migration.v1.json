@@ -1,0 +1,30 @@
+{
+  "contractVersion": "1",
+  "platformOwner": "The 10:31 Project",
+  "product": "Twelve Hats",
+  "betaTenant": "All County Plumbing & Leak",
+  "currentAcceptance": {
+    "environment": "preview",
+    "apiBaseUrl": "https://preview.allcountyhomeservices.com",
+    "productionActivated": false
+  },
+  "targetBeta": {
+    "environment": "twelve_hats_beta",
+    "apiBaseUrl": "https://beta.twelve-hats.com",
+    "activation": "NOT_ACTIVE_UNTIL_AUTHORIZED"
+  },
+  "switchRequirements": [
+    "beta.twelve-hats.com resolves with HTTPS and valid certificate",
+    "employee-safe ACP API is deployed and contract-compatible",
+    "Preview and beta tenant routing are verified without Production fallback",
+    "Mobile release is explicitly approved for the target endpoint",
+    "signed beta build is qualified against the target endpoint"
+  ],
+  "failClosedRules": [
+    "Unknown environment is rejected",
+    "Preview remains pinned to preview.allcountyhomeservices.com",
+    "Production remains inactive",
+    "No endpoint fallback or DNS-derived selection is permitted"
+  ],
+  "status": "PREPARED_NOT_SWITCHED"
+}
