@@ -8,6 +8,7 @@ import os
 import re
 import stat
 from dataclasses import dataclass
+from ipaddress import ip_network
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -170,11 +171,18 @@ def inspect(env_file: Path) -> list[Finding]:
         )
 
     hostname = values.get("PRODUCTION_HOSTNAME")
-    origin_ok = (
-        values.get("CORS_ALLOWED_ORIGINS") == f'["https://{PRODUCTION_HOSTNAME}"]'
-    )
-    host_ok = hostname == PRODUCTION_HOSTNAME and PRODUCTION_HOSTNAME in values.get(
-        "ALLOWED_HOSTS", ""
+    try:
+        origins = json.loads(values.get("CORS_ALLOWED_ORIGINS", "[]"))
+        allowed_hosts = json.loads(values.get("ALLOWED_HOSTS", "[]"))
+    except json.JSONDecodeError:
+        origins, allowed_hosts = [], []
+    origin_ok = origins == [f"https://{PRODUCTION_HOSTNAME}"]
+    host_ok = (
+        hostname == PRODUCTION_HOSTNAME
+        and isinstance(allowed_hosts, list)
+        and all(isinstance(host, str) for host in allowed_hosts)
+        and PRODUCTION_HOSTNAME in allowed_hosts
+        and "*" not in allowed_hosts
     )
     findings.append(
         Finding(
@@ -183,6 +191,37 @@ def inspect(env_file: Path) -> list[Finding]:
             "hostname, trusted host, and CORS origin bind to Twelve Hats Production"
             if origin_ok and host_ok
             else "edge identity must bind exactly to app.twelve-hats.com",
+        )
+    )
+
+    try:
+        trusted_proxies = json.loads(values.get("TRUSTED_PROXY_CIDRS", "[]"))
+        if not isinstance(trusted_proxies, list) or not all(
+            isinstance(value, str) for value in trusted_proxies
+        ):
+            raise ValueError("trusted proxy CIDRs must be a string list")
+        proxy_networks = [ip_network(value, strict=False) for value in trusted_proxies]
+    except (json.JSONDecodeError, TypeError, ValueError):
+        proxy_networks = []
+    proxy_ok = (
+        values.get("TRUST_FORWARDED_HEADERS", "").lower() == "true"
+        and bool(proxy_networks)
+        and all(network.prefixlen > 0 for network in proxy_networks)
+    )
+    transport_ok = (
+        values.get("SECURITY_HEADERS_ENABLED", "").lower() == "true"
+        and values.get("HSTS_ENABLED", "").lower() == "true"
+        and values.get("HSTS_INCLUDE_SUBDOMAINS", "").lower() == "true"
+        and values.get("HSTS_MAX_AGE_SECONDS", "").isdigit()
+        and int(values.get("HSTS_MAX_AGE_SECONDS", "0")) >= 31_536_000
+    )
+    findings.append(
+        Finding(
+            "production_transport_security",
+            "READY" if proxy_ok and transport_ok else "BLOCKED",
+            "trusted proxies, security headers, and HSTS are explicitly bounded"
+            if proxy_ok and transport_ok
+            else "trusted proxy and HTTPS security-header controls must be explicit and bounded",
         )
     )
 

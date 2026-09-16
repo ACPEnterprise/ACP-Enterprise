@@ -37,6 +37,12 @@ def _write_environment(tmp_path: Path) -> Path:
                 "PRODUCTION_HOSTNAME=app.twelve-hats.com",
                 'CORS_ALLOWED_ORIGINS=["https://app.twelve-hats.com"]',
                 'ALLOWED_HOSTS=["app.twelve-hats.com","backend"]',
+                "TRUST_FORWARDED_HEADERS=true",
+                'TRUSTED_PROXY_CIDRS=["172.31.0.0/24"]',
+                "SECURITY_HEADERS_ENABLED=true",
+                "HSTS_ENABLED=true",
+                "HSTS_MAX_AGE_SECONDS=31536000",
+                "HSTS_INCLUDE_SUBDOMAINS=true",
                 'ACCESS_TOKEN_KEYS={"production-1":"' + ("d" * 32) + '"}',
                 "ACCESS_TOKEN_ACTIVE_KID=production-1",
                 f"SECURITY_TOKEN_HMAC_KEY={'e' * 32}",
@@ -110,3 +116,25 @@ def test_preflight_rejects_malformed_or_inactive_keyrings(tmp_path: Path) -> Non
     findings = {item.check: item.status for item in inspect(env_file)}
     assert findings["identity_delivery_keyring"] == "BLOCKED"
     assert findings["protected_input_keyring"] == "READY"
+
+
+def test_preflight_rejects_host_substrings_wildcards_and_unbounded_proxy(
+    tmp_path: Path,
+) -> None:
+    env_file = _write_environment(tmp_path)
+    contents = (
+        env_file.read_text(encoding="utf-8")
+        .replace(
+            'ALLOWED_HOSTS=["app.twelve-hats.com","backend"]',
+            'ALLOWED_HOSTS=["evil-app.twelve-hats.com","*"]',
+        )
+        .replace(
+            'TRUSTED_PROXY_CIDRS=["172.31.0.0/24"]', 'TRUSTED_PROXY_CIDRS=["0.0.0.0/0"]'
+        )
+    )
+    env_file.write_text(contents, encoding="utf-8")
+    env_file.chmod(0o600)
+
+    findings = {item.check: item.status for item in inspect(env_file)}
+    assert findings["production_edge_identity"] == "BLOCKED"
+    assert findings["production_transport_security"] == "BLOCKED"
