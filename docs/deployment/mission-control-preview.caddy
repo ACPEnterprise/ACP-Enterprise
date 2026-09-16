@@ -35,7 +35,9 @@ preview.allcountyhomeservices.com {
 # through the legacy Preview operator hostname; they are not public Beta surfaces.
 beta.twelve-hats.com {
 	@internal path /mission-control* /engineering* /mission-assets/* /api/v1/engineering/* /api/v1/worker-transport*
-	respond @internal 404
+	handle @internal {
+		respond 404
+	}
 
 	@qbo_oauth_callback path /api/v1/integrations/qbo/oauth/callback /api/v1/integrations/qbo/production/oauth/callback
 	log_skip @qbo_oauth_callback
