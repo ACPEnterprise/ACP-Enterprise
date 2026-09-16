@@ -94,3 +94,31 @@ required escalation.
 - The protected Batch 12 platform-boundary changes introduced no Intelligence
   migration requirement. OM1 retains canonical schema, final protected
   integration, Preview, and Production authority.
+
+## Cosmic Batch 2 cycle
+
+- Fresh inventory observed protected SHA
+  `5f7a45118885a38e5faa4fcfcf98dd395d3ea7ea` and cumulative Intelligence SHA
+  `05f10528804ebe665a82b93b2351dd63a51cc854` before this cycle.
+- Laptop-A candidate `origin/work/lia-employee-safe-server-1` at
+  `e17af6f09d1197a485b8e0515ce4f8e58d840b1e`, based directly on protected,
+  was integrated first. It adds the explicit employee-safe LIA authority,
+  Company/Branch/Employee scope enforcement, launch gating, and authorization
+  tests. No migration changed.
+- Laptop-B candidate `origin/work/luminary-economics-delta-explanation-1` at
+  `81a52e5ad9124bc22501f30725b221517e9c7d0e`, based on protected through its
+  reconciled parent, was integrated second. It adds deterministic comparable-
+  period decomposition, fact/derived/finding separation, provenance,
+  freshness, and incomplete-state presentation. No migration changed.
+- Phone/C candidate `origin/work/laptop1-phone-lia-mobile-interaction-1` at
+  `41300801dbf94fb588c6dcb18cc458bbae74b32c` remains already integrated as a
+  documentation-only contract handoff. No Mobile client implementation was
+  published in the current inventory.
+- No worker overlap required a semantic conflict resolution. The employee-safe
+  server contract precedes any future Mobile client qualification.
+- Combined qualification: empty PostgreSQL migration to head passed; backend
+  Intelligence suites `373 passed, 3 warnings`; affected frontend tests `16
+  passed`; ESLint, TypeScript/Vite build, Python compilation, and diff checks
+  passed. Mobile tests are not applicable to this source set.
+- Real All County acceptance remains pending in Preview. No Preview or
+  Production deployment occurred.
