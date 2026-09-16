@@ -9,11 +9,12 @@ import { Alert, Card, Spinner } from "../ui";
 function formatCurrency(value: string | number | null): string {
   if (value == null) return "Unavailable";
   const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return "Unavailable";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(numericValue) ? numericValue : 0);
+  }).format(numericValue);
 }
 
 function formatEventName(eventType: string): string {
