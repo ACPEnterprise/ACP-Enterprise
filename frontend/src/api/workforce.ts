@@ -50,6 +50,37 @@ export interface WorkforceEligibilityItem {
   eligible: boolean;
 }
 
+export interface RealRosterReadinessItem {
+  roster_key: string;
+  display_name: string;
+  operating_role: "ADMIN" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECH";
+  field_tech: boolean;
+  employee_id: string | null;
+  employee_display_name: string | null;
+  user_state: string;
+  employee_state: string;
+  membership_state: string;
+  branch_state: string;
+  role_state: string;
+  workforce_profile_state: string;
+  technician_capability_state: string;
+  mobile_state: string;
+  credential_state: string;
+  availability_state: string;
+  dispatch_state: string;
+  timekeeping_state: string;
+  payroll_linkage_state: string;
+  blockers: string[];
+}
+
+export interface RealRosterReadiness {
+  items: RealRosterReadinessItem[];
+  total: number;
+  bound: number;
+  field_tech_total: number;
+  field_tech_capability_ready: number;
+}
+
 export interface EmployeePermissionExplanation {
   code: string;
   name: string;
@@ -112,6 +143,22 @@ export async function getWorkforceEmployee(employeeId: string): Promise<Workforc
 export async function evaluateWorkforceEligibility(payload: WorkforceEligibilityRequest): Promise<WorkforceEligibilityItem[]> {
   const response = await apiClient.post<{ items: WorkforceEligibilityItem[] }>("/api/v1/workforce/eligibility", payload);
   return response.data.items;
+}
+
+export async function getRealRosterReadiness(): Promise<RealRosterReadiness> {
+  return (await apiClient.get<RealRosterReadiness>("/api/v1/workforce/real-roster")).data;
+}
+
+export async function bindRealRosterEmployee(
+  rosterKey: string,
+  employeeId: string,
+): Promise<RealRosterReadiness> {
+  return (
+    await apiClient.put<RealRosterReadiness>(
+      `/api/v1/workforce/real-roster/${rosterKey}/binding`,
+      { employee_id: employeeId },
+    )
+  ).data;
 }
 
 export async function getEmployeeAdministration(

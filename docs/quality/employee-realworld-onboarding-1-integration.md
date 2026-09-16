@@ -36,15 +36,26 @@ Employee, MAIN Branch, and appointment window. That audited action establishes
 the canonical `technician` capability and bounded availability atomically.
 Office profiles never receive that capability automatically.
 
+The Workforce page now also exposes the eight-person owner-confirmed roster as a
+separate readiness projection. An unbound roster slot remains
+`AUTHENTICATED_VERIFICATION_REQUIRED`. An authorized Workforce manager can select
+one exact existing Employee and persist an audited binding; names, email similarity,
+HCP history, and the marketing/admin account are never matching authority. A binding
+cannot be silently moved to another Employee or reused for a second roster identity.
+Once bound, the projection reports User, Employee, Membership, MAIN Branch, role,
+Workforce profile, technician capability, Mobile role, credential, bounded
+availability, Dispatch window-evaluation, Timekeeping linkage, and Payroll identity
+linkage independently.
+
 ## Deployment and activation sequence
 
-1. Integrate the candidate and apply Alembic head `m3n5p7r9t1v3`.
+1. Integrate the candidate and apply Alembic head `n4p6r8t0v2x4`.
 2. Confirm the Office Manager migration advances active affected users'
    authorization versions; Lianne must establish a refreshed session.
 3. Sign in as the owner and open **Employees → Add Employee**.
 4. For each roster person, first inspect the existing Team record. If an exact
-   User/Membership/Employee already exists, administer that record; do not submit
-   a duplicate onboarding request.
+   User/Membership/Employee already exists, select that exact Employee in the real
+   roster card and confirm the binding; do not submit a duplicate onboarding request.
 5. For each absent person, enter the owner-confirmed name, their owner-supplied
    unique login email, the profile above, and MAIN. Review the read-only plan,
    then send the protected invitation.
@@ -63,8 +74,9 @@ review rather than creating a duplicate.
 
 ## Qualification
 
-- PostgreSQL zero-to-head migration: passed; single head `m3n5p7r9t1v3`.
-- Backend launch-role, identity-onboarding, and field-readiness suites: 43 passed.
+- PostgreSQL zero-to-head migration: passed; single head `n4p6r8t0v2x4`.
+- Backend launch-role, identity-onboarding, field-readiness, and real-roster suites:
+  47 passed.
 - Frontend onboarding, Dispatch assignment, and Workforce suites: 9 passed.
 - Focused Office Manager policy checks: 4 passed.
 - ESLint, Ruff, MyPy, Python compilation, TypeScript, production build, and

@@ -1360,6 +1360,16 @@
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "workforce",
+      "mechanism": "Unique Company roster key and Employee binding with contradictory-rebind rejection",
+      "method": "PUT",
+      "operation_id": "bind_real_roster_employee_api_v1_workforce_real_roster__roster_key__binding_put",
+      "path": "/api/v1/workforce/real-roster/{roster_key}/binding",
+      "reason": "Exact owner-confirmed binding replay converges while reuse or rebinding fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
       "mechanism": "Existing profile, canonical technician capability, and exact Branch/time-window evidence converge",
       "method": "PUT",
       "operation_id": "prepare_field_readiness_api_v1_workforce_administration_employees__employee_id__field_readiness_put",
@@ -2909,6 +2919,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2959a05f7167ee4305f371c5a90b7c76e1ecceeae388eb4d6ca67fe7c89a9da7",
+  "fingerprint": "6f3008fa912a6690fd8a078684a43e8c09c5ae712f0639f2bd5adf675e597adb",
   "schema_version": "1"
 }

@@ -109,6 +109,41 @@ class WorkforceEligibilityResponse(WorkforceSchema):
     items: tuple[WorkforceEligibilityItem, ...]
 
 
+class RealRosterBindingRequest(WorkforceSchema):
+    employee_id: UUID
+
+
+class RealRosterReadinessItem(WorkforceSchema):
+    roster_key: str
+    display_name: str
+    operating_role: str
+    field_tech: bool
+    employee_id: UUID | None
+    employee_display_name: str | None
+    user_state: str
+    employee_state: str
+    membership_state: str
+    branch_state: str
+    role_state: str
+    workforce_profile_state: str
+    technician_capability_state: str
+    mobile_state: str
+    credential_state: str
+    availability_state: str
+    dispatch_state: str
+    timekeeping_state: str
+    payroll_linkage_state: str
+    blockers: tuple[str, ...]
+
+
+class RealRosterReadiness(WorkforceSchema):
+    items: tuple[RealRosterReadinessItem, ...]
+    total: int
+    bound: int
+    field_tech_total: int
+    field_tech_capability_ready: int
+
+
 class EmployeeAdministrationSummary(WorkforceEmployeeSummary):
     user_id: UUID | None
     membership_id: UUID | None

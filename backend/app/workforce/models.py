@@ -71,6 +71,54 @@ class WorkforceCapabilityProfile(Base):
     )
 
 
+class RealWorkforceRosterBinding(Base):
+    """Explicit owner binding; roster identity is never derived from a name."""
+
+    __tablename__ = "real_workforce_roster_bindings"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            name="fk_real_workforce_roster_binding_employee",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "roster_key", name="uq_real_workforce_roster_binding_key"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            name="uq_real_workforce_roster_binding_employee",
+        ),
+        CheckConstraint(
+            "roster_key ~ '^[a-z][a-z0-9-]{0,63}$'",
+            name="ck_real_workforce_roster_binding_key",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    roster_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    confirmed_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+
 class CapabilityCategory(Base):
     __tablename__ = "workforce_capability_categories"
     __table_args__ = (

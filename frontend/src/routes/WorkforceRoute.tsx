@@ -7,7 +7,7 @@ import type { AdminEmployeeTimecard } from "../api/timekeeping";
 import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useRealRosterReadiness, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Spinner } from "../ui";
 
@@ -35,6 +35,8 @@ export function WorkforceRoute() {
   const { activeCompany, permissionCodes = [] } = useAuth();
   const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
   const directory = useWorkforceDirectory();
+  const realRoster = useRealRosterReadiness(permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE"));
+  const [rosterSelections, setRosterSelections] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string | null>(linkedEmployeeId);
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
@@ -125,6 +127,22 @@ export function WorkforceRoute() {
         {canReviewTime && <a className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" href="#timecard-operations">Time &amp; Attendance</a>}
         {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" to="/payroll">Payroll</Link>}
       </nav>
+      <Card className="p-4 sm:p-6">
+        <h3 className="text-lg font-semibold">Real All County roster</h3>
+        <p className="mt-1 text-sm text-content-muted">Owner-confirmed identities must be explicitly bound to an exact ACP Employee. Names are never used as matching authority.</p>
+        {realRoster.query.isLoading ? <Spinner label="Loading real roster readiness" /> : realRoster.query.isError ? <Alert variant="danger">Real roster readiness is unavailable. No Employee state was inferred.</Alert> : (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-content-muted">{realRoster.query.data?.bound ?? 0} of {realRoster.query.data?.total ?? 8} identities bound · {realRoster.query.data?.field_tech_capability_ready ?? 0} of {realRoster.query.data?.field_tech_total ?? 5} Field Tech capabilities ready</p>
+            {realRoster.query.data?.items.map((person) => (
+              <div key={person.roster_key} className="rounded-lg border border-stroke p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{person.display_name}</p><p className="text-sm text-content-muted">{person.operating_role.replaceAll("_", " ")}</p></div><Badge variant={person.blockers.length === 0 ? "success" : "neutral"}>{person.employee_id ? person.dispatch_state.replaceAll("_", " ") : "Binding required"}</Badge></div>
+                {person.employee_id ? <div className="mt-2 grid gap-1 text-xs text-content-muted sm:grid-cols-3"><span>{person.role_state.replaceAll("_", " ")}</span><span>{person.mobile_state.replaceAll("_", " ")}</span><span>{person.credential_state.replaceAll("_", " ")}</span><span>{person.workforce_profile_state.replaceAll("_", " ")}</span><span>{person.technician_capability_state.replaceAll("_", " ")}</span><span>{person.availability_state.replaceAll("_", " ")}</span></div> : realRoster.canBind && <div className="mt-3 flex flex-wrap gap-2"><select aria-label={`Bind ${person.display_name}`} className="min-h-11 min-w-64 rounded-md border border-stroke bg-surface px-3" value={rosterSelections[person.roster_key] ?? ""} onChange={(event) => setRosterSelections((current) => ({ ...current, [person.roster_key]: event.target.value }))}><option value="">Select exact existing Employee</option>{(directory.data ?? []).filter((employee) => !realRoster.query.data?.items.some((item) => item.employee_id === employee.employee_id)).map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} · {employee.employee_number}</option>)}</select><Button variant="outline" disabled={!rosterSelections[person.roster_key] || realRoster.bind.isPending} onClick={() => realRoster.bind.mutate({ rosterKey: person.roster_key, employeeId: rosterSelections[person.roster_key] })}>Confirm identity binding</Button></div>}
+                {person.blockers.length > 0 && <p className="mt-2 text-xs text-content-muted">{person.blockers.map((value) => value.replaceAll("_", " ")).join(" · ")}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
       <Card className="p-4 sm:p-6">
         <h3 className="text-lg font-semibold">Assignment eligibility</h3>
         <p className="mt-1 text-sm text-content-muted">Evaluate explicit Branch, availability, capability, language, restriction, and assignment evidence. This does not assign work.</p>
