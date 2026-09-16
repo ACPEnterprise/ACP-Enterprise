@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useAuth } from "../../auth";
 import { useRealRosterReadiness, useWorkforceDirectory } from "../../hooks/useWorkforce";
 import { Alert, Badge, Button, Card, Input, Spinner } from "../../ui";
+import { ReadinessBlockers } from "./ReadinessBlockers";
 
 const profileDescriptions: Record<string, string> = {
   ADMIN: "Company Administrator. Owner hard gates remain separately enforced.",
@@ -73,7 +74,7 @@ export function RealRosterActivationConsole() {
           {deferred.has(person.roster_key) ? <Alert variant="warning">Deferred in this browser review only. No identity decision was persisted.</Alert> : canManage && <div className="mt-2 flex flex-wrap gap-2"><select aria-label={`Exact ACP Employee for ${person.display_name}`} className="min-h-11 min-w-64 rounded-md border border-stroke bg-surface px-3" value={selections[person.roster_key] ?? ""} onChange={(event) => setSelections((current) => ({...current, [person.roster_key]: event.target.value}))}><option value="">Select exact verified Employee</option>{(directory.data ?? []).filter((employee) => !boundIds.has(employee.employee_id)).map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} · {employee.employee_number}</option>)}</select><Button disabled={!selections[person.roster_key] || roster.bind.isPending} onClick={() => roster.bind.mutate({rosterKey: person.roster_key, employeeId: selections[person.roster_key]})}>Confirm exact identity</Button><Button variant="outline" onClick={() => setSelections((current) => ({...current, [person.roster_key]: ""}))}>Not same person</Button><Button variant="outline" onClick={() => setDeferred((current) => new Set(current).add(person.roster_key))}>Defer</Button></div>}
           <Link className="mt-3 inline-block text-sm font-semibold text-action-primary" to={`/administration/identity-onboarding?name=${encodeURIComponent(person.display_name)}&profile=${onboardingProfile}&branch=MAIN`}>Create/onboard ACP Employee</Link>
         </div>}
-        {person.blockers.length > 0 && <p className="mt-3 text-xs text-content-muted"><strong>Next actions:</strong> {person.blockers.map(label).join(" · ")}</p>}
+        {person.blockers.length > 0 && <ReadinessBlockers blockers={person.blockers} />}
       </article>;
     })}</div>
     <section className="mt-4 rounded-lg border border-stroke p-3" aria-label="HCP Employee certification evidence">
