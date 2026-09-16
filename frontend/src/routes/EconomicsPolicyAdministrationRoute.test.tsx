@@ -69,6 +69,21 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
           policy_history: [],
           policy_gaps: [],
           policy_snapshots: [],
+          cost_authority_decisions: [
+            {
+              family_key: "overtime_premium_allocation",
+              title: "Overtime premium allocation",
+              certification_state: "UNSELECTED",
+              authority_required: "owner_and_accountant",
+              implication: "Determines whether overtime premium becomes Job cost.",
+              evidence_required: ["accepted_overtime_period"],
+              supported_choices: ["hold_unallocated"],
+              current_choice: null,
+              effective_start: null,
+              historical_replay_supported: true,
+              limitations: ["No Job receives premium without authority."],
+            },
+          ],
           mutation_authority: "none",
         }
       : null,
@@ -101,6 +116,8 @@ describe("Economics policy administration", () => {
     expect(screen.getAllByText(/policy required/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 policy decision/i)).toBeVisible();
     expect(screen.getByText("approved allocation drivers")).toBeVisible();
+    expect(screen.getByText("Overtime premium allocation")).toBeVisible();
+    expect(screen.getByText(/No certified choice/i)).toBeVisible();
     expect(screen.getByText(/economic exception center/i)).toBeVisible();
     expect(screen.getByText(/business economics · read-only/i)).toBeVisible();
     expect(

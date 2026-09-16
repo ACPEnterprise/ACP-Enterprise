@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.permissions.authorization import AuthorizationContext
 
+from .cost_attribution_authority import DECISION_REGISTRY
 from .models import (
     CompanyFinancePolicyGap,
     CompanyFinancePolicyParameter,
@@ -187,6 +188,35 @@ class EconomicsPolicyAdministrationService:
             }
             for item in snapshots
         ]
+        family_by_key = {str(item["family_key"]): item for item in families}
+        cost_authority_decisions = []
+        for key, decision_definition in DECISION_REGISTRY.items():
+            family = family_by_key[key]
+            versions = [item for item in policies if item.family_key == key]
+            lifecycle = (
+                "CERTIFIED"
+                if family["state"] == "CONFIGURED"
+                else "DRAFT"
+                if any(item.lifecycle == "draft" for item in versions)
+                else "INACTIVE"
+                if versions and all(item.lifecycle == "retired" for item in versions)
+                else "UNSELECTED"
+            )
+            cost_authority_decisions.append(
+                {
+                    "family_key": key,
+                    "title": family["title"],
+                    "certification_state": lifecycle,
+                    "authority_required": decision_definition.authority_required.value,
+                    "implication": decision_definition.implication,
+                    "evidence_required": list(decision_definition.evidence_required),
+                    "supported_choices": family["supported_strategies"],
+                    "current_choice": family["current_strategy"],
+                    "effective_start": family["effective_start"],
+                    "historical_replay_supported": decision_definition.historical_replay_supported,
+                    "limitations": list(decision_definition.limitations),
+                }
+            )
         canonical: dict[str, Any] = {
             "version": ADMINISTRATION_VERSION,
             "company_id": str(context.company.id),
@@ -199,6 +229,7 @@ class EconomicsPolicyAdministrationService:
             "policy_history": history,
             "policy_gaps": safe_gaps,
             "policy_snapshots": safe_snapshots,
+            "cost_authority_decisions": cost_authority_decisions,
             "mutation_authority": "none",
         }
         fingerprint = hashlib.sha256(
