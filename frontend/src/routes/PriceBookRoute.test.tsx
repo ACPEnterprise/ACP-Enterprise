@@ -215,6 +215,26 @@ describe("PriceBookRoute", () => {
       ),
     );
   });
+  it("filters coherent candidate review cohorts without activating them", async () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+
+    fireEvent.change(screen.getByLabelText("Filter candidate admission state"), {
+      target: { value: "held" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter candidate review requirement"), {
+      target: { value: "MATERIAL_MAPPING_REQUIRED" },
+    });
+
+    await waitFor(() =>
+      expect(candidateReviewState.calls).toContainEqual(
+        expect.objectContaining({
+          admission_status: "held",
+          review_flag: "MATERIAL_MAPPING_REQUIRED",
+          offset: 0,
+        }),
+      ),
+    );
+  });
   it("fails closed without Price Book read authority", () => {
     authState.permissionCodes = [];
     render(

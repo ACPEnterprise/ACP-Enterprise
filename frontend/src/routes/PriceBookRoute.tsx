@@ -103,12 +103,18 @@ export function PriceBookRoute() {
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [candidateOffset, setCandidateOffset] = useState(0);
   const candidatePageSize = 50;
+  const [candidateCategory, setCandidateCategory] = useState("");
+  const [candidateAdmission, setCandidateAdmission] = useState<"" | "admitted" | "held">("");
+  const [candidateReviewFlag, setCandidateReviewFlag] = useState("");
   const [reviewVersionId, setReviewVersionId] = useState<string>();
   const activationReadiness = useActivationReadiness(reviewVersionId);
   const reviewAudit = usePriceBookAudit(reviewVersionId);
   const candidateReview = useCandidateReview(
     {
       search: search.trim() || undefined,
+      category: candidateCategory.trim() || undefined,
+      admission_status: candidateAdmission || undefined,
+      review_flag: candidateReviewFlag || undefined,
       limit: candidatePageSize,
       offset: candidateOffset,
     },
@@ -571,6 +577,43 @@ export function PriceBookRoute() {
                     <div><strong>{candidateReview.data?.counts.held ?? 0}</strong><p className="text-sm text-content-muted">Held — source conflict</p></div>
                     <div><strong>{candidateReview.data?.counts.material_mapping_required ?? 0}</strong><p className="text-sm text-content-muted">Need material mapping</p></div>
                     <div><strong>{candidateReview.data?.counts.activation_ready ?? 0}</strong><p className="text-sm text-content-muted">Activation ready</p></div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Input
+                      aria-label="Filter candidate category"
+                      placeholder="Candidate category"
+                      value={candidateCategory}
+                      onChange={(event) => {
+                        setCandidateCategory(event.target.value);
+                        setCandidateOffset(0);
+                      }}
+                    />
+                    <Select
+                      aria-label="Filter candidate admission state"
+                      value={candidateAdmission}
+                      onChange={(event) => {
+                        setCandidateAdmission(event.target.value as "" | "admitted" | "held");
+                        setCandidateOffset(0);
+                      }}
+                    >
+                      <option value="">All candidate states</option>
+                      <option value="admitted">Draft — ready for review</option>
+                      <option value="held">Held — source conflict</option>
+                    </Select>
+                    <Select
+                      aria-label="Filter candidate review requirement"
+                      value={candidateReviewFlag}
+                      onChange={(event) => {
+                        setCandidateReviewFlag(event.target.value);
+                        setCandidateOffset(0);
+                      }}
+                    >
+                      <option value="">All review requirements</option>
+                      <option value="PRICE_EVIDENCE_REVIEW_REQUIRED">Price review required</option>
+                      <option value="TAX_REVIEW_REQUIRED">Tax review required</option>
+                      <option value="MATERIAL_MAPPING_REQUIRED">Material mapping required</option>
+                      <option value="SOURCE_CONFLICT">Source conflict</option>
+                    </Select>
                   </div>
                   <div className="space-y-3" aria-label="All County candidate services">
                     {(candidateReview.data?.items ?? []).map((candidate) => (
