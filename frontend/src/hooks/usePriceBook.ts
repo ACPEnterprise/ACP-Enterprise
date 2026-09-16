@@ -83,6 +83,19 @@ export function usePriceBookMutations() {
       }) => api.createPriceVersion(itemId, data),
       onSuccess: refresh,
     }),
+    versionUpdate: useMutation({
+      mutationFn: ({ versionId, data }: { versionId: string; data: Parameters<typeof api.updateDraftPriceVersion>[1] }) =>
+        api.updateDraftPriceVersion(versionId, data),
+      onSuccess: refresh,
+    }),
+    versionLifecycle: useMutation({
+      mutationFn: ({ versionId, action, expectedVersion }: {
+        versionId: string;
+        action: "inactivate" | "archive";
+        expectedVersion: number;
+      }) => api.transitionPriceVersion(versionId, action, expectedVersion),
+      onSuccess: refresh,
+    }),
     activate: useMutation({
       mutationFn: ({ id, version }: { id: string; version: number }) =>
         api.activatePriceVersion(id, version),

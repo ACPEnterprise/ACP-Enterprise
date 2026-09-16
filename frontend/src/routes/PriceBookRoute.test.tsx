@@ -16,6 +16,8 @@ const mutationState = vi.hoisted(() => ({
   categoryMutate: vi.fn(),
   categoryUpdateMutate: vi.fn(),
   versionMutate: vi.fn(),
+  versionUpdateMutate: vi.fn(),
+  versionLifecycleMutate: vi.fn(),
 }));
 const candidateReviewState = vi.hoisted(() => ({
   calls: [] as Array<Record<string, unknown>>,
@@ -99,6 +101,8 @@ vi.mock("../hooks/usePriceBook", () => ({
           revision: 1,
           currency: "USD",
           unit_price: "149.95",
+          tax_classification_id: "tax-1",
+          effective_at: "2026-10-01T08:00:00Z",
           status: "draft",
           version: 1,
           components: [
@@ -112,6 +116,18 @@ vi.mock("../hooks/usePriceBook", () => ({
               position: 1,
             },
           ],
+        },
+        {
+          id: "version-active",
+          service_item_id: "item-1",
+          revision: 0,
+          currency: "USD",
+          unit_price: "139.95",
+          tax_classification_id: "tax-1",
+          effective_at: "2026-09-01T08:00:00Z",
+          status: "active",
+          version: 2,
+          components: [],
         },
       ],
       option_groups: [
@@ -160,6 +176,18 @@ vi.mock("../hooks/usePriceBook", () => ({
       isError: false,
       error: null,
       mutateAsync: mutationState.versionMutate,
+    },
+    versionUpdate: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: mutationState.versionUpdateMutate,
+    },
+    versionLifecycle: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: mutationState.versionLifecycleMutate,
     },
     activate: { isError: false, error: null, mutateAsync: vi.fn() },
     optionGroup: {
@@ -221,6 +249,8 @@ describe("PriceBookRoute", () => {
     mutationState.categoryMutate.mockReset();
     mutationState.categoryUpdateMutate.mockReset();
     mutationState.versionMutate.mockReset();
+    mutationState.versionUpdateMutate.mockReset();
+    mutationState.versionLifecycleMutate.mockReset();
   });
 
   it("edits category hierarchy and lifecycle through governed authority", async () => {
@@ -274,6 +304,30 @@ describe("PriceBookRoute", () => {
         ],
       }),
     })));
+  });
+
+  it("edits an existing draft price without rewriting history", async () => {
+    mutationState.versionUpdateMutate.mockResolvedValueOnce({});
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByRole("button", { name: "Edit draft price" }));
+    expect(screen.getByLabelText("Unit price")).toHaveValue(149.95);
+    fireEvent.change(screen.getByLabelText("Unit price"), { target: { value: "159.95" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft price version" }));
+    await waitFor(() => expect(mutationState.versionUpdateMutate).toHaveBeenCalledWith(expect.objectContaining({
+      versionId: "version-1",
+      data: expect.objectContaining({ expected_version: 1, unit_price: "159.95" }),
+    })));
+  });
+
+  it("inactivates an active price through the explicit lifecycle contract", async () => {
+    mutationState.versionLifecycleMutate.mockResolvedValueOnce({});
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByRole("button", { name: "Inactivate price version" }));
+    await waitFor(() => expect(mutationState.versionLifecycleMutate).toHaveBeenCalledWith({
+      versionId: "version-active",
+      action: "inactivate",
+      expectedVersion: 2,
+    }));
   });
 
   it("pages through the native service catalog", async () => {
