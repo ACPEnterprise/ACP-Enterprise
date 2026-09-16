@@ -4,8 +4,9 @@ import { colors, spacing } from "../design/tokens";
 import type { NetworkMonitor } from "../network/networkMonitor";
 import { useJobClock } from "../timeclock/useJobClock";
 import { PrimaryButton } from "./PrimaryButton";
+import { formatAuthoritativeTimestamp } from "../utils/formatting";
 
-function serverTime(value: string | null) { return value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not active"; }
+function serverTime(value: string | null) { return value ? formatAuthoritativeTimestamp(value, undefined, { dateStyle: "medium", timeStyle: "short" }) : "Not active"; }
 
 export function JobClockPanel({ service, network, jobId, appointmentId, enabled }: { service: TimekeepingService; network: NetworkMonitor; jobId: string; appointmentId: string; enabled: boolean }) {
   const clock = useJobClock(service, network, enabled);
