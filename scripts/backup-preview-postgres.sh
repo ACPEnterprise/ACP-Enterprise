@@ -1,10 +1,8 @@
 #!/bin/sh
 set -eu
 
-preview_root=${PREVIEW_ROOT:-/opt/acp-enterprise/current}
-preview_env=${PREVIEW_ENV:-$preview_root/.env.preview}
 backup_root=${BACKUP_ROOT:-/opt/acp-enterprise/backups/scheduled}
-compose_file=${COMPOSE_FILE:-$preview_root/docker-compose.preview.yml}
+postgres_container=${PREVIEW_POSTGRES_CONTAINER:-acp-enterprise-postgres}
 
 umask 077
 install -d -m 700 "$backup_root"
@@ -14,13 +12,13 @@ final_dump=$backup_root/preview-$timestamp.dump
 temporary_dump=$(mktemp "$backup_root/.preview-$timestamp.XXXXXX.dump")
 trap 'rm -f "$temporary_dump" "$temporary_dump.sha256"' EXIT HUP INT TERM
 
-cd "$preview_root"
-docker compose --env-file "$preview_env" -f "$compose_file" exec -T postgres \
+docker inspect --format '{{.State.Running}}' "$postgres_container" | grep -qx true
+docker exec "$postgres_container" \
   sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
   >"$temporary_dump"
 
 test -s "$temporary_dump"
-docker compose --env-file "$preview_env" -f "$compose_file" exec -T postgres \
+docker exec -i "$postgres_container" \
   pg_restore --list <"$temporary_dump" >/dev/null
 chmod 600 "$temporary_dump"
 checksum=$(sha256sum "$temporary_dump" | awk '{print $1}')
