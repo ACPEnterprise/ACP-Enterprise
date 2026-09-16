@@ -119,6 +119,14 @@ async def test_policy_administration_is_read_only_truthful_and_deterministic(
     assert overhead["supported_strategies"] == ["approved_allocation_drivers"]
     assert first["policy_history"][0]["authority_state"] == "current"
     assert "parameters" not in first["policy_history"][0]
+    overtime = next(
+        item
+        for item in first["cost_authority_decisions"]
+        if item["family_key"] == "overtime_premium_allocation"
+    )
+    assert overtime["certification_state"] == "UNSELECTED"
+    assert overtime["authority_required"] == "owner_and_accountant"
+    assert overtime["current_choice"] is None
 
 
 def test_source_states_survive_stale_and_conflicting_projection() -> None:
