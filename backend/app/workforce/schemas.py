@@ -260,3 +260,23 @@ class FieldReadinessResponse(WorkforceSchema):
     profile_id: UUID
     capability_evidence_id: UUID
     availability_evidence_id: UUID
+
+
+class EmployeeNotificationTarget(WorkforceSchema):
+    employee_id: UUID
+    event_type: Literal[
+        "NEW_ASSIGNMENT",
+        "ASSIGNMENT_CHANGED",
+        "JOB_CANCELED",
+        "EMPLOYEE_ACTION_REQUIRED",
+        "TIMEKEEPING_ISSUE",
+    ]
+    company_id: UUID
+    branch_id: UUID
+    membership_id: UUID | None
+    user_id: UUID | None
+    authorization_version: int | None
+    state: Literal["READY", "BLOCKED"]
+    blockers: tuple[str, ...]
+    delivery_channel: Literal["EMPLOYEE_INBOX"] = "EMPLOYEE_INBOX"
+    external_push_state: Literal["PROVIDER_REQUIRED"] = "PROVIDER_REQUIRED"
