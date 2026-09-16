@@ -6,7 +6,8 @@ import { KPIStatCard } from "../components/dashboard/KPIStatCard";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import { Alert, Card, Spinner } from "../ui";
 
-function formatCurrency(value: string | number): string {
+function formatCurrency(value: string | number | null): string {
+  if (value == null) return "Unavailable";
   const numericValue = Number(value);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -27,8 +28,8 @@ export function MissionControlRoute() {
   const { data, isLoading, isError, dataUpdatedAt } = useAnalyticsSummary(canRead);
   const metrics = data
     ? [
-        { label: data.cash_collected.name, value: formatCurrency(data.cash_collected.value), detail: `${data.cash_collected.event_count ?? 0} payment events` },
-        { label: data.booked_revenue.name, value: formatCurrency(data.booked_revenue.value), detail: `${data.booked_revenue.event_count ?? 0} booking events` },
+        { label: data.cash_collected.name, value: formatCurrency(data.cash_collected.value), detail: `${data.cash_collected.event_count ?? 0} admitted of ${data.cash_collected.observed_event_count ?? 0} payment events · ${data.cash_collected.completeness ?? "UNKNOWN"}` },
+        { label: data.booked_revenue.name, value: formatCurrency(data.booked_revenue.value), detail: `${data.booked_revenue.event_count ?? 0} admitted of ${data.booked_revenue.observed_event_count ?? 0} booking events · ${data.booked_revenue.completeness ?? "UNKNOWN"}` },
         { label: data.new_customers.name, value: String(data.new_customers.value), detail: "Customers created today" },
         { label: data.appointments_booked.name, value: String(data.appointments_booked.value), detail: "Appointments booked today" },
         { label: data.total_events.name, value: String(data.total_events.value), detail: "Business events processed" },
@@ -62,6 +63,7 @@ export function MissionControlRoute() {
           Analytics API availability does not represent complete operational system health.
         </p>
         {dataUpdatedAt > 0 && <p className="mt-2 text-xs text-content-muted">Last updated: {new Date(dataUpdatedAt).toLocaleTimeString()}</p>}
+        {data && <p className="mt-2 text-xs text-content-muted">Evidence window: {new Date(data.period_start).toLocaleString()}–{new Date(data.period_end).toLocaleString()} · {data.timezone} · business event projection</p>}
       </section>
 
       {isLoading && <Card className="flex min-h-32 items-center justify-center"><Spinner label="Loading analytics" /></Card>}
@@ -72,6 +74,11 @@ export function MissionControlRoute() {
       )}
       {data && (
         <>
+          {(data.cash_collected.completeness === "PARTIAL" || data.booked_revenue.completeness === "PARTIAL") && (
+            <Alert variant="warning" title="Some monetary events were excluded">
+              Analytics found payment or booking events without usable monetary evidence. Displayed totals include only admitted amounts; missing amounts were not treated as zero.
+            </Alert>
+          )}
           <section className="grid gap-ui-3 sm:grid-cols-2 xl:grid-cols-5">
             {metrics.map((metric) => <KPIStatCard key={metric.label} label={metric.label} value={metric.value} detail={metric.detail} />)}
           </section>

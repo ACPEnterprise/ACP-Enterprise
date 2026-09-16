@@ -334,3 +334,40 @@ async def test_summary_authorization_and_company_isolation(
             headers={"X-Company-ID": str(fixture.company_a_id)},
         )
     assert unauthenticated.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_summary_excludes_missing_amount_instead_of_reporting_zero(
+    analytics_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = analytics_database
+    fixture = await seed_analytics_fixture(factory)
+    period_start, _ = AnalyticsService._today_utc_range()
+    async with factory() as session, session.begin():
+        session.add_all(
+            [
+                event(
+                    company_id=fixture.company_a_id,
+                    event_type=AnalyticsService.PAYMENT_RECEIVED,
+                    occurred_at=period_start + timedelta(hours=1),
+                    payload={"provider_state": "accepted"},
+                ),
+                event(
+                    company_id=fixture.company_a_id,
+                    event_type=AnalyticsService.ESTIMATE_APPROVED,
+                    occurred_at=period_start + timedelta(hours=2),
+                    payload={"approved_amount": "not-a-number"},
+                ),
+            ]
+        )
+    async with factory() as session:
+        value = await AnalyticsService.get_today_summary(
+            session, company_id=fixture.company_a_id
+        )
+    assert value.cash_collected.value is None
+    assert value.cash_collected.event_count == 0
+    assert value.cash_collected.observed_event_count == 1
+    assert value.cash_collected.excluded_event_count == 1
+    assert value.cash_collected.completeness == "PARTIAL"
+    assert value.booked_revenue.value is None
+    assert value.booked_revenue.completeness == "PARTIAL"

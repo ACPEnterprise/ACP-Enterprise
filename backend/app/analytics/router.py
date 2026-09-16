@@ -13,7 +13,6 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AnalyticsPermission
 from app.platform.permissions.dependencies import require_permission
 
-
 router = APIRouter(
     prefix="/api/v1/analytics",
     tags=["Analytics"],
