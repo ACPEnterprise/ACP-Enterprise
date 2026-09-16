@@ -14,15 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.estimates.models import Estimate
 from app.invoicing.models import Invoice
-from app.jobs.models import Job
+from app.jobs.models import Job, JobAppointmentLink
+from app.payments.models import PaymentReceipt
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     CustomerPermission,
     EstimatePermission,
     InvoicePermission,
     JobPermission,
+    PaymentPermission,
+    SchedulingPermission,
     ServiceAgreementPermission,
 )
+from app.scheduling.models import Appointment
 from app.service_agreements.models import ServiceAgreement
 
 from .models import Customer, ServiceLocation
@@ -54,8 +58,10 @@ class CustomerLiaContext(BaseModel):
     lifecycle_state: str
     locations: tuple[ContextItem, ...]
     jobs: tuple[ContextItem, ...]
+    appointment_states: dict[str, int] | None
     estimate_states: dict[str, int] | None
     invoice_states: dict[str, int] | None
+    payment_states: dict[str, int] | None
     agreement_states: dict[str, int] | None
     limitations: tuple[str, ...]
     observed_at: datetime
@@ -69,14 +75,50 @@ class CustomerLiaContext(BaseModel):
         ]
         if self.estimate_states is not None:
             components.append(f"Estimate states: {_states(self.estimate_states)}.")
+        if self.appointment_states is not None:
+            components.append(
+                f"Appointment states: {_states(self.appointment_states)}."
+            )
         if self.invoice_states is not None:
             components.append(f"Invoice states: {_states(self.invoice_states)}.")
+        if self.payment_states is not None:
+            components.append(f"Payment states: {_states(self.payment_states)}.")
         if self.agreement_states is not None:
             components.append(f"Agreement states: {_states(self.agreement_states)}.")
         return " ".join(components)
 
 
 class CustomerLiaContextService:
+    async def resolve_display_name(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        display_name: str,
+    ) -> tuple[UUID, ...]:
+        """Resolve an exact authorized Customer name without existence leakage."""
+        if not context.has_permission(CustomerPermission.READ):
+            return ()
+        branch_ids = _branch_ids(context)
+        if not branch_ids:
+            return ()
+        normalized = " ".join(display_name.casefold().split())
+        return tuple(
+            (
+                await session.scalars(
+                    select(Customer.id)
+                    .where(
+                        Customer.company_id == context.company.id,
+                        Customer.archived_at.is_(None),
+                        func.lower(func.trim(Customer.normalized_name)) == normalized,
+                        _customer_in_authorized_branch(context, branch_ids),
+                    )
+                    .order_by(Customer.id)
+                    .limit(2)
+                )
+            ).all()
+        )
+
     async def for_customer(
         self,
         session: AsyncSession,
@@ -208,6 +250,14 @@ class CustomerLiaContextService:
                 )
                 for row in (await session.scalars(job_query)).all()
             )
+        appointment_states = (
+            await _appointment_state_counts(
+                session, context=context, customer_id=customer.id, branch_ids=branch_ids
+            )
+            if context.has_permission(SchedulingPermission.READ)
+            and context.has_permission(JobPermission.READ)
+            else None
+        )
         estimate_states = (
             await _state_counts(session, Estimate, context, customer.id, branch_ids)
             if context.has_permission(EstimatePermission.READ)
@@ -216,6 +266,13 @@ class CustomerLiaContextService:
         invoice_states = (
             await _state_counts(session, Invoice, context, customer.id, branch_ids)
             if context.has_permission(InvoicePermission.READ)
+            else None
+        )
+        payment_states = (
+            await _state_counts(
+                session, PaymentReceipt, context, customer.id, branch_ids
+            )
+            if context.has_permission(PaymentPermission.READ)
             else None
         )
         agreement_states = (
@@ -231,6 +288,7 @@ class CustomerLiaContextService:
                 (JobPermission.READ, "job_context_not_authorized"),
                 (EstimatePermission.READ, "estimate_context_not_authorized"),
                 (InvoicePermission.READ, "invoice_context_not_authorized"),
+                (PaymentPermission.READ, "payment_context_not_authorized"),
                 (
                     ServiceAgreementPermission.READ,
                     "agreement_context_not_authorized",
@@ -250,8 +308,10 @@ class CustomerLiaContextService:
             "lifecycle_state": customer.status,
             "locations": [item.model_dump(mode="json") for item in locations],
             "jobs": [item.model_dump(mode="json") for item in jobs],
+            "appointment_states": appointment_states,
             "estimate_states": estimate_states,
             "invoice_states": invoice_states,
+            "payment_states": payment_states,
             "agreement_states": agreement_states,
             "limitations": limitations,
         }
@@ -268,8 +328,10 @@ class CustomerLiaContextService:
             lifecycle_state=customer.status,
             locations=locations,
             jobs=jobs,
+            appointment_states=appointment_states,
             estimate_states=estimate_states,
             invoice_states=invoice_states,
+            payment_states=payment_states,
             agreement_states=agreement_states,
             limitations=limitations,
             observed_at=observed_at,
@@ -294,6 +356,37 @@ async def _state_counts(
             )
             .group_by(model.status)
             .order_by(model.status)
+        )
+    ).all()
+    return {str(state): int(count) for state, count in rows}
+
+
+async def _appointment_state_counts(
+    session: AsyncSession,
+    *,
+    context: AuthorizationContext,
+    customer_id: UUID,
+    branch_ids: tuple[UUID, ...],
+) -> dict[str, int]:
+    rows = (
+        await session.execute(
+            select(Appointment.status, func.count())
+            .join(
+                JobAppointmentLink,
+                JobAppointmentLink.appointment_id == Appointment.id,
+            )
+            .join(Job, Job.id == JobAppointmentLink.job_id)
+            .where(
+                Job.company_id == context.company.id,
+                Job.customer_id == customer_id,
+                Job.branch_id.in_(branch_ids),
+                JobAppointmentLink.company_id == context.company.id,
+                JobAppointmentLink.branch_id.in_(branch_ids),
+                Appointment.company_id == context.company.id,
+                Appointment.branch_id.in_(branch_ids),
+            )
+            .group_by(Appointment.status)
+            .order_by(Appointment.status)
         )
     ).all()
     return {str(state): int(count) for state, count in rows}
