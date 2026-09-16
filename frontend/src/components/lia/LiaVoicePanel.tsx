@@ -124,7 +124,10 @@ export function LiaVoicePanel({
           </>
         )}
         <p className="text-xs text-content-muted">
-          No background recording. No raw audio is persisted by ACP. End Conversation stops capture and speech immediately.
+          No background recording. ACP does not persist raw audio. Your browser or
+          device speech service may process audio under its own privacy terms; do
+          not speak passwords, banking details, tax data, or other secrets. End
+          Conversation stops capture and speech immediately.
         </p>
       </CardContent>
     </Card>

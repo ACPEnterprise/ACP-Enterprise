@@ -9,7 +9,10 @@ and navigation suggestions as typed text. Voice has no database adapter, command
 bus, tool executor, or separate intelligence state.
 
 The web implementation uses the browser's foreground Web Speech recognition and
-speech synthesis capabilities. ACP does not persist raw audio. A transcript is
+speech synthesis capabilities. ACP does not persist raw audio, but the browser or
+device speech service may process audio under its own privacy terms and is not
+guaranteed to be on-device. The product therefore warns users not to speak
+passwords, banking details, tax data, or other secrets. A transcript is
 placed into the normal editable question field; only explicitly enabled
 conversation mode submits it automatically. Conversation mode is visibly active,
 has an End Conversation control, stops on page cleanup, and expires after 90
