@@ -98,7 +98,7 @@ async def briefing(
     return await lia_service.ask(
         session,
         context=context,
-        request=LiaRequest(question="How are we doing today and what needs attention?"),
+        request=LiaRequest(question="How are we doing and what needs attention?"),
     )
 
 
