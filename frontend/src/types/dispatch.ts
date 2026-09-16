@@ -32,6 +32,16 @@ export interface DispatchAssignment {
   version: number;
   crew_members: readonly DispatchCrewMember[];
 }
+export interface DispatchAssignmentHistoryItem {
+  event_type: string;
+  prior_status: string | null;
+  new_status: string;
+  primary_employee_id: string | null;
+  actor_display_name: string;
+  reason: string;
+  version: number;
+  occurred_at: string;
+}
 export type DispatchExceptionCode =
   | "assignment_ambiguous"
   | "technician_unavailable"

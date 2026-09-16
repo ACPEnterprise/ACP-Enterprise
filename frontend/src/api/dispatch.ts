@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import type {
   DispatchAssignment,
+  DispatchAssignmentHistoryItem,
   DispatchBoardPage,
   TechnicianEligibility,
   DispatchExceptionCode,
@@ -8,6 +9,24 @@ import type {
 } from "../types/dispatch";
 
 const ROOT = "/api/v1/dispatch";
+export async function getDispatchAssignment(
+  appointmentId: string,
+): Promise<DispatchAssignment> {
+  return (
+    await apiClient.get<DispatchAssignment>(
+      `${ROOT}/appointments/${appointmentId}/assignment`,
+    )
+  ).data;
+}
+export async function getDispatchAssignmentHistory(
+  appointmentId: string,
+): Promise<readonly DispatchAssignmentHistoryItem[]> {
+  return (
+    await apiClient.get<readonly DispatchAssignmentHistoryItem[]>(
+      `${ROOT}/appointments/${appointmentId}/assignment/history`,
+    )
+  ).data;
+}
 export async function getDispatchBoard(
   startAt: string,
   endAt: string,

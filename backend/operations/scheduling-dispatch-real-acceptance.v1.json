@@ -1,0 +1,52 @@
+{
+  "contract": "scheduling.dispatch.real-acceptance.v1",
+  "environment": "Preview",
+  "synthetic_fallback": "prohibited",
+  "production": "prohibited",
+  "default_mode": "read_only",
+  "mutation_gate": {
+    "required": true,
+    "requirements": [
+      "owner_certified_real_employee",
+      "owner_sanctioned_real_appointment",
+      "authorized_owner_or_csr_session",
+      "deployed_release_matches_protected_authority",
+      "record_versions_captured_immediately_before_mutation"
+    ]
+  },
+  "subjects": [
+    "real_customer",
+    "real_service_location",
+    "real_job",
+    "real_appointment",
+    "real_employee"
+  ],
+  "checks": [
+    "calendar_day_week_work_week_month_and_needs_scheduling",
+    "customer_location_job_appointment_relationship",
+    "workforce_dispatch_eligibility",
+    "primary_assignment_and_optional_crew",
+    "save_refresh_persistence",
+    "job_dispatch_consistency",
+    "employee_my_day_consistency",
+    "authorized_reassignment",
+    "authorized_reschedule_with_stale_version_rejection",
+    "assignment_and_scheduling_history",
+    "technician_lifecycle_to_office_projection",
+    "exception_and_capacity_evidence"
+  ],
+  "evidence": [
+    "release_sha",
+    "frontend_digest",
+    "schema_head",
+    "company_id_reference",
+    "branch_id_reference",
+    "appointment_number",
+    "job_number",
+    "employee_number",
+    "before_versions",
+    "after_versions",
+    "observed_ui_states",
+    "audit_references"
+  ]
+}
