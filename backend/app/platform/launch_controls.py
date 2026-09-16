@@ -283,6 +283,7 @@ LAUNCH_ROLE_MATRIX = (
         permission_codes=frozenset(
             {
                 EmployeeOperationsPermission.OWN_DAY_READ,
+                EmployeeOperationsPermission.OWN_LIA_READ,
                 TimekeepingPermission.OWN_PUNCH,
                 TimekeepingPermission.OWN_READ,
                 JobPermission.READ,
