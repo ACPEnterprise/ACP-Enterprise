@@ -73,3 +73,24 @@ required escalation.
   history.
 - Final consolidated branch head is recorded in the release handoff; it is a
   protected ancestor and has zero remote integration divergence.
+
+## Currentness reconciliation addendum
+
+- A fresh `git fetch origin --prune` observed protected authority at
+  `origin/customer-management-v1` SHA
+  `5f7a45118885a38e5faa4fcfcf98dd395d3ea7ea`.
+- The protected history now contains the qualified Laptop-A and Laptop-B
+  Batch 2 source patches (`82ab4dbd...` and `14c9ca49...`) through their
+  reconciled implementations. Rebase therefore classified those source
+  candidates as already contained/current; no duplicate implementation was
+  retained.
+- The Phone/C candidate `41300801dbf94fb588c6dcb18cc458bbae74b32c` remains a
+  documentation-only employee-safe contract handoff. It is retained on this
+  integration branch for OM1/Phone coordination, but is not end-to-end
+  qualified because the server route and Mobile client are not present.
+- Reconciliation restored protected ancestry. The isolated branch is currently
+  9 commits ahead of protected and 0 commits behind; its remote counterpart
+  still requires a non-fast-forward history reconciliation before publication.
+- The protected Batch 12 platform-boundary changes introduced no Intelligence
+  migration requirement. OM1 retains canonical schema, final protected
+  integration, Preview, and Production authority.
