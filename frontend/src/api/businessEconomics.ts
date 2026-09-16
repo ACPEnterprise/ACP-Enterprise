@@ -325,6 +325,19 @@ export interface EconomicsPolicyAdministration {
     definition_version: string;
     snapshot_digest: string;
   }>;
+  cost_authority_decisions: Array<{
+    family_key: string;
+    title: string;
+    certification_state: "UNSELECTED" | "DRAFT" | "CERTIFIED" | "INACTIVE";
+    authority_required: "owner" | "accountant" | "owner_and_accountant";
+    implication: string;
+    evidence_required: string[];
+    supported_choices: string[];
+    current_choice: string | null;
+    effective_start: string | null;
+    historical_replay_supported: boolean;
+    limitations: string[];
+  }>;
   mutation_authority: "none";
   administration_fingerprint: string;
 }

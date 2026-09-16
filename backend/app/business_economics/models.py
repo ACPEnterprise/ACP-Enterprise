@@ -107,6 +107,86 @@ class CompanyFinancePolicyVersion(Base):
     )
 
 
+class JobDirectExpenseAllocation(Base):
+    """Immutable certified split from one exact source line to one Job."""
+
+    __tablename__ = "economics_job_direct_expense_allocations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_eco_direct_expense_job",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("allocation_version >= 1", name="ck_eco_expense_version"),
+        CheckConstraint("amount_minor > 0", name="ck_eco_expense_amount"),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_eco_expense_currency"),
+        CheckConstraint(
+            "status IN ('draft','ready_for_certification','certified','superseded','inactive')",
+            name="ck_eco_expense_status",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_record_type",
+            "source_transaction_id",
+            "source_line_id",
+            "allocation_version",
+            "job_id",
+            name="uq_eco_expense_source_version_job",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_eco_expense_idempotency"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_eco_expense_company_id"),
+        Index(
+            "ix_eco_expense_job_period",
+            "company_id",
+            "branch_id",
+            "job_id",
+            "effective_date",
+            "status",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_record_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    source_transaction_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    source_line_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    source_evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    allocation_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    allocation_basis: Mapped[str] = mapped_column(String(40), nullable=False)
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    allocation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    supersedes_allocation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("economics_job_direct_expense_allocations.id", ondelete="RESTRICT"),
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    expected_prior_version: Mapped[int | None] = mapped_column(Integer)
+    drafted_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    certified_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    certified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class FinancePolicySnapshotRecord(Base):
     __tablename__ = "economics_policy_snapshots"
     __table_args__ = (

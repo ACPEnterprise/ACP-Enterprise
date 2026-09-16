@@ -51,6 +51,29 @@ vi.mock("../hooks/useLuminary", () => ({
     data: {
       readiness: "READY",
       confidence: { score_percent: 90 },
+      job_economics: [
+        {
+          job_id: "job-1", job_number: "J-100", job_status: "completed",
+          customer: { id: "customer-1", name: "All County Customer" },
+          branch: { id: "branch-1", name: "Main" }, service_category: "drain_cleaning",
+          readiness: "PARTIAL", invoiced_revenue_minor: 12550,
+          settlement_applied_minor: null, accepted_worked_seconds: 3600,
+          direct_wage_cost_minor: null, actual_material_cost_minor: null,
+          other_direct_cost_minor: null, direct_contribution_minor: null,
+          contribution_percent_basis_points: null, fully_loaded_profit_minor: null,
+          missing_prerequisites: ["certified_direct_wage_cost", "actual_material_valuation"],
+          confidence_percent: 70,
+        },
+      ],
+      service_line_economics: [
+        {
+          service_category: "drain_cleaning", job_count: 1,
+          contribution_ready_job_count: 0, invoiced_revenue_minor: 12550,
+          accepted_worked_seconds: 3600, actual_material_cost_minor: null,
+          direct_contribution_minor: null, average_invoiced_ticket_minor: 12550,
+          readiness: "PARTIAL", missing_prerequisites: ["certified_direct_wage_cost"],
+        },
+      ],
       admitted_source_evidence: {
         authority: "accepted_acp_native_owning_domain_facts",
         admitted_reference_count: 7,
@@ -116,6 +139,11 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText(/remain separate from calculated profitability/)).toBeVisible();
     expect(screen.getByText(/Invoiced revenue \$125\.50/)).toBeVisible();
     expect(screen.getByText(/Accepted worked hours 1\.00/)).toBeVisible();
+    expect(screen.getByText("What ACP knows by Job")).toBeVisible();
+    expect(screen.getByText("Job J-100")).toBeVisible();
+    expect(screen.getByText("What it means by service line")).toBeVisible();
+    expect(screen.getAllByText("$125.50").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/certified direct wage cost/).length).toBeGreaterThan(0);
   });
 
   it("retries a temporary briefing failure without offering analysis", () => {

@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Final
+from typing import Any, Final, cast
 from uuid import UUID, uuid5
 
 from app.business_economics.source_completeness import source_completeness_matrix
@@ -26,6 +26,7 @@ class AnalysisReadiness(StrEnum):
     PROVIDER_UNSUPPORTED = "PROVIDER_UNSUPPORTED"
     REQUIRES_OWNER_INPUT = "REQUIRES_OWNER_INPUT"
     REQUIRES_ACCOUNTANT_INPUT = "REQUIRES_ACCOUNTANT_INPUT"
+    POLICY_REQUIRED = "POLICY_REQUIRED"
 
 
 class RecommendationFamily(StrEnum):
@@ -270,6 +271,299 @@ def _facts(
     return facts
 
 
+def _evidence_state(value: object, *, policy_required: bool = False) -> str:
+    if value is not None:
+        return AnalysisReadiness.READY.value
+    return (
+        AnalysisReadiness.POLICY_REQUIRED.value
+        if policy_required
+        else AnalysisReadiness.SOURCE_MISSING.value
+    )
+
+
+def _job_economics(workspace: dict[str, object]) -> list[dict[str, object]]:
+    """Compose admitted results with native facts without manufacturing cost."""
+    admitted = {str(item.get("job_id")): item for item in _rows(workspace.get("jobs"))}
+    native = _mapping(workspace.get("native_evidence"))
+    result: list[dict[str, object]] = []
+    for job in _rows(native.get("jobs")):
+        job_id = str(job.get("job_id"))
+        calculated = admitted.get(job_id, {})
+        invoice = job.get("invoiced_revenue_minor")
+        worked = job.get("accepted_worked_seconds")
+        material_usage_count = int(job.get("material_quantity_evidence_count") or 0)
+        material_cost = job.get("material_cost_minor")
+        direct_wage = calculated.get("labor_minor")
+        other_direct = calculated.get("other_direct_cost_minor")
+        contribution = calculated.get("contribution_minor")
+        references = _rows(job.get("references"))
+        conflicts = any(str(item.get("state")) == "CONFLICTING" for item in references)
+        missing = []
+        if invoice is None:
+            missing.append("invoiced_revenue")
+        if worked is None:
+            missing.append("accepted_job_work")
+        if direct_wage is None:
+            missing.append("certified_direct_wage_cost")
+        if material_usage_count == 0:
+            missing.append("actual_material_usage_or_not_applicable_authority")
+        elif material_cost is None:
+            missing.append("actual_material_valuation")
+        if other_direct is None:
+            missing.append("other_direct_cost_completeness")
+        if contribution is None:
+            missing.append("admitted_direct_contribution")
+        readiness = (
+            AnalysisReadiness.CONFLICTING_EVIDENCE.value
+            if conflicts
+            else AnalysisReadiness.READY.value
+            if not missing
+            else AnalysisReadiness.PARTIAL.value
+            if invoice is not None or worked is not None or material_usage_count
+            else AnalysisReadiness.INSUFFICIENT_EVIDENCE.value
+        )
+        result.append(
+            {
+                "job_id": job_id,
+                "job_number": job.get("job_number"),
+                "job_status": job.get("job_status"),
+                "customer": {
+                    "id": job.get("customer_id"),
+                    "name": job.get("customer_name"),
+                },
+                "branch": {
+                    "id": job.get("branch_id"),
+                    "name": job.get("branch_name"),
+                },
+                "service_category": job.get("service_category"),
+                "readiness": readiness,
+                "invoiced_revenue_minor": invoice,
+                "settlement_applied_minor": job.get("settlement_applied_minor"),
+                "accepted_worked_seconds": worked,
+                "direct_wage_cost_minor": direct_wage,
+                "employer_burden_minor": calculated.get("labor_burden_minor"),
+                "material_usage_count": material_usage_count,
+                "actual_material_cost_minor": material_cost,
+                "other_direct_cost_minor": other_direct,
+                "direct_contribution_minor": contribution,
+                "contribution_percent_basis_points": (
+                    contribution * 10_000 // invoice
+                    if isinstance(contribution, int)
+                    and isinstance(invoice, int)
+                    and invoice != 0
+                    else None
+                ),
+                "fully_loaded_profit_minor": calculated.get("net_profit_minor"),
+                "evidence_states": {
+                    "revenue": _evidence_state(invoice),
+                    "settlement": _evidence_state(job.get("settlement_applied_minor")),
+                    "labor_hours": _evidence_state(worked),
+                    "direct_wage_cost": _evidence_state(
+                        direct_wage, policy_required=worked is not None
+                    ),
+                    "employer_burden": _evidence_state(
+                        calculated.get("labor_burden_minor"), policy_required=True
+                    ),
+                    "material_usage": _evidence_state(
+                        material_usage_count if material_usage_count else None
+                    ),
+                    "material_valuation": _evidence_state(material_cost),
+                    "other_direct_cost": _evidence_state(other_direct),
+                    "fully_loaded_profit": _evidence_state(
+                        calculated.get("net_profit_minor"), policy_required=True
+                    ),
+                },
+                "missing_prerequisites": missing,
+                "confidence_percent": calculated.get("confidence_percent")
+                or (70 if readiness == AnalysisReadiness.PARTIAL.value else 80),
+                "authority": {
+                    "revenue": "ACP_NATIVE_INVOICED",
+                    "worked_time": "ACCEPTED_JOB_WORK_INTERVAL",
+                    "calculated_cost": "ADMITTED_ECONOMICS_RESULT"
+                    if calculated
+                    else None,
+                },
+                "evidence_references": references,
+            }
+        )
+    return sorted(result, key=lambda item: (str(item["job_number"]), item["job_id"]))
+
+
+def _service_line_economics(
+    jobs: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for job in jobs:
+        category = job.get("service_category")
+        if isinstance(category, str) and category:
+            grouped.setdefault(category, []).append(job)
+    output = []
+    for category, rows in sorted(grouped.items()):
+        complete = [item for item in rows if item["readiness"] == "READY"]
+        revenue_values = [
+            value
+            for item in rows
+            if isinstance((value := item.get("invoiced_revenue_minor")), int)
+        ]
+        worked_values = [
+            value
+            for item in rows
+            if isinstance((value := item.get("accepted_worked_seconds")), int)
+        ]
+        material_values = [
+            value
+            for item in rows
+            if isinstance((value := item.get("actual_material_cost_minor")), int)
+        ]
+        contribution_values = [
+            value
+            for item in rows
+            if isinstance((value := item.get("direct_contribution_minor")), int)
+        ]
+        missing_values: set[str] = set()
+        for item in rows:
+            item_missing = item.get("missing_prerequisites")
+            if isinstance(item_missing, list):
+                missing_values.update(str(value) for value in item_missing)
+        output.append(
+            {
+                "service_category": category,
+                "job_count": len(rows),
+                "contribution_ready_job_count": len(complete),
+                "invoiced_revenue_minor": sum(revenue_values),
+                "accepted_worked_seconds": sum(worked_values),
+                "actual_material_cost_minor": (
+                    sum(material_values) if len(material_values) == len(rows) else None
+                ),
+                "direct_contribution_minor": (
+                    sum(contribution_values) if len(complete) == len(rows) else None
+                ),
+                "average_invoiced_ticket_minor": (
+                    sum(revenue_values) // len(revenue_values)
+                    if revenue_values
+                    else None
+                ),
+                "readiness": "READY" if len(complete) == len(rows) else "PARTIAL",
+                "missing_prerequisites": sorted(missing_values),
+                "authority": "canonical_job_service_category_rollup",
+            }
+        )
+    return output
+
+
+def _evidence_priority_queue(
+    jobs: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    affected: dict[str, set[str]] = {}
+    for job in jobs:
+        missing = job.get("missing_prerequisites")
+        if not isinstance(missing, list):
+            continue
+        for prerequisite in missing:
+            affected.setdefault(str(prerequisite), set()).add(str(job["job_id"]))
+    ownership = {
+        "invoiced_revenue": ("Invoices", "machine_acquirable"),
+        "accepted_job_work": ("Timekeeping", "machine_acquirable"),
+        "certified_direct_wage_cost": (
+            "Payroll/Economics policy",
+            "owner_input_required",
+        ),
+        "actual_material_usage_or_not_applicable_authority": (
+            "Inventory/Field Operations",
+            "machine_acquirable_or_owner_not_applicable",
+        ),
+        "actual_material_valuation": (
+            "Inventory/Purchasing",
+            "accountant_input_required",
+        ),
+        "other_direct_cost_completeness": (
+            "Accounts Payable/Economics",
+            "accountant_input_required",
+        ),
+        "admitted_direct_contribution": (
+            "Business Economics",
+            "machine_calculated_after_inputs",
+        ),
+    }
+    queue = []
+    for prerequisite, job_ids in affected.items():
+        owner, next_step = ownership.get(
+            prerequisite, ("Source domain", "source_authority_required")
+        )
+        queue.append(
+            {
+                "prerequisite": prerequisite,
+                "affected_job_count": len(job_ids),
+                "affected_job_ids": sorted(job_ids),
+                "responsible_domain": owner,
+                "next_safe_step": next_step,
+                "economic_unlock": (
+                    "direct_contribution"
+                    if prerequisite != "admitted_direct_contribution"
+                    else "owner_profitability_comparison"
+                ),
+            }
+        )
+    return sorted(
+        queue,
+        key=lambda item: (
+            -cast(int, item["affected_job_count"]),
+            str(item["prerequisite"]),
+        ),
+    )
+
+
+def _owner_question_answers(
+    jobs: list[dict[str, object]], service_lines: list[dict[str, object]]
+) -> dict[str, object]:
+    contribution_jobs = [
+        item for item in jobs if isinstance(item.get("direct_contribution_minor"), int)
+    ]
+    ranked = sorted(
+        contribution_jobs,
+        key=lambda item: cast(int, item["direct_contribution_minor"]),
+        reverse=True,
+    )
+    negative = [
+        item for item in ranked if cast(int, item["direct_contribution_minor"]) < 0
+    ]
+    complete_services = [
+        item
+        for item in service_lines
+        if isinstance(item.get("direct_contribution_minor"), int)
+    ]
+    return {
+        "which_jobs_make_money": {
+            "state": "READY" if ranked else "INSUFFICIENT_EVIDENCE",
+            "strongest": ranked[:5],
+            "weakest": list(reversed(ranked[-5:])),
+            "negative": negative,
+            "limitation": "Direct contribution only; overhead is not included."
+            if ranked
+            else "No Job has complete admitted direct-cost and contribution evidence.",
+        },
+        "which_services_perform_best": {
+            "state": "READY" if complete_services else "INSUFFICIENT_EVIDENCE",
+            "services": sorted(
+                complete_services,
+                key=lambda item: cast(int, item["direct_contribution_minor"]),
+                reverse=True,
+            ),
+            "limitation": "Uncategorized and incomplete Jobs are not forced into service-line profit.",
+        },
+        "what_prevents_fully_loaded_profit": {
+            "state": "POLICY_REQUIRED",
+            "missing": [
+                "complete_direct_contribution",
+                "reconciled_overhead_evidence",
+                "certified_overhead_pool_membership",
+                "certified_overhead_allocation_driver",
+            ],
+        },
+        "causality_boundary": "Measured component differences support investigation; they do not establish cause.",
+    }
+
+
 def _recommendations(
     workspace: dict[str, object],
     *,
@@ -443,6 +737,8 @@ def project_owner_economics(
     facts = _facts(
         workspace, company_id=company_id, branch_id=branch_id, as_of=generated_at
     )
+    job_economics = _job_economics(workspace)
+    service_line_economics = _service_line_economics(job_economics)
     packet: dict[str, object] = {
         "contract_version": CONTRACT_VERSION,
         "engine_version": ENGINE_VERSION,
@@ -451,6 +747,12 @@ def project_owner_economics(
         "period": period,
         "readiness": readiness.value,
         "facts": facts,
+        "job_economics": job_economics,
+        "service_line_economics": service_line_economics,
+        "evidence_priority_queue": _evidence_priority_queue(job_economics),
+        "owner_question_answers": _owner_question_answers(
+            job_economics, service_line_economics
+        ),
         "admitted_source_evidence": workspace.get("native_evidence"),
         "confidence": _confidence(workspace),
         "recommendation_candidates": recommendations,

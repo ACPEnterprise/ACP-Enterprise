@@ -163,6 +163,37 @@ export function EconomicsPolicyAdministrationRoute() {
           ? "ACP has not selected real Company values. Review supported choices and required evidence before an authorized policy workflow records a decision."
           : "Every registered policy family has current selected authority."}
       </Alert>
+      <section aria-labelledby="cost-authority-heading" className="space-y-3">
+        <div>
+          <h2 id="cost-authority-heading" className="text-xl font-bold">
+            Cost attribution decisions
+          </h2>
+          <p className="text-sm text-content-muted">
+            What ACP knows, who must certify the remaining choice, and what the
+            choice changes. Saving or certifying authority is not available from
+            this read-only workspace.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {value.cost_authority_decisions.map((decision) => (
+            <Card key={decision.family_key}>
+              <CardHeader>
+                <CardTitle>{decision.title}</CardTitle>
+                <CardDescription>
+                  {label(decision.certification_state)} · Requires {label(decision.authority_required)}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>{decision.implication}</p>
+                <p><strong>Current choice:</strong> {decision.current_choice ? label(decision.current_choice) : "No certified choice"}</p>
+                <p><strong>Evidence needed:</strong> {decision.evidence_required.map(label).join(", ")}</p>
+                <p><strong>Available choices:</strong> {decision.supported_choices.map(label).join(", ")}</p>
+                <p><strong>What remains uncertain:</strong> {decision.limitations.join(" ")}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
       <section className="grid gap-4 lg:grid-cols-2">
         {value.policy_families.map((family) => (
           <Card key={family.family_key}>
