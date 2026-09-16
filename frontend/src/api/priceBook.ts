@@ -94,9 +94,28 @@ export async function createCommercialSnapshot(
 export async function createCategory(data: {
   code: string;
   name: string;
+  description?: string;
+  parent_id?: string;
+  position?: number;
 }): Promise<PriceBookCategory> {
   return (await apiClient.post<PriceBookCategory>(`${path}/categories`, data))
     .data;
+}
+export async function updateCategory(
+  categoryId: string,
+  data: {
+    code: string;
+    name: string;
+    description?: string;
+    parent_id?: string;
+    position?: number;
+    status: "draft" | "active" | "archived";
+    expected_version: number;
+  },
+): Promise<PriceBookCategory> {
+  return (
+    await apiClient.put<PriceBookCategory>(`${path}/categories/${categoryId}`, data)
+  ).data;
 }
 export async function createTax(data: {
   code: string;
