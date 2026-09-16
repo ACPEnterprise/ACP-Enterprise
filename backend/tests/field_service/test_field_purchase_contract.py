@@ -5,8 +5,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-from sqlalchemy import func, select
 
 from app.dispatch.models import DispatchAssignment
 from app.field_service.artifacts import FieldArtifactService
@@ -36,6 +34,9 @@ from app.inventory.models import (
 )
 from app.jobs.models import Job
 from app.purchasing.models import OperationalVendor
+from pydantic import ValidationError
+from sqlalchemy import func, select
+
 from tests.dispatch.test_dispatch_service import dispatch_fixture
 
 
