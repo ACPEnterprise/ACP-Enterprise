@@ -94,6 +94,17 @@ class InventoryRepository:
         )
         return self._item_record(item) if item else None
 
+    async def get_item_by_code(
+        self, session: AsyncSession, *, company_id: UUID, code: str
+    ) -> InventoryItemRecord | None:
+        item = await session.scalar(
+            select(InventoryItem).where(
+                InventoryItem.company_id == company_id,
+                InventoryItem.code == code.strip().upper(),
+            )
+        )
+        return self._item_record(item) if item else None
+
     async def create_location(
         self, session: AsyncSession, *, spec: CreateStockLocation
     ) -> StockLocationRecord:
@@ -162,9 +173,7 @@ class InventoryRepository:
         key = spec.idempotency_key.strip()
         if not key:
             raise InventoryValidation("Movement idempotency key is required")
-        await self._lock_idempotency(
-            session, spec.company_id, "movement", key
-        )
+        await self._lock_idempotency(session, spec.company_id, "movement", key)
         existing = await session.scalar(
             select(StockMovement).where(
                 StockMovement.company_id == spec.company_id,
@@ -654,9 +663,7 @@ class InventoryRepository:
         key = spec.idempotency_key.strip()
         if not key:
             raise InventoryValidation("Reservation idempotency key is required")
-        await self._lock_idempotency(
-            session, spec.company_id, "reservation", key
-        )
+        await self._lock_idempotency(session, spec.company_id, "reservation", key)
         existing = await session.scalar(
             select(InventoryReservation).where(
                 InventoryReservation.company_id == spec.company_id,
@@ -850,6 +857,44 @@ class InventoryRepository:
         )
         return tuple(self._allocation_record(row) for row in rows.all())
 
+    async def list_branch_allocations(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[AllocationRecord, ...]:
+        if not branch_ids:
+            return ()
+        rows = await session.scalars(
+            select(ReservationAllocation)
+            .where(
+                ReservationAllocation.company_id == company_id,
+                ReservationAllocation.branch_id.in_(branch_ids),
+            )
+            .order_by(ReservationAllocation.allocated_at, ReservationAllocation.id)
+        )
+        return tuple(self._allocation_record(row) for row in rows.all())
+
+    async def list_material_issues(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[MaterialIssueRecord, ...]:
+        if not branch_ids:
+            return ()
+        rows = await session.scalars(
+            select(MaterialIssue)
+            .where(
+                MaterialIssue.company_id == company_id,
+                MaterialIssue.branch_id.in_(branch_ids),
+            )
+            .order_by(MaterialIssue.occurred_at, MaterialIssue.id)
+        )
+        return tuple(self._issue_record(row) for row in rows.all())
+
     async def transition_reservation(
         self, session: AsyncSession, *, spec: TransitionReservation
     ) -> ReservationRecord:
@@ -971,8 +1016,8 @@ class InventoryRepository:
             self._assert_same_issue(concurrent_replay, spec)
             return self._issue_record(concurrent_replay)
         self._assert_version(reservation.version, spec.expected_reservation_version)
-        if reservation.status != "allocated":
-            raise InventoryConflict("Only allocated reservations can be issued")
+        if reservation.status not in {"allocated", "partially_allocated"}:
+            raise InventoryConflict("Only allocated reservation evidence can be issued")
         allocation = await self._scoped_allocation(session, spec)
         prior = await session.scalar(
             select(MaterialIssue).where(

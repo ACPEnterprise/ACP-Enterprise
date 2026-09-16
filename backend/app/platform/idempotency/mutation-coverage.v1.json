@@ -268,6 +268,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "inventory",
+      "mechanism": "Company-scoped unique SKU with exact-value replay convergence",
+      "method": "PUT",
+      "operation_id": "create_item_api_v1_inventory_items__code__put",
+      "path": "/api/v1/inventory/items/{code}",
+      "reason": "The same normalized SKU and item facts return one authority; contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "accounting",
       "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
@@ -1663,6 +1673,26 @@
     {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "inventory",
+      "mechanism": "Company-scoped material issue command identity and allocation uniqueness",
+      "method": "POST",
+      "operation_id": "issue_material_api_v1_inventory_reservations__reservation_id__issues_post",
+      "path": "/api/v1/inventory/reservations/{reservation_id}/issues",
+      "reason": "Exact replay returns one immutable Job consumption issue and cannot double-decrement stock.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped reversal command identity and original-issue uniqueness",
+      "method": "POST",
+      "operation_id": "reverse_material_issue_api_v1_inventory_material_issues__issue_id__reversal_post",
+      "path": "/api/v1/inventory/material-issues/{issue_id}/reversal",
+      "reason": "Exact replay returns one compensating reversal and cannot restore stock twice.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
       "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
       "operation_id": "transfer_api_v1_inventory_transfers_post",
@@ -2999,6 +3029,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "894980effcc92ae74e86a4bd4f96bcca4bbb6ec54007e57e334cbaed03e40601",
+  "fingerprint": "25bd0d647e1aa086e8213c1f66c3d8a3eb9fdd76dfb1dc424c6e9178936a75ab",
   "schema_version": "1"
 }

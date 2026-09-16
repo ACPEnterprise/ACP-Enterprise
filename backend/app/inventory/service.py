@@ -11,14 +11,19 @@ from app.inventory.contracts import (
     AdjustmentRecord,
     AllocateReservation,
     AllocationRecord,
+    CreateInventoryItem,
     CreateReservation,
     CreateStockLocation,
     CycleCountEntryRecord,
     CycleCountSessionRecord,
+    InventoryItemRecord,
+    MaterialIssueRecord,
     PostInventoryAdjustment,
+    PostMaterialIssue,
     PostStockMovement,
     RecordCycleCount,
     ReservationRecord,
+    ReverseMaterialIssue,
     StartCycleCount,
     StockLocationRecord,
     StockMovementRecord,
@@ -28,14 +33,19 @@ from app.inventory.errors import InventoryValidation
 from app.inventory.repository import InventoryRepository
 from app.inventory.schemas import (
     AdjustmentCreate,
+    AllocationResponse,
     CycleCountComplete,
     CycleCountRecord,
     CycleCountSessionResponse,
     CycleCountStart,
     InventoryOverview,
+    ItemCreate,
     ItemResponse,
     LocationCreate,
     LocationResponse,
+    MaterialIssueCreate,
+    MaterialIssueResponse,
+    MaterialIssueReverse,
     QuantityResponse,
     ReservationAllocate,
     ReservationCreate,
@@ -43,6 +53,7 @@ from app.inventory.schemas import (
     ReservationResponse,
     TransferCreate,
 )
+from app.jobs.models import Job
 from app.platform.permissions.authorization import AuthorizationContext
 
 
@@ -67,6 +78,7 @@ class InventoryService:
         branches = (
             tuple(context.authorized_branch_ids) if branch_id is None else (branch_id,)
         )
+
         if branch_id is not None:
             self._branch(context, branch_id)
         return InventoryOverview(
@@ -94,7 +106,59 @@ class InventoryService:
                     session, company_id=context.company.id, branch_ids=branches
                 )
             ),
+            allocations=tuple(
+                AllocationResponse.model_validate(record)
+                for record in await self.repository.list_branch_allocations(
+                    session,
+                    company_id=context.company.id,
+                    branch_ids=branches,
+                )
+            ),
+            material_issues=tuple(
+                MaterialIssueResponse.model_validate(record)
+                for record in await self.repository.list_material_issues(
+                    session,
+                    company_id=context.company.id,
+                    branch_ids=branches,
+                )
+            ),
         )
+
+    async def create_item(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        code: str,
+        data: ItemCreate,
+    ) -> InventoryItemRecord:
+        async with session.begin():
+            existing = await self.repository.get_item_by_code(
+                session, company_id=context.company.id, code=code
+            )
+            if existing is not None:
+                if (
+                    existing.name != data.name.strip()
+                    or existing.stocking_unit != data.stocking_unit.strip()
+                    or existing.allow_fractional != data.allow_fractional
+                ):
+                    from app.inventory.errors import InventoryConflict
+
+                    raise InventoryConflict(
+                        "Item code already identifies different material authority"
+                    )
+                return existing
+            return await self.repository.create_item(
+                session,
+                spec=CreateInventoryItem(
+                    company_id=context.company.id,
+                    code=code,
+                    name=data.name,
+                    stocking_unit=data.stocking_unit,
+                    allow_fractional=data.allow_fractional,
+                    actor_user_id=context.user.id,
+                ),
+            )
 
     async def create_location(
         self,
@@ -273,6 +337,115 @@ class InventoryService:
                     "item_id": str(record.item_id),
                     "location_id": str(record.location_id),
                     "version": record.version,
+                },
+            )
+        return record
+
+    async def issue_material(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        reservation_id: UUID,
+        data: MaterialIssueCreate,
+    ) -> MaterialIssueRecord:
+        self._branch(context, data.branch_id)
+        async with session.begin():
+            reservation = await self._reservation(session, context, reservation_id)
+            if reservation.branch_id != data.branch_id:
+                from app.inventory.errors import InventoryNotFound
+
+                raise InventoryNotFound("Job material reservation was not found")
+            if reservation.demand_type != "job":
+                raise InventoryValidation(
+                    "Only an authoritative Job reservation can become Job consumption"
+                )
+            job_exists = await session.scalar(
+                select(Job.id).where(
+                    Job.company_id == context.company.id,
+                    Job.branch_id == reservation.branch_id,
+                    Job.id == reservation.demand_id,
+                )
+            )
+            if job_exists is None:
+                from app.inventory.errors import InventoryNotFound
+
+                raise InventoryNotFound(
+                    "Authoritative Job material demand was not found"
+                )
+            record = await self.repository.post_material_issue(
+                session,
+                spec=PostMaterialIssue(
+                    company_id=context.company.id,
+                    branch_id=data.branch_id,
+                    reservation_id=reservation.id,
+                    allocation_id=data.allocation_id,
+                    item_id=data.item_id,
+                    location_id=data.location_id,
+                    occurred_at=data.occurred_at,
+                    actor_user_id=context.user.id,
+                    authorized_branch_ids=tuple(context.authorized_branch_ids),
+                    expected_reservation_version=data.expected_reservation_version,
+                    idempotency_key=data.idempotency_key,
+                    external_reference_type="job",
+                    external_reference_id=reservation.demand_id,
+                ),
+            )
+            await self._event(
+                session,
+                context,
+                EventType.INVENTORY_MATERIAL_ISSUED,
+                "inventory_material_issue",
+                record.id,
+                record.branch_id,
+                {
+                    "job_id": str(reservation.demand_id),
+                    "item_id": str(record.item_id),
+                    "location_id": str(record.location_id),
+                    "quantity": str(record.quantity),
+                    "unit": record.stocking_unit,
+                    "movement_id": str(record.movement_id),
+                },
+            )
+        return record
+
+    async def reverse_material_issue(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        issue_id: UUID,
+        data: MaterialIssueReverse,
+    ) -> MaterialIssueRecord:
+        self._branch(context, data.branch_id)
+        async with session.begin():
+            record = await self.repository.reverse_material_issue(
+                session,
+                spec=ReverseMaterialIssue(
+                    company_id=context.company.id,
+                    branch_id=data.branch_id,
+                    issue_id=issue_id,
+                    occurred_at=data.occurred_at,
+                    actor_user_id=context.user.id,
+                    authorized_branch_ids=tuple(context.authorized_branch_ids),
+                    expected_reservation_version=data.expected_reservation_version,
+                    idempotency_key=data.idempotency_key,
+                ),
+            )
+            await self._event(
+                session,
+                context,
+                EventType.INVENTORY_MATERIAL_ISSUE_REVERSED,
+                "inventory_material_issue",
+                record.id,
+                record.branch_id,
+                {
+                    "original_issue_id": str(issue_id),
+                    "item_id": str(record.item_id),
+                    "location_id": str(record.location_id),
+                    "quantity": str(record.quantity),
+                    "unit": record.stocking_unit,
+                    "movement_id": str(record.movement_id),
                 },
             )
         return record

@@ -3,18 +3,25 @@ import {
   allocateInventoryReservation,
   completeCycleCount,
   createInventoryLocation,
+  createInventoryItem,
   createInventoryReservation,
   getInventoryOverview,
+  getJobMaterials,
+  getMaterialCostReadiness,
   getCycleCounts,
+  issueInventoryMaterial,
   postInventoryAdjustment,
   postInventoryTransfer,
   releaseInventoryReservation,
+  reverseInventoryMaterialIssue,
   recordCycleCount,
   startCycleCount,
 } from "../api/inventory";
 import type {
   CycleCountRecord,
   InventoryReservationAllocate,
+  InventoryMaterialIssueCreate,
+  InventoryMaterialIssueReverse,
 } from "../types/inventory";
 
 const inventoryKeys = {
@@ -22,7 +29,17 @@ const inventoryKeys = {
   overview: (branch?: string) => ["inventory", "overview", branch] as const,
   cycleCounts: (branch?: string) =>
     ["inventory", "cycle-counts", branch] as const,
+  jobMaterials: (jobId?: string) => ["inventory", "jobs", jobId, "materials"] as const,
+  costReadiness: ["inventory", "cost-readiness"] as const,
 };
+
+export function useJobMaterials(jobId?: string, enabled = true) {
+  return useQuery({
+    queryKey: inventoryKeys.jobMaterials(jobId),
+    queryFn: () => getJobMaterials(jobId!),
+    enabled: enabled && Boolean(jobId),
+  });
+}
 
 export function useInventory(branch?: string, enabled = true) {
   return useQuery({
@@ -40,11 +57,20 @@ export function useCycleCounts(branch?: string, enabled = true) {
   });
 }
 
+export function useMaterialCostReadiness(enabled = true) {
+  return useQuery({
+    queryKey: inventoryKeys.costReadiness,
+    queryFn: getMaterialCostReadiness,
+    enabled,
+  });
+}
+
 export function useInventoryMutations() {
   const client = useQueryClient();
   const refresh = () =>
     client.invalidateQueries({ queryKey: inventoryKeys.all });
   return {
+    createItem: useMutation({ mutationFn: createInventoryItem, onSuccess: refresh }),
     createLocation: useMutation({
       mutationFn: createInventoryLocation,
       onSuccess: refresh,
@@ -70,6 +96,26 @@ export function useInventoryMutations() {
     release: useMutation({
       mutationFn: ({ id, version }: { id: string; version: number }) =>
         releaseInventoryReservation(id, version),
+      onSuccess: refresh,
+    }),
+    issueMaterial: useMutation({
+      mutationFn: ({
+        reservationId,
+        data,
+      }: {
+        reservationId: string;
+        data: InventoryMaterialIssueCreate;
+      }) => issueInventoryMaterial(reservationId, data),
+      onSuccess: refresh,
+    }),
+    reverseIssue: useMutation({
+      mutationFn: ({
+        issueId,
+        data,
+      }: {
+        issueId: string;
+        data: InventoryMaterialIssueReverse;
+      }) => reverseInventoryMaterialIssue(issueId, data),
       onSuccess: refresh,
     }),
     adjust: useMutation({

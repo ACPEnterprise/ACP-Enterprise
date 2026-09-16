@@ -5,11 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.inventory.costing import material_costing_service
 from app.inventory.errors import (
     InventoryConflict,
     InventoryNotFound,
     InventoryValidation,
 )
+from app.inventory.job_materials import job_materials_service
 from app.inventory.schemas import (
     AdjustmentCreate,
     AdjustmentResponse,
@@ -20,8 +22,15 @@ from app.inventory.schemas import (
     CycleCountSessionResponse,
     CycleCountStart,
     InventoryOverview,
+    ItemCreate,
+    ItemResponse,
+    JobMaterialsResponse,
     LocationCreate,
     LocationResponse,
+    MaterialCostReadinessResponse,
+    MaterialIssueCreate,
+    MaterialIssueResponse,
+    MaterialIssueReverse,
     MovementResponse,
     ReservationAllocate,
     ReservationCreate,
@@ -96,6 +105,42 @@ async def overview(
         )
     except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
         raise translate(error) from error
+
+
+@router.get("/jobs/{job_id}/materials", response_model=JobMaterialsResponse)
+async def job_materials(
+    job_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> JobMaterialsResponse:
+    try:
+        return await job_materials_service.projection(
+            session, context=context, job_id=job_id
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.put("/items/{code}", response_model=ItemResponse)
+async def create_item(
+    code: str, data: ItemCreate, context: ManageContext, session: DatabaseSession
+) -> ItemResponse:
+    try:
+        return ItemResponse.model_validate(
+            await inventory_service.create_item(
+                session, context=context, code=code, data=data
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.get("/cost-readiness", response_model=MaterialCostReadinessResponse)
+async def cost_readiness(
+    context: ReadContext,
+    session: DatabaseSession,
+) -> MaterialCostReadinessResponse:
+    return await material_costing_service.readiness(session, context=context)
 
 
 @router.post(
@@ -178,6 +223,51 @@ async def release(
         return ReservationResponse.model_validate(
             await inventory_service.release(
                 session, context=context, reservation_id=reservation_id, data=data
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/reservations/{reservation_id}/issues",
+    response_model=MaterialIssueResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def issue_material(
+    reservation_id: UUID,
+    data: MaterialIssueCreate,
+    context: ReserveContext,
+    session: DatabaseSession,
+) -> MaterialIssueResponse:
+    try:
+        return MaterialIssueResponse.model_validate(
+            await inventory_service.issue_material(
+                session,
+                context=context,
+                reservation_id=reservation_id,
+                data=data,
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/material-issues/{issue_id}/reversal",
+    response_model=MaterialIssueResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def reverse_material_issue(
+    issue_id: UUID,
+    data: MaterialIssueReverse,
+    context: ReserveContext,
+    session: DatabaseSession,
+) -> MaterialIssueResponse:
+    try:
+        return MaterialIssueResponse.model_validate(
+            await inventory_service.reverse_material_issue(
+                session, context=context, issue_id=issue_id, data=data
             )
         )
     except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:

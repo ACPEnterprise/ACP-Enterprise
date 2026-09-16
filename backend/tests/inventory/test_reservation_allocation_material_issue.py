@@ -149,6 +149,32 @@ async def test_partial_allocation_requires_explicit_contract_and_can_complete(
         )
         assert current is not None
         assert current.status == "partially_allocated"
+        issue = await repository.post_material_issue(
+            session,
+            spec=PostMaterialIssue(
+                company_id=company.id,
+                branch_id=branch.id,
+                reservation_id=reservation.id,
+                allocation_id=partial.id,
+                item_id=item.id,
+                location_id=warehouse.id,
+                occurred_at=datetime.now(timezone.utc),
+                actor_user_id=actor.id,
+                authorized_branch_ids=(branch.id,),
+                expected_reservation_version=current.version,
+                idempotency_key=f"partial-issue-{uuid4()}",
+            ),
+        )
+        assert issue.quantity == Decimal(4)
+        current = await repository.get_reservation(
+            session,
+            company_id=company.id,
+            branch_id=branch.id,
+            reservation_id=reservation.id,
+        )
+        assert current is not None
+        assert current.status == "partially_allocated"
+        assert current.issued_quantity == Decimal(4)
         completed = await repository.allocate_reservation(
             session,
             spec=allocation_spec(
@@ -168,6 +194,7 @@ async def test_partial_allocation_requires_explicit_contract_and_can_complete(
             reservation_id=reservation.id,
         )
         assert final is not None and final.status == "allocated"
+        assert final.issued_quantity == Decimal(4)
         ordered = await repository.list_allocations(
             session,
             company_id=company.id,

@@ -8,6 +8,12 @@ export interface InventoryItem {
   status: string;
   version: number;
 }
+export interface InventoryItemCreate {
+  code: string;
+  name: string;
+  stocking_unit: string;
+  allow_fractional: boolean;
+}
 export interface InventoryLocation {
   id: string;
   company_id: string;
@@ -55,6 +61,31 @@ export interface InventoryOverview {
   locations: readonly InventoryLocation[];
   quantities: readonly InventoryQuantity[];
   reservations: readonly InventoryReservation[];
+  allocations: readonly InventoryAllocation[];
+  material_issues: readonly InventoryMaterialIssue[];
+}
+export interface JobMaterialRequirement {
+  component_code: string | null;
+  label: string;
+  requirement_type: string;
+  expected_quantity: string;
+  inventory_item_id: string | null;
+  stocking_unit: string | null;
+  on_hand_quantity: string | null;
+  reserved_quantity: string | null;
+  available_quantity: string | null;
+  consumed_quantity: string | null;
+  readiness_state: string;
+  blockers: readonly string[];
+  source_snapshot_ids: readonly string[];
+  source_snapshot_digests: readonly string[];
+}
+export interface JobMaterials {
+  job_id: string;
+  branch_id: string;
+  requirements: readonly JobMaterialRequirement[];
+  readiness_state: string;
+  blockers: readonly string[];
 }
 export interface InventoryTransfer {
   branch_id: string;
@@ -99,6 +130,70 @@ export interface InventoryAllocation {
   partial_allowed: boolean;
   reservation_version: number;
   allocated_at: string;
+}
+export interface InventoryMaterialIssue {
+  id: string;
+  company_id: string;
+  branch_id: string;
+  reservation_id: string;
+  allocation_id: string;
+  issue_type: "issue" | "reversal";
+  item_id: string;
+  location_id: string;
+  quantity: string;
+  stocking_unit: string;
+  occurred_at: string;
+  posted_at: string;
+  actor_user_id: string;
+  idempotency_key: string;
+  movement_id: string;
+  reversal_of_issue_id: string | null;
+  external_reference_type: string | null;
+  external_reference_id: string | null;
+}
+export interface InventoryMaterialIssueCreate {
+  branch_id: string;
+  allocation_id: string;
+  item_id: string;
+  location_id: string;
+  expected_reservation_version: number;
+  occurred_at: string;
+  idempotency_key: string;
+}
+export interface InventoryMaterialIssueReverse {
+  branch_id: string;
+  expected_reservation_version: number;
+  occurred_at: string;
+  idempotency_key: string;
+}
+export interface MaterialCostEvidence {
+  inventory_item_id: string;
+  vendor_id: string;
+  vendor_name: string;
+  purchase_order_id: string;
+  purchase_order_line_id: string;
+  receipt_id: string;
+  receipt_line_id: string;
+  received_at: string;
+  effective_date: string;
+  accepted_quantity: string;
+  unit: string;
+  unit_cost: string;
+  currency: string;
+  source_reference: string | null;
+  authority_state: "ACTUAL_RECEIPT";
+}
+export interface MaterialValuationReadiness {
+  inventory_item_id: string;
+  on_hand_quantity: string;
+  actual_receipt_cost_available: boolean;
+  currencies: readonly string[];
+  readiness_state: string;
+  blockers: readonly string[];
+}
+export interface MaterialCostReadiness {
+  evidence: readonly MaterialCostEvidence[];
+  readiness: readonly MaterialValuationReadiness[];
 }
 
 export interface InventoryAdjustmentCreate {
