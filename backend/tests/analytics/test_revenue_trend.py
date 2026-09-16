@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from decimal import Decimal
 
 import httpx
@@ -15,6 +16,7 @@ from app.analytics.service import AnalyticsService
 from app.core.config import settings
 from tests.analytics.test_analytics import (
     build_app,
+    event,
     seed_analytics_fixture,
     seed_events,
 )
@@ -102,4 +104,32 @@ async def test_revenue_trend_api_response_shape(
         "cash_collected",
         "booked_event_count",
         "payment_event_count",
+        "excluded_booked_event_count",
+        "excluded_payment_event_count",
     }
+
+
+@pytest.mark.asyncio
+async def test_revenue_trend_preserves_gap_for_invalid_monetary_evidence(
+    revenue_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = revenue_database
+    fixture = await seed_analytics_fixture(factory)
+    period_start, _, _ = AnalyticsService._trend_utc_range(7)
+    async with factory() as session, session.begin():
+        session.add(
+            event(
+                company_id=fixture.company_a_id,
+                event_type=AnalyticsService.PAYMENT_RECEIVED,
+                occurred_at=period_start + timedelta(hours=1),
+                payload={},
+            )
+        )
+    async with factory() as session:
+        value = await AnalyticsService.get_revenue_trend(
+            session, company_id=fixture.company_a_id, days=7
+        )
+    assert value.completeness == "PARTIAL"
+    assert value.excluded_event_count == 1
+    assert value.points[0].cash_collected is None
+    assert value.points[0].excluded_payment_event_count == 1

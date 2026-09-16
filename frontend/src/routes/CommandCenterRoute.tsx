@@ -30,7 +30,8 @@ import {
 import { useJobs } from "../hooks/useJobs";
 import { Alert } from "../ui";
 
-function formatCurrency(value: string | number): string {
+function formatCurrency(value: string | number | null): string {
+  if (value == null) return "Data Unavailable";
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "Data Unavailable";
   return new Intl.NumberFormat("en-US", {
