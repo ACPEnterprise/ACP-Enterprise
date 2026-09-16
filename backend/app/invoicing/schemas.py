@@ -36,6 +36,33 @@ class PaymentApplicationInput(MutationInput):
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
 
 
+class ManualPaymentInput(MutationInput):
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    payment_method: Literal["check", "other_manual"]
+    reference: str = Field(min_length=1, max_length=80)
+
+
+class ManualPaymentItem(InvoiceSchema):
+    id: UUID
+    invoice_id: UUID
+    customer_id: UUID
+    payment_method: str
+    reference_label: str
+    amount: Decimal
+    currency: str
+    occurred_at: datetime
+    settlement_state: Literal["not_asserted"]
+    accounting_state: Literal["not_posted"]
+    evidence_digest: str
+    recorded_by_user_id: UUID
+    created_at: datetime
+
+
+class ManualPaymentResult(InvoiceSchema):
+    invoice: "InvoiceItem"
+    payment: ManualPaymentItem
+
+
 class InvoiceItem(InvoiceSchema):
     id: UUID
     company_id: UUID
@@ -95,6 +122,18 @@ class InvoiceWorkspaceItem(InvoiceSchema):
     version: int
 
 
+class InvoiceCandidateItem(InvoiceSchema):
+    branch_id: UUID
+    estimate_id: UUID
+    job_id: UUID
+    job_number: str
+    customer_id: UUID
+    customer_display_name: str
+    service_location_label: str
+    accepted_total: Decimal
+    currency: str
+
+
 class CustomerEvidenceClassificationItem(InvoiceSchema):
     company_id: UUID
     customer_id: UUID
@@ -105,7 +144,14 @@ class CustomerEvidenceClassificationItem(InvoiceSchema):
     evidence_digest: str | None
     completeness: str
     conflict_state: str
-    classification: Literal["CURRENT_AUTHORITATIVE", "HISTORICAL_SOURCE_EVIDENCE", "STALE", "CONFLICTING", "PARTIAL", "UNAVAILABLE"]
+    classification: Literal[
+        "CURRENT_AUTHORITATIVE",
+        "HISTORICAL_SOURCE_EVIDENCE",
+        "STALE",
+        "CONFLICTING",
+        "PARTIAL",
+        "UNAVAILABLE",
+    ]
     authority: str
 
 

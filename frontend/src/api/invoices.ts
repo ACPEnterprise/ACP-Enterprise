@@ -5,7 +5,11 @@ import type {
   InvoiceMutationInput,
   InvoiceWorkspaceFilters,
   InvoiceWorkspaceItem,
+  InvoiceCandidate,
   CustomerBalance,
+  ManualPayment,
+  ManualPaymentInput,
+  ManualPaymentResult,
 } from "../types/invoices";
 
 const root = "/api/v1/invoices";
@@ -28,6 +32,10 @@ export async function getInvoiceWorkspace(filters: InvoiceWorkspaceFilters): Pro
     limit: filters.limit ?? 100,
     offset: filters.offset ?? 0,
   } })).data;
+}
+
+export async function getInvoiceCandidates(): Promise<InvoiceCandidate[]> {
+  return (await apiClient.get<InvoiceCandidate[]>(`${root}/candidates`, { params: { limit: 100 } })).data;
 }
 
 export async function getCustomerBalance(customerId: string, asOf: string): Promise<CustomerBalance> {
@@ -66,4 +74,12 @@ export async function writeOffInvoice(id: string, input: InvoiceAmountMutationIn
 
 export async function voidInvoice(id: string, input: InvoiceMutationInput): Promise<Invoice> {
   return (await apiClient.post<Invoice>(`${root}/${id}/void`, input)).data;
+}
+
+export async function recordManualPayment(id: string, input: ManualPaymentInput): Promise<ManualPaymentResult> {
+  return (await apiClient.post<ManualPaymentResult>(`${root}/${id}/manual-payments`, input)).data;
+}
+
+export async function getManualPaymentHistory(id: string): Promise<ManualPayment[]> {
+  return (await apiClient.get<ManualPayment[]>(`${root}/${id}/manual-payments`)).data;
 }

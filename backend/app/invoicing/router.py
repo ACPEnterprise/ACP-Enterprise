@@ -11,21 +11,29 @@ from app.invoicing.contracts import (
     CreateFromEstimate,
     InvoiceMutation,
     PaymentApplication,
+    RecordManualPayment,
 )
 from app.invoicing.errors import InvoiceConflict, InvoiceError, InvoiceNotFound
 from app.invoicing.schemas import (
     AmountInput,
     CreateInvoiceInput,
     CustomerBalanceItem,
+    InvoiceCandidateItem,
     InvoiceItem,
     InvoiceWorkspaceItem,
+    ManualPaymentInput,
+    ManualPaymentItem,
+    ManualPaymentResult,
     MutationInput,
     PaymentApplicationInput,
 )
 from app.invoicing.service import invoice_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import InvoicePermission
-from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.codes import InvoicePermission, PaymentPermission
+from app.platform.permissions.dependencies import (
+    require_all_permissions,
+    require_permission,
+)
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
@@ -46,16 +54,43 @@ Adjust = Annotated[
 Apply = Annotated[
     AuthorizationContext, Depends(require_permission(InvoicePermission.APPLY_PAYMENT))
 ]
+ManualPayment = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            PaymentPermission.COLLECT, InvoicePermission.APPLY_PAYMENT
+        )
+    ),
+]
+PaymentHistoryRead = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(PaymentPermission.READ, InvoicePermission.READ)),
+]
 
 
 def _error(error: InvoiceError) -> HTTPException:
     if isinstance(error, InvoiceNotFound):
-        failure = SafeFailure(FailureCode.NOT_FOUND, "Invoice was not found.", ClientRecovery.TERMINAL_FAILURE, current_correlation_id())
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Invoice was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
         return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, InvoiceConflict):
-        failure = SafeFailure(FailureCode.RESOURCE_STATE_CONFLICT, "Invoice operation conflicts with current authority.", ClientRecovery.RETRY_AFTER_REFRESH, current_correlation_id())
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Invoice operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
-    failure = SafeFailure(FailureCode.VALIDATION, "Invoice request requires correction.", ClientRecovery.USER_CORRECTION_REQUIRED, current_correlation_id())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Invoice request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
     return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
@@ -69,28 +104,81 @@ async def invoice_workspace(
     context: Read,
     session: Session,
     as_of: date,
-    state: Literal["all", "open", "overdue", "needs_attention", "draft", "issued", "partially_paid", "adjusted", "paid", "voided", "cancelled"] = "open",
+    state: Literal[
+        "all",
+        "open",
+        "overdue",
+        "needs_attention",
+        "draft",
+        "issued",
+        "partially_paid",
+        "adjusted",
+        "paid",
+        "voided",
+        "cancelled",
+    ] = "open",
     query: Annotated[str | None, Query(max_length=160)] = None,
     customer_id: UUID | None = None,
     branch_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[InvoiceWorkspaceItem]:
-    rows = await invoice_service.workspace(session, context.company.id, context.authorized_branch_ids, as_of=as_of, state=state, query=query, customer_id=customer_id, branch_id=branch_id, limit=limit, offset=offset)
+    rows = await invoice_service.workspace(
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        as_of=as_of,
+        state=state,
+        query=query,
+        customer_id=customer_id,
+        branch_id=branch_id,
+        limit=limit,
+        offset=offset,
+    )
     return [InvoiceWorkspaceItem.model_validate(row) for row in rows]
 
 
+@router.get("/candidates", response_model=tuple[InvoiceCandidateItem, ...])
+async def invoice_candidates(
+    context: Read,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> tuple[InvoiceCandidateItem, ...]:
+    rows = await invoice_service.candidates(
+        session, context.company.id, context.authorized_branch_ids, limit=limit
+    )
+    return tuple(InvoiceCandidateItem.model_validate(row) for row in rows)
+
+
 @router.get("/customers/{customer_id}/balance", response_model=CustomerBalanceItem)
-async def customer_balance(customer_id: UUID, context: Read, session: Session, as_of: date) -> CustomerBalanceItem:
-    row = await invoice_service.customer_balance(session, context.company.id, context.authorized_branch_ids, customer_id, as_of=as_of)
+async def customer_balance(
+    customer_id: UUID, context: Read, session: Session, as_of: date
+) -> CustomerBalanceItem:
+    row = await invoice_service.customer_balance(
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        customer_id,
+        as_of=as_of,
+    )
     if row is None:
         raise _error(InvoiceNotFound("Customer balance was not found."))
     return CustomerBalanceItem.model_validate(row)
 
 
 @router.get("/{invoice_id}/office-detail", response_model=InvoiceWorkspaceItem)
-async def invoice_office_detail(invoice_id: UUID, context: Read, session: Session, as_of: date) -> InvoiceWorkspaceItem:
-    rows = await invoice_service.workspace(session, context.company.id, context.authorized_branch_ids, as_of=as_of, state="all", invoice_id=invoice_id, limit=1)
+async def invoice_office_detail(
+    invoice_id: UUID, context: Read, session: Session, as_of: date
+) -> InvoiceWorkspaceItem:
+    rows = await invoice_service.workspace(
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        as_of=as_of,
+        state="all",
+        invoice_id=invoice_id,
+        limit=1,
+    )
     if not rows:
         raise _error(InvoiceNotFound("Invoice was not found."))
     return InvoiceWorkspaceItem.model_validate(rows[0])
@@ -225,6 +313,51 @@ async def apply_payment(
         )
     except InvoiceError as error:
         raise _error(error) from error
+
+
+@router.post(
+    "/{invoice_id}/manual-payments",
+    response_model=ManualPaymentResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_manual_payment(
+    invoice_id: UUID,
+    payload: ManualPaymentInput,
+    context: ManualPayment,
+    session: Session,
+) -> ManualPaymentResult:
+    _branch(context, payload.branch_id)
+    try:
+        invoice, payment = await invoice_service.record_manual_payment(
+            session,
+            RecordManualPayment(
+                company_id=context.company.id,
+                invoice_id=invoice_id,
+                actor_user_id=context.user.id,
+                **payload.model_dump(),
+            ),
+        )
+        return ManualPaymentResult(
+            invoice=InvoiceItem.model_validate(invoice),
+            payment=ManualPaymentItem.model_validate(payment),
+        )
+    except InvoiceError as error:
+        raise _error(error) from error
+
+
+@router.get(
+    "/{invoice_id}/manual-payments", response_model=tuple[ManualPaymentItem, ...]
+)
+async def manual_payment_history(
+    invoice_id: UUID, context: PaymentHistoryRead, session: Session
+) -> tuple[ManualPaymentItem, ...]:
+    rows = await invoice_service.manual_payment_history(
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        invoice_id,
+    )
+    return tuple(ManualPaymentItem.model_validate(row) for row in rows)
 
 
 @router.post("/{invoice_id}/payment-applications/reverse", response_model=InvoiceItem)

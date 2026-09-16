@@ -3147,8 +3147,18 @@
       "path": "/api/v1/field-purchases/vendor-mappings",
       "reason": "Exact mapping replay converges while contradictory remapping requires explicit supersession.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "invoices",
+      "mechanism": "Company-scoped command identity, canonical request digest, duplicate reference digest, Invoice row lock, and optimistic version",
+      "method": "POST",
+      "operation_id": "record_manual_payment_api_v1_invoices__invoice_id__manual_payments_post",
+      "path": "/api/v1/invoices/{invoice_id}/manual-payments",
+      "reason": "Manual payment replay returns one receipt and one AR application while conflicting or duplicate evidence fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "82c33bc9c7718a785a062c98897ab5609e1682089a857ea93e789c693ce7c51b",
+  "fingerprint": "682dfcd691c78dc206a0f7b710425766e2ff17a8a14d9336978598312585cb70",
   "schema_version": "1"
 }

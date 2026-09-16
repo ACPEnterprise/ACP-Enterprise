@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
-import { creditInvoice, createInvoice, getCustomerBalance, getInvoiceWorkspace, issueInvoice, voidInvoice, writeOffInvoice } from "./invoices";
+import { creditInvoice, createInvoice, getCustomerBalance, getInvoiceCandidates, getInvoiceWorkspace, getManualPaymentHistory, issueInvoice, recordManualPayment, voidInvoice, writeOffInvoice } from "./invoices";
 
 vi.mock("./client", () => ({ apiClient: { post: vi.fn(), get: vi.fn() } }));
 
@@ -51,5 +51,16 @@ describe("Invoice API", () => {
     expect(apiClient.get).toHaveBeenLastCalledWith("/api/v1/invoices/workspace", { params: expect.objectContaining({ as_of: "2026-09-02", state: "needs_attention", query: "Synthetic", limit: 100, offset: 0 }) });
     await getCustomerBalance("customer-1", "2026-09-02");
     expect(apiClient.get).toHaveBeenLastCalledWith("/api/v1/invoices/customers/customer-1/balance", { params: { as_of: "2026-09-02" } });
+    await getInvoiceCandidates();
+    expect(apiClient.get).toHaveBeenLastCalledWith("/api/v1/invoices/candidates", { params: { limit: 100 } });
+  });
+  it("records manual payment evidence without provider or settlement claims", async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { invoice: { id: "invoice-1" }, payment: { id: "manual-1" } } });
+    const input = { branch_id: "branch-1", expected_version: 2, idempotency_key: "manual-check-1", occurred_at: "2026-09-16T12:00:00Z", amount: "25.00", payment_method: "check" as const, reference: "CHECK 1042" };
+    await recordManualPayment("invoice-1", input);
+    expect(apiClient.post).toHaveBeenLastCalledWith("/api/v1/invoices/invoice-1/manual-payments", input);
+    vi.mocked(apiClient.get).mockResolvedValue({ data: [] });
+    await getManualPaymentHistory("invoice-1");
+    expect(apiClient.get).toHaveBeenLastCalledWith("/api/v1/invoices/invoice-1/manual-payments");
   });
 });

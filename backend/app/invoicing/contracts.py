@@ -52,6 +52,13 @@ class PaymentApplication(InvoiceMutation):
 
 
 @dataclass(frozen=True, slots=True)
+class RecordManualPayment(InvoiceMutation):
+    amount: Decimal
+    payment_method: str
+    reference: str
+
+
+@dataclass(frozen=True, slots=True)
 class PostingReceiptFact:
     company_id: UUID
     branch_id: UUID

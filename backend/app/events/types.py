@@ -495,6 +495,7 @@ class EventType(str, Enum):
     INVOICE_WRITE_OFF_RECORDED = "invoice.write_off_recorded"
     INVOICE_PAYMENT_APPLIED = "invoice.payment_applied"
     INVOICE_PAYMENT_APPLICATION_REVERSED = "invoice.payment_application_reversed"
+    INVOICE_MANUAL_PAYMENT_RECORDED = "invoice.manual_payment_recorded"
     INVOICE_CORRECTION_REPLACEMENT_LINKED = "invoice.correction_replacement_linked"
     INVOICE_MIGRATED = "invoice.migrated"
     PAYMENT_RECEIVED = "payment.received"
