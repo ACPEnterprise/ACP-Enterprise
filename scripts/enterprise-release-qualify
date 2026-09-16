@@ -136,6 +136,29 @@ def qualification_decision(results: list[Result], *, executed: bool) -> str:
     return "NOT YET EXECUTED"
 
 
+def receipt_digest(path: Path | None) -> str | None:
+    if path is None or not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def rollback_readiness(
+    backup: Path | None,
+    restore: Path | None,
+    expected_backup: str | None,
+    expected_restore: str | None,
+) -> tuple[str, str]:
+    observed = (receipt_digest(backup), receipt_digest(restore))
+    expected = (expected_backup, expected_restore)
+    if any(value is None for value in observed):
+        return "BLOCKED", "backup and verified restore receipt files are required"
+    if any(value is None for value in expected):
+        return "BLOCKED", "authority-bound backup and restore receipt digests are required"
+    if observed != expected:
+        return "FAIL", "backup or restore receipt digest does not match release authority"
+    return "PASS", "backup and verified restore receipts match release authority"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=("plan", "local", "database", "preview", "postdeploy", "commissioning"), default="plan")
@@ -144,6 +167,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--preview-url")
     parser.add_argument("--backup-receipt", type=Path)
     parser.add_argument("--restore-receipt", type=Path)
+    parser.add_argument("--expected-backup-receipt-sha256")
+    parser.add_argument("--expected-restore-receipt-sha256")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--execute", action="store_true")
     return parser.parse_args()
@@ -170,11 +195,13 @@ def main() -> int:
         elif check.command is not None:
             results.append(run_command(check, root, artifact, candidate))
         elif check.key == "rollback_readiness":
-            receipts = (args.backup_receipt, args.restore_receipt)
-            if all(path and path.is_file() for path in receipts):
-                results.append(placeholder(check, "PASS", "backup and restore receipt paths exist; digests captured in packet"))
-            else:
-                results.append(placeholder(check, "BLOCKED", "backup and verified restore receipts are required"))
+            receipt_status, receipt_reason = rollback_readiness(
+                args.backup_receipt,
+                args.restore_receipt,
+                args.expected_backup_receipt_sha256,
+                args.expected_restore_receipt_sha256,
+            )
+            results.append(placeholder(check, receipt_status, receipt_reason))
         elif check.key in {"api_health", "postdeploy_routes", "authentication_smoke", "authorization_smoke", "background_services", "postgres_health", "redis_health"}:
             results.append(placeholder(check, "BLOCKED", "requires sanctioned deployed environment and protected smoke credentials"))
         elif check.key == "critical_crud":

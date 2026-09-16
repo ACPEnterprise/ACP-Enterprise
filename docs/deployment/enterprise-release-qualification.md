@@ -40,6 +40,8 @@ scripts/enterprise-release-qualify \
   --preview-revision "$APPROVED_PREVIEW_REVISION" \
   --backup-receipt /protected/release/backup-receipt.json \
   --restore-receipt /protected/release/restore-receipt.json \
+  --expected-backup-receipt-sha256 "$BACKUP_RECEIPT_SHA256" \
+  --expected-restore-receipt-sha256 "$RESTORE_RECEIPT_SHA256" \
   --evidence-dir "/var/tmp/enterprise-release-${CANDIDATE_SHA}/preview"
 ```
 

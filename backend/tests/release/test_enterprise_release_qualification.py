@@ -104,3 +104,23 @@ def test_plan_without_execution_never_claims_pass() -> None:
         )
         == "NOT YET EXECUTED"
     )
+
+
+def test_rollback_receipts_must_match_authority_digests(tmp_path: Path) -> None:
+    module = _module()
+    backup = tmp_path / "backup.json"
+    restore = tmp_path / "restore.json"
+    backup.write_text('{"backup":"complete"}', encoding="utf-8")
+    restore.write_text('{"restore":"verified"}', encoding="utf-8")
+    backup_digest = module.receipt_digest(backup)
+    restore_digest = module.receipt_digest(restore)
+
+    assert module.rollback_readiness(backup, restore, None, None)[0] == "BLOCKED"
+    assert (
+        module.rollback_readiness(backup, restore, "0" * 64, restore_digest)[0]
+        == "FAIL"
+    )
+    assert (
+        module.rollback_readiness(backup, restore, backup_digest, restore_digest)[0]
+        == "PASS"
+    )
