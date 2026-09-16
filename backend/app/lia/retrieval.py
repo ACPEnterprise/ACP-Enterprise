@@ -11,6 +11,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounting.models import AccountingPeriod
+from app.beacon.history import (
+    EvaluationDisposition,
+    beacon_evaluation_history_service,
+)
 from app.beacon.service import beacon_query_service
 from app.business_economics.models import EconomicsProfitabilityResultRecord
 from app.customers.lia_context import customer_lia_context_service
@@ -492,9 +496,9 @@ class GovernedRetrievalService:
             if temporal is None:
                 evidence.extend(await self._beacon(session, context, observed_at))
             else:
-                evidence.append(
-                    _period_unavailable(
-                        "beacon", "Beacon lifecycle history", temporal, observed_at
+                evidence.extend(
+                    await self._beacon_history(
+                        session, context, observed_at, temporal
                     )
                 )
         if context.has_permission(AdministrationPermission.COMPANY_ADMINISTER) and (
@@ -675,6 +679,108 @@ class GovernedRetrievalService:
                 observed_at=observed_at,
                 rows=tuple((str(item.id), item.evidence_digest) for item in signals),
                 states=states,
+            ),
+        )
+
+    @staticmethod
+    async def _beacon_history(
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        temporal: LiaTemporalContext,
+    ) -> tuple[EvidenceReference, ...]:
+        if (temporal.end_date - temporal.start_date).days >= 31:
+            return (
+                _period_unavailable(
+                    "beacon",
+                    "Beacon evaluation history",
+                    temporal,
+                    observed_at,
+                    limitation="beacon_history_window_exceeds_31_days",
+                ),
+            )
+        start_at, end_at = _datetime_bounds(temporal)
+        history_since = start_at - timedelta(microseconds=1)
+        history_until = end_at - timedelta(microseconds=1)
+        branch_id = context.active_branch.id if context.active_branch else None
+        records = await beacon_evaluation_history_service.deltas(
+            session,
+            company_id=context.company.id,
+            branch_id=branch_id,
+            since=history_since,
+            until=history_until,
+        )
+        completed = await beacon_evaluation_history_service.has_completed_run(
+            session,
+            company_id=context.company.id,
+            branch_id=branch_id,
+            since=history_since,
+            until=history_until,
+        )
+        if not completed:
+            return (
+                _period_unavailable(
+                    "beacon",
+                    "Beacon evaluation history",
+                    temporal,
+                    observed_at,
+                    limitation="no_completed_beacon_evaluation_in_period",
+                ),
+            )
+
+        states = {
+            disposition.value: sum(
+                item.disposition is disposition for item in records
+            )
+            for disposition in EvaluationDisposition
+        }
+        canonical = {
+            "company_id": str(context.company.id),
+            "branch_id": str(branch_id) if branch_id else None,
+            "period": _temporal_canonical(temporal),
+            "records": sorted(
+                (
+                    str(item.id),
+                    str(item.run_id),
+                    str(item.condition_key),
+                    item.evidence_digest,
+                    item.disposition.value,
+                    item.evaluated_at.isoformat(),
+                    item.evidence_as_of.isoformat(),
+                )
+                for item in records
+            ),
+            "states": states,
+        }
+        digest = hashlib.sha256(
+            json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        state = ", ".join(
+            f"{key}={value}" for key, value in sorted(states.items()) if value
+        )
+        return (
+            EvidenceReference(
+                domain="beacon",
+                label="Beacon evaluation history",
+                authority="AUTHORITATIVE_SIGNAL_HISTORY",
+                observed_at=max(
+                    (item.evaluated_at for item in records), default=observed_at
+                ),
+                freshness="PERSISTED_EVIDENCE",
+                evidence_digest=digest,
+                count=len(records),
+                state=state or "no Beacon changes recorded",
+                source_contract_version="BEACON.EVALUATION_HISTORY.v1",
+                company_id=context.company.id,
+                branch_ids=(branch_id,) if branch_id else (),
+                authorization_version=context.authorization_version,
+                limitations=(
+                    "Historical dispositions explain recorded Beacon evaluations; they do not replace current lifecycle state or authorize remediation.",
+                ),
+                period_start=temporal.start_date,
+                period_end=temporal.end_date,
+                period_label=temporal.period_label,
+                timezone=temporal.timezone,
             ),
         )
 
