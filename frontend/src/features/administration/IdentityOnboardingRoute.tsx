@@ -17,18 +17,20 @@ import {
 } from "./api";
 
 const ONBOARDING_PERMISSION = "COMPANY_IDENTITY_ONBOARDING_MANAGE";
-const STANDARD_ROLES = [
-  { label: "OWNER", codes: ["OWNER", "COMPANY_ADMINISTRATOR"] },
-  { label: "MANAGER", codes: ["MANAGER", "OFFICE_MANAGER"] },
-  { label: "ADMIN", codes: ["ADMIN", "COMPANY_ADMINISTRATOR"] },
-  { label: "CSR", codes: ["CSR", "SERVICE_CSR"] },
-  { label: "TECHNICIAN", codes: ["TECHNICIAN"] },
+const OPERATING_PROFILES = [
+  { label: "ADMIN", roleCodes: [["COMPANY_ADMINISTRATOR", "ADMIN"]] },
+  { label: "OFFICE_MANAGER", roleCodes: [["OFFICE_MANAGER"]] },
+  { label: "OFFICE_STAFF", roleCodes: [["SERVICE_CSR", "CSR"]] },
+  {
+    label: "FIELD_TECH",
+    roleCodes: [["TECHNICIAN"], ["ACP_EMPLOYEE_MOBILE"]],
+  },
 ] as const;
 
-type StandardRole = CompanyRole & { standardLabel: string };
+type OperatingProfile = { label: string; roles: CompanyRole[] };
 type Preparation =
   | { state: "loading" }
-  | { state: "ready"; roles: StandardRole[] }
+  | { state: "ready"; profiles: OperatingProfile[] }
   | { state: "blocked"; message: string };
 
 function submissionMessage(error: unknown): string {
@@ -46,7 +48,7 @@ export function IdentityOnboardingRoute() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [roleId, setRoleId] = useState("");
+  const [profileLabel, setProfileLabel] = useState("FIELD_TECH");
   const [requestKey, setRequestKey] = useState(() => `employee-admin-${crypto.randomUUID()}`);
   const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
   const [readinessAttempt, setReadinessAttempt] = useState(0);
@@ -61,16 +63,19 @@ export function IdentityOnboardingRoute() {
     void listRoles().then((roles) => {
       if (!current) return;
       const systemRoles = roles.filter((role) => role.status === "active" && role.is_system);
-      const standardRoles = STANDARD_ROLES.flatMap((option) => {
-        const role = systemRoles.find((candidate) => option.codes.some((code) => code === candidate.code));
-        return role ? [{ ...role, standardLabel: option.label }] : [];
+      const profiles = OPERATING_PROFILES.flatMap((profile) => {
+        const resolved = profile.roleCodes.map((alternatives) =>
+          systemRoles.find((candidate) => alternatives.some((code) => code === candidate.code)),
+        );
+        return resolved.every((role): role is CompanyRole => Boolean(role))
+          ? [{ label: profile.label, roles: resolved }]
+          : [];
       });
-      if (!standardRoles.some((role) => role.standardLabel === "TECHNICIAN")) {
-        setPreparation({ state: "blocked", message: "Standard Employee roles are unavailable." });
+      if (profiles.length !== OPERATING_PROFILES.length) {
+        setPreparation({ state: "blocked", message: "Approved Employee operating profiles are unavailable." });
         return;
       }
-      setRoleId((value) => value || standardRoles.find((role) => role.standardLabel === "TECHNICIAN")?.id || "");
-      setPreparation({ state: "ready", roles: standardRoles });
+      setPreparation({ state: "ready", profiles });
     }).catch(() => {
       if (current) setPreparation({ state: "blocked", message: "Employee onboarding readiness could not be verified." });
     });
@@ -81,7 +86,10 @@ export function IdentityOnboardingRoute() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (preparation.state !== "ready" || !branchId || !roleId || !email.trim() || !firstName.trim() || !lastName.trim()) return;
+    const selectedProfile = preparation.state === "ready"
+      ? preparation.profiles.find((profile) => profile.label === profileLabel)
+      : undefined;
+    if (!selectedProfile || !branchId || !email.trim() || !firstName.trim() || !lastName.trim()) return;
     setSubmitting(true);
     setMessage(null);
     try {
@@ -90,7 +98,7 @@ export function IdentityOnboardingRoute() {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         display_name: `${firstName.trim()} ${lastName.trim()}`,
-        role_ids: [roleId],
+        role_ids: selectedProfile.roles.map((role) => role.id),
         additional_permission_ids: [],
         login_email: email.trim(),
       };
@@ -143,9 +151,9 @@ export function IdentityOnboardingRoute() {
             <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} required /></label>
           </div>
           <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Role</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={roleId} onChange={(event) => setRoleId(event.target.value)} required>{preparation.roles.map((role) => <option key={`${role.standardLabel}-${role.id}`} value={role.id}>{role.standardLabel}</option>)}</select><span className="text-body-xs text-content-muted">Standard permissions are assigned automatically. Advanced customization remains in Role Administration.</span></label>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Role</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profile.label.replaceAll("_", " ")}</option>)}</select><span className="text-body-xs text-content-muted">Field Tech includes ACP Employee Mobile access. Dispatch eligibility is confirmed separately for an exact appointment window. Office roles do not receive field capability.</span></label>
           <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => setBranchId(event.target.value)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
-          <Button type="submit" loading={submitting} loadingLabel="Sending invite" disabled={submitting || !branchId || !roleId || !firstName.trim() || !lastName.trim() || !email.trim()}>Send Invite</Button>
+          <Button type="submit" loading={submitting} loadingLabel="Sending invite" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim()}>Send Invite</Button>
         </form>}
     </CardContent></Card>
     {onboarding && delivery && <Card><CardHeader><CardTitle>Employee status</CardTitle><CardDescription>Invitation and email delivery are tracked separately. Queued is not delivered.</CardDescription></CardHeader><CardContent className="space-y-ui-4"><dl className="grid gap-ui-3 text-body-s sm:grid-cols-2"><div><dt className="text-content-muted">Account</dt><dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Invitation</dt><dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Email delivery</dt><dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Provider</dt><dd className="font-semibold">{delivery.provider_reference_present ? "Accepted" : "Not accepted"}</dd></div></dl>{delivery.last_error_code && <Alert variant="warning">Invitation delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.</Alert>}<p className="text-body-xs text-content-muted">The employee receives an expiring, single-use activation link and creates their own password.</p><div className="flex gap-ui-3"><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>Reissue invitation</Button><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>Revoke invitation</Button></div></CardContent></Card>}

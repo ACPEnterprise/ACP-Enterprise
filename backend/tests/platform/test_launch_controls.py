@@ -21,6 +21,7 @@ from app.platform.company.models import Company
 from app.platform.launch_controls import (
     COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
     LAUNCH_ROLE_MATRIX,
+    OFFICE_MANAGER_OPERATIONAL_PERMISSIONS,
     LaunchRoleCode,
     validate_launch_role_matrix,
 )
@@ -46,6 +47,7 @@ from app.platform.permissions.codes import (
     LuminaryPermission,
     MigrationPermission,
     PaymentPermission,
+    PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
     WorkforcePermission,
@@ -154,6 +156,37 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
     )
     assert role.permission_codes.isdisjoint(prohibited)
     assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
+
+
+def test_office_manager_has_normal_operations_without_owner_hard_gates() -> None:
+    role = next(
+        value for value in LAUNCH_ROLE_MATRIX
+        if value.code is LaunchRoleCode.OFFICE_MANAGER
+    )
+    assert role.permission_codes == OFFICE_MANAGER_OPERATIONAL_PERMISSIONS
+    assert {
+        CustomerPermission.MANAGE,
+        SchedulingPermission.MANAGE,
+        DispatchPermission.MANAGE,
+        EstimatePermission.MANAGE,
+        InvoicePermission.ISSUE,
+        PaymentPermission.READ,
+        WorkforcePermission.MANAGE,
+        AdministrationPermission.IDENTITY_ONBOARDING_MANAGE,
+    }.issubset(role.permission_codes)
+    assert role.permission_codes.isdisjoint(
+        {
+            AdministrationPermission.COMPANY_ADMINISTER,
+            AdministrationPermission.ROLE_MANAGE,
+            AdministrationPermission.PERMISSION_MANAGE,
+            PriceBookPermission.ACTIVATE,
+            PaymentPermission.COLLECT,
+            PaymentPermission.APPLY,
+            PaymentPermission.REFUND,
+            AccountingPermission.JOURNAL_POST,
+            PayrollPermission.REPORTING_MANAGE,
+        }
+    )
 
 
 def test_own_data_role_has_no_broad_tenant_or_administrative_authority() -> None:
