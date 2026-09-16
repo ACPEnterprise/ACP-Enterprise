@@ -10,9 +10,9 @@ RUN apt-get update \
     && apt-get install --no-install-recommends --yes git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.txt requirements.lock ./
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir --require-hashes -r requirements.lock \
     && pip uninstall --yes pip
 
 COPY . .

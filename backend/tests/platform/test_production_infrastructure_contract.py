@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
-
 from scripts.production_release_preflight import inspect_platform_manifest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -61,6 +60,19 @@ def test_production_runtime_uses_immutable_images_and_read_only_custody() -> Non
         assert all(volume.endswith(":ro") for volume in service["volumes"])
 
     assert "immutable frontend image digest" in services["frontend"]["image"]
+
+
+def test_backend_image_installs_only_hash_locked_dependencies() -> None:
+    dockerfile = (REPOSITORY_ROOT / "backend" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    lockfile = (REPOSITORY_ROOT / "backend" / "requirements.lock").read_text(
+        encoding="utf-8"
+    )
+
+    assert "requirements.lock" in dockerfile
+    assert "--require-hashes -r requirements.lock" in dockerfile
+    assert "--hash=sha256:" in lockfile
 
 
 def test_production_runtime_has_bounded_processes_and_no_reload_server() -> None:
