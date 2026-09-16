@@ -80,6 +80,27 @@ class ActivationRequest(PriceBookSchema):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class ActivationReviewDecision(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ActivationReadinessItem(PriceBookSchema):
+    price_version_id: UUID
+    draft_version: int
+    candidate_identity: str
+    service_code: str
+    price_approved: bool
+    tax_approved: bool
+    effective_date_approved: bool
+    activation_authorized: bool
+    material_mapping_required: bool
+    source_conflict: bool
+    activation_ready: bool
+    remaining_blockers: tuple[str, ...]
+    rationale: dict[str, str]
+
+
 class LifecycleRequest(PriceBookSchema):
     expected_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=500)

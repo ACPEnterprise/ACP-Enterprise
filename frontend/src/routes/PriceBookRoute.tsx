@@ -3,6 +3,8 @@ import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import {
   useCandidateReview,
+  useActivationReadiness,
+  usePriceBookAudit,
   usePriceBook,
   usePriceBookMutations,
 } from "../hooks/usePriceBook";
@@ -52,6 +54,7 @@ export function PriceBookRoute() {
   const canRead = useHasPermission("COMPANY_PRICE_BOOK_READ");
   const canManage = useHasPermission("COMPANY_PRICE_BOOK_MANAGE");
   const canActivate = useHasPermission("COMPANY_PRICE_BOOK_ACTIVATE");
+  const canApproveTax = useHasPermission("COMPANY_ACCOUNTING_FINANCE_APPROVE");
   const [branch, setBranch] = useState("");
   const catalog = usePriceBook(branch || undefined, canRead);
   const mutations = usePriceBookMutations();
@@ -91,6 +94,9 @@ export function PriceBookRoute() {
     componentCost: "",
   });
   const [search, setSearch] = useState("");
+  const [reviewVersionId, setReviewVersionId] = useState<string>();
+  const activationReadiness = useActivationReadiness(reviewVersionId);
+  const reviewAudit = usePriceBookAudit(reviewVersionId);
   const candidateReview = useCandidateReview(
     { search: search.trim() || undefined, limit: 200 },
     canRead && Boolean(activeCompany),
@@ -396,6 +402,7 @@ export function PriceBookRoute() {
     mutations.adjustmentProposal,
     mutations.adjustmentDecision,
     mutations.adjustmentMaterialize,
+    mutations.activationReview,
   ].find((mutation) => mutation.isError);
   const services = catalog.data?.service_items ?? [];
   const versions = catalog.data?.versions ?? [];
@@ -571,6 +578,49 @@ export function PriceBookRoute() {
               )}
             </CardContent>
           </Card>
+          {reviewVersionId && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Activation checklist</CardTitle>
+                <CardDescription>
+                  Each approval applies only to this exact draft revision. Editing the draft makes prior approvals stale. Activation remains a separate final action.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {activationReadiness.isPending ? <Spinner label="Loading activation checklist" /> : activationReadiness.isError ? (
+                  <Alert variant="danger">Activation evidence could not be loaded.</Alert>
+                ) : activationReadiness.data && (
+                  <>
+                    <p><strong>{activationReadiness.data.service_code}</strong> · {activationReadiness.data.activation_ready ? "Ready for explicit activation" : "Not ready to activate"}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {activationReadiness.data.remaining_blockers.map((blocker) => (
+                        <div key={blocker} className="rounded border border-stroke p-3 text-sm">
+                          {blocker.replaceAll("_", " ").toLocaleLowerCase()}
+                        </div>
+                      ))}
+                    </div>
+                    {activationReadiness.data.material_mapping_required && (
+                      <Alert variant="warning">Material mapping is incomplete. This affects internal material readiness; it is not silently treated as Inventory consumption.</Alert>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {canManage && !activationReadiness.data.price_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "price", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the ACP selling price shown for this exact draft." })}>Approve selling price</Button>}
+                      {canApproveTax && !activationReadiness.data.tax_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "tax", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized finance reviewer approved the selected tax classification for this exact draft." })}>Approve tax classification</Button>}
+                      {canManage && !activationReadiness.data.effective_date_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "effective-date", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the effective date shown for this exact draft." })}>Approve effective date</Button>}
+                      {canActivate && !activationReadiness.data.activation_authorized && <Button disabled={!activationReadiness.data.price_approved || !activationReadiness.data.tax_approved || !activationReadiness.data.effective_date_approved} onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "activation-authorization", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized owner approved this exact draft for a later explicit activation command." })}>Authorize later activation</Button>}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Review and activation history</h3>
+                      {reviewAudit.isPending ? <Spinner label="Loading Price Book history" /> : (
+                        <ul className="mt-2 space-y-2 text-sm">
+                          {(reviewAudit.data ?? []).map((entry) => <li key={entry.id}><strong>{entry.action.replaceAll("_", " ")}</strong> · {entry.reason} · {new Date(entry.occurred_at).toLocaleString()}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Activation readiness</CardTitle>
@@ -1264,7 +1314,7 @@ export function PriceBookRoute() {
                               )}
                             </div>
                             {canActivate && version.status === "draft" && (
-                              <Button
+                              <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button><Button
                                 onClick={() =>
                                   void performMutation(() =>
                                     mutations.activate.mutateAsync({
@@ -1275,7 +1325,7 @@ export function PriceBookRoute() {
                                 }
                               >
                                 Activate version
-                              </Button>
+                              </Button></div>
                             )}
                           </div>
                         ))}

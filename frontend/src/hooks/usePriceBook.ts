@@ -24,6 +24,20 @@ export function useCandidateReview(
     enabled,
   });
 }
+export function useActivationReadiness(versionId?: string) {
+  return useQuery({
+    queryKey: ["price-book", "activation-readiness", versionId],
+    queryFn: () => api.getActivationReadiness(versionId!),
+    enabled: Boolean(versionId),
+  });
+}
+export function usePriceBookAudit(entityId?: string) {
+  return useQuery({
+    queryKey: ["price-book", "audit", entityId],
+    queryFn: () => api.getPriceBookAudit(entityId!),
+    enabled: Boolean(entityId),
+  });
+}
 export function usePriceBookMutations() {
   const client = useQueryClient();
   const refresh = () =>
@@ -107,6 +121,15 @@ export function usePriceBookMutations() {
     adjustmentMaterialize: useMutation({
       mutationFn: ({ proposalId, data }: { proposalId: string; data: Parameters<typeof api.materializeAdjustmentProposal>[1] }) =>
         api.materializeAdjustmentProposal(proposalId, data),
+      onSuccess: refresh,
+    }),
+    activationReview: useMutation({
+      mutationFn: ({ versionId, decision, expectedVersion, reason }: {
+        versionId: string;
+        decision: "price" | "tax" | "effective-date" | "activation-authorization";
+        expectedVersion: number;
+        reason: string;
+      }) => api.recordActivationReview(versionId, decision, expectedVersion, reason),
       onSuccess: refresh,
     }),
   };

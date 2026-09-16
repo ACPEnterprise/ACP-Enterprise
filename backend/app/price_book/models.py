@@ -785,3 +785,63 @@ class PriceBookCandidateBinding(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+
+
+class PriceBookActivationReview(Base):
+    """Explicit approvals for one immutable draft revision before activation."""
+
+    __tablename__ = "price_book_activation_reviews"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "price_version_id"],
+            ["price_book_price_versions.company_id", "price_book_price_versions.id"],
+            name="fk_price_book_activation_review_version",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "draft_version >= 1", name="ck_price_book_activation_review_version"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "price_version_id",
+            name="uq_price_book_activation_review_version",
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_price_book_activation_review_company_id"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    price_version_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    draft_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    price_approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    price_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tax_approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    tax_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    effective_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    activation_authorized_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    activation_authorized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    rationale: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )

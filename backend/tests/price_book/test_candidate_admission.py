@@ -1,5 +1,6 @@
 import copy
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +25,8 @@ from app.price_book.models import (
     PriceBookPriceVersion,
     PriceBookServiceItem,
 )
+from app.price_book.schemas import PriceVersionCreate, TaxClassificationCreate
+from app.price_book.service import PriceBookService
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -246,3 +249,89 @@ async def test_changed_evidence_under_same_identity_fails_closed(
                 plan=changed,
                 idempotency_key="all-county-build-1-admission-v1",
             )
+
+
+@pytest.mark.asyncio
+async def test_candidate_activation_requires_exact_separate_approvals(
+    price_book_fixture,
+) -> None:
+    factory, context, _branch = price_book_fixture
+    plan = load_plan()
+    service = PriceBookService()
+    async with factory() as session:
+        await admit_candidate_plan(
+            session,
+            company_id=context.company.id,
+            actor_user_id=context.user.id,
+            plan=plan,
+            idempotency_key="all-county-build-1-approval-test",
+        )
+    async with factory() as session:
+        item = await session.scalar(
+            select(PriceBookServiceItem).where(
+                PriceBookServiceItem.company_id == context.company.id,
+                PriceBookServiceItem.code == "SVC-001",
+            )
+        )
+    assert item is not None
+    async with factory() as session:
+        tax = await service.create_tax(
+            session,
+            context=context,
+            payload=TaxClassificationCreate(
+                code="ACCOUNTANT", name="Accountant approved", taxable=False
+            ),
+        )
+    async with factory() as session:
+        version = await service.create_version(
+            session,
+            context=context,
+            item_id=item.id,
+            payload=PriceVersionCreate(
+                tax_classification_id=tax.id,
+                currency="USD",
+                unit_price="129.00",
+                effective_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+            ),
+        )
+    async with factory() as session:
+        initial = await service.activation_readiness(
+            session, context=context, version_id=version.id
+        )
+    assert initial.activation_ready is False
+    assert initial.remaining_blockers == (
+        "PRICE_APPROVAL_REQUIRED",
+        "TAX_REVIEW_REQUIRED",
+        "EFFECTIVE_DATE_REQUIRED",
+        "ACTIVATION_AUTHORIZATION_REQUIRED",
+    )
+    for decision in ("price", "tax", "effective_date"):
+        async with factory() as session:
+            await service.record_activation_review(
+                session,
+                context=context,
+                version_id=version.id,
+                expected_version=1,
+                decision=decision,
+                reason=f"Approved {decision}",
+            )
+    async with factory() as session:
+        ready = await service.record_activation_review(
+            session,
+            context=context,
+            version_id=version.id,
+            expected_version=1,
+            decision="activation_authorization",
+            reason="Authorized for later explicit activation",
+        )
+    assert ready.activation_ready is True
+    assert ready.material_mapping_required is False
+    async with factory() as session:
+        activated = await service.activate(
+            session,
+            context=context,
+            version_id=version.id,
+            expected_version=1,
+            reason="Explicit bounded activation",
+        )
+    assert activated.status == "active"

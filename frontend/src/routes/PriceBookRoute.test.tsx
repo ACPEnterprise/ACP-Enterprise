@@ -27,6 +27,8 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => authState.permissionCodes.includes(code),
 }));
 vi.mock("../hooks/usePriceBook", () => ({
+  useActivationReadiness: () => ({ isPending: false, isError: false, data: undefined }),
+  usePriceBookAudit: () => ({ isPending: false, isError: false, data: [] }),
   useCandidateReview: () => ({
     isPending: false,
     isError: false,
@@ -162,6 +164,12 @@ vi.mock("../hooks/usePriceBook", () => ({
       mutateAsync: vi.fn(),
     },
     adjustmentMaterialize: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: vi.fn(),
+    },
+    activationReview: {
       isPending: false,
       isError: false,
       error: null,
