@@ -47,7 +47,7 @@ class CustomerTimelineService:
         page: int,
         page_size: int,
     ) -> TimelinePage:
-        customer = await CustomerRepository.get(
+        customer = await CustomerRepository.get_including_archived(
             session,
             company_id=context.company.id,
             customer_id=customer_id,

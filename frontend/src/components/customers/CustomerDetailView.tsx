@@ -107,10 +107,10 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-slate-800 px-3 py-1 text-content-secondary">{customer.customer_type}</span>
               <span className={`rounded-full px-3 py-1 ${archived ? "bg-red-950 text-red-300" : "bg-emerald-950 text-emerald-300"}`}>{archived ? "archived" : customer.status.replaceAll("_", " ")}</span>
-              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {formatCustomerSource(customer.source)}</span>
+              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Native ACP Customer</span>
             </div>
             <p className="mt-3 text-xs text-content-muted">{customer.customer_number || "Customer number unavailable"} · Native record created {customer.created_at ? new Date(customer.created_at).toLocaleString() : "date unavailable"} · updated {customer.updated_at ? new Date(customer.updated_at).toLocaleString() : "date unavailable"}</p>
-            <p className="mt-1 text-xs text-content-muted">Source provenance is shown only when admitted by Migration authority; the marketing source label above is not migration-completeness evidence.</p>
+            <p className="mt-1 text-xs text-content-muted">Marketing source: {formatCustomerSource(customer.source)}. Source provenance is shown only when admitted by Migration authority; this label is not migration-completeness evidence.</p>
           </div>
           {canManage && (!archived ? (
             <div className="grid w-full gap-3 sm:flex sm:w-auto">
@@ -147,7 +147,11 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
         )}
       </Card>
 
-      <CustomerOperationsPanel customerId={customerId} />
+      <Alert variant="information" title="History completeness">
+        This workspace shows related records admitted to native ACP authority. Each section states its own page or time boundary. Missing or source-only history is not treated as none or zero.
+      </Alert>
+
+      <CustomerOperationsPanel customerId={customerId} locations={customer.properties} />
       {canReadCommunications && <CustomerCommunicationHistory customerId={customerId} />}
 
       <Card className="p-ui-4 sm:p-ui-6">

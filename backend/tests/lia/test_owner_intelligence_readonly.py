@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.lia.contracts import (
     AnswerAuthority,
     EvidenceReference,
@@ -75,7 +74,8 @@ def test_owner_question_planner_is_bounded(
 
 def test_employee_name_and_payroll_follow_up_plans_preserve_subject() -> None:
     initial = plan_question("Show me Lianne Hernandez")
-    assert initial.domains == frozenset({"workforce"})
+    assert initial.domains == frozenset({"customers", "workforce"})
+    assert initial.subject_domain == "identity"
     assert initial.subject_query == "Lianne Hernandez"
     follow_up = plan_question(
         "Why is she blocked for payroll?",
@@ -154,11 +154,11 @@ async def test_employee_name_is_not_resolved_without_workforce_read(
 @pytest.mark.parametrize(
     ("matches", "classification", "answer_fragment"),
     (
-        ((), TruthClassification.UNAVAILABLE, "No authorized Employee"),
+        ((), TruthClassification.UNAVAILABLE, "No authorized Customer or Employee"),
         (
             (uuid4(), uuid4()),
             TruthClassification.INCOMPLETE,
-            "More than one authorized Employee",
+            "More than one authorized Customer or Employee",
         ),
     ),
 )

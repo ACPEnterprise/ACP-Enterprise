@@ -138,7 +138,9 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" in response.headers
-    assert "permissions-policy" in response.headers
+    assert response.headers["permissions-policy"] == (
+        "camera=(), microphone=(self), geolocation=()"
+    )
     assert "cache-control" not in response.headers
     assert protected.headers["cache-control"] == "private, no-store"
     assert revalidated.headers["cache-control"] == "no-cache"

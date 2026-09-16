@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from fastapi import FastAPI
-
 from app.events.types import EventType
 from app.payments.router import router
 from app.platform.permissions.codes import PaymentPermission
+from fastapi import FastAPI
 
 app = FastAPI()
 app.include_router(router)
@@ -38,3 +37,5 @@ def test_receipt_list_publishes_bounded_pagination_contract() -> None:
     assert parameters["limit"]["schema"]["maximum"] == 200
     assert parameters["offset"]["schema"]["default"] == 0
     assert parameters["offset"]["schema"]["minimum"] == 0
+    assert parameters["customer_id"]["required"] is False
+    assert parameters["customer_id"]["schema"]["anyOf"][0]["format"] == "uuid"

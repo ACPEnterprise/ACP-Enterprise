@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Bot, ChevronDown, ShieldCheck, Sparkles } from "lucide-react";
 
+import { LiaVoicePanel } from "../components/lia/LiaVoicePanel";
+import { matchingAuthorizedNavigation } from "../components/lia/voiceIntent";
 import {
   useAskLia,
   useLiaFoundationReadiness,
@@ -142,15 +144,26 @@ export function LiaRoute() {
     "inventory",
     "assets",
     "workforce",
+    "payroll",
+    "dispatch",
+    "accounting",
+    "luminary",
+    "beacon",
+    "price-book",
   ]);
+  const validContextId =
+    !contextId ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      contextId,
+    );
   const context =
     contextDomain !== null &&
     contextualDomains.has(contextDomain) &&
-    contextId &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      contextId,
-    )
-      ? { domain: contextDomain, entity_id: contextId }
+    validContextId
+      ? {
+          domain: contextDomain,
+          ...(contextId ? { entity_id: contextId } : {}),
+        }
       : undefined;
   const contextLabel = context
     ? {
@@ -164,6 +177,12 @@ export function LiaRoute() {
         inventory: "Inventory",
         assets: "Asset",
         workforce: "Employee",
+        payroll: "Payroll",
+        dispatch: "Dispatch",
+        accounting: "Financial Reports",
+        luminary: "Luminary",
+        beacon: "Beacon",
+        "price-book": "Price Book",
       }[context.domain]
     : undefined;
   const readiness = useLiaReadiness();
@@ -171,10 +190,11 @@ export function LiaRoute() {
   const briefing = useOwnerBriefing();
   const ask = useAskLia();
   const [question, setQuestion] = useState("");
+  const pendingNavigation = useRef<string | undefined>(undefined);
   const [conversationId, setConversationId] = useState<string>();
   const [conversationContext, setConversationContext] = useState<{
     domain: string;
-    entity_id: string;
+    entity_id?: string;
   }>();
   const [continuation, setContinuation] = useState<{
     authorization_version: number;
@@ -184,10 +204,10 @@ export function LiaRoute() {
   }>();
   const preserveContinuation = (result: LiaResponse) => {
     setConversationId(result.conversation_id);
-    if (result.subject_domain && result.subject_id) {
+    if (result.subject_domain) {
       setConversationContext({
         domain: result.subject_domain,
-        entity_id: result.subject_id,
+        ...(result.subject_id ? { entity_id: result.subject_id } : {}),
       });
       setContinuation({
         authorization_version: result.authorization_version,
@@ -202,6 +222,7 @@ export function LiaRoute() {
     event.preventDefault();
     const value = question.trim();
     if (!value) return;
+    pendingNavigation.current = value;
     ask.mutate(
       {
         question: value,
@@ -213,6 +234,7 @@ export function LiaRoute() {
   };
   const askPrompt = (value: string) => {
     setQuestion(value);
+    pendingNavigation.current = value;
     ask.mutate(
       {
         question: value,
@@ -222,6 +244,15 @@ export function LiaRoute() {
       { onSuccess: preserveContinuation },
     );
   };
+  useEffect(() => {
+    if (!ask.data || !pendingNavigation.current) return;
+    const destination = matchingAuthorizedNavigation(
+      pendingNavigation.current,
+      ask.data.navigation,
+    );
+    pendingNavigation.current = undefined;
+    if (destination) navigate(destination.internal_path);
+  }, [ask.data, navigate]);
   return (
     <div className="mx-auto max-w-5xl space-y-6 overflow-x-hidden pb-28 sm:pb-12">
       <header className="rounded-2xl bg-gradient-to-br from-action-primary/15 to-surface p-5 sm:p-8">
@@ -401,6 +432,12 @@ export function LiaRoute() {
           ))}
         </div>
       </section>
+      <LiaVoicePanel
+        busy={ask.isPending}
+        result={ask.data}
+        onDraft={setQuestion}
+        onSubmit={askPrompt}
+      />
       {ask.data ? <Answer result={ask.data} /> : null}
       {ask.isError ? (
         <Alert variant="danger" title="LIA request unavailable">

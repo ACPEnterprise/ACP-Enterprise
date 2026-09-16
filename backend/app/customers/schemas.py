@@ -368,6 +368,7 @@ class CustomerResponse(CustomerCreate):
     primary_contact_id: UUID | None
     created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None
 
 
 class CustomerDetail(CustomerResponse):
@@ -423,6 +424,12 @@ class SortDirection(StrEnum):
     DESC = "desc"
 
 
+class CustomerRecordState(StrEnum):
+    CURRENT = "current"
+    ARCHIVED = "archived"
+    ALL = "all"
+
+
 class CustomerSearchQuery(StrictSchema):
     query: str | None = Field(default=None, min_length=1, max_length=300)
     status: CustomerStatus | None = None
@@ -435,6 +442,7 @@ class CustomerSearchQuery(StrictSchema):
     updated_to: datetime | None = None
     sort_by: CustomerSortField = CustomerSortField.DISPLAY_NAME
     sort_direction: SortDirection = SortDirection.ASC
+    record_state: CustomerRecordState = CustomerRecordState.CURRENT
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=25, ge=1, le=200)
 

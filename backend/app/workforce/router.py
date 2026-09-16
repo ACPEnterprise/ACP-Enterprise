@@ -277,7 +277,7 @@ async def prepare_field_readiness(
             await workforce_administration_service.prepare_field_readiness(
                 session, context=context, employee_id=employee_id,
                 branch_id=data.branch_id, start_at=data.window_start_at,
-                end_at=data.window_end_at,
+                end_at=data.window_end_at, reason=data.reason,
             )
         )
     except WorkforceAdministrationConflict as error:

@@ -70,6 +70,10 @@ export interface RealRosterReadinessItem {
   dispatch_state: string;
   timekeeping_state: string;
   payroll_linkage_state: string;
+  identity_confirmed_at: string | null;
+  readiness_window_start_at: string | null;
+  readiness_window_end_at: string | null;
+  readiness_source: string | null;
   blockers: string[];
 }
 
@@ -189,6 +193,7 @@ export async function prepareEmployeeFieldReadiness(
   branchId: string,
   windowStartAt: string,
   windowEndAt: string,
+  reason: string,
 ): Promise<void> {
   await apiClient.put(
     `/api/v1/workforce/administration/employees/${employeeId}/field-readiness`,
@@ -196,6 +201,7 @@ export async function prepareEmployeeFieldReadiness(
       branch_id: branchId,
       window_start_at: windowStartAt,
       window_end_at: windowEndAt,
+      reason,
     },
   );
 }

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
 import { useHasPermission } from "../auth";
@@ -34,6 +34,7 @@ export function PaymentDetailRoute() {
   };
 
   return <div className="mx-auto max-w-4xl space-y-6 pb-12">
+    <Link className="inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline" to={`/customers/${receipt.customer_id}`}>Back to Customer</Link>
     <ReceiptSummary receipt={receipt}/>
     {safeMutationError && <Alert variant="danger">{safeMutationError.message} Refresh both the receipt and Invoice before retrying; prior evidence was not rewritten.</Alert>}
     {canApply && <Card><CardHeader><CardTitle>Apply to Invoice</CardTitle></CardHeader><CardContent><form className="grid gap-3 sm:grid-cols-3" onSubmit={(event) => void applySubmit(event)}><Input aria-label="Invoice ID" required value={apply.invoice} onChange={(event)=>setApply({...apply,invoice:event.target.value})}/><Input aria-label="Application amount" required type="number" step="0.01" value={apply.amount} onChange={(event)=>setApply({...apply,amount:event.target.value})}/><Input aria-label="Invoice version" required type="number" value={apply.version} onChange={(event)=>setApply({...apply,version:event.target.value})}/><Button type="submit" loading={mutations.apply.isPending}>Apply receipt</Button></form></CardContent></Card>}

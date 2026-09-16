@@ -784,17 +784,21 @@ class PaymentService:
         *,
         limit: int = 100,
         offset: int = 0,
+        customer_id: UUID | None = None,
     ) -> tuple[PaymentReceipt, ...]:
         if not 1 <= limit <= 200 or offset < 0:
             raise PaymentValidation("Payment receipt page is invalid.")
+        filters = [
+            PaymentReceipt.company_id == company_id,
+            PaymentReceipt.branch_id.in_(branches),
+        ]
+        if customer_id is not None:
+            filters.append(PaymentReceipt.customer_id == customer_id)
         return tuple(
             (
                 await session.scalars(
                     select(PaymentReceipt)
-                    .where(
-                        PaymentReceipt.company_id == company_id,
-                        PaymentReceipt.branch_id.in_(branches),
-                    )
+                    .where(*filters)
                     .order_by(
                         PaymentReceipt.captured_at.desc(), PaymentReceipt.id.desc()
                     )
