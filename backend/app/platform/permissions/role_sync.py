@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import distinct, select
+from sqlalchemy import delete, distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.audit.service import AuditEntry, audit_service
@@ -84,11 +84,186 @@ class RoleSyncResult:
     authorization_users_advanced: int
 
 
+@dataclass(frozen=True, slots=True)
+class CanonicalRoleCollisionRepairResult:
+    role_id: UUID
+    role_code: str
+    promoted: bool
+    permissions_added: tuple[str, ...]
+    permissions_removed: tuple[str, ...]
+    authorization_users_advanced: int
+
+
 class CanonicalRoleSyncConflict(ValueError):
     pass
 
 
 class CanonicalRoleSyncService:
+    async def promote_legacy_collision(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        actor_user_id: UUID,
+        expected_role_id: UUID,
+        role_code: str,
+        expected_permission_digest: str,
+    ) -> CanonicalRoleCollisionRepairResult:
+        """Govern an exact legacy-role collision into canonical authority.
+
+        This deliberately requires an exact role identity and permission-set digest.
+        It preserves the role row and assignments, removes non-canonical grants, and
+        advances every active assignee's authorization version atomically.
+        """
+        definition = next(
+            (item for item in CANONICAL_ROLE_DEFINITIONS if item.code == role_code),
+            None,
+        )
+        if definition is None:
+            raise CanonicalRoleSyncConflict("Canonical role was not found.")
+        async with session.begin():
+            company = await session.scalar(
+                select(Company).where(Company.id == company_id).with_for_update()
+            )
+            if company is None:
+                raise CanonicalRoleSyncConflict("Company was not found.")
+            actor_has_authority = await session.scalar(
+                select(Permission.id)
+                .join(RolePermission, RolePermission.permission_id == Permission.id)
+                .join(Role, Role.id == RolePermission.role_id)
+                .join(MembershipRole, MembershipRole.role_id == Role.id)
+                .join(Membership, Membership.id == MembershipRole.membership_id)
+                .where(
+                    Membership.user_id == actor_user_id,
+                    Membership.company_id == company_id,
+                    Membership.status == "active",
+                    MembershipRole.revoked_at.is_(None),
+                    Role.company_id == company_id,
+                    Role.status == "active",
+                    Permission.code == AdministrationPermission.PERMISSION_MANAGE,
+                    Permission.status == "active",
+                )
+                .limit(1)
+            )
+            if actor_has_authority is None:
+                raise CanonicalRoleSyncConflict("Permission management authority is required.")
+            roles = tuple(
+                (
+                    await session.scalars(
+                        select(Role)
+                        .where(Role.company_id == company_id, Role.code == role_code)
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            if len(roles) != 1 or roles[0].id != expected_role_id:
+                raise CanonicalRoleSyncConflict("Canonical role identity changed before repair.")
+            role = roles[0]
+            assigned_rows = tuple(
+                (
+                    await session.execute(
+                        select(RolePermission, Permission)
+                        .join(Permission, Permission.id == RolePermission.permission_id)
+                        .where(RolePermission.role_id == role.id)
+                    )
+                ).all()
+            )
+            assigned = frozenset(permission.code for _, permission in assigned_rows)
+            digest = hashlib.sha256(
+                json.dumps(sorted(assigned), separators=(",", ":")).encode()
+            ).hexdigest()
+            canonical = definition.permission_codes
+            if role.is_system and assigned == canonical:
+                return CanonicalRoleCollisionRepairResult(
+                    role.id, role.code, False, (), (), 0
+                )
+            if digest != expected_permission_digest:
+                raise CanonicalRoleSyncConflict("Legacy role permissions changed before repair.")
+            permission_rows = {
+                item.code: item
+                for item in (
+                    await session.scalars(
+                        select(Permission).where(
+                            Permission.code.in_(canonical), Permission.status == "active"
+                        )
+                    )
+                ).all()
+            }
+            if set(permission_rows) != set(canonical):
+                raise CanonicalRoleSyncConflict("Canonical Permission catalog is incomplete.")
+            removed = tuple(sorted(assigned - canonical))
+            added = tuple(sorted(canonical - assigned))
+            if removed:
+                await session.execute(
+                    delete(RolePermission).where(
+                        RolePermission.role_id == role.id,
+                        RolePermission.permission_id.in_(
+                            permission.id
+                            for _, permission in assigned_rows
+                            if permission.code in removed
+                        ),
+                    )
+                )
+            now = datetime.now(timezone.utc)
+            for code in added:
+                session.add(
+                    RolePermission(
+                        role_id=role.id,
+                        permission_id=permission_rows[code].id,
+                        assigned_at=now,
+                        assigned_by_user_id=actor_user_id,
+                    )
+                )
+            role.name = definition.name
+            role.description = definition.purpose
+            role.status = "active"
+            role.archived_at = None
+            role.is_system = True
+            role.updated_at = now
+            role.updated_by_user_id = actor_user_id
+            affected_ids = tuple(
+                await session.scalars(
+                    select(distinct(Membership.user_id))
+                    .join(MembershipRole, MembershipRole.membership_id == Membership.id)
+                    .where(
+                        Membership.company_id == company_id,
+                        Membership.status == "active",
+                        MembershipRole.role_id == role.id,
+                        MembershipRole.revoked_at.is_(None),
+                    )
+                )
+            )
+            users = tuple(
+                (
+                    await session.scalars(
+                        select(User).where(User.id.in_(affected_ids)).with_for_update()
+                    )
+                ).all()
+            )
+            for user in users:
+                user.authorization_version += 1
+            audit_service.stage(
+                session,
+                AuditEntry(
+                    action="company.canonical_role_collision_repaired",
+                    resource_type="access_policy",
+                    resource_id=role.id,
+                    actor_user_id=actor_user_id,
+                    company_id=company_id,
+                    branch_id=None,
+                    details={
+                        "role_code": role.code,
+                        "strategy": "promote_existing_role_preserve_assignments",
+                        "permissions_added": list(added),
+                        "permissions_removed": list(removed),
+                        "authorization_users_advanced": len(users),
+                    },
+                ),
+            )
+            return CanonicalRoleCollisionRepairResult(
+                role.id, role.code, True, added, removed, len(users)
+            )
+
     async def plan(
         self, session: AsyncSession, *, company_id: UUID
     ) -> RoleSyncPlan:
