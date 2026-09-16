@@ -18,6 +18,9 @@ const mutationState = vi.hoisted(() => ({
 const candidateReviewState = vi.hoisted(() => ({
   calls: [] as Array<Record<string, unknown>>,
 }));
+const catalogQueryState = vi.hoisted(() => ({
+  calls: [] as Array<Record<string, unknown>>,
+}));
 
 vi.mock("../auth", () => ({
   useAuth: () => ({
@@ -69,7 +72,9 @@ vi.mock("../hooks/usePriceBook", () => ({
     },
     });
   },
-  usePriceBook: () => ({
+  usePriceBook: (_branch: string | undefined, _enabled: boolean, filters: Record<string, unknown>) => {
+    catalogQueryState.calls.push(filters);
+    return ({
     isPending: false,
     isError: false,
     data: {
@@ -113,8 +118,10 @@ vi.mock("../hooks/usePriceBook", () => ({
       options: [
         { id: "option-1", option_group_id: "group-1", service_item_id: "item-1", label: "Better", position: 2 },
       ],
+      total_service_items: 75,
     },
-  }),
+    });
+  },
   usePriceBookMutations: () => ({
     category: {
       isPending: false,
@@ -202,7 +209,21 @@ describe("PriceBookRoute", () => {
   beforeEach(() => {
     mutationState.categoryError = null;
     candidateReviewState.calls = [];
+    catalogQueryState.calls = [];
     mutationState.categoryMutate.mockReset();
+  });
+
+  it("pages through the native service catalog", async () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+
+    expect(screen.getByText("Showing 1–1 of 75 services.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next services" }));
+
+    await waitFor(() =>
+      expect(catalogQueryState.calls).toContainEqual(
+        expect.objectContaining({ limit: 50, offset: 50 }),
+      ),
+    );
   });
 
   it("pages through every candidate instead of hiding records past the first page", async () => {

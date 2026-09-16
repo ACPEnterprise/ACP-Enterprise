@@ -59,10 +59,14 @@ export function PriceBookRoute() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [catalogOffset, setCatalogOffset] = useState(0);
+  const catalogPageSize = 50;
   const catalog = usePriceBook(branch || undefined, canRead, {
     search: search.trim() || undefined,
     categoryId: categoryFilter === "all" ? undefined : categoryFilter,
     itemStatus: statusFilter === "all" ? undefined : statusFilter,
+    limit: catalogPageSize,
+    offset: catalogOffset,
   });
   const mutations = usePriceBookMutations();
   const [category, setCategory] = useState({ code: "", name: "" });
@@ -1361,12 +1365,16 @@ export function PriceBookRoute() {
                   onChange={(event) => {
                     setSearch(event.target.value);
                     setCandidateOffset(0);
+                    setCatalogOffset(0);
                   }}
                 />
                 <Select
                   aria-label="Filter Price Book category"
                   value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  onChange={(event) => {
+                    setCategoryFilter(event.target.value);
+                    setCatalogOffset(0);
+                  }}
                 >
                   <option value="all">All categories</option>
                   {catalog.data?.categories.map((category) => (
@@ -1378,7 +1386,10 @@ export function PriceBookRoute() {
                 <Select
                   aria-label="Filter Price Book status"
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setCatalogOffset(0);
+                  }}
                 >
                   <option value="all">All states</option>
                   <option value="draft">Draft</option>
@@ -1391,7 +1402,10 @@ export function PriceBookRoute() {
                 <Button
                   type="button"
                   variant={categoryFilter === "all" ? "primary" : "ghost"}
-                  onClick={() => setCategoryFilter("all")}
+                  onClick={() => {
+                    setCategoryFilter("all");
+                    setCatalogOffset(0);
+                  }}
                 >
                   All categories
                 </Button>
@@ -1400,14 +1414,17 @@ export function PriceBookRoute() {
                     key={category.id}
                     type="button"
                     variant={categoryFilter === category.id ? "primary" : "ghost"}
-                    onClick={() => setCategoryFilter(category.id)}
+                    onClick={() => {
+                      setCategoryFilter(category.id);
+                      setCatalogOffset(0);
+                    }}
                   >
                     {category.name}
                   </Button>
                 ))}
               </nav>
               <p className="mb-3 text-sm text-content-muted" aria-live="polite">
-                Showing {filteredServices.length} of {services.length} services.
+                Showing {catalog.data?.total_service_items ? catalogOffset + 1 : 0}–{Math.min(catalogOffset + services.length, catalog.data?.total_service_items ?? 0)} of {catalog.data?.total_service_items ?? 0} services.
               </p>
               {selectedService && (
                 <section
@@ -1569,6 +1586,24 @@ export function PriceBookRoute() {
                   );
                 })}
               </ul>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={catalogOffset === 0}
+                  onClick={() => setCatalogOffset((offset) => Math.max(0, offset - catalogPageSize))}
+                >
+                  Previous services
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={catalogOffset + services.length >= (catalog.data?.total_service_items ?? 0)}
+                  onClick={() => setCatalogOffset((offset) => offset + catalogPageSize)}
+                >
+                  Next services
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </>
