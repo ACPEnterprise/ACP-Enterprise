@@ -5,7 +5,6 @@ import stat
 from pathlib import Path
 
 import pytest
-
 from scripts.hcp_financial_accountant_packet import write_packet
 
 
