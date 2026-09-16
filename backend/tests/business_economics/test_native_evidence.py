@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-
 from app.business_economics.native_evidence import NativeEconomicsEvidenceService
 
 
@@ -47,7 +46,7 @@ async def test_native_facts_are_admitted_without_inventing_profitability() -> No
         confidence="authoritative",
         created_at=now,
     )
-    reservation = SimpleNamespace(demand_id=job_id)
+    reservation = SimpleNamespace(demand_id=job_id, demand_type="job")
     issue = SimpleNamespace(
         id=uuid4(),
         item_id=uuid4(),
@@ -120,6 +119,14 @@ async def test_native_facts_are_admitted_without_inventing_profitability() -> No
     assert result["summary"]["invoiced_revenue_minor"] == 12_550
     assert result["summary"]["accepted_worked_seconds"] == 3_600
     assert result["summary"]["material_cost_minor"] == 2_000
+    assert result["summary"]["material_cost_readiness"] == {
+        "actual_usage_records": 1,
+        "valued_job_material_records": 1,
+        "unvalued_job_material_usage": 0,
+        "non_job_attributed_material_issues": 0,
+        "conflicting_valuation_jobs": 0,
+        "expected_pricebook_cost_substituted": False,
+    }
     assert "contribution_minor" not in projected
 
 
@@ -135,7 +142,7 @@ async def test_missing_material_cost_remains_partial_and_missing() -> None:
         stocking_unit="each",
         posted_at=now,
     )
-    reservation = SimpleNamespace(demand_id=job_id)
+    reservation = SimpleNamespace(demand_id=job_id, demand_type="job")
     movement = SimpleNamespace(unit_cost=None, currency=None, valuation_method=None)
     job = SimpleNamespace(
         id=job_id,
@@ -181,3 +188,6 @@ async def test_missing_material_cost_remains_partial_and_missing() -> None:
 
     assert result["families"]["DIRECT_MATERIAL"]["state"] == "PARTIAL"
     assert result["jobs"][0]["material_cost_minor"] is None
+    assert result["summary"]["material_cost_readiness"][
+        "unvalued_job_material_usage"
+    ] == 1
