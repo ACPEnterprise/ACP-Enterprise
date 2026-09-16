@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.idempotency.reliability import IdempotencyConflict
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 from app.price_book.candidate_admission import (
@@ -315,7 +316,31 @@ async def test_candidate_activation_requires_exact_separate_approvals(
                 expected_version=1,
                 decision=decision,
                 reason=f"Approved {decision}",
+                idempotency_key=f"approve-{decision}",
             )
+    async with factory() as session:
+        audit_count_before = await session.scalar(
+            select(func.count())
+            .select_from(PriceBookAuditEntry)
+            .where(PriceBookAuditEntry.action == "price_approved")
+        )
+    async with factory() as session:
+        await service.record_activation_review(
+            session,
+            context=context,
+            version_id=version.id,
+            expected_version=1,
+            decision="price",
+            reason="Approved price",
+            idempotency_key="approve-price",
+        )
+    async with factory() as session:
+        audit_count_after = await session.scalar(
+            select(func.count())
+            .select_from(PriceBookAuditEntry)
+            .where(PriceBookAuditEntry.action == "price_approved")
+        )
+    assert audit_count_after == audit_count_before
     async with factory() as session:
         ready = await service.record_activation_review(
             session,
@@ -324,6 +349,7 @@ async def test_candidate_activation_requires_exact_separate_approvals(
             expected_version=1,
             decision="activation_authorization",
             reason="Authorized for later explicit activation",
+            idempotency_key="approve-activation",
         )
     assert ready.activation_ready is True
     assert ready.material_mapping_required is False
@@ -336,3 +362,14 @@ async def test_candidate_activation_requires_exact_separate_approvals(
             reason="Explicit bounded activation",
         )
     assert activated.status == "active"
+    async with factory() as session:
+        with pytest.raises(IdempotencyConflict):
+            await service.record_activation_review(
+                session,
+                context=context,
+                version_id=version.id,
+                expected_version=1,
+                decision="price",
+                reason="Contradictory price rationale",
+                idempotency_key="approve-price",
+            )

@@ -1398,6 +1398,46 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, draft row lock, and immutable review audit evidence",
+      "method": "POST",
+      "operation_id": "approve_price_api_v1_price_book_versions__version_id__review_price_post",
+      "path": "/api/v1/price-book/versions/{version_id}/review/price",
+      "reason": "Owner price approval is durable activation authority and exact replay cannot replace actor, timestamp, rationale, or audit evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, draft row lock, and immutable review audit evidence",
+      "method": "POST",
+      "operation_id": "approve_tax_api_v1_price_book_versions__version_id__review_tax_post",
+      "path": "/api/v1/price-book/versions/{version_id}/review/tax",
+      "reason": "Finance tax approval is durable activation authority and exact replay cannot replace actor, timestamp, rationale, or audit evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, draft row lock, and immutable review audit evidence",
+      "method": "POST",
+      "operation_id": "approve_effective_date_api_v1_price_book_versions__version_id__review_effective_date_post",
+      "path": "/api/v1/price-book/versions/{version_id}/review/effective-date",
+      "reason": "Effective-date approval is durable activation authority and exact replay cannot replace actor, timestamp, rationale, or audit evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Company-scoped platform mutation receipt, canonical request digest, prerequisite validation, draft row lock, and immutable review audit evidence",
+      "method": "POST",
+      "operation_id": "authorize_activation_api_v1_price_book_versions__version_id__review_activation_authorization_post",
+      "path": "/api/v1/price-book/versions/{version_id}/review/activation-authorization",
+      "reason": "Owner activation authorization is durable authority for later activation and exact replay cannot replace actor, timestamp, rationale, or audit evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "workforce",
       "mechanism": "Company-scoped Employee/profile uniqueness and row locking",
@@ -3159,6 +3199,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "682dfcd691c78dc206a0f7b710425766e2ff17a8a14d9336978598312585cb70",
+  "fingerprint": "2562b1975992f1deac86d4c6842d3e21cb4a09b5b057e8dfaf0c06ec459a6335",
   "schema_version": "1"
 }
