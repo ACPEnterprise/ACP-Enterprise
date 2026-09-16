@@ -6,8 +6,9 @@ import { getOperatorApiError } from "../api/errors";
 import type { AdminEmployeeTimecard } from "../api/timekeeping";
 import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
+import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useRealRosterReadiness, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Spinner } from "../ui";
 
@@ -35,11 +36,6 @@ export function WorkforceRoute() {
   const { activeCompany, permissionCodes = [] } = useAuth();
   const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
   const directory = useWorkforceDirectory();
-  const realRoster = useRealRosterReadiness(permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE"));
-  const [rosterSelections, setRosterSelections] = useState<Record<string, string>>({});
-  const [sourceRosterSelections, setSourceRosterSelections] = useState<Record<string, string>>({});
-  const [fieldWindowStart, setFieldWindowStart] = useState("");
-  const [fieldWindowEnd, setFieldWindowEnd] = useState("");
   const [selected, setSelected] = useState<string | null>(linkedEmployeeId);
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
@@ -110,7 +106,6 @@ export function WorkforceRoute() {
   const branchName = (branchId: string | null) =>
     activeCompany?.branches?.find((branch) => branch.id === branchId)?.name ??
     (branchId ? "Authorized Branch" : "Company-wide / unassigned");
-  const mainBranchId = activeCompany?.branches?.find((branch) => branch.code === "MAIN")?.id ?? "";
 
   return (
     <div className="space-y-6">
@@ -131,60 +126,7 @@ export function WorkforceRoute() {
         {canReviewTime && <a className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" href="#timecard-operations">Time &amp; Attendance</a>}
         {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" to="/payroll">Payroll</Link>}
       </nav>
-      <Card className="p-4 sm:p-6">
-        <h3 className="text-lg font-semibold">Real All County roster</h3>
-        <p className="mt-1 text-sm text-content-muted">Owner-confirmed identities must be explicitly bound to an exact ACP Employee. Names are never used as matching authority.</p>
-        {realRoster.query.isLoading ? <Spinner label="Loading real roster readiness" /> : realRoster.query.isError ? <Alert variant="danger">Real roster readiness is unavailable. No Employee state was inferred.</Alert> : (
-          <div className="mt-4 space-y-3">
-            <p className="text-sm text-content-muted">{realRoster.query.data?.bound ?? 0} of {realRoster.query.data?.total ?? 8} identities bound · {realRoster.query.data?.field_tech_capability_ready ?? 0} of {realRoster.query.data?.field_tech_total ?? 5} Field Tech capabilities ready</p>
-            <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4" aria-label="Real workforce readiness totals">
-              <p className="rounded-md bg-surface-subtle p-2">Login ready: <strong>{realRoster.query.data?.login_ready_total ?? 0}</strong></p>
-              <p className="rounded-md bg-surface-subtle p-2">Membership ready: <strong>{realRoster.query.data?.membership_ready_total ?? 0}</strong></p>
-              <p className="rounded-md bg-surface-subtle p-2">MAIN Branch ready: <strong>{realRoster.query.data?.branch_ready_total ?? 0}</strong></p>
-              <p className="rounded-md bg-surface-subtle p-2">Mobile ready: <strong>{realRoster.query.data?.mobile_ready_total ?? 0}</strong></p>
-              <p className="rounded-md bg-surface-subtle p-2">Dispatch window ready: <strong>{realRoster.query.data?.dispatch_ready_total ?? 0}</strong></p>
-              <p className="rounded-md bg-surface-subtle p-2">Timekeeping identity ready: <strong>{realRoster.query.data?.timekeeping_ready_total ?? 0}</strong></p>
-              <p className="rounded-md bg-surface-subtle p-2">Payroll identity ready: <strong>{realRoster.query.data?.payroll_identity_ready_total ?? 0}</strong></p>
-            </div>
-            {realRoster.canBind && <div className="grid gap-2 rounded-lg bg-surface-subtle p-3 sm:grid-cols-2"><label className="text-sm font-medium">Field-readiness start<Input className="mt-1" type="datetime-local" value={fieldWindowStart} onChange={(event) => setFieldWindowStart(event.target.value)} /></label><label className="text-sm font-medium">Field-readiness end<Input className="mt-1" type="datetime-local" value={fieldWindowEnd} onChange={(event) => setFieldWindowEnd(event.target.value)} /></label><p className="text-xs text-content-muted sm:col-span-2">This records bounded MAIN availability and technician capability. It does not assign work or create all-dates availability.</p></div>}
-            {realRoster.query.data?.items.map((person) => (
-              <div key={person.roster_key} className="rounded-lg border border-stroke p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{person.display_name}</p><p className="text-sm text-content-muted">{person.operating_role.replaceAll("_", " ")}</p></div><Badge variant={person.blockers.length === 0 ? "success" : "neutral"}>{person.employee_id ? person.dispatch_state.replaceAll("_", " ") : "Binding required"}</Badge></div>
-                {person.employee_id ? <><div className="mt-2 grid gap-1 text-xs text-content-muted sm:grid-cols-3"><span>{person.role_state.replaceAll("_", " ")}</span><span>{person.mobile_state.replaceAll("_", " ")}</span><span>{person.credential_state.replaceAll("_", " ")}</span><span>{person.workforce_profile_state.replaceAll("_", " ")}</span><span>{person.technician_capability_state.replaceAll("_", " ")}</span><span>{person.availability_state.replaceAll("_", " ")}</span></div>{person.field_tech && realRoster.canBind && <Button className="mt-3" variant="outline" disabled={!fieldWindowStart || !fieldWindowEnd || !mainBranchId || realRoster.prepareFieldReadiness.isPending} onClick={() => realRoster.prepareFieldReadiness.mutate({ employeeId: person.employee_id as string, branchId: mainBranchId, windowStartAt: new Date(fieldWindowStart).toISOString(), windowEndAt: new Date(fieldWindowEnd).toISOString() })}>Record bounded field readiness</Button>}</> : realRoster.canBind && <div className="mt-3 flex flex-wrap gap-2"><select aria-label={`Bind ${person.display_name}`} className="min-h-11 min-w-64 rounded-md border border-stroke bg-surface px-3" value={rosterSelections[person.roster_key] ?? ""} onChange={(event) => setRosterSelections((current) => ({ ...current, [person.roster_key]: event.target.value }))}><option value="">Select exact existing Employee</option>{(directory.data ?? []).filter((employee) => !realRoster.query.data?.items.some((item) => item.employee_id === employee.employee_id)).map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} · {employee.employee_number}</option>)}</select><Button variant="outline" disabled={!rosterSelections[person.roster_key] || realRoster.bind.isPending} onClick={() => realRoster.bind.mutate({ rosterKey: person.roster_key, employeeId: rosterSelections[person.roster_key] })}>Confirm identity binding</Button></div>}
-                {person.blockers.length > 0 && <p className="mt-2 text-xs text-content-muted">{person.blockers.map((value) => value.replaceAll("_", " ")).join(" · ")}</p>}
-              </div>
-            ))}
-            <section className="rounded-lg border border-stroke p-3" aria-label="HCP Employee certification evidence">
-              <h4 className="font-semibold">Source Employee certification</h4>
-              <p className="mt-1 text-xs text-content-muted">Exact HCP identifiers and persisted ACP targets only. ACP never matches these records by name or email.</p>
-              <p className="mt-2 text-sm text-content-muted">{realRoster.query.data?.source_evidence_total ?? 0} sealed source identities · {realRoster.query.data?.source_only_total ?? 0} source-only · {realRoster.query.data?.certification_required_total ?? 0} certification actions remaining</p>
-              <div className="mt-3 space-y-2">
-                {realRoster.query.data?.source_evidence.map((source) => {
-                  const sourceKey = `${source.source_system}-${source.source_employee_id}`;
-                  const unboundRoster = realRoster.query.data?.items.filter((item) => item.employee_id === null) ?? [];
-                  return (
-                    <div className="rounded-md bg-surface-subtle p-2 text-xs" key={sourceKey}>
-                      <div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{source.source_system} · {source.source_employee_id}</span><Badge variant={source.certification_state === "ACP_EMPLOYEE_BOUND" ? "success" : "neutral"}>{source.certification_state.replaceAll("_", " ")}</Badge></div>
-                      <p className="mt-1 text-content-muted">{source.source_disposition.replaceAll("_", " ")} · evidence v{source.evidence_version}{source.roster_key ? ` · ${source.roster_key.replaceAll("-", " ")}` : ""}</p>
-                      {source.certification_state === "OWNER_CERTIFICATION_REQUIRED" && source.acp_employee_id && realRoster.canBind && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <select aria-label={`Certify ${source.source_system} ${source.source_employee_id}`} className="min-h-10 min-w-64 rounded-md border border-stroke bg-surface px-2" value={sourceRosterSelections[sourceKey] ?? ""} onChange={(event) => setSourceRosterSelections((current) => ({ ...current, [sourceKey]: event.target.value }))}>
-                            <option value="">Select owner-confirmed roster identity</option>
-                            {unboundRoster.map((person) => <option key={person.roster_key} value={person.roster_key}>{person.display_name} · {person.operating_role.replaceAll("_", " ")}</option>)}
-                          </select>
-                          <Button variant="outline" disabled={!sourceRosterSelections[sourceKey] || realRoster.bind.isPending} onClick={() => realRoster.bind.mutate({ rosterKey: sourceRosterSelections[sourceKey], employeeId: source.acp_employee_id as string })}>Confirm exact source target</Button>
-                        </div>
-                      )}
-                      {source.certification_state === "SOURCE_ONLY" && permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && <Link className="mt-2 inline-block font-semibold text-action-primary" to="/administration/identity-onboarding">Create / onboard after owner certification</Link>}
-                      {source.certification_state === "NOT_EMPLOYEE" && <p className="mt-2 font-medium text-content-muted">Legacy only — excluded from Employee onboarding.</p>}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-        )}
-      </Card>
+      <RealRosterActivationConsole />
       <Card className="p-4 sm:p-6">
         <h3 className="text-lg font-semibold">Assignment eligibility</h3>
         <p className="mt-1 text-sm text-content-muted">Evaluate explicit Branch, availability, capability, language, restriction, and assignment evidence. This does not assign work.</p>

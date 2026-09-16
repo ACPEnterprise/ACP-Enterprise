@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { useAuth } from "../../auth";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Spinner } from "../../ui";
@@ -40,15 +40,19 @@ function submissionMessage(error: unknown): string {
 }
 
 export function IdentityOnboardingRoute() {
+  const [searchParams] = useSearchParams();
   const { activeCompany, permissionCodes = [] } = useAuth();
   const authorized = permissionCodes.includes(ONBOARDING_PERMISSION);
   const branches = useMemo(() => activeCompany?.branches ?? [], [activeCompany]);
-  const defaultBranch = activeCompany?.default_branch_id ?? branches.find((branch) => branch.code === "MAIN")?.id ?? branches[0]?.id ?? "";
+  const requestedBranch = searchParams.get("branch");
+  const defaultBranch = branches.find((branch) => branch.code === requestedBranch)?.id ?? activeCompany?.default_branch_id ?? branches.find((branch) => branch.code === "MAIN")?.id ?? branches[0]?.id ?? "";
+  const authoritativeName = searchParams.get("name")?.trim() ?? "";
+  const nameParts = authoritativeName.split(/\s+/).filter(Boolean);
   const [branchId, setBranchId] = useState(defaultBranch);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [firstName, setFirstName] = useState(nameParts.slice(0, -1).join(" "));
+  const [lastName, setLastName] = useState(nameParts.at(-1) ?? "");
   const [email, setEmail] = useState("");
-  const [profileLabel, setProfileLabel] = useState("FIELD_TECH");
+  const [profileLabel, setProfileLabel] = useState(searchParams.get("profile") ?? "FIELD_TECH");
   const [requestKey, setRequestKey] = useState(() => `employee-admin-${crypto.randomUUID()}`);
   const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
   const [readinessAttempt, setReadinessAttempt] = useState(0);
@@ -143,7 +147,7 @@ export function IdentityOnboardingRoute() {
   return <div className="mx-auto w-full max-w-2xl space-y-ui-5 pb-ui-8">
     <header><h1 className="text-heading-m">Team / Employees</h1><p className="mt-ui-2 text-body-s text-content-muted">Add an employee, select their standard role, and send a protected invitation.</p></header>
     {message && <Alert variant={message.kind === "success" ? "success" : "danger"} announcement={message.kind === "success" ? "polite" : "assertive"}>{message.text}</Alert>}
-    <Card><CardHeader><CardTitle>Add Employee</CardTitle><CardDescription>Standard role permissions and Company scope are applied automatically. Duplicate identities fail safely.</CardDescription></CardHeader><CardContent>
+    <Card><CardHeader><CardTitle>Add Employee</CardTitle><CardDescription>Standard role permissions and Company scope are applied automatically. Duplicate identities fail safely. Login email is never guessed or prefilled from roster identity.</CardDescription></CardHeader><CardContent>
       {preparation.state === "loading" ? <Spinner label="Checking Employee onboarding readiness" /> : preparation.state === "blocked" ? <Alert variant="danger"><div className="space-y-ui-3"><p>{preparation.message}</p><Button variant="secondary" onClick={() => { setPreparation({ state: "loading" }); setReadinessAttempt((value) => value + 1); }}>Retry readiness</Button></div></Alert> :
         <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-ui-3 sm:grid-cols-2">

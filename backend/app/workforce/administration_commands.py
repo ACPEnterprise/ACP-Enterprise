@@ -28,6 +28,7 @@ class WorkforceAdministrationService:
     async def prepare_field_readiness(
         self, session: AsyncSession, *, context: AuthorizationContext,
         employee_id: UUID, branch_id: UUID, start_at: datetime, end_at: datetime,
+        reason: str,
     ) -> tuple[UUID, UUID, UUID]:
         if end_at <= start_at:
             raise WorkforceAdministrationConflict("Assignment window is invalid.")
@@ -169,6 +170,13 @@ class WorkforceAdministrationService:
                 self._audit(
                     session, context, "workforce.availability_recorded",
                     availability.id,
+                    {
+                        "employee_id": str(employee.id),
+                        "branch_id": str(branch_id),
+                        "window_start_at": start_at.isoformat(),
+                        "window_end_at": end_at.isoformat(),
+                        "reason": reason.strip(),
+                    },
                 )
             elif (
                 availability.status != "available"
