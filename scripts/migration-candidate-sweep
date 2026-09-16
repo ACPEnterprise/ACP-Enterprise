@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib.util
 import json
 import subprocess
@@ -14,14 +15,13 @@ from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from typing import Any, cast
 
-DESTRUCTIVE_MARKERS = (
-    "op.drop_table(",
-    "op.drop_column(",
-    "op.execute(\"DELETE ",
-    "op.execute('DELETE ",
-    "op.execute(\"TRUNCATE ",
-    "op.execute('TRUNCATE ",
-)
+DESTRUCTIVE_OPERATIONS = {
+    "drop_table",
+    "drop_column",
+    "drop_constraint",
+    "drop_index",
+    "rename_table",
+}
 
 
 def lineage_module(root: Path):  # type: ignore[no-untyped-def]
@@ -82,6 +82,50 @@ def report_for_ref(root: Path, ref: str, module: object) -> dict[str, object]:
         )
 
 
+def destructive_upgrade_operations(content: str) -> list[str]:
+    tree = ast.parse(content)
+    upgrade = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "upgrade"
+        ),
+        None,
+    )
+    if upgrade is None:
+        return ["MISSING_UPGRADE_FUNCTION"]
+    findings: set[str] = set()
+    for node in ast.walk(upgrade):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        if (
+            isinstance(function, ast.Attribute)
+            and isinstance(function.value, ast.Name)
+            and function.value.id == "op"
+        ):
+            if function.attr in DESTRUCTIVE_OPERATIONS:
+                findings.add(f"op.{function.attr}")
+            elif function.attr == "alter_column":
+                for keyword in node.keywords:
+                    if (
+                        keyword.arg == "nullable"
+                        and isinstance(keyword.value, ast.Constant)
+                        and keyword.value.value is False
+                    ):
+                        findings.add("op.alter_column(nullable=False)")
+                    if keyword.arg in {"type_", "postgresql_using"}:
+                        findings.add(f"op.alter_column({keyword.arg})")
+            elif function.attr == "execute" and node.args:
+                statement = node.args[0]
+                if isinstance(statement, ast.Constant) and isinstance(statement.value, str):
+                    sql = statement.value.lstrip().upper()
+                    if sql.startswith(("DELETE ", "TRUNCATE ", "DROP ")):
+                        findings.add(f"op.execute({sql.split(maxsplit=1)[0]})")
+    return sorted(findings)
+
+
 def destructive_operations(root: Path, base: str, candidate: str) -> list[dict[str, str]]:
     names = git(
         root,
@@ -95,9 +139,8 @@ def destructive_operations(root: Path, base: str, candidate: str) -> list[dict[s
     findings: list[dict[str, str]] = []
     for name in names:
         content = git(root, "show", f"{candidate}:{name}")
-        for marker in DESTRUCTIVE_MARKERS:
-            if marker in content:
-                findings.append({"path": name, "marker": marker})
+        for marker in destructive_upgrade_operations(content):
+            findings.append({"path": name, "marker": marker})
     return findings
 
 

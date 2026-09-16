@@ -59,6 +59,19 @@ equals an authoritative category code. Any future migration must preserve
 unmapped Jobs explicitly and must not make a new foreign key non-null until the
 population is reconciled.
 
+## Customer / Job / Invoice / Payment relationship audit
+
+The authoritative Invoice relationship is Company/Branch/Job scoped and payment
+intents bind Company, Branch, Invoice and Customer together. Those primary links
+are structurally protected. However, several downstream Payments rows duplicate
+scope without a matching composite FK: `payment_receipts.branch_id/customer_id`,
+`payment_refunds.branch_id`, and `payment_deposits.branch_id`. Their parent
+Company relationship is constrained, but their redundant Branch/Customer values
+can diverge from the parent while remaining database-valid. This is an exact
+Payments-domain integrity handoff: reconcile existing rows, then add tenant-
+scoped parent keys/FKs or remove redundant scope. OM1-B must not invent that
+domain migration while the payment execution authority remains inactive.
+
 ## Release posture
 
 - Canonical schema path: ready.
