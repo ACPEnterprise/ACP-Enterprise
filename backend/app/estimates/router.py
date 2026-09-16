@@ -113,16 +113,26 @@ async def list_estimates(
     customer_id: UUID | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=250),
+    offset: int = Query(default=0, ge=0),
 ) -> EstimateList:
+    branch_ids = frozenset(branch.id for branch in context.authorized_branches)
     items = await estimate_service.repository.list_summaries(
         session,
         company_id=context.company.id,
-        branch_ids=frozenset(branch.id for branch in context.authorized_branches),
+        branch_ids=branch_ids,
         customer_id=customer_id,
         status=status_filter,
         limit=limit,
+        offset=offset,
     )
-    return EstimateList(items=items, total=len(items))
+    total = await estimate_service.repository.count_summaries(
+        session,
+        company_id=context.company.id,
+        branch_ids=branch_ids,
+        customer_id=customer_id,
+        status=status_filter,
+    )
+    return EstimateList(items=items, total=total)
 
 
 @router.get("/{estimate_id}", response_model=EstimateItem)

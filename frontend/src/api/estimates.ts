@@ -18,10 +18,17 @@ export async function getEstimate(id: string): Promise<Estimate> {
 export async function listEstimates(
   status?: string,
   customerId?: string,
+  limit = 25,
+  offset = 0,
 ): Promise<EstimateList> {
   return (
     await apiClient.get<EstimateList>(root, {
-      params: { status: status || undefined, customer_id: customerId },
+      params: {
+        status: status || undefined,
+        customer_id: customerId,
+        limit,
+        offset,
+      },
     })
   ).data;
 }

@@ -34,7 +34,9 @@ async def test_estimate_pipeline_is_company_and_branch_scoped(
         updated_at=datetime.now(UTC),
     )
     listing = AsyncMock(return_value=(item,))
+    count = AsyncMock(return_value=137)
     monkeypatch.setattr(estimate_service.repository, "list_summaries", listing)
+    monkeypatch.setattr(estimate_service.repository, "count_summaries", count)
     context = SimpleNamespace(
         company=SimpleNamespace(id=company_id),
         authorized_branches=(SimpleNamespace(id=branch_id),),
@@ -47,9 +49,10 @@ async def test_estimate_pipeline_is_company_and_branch_scoped(
         customer_id=customer_id,
         status_filter="draft",
         limit=50,
+        offset=100,
     )
 
-    assert result.total == 1
+    assert result.total == 137
     assert result.items == (item,)
     listing.assert_awaited_once_with(
         session,
@@ -58,4 +61,12 @@ async def test_estimate_pipeline_is_company_and_branch_scoped(
         customer_id=customer_id,
         status="draft",
         limit=50,
+        offset=100,
+    )
+    count.assert_awaited_once_with(
+        session,
+        company_id=company_id,
+        branch_ids=frozenset({branch_id}),
+        customer_id=customer_id,
+        status="draft",
     )
