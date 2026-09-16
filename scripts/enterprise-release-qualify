@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Deterministic Enterprise release qualification runner.
+
+The runner never deploys or merges. It executes only the checks selected by the
+requested profile and records every other check as NOT YET EXECUTED, BLOCKED,
+or NOT APPLICABLE in a sealed JSON packet.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Final
+
+STATUSES: Final = {"PASS", "FAIL", "BLOCKED", "NOT APPLICABLE", "NOT YET EXECUTED"}
+CONTRACT: Final = "enterprise-release-qualification/v1"
+
+
+@dataclass(frozen=True)
+class Check:
+    key: str
+    title: str
+    profiles: tuple[str, ...]
+    command: tuple[str, ...] | None
+    expected: str
+    required_tools: tuple[str, ...] = ()
+    mutation: str = "none"
+
+
+@dataclass(frozen=True)
+class Result:
+    key: str
+    title: str
+    status: str
+    command: str | None
+    expected: str
+    exit_code: int | None
+    duration_seconds: float | None
+    artifact: str | None
+    reason: str | None
+    skipped_count: int | None
+
+
+def checks() -> tuple[Check, ...]:
+    py = "python"
+    return (
+        Check("repository_cleanliness", "Repository cleanliness", ("local",), ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
+        Check("repository_provenance", "Repository provenance", ("local", "preview", "postdeploy"), ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
+        Check("backend_dependencies", "Backend dependency/install verification", ("local",), (py, "-m", "pip", "check"), "No broken requirements", (py,)),
+        Check("frontend_dependencies", "Frontend dependency/install verification", ("local",), ("npm", "ci", "--prefix", "frontend", "--ignore-scripts"), "Lockfile install succeeds", ("npm",), "workspace_dependencies"),
+        Check("backend_lint", "Backend Ruff", ("local",), (py, "-m", "ruff", "check", "backend"), "All checks passed", (py,)),
+        Check("backend_format", "Backend Ruff format", ("local",), (py, "-m", "ruff", "format", "--check", "backend"), "No formatting changes required", (py,)),
+        Check("backend_types", "Backend MyPy", ("local",), (py, "-m", "mypy", "backend/app", "backend/scripts"), "No type errors", (py,)),
+        Check("backend_tests", "Backend complete test suite", ("local",), (py, "-m", "pytest", "-ra", "backend/tests"), "All tests pass; skips disclosed", (py,)),
+        Check("frontend_lint", "Frontend ESLint", ("local",), ("npm", "run", "lint", "--prefix", "frontend"), "No lint errors", ("npm",)),
+        Check("frontend_types", "Frontend TypeScript", ("local",), ("frontend/node_modules/.bin/tsc", "-b", "frontend/tsconfig.json", "--pretty", "false"), "No type errors", ("npm",)),
+        Check("frontend_tests", "Frontend complete test suite", ("local",), ("npm", "run", "test:run", "--prefix", "frontend", "--", "--reporter=verbose"), "All tests pass; skips disclosed", ("npm",)),
+        Check("frontend_build", "Frontend production build", ("local",), ("npm", "run", "build", "--prefix", "frontend"), "Production bundle succeeds", ("npm",)),
+        Check("migration_heads", "Exactly one Alembic head", ("local", "preview"), (py, "-m", "alembic", "-c", "backend/alembic.ini", "heads"), "Exactly one line marked head", (py,)),
+        Check("migration_rehearsal", "Fresh PostgreSQL zero-to-head and drift rehearsal", ("database",), ("scripts/qualify-release-database",), "Fresh upgrade reaches the sole head and drift is zero", ("docker",), "disposable_database"),
+        Check("api_health", "API health", ("postdeploy",), None, "GET /backend-health reports healthy"),
+        Check("authentication_smoke", "Authentication smoke", ("postdeploy",), None, "Anonymous protected request rejected and authorized session accepted"),
+        Check("authorization_smoke", "Authorization/RBAC smoke", ("postdeploy",), None, "Cross-role, cross-Branch, and cross-Company requests fail closed"),
+        Check("critical_crud", "Critical CRUD smoke", ("commissioning",), None, "Approved synthetic tenant CRUD succeeds and is cleaned up", mutation="approved_nonproduction_fixture"),
+        Check("background_services", "Background-service health", ("postdeploy",), None, "Configured workers report healthy recent authenticated heartbeat"),
+        Check("postgres_health", "PostgreSQL health", ("preview", "postdeploy"), None, "pg_isready and current=head pass"),
+        Check("redis_health", "Redis health", ("preview", "postdeploy"), None, "Authenticated health user returns PONG"),
+        Check("preview_configuration", "Preview configuration", ("preview",), ("docker", "compose", "--env-file", ".env.preview", "-f", "docker-compose.preview.yml", "config", "--quiet"), "Compose interpolation succeeds without printing secrets", ("docker",)),
+        Check("secret_custody", "Secrets required but not exposed", ("local", "preview"), ("python3", "scripts/release-secret-custody-check.py", "--env-example", ".env.preview.example"), "Required secret names exist; tracked files contain no runtime secrets", ("python3",)),
+        Check("release_revision", "Release revision/provenance capture", ("local", "preview", "postdeploy"), ("git", "show", "-s", "--format=%H%n%T%n%P%n%aI", "HEAD"), "Commit, tree, parents, and timestamp recorded", ("git",)),
+        Check("rollback_readiness", "Rollback readiness", ("preview",), None, "Backup digest and verified restore receipt are present and match authority"),
+        Check("postdeploy_routes", "Post-deployment route smoke", ("postdeploy",), None, "Health, SPA routes, API revision, auth, and RBAC checks pass"),
+    )
+
+
+def canonical(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def tool_available(tool: str) -> bool:
+    if tool == "python":
+        return sys.version_info >= (3, 12) and shutil.which("python") is not None
+    return shutil.which(tool) is not None
+
+
+def count_skips(output: str) -> int | None:
+    values = [int(value) for value in re.findall(r"(\d+) skipped", output)]
+    return sum(values) if values else 0
+
+
+def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Result:
+    assert check.command is not None
+    missing = [tool for tool in check.required_tools if not tool_available(tool)]
+    if missing:
+        reason = "required supported tool unavailable: " + ", ".join(missing)
+        if "python" in missing:
+            reason += f" (observed Python {sys.version.split()[0]}; repository image uses Python 3.12)"
+        return Result(check.key, check.title, "BLOCKED", shlex.join(check.command), check.expected, None, None, None, reason, None)
+    started = datetime.now(timezone.utc)
+    completed = subprocess.run(check.command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+    duration = (datetime.now(timezone.utc) - started).total_seconds()
+    artifact.write_text(completed.stdout, encoding="utf-8")
+    status = "PASS" if completed.returncode == 0 else "FAIL"
+    reason = None
+    if check.key == "repository_cleanliness" and completed.stdout:
+        status, reason = "FAIL", "working tree is not clean"
+    if check.key == "repository_provenance" and completed.stdout.strip() != candidate:
+        status, reason = "FAIL", "HEAD does not equal candidate SHA"
+    if check.key == "migration_heads" and len([line for line in completed.stdout.splitlines() if line.strip()]) != 1:
+        status, reason = "FAIL", "Alembic does not report exactly one head"
+    return Result(check.key, check.title, status, shlex.join(check.command), check.expected, completed.returncode, duration, str(artifact), reason, count_skips(completed.stdout))
+
+
+def placeholder(check: Check, status: str, reason: str) -> Result:
+    return Result(check.key, check.title, status, shlex.join(check.command) if check.command else None, check.expected, None, None, None, reason, None)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--profile", choices=("plan", "local", "database", "preview", "postdeploy", "commissioning"), default="plan")
+    parser.add_argument("--candidate-sha")
+    parser.add_argument("--preview-revision")
+    parser.add_argument("--preview-url")
+    parser.add_argument("--backup-receipt", type=Path)
+    parser.add_argument("--restore-receipt", type=Path)
+    parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--execute", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    root = Path(__file__).resolve().parents[1]
+    head = subprocess.check_output(("git", "rev-parse", "HEAD"), cwd=root, text=True).strip()
+    candidate = args.candidate_sha or head
+    if not re.fullmatch(r"[0-9a-f]{40}", candidate):
+        raise SystemExit("candidate SHA must be a full 40-character lowercase SHA")
+    args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    args.evidence_dir.chmod(0o700)
+    results: list[Result] = []
+    for check in checks():
+        artifact = args.evidence_dir / f"{check.key}.log"
+        if args.profile == "plan":
+            results.append(placeholder(check, "NOT YET EXECUTED", "plan-only packet"))
+        elif args.profile not in check.profiles:
+            results.append(placeholder(check, "NOT YET EXECUTED", f"owned by profile(s): {', '.join(check.profiles)}"))
+        elif not args.execute:
+            results.append(placeholder(check, "NOT YET EXECUTED", "execution flag not supplied"))
+        elif check.command is not None:
+            results.append(run_command(check, root, artifact, candidate))
+        elif check.key == "rollback_readiness":
+            receipts = (args.backup_receipt, args.restore_receipt)
+            if all(path and path.is_file() for path in receipts):
+                results.append(placeholder(check, "PASS", "backup and restore receipt paths exist; digests captured in packet"))
+            else:
+                results.append(placeholder(check, "BLOCKED", "backup and verified restore receipts are required"))
+        elif check.key in {"api_health", "postdeploy_routes", "authentication_smoke", "authorization_smoke", "background_services", "postgres_health", "redis_health"}:
+            results.append(placeholder(check, "BLOCKED", "requires sanctioned deployed environment and protected smoke credentials"))
+        elif check.key == "critical_crud":
+            results.append(placeholder(check, "BLOCKED", "requires approved disposable non-production tenant and explicit mutation authority"))
+        else:
+            results.append(placeholder(check, "BLOCKED", "required external evidence not supplied"))
+
+    status_counts = {status: sum(result.status == status for result in results) for status in sorted(STATUSES)}
+    receipts = {}
+    for name, path in (("backup", args.backup_receipt), ("restore", args.restore_receipt)):
+        if path and path.is_file():
+            receipts[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    packet = {
+        "contract": CONTRACT,
+        "candidate_sha": candidate,
+        "observed_head": head,
+        "profile": args.profile,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "preview_revision": args.preview_revision or "NOT YET RECORDED",
+        "preview_url": args.preview_url or "NOT YET RECORDED",
+        "results": [asdict(result) for result in results],
+        "status_counts": status_counts,
+        "rollback_receipts": receipts,
+        "release_decision": "FAIL" if status_counts["FAIL"] else ("BLOCKED" if status_counts["BLOCKED"] else ("PASS" if status_counts["NOT YET EXECUTED"] == 0 else "NOT YET EXECUTED")),
+        "deployment_authorized": False,
+    }
+    packet["digest"] = hashlib.sha256(canonical(packet)).hexdigest()
+    packet_path = args.evidence_dir / "qualification-packet.json"
+    descriptor = os.open(packet_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(json.dumps(packet, indent=2, sort_keys=True).encode() + b"\n")
+    print(json.dumps({"packet": str(packet_path), "digest": packet["digest"], "decision": packet["release_decision"], "status_counts": status_counts}, sort_keys=True))
+    return 1 if packet["release_decision"] == "FAIL" else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

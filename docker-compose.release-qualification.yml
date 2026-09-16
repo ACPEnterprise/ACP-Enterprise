@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: release_qualification
+      POSTGRES_USER: release_qualification
+      POSTGRES_PASSWORD: release-qualification-disposable-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U release_qualification -d release_qualification"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks:
+      - qualification
+    volumes:
+      - qualification-postgres:/var/lib/postgresql/data
+
+  qualifier:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://release_qualification:release-qualification-disposable-only@postgres:5432/release_qualification
+      ACCESS_TOKEN_KEYS: '[{"kid":"release-qualification","key":"release-qualification-disposable-signing-key-32-bytes"}]'
+      ACCESS_TOKEN_ACTIVE_KID: release-qualification
+      INVITATION_TOKEN_HMAC_KEY: release-qualification-disposable-hmac-key-32-bytes
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        heads="$$(alembic heads)"
+        test "$$(printf '%s\n' "$$heads" | sed '/^[[:space:]]*$$/d' | wc -l | tr -d ' ')" = 1
+        alembic upgrade head
+        alembic current | grep -q '(head)'
+        alembic check
+    networks:
+      - qualification
+
+volumes:
+  qualification-postgres:
+
+networks:
+  qualification:
+    internal: true
