@@ -52,8 +52,14 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("dispatch", ("dispatch", "assigned", "technician conflict", "who has")),
     ("estimates", ("estimate", "proposal")),
-    ("invoicing", ("invoice", "outstanding", "open ar", "revenue")),
-    ("payments", ("payment", "settlement", "cash collected", "paid us", "collect")),
+    (
+        "invoicing",
+        ("invoice", "outstanding", "open ar", "revenue", "did we charge"),
+    ),
+    (
+        "payments",
+        ("payment", "settlement", "cash collected", "paid us", "pay us", "collect"),
+    ),
     ("communications", ("communication", "message delivery", "bounce")),
     ("assets", ("asset", "equipment", "fleet", "warranty")),
     (
@@ -80,6 +86,7 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "direct deposit",
             "pay statement",
             "holding payroll",
+            "calculate after prerequisites",
         ),
     ),
     (
@@ -110,7 +117,16 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "completeness",
         ),
     ),
-    ("price-book", ("price book", "pricing review", "what did we charge")),
+    (
+        "price-book",
+        (
+            "price book",
+            "pricing review",
+            "our price",
+            "price for",
+            "what did we charge",
+        ),
+    ),
     ("beacon", ("beacon", "signal", "needs attention", "worried about")),
     (
         "business-economics",
@@ -192,10 +208,11 @@ def plan_question(
     normalized = conversation.normalized
     subject = _named_subject(question) if context_domain is None else None
     corrected_context_subject = bool(
-        conversation.corrected_subject and context_domain == "workforce"
+        conversation.corrected_subject
+        and context_domain in {"customers", "jobs", "workforce"}
     )
     if corrected_context_subject:
-        subject = ("workforce", conversation.corrected_subject or "")
+        subject = (context_domain or "identity", conversation.corrected_subject or "")
     subject_domain, subject_query = subject if subject is not None else (None, None)
     if subject_domain == "identity":
         domains = frozenset({"customers", "workforce"})
@@ -260,6 +277,7 @@ def _named_subject(question: str) -> tuple[str, str] | None:
     patterns = (
         ("jobs", r"\s*show\s+me\s+job\s+([A-Z0-9-]+)[?.!]?\s*"),
         ("customers", r"\s*show\s+me\s+customer\s+(.+?)[?.!]?\s*"),
+        ("workforce", r"\s*show\s+me\s+employee\s+(.+?)[?.!]?\s*"),
         (
             "identity",
             r"\s*(?:uh\s+)?(?:show me|find|actually,?\s*show me)\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){0,7})[?.!]?\s*",
