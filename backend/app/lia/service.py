@@ -22,6 +22,12 @@ from .contracts import (
     NavigationSuggestion,
     TruthClassification,
 )
+from .conversation import (
+    ActionRisk,
+    CorrectionKind,
+    ResponseMode,
+    interpret_conversation,
+)
 from .owner_answers import compose_owner_answer
 from .payroll_guidance import payroll_guidance_answer
 from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
@@ -88,6 +94,7 @@ class LiaService:
         request_id = uuid4()
         conversation_id = request.conversation_id or uuid4()
         question = request.question.strip()
+        conversation = interpret_conversation(question)
         if (
             request.context is not None
             and request.context.authorization_version is not None
@@ -124,17 +131,80 @@ class LiaService:
                 answer="I won’t turn an assumption into an ACP fact. I can explain a clearly labeled hypothetical, but authoritative status requires accepted evidence.",
                 limitations=("No business fact was changed or inferred.",),
             )
-        if matches_any(question, HIGH_IMPACT_PATTERNS):
+        if conversation.capability_question:
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.KNOWN,
+                answer=_capability_answer(question),
+                limitations=(
+                    "LIA is read-only and cannot execute operational or financial changes.",
+                    "Answers remain limited to the principal's current ACP permissions.",
+                ),
+                navigation=_capability_navigation(question),
+            )
+        if conversation.action is not None or matches_any(
+            question, HIGH_IMPACT_PATTERNS
+        ):
+            action = conversation.action
+            action_label = (
+                action.action_type.replace("_", " ").lower()
+                if action is not None
+                else "requested business action"
+            )
+            risk = (
+                action.risk.value.replace("_", " ").lower()
+                if action is not None
+                else "high impact operation"
+            )
             return self._response(
                 context=context,
                 request=request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.POLICY_REQUIRED,
-                answer="LIA cannot execute that business action. Review it in the authoritative ACP workflow with the required permission and confirmation.",
+                answer=(
+                    f"I understood this as {action_label} ({risk}). LIA is read-only "
+                    "and did not execute it. Open the authoritative ACP workspace to "
+                    "review the exact record, permission, and confirmation."
+                ),
                 limitations=(
                     "No action proposal was created: an exact target, authoritative evidence, current version, and required permission are mandatory.",
                     "A future proposal must satisfy LIA_PROPOSED_ACTION.v1 and remains non-executing.",
+                ),
+                navigation=_action_navigation(action.risk if action else None),
+            )
+
+        if conversation.correction is CorrectionKind.BACK:
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "I don't have an authorized earlier topic in this bounded request. "
+                    "Name the Customer, Job, Employee, or period you want to return to."
+                ),
+                limitations=(
+                    "LIA did not guess or restore stale conversation context.",
+                ),
+            )
+        if conversation.pronouns and request.context is None:
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "I need the authorized record you mean before I can answer. Name or "
+                    "select the Customer, Job, Employee, Invoice, Appointment, or alert."
+                ),
+                limitations=(
+                    "No referent was guessed and no protected lookup occurred.",
                 ),
             )
 
@@ -315,7 +385,18 @@ class LiaService:
 
         interpreted = payroll_guidance_answer(question, evidence)
         owner_answer = compose_owner_answer(question, evidence)
-        answer = interpreted or owner_answer.text
+        answer = _compose_answer(
+            lines=[interpreted or owner_answer.text],
+            mode=plan.response_mode,
+            authority=_answer_authority(TruthClassification.KNOWN, evidence),
+            period=plan.resolved_period,
+            evidence=evidence,
+        )
+        if any(
+            word in question.casefold()
+            for word in ("why", "profit", "margin", "economics")
+        ):
+            answer += " A causal explanation requires an admitted Business Economics result; these operational counts alone do not establish cause or profitability."
         limitations = (
             "This deterministic response summarizes current ACP records; no external AI provider was invoked.",
             "Counts are not a substitute for domain approval, settlement, posting, or payroll authority.",
@@ -448,3 +529,97 @@ def _answer_authority(
     ):
         return AnswerAuthority.SOURCE_BACKED
     return AnswerAuthority.ACP_AUTHORITATIVE
+
+
+def _compose_answer(
+    *,
+    lines: list[str],
+    mode: ResponseMode,
+    authority: AnswerAuthority,
+    period,
+    evidence: tuple[EvidenceReference, ...],
+) -> str:
+    authority_text = {
+        AnswerAuthority.ACP_AUTHORITATIVE: "ACP's native authorized records show",
+        AnswerAuthority.SOURCE_BACKED: "Authorized source evidence shows",
+        AnswerAuthority.PARTIAL: "ACP has only part of the authorized evidence",
+        AnswerAuthority.INSUFFICIENT_EVIDENCE: "ACP does not have enough authorized evidence",
+    }[authority]
+    period_text = ""
+    if period is not None:
+        period_text = (
+            f" The requested period resolves to {period.starts_on.isoformat()} through "
+            f"{period.ends_on.isoformat()}; the current source summaries are not "
+            "date-filtered, so they must not be treated as period totals."
+        )
+    if mode is ResponseMode.BRIEF:
+        first = lines[0] if lines else "No result was returned."
+        return f"{authority_text}: {first}{period_text}"
+    detail = " ".join(lines)
+    answer = f"{authority_text}: {detail}{period_text}"
+    if mode is ResponseMode.DETAILED:
+        answer += " Open the authoritative workspace for record-level detail and the next permitted step."
+    elif mode is ResponseMode.EVIDENCE:
+        sources = ", ".join(sorted({item.authority for item in evidence}))
+        as_of = max(item.observed_at for item in evidence).isoformat()
+        answer += f" Evidence authority: {sources}. As of {as_of}."
+    return answer
+
+
+def _capability_answer(question: str) -> str:
+    normalized = question.casefold()
+    if any(
+        term in normalized
+        for term in ("schedule", "dispatch", "change prices", "run payroll")
+    ):
+        return (
+            "I can explain authorized evidence and open the relevant ACP workspace, "
+            "but I cannot schedule, dispatch, change prices, or run Payroll."
+        )
+    return (
+        "I can read and explain authorized ACP evidence, preserve a bounded record "
+        "context, show limitations, and suggest safe navigation. I cannot change "
+        "business records, move money, send messages, or grant permissions."
+    )
+
+
+def _capability_navigation(question: str) -> tuple[NavigationSuggestion, ...]:
+    normalized = question.casefold()
+    for term, domain in (
+        ("schedule", "scheduling"),
+        ("dispatch", "dispatch"),
+        ("price", "price-book"),
+        ("payroll", "payroll"),
+    ):
+        if term in normalized:
+            return (
+                NavigationSuggestion(
+                    label=f"Open {domain.replace('-', ' ').title()}",
+                    internal_path=ROUTES[domain],
+                ),
+            )
+    return ()
+
+
+def _action_navigation(risk: ActionRisk | None) -> tuple[NavigationSuggestion, ...]:
+    if risk is None:
+        return ()
+    domain = {
+        ActionRisk.SCHEDULING_CHANGE: "scheduling",
+        ActionRisk.CUSTOMER_COMMUNICATION: "communications",
+        ActionRisk.PRICE_CHANGE: "price-book",
+        ActionRisk.PAYROLL: "payroll",
+        ActionRisk.ACCOUNTING: "accounting",
+        ActionRisk.MONEY_MOVEMENT: "payments",
+        ActionRisk.EMPLOYMENT: "workforce",
+        ActionRisk.PERMISSION_CHANGE: "workforce",
+        ActionRisk.LOW_IMPACT_OPERATION: "purchasing",
+    }.get(risk)
+    if domain is None:
+        return ()
+    return (
+        NavigationSuggestion(
+            label=f"Open {domain.replace('-', ' ').title()}",
+            internal_path=ROUTES[domain],
+        ),
+    )
