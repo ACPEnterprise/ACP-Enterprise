@@ -107,4 +107,19 @@ describe("MissionControlRoute", () => {
     expect(screen.getByText("Some monetary events were excluded")).toBeInTheDocument();
     expect(screen.getByText(/missing amounts were not treated as zero/)).toBeInTheDocument();
   });
+
+  it("does not turn malformed monetary evidence into zero", () => {
+    vi.mocked(analyticsHook.useAnalyticsSummary).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        ...data,
+        booked_revenue: { ...data.booked_revenue, value: "not-a-number" },
+      },
+      dataUpdatedAt: Date.now(),
+    } as never);
+    render(<MissionControlRoute />);
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("$0")).not.toBeInTheDocument();
+  });
 });
