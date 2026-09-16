@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Final
+from typing import Any, Final, cast
 from uuid import UUID, uuid5
 
 from app.business_economics.source_completeness import source_completeness_matrix
@@ -451,6 +451,119 @@ def _service_line_economics(
     return output
 
 
+def _evidence_priority_queue(
+    jobs: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    affected: dict[str, set[str]] = {}
+    for job in jobs:
+        missing = job.get("missing_prerequisites")
+        if not isinstance(missing, list):
+            continue
+        for prerequisite in missing:
+            affected.setdefault(str(prerequisite), set()).add(str(job["job_id"]))
+    ownership = {
+        "invoiced_revenue": ("Invoices", "machine_acquirable"),
+        "accepted_job_work": ("Timekeeping", "machine_acquirable"),
+        "certified_direct_wage_cost": (
+            "Payroll/Economics policy",
+            "owner_input_required",
+        ),
+        "actual_material_usage_or_not_applicable_authority": (
+            "Inventory/Field Operations",
+            "machine_acquirable_or_owner_not_applicable",
+        ),
+        "actual_material_valuation": (
+            "Inventory/Purchasing",
+            "accountant_input_required",
+        ),
+        "other_direct_cost_completeness": (
+            "Accounts Payable/Economics",
+            "accountant_input_required",
+        ),
+        "admitted_direct_contribution": (
+            "Business Economics",
+            "machine_calculated_after_inputs",
+        ),
+    }
+    queue = []
+    for prerequisite, job_ids in affected.items():
+        owner, next_step = ownership.get(
+            prerequisite, ("Source domain", "source_authority_required")
+        )
+        queue.append(
+            {
+                "prerequisite": prerequisite,
+                "affected_job_count": len(job_ids),
+                "affected_job_ids": sorted(job_ids),
+                "responsible_domain": owner,
+                "next_safe_step": next_step,
+                "economic_unlock": (
+                    "direct_contribution"
+                    if prerequisite != "admitted_direct_contribution"
+                    else "owner_profitability_comparison"
+                ),
+            }
+        )
+    return sorted(
+        queue,
+        key=lambda item: (
+            -cast(int, item["affected_job_count"]),
+            str(item["prerequisite"]),
+        ),
+    )
+
+
+def _owner_question_answers(
+    jobs: list[dict[str, object]], service_lines: list[dict[str, object]]
+) -> dict[str, object]:
+    contribution_jobs = [
+        item for item in jobs if isinstance(item.get("direct_contribution_minor"), int)
+    ]
+    ranked = sorted(
+        contribution_jobs,
+        key=lambda item: cast(int, item["direct_contribution_minor"]),
+        reverse=True,
+    )
+    negative = [
+        item for item in ranked if cast(int, item["direct_contribution_minor"]) < 0
+    ]
+    complete_services = [
+        item
+        for item in service_lines
+        if isinstance(item.get("direct_contribution_minor"), int)
+    ]
+    return {
+        "which_jobs_make_money": {
+            "state": "READY" if ranked else "INSUFFICIENT_EVIDENCE",
+            "strongest": ranked[:5],
+            "weakest": list(reversed(ranked[-5:])),
+            "negative": negative,
+            "limitation": "Direct contribution only; overhead is not included."
+            if ranked
+            else "No Job has complete admitted direct-cost and contribution evidence.",
+        },
+        "which_services_perform_best": {
+            "state": "READY" if complete_services else "INSUFFICIENT_EVIDENCE",
+            "services": sorted(
+                complete_services,
+                key=lambda item: cast(int, item["direct_contribution_minor"]),
+                reverse=True,
+            ),
+            "limitation": "Uncategorized and incomplete Jobs are not forced into service-line profit.",
+        },
+        "what_prevents_fully_loaded_profit": {
+            "state": "POLICY_REQUIRED",
+            "missing": [
+                "complete_direct_contribution",
+                "reconciled_overhead_evidence",
+                "certified_overhead_pool_membership",
+                "certified_overhead_allocation_driver",
+            ],
+        },
+        "causality_boundary": "Measured component differences support investigation; they do not establish cause.",
+    }
+
+
 def _recommendations(
     workspace: dict[str, object],
     *,
@@ -625,6 +738,7 @@ def project_owner_economics(
         workspace, company_id=company_id, branch_id=branch_id, as_of=generated_at
     )
     job_economics = _job_economics(workspace)
+    service_line_economics = _service_line_economics(job_economics)
     packet: dict[str, object] = {
         "contract_version": CONTRACT_VERSION,
         "engine_version": ENGINE_VERSION,
@@ -634,7 +748,11 @@ def project_owner_economics(
         "readiness": readiness.value,
         "facts": facts,
         "job_economics": job_economics,
-        "service_line_economics": _service_line_economics(job_economics),
+        "service_line_economics": service_line_economics,
+        "evidence_priority_queue": _evidence_priority_queue(job_economics),
+        "owner_question_answers": _owner_question_answers(
+            job_economics, service_line_economics
+        ),
         "admitted_source_evidence": workspace.get("native_evidence"),
         "confidence": _confidence(workspace),
         "recommendation_candidates": recommendations,
