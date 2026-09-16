@@ -13,6 +13,7 @@ from app.dispatch.models import (
     DispatchCrewMember,
 )
 from app.dispatch.schemas import (
+    AssignmentHistoryItem,
     AssignmentItem,
     CrewMemberItem,
     DispatchBoardItem,
@@ -24,6 +25,7 @@ from app.events.types import EventType
 from app.jobs.models import JobAppointmentLink
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.users.models import User
 from app.scheduling.models import Appointment
 from app.workforce.query import WorkforceEligibilityQuery
 from app.workforce.query_service import workforce_eligibility_service
@@ -115,6 +117,47 @@ class DispatchService:
         if assignment is None:
             raise DispatchNotFound("Assignment was not found.")
         return await self._item(session, assignment, appointment.appointment_number)
+
+    async def history(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        appointment_id: UUID,
+    ) -> tuple[AssignmentHistoryItem, ...]:
+        await self._appointment(session, context, appointment_id)
+        assignment = await self._get_assignment(
+            session, context.company.id, appointment_id
+        )
+        if assignment is None:
+            return ()
+        rows = (
+            await session.execute(
+                select(DispatchAssignmentHistory, User.display_name)
+                .join(User, User.id == DispatchAssignmentHistory.actor_user_id)
+                .where(
+                    DispatchAssignmentHistory.company_id == context.company.id,
+                    DispatchAssignmentHistory.assignment_id == assignment.id,
+                )
+                .order_by(
+                    DispatchAssignmentHistory.occurred_at,
+                    DispatchAssignmentHistory.version,
+                )
+            )
+        ).all()
+        return tuple(
+            AssignmentHistoryItem(
+                event_type=record.event_type,
+                prior_status=record.prior_status,
+                new_status=record.new_status,
+                primary_employee_id=record.primary_employee_id,
+                actor_display_name=actor_display_name,
+                reason=record.reason,
+                version=record.version,
+                occurred_at=record.occurred_at,
+            )
+            for record, actor_display_name in rows
+        )
 
     async def eligible(
         self,

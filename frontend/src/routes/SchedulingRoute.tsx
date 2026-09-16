@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  RefreshCw,
   Search,
   UserRound,
 } from "lucide-react";
@@ -14,7 +15,17 @@ import { useAuth, useHasPermission } from "../auth";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
 import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
 import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
-import { NeedsSchedulingQueue, type QueueAssignmentFilter, type QueueSort } from "../components/scheduling/NeedsSchedulingQueue";
+import { CalendarReadinessCard } from "../components/scheduling/CalendarReadinessCard";
+import {
+  calendarIssues,
+  CURRENT_CALENDAR_QUERY_RANGE,
+  sortAppointments,
+} from "../components/scheduling/calendarOperations";
+import {
+  NeedsSchedulingQueue,
+  type QueueAssignmentFilter,
+  type QueueSort,
+} from "../components/scheduling/NeedsSchedulingQueue";
 import { schedulingMutationRecovery } from "../components/scheduling/schedulingRecovery";
 import {
   dayRange,
@@ -38,7 +49,16 @@ import {
 import type { DispatchBoardItem } from "../types/dispatch";
 import type { JobListItem, JobPriority, JobStatus } from "../types/jobs";
 import type { AppointmentDetail, AppointmentStatus } from "../types/scheduling";
-import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  ConfirmationDialog,
+  Input,
+  Select,
+  Spinner,
+} from "../ui";
 
 const START_HOUR = 7;
 const END_HOUR = 19;
@@ -54,7 +74,13 @@ const statuses: readonly AppointmentStatus[] = [
 ];
 type Perspective = "schedule" | "dispatch";
 type View = "day" | "week" | "work_week" | "month" | "unassigned";
-const views: readonly View[] = ["day", "week", "work_week", "month", "unassigned"];
+const views: readonly View[] = [
+  "day",
+  "week",
+  "work_week",
+  "month",
+  "unassigned",
+];
 
 const label = (value: string) => value.replaceAll("_", " ");
 const time = (value: string | null) =>
@@ -99,8 +125,16 @@ function calendarRange(date: string, view: View) {
   if (view === "month") {
     const selected = new Date(`${safeDate}T12:00:00`);
     return {
-      startAt: new Date(selected.getFullYear(), selected.getMonth(), 1).toISOString(),
-      endAt: new Date(selected.getFullYear(), selected.getMonth() + 1, 1).toISOString(),
+      startAt: new Date(
+        selected.getFullYear(),
+        selected.getMonth(),
+        1,
+      ).toISOString(),
+      endAt: new Date(
+        selected.getFullYear(),
+        selected.getMonth() + 1,
+        1,
+      ).toISOString(),
     };
   }
   return weekRange(safeDate);
@@ -140,25 +174,78 @@ export function SchedulingRoute({
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
   const [searchParams, setSearchParams] = useSearchParams();
-  const [date, setDate] = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get("date") ?? "") ? searchParams.get("date")! : localDateValue(new Date()));
+  const [date, setDate] = useState(() =>
+    /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get("date") ?? "")
+      ? searchParams.get("date")!
+      : localDateValue(new Date()),
+  );
   const [perspective, setPerspective] = useState<Perspective>(() =>
     searchParams.get("perspective") === "dispatch"
       ? "dispatch"
       : initialPerspective,
   );
-  const [view, setView] = useState<View>(() => views.includes(searchParams.get("view") as View) ? searchParams.get("view") as View : "day");
-  const [branchId, setBranchId] = useState(() => searchParams.get("branch") ?? "");
-  const [status, setStatus] = useState<AppointmentStatus | "">(() => statuses.includes(searchParams.get("status") as AppointmentStatus) ? searchParams.get("status") as AppointmentStatus : "");
-  const [technician, setTechnician] = useState(() => searchParams.get("technician") ?? "");
+  const [view, setView] = useState<View>(() =>
+    views.includes(searchParams.get("view") as View)
+      ? (searchParams.get("view") as View)
+      : "day",
+  );
+  const [branchId, setBranchId] = useState(
+    () => searchParams.get("branch") ?? "",
+  );
+  const [status, setStatus] = useState<AppointmentStatus | "">(() =>
+    statuses.includes(searchParams.get("status") as AppointmentStatus)
+      ? (searchParams.get("status") as AppointmentStatus)
+      : "",
+  );
+  const [technician, setTechnician] = useState(
+    () => searchParams.get("technician") ?? "",
+  );
+  const [serviceCategory, setServiceCategory] = useState(
+    () => searchParams.get("category") ?? "",
+  );
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
-  const [queueJobStatus, setQueueJobStatus] = useState<JobStatus | "">(() => (operationalJobStatuses as readonly JobStatus[]).includes(searchParams.get("jobStatus") as JobStatus) ? searchParams.get("jobStatus") as JobStatus : "");
-  const [queuePriority, setQueuePriority] = useState<JobPriority | "">(() => ["low", "normal", "high", "urgent", "emergency"].includes(searchParams.get("priority") ?? "") ? searchParams.get("priority") as JobPriority : "");
-  const [queueAssignment, setQueueAssignment] = useState<QueueAssignmentFilter>(() => ["needs_attention", "scheduled_unassigned", "assigned", "all"].includes(searchParams.get("queue") ?? "") ? searchParams.get("queue") as QueueAssignmentFilter : "needs_attention");
-  const [queueSort, setQueueSort] = useState<QueueSort>(() => ["oldest", "newest", "priority"].includes(searchParams.get("order") ?? "") ? searchParams.get("order") as QueueSort : "oldest");
-  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("appointment"));
+  const [queueJobStatus, setQueueJobStatus] = useState<JobStatus | "">(() =>
+    (operationalJobStatuses as readonly JobStatus[]).includes(
+      searchParams.get("jobStatus") as JobStatus,
+    )
+      ? (searchParams.get("jobStatus") as JobStatus)
+      : "",
+  );
+  const [queuePriority, setQueuePriority] = useState<JobPriority | "">(() =>
+    ["low", "normal", "high", "urgent", "emergency"].includes(
+      searchParams.get("priority") ?? "",
+    )
+      ? (searchParams.get("priority") as JobPriority)
+      : "",
+  );
+  const [queueAssignment, setQueueAssignment] = useState<QueueAssignmentFilter>(
+    () =>
+      ["needs_attention", "scheduled_unassigned", "assigned", "all"].includes(
+        searchParams.get("queue") ?? "",
+      )
+        ? (searchParams.get("queue") as QueueAssignmentFilter)
+        : "needs_attention",
+  );
+  const [queueSort, setQueueSort] = useState<QueueSort>(() =>
+    ["oldest", "newest", "priority"].includes(searchParams.get("order") ?? "")
+      ? (searchParams.get("order") as QueueSort)
+      : "oldest",
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    searchParams.get("appointment"),
+  );
   const [booking, setBooking] = useState(false);
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
+  const graphAppointments = useAppointments(
+    {
+      ...CURRENT_CALENDAR_QUERY_RANGE,
+      branchId: branchId || undefined,
+      page: 1,
+      pageSize: 100,
+    },
+    Boolean(activeCompany) && canRead,
+  );
   const appointments = useAppointments(
     {
       startAt: range.startAt,
@@ -209,36 +296,55 @@ export function SchedulingRoute({
       ).sort(),
     [dispatch.data?.items],
   );
+  const serviceCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (jobs.data?.items ?? [])
+            .map((job) => job.job_type_code)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort(),
+    [jobs.data?.items],
+  );
   const visible = useMemo(
     () =>
-      (appointments.data?.items ?? []).filter((item) => {
-        const dispatchItem = dispatchByAppointment.get(item.id);
-        const job = dispatchItem?.job_id
-          ? jobsById.get(dispatchItem.job_id)
-          : undefined;
-        const haystack =
-          `${item.appointment_number} ${job?.job_number ?? ""} ${job?.customer_display_name ?? ""} ${job?.service_location_label ?? ""}`.toLowerCase();
-        const assignedName = dispatchItem?.assignment?.primary_employee_name;
-        const matchesTechnician =
-          !technician ||
-          (technician === "__unassigned"
-            ? !assignedName
-            : assignedName === technician);
-        return (
-          matchesTechnician &&
-          (!search.trim() || haystack.includes(search.trim().toLowerCase()))
-        );
-      }),
+      sortAppointments(
+        (appointments.data?.items ?? []).filter((item) => {
+          const dispatchItem = dispatchByAppointment.get(item.id);
+          const job = dispatchItem?.job_id
+            ? jobsById.get(dispatchItem.job_id)
+            : undefined;
+          const haystack =
+            `${item.appointment_number} ${job?.job_number ?? ""} ${job?.customer_display_name ?? ""} ${job?.service_location_label ?? ""}`.toLowerCase();
+          const assignedName = dispatchItem?.assignment?.primary_employee_name;
+          const matchesTechnician =
+            !technician ||
+            (technician === "__unassigned"
+              ? !assignedName
+              : assignedName === technician);
+          return (
+            matchesTechnician &&
+            (!serviceCategory || job?.job_type_code === serviceCategory) &&
+            (!search.trim() || haystack.includes(search.trim().toLowerCase()))
+          );
+        }),
+      ),
     [
       appointments.data?.items,
       dispatchByAppointment,
       jobsById,
       search,
+      serviceCategory,
       technician,
     ],
   );
+  const issues = useMemo(
+    () => canDispatch && canReadJobs ? calendarIssues(visible, dispatchByAppointment, jobsById) : [],
+    [canDispatch, canReadJobs, dispatchByAppointment, jobsById, visible],
+  );
   const currentSelection = selectedId
-    ? appointments.data?.items.find((item) => item.id === selectedId) ?? null
+    ? (appointments.data?.items.find((item) => item.id === selectedId) ?? null)
     : null;
   const selectedDispatch = currentSelection
     ? dispatchByAppointment.get(currentSelection.id)
@@ -248,14 +354,30 @@ export function SchedulingRoute({
     if (branchId) params.set("branch", branchId);
     if (status) params.set("status", status);
     if (technician) params.set("technician", technician);
+    if (serviceCategory) params.set("category", serviceCategory);
     if (search.trim()) params.set("search", search.trim());
     if (queueJobStatus) params.set("jobStatus", queueJobStatus);
     if (queuePriority) params.set("priority", queuePriority);
-    if (queueAssignment !== "needs_attention") params.set("queue", queueAssignment);
+    if (queueAssignment !== "needs_attention")
+      params.set("queue", queueAssignment);
     if (queueSort !== "oldest") params.set("order", queueSort);
     if (selectedId) params.set("appointment", selectedId);
     return params;
-  }, [branchId, date, perspective, queueAssignment, queueJobStatus, queuePriority, queueSort, search, selectedId, status, technician, view]);
+  }, [
+    branchId,
+    date,
+    perspective,
+    queueAssignment,
+    queueJobStatus,
+    queuePriority,
+    queueSort,
+    search,
+    selectedId,
+    serviceCategory,
+    status,
+    technician,
+    view,
+  ]);
   const returnTo = `${schedulingPath()}?${routeState.toString()}`;
 
   useEffect(() => {
@@ -264,7 +386,8 @@ export function SchedulingRoute({
     }
   }, [routeState, searchParams, setSearchParams]);
 
-  const selectAppointment = (appointment: AppointmentDetail) => setSelectedId(appointment.id);
+  const selectAppointment = (appointment: AppointmentDetail) =>
+    setSelectedId(appointment.id);
 
   if (!activeCompany)
     return (
@@ -283,7 +406,9 @@ export function SchedulingRoute({
       setDate(localDateValue(selectedDate));
       return;
     }
-    setDate(moveDate(date, amount * (["week", "work_week"].includes(view) ? 7 : 1)));
+    setDate(
+      moveDate(date, amount * (["week", "work_week"].includes(view) ? 7 : 1)),
+    );
   };
 
   return (
@@ -319,7 +444,12 @@ export function SchedulingRoute({
           </Link>
         </div>
       </header>
-      {booking && <BookCustomerWorkPanel onClose={() => setBooking(false)} returnTo={returnTo} />}
+      {booking && (
+        <BookCustomerWorkPanel
+          onClose={() => setBooking(false)}
+          returnTo={returnTo}
+        />
+      )}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto">
@@ -352,33 +482,61 @@ export function SchedulingRoute({
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            <div className="grid grid-cols-2 rounded-lg border border-stroke p-1" aria-label="Schedule perspective">
-              <Button variant={perspective === "schedule" ? "primary" : "ghost"} onClick={() => setPerspective("schedule")}>Schedule</Button>
-              <Button variant={perspective === "dispatch" ? "primary" : "ghost"} onClick={() => setPerspective("dispatch")}>Dispatch</Button>
+            <div
+              className="grid grid-cols-2 rounded-lg border border-stroke p-1"
+              aria-label="Schedule perspective"
+            >
+              <Button
+                variant={perspective === "schedule" ? "primary" : "ghost"}
+                onClick={() => setPerspective("schedule")}
+              >
+                Schedule
+              </Button>
+              <Button
+                variant={perspective === "dispatch" ? "primary" : "ghost"}
+                onClick={() => setPerspective("dispatch")}
+              >
+                Dispatch
+              </Button>
             </div>
             <div
-            className="flex flex-wrap rounded-lg border border-stroke p-1"
-            aria-label="Calendar view"
-          >
-            <Button
-              variant={view === "day" ? "primary" : "ghost"}
-              onClick={() => setView("day")}
+              className="flex flex-wrap rounded-lg border border-stroke p-1"
+              aria-label="Calendar view"
             >
-              Day
-            </Button>
-            <Button
-              variant={view === "week" ? "primary" : "ghost"}
-              onClick={() => setView("week")}
-            >
-              Week
-            </Button>
-            <Button variant={view === "work_week" ? "primary" : "ghost"} onClick={() => setView("work_week")}>Work Week</Button>
-            <Button variant={view === "month" ? "primary" : "ghost"} onClick={() => setView("month")}>Month</Button>
-            <Button variant={view === "unassigned" ? "primary" : "ghost"} onClick={() => setView("unassigned")}>Unassigned</Button>
+              <Button
+                variant={view === "day" ? "primary" : "ghost"}
+                onClick={() => setView("day")}
+              >
+                Day
+              </Button>
+              <Button
+                variant={view === "week" ? "primary" : "ghost"}
+                onClick={() => setView("week")}
+              >
+                Week
+              </Button>
+              <Button
+                variant={view === "work_week" ? "primary" : "ghost"}
+                onClick={() => setView("work_week")}
+              >
+                Work Week
+              </Button>
+              <Button
+                variant={view === "month" ? "primary" : "ghost"}
+                onClick={() => setView("month")}
+              >
+                Month
+              </Button>
+              <Button
+                variant={view === "unassigned" ? "primary" : "ghost"}
+                onClick={() => setView("unassigned")}
+              >
+                Unassigned
+              </Button>
             </div>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <label className="text-sm font-medium">
             Branch
             <Select
@@ -429,6 +587,22 @@ export function SchedulingRoute({
             </Select>
           </label>
           <label className="text-sm font-medium">
+            Service category
+            <Select
+              className="mt-1"
+              aria-label="Service category"
+              value={serviceCategory}
+              onChange={(event) => setServiceCategory(event.target.value)}
+            >
+              <option value="">All categories</option>
+              {serviceCategories.map((value) => (
+                <option key={value} value={value}>
+                  {label(value)}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-sm font-medium">
             Search
             <span className="relative mt-1 block">
               <Search
@@ -445,13 +619,60 @@ export function SchedulingRoute({
             </span>
           </label>
         </div>
-        <p className="text-xs text-content-muted">Times are shown in this device&apos;s {displayTimeZone} timezone. Appointment source windows remain stored as authoritative instants.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-content-muted">
+            Times are shown in this device&apos;s {displayTimeZone} timezone
+            until the Branch-timezone candidate is integrated. Appointment
+            source windows remain stored as authoritative instants.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void appointments.refetch();
+              void graphAppointments.refetch();
+              if (canDispatch) void dispatch.refetch();
+              if (canReadJobs) void jobs.refetch();
+            }}
+          >
+            <RefreshCw size={16} />
+            Refresh authoritative calendar
+          </Button>
+        </div>
       </Card>
-      {appointments.data && appointments.data.total_count > appointments.data.items.length && (
-        <Alert variant="warning" title="Calendar result is partial">
-          Showing {appointments.data.items.length} of {appointments.data.total_count} appointments in this range. Narrow the Branch, status, technician, or date scope before making an operational decision.
+      <CalendarReadinessCard
+        appointments={graphAppointments.data?.items ?? []}
+        appointmentTotal={graphAppointments.data?.total_count ?? 0}
+        jobs={jobs.data?.items ?? []}
+        jobTotal={jobs.data?.total_count ?? 0}
+        unavailable={!canReadJobs || graphAppointments.isError || jobs.isError}
+      />
+      {issues.length > 0 && (
+        <Alert
+          variant="warning"
+          title={`${issues.length} calendar condition${issues.length === 1 ? "" : "s"} require review`}
+        >
+          <ul className="list-disc space-y-1 pl-5">
+            {issues.slice(0, 8).map((issue) => (
+              <li key={issue.key}>{issue.message}</li>
+            ))}
+          </ul>
+          {issues.length > 8 && (
+            <p className="mt-2">
+              {issues.length - 8} additional conditions remain in the current
+              filtered scope.
+            </p>
+          )}
         </Alert>
       )}
+      {appointments.data &&
+        appointments.data.total_count > appointments.data.items.length && (
+          <Alert variant="warning" title="Calendar result is partial">
+            Showing {appointments.data.items.length} of{" "}
+            {appointments.data.total_count} appointments in this range. Narrow
+            the Branch, status, technician, or date scope before making an
+            operational decision.
+          </Alert>
+        )}
       {(appointments.isLoading || dispatch.isLoading) && (
         <Card className="p-8">
           <Spinner label="Loading calendar" />
@@ -461,7 +682,17 @@ export function SchedulingRoute({
         <Alert
           variant="danger"
           title="Schedule unavailable"
-          action={<Button variant="outline" onClick={() => { void appointments.refetch(); if (canDispatch) void dispatch.refetch(); }}>Retry schedule</Button>}
+          action={
+            <Button
+              variant="outline"
+              onClick={() => {
+                void appointments.refetch();
+                if (canDispatch) void dispatch.refetch();
+              }}
+            >
+              Retry schedule
+            </Button>
+          }
         >
           {
             getOperatorApiError(
@@ -475,7 +706,11 @@ export function SchedulingRoute({
         <Alert
           variant="warning"
           title="Customer and Job context is temporarily unavailable"
-          action={<Button variant="outline" onClick={() => void jobs.refetch()}>Retry Job context</Button>}
+          action={
+            <Button variant="outline" onClick={() => void jobs.refetch()}>
+              Retry Job context
+            </Button>
+          }
         >
           Appointment times remain authoritative and usable. Customer, Location,
           Job status, and related navigation may be incomplete until this
@@ -485,7 +720,25 @@ export function SchedulingRoute({
       {!appointments.isLoading &&
         !appointments.isError &&
         (view === "unassigned" ? (
-          <NeedsSchedulingQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} jobsById={jobsById} branches={activeCompany.branches} search={search} jobStatus={queueJobStatus} priority={queuePriority} assignmentFilter={queueAssignment} sort={queueSort} returnTo={returnTo} onJobStatusChange={setQueueJobStatus} onPriorityChange={setQueuePriority} onAssignmentFilterChange={setQueueAssignment} onSortChange={setQueueSort} onSelect={selectAppointment} />
+          <NeedsSchedulingQueue
+            jobs={jobs.data?.items ?? []}
+            appointments={visible}
+            dispatchByAppointment={dispatchByAppointment}
+            jobsById={jobsById}
+            branches={activeCompany.branches}
+            search={search}
+            serviceCategory={serviceCategory}
+            jobStatus={queueJobStatus}
+            priority={queuePriority}
+            assignmentFilter={queueAssignment}
+            sort={queueSort}
+            returnTo={returnTo}
+            onJobStatusChange={setQueueJobStatus}
+            onPriorityChange={setQueuePriority}
+            onAssignmentFilterChange={setQueueAssignment}
+            onSortChange={setQueueSort}
+            onSelect={selectAppointment}
+          />
         ) : view === "day" && perspective === "schedule" ? (
           <DayCalendar
             items={visible}
@@ -523,7 +776,27 @@ export function SchedulingRoute({
           />
         ))}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        {view !== "unassigned" && <NeedsSchedulingQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} jobsById={jobsById} branches={activeCompany.branches} search={search} jobStatus={queueJobStatus} priority={queuePriority} assignmentFilter={queueAssignment} sort={queueSort} returnTo={returnTo} onJobStatusChange={setQueueJobStatus} onPriorityChange={setQueuePriority} onAssignmentFilterChange={setQueueAssignment} onSortChange={setQueueSort} onSelect={selectAppointment} />}
+        {view !== "unassigned" && (
+          <NeedsSchedulingQueue
+            jobs={jobs.data?.items ?? []}
+            appointments={visible}
+            dispatchByAppointment={dispatchByAppointment}
+            jobsById={jobsById}
+            branches={activeCompany.branches}
+            search={search}
+            serviceCategory={serviceCategory}
+            jobStatus={queueJobStatus}
+            priority={queuePriority}
+            assignmentFilter={queueAssignment}
+            sort={queueSort}
+            returnTo={returnTo}
+            onJobStatusChange={setQueueJobStatus}
+            onPriorityChange={setQueuePriority}
+            onAssignmentFilterChange={setQueueAssignment}
+            onSortChange={setQueueSort}
+            onSelect={selectAppointment}
+          />
+        )}
         {currentSelection ? (
           <AppointmentPanel
             key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
@@ -784,32 +1057,58 @@ function DispatchTimeline({
       <div className="min-w-[900px]">
         <div
           className="grid border-b border-stroke bg-surface-subtle"
-          style={{ gridTemplateColumns: `12rem repeat(${END_HOUR - START_HOUR}, minmax(5rem, 1fr))` }}
+          style={{
+            gridTemplateColumns: `12rem repeat(${END_HOUR - START_HOUR}, minmax(5rem, 1fr))`,
+          }}
         >
           <div className="p-3 text-xs font-semibold text-content-muted">
             Technician
           </div>
           {Array.from({ length: END_HOUR - START_HOUR }, (_, index) => (
-            <div className="border-l border-stroke p-3 text-xs font-semibold" key={index}>
-              {new Date(2026, 0, 1, START_HOUR + index).toLocaleTimeString([], { hour: "numeric" })}
+            <div
+              className="border-l border-stroke p-3 text-xs font-semibold"
+              key={index}
+            >
+              {new Date(2026, 0, 1, START_HOUR + index).toLocaleTimeString([], {
+                hour: "numeric",
+              })}
             </div>
           ))}
         </div>
         {lanes.map((lane) => (
-          <div className="grid min-h-20 border-b border-stroke last:border-b-0" key={lane} style={{ gridTemplateColumns: "12rem minmax(0, 1fr)" }}>
+          <div
+            className="grid min-h-20 border-b border-stroke last:border-b-0"
+            key={lane}
+            style={{ gridTemplateColumns: "12rem minmax(0, 1fr)" }}
+          >
             <div className="border-r border-stroke p-3 font-semibold">
               <UserRound className="mr-2 inline" size={16} />
               {lane}
             </div>
             <div className="relative bg-[linear-gradient(to_right,var(--color-stroke)_1px,transparent_1px)] bg-[size:calc(100%/12)_100%]">
               {items
-                .filter((item) => (dispatchByAppointment.get(item.id)?.assignment?.primary_employee_name ?? "Unassigned") === lane)
+                .filter(
+                  (item) =>
+                    (dispatchByAppointment.get(item.id)?.assignment
+                      ?.primary_employee_name ?? "Unassigned") === lane,
+                )
                 .map((item) => {
                   const dispatch = dispatchByAppointment.get(item.id);
-                  const job = dispatch?.job_id ? jobsById.get(dispatch.job_id) : undefined;
-                  const start = item.arrival_window_start_at ? new Date(item.arrival_window_start_at) : null;
-                  const startMinutes = start ? start.getHours() * 60 + start.getMinutes() - START_HOUR * 60 : 0;
-                  const duration = Math.max(45, item.expected_duration_minutes ?? 60);
+                  const job = dispatch?.job_id
+                    ? jobsById.get(dispatch.job_id)
+                    : undefined;
+                  const start = item.arrival_window_start_at
+                    ? new Date(item.arrival_window_start_at)
+                    : null;
+                  const startMinutes = start
+                    ? start.getHours() * 60 +
+                      start.getMinutes() -
+                      START_HOUR * 60
+                    : 0;
+                  const duration = Math.max(
+                    45,
+                    item.expected_duration_minutes ?? 60,
+                  );
                   return (
                     <button
                       type="button"
@@ -818,12 +1117,17 @@ function DispatchTimeline({
                       aria-label={`${lane}, ${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}
                       className="absolute top-2 h-16 overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                       style={{
-                        left: `${Math.max(0, startMinutes) / MINUTES_VISIBLE * 100}%`,
-                        width: `${Math.max(5, Math.min(duration, MINUTES_VISIBLE) / MINUTES_VISIBLE * 100)}%`,
+                        left: `${(Math.max(0, startMinutes) / MINUTES_VISIBLE) * 100}%`,
+                        width: `${Math.max(5, (Math.min(duration, MINUTES_VISIBLE) / MINUTES_VISIBLE) * 100)}%`,
                       }}
                     >
-                      <strong className="block truncate text-sm">{job?.job_number ?? item.appointment_number}</strong>
-                      <span className="block truncate text-xs">{time(item.arrival_window_start_at)} · {appointmentState(item, dispatch, job)}</span>
+                      <strong className="block truncate text-sm">
+                        {job?.job_number ?? item.appointment_number}
+                      </strong>
+                      <span className="block truncate text-xs">
+                        {time(item.arrival_window_start_at)} ·{" "}
+                        {appointmentState(item, dispatch, job)}
+                      </span>
                     </button>
                   );
                 })}
@@ -832,7 +1136,9 @@ function DispatchTimeline({
         ))}
       </div>
       <p className="border-t border-stroke p-3 text-xs text-content-muted">
-        Open space is unbooked time, not verified availability. Dashed Dispatch Intelligence proposals remain review-only until an authorized Scheduling or Dispatch command is submitted.
+        Open space is unbooked time, not verified availability. Dashed Dispatch
+        Intelligence proposals remain review-only until an authorized Scheduling
+        or Dispatch command is submitted.
       </p>
     </section>
   );
@@ -853,7 +1159,9 @@ function MonthCalendar({
   readonly onSelect: (item: AppointmentDetail) => void;
   readonly onOpenDay: (day: Date) => void;
 }) {
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set());
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(
+    () => new Set(),
+  );
   const selected = new Date(`${date}T12:00:00`);
   const first = new Date(selected.getFullYear(), selected.getMonth(), 1);
   const gridStart = new Date(first);
@@ -864,20 +1172,74 @@ function MonthCalendar({
     return day;
   });
   return (
-    <section aria-label="Month calendar" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7">
+    <section
+      aria-label="Month calendar"
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7"
+    >
       {days.map((day) => {
         const dayKey = localDateValue(day);
-        const rows = items.filter((item) => item.arrival_window_start_at && new Date(item.arrival_window_start_at).toDateString() === day.toDateString());
+        const rows = items.filter(
+          (item) =>
+            item.arrival_window_start_at &&
+            new Date(item.arrival_window_start_at).toDateString() ===
+              day.toDateString(),
+        );
         const expanded = expandedDays.has(dayKey);
-        const displayedRows = expanded ? rows : rows.slice(0, MONTH_VISIBLE_APPOINTMENTS);
+        const displayedRows = expanded
+          ? rows
+          : rows.slice(0, MONTH_VISIBLE_APPOINTMENTS);
         return (
-          <Card className={`min-h-36 p-2 ${day.getMonth() === selected.getMonth() ? "" : "opacity-50"}`} key={dayKey}>
-            <button type="button" className="w-full text-left text-sm font-semibold hover:text-action-primary" onClick={() => onOpenDay(day)} aria-label={`Open ${day.toLocaleDateString()} day schedule`}>{day.toLocaleDateString([], { weekday: "short", day: "numeric" })}</button>
+          <Card
+            className={`min-h-36 p-2 ${day.getMonth() === selected.getMonth() ? "" : "opacity-50"}`}
+            key={dayKey}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                className="min-h-9 text-left text-sm font-semibold hover:text-action-primary"
+                onClick={() => onOpenDay(day)}
+                aria-label={`Open ${day.toLocaleDateString()} day schedule`}
+              >
+                {day.toLocaleDateString([], {
+                  weekday: "short",
+                  day: "numeric",
+                })}
+              </button>
+              <span
+                className="text-xs text-content-muted"
+                aria-label={`${rows.length} appointments`}
+              >
+                {rows.length}
+              </span>
+            </div>
             <div className="mt-2 space-y-1">
               {displayedRows.map((item) => {
                 const dispatch = dispatchByAppointment.get(item.id);
-                const job = dispatch?.job_id ? jobsById.get(dispatch.job_id) : undefined;
-                return <button type="button" className="block w-full rounded border border-stroke p-1.5 text-left text-xs hover:border-action-primary" onClick={() => onSelect(item)} key={item.id} aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}><strong className="block truncate">{time(item.arrival_window_start_at)} · {job?.job_number ?? item.appointment_number}</strong><span className="block truncate">{job?.customer_display_name ?? "Customer unavailable"}</span><span className="block truncate text-content-muted">{dispatch?.assignment?.primary_employee_name ?? "Unassigned"} · {appointmentState(item, dispatch, job)}</span></button>;
+                const job = dispatch?.job_id
+                  ? jobsById.get(dispatch.job_id)
+                  : undefined;
+                return (
+                  <button
+                    type="button"
+                    className="block w-full rounded border border-stroke p-1.5 text-left text-xs hover:border-action-primary"
+                    onClick={() => onSelect(item)}
+                    key={item.id}
+                    aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}
+                  >
+                    <strong className="block truncate">
+                      {time(item.arrival_window_start_at)} ·{" "}
+                      {job?.job_number ?? item.appointment_number}
+                    </strong>
+                    <span className="block truncate">
+                      {job?.customer_display_name ?? "Customer unavailable"}
+                    </span>
+                    <span className="block truncate text-content-muted">
+                      {dispatch?.assignment?.primary_employee_name ??
+                        "Unassigned"}{" "}
+                      · {appointmentState(item, dispatch, job)}
+                    </span>
+                  </button>
+                );
               })}
               {rows.length > MONTH_VISIBLE_APPOINTMENTS && (
                 <button
@@ -894,10 +1256,14 @@ function MonthCalendar({
                   aria-expanded={expanded}
                   aria-label={`${expanded ? "Collapse" : "Show"} all ${rows.length} appointments for ${day.toLocaleDateString()}`}
                 >
-                  {expanded ? "Show fewer" : `+${rows.length - MONTH_VISIBLE_APPOINTMENTS} more`}
+                  {expanded
+                    ? "Show fewer"
+                    : `+${rows.length - MONTH_VISIBLE_APPOINTMENTS} more`}
                 </button>
               )}
-              {!rows.length && <p className="text-xs text-content-muted">No appointments</p>}
+              {!rows.length && (
+                <p className="text-xs text-content-muted">No appointments</p>
+              )}
             </div>
           </Card>
         );
@@ -1033,7 +1399,10 @@ function AppointmentPanel({
           reason_code: "operational_adjustment",
         },
       },
-      { onSuccess: () => setConfirmMove(false), onError: () => setConfirmMove(false) },
+      {
+        onSuccess: () => setConfirmMove(false),
+        onError: () => setConfirmMove(false),
+      },
     );
   };
   return (
@@ -1078,7 +1447,10 @@ function AppointmentPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
           className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-3"
-          to={withSchedulingReturn(appointmentDetailPath(appointment.id), returnTo)}
+          to={withSchedulingReturn(
+            appointmentDetailPath(appointment.id),
+            returnTo,
+          )}
         >
           Open Appointment
         </Link>
@@ -1092,7 +1464,10 @@ function AppointmentPanel({
         )}
         <Link
           className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-3"
-          to={withSchedulingReturn(customerDetailPath(appointment.customer_id), returnTo)}
+          to={withSchedulingReturn(
+            customerDetailPath(appointment.customer_id),
+            returnTo,
+          )}
         >
           Open Customer
         </Link>
@@ -1128,7 +1503,11 @@ function AppointmentPanel({
               onChange={(event) => setEnd(event.target.value)}
             />
           </label>
-          {!validWindow && <p className="text-sm text-status-danger">Arrival window must end after it starts.</p>}
+          {!validWindow && (
+            <p className="text-sm text-status-danger">
+              Arrival window must end after it starts.
+            </p>
+          )}
           <label className="block text-sm font-medium">
             Duration in minutes
             <Input
@@ -1142,7 +1521,8 @@ function AppointmentPanel({
           </label>
           {mutationError && (
             <Alert variant="danger" title={mutationError.title}>
-              <strong>{mutationError.state.replaceAll("_", " ")}</strong> — {mutationError.message}
+              <strong>{mutationError.state.replaceAll("_", " ")}</strong> —{" "}
+              {mutationError.message}
             </Alert>
           )}
           {mutation.isSuccess && (
@@ -1150,7 +1530,11 @@ function AppointmentPanel({
               Appointment moved. Calendar and Dispatch evidence are refreshing.
             </Alert>
           )}
-          <Button type="submit" loading={mutation.isPending} disabled={!validWindow || duration < 1}>
+          <Button
+            type="submit"
+            loading={mutation.isPending}
+            disabled={!validWindow || duration < 1}
+          >
             Review new time
           </Button>
         </form>
@@ -1164,8 +1548,17 @@ function AppointmentPanel({
           onCancel={() => setConfirmMove(false)}
           onConfirm={submit}
         >
-          <p><strong>{appointment.appointment_number}</strong></p>
-          <p>{new Date(start).toLocaleString()}–{new Date(end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} arrival window · {duration} minutes expected work</p>
+          <p>
+            <strong>{appointment.appointment_number}</strong>
+          </p>
+          <p>
+            {new Date(start).toLocaleString()}–
+            {new Date(end).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            })}{" "}
+            arrival window · {duration} minutes expected work
+          </p>
           <p>No Dispatch Intelligence proposal is accepted automatically.</p>
         </ConfirmationDialog>
       )}

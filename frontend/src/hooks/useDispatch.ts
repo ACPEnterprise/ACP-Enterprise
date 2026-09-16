@@ -3,6 +3,8 @@ import {
   assignPrimary,
   changeCrew,
   getDispatchBoard,
+  getDispatchAssignment,
+  getDispatchAssignmentHistory,
   getDispatchRecommendation,
   getEligibleTechnicians,
   markReconciliation,
@@ -17,10 +19,32 @@ export const dispatchKeys = {
   board: (start: string, end: string, branch?: string) =>
     ["dispatch", "board", start, end, branch] as const,
   eligible: (id: string) => ["dispatch", "eligible", id] as const,
+  assignment: (id: string) => ["dispatch", "assignment", id] as const,
+  history: (id: string) => ["dispatch", "history", id] as const,
   recommendation: (jobId: string, start: string, end: string) =>
     ["dispatch", "recommendation", jobId, start, end] as const,
 };
-export function useDispatchBoard(start: string, end: string, branch?: string, enabled = true) {
+export function useDispatchAssignment(id?: string, enabled = true) {
+  return useQuery({
+    queryKey: dispatchKeys.assignment(id ?? ""),
+    queryFn: () => getDispatchAssignment(id as string),
+    enabled: enabled && Boolean(id),
+    retry: false,
+  });
+}
+export function useDispatchAssignmentHistory(id?: string, enabled = true) {
+  return useQuery({
+    queryKey: dispatchKeys.history(id ?? ""),
+    queryFn: () => getDispatchAssignmentHistory(id as string),
+    enabled: enabled && Boolean(id),
+  });
+}
+export function useDispatchBoard(
+  start: string,
+  end: string,
+  branch?: string,
+  enabled = true,
+) {
   return useQuery({
     queryKey: dispatchKeys.board(start, end, branch),
     queryFn: () => getDispatchBoard(start, end, branch),

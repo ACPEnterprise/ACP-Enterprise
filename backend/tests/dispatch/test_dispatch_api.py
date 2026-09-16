@@ -126,6 +126,9 @@ def test_dispatch_openapi_contract_exposes_bounded_operations() -> None:
         "/api/v1/dispatch/appointments/{appointment_id}/eligible-technicians" in paths
     )
     assert "/api/v1/dispatch/appointments/{appointment_id}/assignment" in paths
+    assert (
+        "/api/v1/dispatch/appointments/{appointment_id}/assignment/history" in paths
+    )
     assert "/api/v1/dispatch/appointments/{appointment_id}/assignment/crew" in paths
     assert (
         "/api/v1/dispatch/appointments/{appointment_id}/assignment/reconcile" in paths
