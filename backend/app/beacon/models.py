@@ -11,6 +11,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -152,3 +153,143 @@ class BeaconSignalReviewEventModel(Base):
     previous_owner_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     owner_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     owned_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BeaconEvaluationRunModel(Base):
+    __tablename__ = "beacon_evaluation_runs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_beacon_evaluation_runs_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("length(run_digest) = 64", name="ck_beacon_runs_digest"),
+        CheckConstraint(
+            "length(provenance_digest) = 64",
+            name="ck_beacon_runs_provenance_digest",
+        ),
+        CheckConstraint(
+            "length(scope_identity) = 64", name="ck_beacon_runs_scope_identity"
+        ),
+        CheckConstraint(
+            "length(btrim(evaluator_version)) > 0",
+            name="ck_beacon_runs_evaluator_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "scope_identity",
+            "evaluated_at",
+            "evaluator_version",
+            name="uq_beacon_evaluation_run_identity",
+        ),
+        Index(
+            "ix_beacon_runs_company_evaluated",
+            "company_id",
+            "evaluated_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    scope_identity: Mapped[str] = mapped_column(String(64), nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    evidence_as_of: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    evaluator_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    covered_definitions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    provenance: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    provenance_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class BeaconSignalEvaluationModel(Base):
+    __tablename__ = "beacon_signal_evaluations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_beacon_evaluations_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "disposition IN ('new','still_active','changed','resolved','expired','superseded')",
+            name="ck_beacon_evaluations_disposition",
+        ),
+        CheckConstraint(
+            "length(evidence_digest) = 64",
+            name="ck_beacon_evaluations_evidence_digest",
+        ),
+        CheckConstraint(
+            "definition_version > 0", name="ck_beacon_evaluations_definition_version"
+        ),
+        UniqueConstraint(
+            "run_id", "condition_key", name="uq_beacon_evaluation_run_condition"
+        ),
+        Index(
+            "ix_beacon_evaluations_company_condition",
+            "company_id",
+            "condition_key",
+            "evaluated_at",
+            "id",
+        ),
+        Index(
+            "ix_beacon_evaluations_company_disposition",
+            "company_id",
+            "disposition",
+            "evaluated_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("beacon_evaluation_runs.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    condition_key: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    signal_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    definition_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    definition_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    evidence_as_of: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    signal_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    evaluator_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(24), nullable=False)
+    prior_evaluation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("beacon_signal_evaluations.id", ondelete="RESTRICT"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

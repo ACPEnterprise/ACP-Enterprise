@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.beacon.briefing import OwnerAttentionWindow
+from app.beacon.adapter_registry import AdapterStatus, AttentionResponsibility
 from app.beacon.catalog import (
     OperationalConflictPolicy,
     OperationalSignalAdmission,
@@ -24,6 +25,7 @@ from app.beacon.contracts import (
 )
 from app.beacon.escalation import EscalationEligibility, EscalationState
 from app.beacon.evidence_evaluation import EvaluationReadiness
+from app.beacon.history import EvaluationDisposition
 from app.beacon.quality import (
     EvidenceCompletenessState,
     EvidenceConfidenceState,
@@ -31,6 +33,49 @@ from app.beacon.quality import (
     EvidenceReconciliationState,
     StaleEvidenceBehavior,
 )
+
+
+class CrossDomainAdapterRegistrationResponse(BaseModel):
+    family: str
+    source_authority: str
+    contract: str
+    status: AdapterStatus
+    responsibility: AttentionResponsibility
+    clearing_condition: str
+    limitation: str | None
+
+
+class CrossDomainAdapterRegistryResponse(BaseModel):
+    company_id: UUID
+    active_branch_id: UUID | None
+    autonomous_action: bool
+    registrations: tuple[CrossDomainAdapterRegistrationResponse, ...]
+
+
+class BeaconEvaluationRecordResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    run_id: UUID
+    condition_key: UUID
+    signal_id: UUID
+    definition_id: str
+    definition_version: int
+    evidence_digest: str
+    evaluated_at: datetime
+    evidence_as_of: datetime
+    signal_expires_at: datetime
+    evaluator_version: str
+    disposition: EvaluationDisposition
+    prior_evaluation_id: UUID | None
+
+
+class BeaconEvaluationDeltaResponse(BaseModel):
+    company_id: UUID
+    branch_id: UUID | None
+    since: datetime
+    until: datetime
+    items: tuple[BeaconEvaluationRecordResponse, ...]
 
 
 class BeaconConfidenceResponse(BaseModel):
