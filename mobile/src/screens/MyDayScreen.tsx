@@ -5,13 +5,14 @@ import type { NetworkMonitor } from "../network/networkMonitor";
 import { useMyDay } from "../myDay/useMyDay";
 import type { TimekeepingService } from "../api/timekeeping";
 import { useWorkdaySummary } from "../timeclock/useWorkdaySummary";
+import { formatAuthoritativeDate, formatAuthoritativeTimestamp } from "../utils/formatting";
 
 function formatWindow(value: string, timezone: string) {
-  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: timezone }).format(new Date(value));
+  return formatAuthoritativeTimestamp(value, timezone, { hour: "numeric", minute: "2-digit" });
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
+  return formatAuthoritativeDate(value);
 }
 
 function address(assignment: DayAssignment) {
