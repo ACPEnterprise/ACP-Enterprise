@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.lia.contracts import EvidenceReference, LiaContext, LiaRequest
 from app.lia.payroll_guidance import payroll_guidance_answer
 from app.lia.retrieval import GovernedRetrievalService

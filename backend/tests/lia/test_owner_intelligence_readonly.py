@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.lia.contracts import (
     AnswerAuthority,
     EvidenceReference,

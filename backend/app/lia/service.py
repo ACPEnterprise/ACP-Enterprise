@@ -22,8 +22,8 @@ from .contracts import (
     NavigationSuggestion,
     TruthClassification,
 )
-from .payroll_guidance import payroll_guidance_answer
 from .owner_answers import compose_owner_answer
+from .payroll_guidance import payroll_guidance_answer
 from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
 from .retrieval import GovernedRetrievalService, permitted_domain_names
 from .security import (
