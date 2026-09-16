@@ -53,6 +53,14 @@ export interface DispatchBoardPage {
   items: readonly DispatchBoardItem[];
   total_count: number;
 }
+export interface JobAppointmentAssignment {
+  appointment_id: string;
+  appointment_number: string;
+  primary_employee_id: string | null;
+  primary_employee_name: string | null;
+  assignment_status: string | null;
+  assignment_version: number | null;
+}
 export interface TechnicianEligibility {
   employee_id: string;
   employee_number: string;

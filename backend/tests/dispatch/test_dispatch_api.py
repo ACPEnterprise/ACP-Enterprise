@@ -122,6 +122,7 @@ async def test_dispatch_api_fails_closed_without_authentication() -> None:
 def test_dispatch_openapi_contract_exposes_bounded_operations() -> None:
     paths = app.openapi()["paths"]
     assert "/api/v1/dispatch/board" in paths
+    assert "/api/v1/dispatch/jobs/{job_id}/assignments" in paths
     assert (
         "/api/v1/dispatch/appointments/{appointment_id}/eligible-technicians" in paths
     )

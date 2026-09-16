@@ -67,6 +67,15 @@ class DispatchBoardPage(DispatchSchema):
     total_count: int
 
 
+class JobAppointmentAssignmentItem(DispatchSchema):
+    appointment_id: UUID
+    appointment_number: str
+    primary_employee_id: UUID | None
+    primary_employee_name: str | None
+    assignment_status: str | None
+    assignment_version: int | None
+
+
 class RecommendationWindow(DispatchSchema):
     start_at: AwareDatetime
     end_at: AwareDatetime

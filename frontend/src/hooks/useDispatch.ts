@@ -3,8 +3,10 @@ import {
   assignPrimary,
   changeCrew,
   getDispatchBoard,
+  getDispatchAssignment,
   getDispatchRecommendation,
   getEligibleTechnicians,
+  getJobAppointmentAssignments,
   markReconciliation,
   releasePrimary,
   reportDispatchException,
@@ -48,6 +50,21 @@ export function useEligibleTechnicians(id?: string) {
     queryKey: dispatchKeys.eligible(id ?? ""),
     queryFn: () => getEligibleTechnicians(id as string),
     enabled: Boolean(id),
+  });
+}
+export function useDispatchAssignment(appointmentId?: string, enabled = true) {
+  return useQuery({
+    queryKey: [...dispatchKeys.all, "appointment", appointmentId ?? "", "assignment"],
+    queryFn: () => getDispatchAssignment(appointmentId as string),
+    enabled: enabled && Boolean(appointmentId),
+    retry: false,
+  });
+}
+export function useJobAppointmentAssignments(jobId?: string, enabled = true) {
+  return useQuery({
+    queryKey: [...dispatchKeys.all, "job", jobId ?? "", "assignments"],
+    queryFn: () => getJobAppointmentAssignments(jobId as string),
+    enabled: enabled && Boolean(jobId),
   });
 }
 export function useDispatchMutations() {

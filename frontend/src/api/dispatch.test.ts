@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { assignPrimary, reportDispatchException } from "./dispatch";
+import { assignPrimary, getDispatchAssignment, getJobAppointmentAssignments, reportDispatchException } from "./dispatch";
 
 vi.mock("./client", () => ({
-  apiClient: { post: vi.fn(), put: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }));
 
 describe("Dispatch API", () => {
@@ -48,6 +48,21 @@ describe("Dispatch API", () => {
     expect(apiClient.post).toHaveBeenCalledWith(
       "/api/v1/dispatch/appointments/appointment-1/assignment",
       expect.objectContaining({ idempotency_key: "schedule-assignment:request-1" }),
+    );
+  });
+
+  it("reads Job assignment consistency from Dispatch authority", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: [] });
+    await getJobAppointmentAssignments("job-1");
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/dispatch/jobs/job-1/assignments",
+    );
+  });
+  it("reads the authoritative Appointment assignment", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { id: "assignment-1" } });
+    await getDispatchAssignment("appointment-1");
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/dispatch/appointments/appointment-1/assignment",
     );
   });
 });

@@ -3,6 +3,7 @@ import { Card } from "../../ui";
 import { useAuth } from "../../auth";
 import { Link } from "react-router";
 import { appointmentDetailPath, customerDetailPath, withSchedulingReturn } from "../../routing/paths";
+import type { JobAppointmentAssignment } from "../../types/dispatch";
 
 export function CustomerSummaryCard({ job, canOpenCustomer = false, returnTo }: { readonly job: JobDetail; readonly canOpenCustomer?: boolean; readonly returnTo?: string }) {
   const path = returnTo ? withSchedulingReturn(customerDetailPath(job.customer.id), returnTo) : customerDetailPath(job.customer.id);
@@ -12,8 +13,9 @@ export function ServiceLocationCard({ job }: { readonly job: JobDetail }) {
   const location = job.service_location;
   return <Card className="p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Service Location</h3><address className="mt-2 break-words not-italic text-sm text-content-secondary">{location.nickname && <strong className="block">{location.nickname}</strong>}{location.address_line_1}<br />{location.address_line_2 && <>{location.address_line_2}<br /></>}{location.city}, {location.state} {location.postal_code}</address></Card>;
 }
-export function AppointmentSummaryTable({ job, returnTo }: { readonly job: JobDetail; readonly returnTo?: string }) {
-  return <Card className="p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Appointments</h3>{job.appointments.length === 0 ? <p className="mt-3 text-sm text-content-muted">No Appointments linked.</p> : <div className="mt-3 divide-y divide-stroke">{job.appointments.map((item) => { const path = returnTo ? withSchedulingReturn(appointmentDetailPath(item.appointment_id), returnTo) : appointmentDetailPath(item.appointment_id); return <div className="grid min-w-0 gap-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center" key={item.appointment_id}><div className="min-w-0"><span className="text-content-muted">{item.visit_sequence}. </span><Link className="break-all font-semibold text-action-primary hover:underline" to={path}>{item.appointment_number}</Link><p className="mt-1 capitalize text-content-muted">{item.status.replaceAll("_", " ")}</p></div><span className="text-content-muted">{item.arrival_window_start_at ? new Date(item.arrival_window_start_at).toLocaleString() : "No arrival window"}</span></div>; })}</div>}</Card>;
+export function AppointmentSummaryTable({ job, assignments = [], returnTo }: { readonly job: JobDetail; readonly assignments?: readonly JobAppointmentAssignment[]; readonly returnTo?: string }) {
+  const assignmentByAppointment = new Map(assignments.map((item) => [item.appointment_id, item]));
+  return <Card className="p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Appointments</h3>{job.appointments.length === 0 ? <p className="mt-3 text-sm text-content-muted">No Appointments linked.</p> : <div className="mt-3 divide-y divide-stroke">{job.appointments.map((item) => { const path = returnTo ? withSchedulingReturn(appointmentDetailPath(item.appointment_id), returnTo) : appointmentDetailPath(item.appointment_id); const assignment = assignmentByAppointment.get(item.appointment_id); return <div className="grid min-w-0 gap-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center" key={item.appointment_id}><div className="min-w-0"><span className="text-content-muted">{item.visit_sequence}. </span><Link className="break-all font-semibold text-action-primary hover:underline" to={path}>{item.appointment_number}</Link><p className="mt-1 capitalize text-content-muted">{item.status.replaceAll("_", " ")}</p><p className="mt-1 text-content-muted">Technician: {assignment?.primary_employee_name ?? "Unassigned"}</p></div><span className="text-content-muted">{item.arrival_window_start_at ? new Date(item.arrival_window_start_at).toLocaleString() : "No arrival window"}</span></div>; })}</div>}</Card>;
 }
 
 const timestamp = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";

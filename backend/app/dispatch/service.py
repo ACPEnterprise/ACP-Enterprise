@@ -17,6 +17,7 @@ from app.dispatch.schemas import (
     CrewMemberItem,
     DispatchBoardItem,
     DispatchBoardPage,
+    JobAppointmentAssignmentItem,
 )
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
@@ -32,6 +33,53 @@ ACTIVE = ("proposed", "assigned", "acknowledged", "reconciliation_required")
 
 
 class DispatchService:
+    async def job_assignments(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        job_id: UUID,
+    ) -> tuple[JobAppointmentAssignmentItem, ...]:
+        rows = (
+            await session.execute(
+                select(
+                    Appointment.id.label("appointment_id"),
+                    Appointment.appointment_number,
+                    DispatchAssignment.primary_employee_id,
+                    Employee.display_name.label("primary_employee_name"),
+                    DispatchAssignment.status.label("assignment_status"),
+                    DispatchAssignment.version.label("assignment_version"),
+                )
+                .join(
+                    JobAppointmentLink,
+                    (JobAppointmentLink.company_id == Appointment.company_id)
+                    & (JobAppointmentLink.branch_id == Appointment.branch_id)
+                    & (JobAppointmentLink.appointment_id == Appointment.id),
+                )
+                .outerjoin(
+                    DispatchAssignment,
+                    (DispatchAssignment.company_id == Appointment.company_id)
+                    & (DispatchAssignment.appointment_id == Appointment.id)
+                    & (DispatchAssignment.status.in_(ACTIVE)),
+                )
+                .outerjoin(
+                    Employee,
+                    (Employee.company_id == DispatchAssignment.company_id)
+                    & (Employee.id == DispatchAssignment.primary_employee_id),
+                )
+                .where(
+                    Appointment.company_id == context.company.id,
+                    Appointment.branch_id.in_(context.authorized_branch_ids),
+                    JobAppointmentLink.job_id == job_id,
+                )
+                .order_by(
+                    JobAppointmentLink.visit_sequence,
+                    Appointment.id,
+                )
+            )
+        ).mappings().all()
+        return tuple(JobAppointmentAssignmentItem.model_validate(row) for row in rows)
+
     async def board(
         self,
         session: AsyncSession,

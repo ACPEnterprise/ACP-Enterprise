@@ -4,12 +4,14 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useJob } from "../hooks/useJobs";
+import { useJobAppointmentAssignments } from "../hooks/useDispatch";
 import type { JobDetail } from "../types/jobs";
 import { JobDetailRoute } from "./JobDetailRoute";
 
 let permissions = new Set(["COMPANY_JOB_READ", "COMPANY_JOB_EXECUTE"]);
 vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }] } }), useHasPermission: (code: string) => permissions.has(code) }));
 vi.mock("../hooks/useJobs");
+vi.mock("../hooks/useDispatch");
 vi.mock("../components/jobs/LifecycleActionButtons", () => ({ LifecycleActionButtons: () => <div>Lifecycle controls</div> }));
 vi.mock("../components/jobs/JobCompletionStatus", () => ({ JobCompletionStatus: () => <div>Completion status</div> }));
 vi.mock("../components/jobs/ScheduleJobPanel", () => ({ ScheduleJobPanel: () => <div>Schedule Job panel</div> }));
@@ -21,6 +23,7 @@ describe("JobDetailRoute", () => {
   beforeEach(() => {
     permissions = new Set(["COMPANY_JOB_READ", "COMPANY_JOB_EXECUTE"]);
     vi.clearAllMocks();
+    vi.mocked(useJobAppointmentAssignments).mockReturnValue({ data: [] } as never);
   });
   it("renders loading and complete operational detail states", () => {
     vi.mocked(useJob).mockReturnValueOnce({ isLoading: true } as never); const view = renderRoute(); expect(screen.getByRole("status", { name: "Loading Jobs" })).toBeInTheDocument();
@@ -65,5 +68,13 @@ describe("JobDetailRoute", () => {
     expect(screen.getByRole("link", { name: "Back to Schedule" })).toHaveAttribute("href", "/scheduling?date=2026-08-13&view=week");
     expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute("href", "/customers/customer-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dweek");
     expect(screen.getByRole("link", { name: "APT-000001" })).toHaveAttribute("href", "/appointments/appointment-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dweek");
+  });
+  it("shows the Dispatch-authoritative technician on the linked Appointment", () => {
+    permissions.add("COMPANY_DISPATCH_READ");
+    vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: { ...job, appointments: [{ appointment_id: "appointment-1", appointment_number: "APT-000001", visit_sequence: 1, status: "scheduled", arrival_window_start_at: "2026-08-13T13:00:00Z" }] } } as never);
+    vi.mocked(useJobAppointmentAssignments).mockReturnValue({ data: [{ appointment_id: "appointment-1", appointment_number: "APT-000001", primary_employee_id: "employee-1", primary_employee_name: "Melvin Santiago", assignment_status: "assigned", assignment_version: 1 }] } as never);
+    renderRoute();
+    expect(screen.getByText("Technician: Melvin Santiago")).toBeVisible();
+    expect(useJobAppointmentAssignments).toHaveBeenCalledWith("job-1", true);
   });
 });

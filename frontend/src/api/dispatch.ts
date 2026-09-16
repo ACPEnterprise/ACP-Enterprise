@@ -5,6 +5,7 @@ import type {
   TechnicianEligibility,
   DispatchExceptionCode,
   DispatchRecommendation,
+  JobAppointmentAssignment,
 } from "../types/dispatch";
 
 const ROOT = "/api/v1/dispatch";
@@ -25,6 +26,24 @@ export async function getEligibleTechnicians(
   return (
     await apiClient.get<readonly TechnicianEligibility[]>(
       `${ROOT}/appointments/${appointmentId}/eligible-technicians`,
+    )
+  ).data;
+}
+export async function getDispatchAssignment(
+  appointmentId: string,
+): Promise<DispatchAssignment> {
+  return (
+    await apiClient.get<DispatchAssignment>(
+      `${ROOT}/appointments/${appointmentId}/assignment`,
+    )
+  ).data;
+}
+export async function getJobAppointmentAssignments(
+  jobId: string,
+): Promise<readonly JobAppointmentAssignment[]> {
+  return (
+    await apiClient.get<readonly JobAppointmentAssignment[]>(
+      `${ROOT}/jobs/${jobId}/assignments`,
     )
   ).data;
 }

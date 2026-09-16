@@ -23,6 +23,7 @@ from app.dispatch.schemas import (
     DispatchBoardPage,
     DispatchExceptionRequest,
     DispatchRecommendationResponse,
+    JobAppointmentAssignmentItem,
     RecommendationRequest,
     ReconcileRequest,
     TechnicianEligibilityItem,
@@ -61,6 +62,10 @@ IntelligenceReadContext = Annotated[
             JobPermission.READ,
         )
     ),
+]
+JobAssignmentReadContext = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(DispatchPermission.READ, JobPermission.READ)),
 ]
 
 
@@ -120,6 +125,22 @@ async def board(
         )
     except DispatchError as error:
         raise dispatch_http(error) from error
+
+
+@router.get(
+    "/jobs/{job_id}/assignments",
+    response_model=tuple[JobAppointmentAssignmentItem, ...],
+)
+async def job_assignments(
+    job_id: UUID,
+    context: JobAssignmentReadContext,
+    session: DatabaseSession,
+) -> tuple[JobAppointmentAssignmentItem, ...]:
+    return await dispatch_service.job_assignments(
+        session,
+        context=context,
+        job_id=job_id,
+    )
 
 
 @router.get(
