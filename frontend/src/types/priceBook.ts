@@ -119,6 +119,29 @@ export interface PriceBookCandidateReviewPage {
   costs_visible: boolean;
 }
 
+export interface PriceBookActivationReadiness {
+  price_version_id: string;
+  draft_version: number;
+  candidate_identity: string;
+  service_code: string;
+  price_approved: boolean;
+  tax_approved: boolean;
+  effective_date_approved: boolean;
+  activation_authorized: boolean;
+  material_mapping_required: boolean;
+  source_conflict: boolean;
+  activation_ready: boolean;
+  remaining_blockers: string[];
+  rationale: Record<string, string>;
+}
+export interface PriceBookAuditItem {
+  id: string;
+  action: string;
+  reason: string;
+  actor_user_id: string;
+  occurred_at: string;
+}
+
 export interface PriceBookSnapshot {
   id: string;
   company_id: string;

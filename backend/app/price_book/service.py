@@ -17,8 +17,10 @@ from app.platform.permissions.codes import PriceBookPermission
 
 from .errors import PriceBookConflict, PriceBookNotFound, PriceBookValidation
 from .models import (
+    PriceBookActivationReview,
     PriceBookAdjustmentProposal,
     PriceBookAuditEntry,
+    PriceBookCandidateBinding,
     PriceBookCategory,
     PriceBookCommercialSnapshot,
     PriceBookComponent,
@@ -30,6 +32,7 @@ from .models import (
     PriceBookTaxClassification,
 )
 from .schemas import (
+    ActivationReadinessItem,
     AdjustmentProposalCreate,
     AdjustmentProposalDecision,
     AuditItem,
@@ -111,7 +114,7 @@ class PriceBookService:
                     select(PriceBookCategory)
                     .where(
                         PriceBookCategory.company_id == context.company.id,
-                        PriceBookCategory.status == "active",
+                        PriceBookCategory.status.in_(("draft", "active")),
                     )
                     .order_by(PriceBookCategory.name)
                 )
@@ -502,7 +505,7 @@ class PriceBookService:
                 select(PriceBookCategory.id).where(
                     PriceBookCategory.id == payload.parent_id,
                     PriceBookCategory.company_id == context.company.id,
-                    PriceBookCategory.status == "active",
+                    PriceBookCategory.status.in_(("draft", "active")),
                 )
             ):
                 raise PriceBookNotFound("Parent category was not found.")
@@ -553,7 +556,7 @@ class PriceBookService:
                 select(PriceBookCategory.id).where(
                     PriceBookCategory.id == payload.category_id,
                     PriceBookCategory.company_id == context.company.id,
-                    PriceBookCategory.status == "active",
+                    PriceBookCategory.status.in_(("draft", "active")),
                 )
             ):
                 raise PriceBookNotFound("Category was not found.")
@@ -712,7 +715,7 @@ class PriceBookService:
                 select(PriceBookCategory.id).where(
                     PriceBookCategory.id == payload.category_id,
                     PriceBookCategory.company_id == context.company.id,
-                    PriceBookCategory.status == "active",
+                    PriceBookCategory.status.in_(("draft", "active")),
                 )
             ):
                 raise PriceBookNotFound("Category was not found.")
@@ -878,6 +881,34 @@ class PriceBookService:
                 raise PriceBookConflict(
                     "Price version changed or is not an activatable draft."
                 )
+            binding = await session.scalar(
+                select(PriceBookCandidateBinding).where(
+                    PriceBookCandidateBinding.company_id == context.company.id,
+                    PriceBookCandidateBinding.entity_type == "service",
+                    PriceBookCandidateBinding.native_entity_id
+                    == target.service_item_id,
+                )
+            )
+            if binding is not None:
+                review = await session.scalar(
+                    select(PriceBookActivationReview).where(
+                        PriceBookActivationReview.company_id == context.company.id,
+                        PriceBookActivationReview.price_version_id == target.id,
+                    )
+                )
+                if review is None or review.draft_version != target.version:
+                    raise PriceBookConflict("Candidate approvals are missing or stale.")
+                if not all(
+                    (
+                        review.price_approved_at,
+                        review.tax_approved_at,
+                        review.effective_approved_at,
+                        review.activation_authorized_at,
+                    )
+                ):
+                    raise PriceBookConflict(
+                        "Candidate activation requirements remain unresolved."
+                    )
             item = await session.scalar(
                 select(PriceBookServiceItem)
                 .where(
@@ -989,6 +1020,185 @@ class PriceBookService:
                 ),
             )
         return target
+
+    async def activation_readiness(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        version_id: UUID,
+    ) -> ActivationReadinessItem:
+        version = await session.scalar(
+            select(PriceBookPriceVersion).where(
+                PriceBookPriceVersion.company_id == context.company.id,
+                PriceBookPriceVersion.id == version_id,
+            )
+        )
+        if version is None:
+            raise PriceBookNotFound("Price version was not found.")
+        binding = await session.scalar(
+            select(PriceBookCandidateBinding).where(
+                PriceBookCandidateBinding.company_id == context.company.id,
+                PriceBookCandidateBinding.entity_type == "service",
+                PriceBookCandidateBinding.native_entity_id == version.service_item_id,
+            )
+        )
+        if binding is None:
+            raise PriceBookNotFound("Candidate review evidence was not found.")
+        review = await session.scalar(
+            select(PriceBookActivationReview).where(
+                PriceBookActivationReview.company_id == context.company.id,
+                PriceBookActivationReview.price_version_id == version.id,
+            )
+        )
+        current_review = (
+            review
+            if review is not None and review.draft_version == version.version
+            else None
+        )
+        states = {
+            "PRICE_APPROVAL_REQUIRED": bool(
+                current_review and current_review.price_approved_at
+            ),
+            "TAX_REVIEW_REQUIRED": bool(
+                current_review and current_review.tax_approved_at
+            ),
+            "EFFECTIVE_DATE_REQUIRED": bool(
+                current_review and current_review.effective_approved_at
+            ),
+            "ACTIVATION_AUTHORIZATION_REQUIRED": bool(
+                current_review and current_review.activation_authorized_at
+            ),
+        }
+        conflict = "SOURCE_CONFLICT" in binding.review_flags
+        blockers = [key for key, resolved in states.items() if not resolved]
+        if conflict:
+            blockers.append("SOURCE_CONFLICT")
+        evidence = binding.candidate_evidence
+        return ActivationReadinessItem(
+            price_version_id=version.id,
+            draft_version=version.version,
+            candidate_identity=binding.candidate_identity,
+            service_code=str(evidence.get("service_code", "")),
+            price_approved=states["PRICE_APPROVAL_REQUIRED"],
+            tax_approved=states["TAX_REVIEW_REQUIRED"],
+            effective_date_approved=states["EFFECTIVE_DATE_REQUIRED"],
+            activation_authorized=states["ACTIVATION_AUTHORIZATION_REQUIRED"],
+            material_mapping_required="MATERIAL_MAPPING_REQUIRED"
+            in binding.review_flags,
+            source_conflict=conflict,
+            activation_ready=not blockers,
+            remaining_blockers=tuple(blockers),
+            rationale={
+                key: str(value) for key, value in current_review.rationale.items()
+            }
+            if current_review
+            else {},
+        )
+
+    async def record_activation_review(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        version_id: UUID,
+        expected_version: int,
+        decision: str,
+        reason: str,
+    ) -> ActivationReadinessItem:
+        allowed = {"price", "tax", "effective_date", "activation_authorization"}
+        if decision not in allowed:
+            raise PriceBookValidation("Unsupported activation review decision.")
+        now = utc_now()
+        async with session.begin():
+            version = await session.scalar(
+                select(PriceBookPriceVersion)
+                .where(
+                    PriceBookPriceVersion.company_id == context.company.id,
+                    PriceBookPriceVersion.id == version_id,
+                )
+                .with_for_update()
+            )
+            if version is None:
+                raise PriceBookNotFound("Price version was not found.")
+            if version.status != "draft" or version.version != expected_version:
+                raise PriceBookConflict("Only the current draft may be approved.")
+            binding = await session.scalar(
+                select(PriceBookCandidateBinding).where(
+                    PriceBookCandidateBinding.company_id == context.company.id,
+                    PriceBookCandidateBinding.entity_type == "service",
+                    PriceBookCandidateBinding.native_entity_id
+                    == version.service_item_id,
+                )
+            )
+            if binding is None or "SOURCE_CONFLICT" in binding.review_flags:
+                raise PriceBookConflict("Candidate source authority is not approvable.")
+            review = await session.scalar(
+                select(PriceBookActivationReview)
+                .where(
+                    PriceBookActivationReview.company_id == context.company.id,
+                    PriceBookActivationReview.price_version_id == version.id,
+                )
+                .with_for_update()
+            )
+            if review is None:
+                review = PriceBookActivationReview(
+                    company_id=context.company.id,
+                    price_version_id=version.id,
+                    draft_version=version.version,
+                    rationale={},
+                )
+                session.add(review)
+            elif review.draft_version != version.version:
+                review.draft_version = version.version
+                review.price_approved_by_user_id = review.tax_approved_by_user_id = None
+                review.effective_approved_by_user_id = (
+                    review.activation_authorized_by_user_id
+                ) = None
+                review.price_approved_at = review.tax_approved_at = None
+                review.effective_approved_at = review.activation_authorized_at = None
+                review.rationale = {}
+            if decision == "activation_authorization" and not all(
+                (
+                    review.price_approved_at,
+                    review.tax_approved_at,
+                    review.effective_approved_at,
+                )
+            ):
+                raise PriceBookConflict(
+                    "Price, tax, and effective date approvals are required first."
+                )
+            fields = {
+                "price": ("price_approved_by_user_id", "price_approved_at"),
+                "tax": ("tax_approved_by_user_id", "tax_approved_at"),
+                "effective_date": (
+                    "effective_approved_by_user_id",
+                    "effective_approved_at",
+                ),
+                "activation_authorization": (
+                    "activation_authorized_by_user_id",
+                    "activation_authorized_at",
+                ),
+            }
+            actor_field, time_field = fields[decision]
+            setattr(review, actor_field, context.user.id)
+            setattr(review, time_field, now)
+            review.rationale = {**review.rationale, decision: reason}
+            review.updated_at = now
+            await session.flush()
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_price_version",
+                entity_id=version.id,
+                action=f"{decision}_approved",
+                state={"draft_version": version.version, "decision": decision},
+                reason=reason,
+                version=version.version,
+            )
+        return await self.activation_readiness(
+            session, context=context, version_id=version_id
+        )
 
     async def transition_lifecycle(
         self,
