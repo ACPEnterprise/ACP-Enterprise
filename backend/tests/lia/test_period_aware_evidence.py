@@ -448,6 +448,42 @@ async def test_comparison_retrieves_each_period_separately() -> None:
 
 
 @pytest.mark.asyncio
+async def test_comparison_answer_preserves_each_period_without_inventing_delta() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+
+    async def period_evidence(*_args, **kwargs):
+        temporal = kwargs["temporal"]
+        is_may = temporal.start_date == date(2026, 5, 1)
+        return (
+            EvidenceReference(
+                domain="scheduling",
+                label="Appointments",
+                authority="AUTHORITATIVE_FACT",
+                observed_at=ANCHOR,
+                freshness="CURRENT_QUERY",
+                evidence_digest=("a" if is_may else "b") * 64,
+                count=4 if is_may else 7,
+                state="scheduled=4" if is_may else "scheduled=7",
+                period_start=temporal.start_date,
+                period_end=temporal.end_date,
+                period_label=temporal.period_label,
+                timezone=temporal.timezone,
+            ),
+        )
+
+    retrieval.retrieve.side_effect = period_evidence
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(SchedulingPermission.READ),
+        request=LiaRequest(question="Compare the schedule in May and June 2026"),
+    )
+
+    assert "May 2026: Appointments — scheduled=4" in response.answer
+    assert "June 2026: Appointments — scheduled=7" in response.answer
+    assert "did not manufacture a difference" in response.answer
+
+
+@pytest.mark.asyncio
 async def test_financial_report_reuses_authoritative_engine_without_recalculation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

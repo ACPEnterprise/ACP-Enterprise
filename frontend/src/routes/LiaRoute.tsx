@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Bot, ChevronDown, ShieldCheck, Sparkles } from "lucide-react";
 
 import { LiaVoicePanel } from "../components/lia/LiaVoicePanel";
 import { matchingAuthorizedNavigation } from "../components/lia/voiceIntent";
+import { getOperatorApiError } from "../api/errors";
 import {
   useAskLia,
   useLiaFoundationReadiness,
   useLiaReadiness,
   useOwnerBriefing,
 } from "../hooks/useLia";
-import type { LiaResponse } from "../types/lia";
+import type { LiaResponse, LiaTemporalContext } from "../types/lia";
 import {
   Alert,
   Button,
@@ -24,7 +25,8 @@ import {
 } from "../ui";
 
 const prompts = [
-  "How are we doing today?",
+  "How are we doing?",
+  "What is scheduled today?",
   "What changed versus the prior period?",
   "Which Jobs are strongest and which are losing money?",
   "What is driving margin movement?",
@@ -35,6 +37,25 @@ const prompts = [
   "Where is financial evidence incomplete?",
   "What should I inspect next?",
 ];
+
+const contextualDomains = new Set([
+  "customers",
+  "jobs",
+  "scheduling",
+  "estimates",
+  "invoicing",
+  "payments",
+  "purchasing",
+  "inventory",
+  "assets",
+  "workforce",
+  "payroll",
+  "dispatch",
+  "accounting",
+  "luminary",
+  "beacon",
+  "price-book",
+]);
 
 const tone = (classification: LiaResponse["classification"]) =>
   classification === "KNOWN" || classification === "DERIVED"
@@ -133,38 +154,23 @@ export function LiaRoute() {
   const [searchParams] = useSearchParams();
   const contextDomain = searchParams.get("contextDomain");
   const contextId = searchParams.get("contextId");
-  const contextualDomains = new Set([
-    "customers",
-    "jobs",
-    "scheduling",
-    "estimates",
-    "invoicing",
-    "payments",
-    "purchasing",
-    "inventory",
-    "assets",
-    "workforce",
-    "payroll",
-    "dispatch",
-    "accounting",
-    "luminary",
-    "beacon",
-    "price-book",
-  ]);
   const validContextId =
     !contextId ||
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       contextId,
     );
-  const context =
-    contextDomain !== null &&
-    contextualDomains.has(contextDomain) &&
-    validContextId
-      ? {
-          domain: contextDomain,
-          ...(contextId ? { entity_id: contextId } : {}),
-        }
-      : undefined;
+  const context = useMemo(
+    () =>
+      contextDomain !== null &&
+      contextualDomains.has(contextDomain) &&
+      validContextId
+        ? {
+            domain: contextDomain,
+            ...(contextId ? { entity_id: contextId } : {}),
+          }
+        : undefined,
+    [contextDomain, contextId, validContextId],
+  );
   const contextLabel = context
     ? {
         customers: "Customer",
@@ -185,10 +191,16 @@ export function LiaRoute() {
         "price-book": "Price Book",
       }[context.domain]
     : undefined;
+  const routeContextKey = context
+    ? `${context.domain}:${context.entity_id ?? ""}`
+    : "";
   const readiness = useLiaReadiness();
   const foundation = useLiaFoundationReadiness();
   const briefing = useOwnerBriefing();
   const ask = useAskLia();
+  const askError = ask.isError
+    ? getOperatorApiError(ask.error, "LIA request")
+    : undefined;
   const [question, setQuestion] = useState("");
   const pendingNavigation = useRef<string | undefined>(undefined);
   const [conversationId, setConversationId] = useState<string>();
@@ -196,14 +208,17 @@ export function LiaRoute() {
     domain: string;
     entity_id?: string;
   }>();
+  const [conversationRouteKey, setConversationRouteKey] = useState(routeContextKey);
   const [continuation, setContinuation] = useState<{
     authorization_version: number;
     evidence_digest: string;
     as_of: string;
     topic_domains: string[];
+    temporal?: LiaTemporalContext | null;
   }>();
   const preserveContinuation = (result: LiaResponse) => {
     setConversationId(result.conversation_id);
+    setConversationRouteKey(routeContextKey);
     if (result.subject_domain) {
       setConversationContext({
         domain: result.subject_domain,
@@ -214,10 +229,17 @@ export function LiaRoute() {
         evidence_digest: result.evidence_digest,
         as_of: result.as_of,
         topic_domains: result.source_systems,
+        temporal: result.temporal,
       });
     }
   };
-  const activeContext = context ?? conversationContext;
+  const conversationMatchesRoute = conversationRouteKey === routeContextKey;
+  const activeContext =
+    conversationMatchesRoute && conversationContext ? conversationContext : context;
+  const activeConversationId = conversationMatchesRoute
+    ? conversationId
+    : undefined;
+  const activeContinuation = conversationMatchesRoute ? continuation : undefined;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const value = question.trim();
@@ -226,8 +248,10 @@ export function LiaRoute() {
     ask.mutate(
       {
         question: value,
-        conversation_id: conversationId,
-        context: activeContext ? { ...activeContext, ...continuation } : undefined,
+        conversation_id: activeConversationId,
+        context: activeContext
+          ? { ...activeContext, ...activeContinuation }
+          : undefined,
       },
       { onSuccess: preserveContinuation },
     );
@@ -238,8 +262,10 @@ export function LiaRoute() {
     ask.mutate(
       {
         question: value,
-        conversation_id: conversationId,
-        context: activeContext ? { ...activeContext, ...continuation } : undefined,
+        conversation_id: activeConversationId,
+        context: activeContext
+          ? { ...activeContext, ...activeContinuation }
+          : undefined,
       },
       { onSuccess: preserveContinuation },
     );
@@ -439,9 +465,9 @@ export function LiaRoute() {
         onSubmit={askPrompt}
       />
       {ask.data ? <Answer result={ask.data} /> : null}
-      {ask.isError ? (
-        <Alert variant="danger" title="LIA request unavailable">
-          The request failed safely. No answer was inferred.
+      {askError ? (
+        <Alert variant="danger" title={askError.title}>
+          {askError.message} No answer was inferred.
         </Alert>
       ) : null}
       <form

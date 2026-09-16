@@ -21,6 +21,20 @@ export interface LiaEvidence {
   state: string | null;
 }
 
+export interface LiaTemporalContext {
+  start_date: string;
+  end_date: string;
+  as_of: string;
+  timezone: string;
+  period_label: string;
+  comparison_start?: string | null;
+  comparison_end?: string | null;
+  comparison_label?: string | null;
+  prior_start?: string | null;
+  prior_end?: string | null;
+  prior_label?: string | null;
+}
+
 export interface LiaResponse {
   request_id: string;
   conversation_id: string;
@@ -47,6 +61,7 @@ export interface LiaResponse {
   safe_next_action: string | null;
   as_of: string;
   generated_at: string;
+  temporal?: LiaTemporalContext | null;
 }
 
 export interface LiaReadiness {
