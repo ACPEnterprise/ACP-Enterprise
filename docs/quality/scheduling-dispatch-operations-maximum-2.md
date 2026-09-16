@@ -3,6 +3,7 @@
 ## Authority
 
 - Starting protected authority: `4574d17a27104ea997dd92f2e53bda7cb31b90fb`
+- Reconciled protected authority: `0c2f410ed3cca96689148056bcc387a1fd3e4db0`
 - Branch: `work/om2c-scheduling-dispatch-operations-maximum-2`
 - Reused calendar candidate: `636e2e99dc4e070025442f053cc2f8fe28f28238` (product `8bb3f802`, packet `537af291`), replayed without redesign as commits `29fba172` and `73b3554c`.
 - Frozen Dispatch-board candidate `acdfb2c3` was not amended, merged, or rewritten.
