@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Final
 from uuid import UUID
@@ -11,8 +12,9 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-CONTRACT: Final = "hcp-source4-realworld-acceptance-snapshot/v1"
+CONTRACT: Final = "hcp-source4-realworld-acceptance-snapshot/v2"
 SOURCE: Final = "housecall_pro_source4"
+JOURNEY_SAMPLE_SIZE: Final = 20
 
 _FAMILIES: Final = {
     "customers": (
@@ -189,7 +191,7 @@ async def build_realworld_snapshot(
                     ORDER BY count(DISTINCT jsi.job_id) DESC,
                              count(DISTINCT isi.invoice_id) DESC,
                              csi.source_customer_id
-                    LIMIT 5
+                    LIMIT 20
                     """
                 ),
                 scope,
@@ -207,9 +209,9 @@ async def build_realworld_snapshot(
         "held_by_entity_kind": holds,
         "current_operations": {key: int(value or 0) for key, value in operations.items()},
         "historical_customer_journeys": [
-            {key: str(value) if isinstance(value, UUID) else value for key, value in row.items()}
-            for row in journeys
+            _journey(dict(row)) for row in journeys
         ],
+        "historical_customer_journey_sample_size": JOURNEY_SAMPLE_SIZE,
         "limitations": [
             "attachments_have_no_native_source_identity_contract",
             "employee_source_identity_is_not_a_customer_graph_family",
@@ -221,3 +223,17 @@ async def build_realworld_snapshot(
         json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return document
+
+
+def _journey(row: Mapping[str, Any]) -> dict[str, object]:
+    value = {
+        key: str(item) if isinstance(item, UUID) else item
+        for key, item in row.items()
+    }
+    required = ("locations", "jobs", "appointments", "estimates", "invoices", "payments")
+    missing = [family for family in required if int(value.get(family) or 0) == 0]
+    return {
+        **value,
+        "acceptance": "COMPLETE" if not missing else "SOURCE_EVIDENCE_GAP",
+        "missing_families": missing,
+    }

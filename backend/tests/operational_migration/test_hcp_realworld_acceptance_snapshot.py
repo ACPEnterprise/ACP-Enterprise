@@ -5,7 +5,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_realworld_acceptance_snapshot import (
     build_realworld_snapshot,
 )
@@ -90,6 +89,9 @@ async def test_snapshot_is_read_only_and_accounts_native_continuity() -> None:
     assert result["held_by_entity_kind"] == {"job": 3}
     assert result["current_operations"]["dispatch_graph_complete"] == 1
     assert result["historical_customer_journeys"][0]["customer_id"] == str(UUID(int=4))
+    assert result["historical_customer_journeys"][0]["acceptance"] == "COMPLETE"
+    assert result["historical_customer_journeys"][0]["missing_families"] == []
+    assert result["historical_customer_journey_sample_size"] == 20
     assert len(result["digest"]) == 64
     assert not any(
         word in " ".join(session.statements).upper()
@@ -98,3 +100,4 @@ async def test_snapshot_is_read_only_and_accounts_native_continuity() -> None:
     assert any(
         "owner.id = n.customer_id" in statement for statement in session.statements
     )
+    assert any("LIMIT 20" in statement for statement in session.statements)
