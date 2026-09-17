@@ -116,6 +116,16 @@ vi.mock("../hooks/usePriceBook", () => ({
             status: "active",
             version: 1,
           },
+          {
+            id: "category-3",
+            name: "Main Line",
+            code: "MAIN-LINE",
+            description: "Main sewer line services",
+            parent_id: "category-2",
+            position: 3,
+            status: "active",
+            version: 1,
+          },
         ],
         tax_classifications: [
           { id: "tax-1", name: "Taxable", code: "TAXABLE" },
@@ -324,6 +334,9 @@ describe("PriceBookRoute", () => {
   it("shows category hierarchy in owner browsing controls", () => {
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
     expect(screen.getAllByText("Drain › Sewer").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Drain › Sewer › Main Line").length,
+    ).toBeGreaterThan(0);
   });
 
   it("edits category hierarchy and lifecycle through governed authority", async () => {
