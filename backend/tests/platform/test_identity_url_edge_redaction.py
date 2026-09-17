@@ -11,8 +11,9 @@ def test_both_public_hosts_suppress_identity_secret_urls_and_referrers() -> None
     assert caddy.count("@identity_secret_page path /activate /reset-password") == 2
     assert caddy.count("log_skip @identity_secret_page") == 2
     assert (
-        caddy.count('header @identity_secret_page Referrer-Policy "no-referrer"') == 2
+        caddy.count('header @identity_secret_page >Referrer-Policy "no-referrer"') == 2
     )
+    assert 'header @identity_secret_page Referrer-Policy "no-referrer"' not in caddy
 
 
 def test_frontend_container_does_not_log_identity_secret_urls() -> None:
