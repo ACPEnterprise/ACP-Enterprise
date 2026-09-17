@@ -1,7 +1,7 @@
 preview.allcountyhomeservices.com {
 	@identity_secret_page path /activate /reset-password
 	log_skip @identity_secret_page
-	header @identity_secret_page Referrer-Policy "no-referrer"
+	header @identity_secret_page >Referrer-Policy "no-referrer"
 
 	@qbo_oauth_callback path /api/v1/integrations/qbo/oauth/callback /api/v1/integrations/qbo/production/oauth/callback
 	log_skip @qbo_oauth_callback
@@ -38,7 +38,7 @@ preview.allcountyhomeservices.com {
 beta.twelve-hats.com {
 	@identity_secret_page path /activate /reset-password
 	log_skip @identity_secret_page
-	header @identity_secret_page Referrer-Policy "no-referrer"
+	header @identity_secret_page >Referrer-Policy "no-referrer"
 
 	@internal path /mission-control* /engineering* /mission-assets/* /api/v1/engineering/* /api/v1/worker-transport*
 	handle @internal {
