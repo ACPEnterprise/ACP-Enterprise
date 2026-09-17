@@ -1,0 +1,23 @@
+{
+  "schema_version": "LIA_VOICE_TECHNICAL_QUALITY.v1",
+  "expected_container": "WAV",
+  "expected_encoding": "PCM_LINEAR",
+  "sample_rate_policy": "CALIBRATION_PENDING",
+  "channel_policy": "MONO_PREFERRED_CALIBRATION_PENDING",
+  "gates": [
+    {"id": "FILE_DECODABLE", "status": "REQUIRED"},
+    {"id": "FILE_DIGEST_MATCH", "status": "REQUIRED"},
+    {"id": "RIGHTS_METADATA_COMPLETE", "status": "REQUIRED"},
+    {"id": "EXPECTED_SPEAKER_SOURCE", "status": "REQUIRED"},
+    {"id": "TRANSCRIPT_EXACT_MATCH", "status": "REQUIRED"},
+    {"id": "NO_TRUNCATION", "status": "REQUIRED"},
+    {"id": "NO_LONG_DROPOUT", "status": "REQUIRED_THRESHOLD_CALIBRATION_PENDING"},
+    {"id": "NO_DUPLICATE_TAKE", "status": "REQUIRED"},
+    {"id": "NO_CLIPPING", "status": "REQUIRED_THRESHOLD_CALIBRATION_PENDING"},
+    {"id": "SILENCE_BOUNDS", "status": "CALIBRATION_PENDING"},
+    {"id": "NO_EXCESSIVE_NOISE", "status": "CALIBRATION_PENDING"},
+    {"id": "CONSISTENT_LEVEL", "status": "CALIBRATION_PENDING"}
+  ],
+  "failed_gate_result": "QUARANTINED_OR_REJECTED",
+  "automatic_admission": false
+}

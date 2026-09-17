@@ -1,0 +1,152 @@
+{
+  "schema_version": "LIA_VOICE_RECORDING_CORPUS.v1",
+  "corpus_version": "lia-recording-corpus.2026-09-17.v1",
+  "ownership": "ORIGINAL_TWELVE_HATS_TEXT",
+  "fictional_non_pii": true,
+  "blocks": [
+    {
+      "block_id": "GENERAL-ENGLISH",
+      "category": "GENERAL_ENGLISH",
+      "intended_delivery": "WARM_CALM_CONVERSATIONAL",
+      "difficulty": "FOUNDATIONAL",
+      "response_mode": "NORMAL",
+      "prohibited_distortions": ["CHANGED_MEANING", "EXCESSIVE_CHEER", "ANNOUNCER_CADENCE"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-GEN-001","text":"I found the record you asked for, and the current details are ready to review.","important_tokens":["current","ready"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-GEN-002","text":"Would you like the short answer, or should I walk through the evidence?","important_tokens":["short answer","evidence"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-GEN-003","text":"Yes, that is the same customer we discussed a moment ago.","important_tokens":["same customer"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-GEN-004","text":"No, that conclusion is not supported by the available evidence.","important_tokens":["not supported"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-GEN-005","text":"Got it. You meant the second authorized record, not the first one.","important_tokens":["second","not the first"],"required_material_values":["second","first"]},
+        {"corpus_item_id":"LIA-CORPUS-GEN-006","text":"I can explain what ACP knows without guessing what happened next.","important_tokens":["ACP","without guessing"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-GEN-007","text":"The answer is clear, but one limitation matters before you rely on it.","important_tokens":["limitation"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-GEN-008","text":"Let me keep this brief: the work is recorded, and the next review is yours.","important_tokens":["brief","next review"],"required_material_values":[]}
+      ]
+    },
+    {
+      "block_id": "NUMBERS-AND-REFERENCES",
+      "category": "NUMBERS_REFERENCES",
+      "intended_delivery": "EXACT_UNHURRIED",
+      "difficulty": "MATERIAL_VALUES",
+      "response_mode": "NORMAL",
+      "prohibited_distortions": ["SIGN_CHANGE", "DECIMAL_CHANGE", "COUNT_CHANGE", "REFERENCE_CHANGE"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-NUM-001","text":"The count is 7, not 17.","important_tokens":["7","17"],"required_material_values":["7","17"]},
+        {"corpus_item_id":"LIA-CORPUS-NUM-002","text":"The measured value is 18.75, with no rounding applied.","important_tokens":["18.75"],"required_material_values":["18.75"]},
+        {"corpus_item_id":"LIA-CORPUS-NUM-003","text":"The change is negative 5.25 percent.","important_tokens":["negative","5.25 percent"],"required_material_values":["5.25"]},
+        {"corpus_item_id":"LIA-CORPUS-NUM-004","text":"The expected range is 12 through 16 appointments.","important_tokens":["12","16"],"required_material_values":["12","16"]},
+        {"corpus_item_id":"LIA-CORPUS-NUM-005","text":"Read the contact sequence as five five five, zero one zero, twelve hundred.","important_tokens":["five five five","zero one zero"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-NUM-006","text":"Job JOB-313 is linked to Appointment APT-267.","important_tokens":["JOB-313","APT-267"],"required_material_values":["JOB-313","APT-267"]},
+        {"corpus_item_id":"LIA-CORPUS-NUM-007","text":"Invoice INV-204 remains separate from Estimate EST-119.","important_tokens":["INV-204","EST-119"],"required_material_values":["INV-204","EST-119"]},
+        {"corpus_item_id":"LIA-CORPUS-NUM-008","text":"The ratio is 3 to 1, and the confidence classification is partial.","important_tokens":["3 to 1","partial"],"required_material_values":["3","1"]}
+      ]
+    },
+    {
+      "block_id": "FINANCIAL",
+      "category": "FINANCIAL_BUSINESS",
+      "intended_delivery": "CREDIBLE_PRECISE",
+      "difficulty": "MATERIAL_VALUES",
+      "response_mode": "NORMAL",
+      "prohibited_distortions": ["INVOICED_AS_COLLECTED", "REVENUE_AS_PROFIT", "MISSING_COST_AS_ZERO", "BASIS_CHANGE"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-FIN-001","text":"The Invoice total is $842.15, and the open balance is $312.15.","important_tokens":["Invoice total","open balance"],"required_material_values":["$842.15","$312.15"]},
+        {"corpus_item_id":"LIA-CORPUS-FIN-002","text":"Collected cash is $4,250.00; that is not the same as invoiced revenue.","important_tokens":["collected cash","invoiced revenue"],"required_material_values":["$4,250.00"]},
+        {"corpus_item_id":"LIA-CORPUS-FIN-003","text":"QuickBooks source evidence reports $18,900.00 of income for the period.","important_tokens":["QuickBooks","source evidence","income"],"required_material_values":["$18,900.00"]},
+        {"corpus_item_id":"LIA-CORPUS-FIN-004","text":"Gross margin cannot be calculated because accepted material cost is missing.","important_tokens":["gross margin","material cost","missing"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-FIN-005","text":"This Job shows positive contribution of $275.40, not net profit.","important_tokens":["contribution","not net profit"],"required_material_values":["$275.40"]},
+        {"corpus_item_id":"LIA-CORPUS-FIN-006","text":"Payment evidence exists, but settlement and bank deposit evidence are unavailable.","important_tokens":["payment","settlement","bank deposit"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-FIN-007","text":"Accounts receivable is $6,010.25 as of the current report date.","important_tokens":["accounts receivable"],"required_material_values":["$6,010.25"]},
+        {"corpus_item_id":"LIA-CORPUS-FIN-008","text":"The accrual report is available; the requested cash-basis report is not.","important_tokens":["accrual","cash-basis","not"],"required_material_values":[]}
+      ]
+    },
+    {
+      "block_id": "TIME-AND-PERIODS",
+      "category": "TIME_PERIODS",
+      "intended_delivery": "EXACT_NATURAL",
+      "difficulty": "TEMPORAL",
+      "response_mode": "NORMAL",
+      "prohibited_distortions": ["DATE_CHANGE", "TIME_CHANGE", "TIMEZONE_OMISSION", "PERIOD_SUBSTITUTION"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-TIME-001","text":"The appointment starts at 9:30 AM and ends at 11:00 AM Eastern time.","important_tokens":["9:30 AM","11:00 AM","Eastern"],"required_material_values":["9:30 AM","11:00 AM"]},
+        {"corpus_item_id":"LIA-CORPUS-TIME-002","text":"The expected duration is 90 minutes.","important_tokens":["90 minutes"],"required_material_values":["90"]},
+        {"corpus_item_id":"LIA-CORPUS-TIME-003","text":"The service date is September 21, 2026.","important_tokens":["September 21, 2026"],"required_material_values":["September 21, 2026"]},
+        {"corpus_item_id":"LIA-CORPUS-TIME-004","text":"Tomorrow means September 18 in the Company timezone.","important_tokens":["Tomorrow","September 18"],"required_material_values":["September 18"]},
+        {"corpus_item_id":"LIA-CORPUS-TIME-005","text":"May 2026 and June 2026 use the same accrual basis.","important_tokens":["May 2026","June 2026","accrual"],"required_material_values":["May 2026","June 2026"]},
+        {"corpus_item_id":"LIA-CORPUS-TIME-006","text":"Last week ran from September 7 through September 13.","important_tokens":["September 7","September 13"],"required_material_values":["September 7","September 13"]},
+        {"corpus_item_id":"LIA-CORPUS-TIME-007","text":"The evidence was observed at 2:45 PM Eastern time.","important_tokens":["2:45 PM","Eastern"],"required_material_values":["2:45 PM"]},
+        {"corpus_item_id":"LIA-CORPUS-TIME-008","text":"ACP has current state, but no authoritative month-end snapshot for March.","important_tokens":["current state","no authoritative month-end snapshot","March"],"required_material_values":[]}
+      ]
+    },
+    {
+      "block_id": "TRADES-OPERATIONS",
+      "category": "TRADES_SERVICE_BUSINESS",
+      "intended_delivery": "KNOWLEDGEABLE_OPERATIONAL",
+      "difficulty": "DOMAIN_VOCABULARY",
+      "response_mode": "NORMAL",
+      "prohibited_distortions": ["SERVICE_TERM_CHANGE", "STATUS_INVENTION", "AUTONOMOUS_ACTION"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-TRADE-001","text":"The drain cleaning Job is scheduled, but no technician is assigned.","important_tokens":["drain cleaning","scheduled","no technician"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-TRADE-002","text":"The sewer lining Estimate is ready for owner review.","important_tokens":["sewer lining","Estimate"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-TRADE-003","text":"The water heater replacement has an accepted Estimate and an open Job.","important_tokens":["water heater","accepted Estimate","open Job"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-TRADE-004","text":"Dispatch shows the technician en route, not yet arrived.","important_tokens":["Dispatch","en route","not yet arrived"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-TRADE-005","text":"The Price Book service includes labor, but material mapping is incomplete.","important_tokens":["Price Book","labor","material mapping"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-TRADE-006","text":"Inventory shows 4 available units and 2 reserved units.","important_tokens":["available","reserved"],"required_material_values":["4","2"]},
+        {"corpus_item_id":"LIA-CORPUS-TRADE-007","text":"Purchase Order PO-418 has a partial receipt and requires matching review.","important_tokens":["Purchase Order","PO-418","partial receipt"],"required_material_values":["PO-418"]},
+        {"corpus_item_id":"LIA-CORPUS-TRADE-008","text":"The service agreement covers the selected Location, but billing readiness is incomplete.","important_tokens":["service agreement","Location","billing readiness"],"required_material_values":[]}
+      ]
+    },
+    {
+      "block_id": "PAYROLL-WORKFORCE",
+      "category": "PAYROLL_WORKFORCE",
+      "intended_delivery": "CALM_DEPENDENCY_AWARE",
+      "difficulty": "BLOCKERS",
+      "response_mode": "NORMAL",
+      "prohibited_distortions": ["PROTECTED_VALUE_DISCLOSURE", "EMPLOYMENT_RECOMMENDATION", "CALCULATION_CLAIM"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-PAY-001","text":"The Employee is not payroll-ready because compensation setup is missing.","important_tokens":["not payroll-ready","compensation setup"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-PAY-002","text":"Accepted time is missing for this pay period, so gross pay cannot be calculated yet.","important_tokens":["accepted time","gross pay","cannot"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-PAY-003","text":"The owner can complete the employment inputs; the accountant must certify the tax setup.","important_tokens":["owner","accountant","certify"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-PAY-004","text":"Withholding calculation comes after compensation, policy, and accepted time are ready.","important_tokens":["withholding","after"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-PAY-005","text":"The open clock must be resolved before this timecard can be accepted.","important_tokens":["open clock","before","accepted"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-PAY-006","text":"Mobile readiness is complete, but Payroll readiness is a separate authority.","important_tokens":["Mobile readiness","Payroll readiness","separate"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-PAY-007","text":"I can explain the blocker without exposing compensation, tax, or banking values.","important_tokens":["without exposing","compensation","tax","banking"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-PAY-008","text":"ACP will calculate gross pay only after the required evidence is accepted.","important_tokens":["only after","accepted"],"required_material_values":[]}
+      ]
+    },
+    {
+      "block_id": "EVIDENCE-SAFETY",
+      "category": "LIA_EVIDENCE_BEHAVIOR",
+      "intended_delivery": "CREDIBLE_RESTRAINED",
+      "difficulty": "UNCERTAINTY",
+      "response_mode": "EVIDENCE",
+      "prohibited_distortions": ["FALSE_CERTAINTY", "MISSING_AS_ZERO", "CONFLICT_SUPPRESSION", "AUTHORITY_UPGRADE"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-EVID-001","text":"ACP has part of the history, but the earlier source records are not admitted yet.","important_tokens":["part","not admitted"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-EVID-002","text":"Two authorized sources conflict, so I will not choose a winner.","important_tokens":["conflict","not choose"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-EVID-003","text":"This evidence is stale. Refresh it before relying on the current state.","important_tokens":["stale","Refresh"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-EVID-004","text":"I found the Customer, but the requested historical Invoice evidence is unavailable.","important_tokens":["found","unavailable"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-EVID-005","text":"QuickBooks source evidence is available; ACP-native ledger authority is not.","important_tokens":["source evidence","ACP-native","not"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-EVID-006","text":"Beacon marked this condition active because the accepted evidence still matches its definition.","important_tokens":["Beacon","active","accepted evidence"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-EVID-007","text":"Luminary can explain the measured result, but it cannot establish unsupported causality.","important_tokens":["Luminary","cannot","causality"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-EVID-008","text":"The safe next step is to open the authoritative record and inspect the missing evidence.","important_tokens":["safe next step","authoritative record"],"required_material_values":[]}
+      ]
+    },
+    {
+      "block_id": "CLARIFICATION-DENIAL",
+      "category": "CLARIFICATION_AND_DENIAL",
+      "intended_delivery": "DIRECT_RESPECTFUL",
+      "difficulty": "CONVERSATIONAL_BOUNDARY",
+      "response_mode": "BRIEF",
+      "prohibited_distortions": ["GUESSING", "EXISTENCE_DISCLOSURE", "PERMISSION_BYPASS", "HOSTILITY"],
+      "items": [
+        {"corpus_item_id":"LIA-CORPUS-SAFE-001","text":"I found two authorized Customers with that name. Which Location do you mean?","important_tokens":["two","authorized","which"],"required_material_values":["two"]},
+        {"corpus_item_id":"LIA-CORPUS-SAFE-002","text":"I cannot safely identify which Job you mean from the current context.","important_tokens":["cannot safely identify"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-SAFE-003","text":"That information is not available with your current Employee permissions.","important_tokens":["not available","Employee permissions"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-SAFE-004","text":"I can show your assigned work, but not another Employee's Payroll information.","important_tokens":["your assigned work","not another Employee"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-SAFE-005","text":"Operational changes are not enabled. I can open the Appointment for review.","important_tokens":["not enabled","open","review"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-SAFE-006","text":"I do not have enough evidence to answer that without guessing.","important_tokens":["not enough evidence","without guessing"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-SAFE-007","text":"The period could mean invoiced revenue, collected cash, or net income. Which one do you want?","important_tokens":["invoiced revenue","collected cash","net income"],"required_material_values":[]},
+        {"corpus_item_id":"LIA-CORPUS-SAFE-008","text":"Your authorization changed, so I need to refresh before continuing.","important_tokens":["authorization changed","refresh"],"required_material_values":[]}
+      ]
+    }
+  ]
+}

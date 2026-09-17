@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://twelve-hats.com/schemas/lia-voice-recording-session.v1.json",
+  "title": "LIA Voice Recording Session v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "contributor_reference", "microphone_setup_identifier", "room_environment_class", "sample_rate_hz", "channel_format", "gain_configuration", "session_started_at", "session_ended_at", "script_block_ids", "operator_reference", "rights_status", "quality_status", "takes"],
+  "properties": {
+    "session_id": {"type": "string", "pattern": "^LIA-SESSION-[A-Z0-9-]+$"},
+    "contributor_reference": {"type": "string"},
+    "microphone_setup_identifier": {"type": "string"},
+    "room_environment_class": {"type": "string"},
+    "sample_rate_hz": {"type": "integer", "minimum": 1},
+    "channel_format": {"type": "string"},
+    "gain_configuration": {"type": "string"},
+    "session_started_at": {"type": "string", "format": "date-time"},
+    "session_ended_at": {"type": "string", "format": "date-time"},
+    "script_block_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+    "operator_reference": {"type": "string"},
+    "rights_status": {"enum": ["PENDING", "APPROVED", "REJECTED", "REVOKED"]},
+    "quality_status": {"enum": ["PENDING", "PASSED", "FAILED", "CALIBRATION_PENDING"]},
+    "takes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["asset_id", "corpus_item_id", "file_hash", "noise_problem_markers"], "properties": {"asset_id": {"type": "string"}, "corpus_item_id": {"type": "string"}, "retake_of_asset_id": {"type": ["string", "null"]}, "file_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, "noise_problem_markers": {"type": "array", "items": {"type": "string"}}}}}
+  }
+}
