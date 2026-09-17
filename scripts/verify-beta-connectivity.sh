@@ -70,9 +70,20 @@ for base_url in "$preview_url" "$beta_url"; do
   require_header_value strict-transport-security 'max-age=(31536000|[4-9][0-9]{7,}|[1-9][0-9]{8,});[[:space:]]*includeSubDomains'
   require_header_value x-content-type-options nosniff
   require_header_value x-frame-options DENY
-  require_header_value referrer-policy no-referrer
+  require_header_value referrer-policy strict-origin-when-cross-origin
   require_header_value permissions-policy '.+'
   require_header_value content-security-policy '.+'
+done
+
+# General application navigation may retain same-origin context, while pages
+# that can receive one-time identity material must never send a referrer.
+for base_url in "$preview_url" "$beta_url"; do
+  for identity_path in activate reset-password; do
+    curl --silent --show-error --max-time 15 --head \
+      "$base_url/$identity_path" >"$temporary_headers"
+    require_single_header referrer-policy
+    require_header_value referrer-policy no-referrer
+  done
 done
 
 for base_url in "$preview_url" "$beta_url"; do
