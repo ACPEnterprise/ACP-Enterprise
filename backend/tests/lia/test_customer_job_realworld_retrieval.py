@@ -20,6 +20,8 @@ from app.lia.service import ROUTES, LiaService, _evidence_route
 from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.codes import (
     CustomerPermission,
+    EstimatePermission,
+    InvoicePermission,
     JobPermission,
     SchedulingPermission,
     WorkforcePermission,
@@ -100,6 +102,14 @@ def test_named_customer_and_job_plans_are_bounded() -> None:
         "What's our price for drain cleaning?"
     ).domains
     assert "payments" in plan_question("What did they pay us last time?").domains
+    for question, domain, reference in (
+        ("Show me Estimate EST-000123", "estimates", "EST-000123"),
+        ("Show me Invoice INV-000456", "invoicing", "INV-000456"),
+        ("Show me Appointment APT-000267", "scheduling", "APT-000267"),
+    ):
+        plan = plan_question(question)
+        assert plan.subject_domain == domain
+        assert plan.subject_query == reference
 
 
 def test_exact_subject_corrections_replace_customer_and_job_referents() -> None:
@@ -179,6 +189,52 @@ async def test_exact_authorized_subject_resolves_to_existing_projection(
     assert response.proposals == ()
     assert retrieval.retrieve.await_args.kwargs["entity_id"] == entity_id
     assert retrieval.retrieve.await_args.kwargs["domains"] == {domain}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "domain", "permission"),
+    (
+        ("Show me Estimate EST-000123", "estimates", EstimatePermission.READ),
+        ("Show me Invoice INV-000456", "invoicing", InvoicePermission.READ),
+        (
+            "Show me Appointment APT-000267",
+            "scheduling",
+            SchedulingPermission.READ,
+        ),
+    ),
+)
+async def test_canonical_operational_reference_resolves_without_uuid(
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+    domain: str,
+    permission: str,
+) -> None:
+    entity_id = uuid4()
+    resolver = AsyncMock(return_value=(entity_id,))
+    monkeypatch.setattr("app.lia.service.resolve_canonical_reference", resolver)
+    evidence = EvidenceReference(
+        domain=domain,
+        label=domain,
+        authority="AUTHORITATIVE_FACT",
+        observed_at=datetime.now(timezone.utc),
+        freshness="CURRENT_QUERY",
+        entity_id=entity_id,
+        evidence_digest="r" * 64,
+        count=1,
+        state="active=1",
+    )
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (evidence,)
+
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(), context=_context(permission), request=LiaRequest(question=question)
+    )
+
+    assert response.subject_domain == domain
+    assert response.subject_id == entity_id
+    resolver.assert_awaited_once()
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] == entity_id
 
 
 @pytest.mark.asyncio
