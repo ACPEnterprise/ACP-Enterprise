@@ -3,6 +3,7 @@ import { ApiFailure } from "../src/api/types";
 import { LiaScreen } from "../src/screens/LiaScreen";
 import { createLiaService } from "../src/api/lia";
 import type { LiaResponse, LiaService } from "../src/api/lia";
+import { ACTIVE_SPEECH_RENDERER, spokenTextForResponse, twelveHatsAudioSchema, twelveHatsSpeech } from "../src/lia/speech";
 
 const response: LiaResponse = {
   response_mode: "NORMAL",
@@ -11,6 +12,7 @@ const response: LiaResponse = {
 function service() { return { ask: jest.fn(async () => response) } satisfies LiaService; }
 
 describe("employee-safe Mobile LIA", () => {
+  it("defaults to local speech and keeps the owned engine disabled", () => { expect(ACTIVE_SPEECH_RENDERER).toBe("DEVICE_LOCAL_FALLBACK"); expect(twelveHatsSpeech).toBeNull(); expect(spokenTextForResponse(response)).toBe(response.answer); expect(twelveHatsAudioSchema.safeParse({ audio: "data", content_type: "audio/mpeg", duration_ms: 10, model_version: "v1", render_version: "v1", render_digest: "z".repeat(64) }).success).toBe(false); });
   it("uses only the employee-safe endpoint", async () => { const client = { request: jest.fn(async () => response) }; await createLiaService(client as never).ask("What is my next job?"); const calls = client.request.mock.calls as unknown[][]; expect(calls[0]?.[0]).toBe("/api/v1/lia/employee/ask"); expect(calls.some(([path]) => path === "/api/v1/lia/ask")).toBe(false); });
   it("submits through the employee-safe service and preserves conversation continuity", async () => {
     const lia = service(); render(<LiaScreen service={lia} />);
