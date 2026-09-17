@@ -2,9 +2,13 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from app.platform.auth.errors import PasswordPolicyError
-from app.platform.auth.router import confirm_password_reset, recovery_service
+from app.platform.auth.router import (
+    confirm_password_reset,
+    recovery_service,
+)
 from app.platform.auth.schemas import PasswordResetConfirmRequest
 from app.platform.company.admin_router import translate_admin_error
 from app.platform.company.admin_service import (
@@ -48,12 +52,19 @@ async def test_password_policy_error_is_safe_and_correctable(
     async def reject(*_args, **_kwargs):
         raise PasswordPolicyError(protected)
 
+    async def allow(**_kwargs):
+        return None
+
     monkeypatch.setattr(recovery_service, "confirm_password_reset", reject)
+    monkeypatch.setattr("app.platform.auth.router.enforce_rate_limit", allow)
     with pytest.raises(HTTPException) as captured:
         await confirm_password_reset(
             data=PasswordResetConfirmRequest(
                 token="qualification-reset-token-0123456789abcdef",
                 new_password="qualification-password-0123456789",
+            ),
+            request=Request(
+                {"type": "http", "client": ("127.0.0.1", 1234), "headers": []}
             ),
             session=object(),
         )

@@ -122,6 +122,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @property
+    def api_documentation_enabled(self) -> bool:
+        return self.environment in {"development", "test"}
+
     @model_validator(mode="after")
     def validate_security_configuration(self) -> "Settings":
         if self.environment == "test":
