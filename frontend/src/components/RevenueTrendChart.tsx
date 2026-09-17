@@ -11,11 +11,9 @@ import { useState } from "react";
 
 import { useRevenueTrend } from "../hooks/useRevenueTrend";
 
-function formatCurrency(value: number): string {
+function formatAmount(value: number): string {
   return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -63,6 +61,7 @@ export function RevenueTrendChart() {
         <p className="text-xs text-content-muted">
           {data?.period_start ? `${new Date(data.period_start).toLocaleDateString()}–${new Date(data.period_end).toLocaleDateString()} · ${data.timezone}` : "Period unavailable"}
           {data?.completeness ? ` · ${data.completeness} evidence` : ""}
+          {" · currency unavailable"}
         </p>
         <label className="text-xs font-medium text-content-secondary">
           Trend period
@@ -83,11 +82,11 @@ export function RevenueTrendChart() {
 
           <YAxis
             stroke="var(--semantic-text-muted)"
-            tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
+            tickFormatter={(value) => formatAmount(Number(value))}
           />
 
           <Tooltip
-            formatter={(value) => formatCurrency(Number(value))}
+            formatter={(value) => formatAmount(Number(value))}
             contentStyle={{
               backgroundColor: "var(--semantic-surface)",
               border: "1px solid var(--semantic-border)",

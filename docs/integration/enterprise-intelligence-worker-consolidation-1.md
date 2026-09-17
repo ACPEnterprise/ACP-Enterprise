@@ -390,3 +390,24 @@ required escalation.
   `o1q9s27h4u0v`. Local Xcode Release remains blocked by missing generated
   CocoaPods `Pods-ACPEmployee.release.xcconfig`; worker-reported simulator
   qualification remains recorded separately.
+
+## Maximum shift currentness (2026-09-17)
+
+- A and B published no new heads beyond `6c3f89daba3c209fe2ef323c62648c8383428f22`
+  and `029d7fcb25477a8a1a145df07410dbdf865ed08f`; both remain integrated and
+  qualified. The Phone branch advanced to `72ed521e09dd32e315c081c71024a6f6c4353f0b`.
+- The Phone advance was a bounded two-file safety patch, integrated as
+  `76df7083197787fc39d5a162ef8572946fae9fbe`: native speech failures now leave
+  the authorized answer visible and report playback unavailability. No owner
+  route fallback or authorization change was introduced.
+- Current protected authority is
+  `be79bd2586873d91c50c2d94ceeaf21643e4fd3e`; the cumulative branch is
+  protected-derived, `0` behind and `1146` ahead before the final local commits.
+- Audit found an Intelligence-owned Analytics presentation defect: the revenue
+  trend chart labeled amounts as USD although the Analytics source contract has
+  no authoritative currency. The chart now presents numeric amounts and labels
+  currency as unavailable; no source contract or calculation was invented.
+- Post-fix frontend qualification: 57 focused tests, ESLint, TypeScript, and
+  Vite passed. Mobile qualification: 16 suites / 146 tests, typecheck, lint,
+  config validation, and iOS/Android exports passed. Preview/Production were
+  not deployed and real-data acceptance remains pending.
