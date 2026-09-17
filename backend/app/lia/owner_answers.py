@@ -181,6 +181,21 @@ def compose_owner_answer(
             )
 
     if "scheduling" in by_domain or "dispatch" in by_domain:
+        dispatch_context = next(
+            (
+                item
+                for item in evidence
+                if item.authority == "DISPATCH.LIA_CONTEXT.v1" and item.state
+            ),
+            None,
+        )
+        if dispatch_context is not None:
+            _, _, summary = (dispatch_context.state or "").partition("|")
+            return OwnerAnswer(
+                summary
+                + " This is current read-only Dispatch evidence; LIA did not assign or release anyone.",
+                "Open Dispatch",
+            )
         schedule_parts: list[str] = []
         for domain in ("scheduling", "dispatch"):
             schedule_item = by_domain.get(domain)

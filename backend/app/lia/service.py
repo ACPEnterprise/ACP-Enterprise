@@ -299,6 +299,35 @@ class LiaService:
                 limitations=("ACP does not reveal whether protected records exist.",),
             )
         if (
+            request.context is not None
+            and request.context.domain == "invoicing"
+            and request.context.entity_id is not None
+            and "payments" in selected
+            and "invoicing" not in selected
+        ):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "ACP can retain the selected Invoice, but the current LIA evidence contract does not bind "
+                    "that Invoice to authoritative payment application, settlement, or collected-cash evidence. "
+                    "Open the Invoice to inspect its current authorized payment state."
+                ),
+                limitations=(
+                    "Company-wide Payment records were not substituted for this Invoice.",
+                    "Payment existence was not treated as settlement or collected cash.",
+                ),
+                navigation=(
+                    NavigationSuggestion(
+                        label="Open Invoice",
+                        internal_path=f"/invoices/{request.context.entity_id}",
+                    ),
+                ),
+            )
+        if (
             temporal is None
             and "payroll" in selected
             and "pay period" in question.casefold()
@@ -465,10 +494,21 @@ class LiaService:
                 )
             resolved_domain, entity_id = subject_matches[0]
             selected = (
-                {"workforce", "payroll"}
-                if resolved_domain == "workforce" and "payroll" in selected
+                {
+                    domain
+                    for domain in selected
+                    if domain in {"workforce", "payroll", "timekeeping", "dispatch"}
+                }
+                if resolved_domain == "workforce"
+                else {
+                    domain
+                    for domain in selected
+                    if domain in {"scheduling", "dispatch"}
+                }
+                if resolved_domain == "scheduling"
                 else {resolved_domain}
             )
+            selected.add(resolved_domain)
             effective_request = request.model_copy(
                 update={
                     "context": LiaContext(
@@ -545,6 +585,11 @@ class LiaService:
                 context=context,
                 domains=selected,
                 entity_id=entity_id,
+                entity_domain=(
+                    effective_request.context.domain
+                    if effective_request.context is not None
+                    else None
+                ),
             )
         else:
             evidence = await self.retrieval.retrieve(
@@ -552,6 +597,11 @@ class LiaService:
                 context=context,
                 domains=selected,
                 entity_id=entity_id,
+                entity_domain=(
+                    effective_request.context.domain
+                    if effective_request.context is not None
+                    else None
+                ),
                 temporal=temporal,
                 requested_accounting_basis=requested_basis,
             )
@@ -571,6 +621,11 @@ class LiaService:
                         context=context,
                         domains=selected,
                         entity_id=entity_id,
+                        entity_domain=(
+                            effective_request.context.domain
+                            if effective_request.context is not None
+                            else None
+                        ),
                         temporal=comparison,
                         requested_accounting_basis=requested_basis,
                     )
@@ -587,6 +642,32 @@ class LiaService:
                 limitations=(
                     "AI_PROVIDER_NOT_CONFIGURED",
                     "No eligible source adapter returned evidence.",
+                ),
+            )
+
+        if "timekeeping" in selected and re.search(
+            r"\bhow\s+many\s+hours\b|\bjobsite\s+hours\b", question.casefold()
+        ):
+            return self._response(
+                context=context,
+                request=effective_request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "ACP found the authorized accepted timekeeping records for the requested Employee and period, "
+                    "but the current LIA evidence contract does not provide an authoritative total-hours aggregate. "
+                    "Open Time & Attendance to review the accepted intervals and total."
+                ),
+                evidence=evidence,
+                limitations=(
+                    "Accepted-record counts were not presented as worked or paid hours.",
+                    "Scheduled duration was not substituted for accepted time.",
+                ),
+                navigation=(
+                    NavigationSuggestion(
+                        label="Open Time & Attendance", internal_path="/employees"
+                    ),
                 ),
             )
 

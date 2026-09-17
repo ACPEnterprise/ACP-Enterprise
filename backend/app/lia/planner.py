@@ -76,7 +76,10 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "login ready",
         ),
     ),
-    ("timekeeping", ("timekeeping", "time entry", "labor hours", "clock")),
+    (
+        "timekeeping",
+        ("timekeeping", "time entry", "timecard", "labor hours", "jobsite hours", "hours"),
+    ),
     (
         "payroll",
         (
@@ -283,6 +286,14 @@ def _named_subject(question: str) -> tuple[str, str] | None:
     )
     if price_reference:
         return ("price-book", " ".join(price_reference.group(1).split()))
+    for pattern in (
+        r"\s*how\s+many\s+hours\s+did\s+(.+?)\s+work(?:\s+.+)?[?.!]?\s*",
+        r"\s*what\s+are\s+(.+?)(?:'s|’s)\s+jobsite\s+hours(?:\s+.+)?[?.!]?\s*",
+        r"\s*show\s+me\s+(.+?)(?:'s|’s)\s+time\s+entries(?:\s+.+)?[?.!]?\s*",
+    ):
+        employee_time = re.fullmatch(pattern, question, re.IGNORECASE)
+        if employee_time:
+            return ("workforce", " ".join(employee_time.group(1).split()))
     for domain, label, prefix in (
         ("estimates", "estimate", "EST"),
         ("invoicing", "invoice", "INV"),
