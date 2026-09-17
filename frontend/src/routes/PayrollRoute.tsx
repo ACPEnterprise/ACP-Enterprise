@@ -86,7 +86,7 @@ export function PayrollRoute() {
       <header>
         <p className="text-sm font-semibold text-action-primary">Financial Operations</p>
         <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll Administration</h1>
-        <p className="mt-2 text-content-muted">Readiness, reconciliation, reporting, payment, remittance, statements, and correction evidence. Provider execution and filing remain disabled.</p>
+        <p className="mt-2 text-content-muted">Prepare, calculate, review, approve, and document Payroll. Paper-check issuance is recorded here; provider execution, ACH, and tax filing remain disabled.</p>
       </header>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
       {canReadCutover && <PayrollCutoverReview />}
@@ -126,7 +126,7 @@ export function PayrollRoute() {
       <Card>
         <CardHeader>
           <CardTitle>Current pay-period review</CardTitle>
-          <CardDescription>Accepted time through compensation, withholding, and gross-pay readiness. This view does not calculate or transmit Payroll.</CardDescription>
+          <CardDescription>Accepted time through compensation, withholding, and gross-pay readiness. Calculate and approval actions become available only after every required authority is complete.</CardDescription>
         </CardHeader>
         <CardContent>
           {!canReadTime && (
