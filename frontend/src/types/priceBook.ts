@@ -136,6 +136,30 @@ export interface PriceBookActivationReadiness {
   remaining_blockers: string[];
   rationale: Record<string, string>;
 }
+export interface CompanyTaxPolicy {
+  id: string;
+  company_id: string;
+  policy_identity: string;
+  version: number;
+  status: "draft" | "certified" | "superseded";
+  effective_at: string;
+  expires_at: string | null;
+  customer_service_treatment: "NOT_TAXED" | "TAXED" | "REVIEW_REQUIRED";
+  customer_material_treatment: "NOT_TAXED" | "TAXED" | "REVIEW_REQUIRED";
+  purchase_material_tax_handling:
+    "PAID_AT_PURCHASE" | "EXEMPT" | "REVIEW_REQUIRED";
+  authority_source: string;
+  authority_notes: string | null;
+  authorized_exceptions: Array<Record<string, unknown>>;
+  supersedes_policy_id: string | null;
+  certified_by_user_id: string | null;
+  certified_at: string | null;
+  created_at: string;
+}
+export interface CompanyTaxPolicyPage {
+  current: CompanyTaxPolicy | null;
+  history: CompanyTaxPolicy[];
+}
 export interface PriceBookAuditItem {
   id: string;
   action: string;

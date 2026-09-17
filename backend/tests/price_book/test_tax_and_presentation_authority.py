@@ -11,7 +11,10 @@ from app.price_book.commerce_contracts import (
     SalesPresentationAlternative,
     build_authority_digest,
 )
-from app.tax_policy.company_policy import customer_treatment
+from app.tax_policy.company_policy import (
+    customer_treatment,
+    effective_company_tax_policy,
+)
 from app.tax_policy.models import CompanyTaxPolicy
 
 
@@ -52,6 +55,25 @@ def test_authorized_service_exception_fails_closed() -> None:
         customer_treatment(item, component_types={"labor"}, service_item_id=service_id)
         == "REVIEW_REQUIRED"
     )
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_effective_company_policy_fails_closed() -> None:
+    effective = datetime.now(timezone.utc)
+    policies = [policy(effective_at=effective), policy(effective_at=effective)]
+
+    class Result:
+        def all(self):
+            return policies
+
+    class Session:
+        async def scalars(self, _query):
+            return Result()
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        await effective_company_tax_policy(
+            Session(), company_id=policies[0].company_id, effective_at=effective
+        )
 
 
 def test_good_better_best_is_not_a_pricing_tier() -> None:

@@ -42,6 +42,13 @@ export function useActivationReadiness(versionId?: string) {
     enabled: Boolean(versionId),
   });
 }
+export function useCompanyTaxPolicy(enabled = true) {
+  return useQuery({
+    queryKey: ["price-book", "company-tax-policy"],
+    queryFn: api.getCompanyTaxPolicy,
+    enabled,
+  });
+}
 export function usePriceBookAudit(entityId?: string) {
   return useQuery({
     queryKey: ["price-book", "audit", entityId],
@@ -59,18 +66,52 @@ export function usePriceBookMutations() {
       onSuccess: refresh,
     }),
     categoryUpdate: useMutation({
-      mutationFn: ({ categoryId, data }: { categoryId: string; data: Parameters<typeof api.updateCategory>[1] }) =>
-        api.updateCategory(categoryId, data),
+      mutationFn: ({
+        categoryId,
+        data,
+      }: {
+        categoryId: string;
+        data: Parameters<typeof api.updateCategory>[1];
+      }) => api.updateCategory(categoryId, data),
       onSuccess: refresh,
     }),
     tax: useMutation({ mutationFn: api.createTax, onSuccess: refresh }),
+    companyTaxPolicy: useMutation({
+      mutationFn: api.createCompanyTaxPolicy,
+      onSuccess: refresh,
+    }),
+    updateCompanyTaxPolicy: useMutation({
+      mutationFn: ({
+        policyId,
+        data,
+      }: {
+        policyId: string;
+        data: Parameters<typeof api.updateCompanyTaxPolicy>[1];
+      }) => api.updateCompanyTaxPolicy(policyId, data),
+      onSuccess: refresh,
+    }),
+    certifyCompanyTaxPolicy: useMutation({
+      mutationFn: ({
+        policyId,
+        expectedVersion,
+      }: {
+        policyId: string;
+        expectedVersion: number;
+      }) => api.certifyCompanyTaxPolicy(policyId, expectedVersion),
+      onSuccess: refresh,
+    }),
     item: useMutation({
       mutationFn: api.createServiceItem,
       onSuccess: refresh,
     }),
     itemUpdate: useMutation({
-      mutationFn: ({ itemId, data }: { itemId: string; data: Parameters<typeof api.updateServiceItem>[1] }) =>
-        api.updateServiceItem(itemId, data),
+      mutationFn: ({
+        itemId,
+        data,
+      }: {
+        itemId: string;
+        data: Parameters<typeof api.updateServiceItem>[1];
+      }) => api.updateServiceItem(itemId, data),
       onSuccess: refresh,
     }),
     version: useMutation({
@@ -84,12 +125,21 @@ export function usePriceBookMutations() {
       onSuccess: refresh,
     }),
     versionUpdate: useMutation({
-      mutationFn: ({ versionId, data }: { versionId: string; data: Parameters<typeof api.updateDraftPriceVersion>[1] }) =>
-        api.updateDraftPriceVersion(versionId, data),
+      mutationFn: ({
+        versionId,
+        data,
+      }: {
+        versionId: string;
+        data: Parameters<typeof api.updateDraftPriceVersion>[1];
+      }) => api.updateDraftPriceVersion(versionId, data),
       onSuccess: refresh,
     }),
     versionLifecycle: useMutation({
-      mutationFn: ({ versionId, action, expectedVersion }: {
+      mutationFn: ({
+        versionId,
+        action,
+        expectedVersion,
+      }: {
         versionId: string;
         action: "inactivate" | "archive";
         expectedVersion: number;
@@ -143,22 +193,44 @@ export function usePriceBookMutations() {
       onSuccess: refresh,
     }),
     adjustmentDecision: useMutation({
-      mutationFn: ({ proposalId, data }: { proposalId: string; data: Parameters<typeof api.decideAdjustmentProposal>[1] }) =>
-        api.decideAdjustmentProposal(proposalId, data),
+      mutationFn: ({
+        proposalId,
+        data,
+      }: {
+        proposalId: string;
+        data: Parameters<typeof api.decideAdjustmentProposal>[1];
+      }) => api.decideAdjustmentProposal(proposalId, data),
       onSuccess: refresh,
     }),
     adjustmentMaterialize: useMutation({
-      mutationFn: ({ proposalId, data }: { proposalId: string; data: Parameters<typeof api.materializeAdjustmentProposal>[1] }) =>
-        api.materializeAdjustmentProposal(proposalId, data),
+      mutationFn: ({
+        proposalId,
+        data,
+      }: {
+        proposalId: string;
+        data: Parameters<typeof api.materializeAdjustmentProposal>[1];
+      }) => api.materializeAdjustmentProposal(proposalId, data),
       onSuccess: refresh,
     }),
     activationReview: useMutation({
-      mutationFn: ({ versionId, decision, expectedVersion, reason }: {
+      mutationFn: ({
+        versionId,
+        decision,
+        expectedVersion,
+        reason,
+      }: {
         versionId: string;
-        decision: "price" | "tax" | "effective-date" | "activation-authorization";
+        decision:
+          "price" | "tax" | "effective-date" | "activation-authorization";
         expectedVersion: number;
         reason: string;
-      }) => api.recordActivationReview(versionId, decision, expectedVersion, reason),
+      }) =>
+        api.recordActivationReview(
+          versionId,
+          decision,
+          expectedVersion,
+          reason,
+        ),
       onSuccess: refresh,
     }),
   };
