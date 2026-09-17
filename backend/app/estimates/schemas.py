@@ -54,6 +54,11 @@ class SameDayMembershipRevisionInput(EstimateSchema):
     expected_version: int = Field(ge=1)
 
 
+class ApplyDiscountProposalInput(EstimateSchema):
+    branch_id: UUID
+    expected_version: int = Field(ge=1)
+
+
 class TransitionInput(EstimateSchema):
     branch_id: UUID
     expected_version: int = Field(ge=1)

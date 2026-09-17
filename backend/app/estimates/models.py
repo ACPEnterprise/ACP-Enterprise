@@ -267,6 +267,7 @@ class TechnicianDiscountProposal(Base):
     proposed_final_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     approved_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     approved_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    applied_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING_MANAGER_APPROVAL")
     approver_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

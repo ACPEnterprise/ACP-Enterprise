@@ -31,6 +31,7 @@ from app.estimates.models import (
     EstimateLifecycleHistory,
     EstimateLineItem,
     EstimateRevision,
+    TechnicianDiscountProposal,
 )
 from app.estimates.pricing import PricingLine, PricingResult, calculate
 from app.estimates.pricing_authority import active_membership_evidence
@@ -234,10 +235,6 @@ class EstimateService:
                 for snapshot in snapshots
             )
             membership_percentage = membership.percentage if agreement and all_lines_membership_eligible else Decimal(0)
-            if membership_percentage and spec.discount_type is not None:
-                raise EstimateValidationError(
-                    "Additional technician discounts require a persisted manager-approved proposal."
-                )
             pricing = await self._price_snapshots(
                 session,
                 company_id=spec.company_id,
@@ -437,18 +434,46 @@ class EstimateService:
                 for snapshot in snapshots
             )
             membership_percentage = membership.percentage if agreement and all_lines_membership_eligible else Decimal(0)
-            if membership_percentage and spec.discount_type is not None:
+            proposal = None
+            if spec.approved_proposal_id is not None:
+                proposal = await session.scalar(select(TechnicianDiscountProposal).where(
+                    TechnicianDiscountProposal.company_id == spec.company_id,
+                    TechnicianDiscountProposal.id == spec.approved_proposal_id,
+                    TechnicianDiscountProposal.estimate_id == estimate.id,
+                    TechnicianDiscountProposal.revision_id == prior.id,
+                    TechnicianDiscountProposal.state == "APPROVED",
+                ).with_for_update())
+                if proposal is None:
+                    raise EstimateValidationError("Only an approved proposal for the current revision may be applied.")
+                if proposal.applied_revision_id is not None:
+                    return await self._reload(session, company_id=spec.company_id, estimate_id=spec.estimate_id)
+            if membership_percentage and spec.discount_type is not None and proposal is None:
                 raise EstimateValidationError(
                     "Additional technician discounts require a persisted manager-approved proposal."
                 )
-            pricing = await self._price_snapshots(
-                session,
-                company_id=spec.company_id,
-                branch_id=spec.branch_id,
-                snapshots=snapshots,
-                discount_type="percentage" if membership_percentage else spec.discount_type,
-                discount_value=membership_percentage if membership_percentage else spec.discount_value,
-            )
+            if proposal is not None:
+                base_pricing = await self._price_snapshots(
+                    session, company_id=spec.company_id, branch_id=spec.branch_id,
+                    snapshots=snapshots, discount_type="percentage", discount_value=membership_percentage,
+                )
+                after_membership = base_pricing.subtotal - base_pricing.discount
+                additional = (
+                    after_membership * proposal.requested_value / Decimal(100)
+                    if proposal.discount_type == "percentage" else proposal.requested_value
+                ).quantize(Decimal("0.01"))
+                pricing = await self._price_snapshots(
+                    session, company_id=spec.company_id, branch_id=spec.branch_id,
+                    snapshots=snapshots, discount_type="fixed", discount_value=base_pricing.discount + additional,
+                )
+            else:
+                pricing = await self._price_snapshots(
+                    session,
+                    company_id=spec.company_id,
+                    branch_id=spec.branch_id,
+                    snapshots=snapshots,
+                    discount_type="percentage" if membership_percentage else spec.discount_type,
+                    discount_value=membership_percentage if membership_percentage else spec.discount_value,
+                )
             membership_evidence = membership.as_dict()
             membership_evidence["eligibility"] = "ELIGIBLE" if membership_percentage else ("INELIGIBLE_SERVICE" if agreement else membership.eligibility)
             membership_evidence["amount"] = str(pricing.discount if membership_percentage else Decimal("0.00"))
@@ -477,7 +502,18 @@ class EstimateService:
                     "price_book_amount": str(pricing.subtotal),
                     "membership": membership_evidence,
                     "membership_discount_amount": str(pricing.discount if membership_percentage else Decimal("0.00")),
-                    "technician_discount": {"state": "NONE", "type": None, "value": None, "amount": "0.00"},
+                    "technician_discount": {
+                        "state": proposal.state if proposal else "NONE",
+                        "type": proposal.discount_type if proposal else None,
+                        "requested_value": str(proposal.requested_value) if proposal else None,
+                        "approved_value": str(proposal.approved_value) if proposal else None,
+                        "amount": str(pricing.discount - (base_pricing.discount if proposal else Decimal(0))) if proposal else "0.00",
+                        "proposal_id": str(proposal.id) if proposal else None,
+                        "requester_user_id": str(proposal.requester_user_id) if proposal else None,
+                        "approver_user_id": str(proposal.approver_user_id) if proposal else None,
+                        "requested_at": proposal.created_at.isoformat() if proposal else None,
+                        "approved_at": proposal.decided_at.isoformat() if proposal and proposal.decided_at else None,
+                    },
                     "final_customer_amount": str(pricing.total),
                 },
                 expires_at=spec.expires_at,
@@ -517,6 +553,8 @@ class EstimateService:
                 references=references,
                 history=history,
             )
+            if proposal is not None:
+                proposal.applied_revision_id = revision.id
             self._stage_event(
                 session,
                 estimate=estimate,

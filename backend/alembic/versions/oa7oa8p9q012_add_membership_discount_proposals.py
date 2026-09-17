@@ -35,6 +35,7 @@ def upgrade() -> None:
         sa.Column("proposed_final_amount", sa.Numeric(18, 2), nullable=False),
         sa.Column("approved_value", sa.Numeric(18, 4), nullable=True),
         sa.Column("approved_amount", sa.Numeric(18, 2), nullable=True),
+        sa.Column("applied_revision_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("state", sa.String(length=32), nullable=False),
         sa.Column("approver_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
