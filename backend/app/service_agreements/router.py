@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -12,12 +14,14 @@ from app.service_agreements.schemas import (
     AgreementOut,
     BillingCreate,
     BillingOut,
+    CustomerEntitlementOut,
     EnrollmentCreate,
     EntitlementMutation,
     EntitlementOut,
     PlanCreate,
     PlanOut,
     RenewalCreate,
+    SameDaySaleCreate,
     Transition,
     WorkspaceOut,
 )
@@ -86,6 +90,25 @@ async def enroll(p: EnrollmentCreate, c: Manage, s: Session):
         fail(e)
 
 
+@router.post("/same-day-sale", response_model=AgreementOut)
+async def same_day_sale(p: SameDaySaleCreate, c: Manage, s: Session):
+    """Enroll and activate today without implying payment or settlement."""
+    if p.start_date != datetime.now(timezone.utc).date() or p.end_date < p.start_date:
+        raise HTTPException(422, "Same-day enrollment must start today and cannot be backdated.")
+    if not c.can_access_branch(p.branch_id):
+        raise HTTPException(404, "Branch was not found.")
+    try:
+        agreement = await agreement_service.enroll(s, c.company.id, c.user.id, p)
+        if agreement.status == "active":
+            return AgreementOut.model_validate(agreement)
+        return AgreementOut.model_validate(await agreement_service.transition(
+            s, c.company.id, agreement.id, agreement.version, "active",
+            reason="same_day_membership_sale", key=f"{p.idempotency_key}:activate", actor=c.user.id,
+        ))
+    except AgreementError as e:
+        fail(e)
+
+
 @router.get("/workspace", response_model=WorkspaceOut)
 async def workspace(c: Read, s: Session):
     agreements, entitlements = await agreement_service.workspace(
@@ -103,6 +126,30 @@ async def workspace(c: Read, s: Session):
     )
 
 
+@router.get("/customers/{customer_id}/entitlements", response_model=list[CustomerEntitlementOut])
+async def customer_entitlements(customer_id: UUID, c: Read, s: Session):
+    rows = await agreement_service.customer_entitlements(
+        s, c.company.id, c.authorized_branch_ids, customer_id
+    )
+    return [
+        CustomerEntitlementOut(
+            agreement_id=agreement.id,
+            agreement_number=agreement.agreement_number,
+            customer_id=agreement.customer_id,
+            service_location_id=coverage.service_location_id,
+            status=agreement.status,
+            start_date=agreement.start_date,
+            end_date=agreement.end_date,
+            plan_code=str(agreement.plan_snapshot.get("code", "")),
+            plan_version=int(agreement.plan_snapshot.get("version", 0)),
+            membership_discount_percentage=Decimal(str(agreement.plan_snapshot.get("membership_discount_percentage", "0"))),
+            dispatch_priority=str(agreement.plan_snapshot.get("dispatch_priority", "UNCONFIGURED")),
+            after_hours_fee_waived=bool(agreement.plan_snapshot.get("after_hours_fee_waived", False)),
+            transferable=bool(agreement.plan_snapshot.get("transferable", False)),
+            plan_snapshot_digest=str(agreement.plan_snapshot.get("definition_digest", "")),
+        )
+        for agreement, coverage in rows
+    ]
 @router.post("/{agreement_id}/activate", response_model=AgreementOut)
 async def activate(agreement_id: UUID, p: Transition, c: Manage, s: Session):
     try:
