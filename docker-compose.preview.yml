@@ -211,10 +211,11 @@ services:
       start_period: 5s
       retries: 12
     restart: unless-stopped
+    user: "101:101"
     read_only: true
     tmpfs:
-      - /var/cache/nginx:size=32m,mode=0755
-      - /var/run:size=4m,mode=0755
+      - /var/cache/nginx:size=32m,mode=0755,uid=101,gid=101
+      - /var/run:size=4m,mode=0755,uid=101,gid=101
     cap_drop:
       - ALL
     security_opt:
@@ -371,10 +372,11 @@ services:
       start_period: 5s
       retries: 12
     restart: unless-stopped
+    user: "101:101"
     read_only: true
     tmpfs:
-      - /var/cache/nginx:size=32m,mode=0755
-      - /var/run:size=4m,mode=0755
+      - /var/cache/nginx:size=32m,mode=0755,uid=101,gid=101
+      - /var/run:size=4m,mode=0755,uid=101,gid=101
     cap_drop:
       - ALL
     security_opt:
