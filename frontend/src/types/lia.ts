@@ -41,6 +41,7 @@ export interface LiaResponse {
   classification: LiaClassification;
   authority: "ACP_AUTHORITATIVE" | "SOURCE_BACKED" | "PARTIAL" | "INSUFFICIENT_EVIDENCE";
   answer: string;
+  response_mode: "BRIEF" | "NORMAL" | "DETAILED" | "EVIDENCE";
   evidence: LiaEvidence[];
   limitations: string[];
   navigation: { label: string; internal_path: string }[];

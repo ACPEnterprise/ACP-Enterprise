@@ -26,7 +26,7 @@ export function LiaVoicePanel({
   useEffect(() => {
     if (!result || result.request_id === lastSpokenRequest.current) return;
     lastSpokenRequest.current = result.request_id;
-    voice.speak(spokenAnswer(result));
+    voice.speak(spokenAnswer(result, result.response_mode));
   }, [result, voice]);
 
   return (
