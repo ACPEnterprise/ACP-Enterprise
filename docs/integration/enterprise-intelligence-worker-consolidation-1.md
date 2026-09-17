@@ -372,3 +372,21 @@ required escalation.
   deterministic and tested; B’s ACP/LIA/QBO/HVAC/SKU entries remain
   `PROPOSED`; arbitrary names are never guessed. Provider remains `NONE` and
   `REFERENCE_MEASUREMENT_PENDING` remains true.
+
+## Native speech final currentness
+
+- Protected authority advanced to `be79bd2586873d91c50c2d94ceeaf21643e4fd3e`
+  during consolidation. The Intelligence branch was rebased onto it, with
+  prior spoken-presence, A/B, and Mobile history preserved; the stale remote
+  Intelligence history was merged normally and no force-push was used.
+- A `6c3f89daba3c209fe2ef323c62648c8383428f22`, B
+  `029d7fcb25477a8a1a145df07410dbdf865ed08f`, and C
+  `2f21a562fda94c38d85c85dba2ba86311f93ff75` are integrated. The Mobile
+  `response_mode` overlap was reconciled to one backward-safe schema field.
+- Focused browser spoken/evaluation qualification: 55 tests passed, ESLint,
+  TypeScript, and Vite passed. Mobile: 16 suites / 145 tests passed,
+  typecheck, lint, config validation, and iOS/Android exports passed. Backend
+  Intelligence suites: 653 passed with 3 warnings and one Alembic head
+  `o1q9s27h4u0v`. Local Xcode Release remains blocked by missing generated
+  CocoaPods `Pods-ACPEmployee.release.xcconfig`; worker-reported simulator
+  qualification remains recorded separately.
