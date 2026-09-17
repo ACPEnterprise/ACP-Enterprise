@@ -101,9 +101,7 @@ def test_named_customer_and_job_plans_are_bounded() -> None:
     assert employee.subject_query == "Lianne Hernandez"
     assert employee.domains == frozenset({"workforce"})
 
-    assert "price-book" in plan_question(
-        "What's our price for drain cleaning?"
-    ).domains
+    assert "price-book" in plan_question("What's our price for drain cleaning?").domains
     assert "payments" in plan_question("What did they pay us last time?").domains
     for question, domain, reference in (
         ("Show me Estimate EST-000123", "estimates", "EST-000123"),
@@ -121,9 +119,7 @@ def test_named_customer_and_job_plans_are_bounded() -> None:
 
 
 def test_exact_subject_corrections_replace_customer_and_job_referents() -> None:
-    customer = plan_question(
-        "No, I meant Acme Plumbing", "customers", ("customers",)
-    )
+    customer = plan_question("No, I meant Acme Plumbing", "customers", ("customers",))
     assert customer.subject_domain == "customers"
     assert customer.subject_query == "Acme Plumbing"
     assert customer.domains == frozenset({"customers"})
@@ -186,7 +182,9 @@ async def test_exact_authorized_subject_resolves_to_existing_projection(
 ) -> None:
     entity_id = uuid4()
     resolver_owner = (
-        customer_lia_context_service if domain == "customers" else job_lia_context_service
+        customer_lia_context_service
+        if domain == "customers"
+        else job_lia_context_service
     )
     monkeypatch.setattr(
         resolver_owner, resolver_name, AsyncMock(return_value=(entity_id,))
@@ -355,9 +353,13 @@ async def test_ambiguous_and_missing_subjects_fail_closed(
     matches: tuple[UUID, ...],
 ) -> None:
     resolver_owner = (
-        customer_lia_context_service if domain == "customers" else job_lia_context_service
+        customer_lia_context_service
+        if domain == "customers"
+        else job_lia_context_service
     )
-    resolver_name = "resolve_display_name" if domain == "customers" else "resolve_job_number"
+    resolver_name = (
+        "resolve_display_name" if domain == "customers" else "resolve_job_number"
+    )
     monkeypatch.setattr(resolver_owner, resolver_name, AsyncMock(return_value=matches))
     retrieval = AsyncMock(spec=GovernedRetrievalService)
 
@@ -556,7 +558,10 @@ async def test_explicit_topic_switch_drops_prior_entity_referent() -> None:
 @pytest.mark.asyncio
 async def test_source_resolvers_apply_company_and_branch_scope() -> None:
     for resolver, argument in (
-        (customer_lia_context_service.resolve_display_name, {"display_name": "Known Customer"}),
+        (
+            customer_lia_context_service.resolve_display_name,
+            {"display_name": "Known Customer"},
+        ),
         (job_lia_context_service.resolve_job_number, {"job_number": "306"}),
     ):
         result = MagicMock()
