@@ -141,3 +141,20 @@ class WorkspaceOut(Schema):
     renewal_pending_count: int
     service_due_count: int
     billing_unconfigured_count: int
+
+
+class CustomerEntitlementOut(Schema):
+    agreement_id: UUID
+    agreement_number: str
+    customer_id: UUID
+    service_location_id: UUID
+    status: str
+    start_date: date
+    end_date: date
+    plan_code: str
+    plan_version: int
+    membership_discount_percentage: Decimal
+    dispatch_priority: str
+    after_hours_fee_waived: bool
+    transferable: bool
+    plan_snapshot_digest: str

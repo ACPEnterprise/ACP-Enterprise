@@ -20,6 +20,7 @@ from app.service_agreements.models import (
     ServiceEntitlement,
 )
 from app.service_agreements.schemas import EnrollmentCreate, PlanCreate
+from app.service_agreements.policy import policy_for_code
 
 
 class AgreementError(Exception):
@@ -284,6 +285,17 @@ class AgreementService:
             "benefits": plan.benefits,
             "definition_digest": plan.definition_digest,
         }
+        policy = policy_for_code(plan.code)
+        if policy:
+            snap.update(
+                {
+                    "membership_discount_percentage": str(policy.discount_percentage),
+                    "dispatch_priority": policy.dispatch_priority,
+                    "after_hours_fee_waived": policy.after_hours_fee_waived,
+                    "transferable": policy.transferable,
+                    "membership_policy_version": "oa007-oa008-1",
+                }
+            )
         row = ServiceAgreement(
             company_id=company,
             branch_id=p.branch_id,
@@ -794,6 +806,21 @@ class AgreementService:
             ).all()
         )
         return agreements, entitlements
+
+    async def customer_entitlements(self, s, company, branches, customer_id):
+        rows = await s.execute(
+            select(ServiceAgreement, AgreementCoverage)
+            .join(AgreementCoverage, AgreementCoverage.agreement_id == ServiceAgreement.id)
+            .where(
+                ServiceAgreement.company_id == company,
+                ServiceAgreement.customer_id == customer_id,
+                ServiceAgreement.branch_id.in_(branches),
+                ServiceAgreement.status == "active",
+                AgreementCoverage.company_id == company,
+            )
+            .order_by(ServiceAgreement.end_date.desc())
+        )
+        return list(rows.all())
 
 
 agreement_service = AgreementService()
