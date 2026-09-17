@@ -1,6 +1,9 @@
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+from starlette.requests import Request
+
 from app.platform.auth.errors import PasswordPolicyError
 from app.platform.auth.router import (
     confirm_password_reset,
@@ -13,8 +16,6 @@ from app.platform.company.admin_service import (
     AccessPolicyConflictError,
     AccessPolicyNotFoundError,
 )
-from fastapi import HTTPException
-from starlette.requests import Request
 
 
 def test_company_admin_errors_do_not_reflect_identity_details() -> None:
