@@ -12,7 +12,9 @@ class ProviderResult:
 
 
 class LiaModelProvider(Protocol):
-    async def explain(self, *, question: str, evidence_summary: str) -> ProviderResult: ...
+    async def explain(
+        self, *, question: str, evidence_summary: str
+    ) -> ProviderResult: ...
 
 
 class UnconfiguredProvider:

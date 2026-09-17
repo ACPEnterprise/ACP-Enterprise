@@ -23,8 +23,9 @@ def _context(*, permitted: bool = True, active_branch: bool = True):
         company=SimpleNamespace(id=uuid4()),
         active_branch=branch,
         authorization_version=7,
-        has_permission=lambda permission: permitted
-        and permission == PriceBookPermission.READ,
+        has_permission=lambda permission: (
+            permitted and permission == PriceBookPermission.READ
+        ),
     )
 
 

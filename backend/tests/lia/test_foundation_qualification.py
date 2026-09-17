@@ -24,12 +24,12 @@ def test_foundation_qualification_fingerprint_reloads_deterministically() -> Non
     assert fingerprint == payload["qualification_fingerprint"]
 
 
-def test_foundation_qualification_never_claims_provider_or_mutation_authority() -> (
-    None
-):
+def test_foundation_qualification_never_claims_provider_or_mutation_authority() -> None:
     payload = json.loads(QUALIFICATION_PATH.read_text())
 
-    assert payload["classification"] == "LIA_FOUNDATION_READY_FOR_PROVIDER_IMPLEMENTATION"
+    assert (
+        payload["classification"] == "LIA_FOUNDATION_READY_FOR_PROVIDER_IMPLEMENTATION"
+    )
     assert payload["provider_configured"] is False
     assert payload["provider_called"] is False
     assert payload["autonomous_mutation_enabled"] is False
