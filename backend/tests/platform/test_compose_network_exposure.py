@@ -25,6 +25,31 @@ def test_preview_infrastructure_does_not_publish_a_host_port() -> None:
     assert "ports" not in compose["services"]["backend"]
 
 
+def test_preview_application_runtimes_are_hardened() -> None:
+    compose = _compose("docker-compose.preview.yml")
+    services = compose["services"]
+
+    for service_name in (
+        "migrate",
+        "backend",
+        "mission-control-api",
+        "mission-control-web",
+        "identity-delivery-worker",
+        "frontend",
+    ):
+        service = services[service_name]
+        assert service["read_only"] is True
+        assert service["cap_drop"] == ["ALL"]
+        assert "no-new-privileges:true" in service["security_opt"]
+        assert service["tmpfs"]
+
+    # These bounded jobs require root only to establish ownership on named volumes.
+    for initializer_name in ("qbo-sandbox-init", "qbo-production-init"):
+        initializer = services[initializer_name]
+        assert initializer["user"] == "root"
+        assert initializer["restart"] == "no"
+
+
 def test_preview_redis_requires_acl_file_and_secret_indirection() -> None:
     compose = _compose("docker-compose.preview.yml")
     redis = compose["services"]["redis"]
