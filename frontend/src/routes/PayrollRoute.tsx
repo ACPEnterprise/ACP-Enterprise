@@ -268,6 +268,27 @@ export function PayrollRoute() {
         </Card>
       </section>
       <section className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Operator workflow</CardTitle>
+            <CardDescription>Use the governed sequence below. Each step remains unavailable until its prerequisite evidence and permission are present.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["1", "Select pay period", "Choose or create the Company-scoped period."],
+                ["2", "Readiness and calculate", "Approved policy, Employee inputs, and accepted time are required; missing values are not zero."],
+                ["3", "Review and approve", "Authorized reviewers approve the immutable run evidence."],
+                ["4", "Paper-check evidence", "Record a paper-check release only after approval. No bank settlement or ACH is performed."],
+              ].map(([step, title, description]) => (
+                <li className="rounded-lg border border-stroke p-3" key={step}>
+                  <strong>{step}. {title}</strong>
+                  <p className="mt-1 text-content-muted">{description}</p>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Payroll runs</CardTitle>
