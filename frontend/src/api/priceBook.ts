@@ -25,6 +25,7 @@ export async function getPriceBook(
     itemStatus?: string;
     limit?: number;
     offset?: number;
+    sellableOnly?: boolean;
   } = {},
 ): Promise<PriceBookCatalog> {
   return (
@@ -36,6 +37,7 @@ export async function getPriceBook(
         ...(filters.itemStatus ? { item_status: filters.itemStatus } : {}),
         limit: filters.limit ?? 500,
         offset: filters.offset ?? 0,
+        ...(filters.sellableOnly ? { sellable_only: true } : {}),
       },
     })
   ).data;

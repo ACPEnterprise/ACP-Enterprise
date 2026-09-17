@@ -35,6 +35,7 @@ def test_host_audit_fails_closed_for_runtime_disk_and_backup_drift() -> None:
     assert "DISK_BLOCKER_PERCENT:-90" in script
     assert "(unhealthy\\)|Restarting" in script
     assert "MAX_BACKUP_AGE_HOURS:-26" in script
+    assert "BACKUP_ROOT:-/opt/acp-enterprise/backups/scheduled" in script
     assert '"$backup_mode" != "600"' in script
     assert "newest Preview backup has no SHA-256 sidecar" in script
     assert "checksum does not bind the newest dump" in script
