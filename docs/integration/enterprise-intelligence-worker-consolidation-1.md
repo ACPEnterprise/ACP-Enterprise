@@ -332,3 +332,18 @@ required escalation.
   exception remains an Estimates handoff. Revenue Cycle monetary aggregates,
   settlement/cash/as-of, Timekeeping period hours, richer Dispatch ordered
   references, and Analytics authoritative currency remain source contracts.
+
+## Spoken presence current-authority reconciliation
+
+- Protected authority advanced during handoff from `b527d75eecb2d271a29bcb0bacb9e1b16b33784b`
+  to `be7d1e9bf928301d1a14274b7fae295935fb0b89`. The isolated Intelligence
+  branch was rebased onto the new authority and the prior remote Intelligence
+  history was merged without force-push; protected ancestry is restored.
+- A `13d2094b7618a125d44b36dc31e1f33b5d48c79b` and B
+  `8bd90a9d0a954247497c372e2ca52c48dfb1494a` remain integrated. The tested
+  implementation is platform-local speech at rate `0.94`, neutral pitch, and
+  deterministic evidence-safe rendering. Delivery-style targets and reference
+  measurement remain non-authoritative design/evaluation material.
+- Mobile accepts additive `response_mode` with a backward-safe `NORMAL`
+  default. Native speech is not duplicated in this lane; Phone follow-up may
+  consume the shared field when separately implemented.
