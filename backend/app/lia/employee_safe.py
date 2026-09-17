@@ -25,6 +25,7 @@ from .contracts import (
     NavigationSuggestion,
     TruthClassification,
 )
+from .conversation import interpret_conversation
 from .security import EXFILTRATION_PATTERNS, INJECTION_PATTERNS, matches_any
 from .temporal import resolve_temporal_context
 
@@ -375,6 +376,7 @@ class EmployeeSafeLiaService:
             if evidence
             else AnswerAuthority.INSUFFICIENT_EVIDENCE,
             answer=answer,
+            response_mode=interpret_conversation(request.question).response_mode.value,
             evidence=evidence,
             limitations=limitations,
             navigation=navigation,

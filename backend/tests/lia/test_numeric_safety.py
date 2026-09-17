@@ -7,7 +7,12 @@ from uuid import uuid4
 
 import pytest
 
-from app.lia.contracts import EvidenceReference, LiaRequest, TruthClassification
+from app.lia.contracts import (
+    EvidenceReference,
+    LiaContext,
+    LiaRequest,
+    TruthClassification,
+)
 from app.lia.retrieval import GovernedRetrievalService
 from app.lia.service import LiaService
 
@@ -68,13 +73,30 @@ async def test_amount_questions_never_turn_record_counts_into_dollars(
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_make_question_requires_financial_definition() -> None:
+@pytest.mark.parametrize(
+    "question",
+    (
+        "What did we make in May?",
+        "What did that job make?",
+        "How much did we do last month?",
+    ),
+)
+async def test_ambiguous_make_question_requires_financial_definition(
+    question: str,
+) -> None:
     retrieval = AsyncMock(spec=GovernedRetrievalService)
 
     response = await LiaService(retrieval=retrieval).ask(
         AsyncMock(),
         context=_context(),
-        request=LiaRequest(question="What did we make in May?"),
+        request=LiaRequest(
+            question=question,
+            context=(
+                LiaContext(domain="jobs", entity_id=uuid4())
+                if "that job" in question.casefold()
+                else None
+            ),
+        ),
     )
 
     assert response.classification is TruthClassification.INCOMPLETE

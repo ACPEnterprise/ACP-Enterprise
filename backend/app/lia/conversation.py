@@ -161,13 +161,19 @@ def interpret_conversation(
                 "she",
                 "he",
                 "they",
+                "his jobs",
+                "her jobs",
+                "their jobs",
                 "that customer",
                 "that job",
                 "that invoice",
                 "that appointment",
                 "that alert",
                 "that recommendation",
+                "that one",
+                "the last one",
                 "the first one",
+                "the second one",
             )
             if re.search(rf"\b{re.escape(token)}\b", normalized)
         ),
@@ -210,6 +216,8 @@ def _correction(question: str) -> CorrectionKind:
         for phrase in ("the other", "the first one", "the second one")
     ):
         return CorrectionKind.AMBIGUOUS
+    if re.search(r"\bthat\s+(job|invoice|customer|appointment),?\s+not\s+the\s+", question):
+        return CorrectionKind.SUBJECT
     return CorrectionKind.NONE
 
 

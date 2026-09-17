@@ -131,9 +131,7 @@ class LiaService:
             resolved_temporal is None
             and temporal is not None
             and temporal.prior_start is not None
-            and re.search(
-                r"\bcompare (?:them|those|the two)\b", question, re.IGNORECASE
-            )
+            and re.search(r"(?<!\w)compare(?!\w)", question, re.IGNORECASE)
         ):
             temporal = temporal.model_copy(
                 update={
@@ -248,6 +246,26 @@ class LiaService:
                     "LIA did not guess or restore stale conversation context.",
                 ),
             )
+        if re.search(
+            r"\b(?:the (?:first|second|last) one|the other one|the other smith)\b",
+            question,
+            re.IGNORECASE,
+        ):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "I don't have an authorized candidate list in this request, so I can't safely tell which record you mean. "
+                    "Name the record or select it in its authoritative workspace."
+                ),
+                limitations=(
+                    "No ordinal or similar-name record was guessed.",
+                    "No protected lookup occurred.",
+                ),
+            )
         if conversation.pronouns and request.context is None:
             return self._response(
                 context=context,
@@ -264,7 +282,10 @@ class LiaService:
                 ),
             )
 
-        if re.search(r"\bwhat did (?:we|the business) make\b", question.casefold()):
+        if re.search(
+            r"\b(?:what did (?:we|the business|that job) make|how much did (?:we|that job) do)\b",
+            question.casefold(),
+        ):
             return self._response(
                 context=context,
                 request=request,
@@ -377,9 +398,30 @@ class LiaService:
             question, selected, temporal
         )
         if unsupported_period_reason is not None:
+            response_request = request
+            if temporal is not None:
+                prior_context = request.context
+                response_request = request.model_copy(
+                    update={
+                        "context": LiaContext(
+                            domain=prior_context.domain if prior_context else None,
+                            entity_id=prior_context.entity_id if prior_context else None,
+                            authorization_version=context.authorization_version,
+                            evidence_digest=(
+                                prior_context.evidence_digest
+                                if prior_context is not None and not period_changed
+                                else None
+                            ),
+                            topic_domains=(
+                                prior_context.topic_domains if prior_context else ()
+                            ),
+                            temporal=temporal,
+                        )
+                    }
+                )
             return self._response(
                 context=context,
-                request=request,
+                request=response_request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.INCOMPLETE,
@@ -595,6 +637,28 @@ class LiaService:
                         )
                     }
                 )
+        if temporal is not None:
+            prior_context = effective_request.context
+            effective_request = effective_request.model_copy(
+                update={
+                    "context": LiaContext(
+                        domain=prior_context.domain if prior_context else None,
+                        entity_id=prior_context.entity_id if prior_context else entity_id,
+                        authorization_version=context.authorization_version,
+                        evidence_digest=(
+                            prior_context.evidence_digest
+                            if prior_context is not None and not period_changed
+                            else None
+                        ),
+                        topic_domains=(
+                            prior_context.topic_domains
+                            if prior_context is not None
+                            else tuple(sorted(selected))
+                        ),
+                        temporal=temporal,
+                    )
+                }
+            )
         requested_basis = _requested_accounting_basis(question)
         if preloaded_evidence:
             evidence = preloaded_evidence
