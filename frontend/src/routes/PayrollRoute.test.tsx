@@ -287,14 +287,14 @@ describe("PayrollRoute authorization", () => {
             employee_id: "employee-1",
             employee_number: "EMP-1",
             display_name: "Marisol Rivera",
-            accepted_minutes: 2400,
+            accepted_minutes: 0,
             regular_candidate_minutes: null,
             overtime_candidate_minutes: null,
             compensation_readiness: "MISSING_CONFIGURATION",
             withholding_readiness: "MISSING_CONFIGURATION_OR_CALCULATION",
             gross_pay_readiness: "NOT_CALCULATED",
             payroll_review_status: "NOT_STARTED",
-            exception_codes: ["GROSS_PAY_NOT_CALCULATED"],
+            exception_codes: ["GROSS_PAY_NOT_CALCULATED", "TIME_EVIDENCE_MISSING"],
           },
         ],
       }) as never,
@@ -305,6 +305,8 @@ describe("PayrollRoute authorization", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Marisol Rivera")).toBeVisible();
+    expect(screen.getAllByText("No time entries")).toHaveLength(2);
+    expect(screen.queryByText("Time Evidence Missing")).not.toBeInTheDocument();
     expect(screen.getAllByText("Not calculated")).toHaveLength(2);
     expect(
       screen.getAllByText(/Missing configuration/i).length,
