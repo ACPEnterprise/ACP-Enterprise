@@ -260,3 +260,43 @@ required escalation.
   source-domain review. It was not integrated merely to create work.
 - No code change was warranted. This shift records evidence only; Preview and
   Production were not deployed, and real business records were not changed.
+
+## Final A/B reconciliation (current)
+
+- Protected authority remained `b527d75eecb2d271a29bcb0bacb9e1b16b33784b`.
+  Previous Intelligence head was `815a1d1c16c54fd15f6243a45b4a9e751c65a4c8`.
+- Laptop-A `work/lia-connected-quality-shift-2` current head
+  `a86ecf262f6ae1b1ef7dd565fb2c811cabb18053` was `PARTIALLY_CONTAINED`:
+  earlier cumulative patches were patch-equivalent, while ten later commits
+  were genuinely new and integrated. These add exact commercial retrieval,
+  scoped Employee/Dispatch evidence, numeric/financial safety, Beacon
+  explanation/evidence/navigation, and Luminary/Economics context navigation.
+  No migrations.
+- Laptop-B `work/cosmic-intelligence-realdata-maximum-1` current head
+  `fba5cb00cf8dde559ca8eb6a417572d036dbd57a` was `PARTIALLY_CONTAINED`:
+  duplicate Analytics/Beacon history and the overlapping Luminary evidence
+  patch were skipped; eight genuinely new reporting, empty-state, trend,
+  currency, and Command Center truth patches were integrated. No migrations.
+- Phone/C `work/laptop1-phone-lia-client-maximum-1` remains
+  `90aa2c9b750051c8ab08f3f6eb41d4145843ce7b`; all four patches are already
+  patch-equivalent and were not replayed.
+- Final qualification: backend Intelligence/source suites `652 passed, 3
+  warnings`; PostgreSQL zero-to-head passed with one Alembic head
+  `o1q9s27h4u0v`; frontend `138 files / 564 tests passed`, with ESLint,
+  TypeScript, Vite, Python compilation, and diff-check passing. Mobile `16
+  suites / 143 tests`, typecheck, lint, config validation, and iOS/Android
+  exports passed. Ruff and MyPy were unavailable on host; Xcode Release remains
+  blocked by missing generated CocoaPods configuration.
+- The full frontend run reproduced an asynchronous Estimates source-domain
+  defect at `frontend/src/routes/EstimatesRoute.tsx:354`: missing
+  `current_revision` is dereferenced for `proposal_title`. Retrieval itself is
+  not an Intelligence defect; Estimates owns the fix and should guard the
+  optional current revision or repair its contract/fixture.
+- A’s context navigation partially resolves the prior Luminary/Economics gap:
+  surface context reaches LIA, but exact finding/result drill-back still needs
+  owning-domain opaque identifiers. Intelligence did not invent them.
+- Price Book exact retrieval is integrated; Branch-safe current-price authority
+  remains source-owned. Estimate retrieval is integrated; proposal-title
+  exception remains an Estimates handoff. Revenue Cycle monetary aggregates,
+  settlement/cash/as-of, Timekeeping period hours, richer Dispatch ordered
+  references, and Analytics authoritative currency remain source contracts.
