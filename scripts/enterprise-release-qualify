@@ -47,15 +47,23 @@ class Result:
     exit_code: int | None
     duration_seconds: float | None
     artifact: str | None
+    artifact_sha256: str | None
     reason: str | None
     skipped_count: int | None
 
 
 def checks() -> tuple[Check, ...]:
     py = "python"
+    execution_profiles = (
+        "local",
+        "database",
+        "preview",
+        "postdeploy",
+        "commissioning",
+    )
     return (
-        Check("repository_cleanliness", "Repository cleanliness", ("local",), ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
-        Check("repository_provenance", "Repository provenance", ("local", "preview", "postdeploy"), ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
+        Check("repository_cleanliness", "Repository cleanliness", execution_profiles, ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
+        Check("repository_provenance", "Repository provenance", execution_profiles, ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
         Check("backend_dependencies", "Backend dependency/install verification", ("local",), (py, "-m", "pip", "check"), "No broken requirements", (py,)),
         Check("frontend_dependencies", "Frontend dependency/install verification", ("local",), ("npm", "ci", "--prefix", "frontend", "--ignore-scripts"), "Lockfile install succeeds", ("npm",), "workspace_dependencies"),
         Check("backend_lint", "Backend Ruff", ("local",), (py, "-m", "ruff", "check", "backend"), "All checks passed", (py,)),
@@ -77,7 +85,7 @@ def checks() -> tuple[Check, ...]:
         Check("redis_health", "Redis health", ("preview", "postdeploy"), None, "Authenticated health user returns PONG"),
         Check("preview_configuration", "Preview configuration", ("preview",), ("docker", "compose", "--env-file", ".env.preview", "-f", "docker-compose.preview.yml", "config", "--quiet"), "Compose interpolation succeeds without printing secrets", ("docker",)),
         Check("secret_custody", "Secrets required but not exposed", ("local", "preview"), ("python3", "scripts/release-secret-custody-check.py", "--env-example", ".env.preview.example"), "Required secret names exist; tracked files contain no runtime secrets", ("python3",)),
-        Check("release_revision", "Release revision/provenance capture", ("local", "preview", "postdeploy"), ("git", "show", "-s", "--format=%H%n%T%n%P%n%aI", "HEAD"), "Commit, tree, parents, and timestamp recorded", ("git",)),
+        Check("release_revision", "Release revision/provenance capture", execution_profiles, ("git", "show", "-s", "--format=%H%n%T%n%P%n%aI", "HEAD"), "Commit, tree, parents, and timestamp recorded", ("git",)),
         Check("rollback_readiness", "Rollback readiness", ("preview",), None, "Backup digest and verified restore receipt are present and match authority"),
         Check("postdeploy_routes", "Post-deployment route smoke", ("postdeploy",), None, "Health, SPA routes, API revision, auth, and RBAC checks pass"),
     )
@@ -101,28 +109,64 @@ def count_skips(output: str) -> int | None:
 def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Result:
     assert check.command is not None
     missing = [tool for tool in check.required_tools if not tool_available(tool)]
+    reason: str | None = None
     if missing:
         reason = "required supported tool unavailable: " + ", ".join(missing)
         if "python" in missing:
             reason += f" (observed Python {sys.version.split()[0]}; repository image uses Python 3.12)"
-        return Result(check.key, check.title, "BLOCKED", shlex.join(check.command), check.expected, None, None, None, reason, None)
+        return Result(check.key, check.title, "BLOCKED", shlex.join(check.command), check.expected, None, None, None, None, reason, None)
     started = datetime.now(timezone.utc)
     completed = subprocess.run(check.command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     duration = (datetime.now(timezone.utc) - started).total_seconds()
     artifact.write_text(completed.stdout, encoding="utf-8")
+    artifact.chmod(0o600)
     status = "PASS" if completed.returncode == 0 else "FAIL"
-    reason = None
     if check.key == "repository_cleanliness" and completed.stdout:
         status, reason = "FAIL", "working tree is not clean"
     if check.key == "repository_provenance" and completed.stdout.strip() != candidate:
         status, reason = "FAIL", "HEAD does not equal candidate SHA"
     if check.key == "migration_heads" and len([line for line in completed.stdout.splitlines() if line.strip()]) != 1:
         status, reason = "FAIL", "Alembic does not report exactly one head"
-    return Result(check.key, check.title, status, shlex.join(check.command), check.expected, completed.returncode, duration, str(artifact), reason, count_skips(completed.stdout))
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    return Result(check.key, check.title, status, shlex.join(check.command), check.expected, completed.returncode, duration, str(artifact), artifact_sha256, reason, count_skips(completed.stdout))
 
 
 def placeholder(check: Check, status: str, reason: str) -> Result:
-    return Result(check.key, check.title, status, shlex.join(check.command) if check.command else None, check.expected, None, None, None, reason, None)
+    return Result(check.key, check.title, status, shlex.join(check.command) if check.command else None, check.expected, None, None, None, None, reason, None)
+
+
+def qualification_decision(results: list[Result], *, executed: bool) -> str:
+    statuses = {result.status for result in results}
+    if "FAIL" in statuses:
+        return "FAIL"
+    if "BLOCKED" in statuses:
+        return "BLOCKED"
+    if executed:
+        return "PASS"
+    return "NOT YET EXECUTED"
+
+
+def receipt_digest(path: Path | None) -> str | None:
+    if path is None or not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def rollback_readiness(
+    backup: Path | None,
+    restore: Path | None,
+    expected_backup: str | None,
+    expected_restore: str | None,
+) -> tuple[str, str]:
+    observed = (receipt_digest(backup), receipt_digest(restore))
+    expected = (expected_backup, expected_restore)
+    if any(value is None for value in observed):
+        return "BLOCKED", "backup and verified restore receipt files are required"
+    if any(value is None for value in expected):
+        return "BLOCKED", "authority-bound backup and restore receipt digests are required"
+    if observed != expected:
+        return "FAIL", "backup or restore receipt digest does not match release authority"
+    return "PASS", "backup and verified restore receipts match release authority"
 
 
 def parse_args() -> argparse.Namespace:
@@ -133,6 +177,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--preview-url")
     parser.add_argument("--backup-receipt", type=Path)
     parser.add_argument("--restore-receipt", type=Path)
+    parser.add_argument("--expected-backup-receipt-sha256")
+    parser.add_argument("--expected-restore-receipt-sha256")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--execute", action="store_true")
     return parser.parse_args()
@@ -159,11 +205,13 @@ def main() -> int:
         elif check.command is not None:
             results.append(run_command(check, root, artifact, candidate))
         elif check.key == "rollback_readiness":
-            receipts = (args.backup_receipt, args.restore_receipt)
-            if all(path and path.is_file() for path in receipts):
-                results.append(placeholder(check, "PASS", "backup and restore receipt paths exist; digests captured in packet"))
-            else:
-                results.append(placeholder(check, "BLOCKED", "backup and verified restore receipts are required"))
+            receipt_status, receipt_reason = rollback_readiness(
+                args.backup_receipt,
+                args.restore_receipt,
+                args.expected_backup_receipt_sha256,
+                args.expected_restore_receipt_sha256,
+            )
+            results.append(placeholder(check, receipt_status, receipt_reason))
         elif check.key in {"api_health", "postdeploy_routes", "authentication_smoke", "authorization_smoke", "background_services", "postgres_health", "redis_health"}:
             results.append(placeholder(check, "BLOCKED", "requires sanctioned deployed environment and protected smoke credentials"))
         elif check.key == "critical_crud":
@@ -176,6 +224,7 @@ def main() -> int:
     for name, path in (("backup", args.backup_receipt), ("restore", args.restore_receipt)):
         if path and path.is_file():
             receipts[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    decision = qualification_decision(results, executed=args.execute)
     packet = {
         "contract": CONTRACT,
         "candidate_sha": candidate,
@@ -187,7 +236,7 @@ def main() -> int:
         "results": [asdict(result) for result in results],
         "status_counts": status_counts,
         "rollback_receipts": receipts,
-        "release_decision": "FAIL" if status_counts["FAIL"] else ("BLOCKED" if status_counts["BLOCKED"] else ("PASS" if status_counts["NOT YET EXECUTED"] == 0 else "NOT YET EXECUTED")),
+        "release_decision": decision,
         "deployment_authorized": False,
     }
     packet["digest"] = hashlib.sha256(canonical(packet)).hexdigest()
@@ -196,7 +245,7 @@ def main() -> int:
     with os.fdopen(descriptor, "wb") as stream:
         stream.write(json.dumps(packet, indent=2, sort_keys=True).encode() + b"\n")
     print(json.dumps({"packet": str(packet_path), "digest": packet["digest"], "decision": packet["release_decision"], "status_counts": status_counts}, sort_keys=True))
-    return 1 if packet["release_decision"] == "FAIL" else 0
+    return 1 if decision in {"FAIL", "BLOCKED"} else 0
 
 
 if __name__ == "__main__":

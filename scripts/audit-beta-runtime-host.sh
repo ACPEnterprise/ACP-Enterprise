@@ -44,9 +44,30 @@ if [ "$backup_mode" != "600" ]; then
   echo "BLOCKED: newest Preview backup mode is $backup_mode instead of 600." >&2
   exit 1
 fi
+checksum_path=$backup_path.sha256
+if [ ! -f "$checksum_path" ]; then
+  echo "BLOCKED: newest Preview backup has no SHA-256 sidecar." >&2
+  exit 1
+fi
+checksum_mode=$(stat -c '%a' "$checksum_path")
+if [ "$checksum_mode" != "600" ]; then
+  echo "BLOCKED: newest Preview backup checksum mode is $checksum_mode instead of 600." >&2
+  exit 1
+fi
+backup_name=$(basename "$backup_path")
+checksum_target=$(awk 'NF == 2 {print $2}' "$checksum_path")
+if [ "$checksum_target" != "$backup_name" ]; then
+  echo "BLOCKED: Preview backup checksum does not bind the newest dump." >&2
+  exit 1
+fi
+if ! (cd "$(dirname "$backup_path")" && sha256sum --check --status "$(basename "$checksum_path")"); then
+  echo "BLOCKED: newest Preview backup failed SHA-256 verification." >&2
+  exit 1
+fi
 
 "$script_dir/verify-beta-connectivity.sh"
 echo "root_disk_percent=$disk_percent"
 echo "latest_preview_backup=$backup_path"
+echo "latest_preview_backup_checksum=verified"
 echo "latest_preview_backup_age_hours=$backup_age_hours"
 echo "beta_runtime_host=healthy"
