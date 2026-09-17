@@ -27,6 +27,7 @@ def test_release_catalog_covers_required_gates() -> None:
     assert {
         "repository_cleanliness",
         "backend_dependencies",
+        "backend_dependency_pins",
         "backend_vulnerabilities",
         "frontend_dependencies",
         "frontend_vulnerabilities",
