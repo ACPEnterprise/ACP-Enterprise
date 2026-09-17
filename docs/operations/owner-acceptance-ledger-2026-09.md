@@ -30,3 +30,13 @@ requires a deployed Beta retest with owner evidence.
   Preview or Production deployment was performed by this ledger update.
 - OA-009 requires provider-ID-based population reconciliation; names are not
   migration identity keys.
+
+## Workforce Issue #415 evidence
+
+`IMPLEMENTED_NOT_DEPLOYED` / `RETEST REQUIRED` on
+`integration/om2-operations` (PR #423, worker
+`ab40d7c1db1bbe02a6558a3f909525861efde790`). The timeline now renders the
+canonical `Role.name`; no `Role.display_name` field was added. Fresh isolated
+PostgreSQL qualification passed, including assigned/revoked role history and
+Company-scoped authorization. Beta owner/staff retest remains required; this
+row is not owner-accepted.
