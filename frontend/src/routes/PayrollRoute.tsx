@@ -292,7 +292,7 @@ export function PayrollRoute() {
         <Card>
           <CardHeader>
             <CardTitle>Payroll runs</CardTitle>
-            <CardDescription>Assembly, review, and final approval</CardDescription>
+          <CardDescription>Assembly, review, and approved immutable Payroll authority</CardDescription>
           </CardHeader>
           <CardContent>
             <StateList values={value.run_counts} empty="No synthetic or operational runs." />
@@ -303,7 +303,7 @@ export function PayrollRoute() {
         <Card>
           <CardHeader>
             <CardTitle>Payments</CardTitle>
-            <CardDescription>Release and settlement evidence</CardDescription>
+          <CardDescription>Paper-check evidence only; no bank settlement is asserted</CardDescription>
           </CardHeader>
           <CardContent>
             <StateList values={value.payment_counts} empty="No payment authority prepared." />

@@ -166,6 +166,62 @@ async def approve_run(run_id: UUID, payload: ReviewInput, context: Approve, sess
     return {"run_id": value.run_id, "decision": value.decision, "review_digest": value.review_digest}
 
 
+@router.get("/runs/{run_id}")
+async def get_run(run_id: UUID, context: Read, session: Session) -> dict[str, object]:
+    """Return a safe operator projection of one Company-scoped Payroll run.
+
+    ``approved`` is the existing immutable Payroll authority.  This projection
+    deliberately labels it as such instead of inventing a close/GL-posted
+    state; Accounting, tax filing, and payment execution remain separate
+    governed boundaries.
+    """
+    service = PayrollRunService()
+    try:
+        run = await service.run(session, context=context, run_id=run_id)
+    except PayrollConflictError as error:
+        raise HTTPException(404, str(error)) from error
+    members = tuple(
+        (
+            await session.scalars(
+                select(PayrollRunMemberRecord)
+                .where(
+                    PayrollRunMemberRecord.company_id == context.company.id,
+                    PayrollRunMemberRecord.run_id == run.id,
+                )
+                .order_by(PayrollRunMemberRecord.employee_id)
+            )
+        ).all()
+    )
+    return {
+        "run_id": run.id,
+        "pay_period_id": run.pay_period_id,
+        "lifecycle": run.lifecycle,
+        "review_state": run.review_state,
+        "immutable_payroll_authority": run.lifecycle == "approved",
+        "accounting_posted": False,
+        "payment_execution": "not_performed",
+        "tax_filing": "not_performed",
+        "run_digest": run.run_digest,
+        "currency": run.currency,
+        "aggregate_gross": str(run.aggregate_gross),
+        "aggregate_employee_taxes": str(run.aggregate_employee_taxes),
+        "aggregate_employee_deductions": str(run.aggregate_employee_deductions),
+        "aggregate_net_pay": str(run.aggregate_net_pay),
+        "members": [
+            {
+                "employee_id": item.employee_id,
+                "disposition": item.disposition,
+                "gross_result_id": item.gross_result_id,
+                "gross_result_digest": item.gross_result_digest,
+                "tax_result_id": item.tax_result_id,
+                "tax_result_digest": item.tax_result_digest,
+                "blocker_codes": item.blocker_codes,
+            }
+            for item in members
+        ],
+    }
+
+
 @router.post("/paper-check-destinations")
 async def create_paper_check_destination(payload: PaperCheckDestinationInput, context: PaymentManage, session: Session) -> dict[str, object]:
     employee = await session.scalar(
