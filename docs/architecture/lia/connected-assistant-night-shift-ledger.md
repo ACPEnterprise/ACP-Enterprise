@@ -31,6 +31,7 @@ a stop condition. Source domains continue to own their facts and calculations.
 | LIA-N1-019 | Financial amount wording | Amount questions could reach record-count/readiness evidence whose state did not contain an authoritative monetary aggregate | BLOCKS_WORK | Amount questions now fail incomplete unless an admitted posted-ledger amount authority is present; counts are never presented as dollars and invoice/payment/settlement/cash/revenue semantics remain distinct |
 | LIA-N1-020 | Ambiguous owner financial language | “What did we make?” had no bounded source and returned a generic unavailable response, while “sales” could be treated as ordinary readiness evidence | SLOWS_WORK | Ask the owner to choose invoiced amount, earned revenue, collected cash, QuickBooks income, net income, or contribution; sales/revenue/income/profit amount wording also requires authoritative monetary evidence |
 | LIA-N1-021 | Contextual Beacon explanation | A selected Beacon signal ID survived in response context, but retrieval ignored it and summarized the entire attention queue for “Explain this one” | BLOCKS_WORK | Exact Beacon context now selects only the currently authorized signal and returns its accepted explanation, severity, priority, recommendation, evidence digest, and scope; unknown/foreign identities reveal nothing |
+| LIA-N1-022 | Luminary → LIA handoff | “Ask LIA about this evidence” opened an unscoped LIA session, so follow-up language such as “What does this mean?” had no safe referent | SLOWS_WORK | The handoff now declares the Luminary domain and lets the server retrieve the latest authorized briefing; no finding identifier or evidence payload is trusted from the browser |
 
 ## UI friction ledger
 
@@ -58,9 +59,9 @@ a stop condition. Source domains continue to own their facts and calculations.
   Timekeeping-owned total-hours projection; LIA now retrieves the correct
   Employee's accepted revisions but explicitly refuses to present revision
   counts or scheduled duration as worked/paid hours.
-- Luminary/Economics presentation: contextual entry points currently claim
-  evidence context without passing an accepted entity identifier. Coordinate
-  with the active `work/cosmic-intelligence-realdata-maximum-1` lane.
+- Luminary/Economics presentation: Luminary now passes a safe domain-only LIA
+  context and the server resolves the latest authorized briefing. Exact
+  finding/result drill-back still requires an owning-domain opaque identifier.
 - Protected frontend test ownership: the prior eight Invoice, Customer-history,
   and Financial Reports fixture failures are now repaired in protected
   authority. They remain recorded in history but are no longer active handoffs.
