@@ -38,7 +38,17 @@ vi.mock("../hooks/useFinancialReporting", () => ({
         reconciliation: "reconciled",
         review: "unreviewed",
       },
-      rows: [],
+      rows: [{
+        account_id: "account-1",
+        code: "1100",
+        name: "Accounts Receivable",
+        classification: "asset",
+        beginning_balance: "125.5",
+        debits: "20",
+        credits: "5",
+        ending_balance: "140.5",
+        display_balance: "140.5",
+      }],
       total_beginning_balance: "0",
       total_debits: "0",
       total_credits: "0",
@@ -90,6 +100,8 @@ describe("FinancialReportsRoute", () => {
     ).toBeVisible();
     expect(screen.getByRole("option", { name: "Main Branch (MAIN)" })).toBeVisible();
     expect(screen.queryByLabelText(/Branch ID/i)).not.toBeInTheDocument();
+    expect(screen.getByText("$125.50")).toBeVisible();
+    expect(screen.getByText("$140.50")).toBeVisible();
   });
 
   it("rejects reversed report periods before changing the authoritative request", () => {
