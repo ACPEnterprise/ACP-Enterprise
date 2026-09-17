@@ -40,10 +40,10 @@ const pronunciationTerms: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bQBO\b/g, "Q B O"],
   [/\bACP\b/g, "A C P"],
   [/\bHVAC\b/g, "H V A C"],
-  [/\bJOB-(\d+)\b/gi, "Job $1"],
-  [/\bINV-(\d+)\b/gi, "Invoice $1"],
-  [/\bEST-(\d+)\b/gi, "Estimate $1"],
-  [/\bAPT-(\d+)\b/gi, "Appointment $1"],
+  [/\b(?:Job\s+)?JOB-(\d+)\b/gi, "Job $1"],
+  [/\b(?:Invoice\s+)?INV-(\d+)\b/gi, "Invoice $1"],
+  [/\b(?:Estimate\s+)?EST-(\d+)\b/gi, "Estimate $1"],
+  [/\b(?:Appointment\s+)?APT-(\d+)\b/gi, "Appointment $1"],
 ];
 
 function normalizeSpokenSemantics(value: string): string {
@@ -60,9 +60,15 @@ function normalizeSpokenSemantics(value: string): string {
 
 function cleanVisualScaffolding(value: string): string {
   let text = value
+    .replace(/\bNo authorized authoritative evidence is available for this question\b/gi, "I don't have authorized evidence for that yet")
+    .replace(/\bEvidence unavailable\b/gi, "I don't have that evidence yet")
     .replace(/^ACP's native authorized records show:\s*/i, "")
     .replace(/^Current authorized evidence\s*[—:-]\s*/i, "")
     .replace(/^Answer\s*:\s*/i, "")
+    .replace(/^Correction\s*:\s*/i, "Got it — ")
+    .replace(/^Topic changed\s*:\s*(.)/i, (_match, first: string) => `Now, ${first.toLocaleLowerCase()}`)
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/(^|[.!?]\s+)(?:\d+[.)]|(?:what is true|what is blocked|why|next step|evidence))\s*[:—-]?\s*/gim, "$1")
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "the selected record")
     .replace(/^[-*•]\s*/gm, "")
     .replace(/\n\s*[-*•]?\s*/g, ". ")
@@ -87,6 +93,26 @@ function cleanVisualScaffolding(value: string): string {
     .replace(/\.{2,}/g, ".")
     .replace(/\s+([,.!?])/g, "$1")
     .trim();
+}
+
+function evidenceSummary(result: LiaResponse): string {
+  const labels = [...new Set(result.evidence.map((item) => item.label.trim()).filter(Boolean))];
+  if (!labels.length) return "No supporting evidence was available for this answer.";
+  const sources = labels.slice(0, 3).join(", ");
+  const extra = labels.length > 3 ? `, plus ${labels.length - 3} more sources` : "";
+  const instant = new Date(result.as_of);
+  const asOf = Number.isNaN(instant.valueOf())
+    ? result.as_of
+    : new Intl.DateTimeFormat("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "UTC",
+        timeZoneName: "short",
+      }).format(instant);
+  return `The supporting evidence comes from ${sources}${extra}, as of ${asOf}.`;
 }
 
 function sentences(value: string): string[] {
@@ -120,7 +146,7 @@ export function spokenAnswer(
 ): string {
   const cleaned = cleanVisualScaffolding(result.answer);
   const selected = sentences(cleaned).slice(0, sentenceBudget[mode]);
-  let answer = selected.join(" ").slice(0, mode === "BRIEF" ? 360 : 720).trim();
+  let answer = selected.join(" ").trim();
 
   if (
     result.authority === "SOURCE_BACKED" &&
@@ -137,6 +163,10 @@ export function spokenAnswer(
     !/^Refresh authoritative ACP evidence$/i.test(next)
   ) {
     answer += ` ${naturalNextAction(next)}`;
+  }
+
+  if (mode === "EVIDENCE") {
+    answer += ` ${evidenceSummary(result)}`;
   }
 
   return answer;
