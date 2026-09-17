@@ -217,14 +217,19 @@ def plan_question(
     conversation = interpret_conversation(question)
     normalized = conversation.normalized
     subject = _named_subject(question) if context_domain is None else None
+    corrected_subject = conversation.corrected_subject
+    corrected_reference = _named_subject(corrected_subject) if corrected_subject else None
     corrected_context_subject = bool(
-        conversation.corrected_subject
+        corrected_subject
+        and corrected_reference is None
         and context_domain in {"customers", "jobs", "workforce"}
     )
-    if corrected_context_subject:
-        subject = (context_domain or "identity", conversation.corrected_subject or "")
-    elif conversation.corrected_subject:
-        subject = ("identity", conversation.corrected_subject)
+    if corrected_reference is not None:
+        subject = corrected_reference
+    elif corrected_context_subject:
+        subject = (context_domain or "identity", corrected_subject or "")
+    elif corrected_subject:
+        subject = ("identity", corrected_subject)
     subject_domain, subject_query = subject if subject is not None else (None, None)
     if subject_domain == "identity":
         domains = frozenset({"customers", "workforce"})
@@ -309,10 +314,10 @@ def _named_subject(question: str) -> tuple[str, str] | None:
         ("scheduling", "appointment", "APT"),
     ):
         record_reference = re.search(
-            rf"\b{label}\s+({prefix}-\d+)\b", question, re.IGNORECASE
+            rf"\b{label}\s+(?:{prefix}-)?(\d+)\b", question, re.IGNORECASE
         )
         if record_reference:
-            return (domain, record_reference.group(1).upper())
+            return (domain, f"{prefix}-{record_reference.group(1)}")
     job_reference = re.search(
         r"\bjob\s+([A-Z]+(?:-[A-Z]+)*-?\d+|\d+)\b", question, re.IGNORECASE
     )

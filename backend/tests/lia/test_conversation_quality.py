@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 
-from app.lia.contracts import LiaContext, LiaRequest, TruthClassification
+from app.lia.contracts import (
+    LiaContext,
+    LiaRequest,
+    LiaTemporalContext,
+    TruthClassification,
+)
 from app.lia.conversation import (
     ActionRisk,
     CorrectionKind,
@@ -140,6 +145,21 @@ def test_named_back_reference_rebinds_subject_and_payroll_topic() -> None:
     assert plan.domains == frozenset({"workforce", "payroll"})
 
 
+def test_explicit_record_correction_rebinds_domain_and_canonical_reference() -> None:
+    plan = plan_question(
+        "No, I meant invoice 1234.",
+        context_domain="customers",
+        topic_domains=("customers",),
+    )
+    assert plan.subject_domain == "invoicing"
+    assert plan.subject_query == "INV-1234"
+    assert plan.domains == frozenset({"invoicing"})
+
+
+def test_possessive_referent_is_recognized() -> None:
+    assert "his jobs" in interpret_conversation("Show me his jobs.").pronouns
+
+
 @pytest.mark.asyncio
 async def test_unbound_pronoun_requires_clarification_without_retrieval() -> None:
     retrieval = AsyncMock(spec=GovernedRetrievalService)
@@ -148,6 +168,51 @@ async def test_unbound_pronoun_requires_clarification_without_retrieval() -> Non
     )
     assert result.classification is TruthClassification.INCOMPLETE
     retrieval.retrieve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ordinal_referent_without_candidate_contract_requires_clarification() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    result = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(),
+        request=LiaRequest(
+            question="What about the last one?",
+            context=LiaContext(domain="jobs", entity_id=uuid4()),
+        ),
+    )
+    assert result.classification is TruthClassification.INCOMPLETE
+    assert "authorized candidate list" in result.answer
+    retrieval.retrieve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_retained_period_supports_natural_comparison_follow_up() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = ()
+    temporal = LiaTemporalContext(
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 6, 30),
+        as_of=datetime(2026, 9, 17, tzinfo=UTC),
+        timezone="America/New_York",
+        period_label="June 2026",
+        prior_start=date(2026, 5, 1),
+        prior_end=date(2026, 5, 31),
+        prior_label="May 2026",
+    )
+    result = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context("COMPANY_ACCOUNTING_REPORT_READ"),
+        request=LiaRequest(
+            question="How does that compare?",
+            context=LiaContext(domain="accounting", temporal=temporal),
+        ),
+    )
+    assert result.temporal is not None
+    assert result.temporal.period_label == "June 2026"
+    assert result.temporal.comparison_label == "May 2026"
+    assert result.classification is TruthClassification.UNAVAILABLE
+    assert retrieval.retrieve.await_count == 2
 
 
 @pytest.mark.asyncio
