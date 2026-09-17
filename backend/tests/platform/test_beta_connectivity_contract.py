@@ -68,6 +68,12 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "require_single_header content-security-policy" in verifier
     assert "require_header_value strict-transport-security" in verifier
     assert "require_header_value x-frame-options DENY" in verifier
+    assert (
+        "require_header_value referrer-policy strict-origin-when-cross-origin"
+        in verifier
+    )
+    assert "for identity_path in activate reset-password" in verifier
+    assert "require_header_value referrer-policy no-referrer" in verifier
     assert "require_https_redirect beta.twelve-hats.com" in verifier
     assert "REQUIRE_PUBLIC_METADATA" in verifier
     assert "mission-control" in verifier
