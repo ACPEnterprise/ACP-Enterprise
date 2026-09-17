@@ -179,7 +179,19 @@ export function useLiaVoice({
       if (!supported || !answer.trim()) return;
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(answer);
-      utterance.rate = 1;
+      const voices = window.speechSynthesis.getVoices?.() ?? [];
+      const englishVoices = voices.filter((voice) =>
+        voice.lang.toLocaleLowerCase().startsWith("en"),
+      );
+      utterance.voice =
+        englishVoices.find((voice) => voice.default && voice.localService) ??
+        englishVoices.find((voice) => voice.localService) ??
+        englishVoices.find((voice) => voice.default) ??
+        englishVoices[0] ??
+        null;
+      utterance.rate = 0.94;
+      utterance.pitch = 1;
+      utterance.volume = 1;
       utterance.onstart = () => setState("SPEAKING");
       utterance.onerror = () => {
         setError("The spoken response could not be played. The full answer remains visible.");

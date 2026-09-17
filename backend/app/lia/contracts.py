@@ -120,6 +120,7 @@ class LiaResponse(LiaSchema):
     classification: TruthClassification
     authority: AnswerAuthority
     answer: str
+    response_mode: str = Field(pattern="^(BRIEF|NORMAL|DETAILED|EVIDENCE)$")
     evidence: tuple[EvidenceReference, ...] = ()
     limitations: tuple[str, ...] = ()
     navigation: tuple[NavigationSuggestion, ...] = ()
