@@ -28,6 +28,7 @@ a stop condition. Source domains continue to own their facts and calculations.
 | LIA-N1-016 | Named Employee time/Dispatch context | Named Employee period questions dropped Timekeeping/Dispatch after identity resolution, while generic retrieval compared the Employee UUID to the evidence-record UUID | BLOCKS_WORK | Preserve the permitted Employee-related domains and filter accepted Timekeeping revisions/primary Dispatch assignments by their Employee columns |
 | LIA-N1-017 | Invoice → Payment follow-up | Asking for payment evidence from an exact Invoice context switched to unscoped Company-wide Payment counts | BLOCKS_WORK | Fail incomplete with direct Invoice navigation until Revenue Cycle provides the Invoice application/settlement projection; broad Payment evidence is never substituted |
 | LIA-N1-018 | Appointment assignment question | Exact Appointment resolution discarded Dispatch and could only report Appointment state, not the authoritative assignee | BLOCKS_WORK | Compose the existing permission-scoped Dispatch detail read model by Appointment identity, including truthful unassigned state and existence hiding; no assignment mutation is exposed |
+| LIA-N1-019 | Financial amount wording | Amount questions could reach record-count/readiness evidence whose state did not contain an authoritative monetary aggregate | BLOCKS_WORK | Amount questions now fail incomplete unless an admitted posted-ledger amount authority is present; counts are never presented as dollars and invoice/payment/settlement/cash/revenue semantics remain distinct |
 
 ## UI friction ledger
 
@@ -48,7 +49,9 @@ a stop condition. Source domains continue to own their facts and calculations.
   read model with exact identity and selected-Branch scope; historical charge,
   cost, and margin questions remain owned by Revenue Cycle/Economics.
 - Revenue Cycle: Invoice/Payment relationship, application, settlement, cash,
-  and historical-as-of evidence require domain-owned projections.
+  historical-as-of evidence, and authoritative monetary aggregates require
+  domain-owned projections. LIA explicitly refuses to turn record counts into
+  dollars while those projections are absent.
 - Timekeeping: Employee/period accepted interval and hours evidence requires a
   Timekeeping-owned total-hours projection; LIA now retrieves the correct
   Employee's accepted revisions but explicitly refuses to present revision

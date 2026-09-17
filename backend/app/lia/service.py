@@ -407,9 +407,7 @@ class LiaService:
                         if price_lookup.matches
                         else "No active authorized Price Book service with that exact name or code is available in the selected Branch."
                     ),
-                    limitations=(
-                        "No fuzzy service identity or price was inferred.",
-                    ),
+                    limitations=("No fuzzy service identity or price was inferred.",),
                     navigation=(
                         NavigationSuggestion(
                             label="Open Price Book", internal_path="/price-book"
@@ -558,9 +556,7 @@ class LiaService:
                 )
                 prior_evidence_digest = (
                     prior_context.evidence_digest
-                    if prior_context is not None
-                    and same_subject
-                    and not period_changed
+                    if prior_context is not None and same_subject and not period_changed
                     else None
                 )
                 entity_id = prior_entity_id
@@ -642,6 +638,46 @@ class LiaService:
                 limitations=(
                     "AI_PROVIDER_NOT_CONFIGURED",
                     "No eligible source adapter returned evidence.",
+                ),
+            )
+
+        numeric_amount_request = bool(
+            re.search(
+                r"\bhow\s+much\b|\btotal\s+(?:amount|invoiced|paid|collected)\b",
+                question.casefold(),
+            )
+        )
+        has_authoritative_financial_amount = any(
+            item.authority == "ACP_POSTED_LEDGER_AUTHORITY" for item in evidence
+        )
+        if (
+            numeric_amount_request
+            and selected & {"invoicing", "payments", "accounting"}
+            and not has_authoritative_financial_amount
+        ):
+            return self._response(
+                context=context,
+                request=effective_request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "ACP found authorized records for the requested scope, but the current LIA evidence contract "
+                    "does not provide the authoritative monetary aggregate needed to answer this amount question. "
+                    "Open the cited financial workspace to inspect the available total and its accounting or settlement authority."
+                ),
+                evidence=evidence,
+                limitations=(
+                    "Record counts were not presented as dollars.",
+                    "Invoice, payment, settlement, collected cash, revenue, and income were not collapsed into one amount.",
+                ),
+                navigation=tuple(
+                    NavigationSuggestion(
+                        label=f"Open {item.label}",
+                        internal_path=_evidence_route(item),
+                    )
+                    for item in evidence
+                    if item.domain in ROUTES
                 ),
             )
 
