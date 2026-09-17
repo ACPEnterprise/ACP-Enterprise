@@ -239,6 +239,38 @@ required escalation.
   Price Book, Revenue Cycle, Timekeeping, Customer/Job historical identity,
   and Analytics currency contracts.
 
+## LIA spoken presence consolidation
+
+- Current protected authority: `b527d75eecb2d271a29bcb0bacb9e1b16b33784b`.
+  Prior Intelligence head: `1a72c9a7b181cdd63557f44a9abc5a18294fed94`.
+- Laptop-A `work/lia-spoken-presence-maximum-1` at
+  `13d2094b7618a125d44b36dc31e1f33b5d48c79b` was genuinely new and integrated
+  as implementation authority. It adds additive `response_mode`, deterministic
+  evidence-safe spoken rendering, response-depth budgets, safe next-action
+  handling, local platform voice preference, `0.94` rate, and neutral pitch.
+  Visual answers/evidence and factual/provenance/authorization boundaries stay
+  unchanged. No migrations.
+- Laptop-B `work/lia-delivery-style-profile-1` at
+  `8bd90a9d0a954247497c372e2ca52c48dfb1494a` was genuinely new documentation
+  and integrated as design/evaluation authority. Its 150–170 WPM and warm,
+  calm, professional profile are targets only. `REFERENCE_MEASUREMENT_PENDING`
+  remains explicit; no unavailable reference audio was represented as measured.
+- Corrected B’s stale implementation-rate wording from `1` to the tested A
+  default `0.94`. The advisory `0.96` option does not override it. No provider,
+  credentials, voice clone, or external TTS integration was added.
+- Mobile response validation now accepts additive `response_mode` with a
+  `NORMAL` default; no separate Mobile intelligence or native speech engine
+  was introduced. Existing employee-safe endpoint, permission, conversation,
+  provenance, and fail-safe behavior remain intact. Native speech remains a
+  future Phone-owned follow-up.
+- Qualification: frontend spoken/LIA tests `32 passed`, ESLint, TypeScript,
+  and Vite build passed; Mobile LIA tests `4 passed`, typecheck, lint, and
+  config validation passed; Python compilation and diff-check passed. Host
+  Ruff/MyPy were unavailable. No schema changes.
+- Preview acceptance remains pending; no Preview/Production deployment,
+  external provider selection, credentials, reference recording, or business
+  data mutation occurred.
+
 ## Continuous Intelligence shift sweep
 
 - Fresh remote sweep confirmed protected authority
