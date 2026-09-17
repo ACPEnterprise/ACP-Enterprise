@@ -56,6 +56,11 @@ function StatementSection({
   return (
     <section>
       <h3 className="mb-2 font-semibold">{title}</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-content-muted">
+          No posted {title.toLowerCase()} accounts exist for this report scope.
+        </p>
+      ) : (
       <table className="w-full text-sm">
         <tbody>
           {rows.map((row) => (
@@ -68,12 +73,16 @@ function StatementSection({
           ))}
         </tbody>
       </table>
+      )}
     </section>
   );
 }
 
 function ReportBody({ report }: { report: FinancialReport }) {
   if (isTrialBalance(report)) {
+    if (report.rows.length === 0) {
+      return <p className="text-content-muted">No posted account balances exist for this report scope.</p>;
+    }
     return (
       <table className="w-full text-sm">
         <thead>
@@ -143,6 +152,9 @@ function ReportBody({ report }: { report: FinancialReport }) {
     );
   }
   const ledger = report as GeneralLedger;
+  if (ledger.rows.length === 0) {
+    return <p className="text-content-muted">No posted General Ledger lines exist for this report period and scope.</p>;
+  }
   return (
     <table className="w-full text-sm">
       <thead>
