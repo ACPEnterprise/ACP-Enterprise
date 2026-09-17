@@ -146,6 +146,7 @@ async def catalog(
     version_status: Annotated[
         str | None, Query(pattern=r"^(draft|active|inactive|superseded|archived)$")
     ] = None,
+    sellable_only: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> CatalogPage:
@@ -158,6 +159,7 @@ async def catalog(
             category_id=category_id,
             item_status=item_status,
             version_status=version_status,
+            sellable_only=sellable_only,
             limit=limit,
             offset=offset,
         )

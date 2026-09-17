@@ -78,68 +78,114 @@ vi.mock("../hooks/usePriceBook", () => ({
   },
   usePriceBook: (_branch: string | undefined, _enabled: boolean, filters: Record<string, unknown>) => {
     catalogQueryState.calls.push(filters);
-    return ({
-    isPending: false,
-    isError: false,
-    data: {
-      categories: [{ id: "category-1", name: "Drain", code: "DRAIN", description: "Drain services", parent_id: null, position: 1, status: "active", version: 2 }],
-      tax_classifications: [{ id: "tax-1", name: "Taxable", code: "TAXABLE" }],
-      service_items: [
-        {
-          id: "item-1",
-          category_id: "category-1",
-          name: "Drain clearing",
-          code: "DRAIN-CLEAR",
-          status: "draft",
-          customer_description: "Clear a drain.",
-          internal_description: "Use approved cable and inspect trap.",
-        },
-      ],
-      versions: [
-        {
-          id: "version-1",
-          service_item_id: "item-1",
-          revision: 1,
-          currency: "USD",
-          unit_price: "149.95",
-          tax_classification_id: "tax-1",
-          effective_at: "2026-10-01T08:00:00Z",
-          status: "draft",
-          version: 1,
-          components: [
-            {
-              component_type: "material",
-              code: null,
-              label: "Expected fitting",
-              quantity: "2",
-              unit_cost: "4.50",
-              extended_cost: "9.00",
-              position: 1,
-            },
-          ],
-        },
-        {
-          id: "version-active",
-          service_item_id: "item-1",
-          revision: 0,
-          currency: "USD",
-          unit_price: "139.95",
-          tax_classification_id: "tax-1",
-          effective_at: "2026-09-01T08:00:00Z",
-          status: "active",
-          version: 2,
-          components: [],
-        },
-      ],
-      option_groups: [
-        { id: "group-1", name: "Service level", code: "SERVICE-LEVEL", minimum_selections: 1, maximum_selections: 1, status: "active" },
-      ],
-      options: [
-        { id: "option-1", option_group_id: "group-1", service_item_id: "item-1", label: "Better", position: 2 },
-      ],
-      total_service_items: 75,
-    },
-    });
+    return {
+      isPending: false,
+      isError: false,
+      data: {
+        categories: [
+          {
+            id: "category-1",
+            name: "Drain",
+            code: "DRAIN",
+            description: "Drain services",
+            parent_id: null,
+            position: 1,
+            status: "active",
+            version: 2,
+          },
+          {
+            id: "category-2",
+            name: "Sewer",
+            code: "SEWER",
+            description: "Sewer services",
+            parent_id: "category-1",
+            position: 2,
+            status: "active",
+            version: 1,
+          },
+          {
+            id: "category-3",
+            name: "Main Line",
+            code: "MAIN-LINE",
+            description: "Main sewer line services",
+            parent_id: "category-2",
+            position: 3,
+            status: "active",
+            version: 1,
+          },
+        ],
+        tax_classifications: [
+          { id: "tax-1", name: "Taxable", code: "TAXABLE" },
+        ],
+        service_items: [
+          {
+            id: "item-1",
+            category_id: "category-1",
+            name: "Drain clearing",
+            code: "DRAIN-CLEAR",
+            status: "draft",
+            customer_description: "Clear a drain.",
+            internal_description: "Use approved cable and inspect trap.",
+          },
+        ],
+        versions: [
+          {
+            id: "version-1",
+            service_item_id: "item-1",
+            revision: 1,
+            currency: "USD",
+            unit_price: "149.95",
+            tax_classification_id: "tax-1",
+            effective_at: "2026-10-01T08:00:00Z",
+            status: "draft",
+            version: 1,
+            components: [
+              {
+                component_type: "material",
+                code: null,
+                label: "Expected fitting",
+                quantity: "2",
+                unit_cost: "4.50",
+                extended_cost: "9.00",
+                position: 1,
+              },
+            ],
+          },
+          {
+            id: "version-active",
+            service_item_id: "item-1",
+            revision: 0,
+            currency: "USD",
+            unit_price: "139.95",
+            tax_classification_id: "tax-1",
+            effective_at: "2026-09-01T08:00:00Z",
+            status: "active",
+            version: 2,
+            components: [],
+          },
+        ],
+        option_groups: [
+          {
+            id: "group-1",
+            name: "Service level",
+            code: "SERVICE-LEVEL",
+            minimum_selections: 1,
+            maximum_selections: 1,
+            status: "active",
+          },
+        ],
+        options: [
+          {
+            id: "option-1",
+            option_group_id: "group-1",
+            service_item_id: "item-1",
+            label: "Better",
+            position: 2,
+          },
+        ],
+        total_service_items: 75,
+      },
+    };
   },
   usePriceBookMutations: () => ({
     category: {
@@ -252,6 +298,14 @@ describe("PriceBookRoute", () => {
     mutationState.versionMutate.mockReset();
     mutationState.versionUpdateMutate.mockReset();
     mutationState.versionLifecycleMutate.mockReset();
+  });
+
+  it("shows category hierarchy in owner browsing controls", () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+    expect(screen.getAllByText("Drain › Sewer").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Drain › Sewer › Main Line").length,
+    ).toBeGreaterThan(0);
   });
 
   it("edits category hierarchy and lifecycle through governed authority", async () => {

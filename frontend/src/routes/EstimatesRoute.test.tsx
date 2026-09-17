@@ -123,6 +123,10 @@ vi.mock("../api/estimates", () => ({
   convertEstimateToJob: vi.fn(),
 }));
 vi.mock("../api/priceBook", () => ({
+  getCompanyTaxPolicy: vi.fn().mockResolvedValue({ current: null, history: [] }),
+  createCompanyTaxPolicy: vi.fn(),
+  updateCompanyTaxPolicy: vi.fn(),
+  certifyCompanyTaxPolicy: vi.fn(),
   getPriceBook: vi.fn().mockResolvedValue({
     categories: [
       { id: "category-1", code: "DRAIN", name: "Drain Cleaning", status: "active" },
@@ -150,7 +154,15 @@ vi.mock("../api/priceBook", () => ({
         current_version_id: "version-1",
       },
     ],
-    versions: [],
+    versions: [
+      {
+        id: "version-1",
+        service_item_id: "service-1",
+        status: "active",
+        currency: "USD",
+        unit_price: "149.00",
+      },
+    ],
     total_service_items: 1,
     limit: 500,
     offset: 0,
@@ -288,7 +300,9 @@ describe("EstimatesRoute", () => {
     expect(screen.getByLabelText("Estimate Service Location")).toHaveValue(
       "location-1",
     );
-    await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
+    await screen.findByRole("option", {
+      name: "HEAT-1 · Heating service · $149.00",
+    });
 
     fireEvent.change(screen.getByLabelText("Search active Price Book services"), {
       target: { value: "drain" },
@@ -296,7 +310,11 @@ describe("EstimatesRoute", () => {
     await waitFor(() =>
       expect(priceBookApi.getPriceBook).toHaveBeenCalledWith(
         "11111111-1111-4111-8111-111111111111",
-        expect.objectContaining({ search: "drain", itemStatus: "active" }),
+        expect.objectContaining({
+          search: "drain",
+          itemStatus: "active",
+          sellableOnly: true,
+        }),
       ),
     );
 
@@ -310,6 +328,7 @@ describe("EstimatesRoute", () => {
           search: "drain",
           categoryId: "category-1",
           itemStatus: "active",
+          sellableOnly: true,
         }),
       ),
     );
@@ -337,7 +356,9 @@ describe("EstimatesRoute", () => {
     fireEvent.change(screen.getByLabelText("Estimate Customer"), {
       target: { value: "customer-1" },
     });
-    await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
+    await screen.findByRole("option", {
+      name: "HEAT-1 · Heating service · $149.00",
+    });
     fireEvent.change(await screen.findByLabelText("Price Book service"), {
       target: { value: "service-1" },
     });
@@ -391,7 +412,9 @@ describe("EstimatesRoute", () => {
       target: { value: "customer-1" },
     });
     const serviceSelect = await screen.findByLabelText("Price Book service");
-    await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
+    await screen.findByRole("option", {
+      name: "HEAT-1 · Heating service · $149.00",
+    });
     fireEvent.change(serviceSelect, {
       target: { value: "service-1" },
     });
