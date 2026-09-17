@@ -107,7 +107,7 @@ evidence sentences.
 1. Reconcile the existing dirty spoken-response draft in the dedicated
    `work/lia-spoken-presence-maximum-1` lane; do not overwrite it from this
    packet.
-2. Add a typed `LiaDeliveryStyle` configuration with `rate: 0.96`, `pitch: 1.0`,
+2. Add a typed `LiaDeliveryStyle` configuration with `rate: 0.94`, `pitch: 1.0`,
    `volume: 1.0`, `lang: "en-US"`, sentence budgets, and response modes.
 3. Apply the style when constructing `SpeechSynthesisUtterance`.
 4. Retain full visual evidence while speaking a conclusion, limitation, and
