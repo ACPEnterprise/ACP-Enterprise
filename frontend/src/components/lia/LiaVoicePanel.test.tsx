@@ -27,6 +27,9 @@ class RecognitionMock {
 class UtteranceMock {
   text: string;
   rate = 1;
+  pitch = 1;
+  volume = 1;
+  voice: SpeechSynthesisVoice | null = null;
   onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
   onerror: (() => void) | null = null;
@@ -38,6 +41,15 @@ class UtteranceMock {
 
 const speech = {
   cancel: vi.fn(),
+  getVoices: vi.fn(() => [
+    {
+      default: true,
+      lang: "en-US",
+      localService: true,
+      name: "System English",
+      voiceURI: "system-english",
+    } satisfies SpeechSynthesisVoice,
+  ]),
   speak: vi.fn((utterance: UtteranceMock) => {
     utterance.onstart?.();
   }),
@@ -49,6 +61,7 @@ const response = (): LiaResponse => ({
   classification: "KNOWN",
   authority: "ACP_AUTHORITATIVE",
   answer: "Two appointments are scheduled tomorrow.",
+  response_mode: "NORMAL",
   evidence: [],
   limitations: [],
   navigation: [{ label: "Open Scheduling", internal_path: "/scheduling" }],
@@ -147,6 +160,9 @@ describe("LIA voice panel", () => {
       />,
     );
     expect(speech.speak).toHaveBeenCalledOnce();
+    const utterance = speech.speak.mock.calls[0]?.[0];
+    expect(utterance?.rate).toBe(0.94);
+    expect(utterance?.voice?.name).toBe("System English");
     expect(screen.getByText("SPEAKING")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Interrupt LIA" }));
     expect(speech.cancel).toHaveBeenCalled();
@@ -186,7 +202,7 @@ describe("LIA voice panel", () => {
     result.answer =
       "Direct conclusion. Important implication. Detailed evidence one. Detailed evidence two. Detailed evidence three.";
     expect(spokenAnswer(result)).toBe(
-      "Direct conclusion. Important implication. Next: Open Scheduling.",
+      "Direct conclusion. Important implication. Detailed evidence one. You can open Scheduling next.",
     );
   });
 });
