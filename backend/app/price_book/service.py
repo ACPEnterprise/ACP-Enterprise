@@ -205,6 +205,28 @@ class PriceBookService:
             )
             or 0
         )
+        if sellable_only:
+            filtered_items = item_query.subquery()
+            visible_category_ids = set(
+                (
+                    await session.scalars(
+                        select(filtered_items.c.category_id).distinct()
+                    )
+                ).all()
+            )
+            by_category_id = {category.id: category for category in categories}
+            parent_ids = {
+                by_category_id[category_id].parent_id
+                for category_id in visible_category_ids
+                if category_id in by_category_id
+                and by_category_id[category_id].parent_id is not None
+            }
+            visible_category_ids.update(parent_ids)
+            categories = tuple(
+                category
+                for category in categories
+                if category.id in visible_category_ids
+            )
         items = tuple(
             (
                 await session.scalars(
