@@ -65,7 +65,7 @@ Protected authority uses the browser Web Speech API in
 - voice: platform default; no stable ACP voice identity is selected;
 - response shaping: first two sentences plus `safe_next_action`, implemented in
   `frontend/src/components/lia/voiceSpeech.ts`;
-- configured synthesis parameter: `SpeechSynthesisUtterance.rate = 1`;
+- configured synthesis parameter: `SpeechSynthesisUtterance.rate = 0.94`;
 - unconfigured available properties: `voice`, `lang`, `pitch`, and `volume`;
 - pause behavior: punctuation and the device engine; no deterministic pause
   plan;
@@ -206,4 +206,3 @@ Laptop Enterprise should:
    browser voice inventories are device-dependent.
 6. Defer Variant C procurement and credentials to a separately approved provider
    admission milestone.
-

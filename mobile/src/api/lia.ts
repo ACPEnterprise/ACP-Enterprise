@@ -13,6 +13,7 @@ const evidenceSchema = z.object({
 const navigationSchema = z.object({ label: z.string(), internal_path: z.string() });
 export const liaResponseSchema = z.object({
   request_id: z.string().uuid(), conversation_id: z.string().uuid(),
+  response_mode: z.enum(["BRIEF", "NORMAL", "DETAILED", "EVIDENCE"]).default("NORMAL"),
   classification: z.enum(["KNOWN", "DERIVED", "INCOMPLETE", "STALE", "CONFLICTING", "UNAVAILABLE", "UNAUTHORIZED", "POLICY_REQUIRED", "EXTERNAL_GATE"]),
   authority: z.enum(["ACP_AUTHORITATIVE", "SOURCE_BACKED", "PARTIAL", "INSUFFICIENT_EVIDENCE"]),
   answer: z.string(), evidence: z.array(evidenceSchema).default([]), limitations: z.array(z.string()).default([]),
