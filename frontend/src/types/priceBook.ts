@@ -5,6 +5,7 @@ export interface PriceBookCategory {
   code: string;
   name: string;
   description: string | null;
+  position: number | null;
   status: string;
   version: number;
 }
@@ -25,6 +26,7 @@ export interface PriceBookServiceItem {
   code: string;
   name: string;
   customer_description: string;
+  internal_description: string | null;
   status: string;
   current_version_id: string | null;
   version: number;

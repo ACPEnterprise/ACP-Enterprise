@@ -69,7 +69,16 @@ export function PriceBookRoute() {
     offset: catalogOffset,
   });
   const mutations = usePriceBookMutations();
-  const [category, setCategory] = useState({ code: "", name: "" });
+  const emptyCategory = {
+    code: "",
+    name: "",
+    description: "",
+    parentId: "",
+    position: "",
+    status: "draft" as "draft" | "active" | "archived",
+  };
+  const [category, setCategory] = useState(emptyCategory);
+  const [editCategory, setEditCategory] = useState<{ id: string; version: number } | null>(null);
   const [tax, setTax] = useState({ code: "", name: "", taxable: true });
   const [optionGroup, setOptionGroup] = useState({
     code: "",
@@ -88,6 +97,7 @@ export function PriceBookRoute() {
     code: "",
     name: "",
     customer_description: "",
+    internal_description: "",
   });
   const [editItem, setEditItem] = useState<{
     id: string;
@@ -104,6 +114,13 @@ export function PriceBookRoute() {
     componentQuantity: "1",
     componentCost: "",
   });
+  const [draftComponents, setDraftComponents] = useState<Array<{
+    component_type: "labor" | "material" | "other_direct";
+    label: string;
+    quantity: string;
+    unit_cost?: string;
+  }>>([]);
+  const [editDraft, setEditDraft] = useState<{ id: string; version: number } | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [candidateOffset, setCandidateOffset] = useState(0);
   const candidatePageSize = 50;
@@ -180,8 +197,31 @@ export function PriceBookRoute() {
   const submitCategory = async (event: FormEvent) => {
     event.preventDefault();
     await performMutation(
-      () => mutations.category.mutateAsync(category),
-      () => setCategory({ code: "", name: "" }),
+      () =>
+        editCategory
+          ? mutations.categoryUpdate.mutateAsync({
+              categoryId: editCategory.id,
+              data: {
+                code: category.code,
+                name: category.name,
+                description: category.description || undefined,
+                parent_id: category.parentId || undefined,
+                position: category.position ? Number(category.position) : undefined,
+                status: category.status,
+                expected_version: editCategory.version,
+              },
+            })
+          : mutations.category.mutateAsync({
+              code: category.code,
+              name: category.name,
+              description: category.description || undefined,
+              parent_id: category.parentId || undefined,
+              position: category.position ? Number(category.position) : undefined,
+            }),
+      () => {
+        setCategory(emptyCategory);
+        setEditCategory(null);
+      },
     );
   };
   const submitTax = async (event: FormEvent) => {
@@ -244,6 +284,7 @@ export function PriceBookRoute() {
           code: "",
           name: "",
           customer_description: "",
+          internal_description: "",
         });
         setEditItem(null);
       },
@@ -251,8 +292,28 @@ export function PriceBookRoute() {
   };
   const submitDraft = async (event: FormEvent) => {
     event.preventDefault();
+    const pendingComponent = draft.componentLabel
+      ? [{
+          component_type: draft.componentType,
+          label: draft.componentLabel,
+          quantity: draft.componentQuantity,
+          unit_cost: draft.componentCost || undefined,
+        }]
+      : [];
     await performMutation(() =>
-      mutations.version.mutateAsync({
+      editDraft
+        ? mutations.versionUpdate.mutateAsync({
+            versionId: editDraft.id,
+            data: {
+              expected_version: editDraft.version,
+              tax_classification_id: draft.taxId,
+              currency: "USD",
+              unit_price: draft.price,
+              effective_at: new Date(draft.effective).toISOString(),
+              components: [...draftComponents, ...pendingComponent],
+            },
+          })
+        : mutations.version.mutateAsync({
         itemId: draft.itemId,
         data: {
           branch_id: branch || undefined,
@@ -260,16 +321,13 @@ export function PriceBookRoute() {
           currency: "USD",
           unit_price: draft.price,
           effective_at: new Date(draft.effective).toISOString(),
-          components: [
-            {
-              component_type: draft.componentType,
-              label: draft.componentLabel,
-              quantity: draft.componentQuantity,
-              unit_cost: draft.componentCost || undefined,
-            },
-          ],
+          components: [...draftComponents, ...pendingComponent],
         },
-      }),
+          }),
+      () => {
+        setDraftComponents([]);
+        setEditDraft(null);
+      },
     );
   };
   const saveVisibleReview = async () => {
@@ -902,6 +960,36 @@ export function PriceBookRoute() {
                     className="space-y-3"
                     onSubmit={(e) => void submitCategory(e)}
                   >
+                    <Select
+                      aria-label="Choose category to edit"
+                      value={editCategory?.id ?? ""}
+                      onChange={(event) => {
+                        const selected = catalog.data?.categories.find(
+                          (candidate) => candidate.id === event.target.value,
+                        );
+                        if (!selected) {
+                          setEditCategory(null);
+                          setCategory(emptyCategory);
+                          return;
+                        }
+                        setEditCategory({ id: selected.id, version: selected.version });
+                        setCategory({
+                          code: selected.code,
+                          name: selected.name,
+                          description: selected.description ?? "",
+                          parentId: selected.parent_id ?? "",
+                          position: selected.position?.toString() ?? "",
+                          status: selected.status as "draft" | "active" | "archived",
+                        });
+                      }}
+                    >
+                      <option value="">Create a new category</option>
+                      {catalog.data?.categories.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          Edit {candidate.name}
+                        </option>
+                      ))}
+                    </Select>
                     <Input
                       aria-label="Category code"
                       placeholder="Code"
@@ -920,13 +1008,53 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Category description"
+                      placeholder="Description"
+                      value={category.description}
+                      onChange={(e) => setCategory({ ...category, description: e.target.value })}
+                    />
+                    <Select
+                      aria-label="Parent category"
+                      value={category.parentId}
+                      onChange={(e) => setCategory({ ...category, parentId: e.target.value })}
+                    >
+                      <option value="">No parent category</option>
+                      {catalog.data?.categories
+                        .filter((candidate) => candidate.id !== editCategory?.id)
+                        .map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                    </Select>
+                    <Input
+                      aria-label="Category order"
+                      type="number"
+                      min="1"
+                      placeholder="Display order"
+                      value={category.position}
+                      onChange={(e) => setCategory({ ...category, position: e.target.value })}
+                    />
+                    {editCategory && (
+                      <Select
+                        aria-label="Category status"
+                        value={category.status}
+                        onChange={(e) => setCategory({ ...category, status: e.target.value as "draft" | "active" | "archived" })}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                      </Select>
+                    )}
                     <Button
                       fullWidth
                       type="submit"
-                      loading={mutations.category.isPending}
+                      loading={mutations.category.isPending || mutations.categoryUpdate.isPending}
                     >
-                      Create category
+                      {editCategory ? "Save category" : "Create category"}
                     </Button>
+                    {editCategory && (
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditCategory(null); setCategory(emptyCategory); }}>
+                        Cancel category edit
+                      </Button>
+                    )}
                   </form>
                 </CardContent>
               </Card>
@@ -984,6 +1112,12 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Internal service notes"
+                      placeholder="Internal technical or cost notes"
+                      value={item.internal_description}
+                      onChange={(e) => setItem({ ...item, internal_description: e.target.value })}
+                    />
                     <Button
                       fullWidth
                       type="submit"
@@ -998,7 +1132,7 @@ export function PriceBookRoute() {
                         variant="ghost"
                         onClick={() => {
                           setEditItem(null);
-                          setItem({ category_id: "", code: "", name: "", customer_description: "" });
+                          setItem({ category_id: "", code: "", name: "", customer_description: "", internal_description: "" });
                         }}
                       >
                         Cancel edit
@@ -1009,7 +1143,7 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>Draft price version</CardTitle>
+                  <CardTitle>{editDraft ? "Edit draft price version" : "Draft price version"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form
@@ -1088,7 +1222,7 @@ export function PriceBookRoute() {
                       onChange={(e) =>
                         setDraft({ ...draft, componentLabel: e.target.value })
                       }
-                      required
+                      required={draftComponents.length === 0}
                     />
                     <Input
                       aria-label="Expected component quantity"
@@ -1116,12 +1250,52 @@ export function PriceBookRoute() {
                       Expected inputs support planning only. They do not prove purchased or consumed materials, and missing cost is never treated as zero.
                     </p>
                     <Button
+                      type="button"
+                      variant="outline"
+                      fullWidth
+                      disabled={!draft.componentLabel || !draft.componentQuantity}
+                      onClick={() => {
+                        setDraftComponents([
+                          ...draftComponents,
+                          {
+                            component_type: draft.componentType,
+                            label: draft.componentLabel,
+                            quantity: draft.componentQuantity,
+                            unit_cost: draft.componentCost || undefined,
+                          },
+                        ]);
+                        setDraft({
+                          ...draft,
+                          componentLabel: "",
+                          componentQuantity: "1",
+                          componentCost: "",
+                        });
+                      }}
+                    >
+                      Add expected input
+                    </Button>
+                    {draftComponents.length > 0 && (
+                      <ul className="space-y-2 text-sm" aria-label="Staged expected inputs">
+                        {draftComponents.map((component, index) => (
+                          <li key={`${component.component_type}:${component.label}:${index}`} className="flex items-center justify-between gap-3 rounded-md bg-surface-muted p-2">
+                            <span>{component.component_type.replaceAll("_", " ")} · {component.label} · {component.quantity}{component.unit_cost ? ` × USD ${component.unit_cost}` : " · cost evidence missing"}</span>
+                            <Button type="button" variant="ghost" onClick={() => setDraftComponents(draftComponents.filter((_, candidate) => candidate !== index))}>Remove</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <Button
                       fullWidth
                       type="submit"
-                      loading={mutations.version.isPending}
+                      loading={mutations.version.isPending || mutations.versionUpdate.isPending}
                     >
-                      Create draft
+                      {editDraft ? "Save draft price version" : "Create draft"}
                     </Button>
+                    {editDraft && (
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditDraft(null); setDraftComponents([]); }}>
+                        Cancel draft edit
+                      </Button>
+                    )}
                   </form>
                 </CardContent>
               </Card>
@@ -1447,6 +1621,11 @@ export function PriceBookRoute() {
                     </Button>
                   </div>
                   <p className="mt-2">{selectedService.customer_description}</p>
+                  {canManage && selectedService.internal_description && (
+                    <p className="mt-2 rounded-md bg-surface-muted p-3 text-sm">
+                      <strong>Internal notes:</strong> {selectedService.internal_description}
+                    </p>
+                  )}
                   {selectedService.status === "draft" && (
                     <Alert>
                       This Draft service is available for owner review. It cannot be selected in an Estimate until an authorized owner explicitly activates it.
@@ -1528,6 +1707,7 @@ export function PriceBookRoute() {
                                   code: service.code,
                                   name: service.name,
                                   customer_description: service.customer_description,
+                                  internal_description: service.internal_description ?? "",
                                 });
                                 setEditItem({
                                   id: service.id,
@@ -1578,6 +1758,50 @@ export function PriceBookRoute() {
                             </div>
                             {canActivate && version.status === "draft" && (
                               <Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button>
+                            )}
+                            {canManage && version.status === "draft" && (
+                              <Button
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditDraft({ id: version.id, version: version.version });
+                                  setDraft({
+                                    itemId: version.service_item_id,
+                                    taxId: version.tax_classification_id,
+                                    price: version.unit_price,
+                                    effective: version.effective_at.slice(0, 16),
+                                    componentType: "labor",
+                                    componentLabel: "",
+                                    componentQuantity: "1",
+                                    componentCost: "",
+                                  });
+                                  setDraftComponents(version.components.map((component) => ({
+                                    component_type: component.component_type,
+                                    label: component.label,
+                                    quantity: component.quantity,
+                                    unit_cost: component.unit_cost,
+                                  })));
+                                }}
+                              >
+                                Edit draft price
+                              </Button>
+                            )}
+                            {canActivate && version.status === "active" && (
+                              <Button
+                                variant="ghost"
+                                loading={mutations.versionLifecycle.isPending}
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "inactivate", expectedVersion: version.version })}
+                              >
+                                Inactivate price version
+                              </Button>
+                            )}
+                            {canActivate && version.status === "inactive" && (
+                              <Button
+                                variant="ghost"
+                                loading={mutations.versionLifecycle.isPending}
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "archive", expectedVersion: version.version })}
+                              >
+                                Archive price version
+                              </Button>
                             )}
                           </div>
                         ))}

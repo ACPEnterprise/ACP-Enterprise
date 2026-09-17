@@ -46,6 +46,12 @@ vi.mock("../hooks/useQboAccountingEvidence", () => ({
     data: undefined,
     refetch: vi.fn(),
   })),
+  useQboSourceBackedProfitAndLoss: vi.fn(() => ({
+    isPending: false,
+    isError: true,
+    data: undefined,
+    refetch: vi.fn(),
+  })),
 }));
 
 describe("FinancialReportsRoute", () => {

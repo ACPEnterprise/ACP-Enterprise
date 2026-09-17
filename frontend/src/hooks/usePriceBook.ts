@@ -58,6 +58,11 @@ export function usePriceBookMutations() {
       mutationFn: api.createCategory,
       onSuccess: refresh,
     }),
+    categoryUpdate: useMutation({
+      mutationFn: ({ categoryId, data }: { categoryId: string; data: Parameters<typeof api.updateCategory>[1] }) =>
+        api.updateCategory(categoryId, data),
+      onSuccess: refresh,
+    }),
     tax: useMutation({ mutationFn: api.createTax, onSuccess: refresh }),
     item: useMutation({
       mutationFn: api.createServiceItem,
@@ -76,6 +81,19 @@ export function usePriceBookMutations() {
         itemId: string;
         data: Parameters<typeof api.createPriceVersion>[1];
       }) => api.createPriceVersion(itemId, data),
+      onSuccess: refresh,
+    }),
+    versionUpdate: useMutation({
+      mutationFn: ({ versionId, data }: { versionId: string; data: Parameters<typeof api.updateDraftPriceVersion>[1] }) =>
+        api.updateDraftPriceVersion(versionId, data),
+      onSuccess: refresh,
+    }),
+    versionLifecycle: useMutation({
+      mutationFn: ({ versionId, action, expectedVersion }: {
+        versionId: string;
+        action: "inactivate" | "archive";
+        expectedVersion: number;
+      }) => api.transitionPriceVersion(versionId, action, expectedVersion),
       onSuccess: refresh,
     }),
     activate: useMutation({

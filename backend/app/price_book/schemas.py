@@ -271,6 +271,9 @@ class ServiceItem(PriceBookSchema):
     code: str
     name: str
     customer_description: str
+    internal_description: str | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     status: str
     current_version_id: UUID | None
     version: int
