@@ -6,21 +6,23 @@ Leak remains the tenant and owns its business data. `beta.twelve-hats.com` is th
 Twelve Hats-owned public beta entry point. This packet does not touch
 `app.twelve-hats.com` and creates no Production resource.
 
-## Current evidence — 2026-09-16
+## Current evidence — 2026-09-17
 
-- Preview resolves to `162.243.234.193` and terminates valid Let's Encrypt TLS in
-  Caddy before proxying to loopback frontend Nginx on port 8080.
+- Preview and Beta resolve to `162.243.234.193` and terminate valid Let's Encrypt TLS
+  in Caddy before proxying to loopback frontend Nginx on port 8080. The Beta
+  certificate is valid through 2026-12-15 and Caddy is receiving ACME renewal-window
+  updates.
 - Frontend, backend, PostgreSQL and Redis containers are healthy. The backend health
-  projection reports database, schema and Redis healthy.
-- `beta.twelve-hats.com` is absent from DNS. The `twelve-hats.com` zone uses GoDaddy
-  nameservers, so the exact external action is an `A` record named `beta`, value
-  `162.243.234.193`, TTL 600. Do not create or change `app.twelve-hats.com`.
+  projection reports database, schema and Redis healthy and is identical through both
+  hostnames. The isolated Mission Control API and web services are also healthy.
+- The `twelve-hats.com` zone uses GoDaddy nameservers. The accepted record is exactly
+  `beta A 162.243.234.193`; do not create or change `app.twelve-hats.com`.
 - The host Caddy service is active and automatically owns certificate issuance and
-  renewal. Its current Preview certificate is valid through 2026-10-18.
+  renewal for both hostnames.
 - Only ports 22, 80 and 443 are host-firewall accessible. SSH is currently permitted
   from anywhere, which is a hardening follow-up; database, Redis and backend have no
   public host ports.
-- Root disk utilization is 80% with approximately 16 GiB available. Treat 85% as a
+- Root disk utilization is 82% with approximately 14 GiB available. Treat 85% as a
   warning and 90% as a blocker; remove only classified disposable build/cache data,
   never databases, evidence, backups or rollback packages.
 - No cookie domain migration exists. Web refresh tokens are held in per-origin
@@ -29,31 +31,30 @@ Twelve Hats-owned public beta entry point. This packet does not touch
   preserved Preview API.
 - Public `/`, `/healthz`, `/backend-health`, and SPA direct routes work on Preview.
   `/api/v1/auth/session` fails closed with 401 when unauthenticated.
-- The deployed frontend currently duplicates browser security headers on proxied API
-  responses because both FastAPI and Nginx add them. This candidate hides upstream
-  copies at Nginx and emits the edge policy once; deploy with the next reviewed
-  frontend image rather than editing a running container.
-- Preview Mission Control is currently unavailable: its web container restarts because
-  upstream `backend` is unresolved, and its API reports an application/schema-head
-  mismatch. This does not affect the healthy tenant application, but it must be owned
-  as a separate internal-runtime repair. Beta deliberately returns 404 for Mission
-  Control, engineering APIs/assets and worker transport.
+- The deployed frontend emits one browser security-header policy, and exact
+  activation/reset pages return `Referrer-Policy: no-referrer` without retaining their
+  requests in Caddy or Nginx access logs.
+- Preview Mission Control is healthy and its unauthenticated API fails closed with
+  401. Beta deliberately returns 404 for Mission Control, engineering APIs/assets and
+  worker transport.
+- The daily restricted database backup timer and five-minute local Beta connectivity
+  monitor are enabled. The latest scheduled dump is mode 0600, checksum-valid and
+  readable by `pg_restore --list`.
 
-## Safe activation order
+## Accepted activation and ongoing release gate
 
-1. Integrate this packet and deploy the dual-host `ALLOWED_HOSTS` and
-   `CORS_ALLOWED_ORIGINS` configuration to the existing Preview backend. Keep
+1. Preserve the dual-host `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` configuration in
+   every Preview release. Keep
    identity activation and both QBO callback origins on Preview until their provider
    registrations are separately migrated.
-2. Install the reviewed Caddyfile and run `caddy validate --config /etc/caddy/Caddyfile`.
-   Save the previous file mode-0600 under the existing configuration-backup boundary.
-3. At GoDaddy DNS, create only:
+2. Before changing Caddy, run `caddy validate --config /etc/caddy/Caddyfile` and save
+   the previous file mode-0600 under the existing configuration-backup boundary.
+3. Preserve the accepted GoDaddy DNS record:
 
    `beta  A  162.243.234.193  TTL 600`
 
-4. Wait for authoritative and public resolution. Caddy then obtains the Beta
-   certificate automatically. Do not use a temporary certificate or disable TLS
-   verification.
+4. Require authoritative and public resolution and a valid automatically managed Beta
+   certificate. Do not use a temporary certificate or disable TLS verification.
 5. Run `scripts/verify-beta-connectivity.sh`. Then perform an authenticated browser
    pass using a sanctioned Beta employee/owner identity and verify Company/Branch,
    direct-route refresh, logout/login, session refresh and authorization changes.
@@ -81,8 +82,8 @@ App Store Connect. Do not invent policy or contact language in infrastructure.
 
 ## Monitoring without provider spend
 
-Install a root-owned systemd oneshot/timer that runs the repository verification every
-five minutes after Beta DNS activation. Results go to journald and a nonzero exit is
+The root-owned systemd oneshot/timer runs the repository verification every five
+minutes. Results go to journald and a nonzero exit is
 visible through `systemctl --failed` and `journalctl`; this is local detection, not
 paging. The verifier requires exact DNS, HTTPS redirects, route health, identical
 Preview/Beta backend projections, one edge security-header policy, trusted and
@@ -95,12 +96,12 @@ Set `REQUIRE_PUBLIC_METADATA=1` only after approved support and privacy content 
 published. That release gate rejects either URL while it still returns the generic
 application shell.
 
-Templates are provided as
+Installed units originate from the templates
 `twelve-hats-beta-connectivity-monitor.service.example` and
-`twelve-hats-beta-connectivity-monitor.timer.example`. Point the service's
+`twelve-hats-beta-connectivity-monitor.timer.example`. Keep the service's
 `WorkingDirectory` and `ExecStart` at the immutable deployed release or controlled
-`current` symlink, run the verifier manually once, then enable the timer. Do not enable
-it before DNS/TLS activation because an intentionally absent Beta record must fail.
+`current` symlink and verify the unit after each release. The timer must remain enabled
+only while DNS/TLS activation is intended because an absent Beta record fails closed.
 
 ## Rollback
 
