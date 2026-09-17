@@ -28,9 +28,12 @@ evaluation target—not a measurement and not a promise made by Web Speech.
   `voiceschanged`, prefers explicitly reviewed voice identifiers, then applies
   deterministic English/local/default fallbacks. It makes no gender,
   biometric, accent, or identity inference.
-- `LiaSpeechRenderer` defines a future adapter boundary for browser/device,
-  native-device, or separately admitted cloud rendering. Results can report an
-  adapter ID, optional duration and digest, and explicit fallback/error state.
+- `LiaSpeechRenderer` defines the future Twelve Hats-owned speech-engine
+  boundary. Current browser/device and native-device adapters remain local
+  transitional fallbacks. Commercial hosted rendering, vendor voice identity,
+  per-render vendor calls, and external production credentials are disallowed.
+  Results can report an adapter ID, optional duration and digest, and explicit
+  fallback/error state.
 - Pronunciation hints are explicit and reviewable. Proposed ACP, LIA, HVAC,
   QBO, and SKU entries are not applied until their status is `APPROVED`; names
   are never guessed.
@@ -54,10 +57,11 @@ relative rate control.
 
 Browser/device speech behavior and processing location vary by browser and
 operating system; deployment acceptance must review the actual target devices.
-Any external renderer requires a separate privacy, retention, security,
-contract, and provider-admission review. Spoken playback is a non-authoritative
-presentation of the visible response. ACP's visual source and evidence links
-remain authoritative.
+The final renderer must be Twelve Hats-controlled. Any upstream model or
+artifact considered for that engine requires an explicit license and training-
+data rights review; it is not an exclusive ownership claim. Spoken playback is
+a non-authoritative presentation of the visible response. ACP's visual source
+and evidence links remain authoritative.
 
 ## Enterprise Intelligence handoff
 
@@ -66,5 +70,6 @@ the `0.94` browser rate unless comparative acceptance produces explicit test
 evidence for a change. Review candidate device voices by intelligibility,
 warmth, professional credibility, restrained expressiveness, number/date
 clarity, limitation delivery, and robotic artifacts—never similarity to a
-person. Provider selection and reference-audio measurement remain separate,
-owner-controlled milestones.
+person. Twelve Hats speech-engine implementation and reference-audio measurement
+remain separate, owner-controlled milestones. Commercial provider selection is
+not a production milestone.

@@ -411,3 +411,34 @@ required escalation.
   Vite passed. Mobile qualification: 16 suites / 146 tests, typecheck, lint,
   config validation, and iOS/Android exports passed. Preview/Production were
   not deployed and real-data acceptance remains pending.
+
+## LIA Voice Sovereignty consolidation (2026-09-17)
+
+- Current protected authority advanced from `be79bd2586873d91c50c2d94ceeaf21643e4fd3e`
+  to `44587182a328d3b56cd73568b5bbd9b8b1231cdd`. A normal protected merge
+  restored ancestry; no protected ref was modified and no force-push occurred.
+- Laptop-A `work/lia-spoken-presence-maximum-1-successor` at
+  `9c0754d2f0941071f9078fe7ce48db7e93247913` was genuinely new from the
+  prior Intelligence head. It adds one shared deterministic semantic speech
+  path for Web and Mobile, including material-value preservation, budgets,
+  evidence-mode provenance, safe actions, and native failure handling.
+- Laptop-B `work/lia-delivery-style-profile-1-current` at
+  `27f1ee263e11066eab6d734d4b7d8bb799d94728` was documentation/profile work
+  from an older Intelligence tip and was integrated after reconciliation. Its
+  future renderer language now explicitly targets a Twelve Hats-owned engine;
+  commercial hosted TTS, vendor identities, credentials, and per-render calls
+  are disallowed in production.
+- Phone remains contained at `72ed521e09dd32e315c081c71024a6f6c4353f0b`;
+  no patches were replayed. Its Expo Speech adapter remains a local,
+  transitional fallback, while Mobile now consumes the same semantic shaping
+  contract as Web.
+- Added `docs/architecture/lia/voice-sovereignty.v1.md`, formalizing Twelve
+  Hats ownership of identity, rights-cleared training data, pronunciation,
+  delivery, model artifacts, inference, privacy, and portability. The
+  `LiaSpeechRenderer` boundary is reserved for `TWELVE_HATS_SPEECH`.
+- No database migrations. Backend qualification remains `653 passed` with 3
+  warnings and Alembic head `o1q9s27h4u0v`. Current focused frontend
+  qualification: 57 tests, ESLint, TypeScript, Vite passed. Current Mobile
+  qualification: 16 suites / 152 tests, typecheck, lint, config validation,
+  and iOS/Android exports passed. Local Xcode Release remains unavailable when
+  generated CocoaPods configuration is absent.

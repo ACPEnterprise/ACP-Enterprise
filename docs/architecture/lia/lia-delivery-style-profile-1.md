@@ -19,7 +19,7 @@ reference participant. Outputs must be aggregate delivery statistics and
 non-biometric prose. Do not retain speaker embeddings or use speaker similarity
 as an acceptance metric.
 
-## Provider-neutral delivery profile
+## Twelve Hats-owned delivery profile
 
 | Dimension | LIA target | Guardrail |
 | --- | --- | --- |
@@ -91,10 +91,9 @@ on-device human review remain authoritative for Variant B.
 
 The present stack can improve phrasing, language choice, relative rate,
 pitch/volume, and device-voice selection. It cannot guarantee the same voice,
-pause timing, cadence, or quality across browsers and operating systems. A
-provider successor is warranted only if cross-device acceptance proves those
-limits material; it is not warranted merely because richer controls exist
-elsewhere.
+pause timing, cadence, or quality across browsers and operating systems. Those
+limits are inputs to the separately governed Twelve Hats-owned engine program;
+they do not justify a commercial provider successor.
 
 ## Distinct base-voice requirements
 
@@ -107,7 +106,7 @@ A candidate is acceptable when it is a synthetic adult feminine voice with:
 - natural questions and corrections;
 - low robotic artifacts on Customer names, Job numbers, dates, currency, and
   acronyms;
-- stable availability and an explicit provider/OS voice identifier;
+- stable availability and an explicit platform voice identifier;
 - no claim of Lianne similarity.
 
 Reject voices that are bubbly, breathy/intimate, theatrical, sales-like,
@@ -147,22 +146,22 @@ No voice has been admitted as “best”: that requires the same 12-item corpus 
 be reviewed on the intended Preview Mac/browser and iPhone, using quality—not
 similarity to Lianne—as the rubric.
 
-### Variant C — provider-neutral successor
+### Variant C — Twelve Hats-owned speech engine
 
-A provider change would be warranted if acceptance requires the same distinct voice
-across desktop and mobile, deterministic pause/prosody control, renderable audio,
-or provider delivery/quality evidence. Introduce a server-side `LiaSpeechRenderer`
-interface only after owner/provider admission. It should accept spoken text,
-locale, style profile/version, idempotency identity, and correlation identity,
-and return an opaque audio artifact plus engine/voice/style versions. It must not
-receive arbitrary database access or hidden business context.
+The final production path is owned and controlled by Twelve Hats. The
+`LiaSpeechRenderer` request/result boundary in `voiceDelivery.ts` is reserved
+for the Twelve Hats speech engine and accepts only spoken text, locale, style
+profile/version, approved pronunciation data, and response identity. It may
+return an opaque audio artifact, engine/voice/style versions, render digest,
+duration, and bounded failure state. It must not receive arbitrary database
+access or hidden business context.
 
-Provider evaluation must score style prompting, rate/prosody/pause control,
-voice stability, pronunciation dictionaries, streaming latency, data retention,
-training-use policy, regional processing, accessibility, cost, and failover.
-The provider-neutral `LiaSpeechRenderer` request/result boundary now exists in
-`voiceDelivery.ts`; no external adapter is implemented and no provider is
-selected by this packet.
+Commercial hosted TTS adapters, per-render vendor calls, vendor voice
+identities, provider procurement, and provider credentials are disallowed in
+the production LIA voice path. Any upstream model ever evaluated must be
+treated as a non-exclusive license dependency and separately approved; the
+strongest target remains Twelve Hats-controlled model artifacts and inference
+infrastructure.
 
 ## Twelve-response comparison corpus
 
@@ -220,5 +219,7 @@ Laptop Enterprise should:
    browser voice inventories are device-dependent.
 4. Record reviewed device voice identifiers only after the 12-item comparison;
    do not infer voice attributes from name or audio biometrics.
-5. Defer Variant C procurement and credentials to a separately approved provider
-   admission milestone.
+5. Keep the current device adapters as transitional local fallbacks. Do not
+   procure, configure, or send production LIA text or recordings to a commercial
+   speech provider. A future Twelve Hats-owned engine requires a separate owner
+   architecture, privacy, training-data-rights, model, and deployment review.
