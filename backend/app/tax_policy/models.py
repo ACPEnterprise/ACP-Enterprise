@@ -9,8 +9,10 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -82,6 +84,86 @@ class OperationalTaxPolicy(Base):
         DateTime(timezone=True), nullable=False
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CompanyTaxPolicy(Base):
+    __tablename__ = "company_tax_policies"
+    __table_args__ = (
+        CheckConstraint("version >= 1", name="ck_company_tax_policy_version"),
+        CheckConstraint(
+            "status IN ('draft','certified','superseded')",
+            name="ck_company_tax_policy_status",
+        ),
+        CheckConstraint(
+            "customer_service_treatment IN ('NOT_TAXED','TAXED','REVIEW_REQUIRED')",
+            name="ck_company_tax_policy_service_treatment",
+        ),
+        CheckConstraint(
+            "customer_material_treatment IN ('NOT_TAXED','TAXED','REVIEW_REQUIRED')",
+            name="ck_company_tax_policy_material_treatment",
+        ),
+        CheckConstraint(
+            "purchase_material_tax_handling IN ('PAID_AT_PURCHASE','EXEMPT','REVIEW_REQUIRED')",
+            name="ck_company_tax_policy_purchase_handling",
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > effective_at",
+            name="ck_company_tax_policy_window",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "policy_identity",
+            "version",
+            name="uq_company_tax_policy_version",
+        ),
+        Index(
+            "ix_company_tax_policy_effective",
+            "company_id",
+            "status",
+            "effective_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    policy_identity: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    effective_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    customer_service_treatment: Mapped[str] = mapped_column(String(24), nullable=False)
+    customer_material_treatment: Mapped[str] = mapped_column(String(24), nullable=False)
+    purchase_material_tax_handling: Mapped[str] = mapped_column(
+        String(24), nullable=False
+    )
+    authority_source: Mapped[str] = mapped_column(String(80), nullable=False)
+    authority_notes: Mapped[str | None] = mapped_column(Text)
+    authorized_exceptions: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    supersedes_policy_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("company_tax_policies.id", ondelete="RESTRICT"),
+    )
+    certified_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    certified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
