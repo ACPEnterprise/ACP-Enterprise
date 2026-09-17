@@ -1,0 +1,68 @@
+{
+  "schema": "TWELVE_HATS_SPEECH_DEPENDENCY_SOVEREIGNTY.v1",
+  "production_target": "TWELVE_HATS_SPEECH",
+  "entries": [
+    {
+      "component": "voice_identity",
+      "classification": "TWELVE_HATS_OWNED",
+      "current_state": "NOT_TRAINED"
+    },
+    {
+      "component": "model_weights_and_checkpoints",
+      "classification": "TWELVE_HATS_OWNED",
+      "current_state": "NOT_AVAILABLE"
+    },
+    {
+      "component": "training_dataset",
+      "classification": "TWELVE_HATS_OWNED",
+      "current_state": "DATASET_NOT_READY"
+    },
+    {
+      "component": "lia_semantic_renderer_and_delivery_contract",
+      "classification": "TWELVE_HATS_OWNED",
+      "current_state": "AUTHORITATIVE"
+    },
+    {
+      "component": "python_pydantic_sha256_json_runtime",
+      "classification": "GENERAL_PURPOSE_INFRASTRUCTURE",
+      "current_state": "IN_USE_FOR_CONTRACTS_ONLY"
+    },
+    {
+      "component": "future_ml_tensor_and_accelerator_runtime",
+      "classification": "UPSTREAM_LICENSED",
+      "current_state": "NOT_SELECTED_OR_INSTALLED",
+      "required_review": [
+        "license",
+        "security",
+        "reproducible_build",
+        "accelerator_support",
+        "artifact_portability"
+      ]
+    },
+    {
+      "component": "pretrained_tts_weights_vocoders_or_speaker_encoders",
+      "classification": "DISALLOWED_VOICE_DEPENDENCY",
+      "current_state": "ABSENT"
+    },
+    {
+      "component": "commercial_or_hosted_tts_api",
+      "classification": "DISALLOWED_VOICE_DEPENDENCY",
+      "current_state": "ABSENT"
+    },
+    {
+      "component": "public_or_scraped_voice_dataset",
+      "classification": "DISALLOWED_VOICE_DEPENDENCY",
+      "current_state": "ABSENT"
+    },
+    {
+      "component": "third_party_pronunciation_or_speaker_model",
+      "classification": "DISALLOWED_VOICE_DEPENDENCY",
+      "current_state": "ABSENT"
+    }
+  ],
+  "commercial_provider_dependency": "NONE",
+  "external_inference_url": "NONE",
+  "credential_requirement": "NONE",
+  "pretrained_checkpoint": "NONE",
+  "external_voice_dataset": "NONE"
+}
