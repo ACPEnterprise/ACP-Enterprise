@@ -27,6 +27,7 @@ services:
   qualification:
     build:
       context: ./backend
+      dockerfile: Dockerfile.test
     environment:
       ENVIRONMENT: test
       DATABASE_URL: postgresql+asyncpg://acp_redis_qualification@postgres:5432/acp_redis_qualification
@@ -45,9 +46,8 @@ services:
       - sh
       - -lc
       - >-
-        pip install -q -r requirements-dev.txt &&
         alembic upgrade head &&
-        pytest -q -p no:cacheprovider
+        python -m pytest -q -p no:cacheprovider
         tests/platform/test_redis_runtime_integration.py
         tests/platform/test_health_readiness.py
         tests/platform/test_authentication_persistence.py
