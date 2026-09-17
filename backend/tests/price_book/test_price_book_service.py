@@ -463,6 +463,12 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             payload=OptionCreate(service_item_id=item.id, label="Standard", position=1),
         )
     async with factory() as session:
+        await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="UNUSED", name="Unused draft category"),
+        )
+    async with factory() as session:
         catalog = await service.catalog(session, context=context)
     assert catalog.option_groups[0].id == group.id
     assert catalog.options[0].id == option.id
@@ -475,6 +481,7 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             sellable_at=effective + timedelta(minutes=1),
         )
     assert sellable.service_items == ()
+    assert sellable.categories == ()
     assert sellable.option_groups == ()
     assert sellable.options == ()
     async with factory() as session:
@@ -494,6 +501,7 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             sellable_at=effective + timedelta(minutes=1),
         )
     assert [value.id for value in sellable.service_items] == [item.id]
+    assert [value.code for value in sellable.categories] == ["DRAIN"]
     assert [value.id for value in sellable.option_groups] == [group.id]
     assert [value.id for value in sellable.options] == [option.id]
     first_request = SnapshotRequest(
