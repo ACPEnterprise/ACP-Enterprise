@@ -5,6 +5,7 @@ import { createLiaService } from "../src/api/lia";
 import type { LiaResponse, LiaService } from "../src/api/lia";
 
 const response: LiaResponse = {
+  response_mode: "NORMAL",
   request_id: "10000000-0000-4000-8000-000000000001", conversation_id: "20000000-0000-4000-8000-000000000001", classification: "KNOWN", authority: "ACP_AUTHORITATIVE", answer: "Your next assigned appointment is synthetic.", evidence: [{ domain: "employee-operations", label: "My authorized assigned work", authority: "EMPLOYEE.DAY.v1", observed_at: "2026-09-16T12:00:00Z", freshness: "CURRENT_QUERY", evidence_digest: "a".repeat(64), branch_ids: [], limitations: ["Only your active assignments are included."] }], limitations: [], navigation: [], completeness: "COMPLETE_FOR_EMPLOYEE_SAFE_ADAPTERS", freshness: "CURRENT_QUERY", provider: "deterministic-acp", provider_version: "v1", policy_version: "LIA.EMPLOYEE_SAFE.v1", evidence_digest: "a".repeat(64), authorization_version: 1, company_id: "30000000-0000-4000-8000-000000000001", branch_ids: [], source_systems: ["employee-operations"], missing_evidence: [], safe_next_action: "Open My Day", as_of: "2026-09-16T12:00:00Z", generated_at: "2026-09-16T12:00:00Z", temporal: null,
 };
 function service() { return { ask: jest.fn(async () => response) } satisfies LiaService; }
