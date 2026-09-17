@@ -223,6 +223,58 @@ class EstimateRevision(Base):
     )
 
 
+class TechnicianDiscountProposal(Base):
+    """A reviewable adjustment; it never changes Estimate economics by itself."""
+
+    __tablename__ = "estimate_technician_discount_proposals"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "estimate_id"],
+            ["estimate_proposals.company_id", "estimate_proposals.id"],
+            name="fk_estimate_discount_proposal_estimate",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "revision_id"],
+            ["estimate_revisions.company_id", "estimate_revisions.id"],
+            name="fk_estimate_discount_proposal_revision",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "discount_type IN ('fixed','percentage')",
+            name="ck_estimate_discount_proposal_type",
+        ),
+        CheckConstraint(
+            "state IN ('PROPOSED','PENDING_MANAGER_APPROVAL','APPROVED','REJECTED','CANCELLED')",
+            name="ck_estimate_discount_proposal_state",
+        ),
+        CheckConstraint("requested_value >= 0", name="ck_estimate_discount_proposal_value"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_estimate_discount_proposal_idempotency"),
+        Index("ix_estimate_discount_proposals_review", "company_id", "estimate_id", "state"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    estimate_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    revision_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    requester_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    discount_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    requested_value: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    amount_before: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    membership_discount_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0.00"))
+    proposed_final_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    approved_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    approved_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING_MANAGER_APPROVAL")
+    approver_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class EstimateLineItem(Base):
     __tablename__ = "estimate_revision_line_items"
     __table_args__ = (

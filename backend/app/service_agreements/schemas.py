@@ -55,6 +55,11 @@ class EnrollmentCreate(Schema):
     idempotency_key: str = Field(min_length=1, max_length=160)
 
 
+class SameDaySaleCreate(EnrollmentCreate):
+    """Commercial enrollment only; payment settlement is a separate authority."""
+    estimate_id: UUID | None = None
+
+
 class AgreementOut(Schema):
     id: UUID
     company_id: UUID

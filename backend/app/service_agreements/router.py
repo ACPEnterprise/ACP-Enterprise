@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
@@ -13,15 +14,16 @@ from app.service_agreements.schemas import (
     AgreementOut,
     BillingCreate,
     BillingOut,
+    CustomerEntitlementOut,
     EnrollmentCreate,
     EntitlementMutation,
     EntitlementOut,
     PlanCreate,
     PlanOut,
     RenewalCreate,
+    SameDaySaleCreate,
     Transition,
     WorkspaceOut,
-    CustomerEntitlementOut,
 )
 from app.service_agreements.service import (
     AgreementConflict,
@@ -84,6 +86,25 @@ async def enroll(p: EnrollmentCreate, c: Manage, s: Session):
         return AgreementOut.model_validate(
             await agreement_service.enroll(s, c.company.id, c.user.id, p)
         )
+    except AgreementError as e:
+        fail(e)
+
+
+@router.post("/same-day-sale", response_model=AgreementOut)
+async def same_day_sale(p: SameDaySaleCreate, c: Manage, s: Session):
+    """Enroll and activate today without implying payment or settlement."""
+    if p.start_date != datetime.now(timezone.utc).date() or p.end_date < p.start_date:
+        raise HTTPException(422, "Same-day enrollment must start today and cannot be backdated.")
+    if not c.can_access_branch(p.branch_id):
+        raise HTTPException(404, "Branch was not found.")
+    try:
+        agreement = await agreement_service.enroll(s, c.company.id, c.user.id, p)
+        if agreement.status == "active":
+            return AgreementOut.model_validate(agreement)
+        return AgreementOut.model_validate(await agreement_service.transition(
+            s, c.company.id, agreement.id, agreement.version, "active",
+            reason="same_day_membership_sale", key=f"{p.idempotency_key}:activate", actor=c.user.id,
+        ))
     except AgreementError as e:
         fail(e)
 

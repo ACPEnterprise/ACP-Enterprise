@@ -19,8 +19,8 @@ from app.service_agreements.models import (
     ServiceAgreement,
     ServiceEntitlement,
 )
-from app.service_agreements.schemas import EnrollmentCreate, PlanCreate
 from app.service_agreements.policy import policy_for_code
+from app.service_agreements.schemas import EnrollmentCreate, PlanCreate
 
 
 class AgreementError(Exception):

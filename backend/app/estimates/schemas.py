@@ -32,6 +32,28 @@ class RevisionInput(ProposalInput):
     expected_version: int = Field(ge=1)
 
 
+class TechnicianDiscountProposalInput(EstimateSchema):
+    branch_id: UUID
+    revision_id: UUID
+    discount_type: str = Field(pattern=r"^(fixed|percentage)$")
+    requested_value: Decimal = Field(ge=0)
+    reason: str = Field(min_length=1, max_length=4000)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+    job_id: UUID | None = None
+
+
+class TechnicianDiscountDecisionInput(EstimateSchema):
+    branch_id: UUID
+    approve: bool
+    reason: str | None = Field(default=None, max_length=4000)
+
+
+class SameDayMembershipRevisionInput(EstimateSchema):
+    branch_id: UUID
+    agreement_id: UUID
+    expected_version: int = Field(ge=1)
+
+
 class TransitionInput(EstimateSchema):
     branch_id: UUID
     expected_version: int = Field(ge=1)
