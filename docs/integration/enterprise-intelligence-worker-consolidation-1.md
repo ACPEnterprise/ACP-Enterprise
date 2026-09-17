@@ -412,6 +412,40 @@ required escalation.
   config validation, and iOS/Android exports passed. Preview/Production were
   not deployed and real-data acceptance remains pending.
 
+## Maximum parallel intelligence shift (2026-09-17)
+
+- Protected authority advanced to `1be3de4456afc7b67ed6bb9f54644468318dd6e4`.
+  Intelligence reconciled with a normal protected merge; protected ancestry is
+  intact and protected history was not modified.
+- Laptop-A `origin/work/lia-voice-genesis-proprietary-engine-1` at
+  `3bacb78436fa87d5217eaafe862a5db195c08937` was integrated as a bounded,
+  fail-closed Twelve Hats speech-engine foundation. It adds typed dataset,
+  training, artifact, inference, and acoustic-evaluation contracts plus
+  governance tests; it contains no model, route, audio, provider, credential,
+  or migration.
+- Laptop-B `origin/work/lia-voice-genesis-corpus-rights-1` at
+  `ca9df20d50a6c2cadfe837b25dc195b635de0730` was integrated as the owned voice
+  Genesis/rights and non-PII corpus authority. Admission requires explicit
+  Twelve Hats ownership or perpetual commissioned rights, quality, provenance,
+  and fail-closed status. No audio was added.
+- Phone/C `origin/work/laptop1-phone-twelve-hats-speech-readiness-1` at
+  `59da53a94c91a9d0fb0431a3a1b80012ae58a612` was integrated. The Mobile
+  `TWELVE_HATS_SPEECH` adapter is reserved but null/disabled; local Expo speech
+  remains the transitional fallback. A stale test expectation was corrected to
+  assert A's shared semantic renderer output, including the safe next action.
+- Current Mobile qualification: 17 suites / 153 tests passed, typecheck, lint,
+  config validation, and iOS/Android Expo exports passed. Frontend qualification:
+  611 tests passed with one pre-existing unhandled Estimates source-domain
+  exception; lint and Vite build passed. Backend pytest and Docker qualification
+  were unavailable in this environment (host pytest absent; Docker credential
+  helper absent). Python compilation, JSON validation, diff-check, and secret
+  scan passed.
+- Twelve Hats Voice Sovereignty is now the hard production rule: commercial or
+  hosted TTS, vendor-controlled identities, external inference URLs, provider
+  credentials, and per-render vendor calls are disallowed. `LiaSpeechRenderer`
+  is reserved for the owned `TWELVE_HATS_SPEECH` engine. Preview and Production
+  were not deployed.
+
 ## LIA Voice Sovereignty consolidation (2026-09-17)
 
 - Current protected authority advanced from `be79bd2586873d91c50c2d94ceeaf21643e4fd3e`
