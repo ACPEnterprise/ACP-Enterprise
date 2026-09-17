@@ -25,6 +25,9 @@ a stop condition. Source domains continue to own their facts and calculations.
 | LIA-N1-013 | Voice conversation timeout/cancel | Inactivity could label the session IDLE without aborting active recognition; Cancel did not end every capture/speech path | BLOCKS_WORK | Inactivity and Cancel now abort recognition, cancel speech, clear timers, and exit conversation mode |
 | LIA-N1-014 | Exact Price Book lookup | “What’s our price for drain cleaning?” routed to Price Book but returned catalog status counts instead of the authorized current customer price | BLOCKS_WORK | Added exact name/code, selected-Branch retrieval over the authoritative catalog pointer; ambiguous/no-match/Branch-missing cases fail closed and costs remain excluded |
 | LIA-N1-015 | Operational record lookup | Natural Estimate, Invoice, and Appointment references were classified by domain but degraded to company/Branch aggregate counts | BLOCKS_WORK | Canonical `EST-`, `INV-`, and `APT-` references now resolve exactly inside current Company/Branch permission scope; foreign and unknown identities remain hidden |
+| LIA-N1-016 | Named Employee time/Dispatch context | Named Employee period questions dropped Timekeeping/Dispatch after identity resolution, while generic retrieval compared the Employee UUID to the evidence-record UUID | BLOCKS_WORK | Preserve the permitted Employee-related domains and filter accepted Timekeeping revisions/primary Dispatch assignments by their Employee columns |
+| LIA-N1-017 | Invoice → Payment follow-up | Asking for payment evidence from an exact Invoice context switched to unscoped Company-wide Payment counts | BLOCKS_WORK | Fail incomplete with direct Invoice navigation until Revenue Cycle provides the Invoice application/settlement projection; broad Payment evidence is never substituted |
+| LIA-N1-018 | Appointment assignment question | Exact Appointment resolution discarded Dispatch and could only report Appointment state, not the authoritative assignee | BLOCKS_WORK | Compose the existing permission-scoped Dispatch detail read model by Appointment identity, including truthful unassigned state and existence hiding; no assignment mutation is exposed |
 
 ## UI friction ledger
 
@@ -47,7 +50,9 @@ a stop condition. Source domains continue to own their facts and calculations.
 - Revenue Cycle: Invoice/Payment relationship, application, settlement, cash,
   and historical-as-of evidence require domain-owned projections.
 - Timekeeping: Employee/period accepted interval and hours evidence requires a
-  Timekeeping-owned projection; scheduled duration is never substituted.
+  Timekeeping-owned total-hours projection; LIA now retrieves the correct
+  Employee's accepted revisions but explicitly refuses to present revision
+  counts or scheduled duration as worked/paid hours.
 - Luminary/Economics presentation: contextual entry points currently claim
   evidence context without passing an accepted entity identifier. Coordinate
   with the active `work/cosmic-intelligence-realdata-maximum-1` lane.
