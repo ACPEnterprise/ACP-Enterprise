@@ -41,6 +41,7 @@ Read = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermiss
 Assemble = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.RUN_ASSEMBLE))]
 Review = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.RUN_REVIEW))]
 Approve = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.RUN_APPROVE))]
+Calculate = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.CALCULATION_EXECUTE))]
 PaymentRead = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_READ))]
 PaymentManage = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_INSTRUCTION_MANAGE))]
 PaymentAssemble = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_ASSEMBLE))]
@@ -77,6 +78,19 @@ class PaperCheckDestinationInput(BaseModel):
 
 class ReviewDecisionInput(ReviewInput):
     decision: str = Field(pattern="^(accepted|rejected)$")
+
+
+def _run_blockers(run: PayrollRunRecord, members: tuple[PayrollRunMemberRecord, ...]) -> list[str]:
+    blockers: list[str] = []
+    if run.lifecycle not in {"assembled", "under_review", "reviewed", "approved"}:
+        blockers.append("RUN_NOT_CALCULABLE")
+    if not members:
+        blockers.append("NO_ELIGIBLE_REAL_EMPLOYEES")
+    for member in members:
+        if member.disposition == "ready" and (member.gross_result_id is None or member.tax_result_id is None):
+            blockers.append(f"MISSING_CALCULATION_RESULT:{member.employee_id}")
+        blockers.extend(member.blocker_codes or ())
+    return sorted(set(blockers))
 
 
 @router.get("/workflow")
@@ -219,6 +233,51 @@ async def get_run(run_id: UUID, context: Read, session: Session) -> dict[str, ob
             }
             for item in members
         ],
+    }
+
+
+@router.post("/runs/{run_id}/calculate")
+async def calculate_run(run_id: UUID, context: Calculate, session: Session) -> dict[str, object]:
+    """Compose the existing calculation authorities for operator use.
+
+    Calculation engines persist immutable gross/tax results before run assembly;
+    this route never fabricates inputs or recalculates a closed run. It returns
+    blocker evidence until those governed results exist, and otherwise exposes
+    the exact result references bound to the run.
+    """
+    run = await session.scalar(select(PayrollRunRecord).where(PayrollRunRecord.company_id == context.company.id, PayrollRunRecord.id == run_id))
+    if run is None:
+        raise HTTPException(404, "Payroll run was not found")
+    members = tuple((await session.scalars(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.company_id == context.company.id, PayrollRunMemberRecord.run_id == run.id))).all())
+    blockers = _run_blockers(run, members)
+    if blockers:
+        raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": blockers})
+    return {
+        "run_id": run.id,
+        "status": "calculated",
+        "calculation": "existing_governed_results",
+        "members": [{"employee_id": item.employee_id, "gross_result_id": item.gross_result_id, "tax_result_id": item.tax_result_id} for item in members],
+        "run_digest": run.run_digest,
+        "replay": "same immutable result references",
+    }
+
+
+@router.post("/runs/{run_id}/close")
+async def close_run(run_id: UUID, payload: ReviewInput, context: Approve, session: Session) -> dict[str, object]:
+    """Close the existing approved terminal authority without GL posting."""
+    try:
+        handoff = await PayrollRunService().approved_handoff(session, context=context, run_id=run_id, purpose="future_payment_release")
+    except PayrollConflictError as error:
+        raise HTTPException(409, str(error)) from error
+    return {
+        "run_id": handoff.run_id,
+        "status": "closed_payroll_authority",
+        "terminal_lifecycle": "approved",
+        "close_receipt": handoff.run_digest,
+        "close_reason": payload.reason_code,
+        "accounting_posted": False,
+        "payment_execution": "not_performed",
+        "tax_filing": "not_performed",
     }
 
 
