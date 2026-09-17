@@ -163,4 +163,57 @@ describe("LIA spoken presentation", () => {
     expect(spoken).toContain("incomplete");
     expect(spoken).toContain("source-backed evidence");
   });
+
+  it("turns structured report headings into connected spoken sentences", () => {
+    const spoken = spokenAnswer(
+      response("WHAT IS TRUE: Lianne is active. WHAT IS BLOCKED: Accepted time is missing. NEXT STEP: Review this pay period."),
+    );
+    expect(spoken).toBe(
+      "Lianne is active. Accepted time is missing. Review this pay period.",
+    );
+    expect(spoken).not.toMatch(/WHAT IS|NEXT STEP/);
+  });
+
+  it("speaks bounded provenance only in evidence mode", () => {
+    const withEvidence = response("The Invoice is open.", {
+      evidence: [
+        {
+          domain: "invoicing",
+          label: "Authorized Invoice state",
+          authority: "INVOICE.v1",
+          observed_at: "2026-09-17T12:00:00Z",
+          freshness: "CURRENT_QUERY",
+          evidence_digest: "b".repeat(64),
+          entity_id: null,
+          count: 1,
+          state: "open",
+        },
+      ],
+    });
+    expect(spokenAnswer(withEvidence, "NORMAL")).not.toContain("supporting evidence");
+    const spoken = spokenAnswer(withEvidence, "EVIDENCE");
+    expect(spoken).toContain("supporting evidence comes from Authorized Invoice state");
+    expect(spoken).toContain("September 17, 2026");
+    expect(spoken).toContain("12:00 PM UTC");
+  });
+
+  it("finishes material sentences instead of truncating exact facts", () => {
+    const exact = `The authorized Invoice balance is $${"1".repeat(400)}.25.`;
+    expect(spokenAnswer(response(exact), "BRIEF")).toBe(exact);
+  });
+
+  it("acknowledges corrections and topic changes without changing the fact", () => {
+    expect(spokenAnswer(response("Correction: Invoice INV-204 is the selected record."))).toBe(
+      "Got it — Invoice 204 is the selected record.",
+    );
+    expect(spokenAnswer(response("Topic changed: Two appointments are scheduled tomorrow."))).toBe(
+      "Now, two appointments are scheduled tomorrow.",
+    );
+  });
+
+  it("states unavailable evidence in plain language", () => {
+    expect(spokenAnswer(response("No authorized authoritative evidence is available for this question."))).toBe(
+      "I don't have authorized evidence for that yet.",
+    );
+  });
 });
