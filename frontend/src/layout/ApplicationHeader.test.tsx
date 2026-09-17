@@ -55,7 +55,7 @@ describe("ApplicationHeader", () => {
     expect(within(breadcrumbs).getByText("Customer Detail")).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("Welcome, Preview")).toBeInTheDocument();
     expect(screen.getByText("All County Plumbing")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Command Center Online");
+    expect(screen.getByRole("status")).toHaveTextContent("Authenticated session");
   });
 
   it("changes the active theme preference", async () => {
