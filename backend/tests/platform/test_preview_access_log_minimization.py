@@ -19,6 +19,8 @@ def test_preview_edge_access_log_excludes_queries_referrers_and_user_agents() ->
     assert "$http_referer" not in log_format
     assert "$http_user_agent" not in log_format
     assert "access_log /var/log/nginx/access.log acp_safe;" in nginx
+    assert nginx.count("location = /activate {") == 1
+    assert nginx.count("location = /reset-password {") == 1
 
 
 def test_backend_does_not_duplicate_query_bearing_uvicorn_access_log() -> None:
