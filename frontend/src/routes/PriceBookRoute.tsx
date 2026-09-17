@@ -593,6 +593,16 @@ export function PriceBookRoute() {
     (service) =>
       !versions.some((version) => version.service_item_id === service.id),
   ).length;
+  const categoryDisplayName = (categoryId: string) => {
+    const category = catalog.data?.categories.find(
+      (candidate) => candidate.id === categoryId,
+    );
+    if (!category) return "Category unavailable";
+    const parent = catalog.data?.categories.find(
+      (candidate) => candidate.id === category.parent_id,
+    );
+    return parent ? `${parent.name} › ${category.name}` : category.name;
+  };
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
       <header>
@@ -865,7 +875,7 @@ export function PriceBookRoute() {
                     setCatalogOffset(0);
                   }}
                 >
-                  {catalogCategory.name}
+                  {categoryDisplayName(catalogCategory.id)}
                 </Button>
               ))}
             </CardContent>
@@ -2223,7 +2233,7 @@ export function PriceBookRoute() {
                   <option value="all">All categories</option>
                   {catalog.data?.categories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {categoryDisplayName(category.id)}
                     </option>
                   ))}
                 </Select>
@@ -2268,7 +2278,7 @@ export function PriceBookRoute() {
                       setCatalogOffset(0);
                     }}
                   >
-                    {category.name}
+                    {categoryDisplayName(category.id)}
                   </Button>
                 ))}
               </nav>
@@ -2289,7 +2299,9 @@ export function PriceBookRoute() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-xs text-content-muted">
-                        {selectedCategory?.name ?? "Category unavailable"} ·{" "}
+                        {selectedCategory
+                          ? categoryDisplayName(selectedCategory.id)
+                          : "Category unavailable"} ·{" "}
                         {selectedService.code}
                       </p>
                       <h3 className="text-lg font-semibold">
@@ -2478,25 +2490,26 @@ export function PriceBookRoute() {
                                 </p>
                               )}
                               {canManage && version.components.length > 0 && (
-                                <ul
-                                  className="mt-2 space-y-1 text-xs text-content-muted"
-                                  aria-label={`Expected inputs for revision ${version.revision}`}
-                                >
-                                  {version.components.map((component) => (
-                                    <li
-                                      key={`${component.position}:${component.label}`}
-                                    >
-                                      {component.component_type.replaceAll(
-                                        "_",
-                                        " ",
-                                      )}{" "}
-                                      · {component.label} · {component.quantity}
-                                      {component.unit_cost == null
-                                        ? " · cost evidence missing"
-                                        : ` × ${version.currency} ${component.unit_cost}`}
-                                    </li>
-                                  ))}
-                                </ul>
+                                <div className="mt-2 text-xs text-content-muted">
+                                  <p>
+                                    Expected inputs only — these do not record a
+                                    purchase, Inventory movement, or Job consumption.
+                                  </p>
+                                  <ul
+                                    className="mt-1 space-y-1"
+                                    aria-label={`Expected inputs for revision ${version.revision}`}
+                                  >
+                                    {version.components.map((component) => (
+                                      <li key={`${component.position}:${component.label}`}>
+                                        {component.component_type.replaceAll("_", " ")} ·{" "}
+                                        {component.label} · {component.quantity}
+                                        {component.unit_cost == null
+                                          ? " · cost evidence missing"
+                                          : ` × ${version.currency} ${component.unit_cost}`}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
                               )}
                               {version.status === "draft" &&
                                 itemVersions.some(

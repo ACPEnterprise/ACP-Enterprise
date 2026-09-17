@@ -116,6 +116,8 @@ class PriceBookService:
         category_id: UUID | None = None,
         item_status: str | None = None,
         version_status: str | None = None,
+        sellable_only: bool = False,
+        sellable_at: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> CatalogPage:
@@ -129,7 +131,10 @@ class PriceBookService:
                         PriceBookCategory.company_id == context.company.id,
                         PriceBookCategory.status.in_(("draft", "active")),
                     )
-                    .order_by(PriceBookCategory.name)
+                    .order_by(
+                        PriceBookCategory.position.asc().nullslast(),
+                        PriceBookCategory.name,
+                    )
                 )
             ).all()
         )
@@ -148,6 +153,24 @@ class PriceBookService:
         item_query = select(PriceBookServiceItem).where(
             PriceBookServiceItem.company_id == context.company.id
         )
+        if sellable_only:
+            item_status = "active"
+            version_status = "active"
+            resolved_sellable_at = sellable_at or utc_now()
+            item_query = item_query.where(
+                PriceBookServiceItem.current_version_id.is_not(None),
+                PriceBookServiceItem.current_version_id.in_(
+                    select(PriceBookPriceVersion.id).where(
+                        PriceBookPriceVersion.company_id == context.company.id,
+                        PriceBookPriceVersion.status == "active",
+                        PriceBookPriceVersion.effective_at <= resolved_sellable_at,
+                        or_(
+                            PriceBookPriceVersion.expires_at.is_(None),
+                            PriceBookPriceVersion.expires_at > resolved_sellable_at,
+                        ),
+                    )
+                ),
+            )
         if branch_id is not None:
             item_query = item_query.where(
                 or_(
@@ -242,21 +265,34 @@ class PriceBookService:
         by_version: dict[UUID, list[PriceBookComponent]] = {}
         for component in components:
             by_version.setdefault(component.price_version_id, []).append(component)
-        option_groups = tuple(
-            (
-                await session.scalars(
-                    select(PriceBookOptionGroup)
-                    .where(PriceBookOptionGroup.company_id == context.company.id)
-                    .order_by(PriceBookOptionGroup.name)
-                )
-            ).all()
+        option_query = select(PriceBookOption).where(
+            PriceBookOption.company_id == context.company.id
         )
+        if sellable_only:
+            option_query = option_query.where(
+                PriceBookOption.service_item_id.in_(item_ids)
+            )
         options = tuple(
             (
                 await session.scalars(
-                    select(PriceBookOption)
-                    .where(PriceBookOption.company_id == context.company.id)
-                    .order_by(PriceBookOption.option_group_id, PriceBookOption.position)
+                    option_query.order_by(
+                        PriceBookOption.option_group_id, PriceBookOption.position
+                    )
+                )
+            ).all()
+        )
+        option_group_query = select(PriceBookOptionGroup).where(
+            PriceBookOptionGroup.company_id == context.company.id
+        )
+        if sellable_only:
+            option_group_query = option_group_query.where(
+                PriceBookOptionGroup.status == "active",
+                PriceBookOptionGroup.id.in_([option.option_group_id for option in options]),
+            )
+        option_groups = tuple(
+            (
+                await session.scalars(
+                    option_group_query.order_by(PriceBookOptionGroup.name)
                 )
             ).all()
         )

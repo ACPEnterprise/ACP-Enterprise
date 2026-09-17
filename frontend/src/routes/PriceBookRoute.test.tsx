@@ -106,6 +106,16 @@ vi.mock("../hooks/usePriceBook", () => ({
             status: "active",
             version: 2,
           },
+          {
+            id: "category-2",
+            name: "Sewer",
+            code: "SEWER",
+            description: "Sewer services",
+            parent_id: "category-1",
+            position: 2,
+            status: "active",
+            version: 1,
+          },
         ],
         tax_classifications: [
           { id: "tax-1", name: "Taxable", code: "TAXABLE" },
@@ -309,6 +319,11 @@ describe("PriceBookRoute", () => {
     mutationState.versionMutate.mockReset();
     mutationState.versionUpdateMutate.mockReset();
     mutationState.versionLifecycleMutate.mockReset();
+  });
+
+  it("shows category hierarchy in owner browsing controls", () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+    expect(screen.getAllByText("Drain › Sewer").length).toBeGreaterThan(0);
   });
 
   it("edits category hierarchy and lifecycle through governed authority", async () => {
