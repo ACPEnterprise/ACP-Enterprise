@@ -86,11 +86,7 @@ class PriceBookLiaContextService:
         digest = hashlib.sha256(
             json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
-        state = (
-            "CURRENT_PRICE"
-            if current is not None
-            else "CURRENT_PRICE_UNAVAILABLE"
-        )
+        state = "CURRENT_PRICE" if current is not None else "CURRENT_PRICE_UNAVAILABLE"
         summary = (
             f"{item.name} ({item.code}) is {current.currency} {current.unit_price} "
             f"effective {current.effective_at.date().isoformat()}."
