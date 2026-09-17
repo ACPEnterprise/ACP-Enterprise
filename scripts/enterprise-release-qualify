@@ -47,6 +47,7 @@ class Result:
     exit_code: int | None
     duration_seconds: float | None
     artifact: str | None
+    artifact_sha256: str | None
     reason: str | None
     skipped_count: int | None
 
@@ -108,28 +109,30 @@ def count_skips(output: str) -> int | None:
 def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Result:
     assert check.command is not None
     missing = [tool for tool in check.required_tools if not tool_available(tool)]
+    reason: str | None = None
     if missing:
         reason = "required supported tool unavailable: " + ", ".join(missing)
         if "python" in missing:
             reason += f" (observed Python {sys.version.split()[0]}; repository image uses Python 3.12)"
-        return Result(check.key, check.title, "BLOCKED", shlex.join(check.command), check.expected, None, None, None, reason, None)
+        return Result(check.key, check.title, "BLOCKED", shlex.join(check.command), check.expected, None, None, None, None, reason, None)
     started = datetime.now(timezone.utc)
     completed = subprocess.run(check.command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     duration = (datetime.now(timezone.utc) - started).total_seconds()
     artifact.write_text(completed.stdout, encoding="utf-8")
+    artifact.chmod(0o600)
     status = "PASS" if completed.returncode == 0 else "FAIL"
-    reason = None
     if check.key == "repository_cleanliness" and completed.stdout:
         status, reason = "FAIL", "working tree is not clean"
     if check.key == "repository_provenance" and completed.stdout.strip() != candidate:
         status, reason = "FAIL", "HEAD does not equal candidate SHA"
     if check.key == "migration_heads" and len([line for line in completed.stdout.splitlines() if line.strip()]) != 1:
         status, reason = "FAIL", "Alembic does not report exactly one head"
-    return Result(check.key, check.title, status, shlex.join(check.command), check.expected, completed.returncode, duration, str(artifact), reason, count_skips(completed.stdout))
+    artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    return Result(check.key, check.title, status, shlex.join(check.command), check.expected, completed.returncode, duration, str(artifact), artifact_sha256, reason, count_skips(completed.stdout))
 
 
 def placeholder(check: Check, status: str, reason: str) -> Result:
-    return Result(check.key, check.title, status, shlex.join(check.command) if check.command else None, check.expected, None, None, None, reason, None)
+    return Result(check.key, check.title, status, shlex.join(check.command) if check.command else None, check.expected, None, None, None, None, reason, None)
 
 
 def qualification_decision(results: list[Result], *, executed: bool) -> str:

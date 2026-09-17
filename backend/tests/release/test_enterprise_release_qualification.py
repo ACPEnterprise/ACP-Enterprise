@@ -84,7 +84,28 @@ def result(module, status: str):
         None,
         None,
         None,
+        None,
     )
+
+
+def test_executed_evidence_is_private_and_digest_bound(tmp_path: Path) -> None:
+    module = _module()
+    artifact = tmp_path / "evidence.log"
+    check = module.Check(
+        "evidence",
+        "Evidence",
+        ("local",),
+        (sys.executable, "-c", "print('qualified')"),
+        "qualified",
+    )
+
+    observed = module.run_command(check, tmp_path, artifact, "a" * 40)
+
+    assert observed.status == "PASS"
+    assert observed.artifact_sha256 == module.hashlib.sha256(
+        artifact.read_bytes()
+    ).hexdigest()
+    assert artifact.stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.parametrize("status", ["FAIL", "BLOCKED"])
