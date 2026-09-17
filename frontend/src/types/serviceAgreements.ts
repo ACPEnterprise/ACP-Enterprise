@@ -52,3 +52,20 @@ export interface AgreementWorkspace {
   service_due_count: number;
   billing_unconfigured_count: number;
 }
+
+export interface CustomerMembershipEntitlement {
+  agreement_id: string;
+  agreement_number: string;
+  customer_id: string;
+  service_location_id: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  plan_code: string;
+  plan_version: number;
+  membership_discount_percentage: string;
+  dispatch_priority: string;
+  after_hours_fee_waived: boolean;
+  transferable: boolean;
+  plan_snapshot_digest: string;
+}
