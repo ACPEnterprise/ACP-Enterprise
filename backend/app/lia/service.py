@@ -37,6 +37,8 @@ from .conversation import (
 from .owner_answers import compose_owner_answer
 from .payroll_guidance import payroll_guidance_answer
 from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
+from .price_book_context import price_book_lia_context_service
+from .record_resolution import resolve_canonical_reference
 from .retrieval import GovernedRetrievalService, permitted_domain_names
 from .security import (
     EXFILTRATION_PATTERNS,
@@ -337,7 +339,56 @@ class LiaService:
             )
         effective_request = request
         entity_id = request.context.entity_id if request.context else None
-        if plan.subject_query is not None and plan.subject_domain is not None:
+        preloaded_evidence: tuple[EvidenceReference, ...] = ()
+        if (
+            plan.subject_query is not None
+            and plan.subject_domain == "price-book"
+            and "price-book" in selected
+        ):
+            price_lookup = await price_book_lia_context_service.resolve_exact(
+                session,
+                context=context,
+                query=plan.subject_query,
+            )
+            if price_lookup.branch_required:
+                return self._response(
+                    context=context,
+                    request=request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    classification=TruthClassification.INCOMPLETE,
+                    answer="Select an authorized Branch before asking for a current Price Book price.",
+                    limitations=(
+                        "A Company-wide price was not substituted for Branch price authority.",
+                    ),
+                )
+            if len(price_lookup.matches) != 1 or price_lookup.evidence is None:
+                return self._response(
+                    context=context,
+                    request=request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    classification=(
+                        TruthClassification.INCOMPLETE
+                        if price_lookup.matches
+                        else TruthClassification.UNAVAILABLE
+                    ),
+                    answer=(
+                        "More than one authorized Price Book service matches that exact name or code. Open Price Book and select the intended service."
+                        if price_lookup.matches
+                        else "No active authorized Price Book service with that exact name or code is available in the selected Branch."
+                    ),
+                    limitations=(
+                        "No fuzzy service identity or price was inferred.",
+                    ),
+                    navigation=(
+                        NavigationSuggestion(
+                            label="Open Price Book", internal_path="/price-book"
+                        ),
+                    ),
+                )
+            preloaded_evidence = (price_lookup.evidence,)
+        elif plan.subject_query is not None and plan.subject_domain is not None:
             subject_matches: list[tuple[str, UUID]] = []
             if "customers" in selected and plan.subject_domain in {
                 "customers",
@@ -372,12 +423,26 @@ class LiaService:
                         job_number=plan.subject_query,
                     )
                 )
+            if plan.subject_domain in {"estimates", "invoicing", "scheduling"}:
+                subject_matches.extend(
+                    (plan.subject_domain, match)
+                    for match in await resolve_canonical_reference(
+                        session,
+                        context=context,
+                        domain=plan.subject_domain,
+                        reference=plan.subject_query,
+                    )
+                )
             if len(subject_matches) != 1:
                 subject_label = {
                     "customers": "Customer",
                     "jobs": "Job",
                     "identity": "Customer or Employee",
                     "workforce": "Employee",
+                    "price-book": "Price Book service",
+                    "estimates": "Estimate",
+                    "invoicing": "Invoice",
+                    "scheduling": "Appointment",
                 }[plan.subject_domain]
                 return self._response(
                     context=context,
@@ -472,7 +537,9 @@ class LiaService:
                     }
                 )
         requested_basis = _requested_accounting_basis(question)
-        if temporal is None:
+        if preloaded_evidence:
+            evidence = preloaded_evidence
+        elif temporal is None:
             evidence = await self.retrieval.retrieve(
                 session,
                 context=context,
