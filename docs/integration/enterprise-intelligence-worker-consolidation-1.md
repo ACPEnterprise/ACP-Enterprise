@@ -347,3 +347,28 @@ required escalation.
 - Mobile accepts additive `response_mode` with a backward-safe `NORMAL`
   default. Native speech is not duplicated in this lane; Phone follow-up may
   consume the shared field when separately implemented.
+
+## Native Mobile speech consolidation
+
+- Phone/C `work/laptop1-phone-lia-client-maximum-1` at
+  `2f21a562fda94c38d85c85dba2ba86311f93ff75` was genuinely new after the
+  existing four Mobile commits and was integrated. It adds `expo-speech`
+  `57.0.3`, Speak/Stop/replay, unmount and new-question cancellation, and
+  native local-device playback of the server-composed answer only. No owner
+  endpoint fallback, cache, provider, or credential was added.
+- Browser and Mobile share the same nominal delivery values: en-US, rate
+  `0.94`, pitch `1`, volume `1`, and response mode. Numeric rates are adapter
+  parameters, not an acoustic identity or absolute WPM guarantee. Browser
+  semantic shaping remains deterministic; Mobile does not create a second
+  planner, fact, authority, or evidence path.
+- Browser qualification: 55 focused spoken/evaluation tests, ESLint,
+  TypeScript, and Vite build passed. Mobile qualification: 16 suites / 145
+  tests, typecheck, lint, config validation, iOS/Android Expo exports passed.
+  The local unsigned Xcode Release build remains unavailable because generated
+  `Pods-ACPEmployee.release.xcconfig` is absent, despite the worker’s reported
+  CocoaPods/simulator qualification. No migrations; Python compilation,
+  diff-check, and secret scan passed.
+- Pronunciation governance: A’s built-in ACP/LIA/QBO/HVAC normalization remains
+  deterministic and tested; B’s ACP/LIA/QBO/HVAC/SKU entries remain
+  `PROPOSED`; arbitrary names are never guessed. Provider remains `NONE` and
+  `REFERENCE_MEASUREMENT_PENDING` remains true.
