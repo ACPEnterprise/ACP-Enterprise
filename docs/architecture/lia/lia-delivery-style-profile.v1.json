@@ -1,0 +1,64 @@
+{
+  "schema": "LIA_DELIVERY_STYLE_PROFILE.v1",
+  "identity_target": "DISTINCT_SYNTHETIC_LIA",
+  "reference": {
+    "status": "REFERENCE_MEASUREMENT_PENDING",
+    "source_name": "New Recording.m4a",
+    "source_available_in_sanctioned_path": false,
+    "external_upload_permitted": false,
+    "speaker_similarity_target": false,
+    "measured_pace_wpm": null,
+    "measured_pause_statistics": null,
+    "measured_inflection": null
+  },
+  "delivery": {
+    "voice_character": [
+      "ADULT_FEMININE_SYNTHETIC",
+      "WARM",
+      "CALM",
+      "INTELLIGENT",
+      "CONFIDENT",
+      "PROFESSIONAL",
+      "CONVERSATIONAL"
+    ],
+    "expressiveness": "RESTRAINED",
+    "pace": "MODERATE",
+    "evaluation_target_wpm": [150, 170],
+    "evaluation_target_is_measurement": false,
+    "fact_contour": "SETTLED",
+    "question_contour": "GENTLE_RISE",
+    "limitation_pause": "DELIBERATE",
+    "emphasis": "MEANING_BEARING_TERMS_ONLY",
+    "prohibited": [
+      "BUBBLY",
+      "THEATRICAL",
+      "SALES_LIKE",
+      "ANNOUNCER_LIKE",
+      "ROBOTIC",
+      "REFERENCE_SPEAKER_IMITATION"
+    ]
+  },
+  "current_adapters": {
+    "web": {
+      "engine": "WEB_SPEECH_DEVICE_SYNTHESIS",
+      "relative_rate": 0.94,
+      "pitch": 1,
+      "volume": 1,
+      "language": "en-US",
+      "ssml": "UNSUPPORTED_AS_PORTABLE_CONTRACT",
+      "voice_selection": "REVIEWED_ID_THEN_LOCAL_ENGLISH_FALLBACK"
+    },
+    "mobile": {
+      "engine": "EXPO_SPEECH_NATIVE_DEVICE_SERVICE",
+      "relative_rate": 0.94,
+      "pitch": 1,
+      "language": "en-US",
+      "voice_selection": "DEVICE_DEFAULT"
+    }
+  },
+  "prototype_paths": {
+    "A": "IMPLEMENTED_DEVICE_RENDERER_WITH_SEMANTIC_SHAPING",
+    "B": "INVENTORY_AND_PREFERENCE_READY_DEVICE_REVIEW_PENDING",
+    "C": "PROVIDER_NEUTRAL_BOUNDARY_READY_PROVIDER_NOT_SELECTED"
+  }
+}
