@@ -132,6 +132,7 @@ export async function createServiceItem(data: {
   code: string;
   name: string;
   customer_description: string;
+  internal_description?: string;
 }): Promise<PriceBookServiceItem> {
   return (
     await apiClient.post<PriceBookServiceItem>(`${path}/service-items`, data)
@@ -145,6 +146,7 @@ export async function updateServiceItem(
     code: string;
     name: string;
     customer_description: string;
+    internal_description?: string;
     status: "draft" | "active" | "inactive" | "archived";
     expected_version: number;
   },

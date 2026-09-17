@@ -92,6 +92,7 @@ vi.mock("../hooks/usePriceBook", () => ({
           code: "DRAIN-CLEAR",
           status: "draft",
           customer_description: "Clear a drain.",
+          internal_description: "Use approved cable and inspect trap.",
         },
       ],
       versions: [
@@ -523,6 +524,9 @@ describe("PriceBookRoute", () => {
     expect(
       screen.getByRole("region", { name: "Selected service details" }),
     ).toHaveTextContent("Draft — ready for review");
+    expect(
+      screen.getByRole("region", { name: "Selected service details" }),
+    ).toHaveTextContent("Use approved cable and inspect trap.");
     fireEvent.click(screen.getByRole("button", { name: "Back to results" }));
     expect(
       screen.queryByRole("region", { name: "Selected service details" }),

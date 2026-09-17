@@ -185,6 +185,7 @@ async def seed_draft(factory, context, branch):
                 code="DRAIN-CLEAR",
                 name="Drain clearing",
                 customer_description="Clear one standard drain.",
+                internal_description="Use approved cable and inspect trap.",
                 branch_id=None,
             ),
         )
@@ -288,6 +289,10 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
         )
     assert category_search.total_service_items == 1
     assert category_search.service_items[0].id == item.id
+    assert (
+        category_search.service_items[0].internal_description
+        == "Use approved cable and inspect trap."
+    )
     assert "internal_description" not in str(serialized_catalog)
     async with factory() as session:
         assert (

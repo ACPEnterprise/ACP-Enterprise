@@ -97,6 +97,7 @@ export function PriceBookRoute() {
     code: "",
     name: "",
     customer_description: "",
+    internal_description: "",
   });
   const [editItem, setEditItem] = useState<{
     id: string;
@@ -283,6 +284,7 @@ export function PriceBookRoute() {
           code: "",
           name: "",
           customer_description: "",
+          internal_description: "",
         });
         setEditItem(null);
       },
@@ -1110,6 +1112,12 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Internal service notes"
+                      placeholder="Internal technical or cost notes"
+                      value={item.internal_description}
+                      onChange={(e) => setItem({ ...item, internal_description: e.target.value })}
+                    />
                     <Button
                       fullWidth
                       type="submit"
@@ -1124,7 +1132,7 @@ export function PriceBookRoute() {
                         variant="ghost"
                         onClick={() => {
                           setEditItem(null);
-                          setItem({ category_id: "", code: "", name: "", customer_description: "" });
+                          setItem({ category_id: "", code: "", name: "", customer_description: "", internal_description: "" });
                         }}
                       >
                         Cancel edit
@@ -1613,6 +1621,11 @@ export function PriceBookRoute() {
                     </Button>
                   </div>
                   <p className="mt-2">{selectedService.customer_description}</p>
+                  {canManage && selectedService.internal_description && (
+                    <p className="mt-2 rounded-md bg-surface-muted p-3 text-sm">
+                      <strong>Internal notes:</strong> {selectedService.internal_description}
+                    </p>
+                  )}
                   {selectedService.status === "draft" && (
                     <Alert>
                       This Draft service is available for owner review. It cannot be selected in an Estimate until an authorized owner explicitly activates it.
@@ -1694,6 +1707,7 @@ export function PriceBookRoute() {
                                   code: service.code,
                                   name: service.name,
                                   customer_description: service.customer_description,
+                                  internal_description: service.internal_description ?? "",
                                 });
                                 setEditItem({
                                   id: service.id,
