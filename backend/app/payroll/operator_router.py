@@ -19,6 +19,7 @@ from app.payroll.operations import PayrollOperationsService
 from app.payroll.payment_release import (
     DraftPaymentDestination,
     PaymentMethod,
+    PaymentReleaseReviewDecision,
     PayrollPaymentReleaseService,
 )
 from app.payroll.permissions import PayrollPermission
@@ -42,6 +43,9 @@ Review = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermi
 Approve = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.RUN_APPROVE))]
 PaymentRead = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_READ))]
 PaymentManage = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_INSTRUCTION_MANAGE))]
+PaymentAssemble = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_ASSEMBLE))]
+PaymentReview = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_REVIEW))]
+PaymentApprove = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_APPROVE))]
 
 
 class RunMemberInput(BaseModel):
@@ -215,3 +219,49 @@ async def payment_readiness(run_id: UUID, context: PaymentRead, session: Session
         resolution = await service.resolve_destination(session, company_id=context.company.id, employee_id=member.employee_id, as_of_date=period.payday)
         rows.append({"employee_id": member.employee_id, "state": resolution.state.value, "method": resolution.method.value if resolution.method else None, "masked": bool(resolution.protected_reference is not None)})
     return {"run_id": run.id, "run_lifecycle": run.lifecycle, "payday": period.payday, "payment_method": "paper_check", "instructions": rows, "execution": "not_performed"}
+
+
+@router.post("/runs/{run_id}/paper-check-release/assemble")
+async def assemble_paper_check_release(run_id: UUID, context: PaymentAssemble, session: Session) -> dict[str, object]:
+    run = await session.scalar(select(PayrollRunRecord).where(PayrollRunRecord.company_id == context.company.id, PayrollRunRecord.id == run_id))
+    if run is None:
+        raise HTTPException(404, "Payroll run was not found")
+    period = await session.scalar(select(PayPeriod).where(PayPeriod.company_id == context.company.id, PayPeriod.id == run.pay_period_id))
+    if period is None:
+        raise HTTPException(422, "Payroll pay period is unavailable")
+    members = tuple((await session.scalars(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.company_id == context.company.id, PayrollRunMemberRecord.run_id == run.id, PayrollRunMemberRecord.disposition == "ready"))).all())
+    service = PayrollPaymentReleaseService()
+    destinations = {member.employee_id: await service.resolve_destination(session, company_id=context.company.id, employee_id=member.employee_id, as_of_date=period.payday) for member in members}
+    try:
+        candidate = await service.assemble_candidate(session, context=context, payroll_run_id=run.id, destinations=destinations, assembled_at=datetime.now(timezone.utc))
+        value = await service.persist_candidate(session, context=context, candidate=candidate)
+    except (PayrollConflictError, ValueError) as error:
+        raise HTTPException(422, str(error)) from error
+    return {"release_id": value.id, "lifecycle": value.lifecycle, "review_state": value.review_state, "aggregate_release_amount": str(value.aggregate_release_amount), "execution": "not_performed"}
+
+
+@router.post("/paper-check-releases/{release_id}/review")
+async def review_paper_check_release(release_id: UUID, payload: ReviewInput, context: PaymentReview, session: Session) -> dict[str, object]:
+    try:
+        value = await PayrollPaymentReleaseService().initiate_review(session, context=context, release_id=release_id, reason_code=payload.reason_code)
+    except (PayrollConflictError, ValueError) as error:
+        raise HTTPException(422, str(error)) from error
+    return {"release_id": value.release_id, "decision": value.decision, "review_digest": value.review_digest}
+
+
+@router.post("/paper-check-releases/{release_id}/review/decision")
+async def decide_paper_check_review(release_id: UUID, payload: ReviewDecisionInput, context: PaymentReview, session: Session) -> dict[str, object]:
+    try:
+        value = await PayrollPaymentReleaseService().decide_review(session, context=context, release_id=release_id, decision=PaymentReleaseReviewDecision(payload.decision), reason_code=payload.reason_code)
+    except (PayrollConflictError, ValueError) as error:
+        raise HTTPException(422, str(error)) from error
+    return {"release_id": value.release_id, "decision": value.decision, "review_digest": value.review_digest}
+
+
+@router.post("/paper-check-releases/{release_id}/approve")
+async def approve_paper_check_release(release_id: UUID, payload: ReviewInput, context: PaymentApprove, session: Session) -> dict[str, object]:
+    try:
+        value = await PayrollPaymentReleaseService().approve_release(session, context=context, release_id=release_id, reason_code=payload.reason_code)
+    except (PayrollConflictError, ValueError) as error:
+        raise HTTPException(422, str(error)) from error
+    return {"release_id": value.release_id, "decision": value.decision, "review_digest": value.review_digest, "execution": "not_performed"}
