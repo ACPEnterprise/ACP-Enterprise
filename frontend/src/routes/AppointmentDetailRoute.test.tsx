@@ -219,6 +219,34 @@ describe("AppointmentDetailRoute", () => {
     expect(screen.getByText(/Lianne Hernandez/)).toBeVisible();
     expect(screen.getByText(/Coverage change/)).toBeVisible();
   });
+  it("does not present a released technician as the current assignment", () => {
+    vi.mocked(useJobForAppointment).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [] },
+    } as never);
+    vi.mocked(useDispatchAssignment).mockReturnValue({
+      isLoading: false,
+      data: {
+        primary_employee_name: "Former Technician",
+        status: "released",
+        arrival_state: "pending",
+        released_at: "2026-07-23T14:00:00Z",
+        version: 4,
+        crew_members: [],
+      },
+    } as never);
+    renderRoute();
+    expect(
+      screen.getByText(
+        "No current technician assignment is active for this Appointment.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Latest retained assignment history: released/),
+    ).toBeVisible();
+    expect(screen.queryByText("Former Technician")).not.toBeInTheDocument();
+  });
   it("preserves a validated Scheduling return path through Appointment and Job detail", () => {
     vi.mocked(useJobForAppointment).mockReturnValue({
       isLoading: false,

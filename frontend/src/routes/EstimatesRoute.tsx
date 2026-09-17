@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
-import { useSearchParams } from "react-router";
-import { useHasPermission } from "../auth";
+import { Link, useSearchParams } from "react-router";
+import { useAuth, useHasPermission } from "../auth";
+import { useCustomerDetail, useCustomerSearch } from "../hooks/useCustomers";
 import {
   useEstimate,
   useEstimateMutations,
@@ -17,11 +18,13 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Field,
   Input,
   Select,
   Spinner,
 } from "../ui";
 import { EstimateDecisionControls } from "../components/estimates/EstimateDecisionControls";
+import { customerReturnPath } from "../routing/paths";
 
 function money(value: string, currency = "USD") {
   return new Intl.NumberFormat(undefined, {
@@ -48,19 +51,31 @@ function estimateRecoveryMessage(error: unknown) {
 }
 
 export function EstimatesRoute() {
+  const { activeCompany } = useAuth();
   const [params, setParams] = useSearchParams();
   const canRead = useHasPermission("COMPANY_ESTIMATE_READ");
   const canManage = useHasPermission("COMPANY_ESTIMATE_MANAGE");
   const canReadPriceBook = useHasPermission("COMPANY_PRICE_BOOK_READ");
+  const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
   const id = params.get("id") ?? "";
+  const returnTo = customerReturnPath(params.get("returnTo"));
   const estimate = useEstimate(id, canRead && Boolean(id));
   const mutations = useEstimateMutations();
   const priceBookMutations = usePriceBookMutations();
   const [statusFilter, setStatusFilter] = useState("");
-  const estimates = useEstimates(statusFilter || undefined, undefined, canRead);
+  const [estimateOffset, setEstimateOffset] = useState(0);
+  const estimatePageSize = 25;
+  const estimates = useEstimates(
+    statusFilter || undefined,
+    undefined,
+    canRead,
+    estimatePageSize,
+    estimateOffset,
+  );
   const [lookup, setLookup] = useState(id);
   const [form, setForm] = useState({
-    branch: "",
+    branch:
+      activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? "",
     customer: "",
     serviceLocation: "",
     serviceItem: "",
@@ -75,12 +90,49 @@ export function EstimatesRoute() {
     discountValue: "",
   });
   const [proposalLines, setProposalLines] = useState<
-    Array<{ serviceItem: string; option: string; quantity: string }>
+    Array<{
+      serviceItem: string;
+      serviceName: string;
+      customerDescription: string;
+      option: string;
+      optionGroup?: string;
+      optionLabel?: string;
+      quantity: string;
+    }>
   >([]);
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [serviceCategory, setServiceCategory] = useState("");
+  const [customerSearchInput, setCustomerSearchInput] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerPage, setCustomerPage] = useState(1);
+  const customers = useCustomerSearch(
+    {
+      query: customerSearch || undefined,
+      sort_by: "display_name",
+      sort_direction: "asc",
+      record_state: "current",
+      page: customerPage,
+      page_size: 25,
+    },
+    canManage && canReadCustomers,
+  );
+  const selectedCustomer = useCustomerDetail(
+    form.customer || null,
+    canManage && canReadCustomers,
+  );
   const priceBook = usePriceBook(
     form.branch || undefined,
     canManage && canReadPriceBook && form.branch.length === 36,
+    {
+      search: serviceSearch.trim() || undefined,
+      categoryId: serviceCategory || undefined,
+      itemStatus: "active",
+    },
   );
+  const activeServices =
+    priceBook.data?.service_items.filter(
+      (item) => item.status === "active" && item.current_version_id,
+    ) ?? [];
 
   if (!canRead)
     return (
@@ -89,12 +141,22 @@ export function EstimatesRoute() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     try {
-      const requestedLines = form.serviceItem
+      const selectedService = priceBook.data?.service_items.find(
+        (item) => item.id === form.serviceItem,
+      );
+      const selectedOption = priceBook.data?.options.find(
+        (option) => option.id === form.option,
+      );
+      const requestedLines = selectedService
         ? [
             ...proposalLines,
             {
-              serviceItem: form.serviceItem,
-              option: form.option,
+              serviceItem: selectedService.id,
+              serviceName: selectedService.name,
+              customerDescription: selectedService.customer_description,
+              option: selectedOption?.id ?? "",
+              optionGroup: selectedOption?.option_group_id,
+              optionLabel: selectedOption?.label,
               quantity: form.quantity,
             },
           ]
@@ -102,29 +164,24 @@ export function EstimatesRoute() {
       if (!requestedLines.length) return;
       const lines = [];
       for (const requested of requestedLines) {
-        const service = priceBook.data?.service_items.find(
-          (item) => item.id === requested.serviceItem,
-        );
-        if (!service) return;
-        const option = priceBook.data?.options.find(
-          (candidate) => candidate.id === requested.option,
-        );
         const snapshot = await priceBookMutations.snapshot.mutateAsync({
-          itemId: service.id,
+          itemId: requested.serviceItem,
           data: {
             branch_id: form.branch,
             quantity: requested.quantity,
             currency: "USD",
             effective_at: new Date().toISOString(),
             idempotency_key: `estimate-${crypto.randomUUID()}`,
-            option_group_id: option?.option_group_id,
-            option_id: option?.id,
+            option_group_id: requested.optionGroup,
+            option_id: requested.option || undefined,
           },
         });
         lines.push({
           snapshot_id: snapshot.id,
-          title: service.name,
-          description: service.customer_description,
+          title: requested.optionLabel
+            ? `${requested.optionLabel} · ${requested.serviceName}`
+            : requested.serviceName,
+          description: requested.customerDescription,
         });
       }
       const created = await mutations.create.mutateAsync({
@@ -173,7 +230,10 @@ export function EstimatesRoute() {
             <Select
               aria-label="Estimate status filter"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                setEstimateOffset(0);
+              }}
             >
               <option value="">All states</option>
               <option value="draft">Draft</option>
@@ -235,6 +295,15 @@ export function EstimatesRoute() {
                   ))}
                 </tbody>
               </table>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-content-muted">
+                  Showing {estimateOffset + 1}–{Math.min(estimateOffset + estimates.data.items.length, estimates.data.total)} of {estimates.data.total} Estimates.
+                </p>
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" disabled={estimateOffset === 0} onClick={() => setEstimateOffset((offset) => Math.max(0, offset - estimatePageSize))}>Previous Estimates</Button>
+                  <Button type="button" variant="ghost" disabled={estimateOffset + estimates.data.items.length >= estimates.data.total} onClick={() => setEstimateOffset((offset) => offset + estimatePageSize)}>Next Estimates</Button>
+                </div>
+              </div>
             </div>
           ) : (
             <p className="rounded-lg border border-dashed border-stroke p-5 text-sm text-content-muted">
@@ -277,6 +346,9 @@ export function EstimatesRoute() {
           estimate.data && (
             <Card>
               <CardHeader>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  {returnTo ? <Link className="text-action-primary hover:underline" to={returnTo}>← Back to Customer</Link> : <Link className="text-action-primary hover:underline" to={`/customers/${estimate.data.customer_id}`}>Open Customer</Link>}
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle>
                     {estimate.data.current_revision.proposal_title}
@@ -311,6 +383,9 @@ export function EstimatesRoute() {
                               {line.description}
                             </p>
                           )}
+                          <p className="text-xs text-content-muted">
+                            {line.quantity} × {money(line.unit_price, line.currency)} each
+                          </p>
                           {line.option_id && (
                             <p className="text-xs text-content-muted">
                               Selected customer option
@@ -381,6 +456,11 @@ export function EstimatesRoute() {
                 services.
               </Alert>
             )}
+            {!canReadCustomers && (
+              <Alert variant="danger">
+                Customer read permission is required to select a Customer and Service Location.
+              </Alert>
+            )}
             {(mutations.create.isError ||
               priceBookMutations.snapshot.isError) && (
               <Alert variant="danger" role="alert" aria-live="assertive">
@@ -393,11 +473,13 @@ export function EstimatesRoute() {
               className="grid gap-3 sm:grid-cols-2"
               onSubmit={(event) => void submit(event)}
             >
-              <Input
-                aria-label="Branch ID"
+              <Select
+                aria-label="Branch"
                 value={form.branch}
                 onChange={(event) => {
                   setProposalLines([]);
+                  setServiceSearch("");
+                  setServiceCategory("");
                   setForm({
                     ...form,
                     branch: event.target.value,
@@ -407,34 +489,133 @@ export function EstimatesRoute() {
                   });
                 }}
                 required
-              />
-              <Input
-                aria-label="Customer ID"
-                value={form.customer}
-                onChange={(event) =>
-                  setForm({ ...form, customer: event.target.value })
-                }
+              >
+                <option value="">Select Branch</option>
+                {activeCompany?.branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name} ({branch.code})
+                  </option>
+                ))}
+              </Select>
+              <Field label="Find Customer" helperText="Searches the admitted Customer roster.">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Input
+                    aria-label="Find Estimate Customer"
+                    value={customerSearchInput}
+                    onChange={(event) => setCustomerSearchInput(event.target.value)}
+                    placeholder="Name, number, phone, email, or address"
+                    disabled={!canReadCustomers}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!canReadCustomers}
+                    onClick={() => {
+                      setCustomerSearch(customerSearchInput.trim());
+                      setCustomerPage(1);
+                    }}
+                  >
+                    Search Customers
+                  </Button>
+                </div>
+              </Field>
+              <Field
+                label="Customer"
                 required
-              />
+                helperText={customers.isError ? "Customer search is unavailable; no selection was changed." : customers.data ? `Showing ${customers.data.items.length} of ${customers.data.total_count} admitted Customers.` : undefined}
+              >
+                <Select
+                  aria-label="Estimate Customer"
+                  value={form.customer}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      customer: event.target.value,
+                      serviceLocation: "",
+                    })
+                  }
+                  required
+                  disabled={!canReadCustomers || customers.isLoading}
+                >
+                  <option value="">Select Customer</option>
+                  {selectedCustomer.data && !customers.data?.items.some((item) => item.id === selectedCustomer.data.id) && (
+                    <option value={selectedCustomer.data.id}>{selectedCustomer.data.display_name || selectedCustomer.data.business_name || "Selected Customer"}</option>
+                  )}
+                  {customers.data?.items.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.display_name || customer.business_name || "Unnamed Customer"}
+                    </option>
+                  ))}
+                </Select>
+                <div className="mt-2 flex gap-2">
+                  <Button type="button" variant="ghost" disabled={!customers.data || customerPage <= 1} onClick={() => setCustomerPage((page) => Math.max(1, page - 1))}>Previous Customers</Button>
+                  <Button type="button" variant="ghost" disabled={!customers.data || customerPage >= customers.data.total_pages} onClick={() => setCustomerPage((page) => page + 1)}>Next Customers</Button>
+                </div>
+              </Field>
+              <Field
+                label="Service Location"
+                helperText={form.customer && selectedCustomer.data?.properties.length === 0 ? "This Customer has no Service Locations. A location is required before Job conversion." : "Optional for a Draft Estimate; required before Job conversion."}
+              >
+                <Select
+                  aria-label="Estimate Service Location"
+                  value={form.serviceLocation}
+                  onChange={(event) => setForm({ ...form, serviceLocation: event.target.value })}
+                  disabled={!form.customer || selectedCustomer.isLoading}
+                >
+                  <option value="">No Service Location selected</option>
+                  {selectedCustomer.data?.properties.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.address_line_1}, {location.city}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Input
-                aria-label="Service Location ID"
-                value={form.serviceLocation}
-                onChange={(event) =>
-                  setForm({ ...form, serviceLocation: event.target.value })
-                }
-                placeholder="Required before Job conversion"
+                aria-label="Search active Price Book services"
+                placeholder="Search by service name, code, or category"
+                value={serviceSearch}
+                onChange={(event) => {
+                  setServiceSearch(event.target.value);
+                  setForm({ ...form, serviceItem: "", option: "" });
+                }}
+                disabled={!canReadPriceBook || form.branch.length !== 36}
               />
+              <Select
+                aria-label="Filter active Price Book category"
+                value={serviceCategory}
+                onChange={(event) => {
+                  setServiceCategory(event.target.value);
+                  setForm({
+                    ...form,
+                    serviceItem: "",
+                    optionGroup: "",
+                    option: "",
+                  });
+                }}
+                disabled={!canReadPriceBook || form.branch.length !== 36}
+              >
+                <option value="">All service categories</option>
+                {priceBook.data?.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </Select>
               <Select
                 aria-label="Customer option set"
                 value={form.optionGroup}
-                onChange={(event) =>
+                onChange={(event) => {
+                  if (event.target.value) {
+                    setServiceSearch("");
+                    setServiceCategory("");
+                  }
                   setForm({
                     ...form,
                     optionGroup: event.target.value,
                     option: "",
                     serviceItem: "",
-                  })
-                }
+                  });
+                }}
               >
                 <option value="">Choose an individual service</option>
                 {priceBook.data?.option_groups
@@ -496,18 +677,20 @@ export function EstimatesRoute() {
                       ? "Loading Price Book…"
                       : "Select active service"}
                   </option>
-                  {priceBook.data?.service_items
-                    .filter(
-                      (item) =>
-                        item.status === "active" && item.current_version_id,
-                    )
-                    .map((item) => (
+                  {activeServices.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.code} · {item.name}
                       </option>
                     ))}
                 </Select>
               )}
+              {!priceBook.isPending &&
+                form.branch.length === 36 &&
+                activeServices.length === 0 && (
+                  <Alert variant="warning">
+                    No active Price Book services match this search and category. Draft and held services must be reviewed and explicitly activated before they can be sold.
+                  </Alert>
+                )}
               <Input
                 aria-label="Quantity"
                 type="number"
@@ -524,11 +707,22 @@ export function EstimatesRoute() {
                 variant="outline"
                 disabled={!form.serviceItem}
                 onClick={() => {
+                  const service = priceBook.data?.service_items.find(
+                    (item) => item.id === form.serviceItem,
+                  );
+                  const selectedOption = priceBook.data?.options.find(
+                    (candidate) => candidate.id === form.option,
+                  );
+                  if (!service) return;
                   setProposalLines([
                     ...proposalLines,
                     {
-                      serviceItem: form.serviceItem,
-                      option: form.option,
+                      serviceItem: service.id,
+                      serviceName: service.name,
+                      customerDescription: service.customer_description,
+                      option: selectedOption?.id ?? "",
+                      optionGroup: selectedOption?.option_group_id,
+                      optionLabel: selectedOption?.label,
                       quantity: form.quantity,
                     },
                   ]);
@@ -556,11 +750,8 @@ export function EstimatesRoute() {
                         className="flex justify-between gap-3"
                       >
                         <span>
-                          {
-                            priceBook.data?.service_items.find(
-                              (item) => item.id === line.serviceItem,
-                            )?.name
-                          }{" "}
+                          {line.optionLabel ? `${line.optionLabel} · ` : ""}
+                          {line.serviceName}{" "}
                           × {line.quantity}
                         </span>
                         <Button
@@ -640,6 +831,9 @@ export function EstimatesRoute() {
                 type="submit"
                 disabled={
                   !canReadPriceBook ||
+                  !canReadCustomers ||
+                  !form.customer ||
+                  !form.branch ||
                   (!form.serviceItem && proposalLines.length === 0)
                 }
                 loading={

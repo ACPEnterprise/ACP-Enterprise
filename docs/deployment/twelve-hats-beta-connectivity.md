@@ -84,9 +84,16 @@ App Store Connect. Do not invent policy or contact language in infrastructure.
 Install a root-owned systemd oneshot/timer that runs the repository verification every
 five minutes after Beta DNS activation. Results go to journald and a nonzero exit is
 visible through `systemctl --failed` and `journalctl`; this is local detection, not
-paging. Continue checking container health, Caddy status, disk utilization, certificate
-expiry and both hostnames. A named human and external alert delivery remain required
+paging. The verifier requires exact DNS, HTTPS redirects, route health, identical
+Preview/Beta backend projections, one edge security-header policy, trusted and
+untrusted CORS behavior, internal-route isolation, and at least 14 days of TLS
+validity. Continue checking container health, Caddy status and disk utilization as
+separate host-level signals. A named human and external alert delivery remain required
 for unattended beta operations.
+
+Set `REQUIRE_PUBLIC_METADATA=1` only after approved support and privacy content is
+published. That release gate rejects either URL while it still returns the generic
+application shell.
 
 Templates are provided as
 `twelve-hats-beta-connectivity-monitor.service.example` and

@@ -264,7 +264,16 @@ class PriceBookService:
             tax_classifications=tuple(
                 TaxClassificationItem.model_validate(value) for value in taxes
             ),
-            service_items=tuple(ServiceItem.model_validate(value) for value in items),
+            service_items=tuple(
+                ServiceItem.model_validate(value).model_copy(
+                    update={
+                        "internal_description": (
+                            value.internal_description if costs_visible else None
+                        )
+                    }
+                )
+                for value in items
+            ),
             versions=tuple(
                 self._version_item(
                     version,

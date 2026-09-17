@@ -1,4 +1,8 @@
 preview.allcountyhomeservices.com {
+	@identity_secret_page path /activate /reset-password
+	log_skip @identity_secret_page
+	header @identity_secret_page >Referrer-Policy "no-referrer"
+
 	@qbo_oauth_callback path /api/v1/integrations/qbo/oauth/callback /api/v1/integrations/qbo/production/oauth/callback
 	log_skip @qbo_oauth_callback
 	@browser_secret_path path /activate /reset-password
@@ -34,6 +38,10 @@ preview.allcountyhomeservices.com {
 # runtime. Engineering, Mission Control, and worker transport remain available only
 # through the legacy Preview operator hostname; they are not public Beta surfaces.
 beta.twelve-hats.com {
+	@identity_secret_page path /activate /reset-password
+	log_skip @identity_secret_page
+	header @identity_secret_page >Referrer-Policy "no-referrer"
+
 	@internal path /mission-control* /engineering* /mission-assets/* /api/v1/engineering/* /api/v1/worker-transport*
 	handle @internal {
 		respond 404

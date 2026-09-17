@@ -11,7 +11,7 @@ import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useRoles } from "../features/administration/hooks";
 import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
-import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Spinner } from "../ui";
+import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
   return <Badge variant={state === "READY" ? "success" : state === "BLOCKED" ? "danger" : "neutral"}>{state.replaceAll("_", " ")}</Badge>;
@@ -76,7 +76,7 @@ export function WorkforceRoute() {
   const [selectedPayPeriodId, setSelectedPayPeriodId] = useState(searchParams.get("period") ?? "");
   const effectivePayPeriodId = selectedPayPeriodId || timeReview.data?.pay_period?.id || payPeriods.data?.[0]?.id || null;
   const timecards = useAdminTimecardOperations(effectivePayPeriodId, canReviewTime);
-  const [branchId, setBranchId] = useState("");
+  const [branchId, setBranchId] = useState(() => activeCompany?.default_branch_id ?? activeCompany?.branches?.[0]?.id ?? "");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const selectPayPeriod = (payPeriodId: string) => {
@@ -190,8 +190,8 @@ export function WorkforceRoute() {
           }}
         >
           <label className="text-sm">
-            <span className="mb-1 block font-medium">Branch ID</span>
-            <Input required value={branchId} onChange={(event) => setBranchId(event.target.value)} placeholder="Authorized Branch UUID" />
+            <span className="mb-1 block font-medium">Branch</span>
+            <Select required value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="">Select an authorized Branch</option>{(activeCompany?.branches ?? []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}{branch.code ? ` (${branch.code})` : ""}</option>)}</Select>
           </label>
           <label className="text-sm">
             <span className="mb-1 block font-medium">Window start</span>

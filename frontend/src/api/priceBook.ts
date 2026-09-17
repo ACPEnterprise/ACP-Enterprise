@@ -23,6 +23,8 @@ export async function getPriceBook(
     search?: string;
     categoryId?: string;
     itemStatus?: string;
+    limit?: number;
+    offset?: number;
   } = {},
 ): Promise<PriceBookCatalog> {
   return (
@@ -32,7 +34,8 @@ export async function getPriceBook(
         ...(filters.search ? { search: filters.search } : {}),
         ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
         ...(filters.itemStatus ? { item_status: filters.itemStatus } : {}),
-        limit: 500,
+        limit: filters.limit ?? 500,
+        offset: filters.offset ?? 0,
       },
     })
   ).data;
@@ -91,9 +94,28 @@ export async function createCommercialSnapshot(
 export async function createCategory(data: {
   code: string;
   name: string;
+  description?: string;
+  parent_id?: string;
+  position?: number;
 }): Promise<PriceBookCategory> {
   return (await apiClient.post<PriceBookCategory>(`${path}/categories`, data))
     .data;
+}
+export async function updateCategory(
+  categoryId: string,
+  data: {
+    code: string;
+    name: string;
+    description?: string;
+    parent_id?: string;
+    position?: number;
+    status: "draft" | "active" | "archived";
+    expected_version: number;
+  },
+): Promise<PriceBookCategory> {
+  return (
+    await apiClient.put<PriceBookCategory>(`${path}/categories/${categoryId}`, data)
+  ).data;
 }
 export async function createTax(data: {
   code: string;
@@ -110,6 +132,7 @@ export async function createServiceItem(data: {
   code: string;
   name: string;
   customer_description: string;
+  internal_description?: string;
 }): Promise<PriceBookServiceItem> {
   return (
     await apiClient.post<PriceBookServiceItem>(`${path}/service-items`, data)
@@ -123,6 +146,7 @@ export async function updateServiceItem(
     code: string;
     name: string;
     customer_description: string;
+    internal_description?: string;
     status: "draft" | "active" | "inactive" | "archived";
     expected_version: number;
   },
@@ -167,6 +191,37 @@ export async function activatePriceVersion(
         reason: "Owner activated Price Book version.",
       },
     )
+  ).data;
+}
+export async function updateDraftPriceVersion(
+  versionId: string,
+  data: {
+    expected_version: number;
+    tax_classification_id: string;
+    currency: string;
+    unit_price: string;
+    effective_at: string;
+    components: Array<{
+      component_type: "labor" | "material" | "other_direct";
+      code?: string;
+      label: string;
+      quantity: string;
+      unit_cost?: string;
+    }>;
+  },
+): Promise<PriceBookVersion> {
+  return (await apiClient.put<PriceBookVersion>(`${path}/versions/${versionId}/draft`, data)).data;
+}
+export async function transitionPriceVersion(
+  versionId: string,
+  action: "inactivate" | "archive",
+  expectedVersion: number,
+): Promise<PriceBookVersion> {
+  return (
+    await apiClient.post<PriceBookVersion>(`${path}/versions/${versionId}/${action}`, {
+      expected_version: expectedVersion,
+      reason: `Owner explicitly requested ${action} through Price Book maintenance.`,
+    })
   ).data;
 }
 export async function createOptionGroup(data: {

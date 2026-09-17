@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useScheduleExistingJob } from "../../hooks/useOperations";
@@ -20,7 +21,7 @@ const job = {
 } as unknown as JobDetail;
 
 function renderPanel(canAssign = true) {
-  return render(<QueryClientProvider client={new QueryClient()}><ScheduleJobPanel job={job} canAssign={canAssign} /></QueryClientProvider>);
+  return render(<MemoryRouter><QueryClientProvider client={new QueryClient()}><ScheduleJobPanel job={job} canAssign={canAssign} /></QueryClientProvider></MemoryRouter>);
 }
 
 describe("ScheduleJobPanel", () => {
@@ -28,8 +29,9 @@ describe("ScheduleJobPanel", () => {
     vi.clearAllMocks();
     vi.mocked(useScheduleExistingJob).mockReturnValue({ mutate, isPending: false, isSuccess: false, error: null } as never);
     vi.mocked(useWorkforceDirectory).mockReturnValue({ isLoading: false, data: [
-      { employee_id: "employee-beta", employee_number: "SYN-BETA", display_name: "Synthetic Beta Employee", employee_status: "active", technician: true, home_branch_id: "branch-main" },
-      { employee_id: "employee-other", employee_number: "OTHER", display_name: "Other Branch", employee_status: "active", technician: true, home_branch_id: "branch-other" },
+      { employee_id: "employee-beta", employee_number: "SYN-BETA", display_name: "Synthetic Beta Employee", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-main" },
+      { employee_id: "employee-blocked", employee_number: "BLOCKED", display_name: "Blocked Technician", employee_status: "active", technician: true, readiness_state: "BLOCKED", home_branch_id: "branch-main" },
+      { employee_id: "employee-other", employee_number: "OTHER", display_name: "Other Branch", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-other" },
     ] } as never);
   });
 
@@ -38,6 +40,7 @@ describe("ScheduleJobPanel", () => {
     expect(screen.getByRole("heading", { name: "Schedule Job" })).toBeVisible();
     expect(screen.getByRole("option", { name: "Unassigned / Needs Scheduling" })).toBeVisible();
     expect(screen.getByRole("option", { name: "Synthetic Beta Employee — SYN-BETA" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /Blocked Technician/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Other Branch/ })).not.toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText(/^Arrival window starts/));
     await userEvent.type(screen.getByLabelText(/^Arrival window starts/), "2026-09-14T09:00");
@@ -114,6 +117,24 @@ describe("ScheduleJobPanel", () => {
     renderPanel();
     expect(screen.getByText(/FAILED REQUIRES REFRESH/)).toBeVisible();
     expect(screen.getByText(/record changed after it was loaded/i)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry same request" })).not.toBeInTheDocument();
+  });
+
+  it("reports partial completion without offering to book the Appointment again", () => {
+    vi.mocked(useScheduleExistingJob).mockReturnValue({
+      mutate,
+      isPending: false,
+      isSuccess: true,
+      error: null,
+      data: {
+        appointment: { id: "appointment-1", appointment_number: "APT-1" },
+        assignmentState: "FAILED",
+      },
+    } as never);
+    renderPanel();
+    expect(screen.getByText("Appointment booked; technician not assigned")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open APT-1" })).toHaveAttribute("href", "/appointments/appointment-1");
+    expect(screen.getByText(/do not book it again/i)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Retry same request" })).not.toBeInTheDocument();
   });
 });

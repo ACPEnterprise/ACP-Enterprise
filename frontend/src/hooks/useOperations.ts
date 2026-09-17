@@ -27,15 +27,22 @@ export function useScheduleExistingJob(jobId: string) {
       const { employee_id: employeeId, ...schedule } = input;
       const result = await scheduleExistingJob(jobId, schedule);
       if (employeeId) {
-        await assignPrimary(
-          result.appointment.id,
-          employeeId,
-          "Office assignment while scheduling Job",
-          undefined,
-          `schedule-assignment:${input.request_id}`,
-        );
+        try {
+          await assignPrimary(
+            result.appointment.id,
+            employeeId,
+            "Office assignment while scheduling Job",
+            undefined,
+            `schedule-assignment:${input.request_id}`,
+          );
+        } catch (assignmentError) {
+          return { ...result, assignmentState: "FAILED" as const, assignmentError };
+        }
       }
-      return result;
+      return {
+        ...result,
+        assignmentState: employeeId ? "ASSIGNED" as const : "NOT_REQUESTED" as const,
+      };
     },
     onSettled: async () => {
       await Promise.all([

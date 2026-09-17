@@ -14,6 +14,7 @@ import {
   useEligibleTechnicians,
 } from "../hooks/useDispatch";
 import { dispatchReadiness } from "../components/dispatch/dispatchEligibility";
+import { isActiveDispatchAssignment } from "../components/dispatch/dispatchOperations";
 import {
   customerDetailPath,
   customerLocationPath,
@@ -110,6 +111,11 @@ export function AppointmentDetailRoute() {
     (item) => item.id === appointment.service_location_id,
   );
   const eligible = jobEligibleStatuses.has(appointment.status);
+  const assignment = isActiveDispatchAssignment(assignmentQuery.data)
+    ? assignmentQuery.data
+    : null;
+  const terminalAssignment =
+    assignmentQuery.data && !assignment ? assignmentQuery.data : null;
   return (
     <div className="min-w-0 space-y-6">
       <Link
@@ -224,32 +230,30 @@ export function AppointmentDetailRoute() {
           <p className="mt-3 text-sm text-content-muted">
             Loading assignment evidence…
           </p>
-        ) : assignmentQuery.data ? (
+        ) : assignment ? (
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <dl className="grid gap-3 text-sm">
               <div>
                 <dt className="text-content-muted">Primary technician</dt>
-                <dd>
-                  {assignmentQuery.data.primary_employee_name ?? "Unassigned"}
-                </dd>
+                <dd>{assignment.primary_employee_name ?? "Unassigned"}</dd>
               </div>
               <div>
                 <dt className="text-content-muted">Assignment state</dt>
                 <dd className="capitalize">
-                  {displayStatus(assignmentQuery.data.status)} ·{" "}
-                  {displayStatus(assignmentQuery.data.arrival_state)}
+                  {displayStatus(assignment.status)} ·{" "}
+                  {displayStatus(assignment.arrival_state)}
                 </dd>
               </div>
               <div>
                 <dt className="text-content-muted">Version</dt>
-                <dd>{assignmentQuery.data.version}</dd>
+                <dd>{assignment.version}</dd>
               </div>
             </dl>
             <div>
               <h4 className="text-sm font-semibold">Additional crew</h4>
-              {assignmentQuery.data.crew_members.length ? (
+              {assignment.crew_members.length ? (
                 <ul className="mt-2 space-y-1 text-sm">
-                  {assignmentQuery.data.crew_members.map((member) => (
+                  {assignment.crew_members.map((member) => (
                     <li key={member.id}>{member.display_name}</li>
                   ))}
                 </ul>
@@ -261,9 +265,21 @@ export function AppointmentDetailRoute() {
             </div>
           </div>
         ) : (
-          <p className="mt-3 text-sm text-content-muted">
-            No current assignment evidence is available for this Appointment.
-          </p>
+          <div className="mt-3 text-sm text-content-muted">
+            <p>
+              No current technician assignment is active for this Appointment.
+            </p>
+            {terminalAssignment && (
+              <p className="mt-2">
+                Latest retained assignment history:{" "}
+                {displayStatus(terminalAssignment.status)}
+                {terminalAssignment.released_at
+                  ? ` ${timestamp(terminalAssignment.released_at)}`
+                  : ""}
+                .
+              </p>
+            )}
+          </div>
         )}
         {canReadDispatch && eligibilityQuery.data && (
           <div className="mt-5 border-t border-stroke pt-4">

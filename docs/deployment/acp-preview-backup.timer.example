@@ -1,0 +1,12 @@
+[Unit]
+Description=Create a daily restricted ACP Preview PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+Unit=acp-preview-backup.service
+
+[Install]
+WantedBy=timers.target
+

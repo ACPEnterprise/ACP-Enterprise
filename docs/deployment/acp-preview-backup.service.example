@@ -1,0 +1,20 @@
+[Unit]
+Description=ACP Preview PostgreSQL restricted backup
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/acp-enterprise/current
+ExecStart=/opt/acp-enterprise/current/scripts/backup-preview-postgres.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/opt/acp-enterprise/current
+ReadWritePaths=/opt/acp-enterprise/backups /run/docker.sock
+StandardOutput=journal
+StandardError=journal
+

@@ -24,6 +24,7 @@ from app.estimates.models import (
     EstimateRevision,
 )
 from app.estimates.schemas import EstimateSummary
+from app.jobs.models import Job
 from app.price_book.models import PriceBookCommercialSnapshot
 
 
@@ -39,6 +40,7 @@ class EstimateRepository:
         customer_id: UUID | None = None,
         status: str | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> tuple[EstimateSummary, ...]:
         statement = (
             select(Estimate, EstimateRevision)
@@ -58,7 +60,9 @@ class EstimateRepository:
             statement = statement.where(Estimate.status == status)
         rows = (
             await session.execute(
-                statement.order_by(Estimate.updated_at.desc(), Estimate.id).limit(limit)
+                statement.order_by(Estimate.updated_at.desc(), Estimate.id)
+                .limit(limit)
+                .offset(offset)
             )
         ).all()
         return tuple(
@@ -79,6 +83,25 @@ class EstimateRepository:
             )
             for estimate, revision in rows
         )
+
+    @staticmethod
+    async def count_summaries(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: frozenset[UUID],
+        customer_id: UUID | None = None,
+        status: str | None = None,
+    ) -> int:
+        statement = select(func.count()).select_from(Estimate).where(
+            Estimate.company_id == company_id,
+            Estimate.branch_id.in_(branch_ids),
+        )
+        if customer_id is not None:
+            statement = statement.where(Estimate.customer_id == customer_id)
+        if status is not None:
+            statement = statement.where(Estimate.status == status)
+        return int(await session.scalar(statement) or 0)
 
     @staticmethod
     async def next_estimate_number(session: AsyncSession, *, company_id: UUID) -> str:
@@ -265,6 +288,26 @@ class EstimateRepository:
             if decision is not None
             else None
         )
+        conversion_row = await session.execute(
+            select(EstimateJobConversion, Job.job_number)
+            .join(
+                Job,
+                (Job.company_id == EstimateJobConversion.company_id)
+                & (Job.id == EstimateJobConversion.job_id),
+            )
+            .where(
+                EstimateJobConversion.company_id == company_id,
+                EstimateJobConversion.estimate_id == estimate.id,
+            )
+        )
+        conversion_result = conversion_row.one_or_none()
+        conversion_record = (
+            EstimateRepository.conversion_record(
+                conversion_result[0], job_number=conversion_result[1]
+            )
+            if conversion_result is not None
+            else None
+        )
         return EstimateRecord(
             id=estimate.id,
             company_id=estimate.company_id,
@@ -277,6 +320,7 @@ class EstimateRepository:
             version=estimate.version,
             current_revision=revision_record,
             customer_decision=decision_record,
+            conversion=conversion_record,
         )
 
     @staticmethod

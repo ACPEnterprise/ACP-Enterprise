@@ -23,7 +23,6 @@ import {
 } from "../components/dispatch/dispatchPresentation";
 import { useJobs } from "../hooks/useJobs";
 import { useDispatchBoard } from "../hooks/useDispatch";
-import type { DispatchBoardItem } from "../types/dispatch";
 import { Alert } from "../ui";
 
 export function DispatchRoute() {
@@ -37,9 +36,7 @@ export function DispatchRoute() {
   const [boardFilter, setBoardFilter] = useState<DispatchBoardFilter>("all");
   const [search, setSearch] = useState("");
   const [technician, setTechnician] = useState("");
-  const [selectedWork, setSelectedWork] = useState<DispatchBoardItem | null>(
-    null,
-  );
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const range = dayRange(date);
   const dispatch = useDispatchBoard(
     range.startAt,
@@ -63,6 +60,9 @@ export function DispatchRoute() {
     [jobs.data?.items],
   );
   const dispatchItems = dispatch.data?.items ?? [];
+  const selectedWork = selectedAppointmentId
+    ? dispatchItems.find((item) => item.appointment_id === selectedAppointmentId) ?? null
+    : null;
   const visibleDispatchItems = filterDispatchBoard(
     dispatchItems,
     jobsById,
@@ -82,11 +82,11 @@ export function DispatchRoute() {
     );
   const changeDate = (value: string) => {
     setDate(value);
-    setSelectedWork(null);
+    setSelectedAppointmentId(null);
   };
   const changeBranch = (value: string) => {
     setBranchId(value);
-    setSelectedWork(null);
+    setSelectedAppointmentId(null);
     setJobPage(1);
   };
   return (
@@ -132,7 +132,7 @@ export function DispatchRoute() {
       {selectedWork && canManage && (
         <DispatchAssignmentPanel
           item={selectedWork}
-          onClose={() => setSelectedWork(null)}
+          onClose={() => setSelectedAppointmentId(null)}
         />
       )}
       {selectedWork && canReadJobs && (
@@ -146,7 +146,7 @@ export function DispatchRoute() {
             loading={dispatch.isLoading}
             error={dispatch.error}
             onRetry={() => void dispatch.refetch()}
-            onSelect={setSelectedWork}
+            onSelect={(item) => setSelectedAppointmentId(item.appointment_id)}
             canManage={canManage}
           />
         }

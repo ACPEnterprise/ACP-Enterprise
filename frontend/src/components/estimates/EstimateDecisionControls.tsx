@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
+import { Link } from "react-router";
 
 import type { Estimate } from "../../types/estimates";
 import { Alert, Button, Field, Input, Textarea } from "../../ui";
@@ -38,6 +39,19 @@ export function EstimateDecisionControls({
   const [jobTypeCode, setJobTypeCode] = useState("");
   const [reportedProblem, setReportedProblem] = useState("");
   const [mode, setMode] = useState<"approve" | "reject" | null>(null);
+  const [revising, setRevising] = useState(false);
+  const [revisionTitle, setRevisionTitle] = useState(
+    estimate.current_revision.proposal_title,
+  );
+  const [revisionMessage, setRevisionMessage] = useState(
+    estimate.current_revision.customer_message ?? "",
+  );
+  const [revisionTerms, setRevisionTerms] = useState(
+    estimate.current_revision.terms ?? "",
+  );
+  const [revisionExpiry, setRevisionExpiry] = useState(
+    estimate.current_revision.expires_at?.slice(0, 16) ?? "",
+  );
   const transition = (action: "send" | "view" | "expire") =>
     mutations.transition.mutate({
       id: estimate.id,
@@ -77,16 +91,42 @@ export function EstimateDecisionControls({
         customer_reported_problem: reportedProblem || undefined,
       },
     });
+  const revise = (event: FormEvent) => {
+    event.preventDefault();
+    mutations.revise.mutate({
+      id: estimate.id,
+      input: {
+        branch_id: estimate.branch_id,
+        customer_id: estimate.customer_id,
+        service_location_id: estimate.service_location_id ?? undefined,
+        expected_version: estimate.version,
+        proposal_title: revisionTitle,
+        customer_message: revisionMessage || undefined,
+        terms: revisionTerms || undefined,
+        expires_at: revisionExpiry
+          ? new Date(revisionExpiry).toISOString()
+          : undefined,
+        lines: estimate.current_revision.lines.map((line) => ({
+          snapshot_id: line.snapshot_id,
+          title: line.title,
+          description: line.description ?? undefined,
+        })),
+      },
+    });
+  };
   const busy =
     mutations.transition.isPending ||
     mutations.decide.isPending ||
-    mutations.convert.isPending;
+    mutations.convert.isPending ||
+    mutations.revise.isPending;
   const failure = mutations.transition.isError
     ? mutations.transition.error
     : mutations.decide.isError
       ? mutations.decide.error
       : mutations.convert.isError
         ? mutations.convert.error
+        : mutations.revise.isError
+          ? mutations.revise.error
         : null;
   return (
     <section
@@ -94,6 +134,11 @@ export function EstimateDecisionControls({
       aria-label="Estimate lifecycle"
     >
       <div className="flex flex-wrap gap-2">
+        {!["approved", "accepted", "cancelled"].includes(estimate.status) && (
+          <Button variant="outline" disabled={busy} onClick={() => setRevising(true)}>
+            Revise customer presentation
+          </Button>
+        )}
         {estimate.status === "draft" && (
           <Button disabled={busy} onClick={() => transition("send")}>
             Record as presented
@@ -132,6 +177,32 @@ export function EstimateDecisionControls({
           </Button>
         )}
       </div>
+      {revising && (
+        <form
+          className="grid gap-3 rounded-lg bg-surface-subtle p-4 sm:grid-cols-2"
+          onSubmit={revise}
+        >
+          <Alert className="sm:col-span-2">
+            This creates a new immutable revision. Existing sealed service lines and prices are retained.
+          </Alert>
+          <Field label="Proposal title">
+            <Input value={revisionTitle} onChange={(event) => setRevisionTitle(event.target.value)} required />
+          </Field>
+          <Field label="Expiration (optional)">
+            <Input type="datetime-local" value={revisionExpiry} onChange={(event) => setRevisionExpiry(event.target.value)} />
+          </Field>
+          <Field label="Customer message (optional)">
+            <Textarea value={revisionMessage} onChange={(event) => setRevisionMessage(event.target.value)} />
+          </Field>
+          <Field label="Terms (optional)">
+            <Textarea value={revisionTerms} onChange={(event) => setRevisionTerms(event.target.value)} />
+          </Field>
+          <div className="flex gap-2 sm:col-span-2">
+            <Button type="submit" loading={mutations.revise.isPending}>Create revised Draft</Button>
+            <Button type="button" variant="ghost" onClick={() => setRevising(false)}>Cancel</Button>
+          </div>
+        </form>
+      )}
       {mode && (
         <form
           className="grid gap-3 rounded-lg bg-surface-subtle p-4 sm:grid-cols-2"
@@ -183,8 +254,21 @@ export function EstimateDecisionControls({
           </div>
         </form>
       )}
-      {estimate.status === "approved" && (
+      {estimate.conversion ? (
+        <Alert variant="success">
+          Converted to Job{" "}
+          <Link className="font-semibold underline" to={`/jobs/${estimate.conversion.job_id}`}>
+            {estimate.conversion.job_number}
+          </Link>
+          . The sold Estimate snapshot remains preserved.
+        </Alert>
+      ) : estimate.status === "approved" && (
         <div className="grid gap-3 rounded-lg border border-stroke p-4 sm:grid-cols-2">
+          {!estimate.service_location_id && (
+            <Alert className="sm:col-span-2" variant="warning" role="alert">
+              Select a Service Location on a revised Estimate before converting it to a Job. The approved sold snapshot remains unchanged.
+            </Alert>
+          )}
           <Field label="Job type code (optional)">
             <Input
               value={jobTypeCode}
@@ -201,6 +285,7 @@ export function EstimateDecisionControls({
             <Button
               type="button"
               loading={mutations.convert.isPending}
+              disabled={!estimate.service_location_id}
               onClick={convert}
             >
               Convert approved Estimate to Job

@@ -392,5 +392,7 @@ describe("WorkforceRoute", () => {
       "water_heater",
     );
     expect(screen.getByText("Marisol Rivera")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Branch" })).toHaveValue("branch-1");
+    expect(screen.queryByPlaceholderText("Authorized Branch UUID")).not.toBeInTheDocument();
   });
 });

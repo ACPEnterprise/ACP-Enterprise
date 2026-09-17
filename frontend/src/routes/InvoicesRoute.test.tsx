@@ -11,6 +11,7 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),
 }));
 vi.mock("../api/invoices", () => ({
+  getInvoiceCandidates: vi.fn().mockResolvedValue([]),
   getInvoiceWorkspace: vi
     .fn()
     .mockImplementation(async (filters: { query?: string }) => filters.query ? [] : [
@@ -84,8 +85,9 @@ describe("InvoicesRoute", () => {
     permissions = new Set(["COMPANY_INVOICE_READ", "COMPANY_INVOICE_MANAGE"]);
     renderRoute();
     expect(await screen.findByText("Create from accepted work")).toBeVisible();
-    expect(screen.getByLabelText("Estimate ID")).toBeVisible();
-    expect(screen.getByLabelText("Job ID")).toBeVisible();
+    expect(screen.getByLabelText("Completed accepted work")).toBeVisible();
+    expect(screen.queryByLabelText("Estimate ID")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Job ID")).not.toBeInTheDocument();
   });
   it("filters the operational receivables queue without changing authority", async () => {
     permissions = new Set(["COMPANY_INVOICE_READ"]);

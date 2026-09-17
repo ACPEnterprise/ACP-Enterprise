@@ -446,6 +446,24 @@ describe("SchedulingRoute", () => {
     );
   });
 
+  it.each(["completed", "no_show", "cancelled"])(
+    "does not offer a reschedule action for %s Appointment history",
+    async (status) => {
+      permissions.add("COMPANY_SCHEDULING_MANAGE");
+      vi.mocked(useAppointments).mockReturnValue({
+        isLoading: false,
+        isError: false,
+        data: { items: [{ ...appointment, status }], total_count: 1, page: 1, page_size: 100 },
+      } as never);
+      render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+      await userEvent.click(screen.getAllByRole("button", { name: /APT-000001/ })[0]);
+
+      expect(screen.getByText("Appointment cannot be moved")).toBeVisible();
+      expect(screen.getByText(new RegExp(`This Appointment is ${status.replaceAll("_", " ")}`, "i"))).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Review new time" })).not.toBeInTheDocument();
+    },
+  );
+
   it("expands and selects every appointment on a crowded Month day before an explicit Day drill-down", async () => {
     const crowded = Array.from({ length: 5 }, (_, index) => ({
       ...appointment,

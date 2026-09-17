@@ -59,13 +59,26 @@ export function PriceBookRoute() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [catalogOffset, setCatalogOffset] = useState(0);
+  const catalogPageSize = 50;
   const catalog = usePriceBook(branch || undefined, canRead, {
     search: search.trim() || undefined,
     categoryId: categoryFilter === "all" ? undefined : categoryFilter,
     itemStatus: statusFilter === "all" ? undefined : statusFilter,
+    limit: catalogPageSize,
+    offset: catalogOffset,
   });
   const mutations = usePriceBookMutations();
-  const [category, setCategory] = useState({ code: "", name: "" });
+  const emptyCategory = {
+    code: "",
+    name: "",
+    description: "",
+    parentId: "",
+    position: "",
+    status: "draft" as "draft" | "active" | "archived",
+  };
+  const [category, setCategory] = useState(emptyCategory);
+  const [editCategory, setEditCategory] = useState<{ id: string; version: number } | null>(null);
   const [tax, setTax] = useState({ code: "", name: "", taxable: true });
   const [optionGroup, setOptionGroup] = useState({
     code: "",
@@ -84,6 +97,7 @@ export function PriceBookRoute() {
     code: "",
     name: "",
     customer_description: "",
+    internal_description: "",
   });
   const [editItem, setEditItem] = useState<{
     id: string;
@@ -100,15 +114,28 @@ export function PriceBookRoute() {
     componentQuantity: "1",
     componentCost: "",
   });
+  const [draftComponents, setDraftComponents] = useState<Array<{
+    component_type: "labor" | "material" | "other_direct";
+    label: string;
+    quantity: string;
+    unit_cost?: string;
+  }>>([]);
+  const [editDraft, setEditDraft] = useState<{ id: string; version: number } | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [candidateOffset, setCandidateOffset] = useState(0);
   const candidatePageSize = 50;
+  const [candidateCategory, setCandidateCategory] = useState("");
+  const [candidateAdmission, setCandidateAdmission] = useState<"" | "admitted" | "held">("");
+  const [candidateReviewFlag, setCandidateReviewFlag] = useState("");
   const [reviewVersionId, setReviewVersionId] = useState<string>();
   const activationReadiness = useActivationReadiness(reviewVersionId);
   const reviewAudit = usePriceBookAudit(reviewVersionId);
   const candidateReview = useCandidateReview(
     {
       search: search.trim() || undefined,
+      category: candidateCategory.trim() || undefined,
+      admission_status: candidateAdmission || undefined,
+      review_flag: candidateReviewFlag || undefined,
       limit: candidatePageSize,
       offset: candidateOffset,
     },
@@ -170,8 +197,31 @@ export function PriceBookRoute() {
   const submitCategory = async (event: FormEvent) => {
     event.preventDefault();
     await performMutation(
-      () => mutations.category.mutateAsync(category),
-      () => setCategory({ code: "", name: "" }),
+      () =>
+        editCategory
+          ? mutations.categoryUpdate.mutateAsync({
+              categoryId: editCategory.id,
+              data: {
+                code: category.code,
+                name: category.name,
+                description: category.description || undefined,
+                parent_id: category.parentId || undefined,
+                position: category.position ? Number(category.position) : undefined,
+                status: category.status,
+                expected_version: editCategory.version,
+              },
+            })
+          : mutations.category.mutateAsync({
+              code: category.code,
+              name: category.name,
+              description: category.description || undefined,
+              parent_id: category.parentId || undefined,
+              position: category.position ? Number(category.position) : undefined,
+            }),
+      () => {
+        setCategory(emptyCategory);
+        setEditCategory(null);
+      },
     );
   };
   const submitTax = async (event: FormEvent) => {
@@ -234,6 +284,7 @@ export function PriceBookRoute() {
           code: "",
           name: "",
           customer_description: "",
+          internal_description: "",
         });
         setEditItem(null);
       },
@@ -241,8 +292,28 @@ export function PriceBookRoute() {
   };
   const submitDraft = async (event: FormEvent) => {
     event.preventDefault();
+    const pendingComponent = draft.componentLabel
+      ? [{
+          component_type: draft.componentType,
+          label: draft.componentLabel,
+          quantity: draft.componentQuantity,
+          unit_cost: draft.componentCost || undefined,
+        }]
+      : [];
     await performMutation(() =>
-      mutations.version.mutateAsync({
+      editDraft
+        ? mutations.versionUpdate.mutateAsync({
+            versionId: editDraft.id,
+            data: {
+              expected_version: editDraft.version,
+              tax_classification_id: draft.taxId,
+              currency: "USD",
+              unit_price: draft.price,
+              effective_at: new Date(draft.effective).toISOString(),
+              components: [...draftComponents, ...pendingComponent],
+            },
+          })
+        : mutations.version.mutateAsync({
         itemId: draft.itemId,
         data: {
           branch_id: branch || undefined,
@@ -250,16 +321,13 @@ export function PriceBookRoute() {
           currency: "USD",
           unit_price: draft.price,
           effective_at: new Date(draft.effective).toISOString(),
-          components: [
-            {
-              component_type: draft.componentType,
-              label: draft.componentLabel,
-              quantity: draft.componentQuantity,
-              unit_cost: draft.componentCost || undefined,
-            },
-          ],
+          components: [...draftComponents, ...pendingComponent],
         },
-      }),
+          }),
+      () => {
+        setDraftComponents([]);
+        setEditDraft(null);
+      },
     );
   };
   const saveVisibleReview = async () => {
@@ -572,6 +640,43 @@ export function PriceBookRoute() {
                     <div><strong>{candidateReview.data?.counts.material_mapping_required ?? 0}</strong><p className="text-sm text-content-muted">Need material mapping</p></div>
                     <div><strong>{candidateReview.data?.counts.activation_ready ?? 0}</strong><p className="text-sm text-content-muted">Activation ready</p></div>
                   </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Input
+                      aria-label="Filter candidate category"
+                      placeholder="Candidate category"
+                      value={candidateCategory}
+                      onChange={(event) => {
+                        setCandidateCategory(event.target.value);
+                        setCandidateOffset(0);
+                      }}
+                    />
+                    <Select
+                      aria-label="Filter candidate admission state"
+                      value={candidateAdmission}
+                      onChange={(event) => {
+                        setCandidateAdmission(event.target.value as "" | "admitted" | "held");
+                        setCandidateOffset(0);
+                      }}
+                    >
+                      <option value="">All candidate states</option>
+                      <option value="admitted">Draft — ready for review</option>
+                      <option value="held">Held — source conflict</option>
+                    </Select>
+                    <Select
+                      aria-label="Filter candidate review requirement"
+                      value={candidateReviewFlag}
+                      onChange={(event) => {
+                        setCandidateReviewFlag(event.target.value);
+                        setCandidateOffset(0);
+                      }}
+                    >
+                      <option value="">All review requirements</option>
+                      <option value="PRICE_EVIDENCE_REVIEW_REQUIRED">Price review required</option>
+                      <option value="TAX_REVIEW_REQUIRED">Tax review required</option>
+                      <option value="MATERIAL_MAPPING_REQUIRED">Material mapping required</option>
+                      <option value="SOURCE_CONFLICT">Source conflict</option>
+                    </Select>
+                  </div>
                   <div className="space-y-3" aria-label="All County candidate services">
                     {(candidateReview.data?.items ?? []).map((candidate) => (
                       <article
@@ -660,6 +765,7 @@ export function PriceBookRoute() {
                       {canApproveTax && !activationReadiness.data.tax_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "tax", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized finance reviewer approved the selected tax classification for this exact draft." })}>Approve tax classification</Button>}
                       {canManage && !activationReadiness.data.effective_date_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "effective-date", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the effective date shown for this exact draft." })}>Approve effective date</Button>}
                       {canActivate && !activationReadiness.data.activation_authorized && <Button disabled={!activationReadiness.data.price_approved || !activationReadiness.data.tax_approved || !activationReadiness.data.effective_date_approved} onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "activation-authorization", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized owner approved this exact draft for a later explicit activation command." })}>Authorize later activation</Button>}
+                      {canActivate && activationReadiness.data.activation_ready && <Button onClick={() => void performMutation(() => mutations.activate.mutateAsync({ id: reviewVersionId, version: activationReadiness.data!.draft_version }))}>Activate reviewed version</Button>}
                     </div>
                     <div>
                       <h3 className="font-semibold">Review and activation history</h3>
@@ -854,6 +960,36 @@ export function PriceBookRoute() {
                     className="space-y-3"
                     onSubmit={(e) => void submitCategory(e)}
                   >
+                    <Select
+                      aria-label="Choose category to edit"
+                      value={editCategory?.id ?? ""}
+                      onChange={(event) => {
+                        const selected = catalog.data?.categories.find(
+                          (candidate) => candidate.id === event.target.value,
+                        );
+                        if (!selected) {
+                          setEditCategory(null);
+                          setCategory(emptyCategory);
+                          return;
+                        }
+                        setEditCategory({ id: selected.id, version: selected.version });
+                        setCategory({
+                          code: selected.code,
+                          name: selected.name,
+                          description: selected.description ?? "",
+                          parentId: selected.parent_id ?? "",
+                          position: selected.position?.toString() ?? "",
+                          status: selected.status as "draft" | "active" | "archived",
+                        });
+                      }}
+                    >
+                      <option value="">Create a new category</option>
+                      {catalog.data?.categories.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          Edit {candidate.name}
+                        </option>
+                      ))}
+                    </Select>
                     <Input
                       aria-label="Category code"
                       placeholder="Code"
@@ -872,13 +1008,53 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Category description"
+                      placeholder="Description"
+                      value={category.description}
+                      onChange={(e) => setCategory({ ...category, description: e.target.value })}
+                    />
+                    <Select
+                      aria-label="Parent category"
+                      value={category.parentId}
+                      onChange={(e) => setCategory({ ...category, parentId: e.target.value })}
+                    >
+                      <option value="">No parent category</option>
+                      {catalog.data?.categories
+                        .filter((candidate) => candidate.id !== editCategory?.id)
+                        .map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                    </Select>
+                    <Input
+                      aria-label="Category order"
+                      type="number"
+                      min="1"
+                      placeholder="Display order"
+                      value={category.position}
+                      onChange={(e) => setCategory({ ...category, position: e.target.value })}
+                    />
+                    {editCategory && (
+                      <Select
+                        aria-label="Category status"
+                        value={category.status}
+                        onChange={(e) => setCategory({ ...category, status: e.target.value as "draft" | "active" | "archived" })}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                      </Select>
+                    )}
                     <Button
                       fullWidth
                       type="submit"
-                      loading={mutations.category.isPending}
+                      loading={mutations.category.isPending || mutations.categoryUpdate.isPending}
                     >
-                      Create category
+                      {editCategory ? "Save category" : "Create category"}
                     </Button>
+                    {editCategory && (
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditCategory(null); setCategory(emptyCategory); }}>
+                        Cancel category edit
+                      </Button>
+                    )}
                   </form>
                 </CardContent>
               </Card>
@@ -936,6 +1112,12 @@ export function PriceBookRoute() {
                       }
                       required
                     />
+                    <Input
+                      aria-label="Internal service notes"
+                      placeholder="Internal technical or cost notes"
+                      value={item.internal_description}
+                      onChange={(e) => setItem({ ...item, internal_description: e.target.value })}
+                    />
                     <Button
                       fullWidth
                       type="submit"
@@ -950,7 +1132,7 @@ export function PriceBookRoute() {
                         variant="ghost"
                         onClick={() => {
                           setEditItem(null);
-                          setItem({ category_id: "", code: "", name: "", customer_description: "" });
+                          setItem({ category_id: "", code: "", name: "", customer_description: "", internal_description: "" });
                         }}
                       >
                         Cancel edit
@@ -961,7 +1143,7 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>Draft price version</CardTitle>
+                  <CardTitle>{editDraft ? "Edit draft price version" : "Draft price version"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form
@@ -1040,15 +1222,80 @@ export function PriceBookRoute() {
                       onChange={(e) =>
                         setDraft({ ...draft, componentLabel: e.target.value })
                       }
+                      required={draftComponents.length === 0}
+                    />
+                    <Input
+                      aria-label="Expected component quantity"
+                      type="number"
+                      min="0.0001"
+                      step="0.0001"
+                      value={draft.componentQuantity}
+                      onChange={(e) =>
+                        setDraft({ ...draft, componentQuantity: e.target.value })
+                      }
                       required
                     />
+                    <Input
+                      aria-label="Expected component unit cost"
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      placeholder="Leave blank when cost evidence is unavailable"
+                      value={draft.componentCost}
+                      onChange={(e) =>
+                        setDraft({ ...draft, componentCost: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-content-muted">
+                      Expected inputs support planning only. They do not prove purchased or consumed materials, and missing cost is never treated as zero.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      fullWidth
+                      disabled={!draft.componentLabel || !draft.componentQuantity}
+                      onClick={() => {
+                        setDraftComponents([
+                          ...draftComponents,
+                          {
+                            component_type: draft.componentType,
+                            label: draft.componentLabel,
+                            quantity: draft.componentQuantity,
+                            unit_cost: draft.componentCost || undefined,
+                          },
+                        ]);
+                        setDraft({
+                          ...draft,
+                          componentLabel: "",
+                          componentQuantity: "1",
+                          componentCost: "",
+                        });
+                      }}
+                    >
+                      Add expected input
+                    </Button>
+                    {draftComponents.length > 0 && (
+                      <ul className="space-y-2 text-sm" aria-label="Staged expected inputs">
+                        {draftComponents.map((component, index) => (
+                          <li key={`${component.component_type}:${component.label}:${index}`} className="flex items-center justify-between gap-3 rounded-md bg-surface-muted p-2">
+                            <span>{component.component_type.replaceAll("_", " ")} · {component.label} · {component.quantity}{component.unit_cost ? ` × USD ${component.unit_cost}` : " · cost evidence missing"}</span>
+                            <Button type="button" variant="ghost" onClick={() => setDraftComponents(draftComponents.filter((_, candidate) => candidate !== index))}>Remove</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <Button
                       fullWidth
                       type="submit"
-                      loading={mutations.version.isPending}
+                      loading={mutations.version.isPending || mutations.versionUpdate.isPending}
                     >
-                      Create draft
+                      {editDraft ? "Save draft price version" : "Create draft"}
                     </Button>
+                    {editDraft && (
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditDraft(null); setDraftComponents([]); }}>
+                        Cancel draft edit
+                      </Button>
+                    )}
                   </form>
                 </CardContent>
               </Card>
@@ -1240,6 +1487,43 @@ export function PriceBookRoute() {
           )}
           <Card>
             <CardHeader>
+              <CardTitle>Customer option sets</CardTitle>
+              <CardDescription>
+                Good/Better/Best and other genuine alternatives connected to Price Book services.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {catalog.data?.option_groups.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {catalog.data.option_groups.map((group) => {
+                    const groupOptions = catalog.data?.options
+                      .filter((candidate) => candidate.option_group_id === group.id)
+                      .sort((left, right) => left.position - right.position) ?? [];
+                    return (
+                      <section key={group.id} className="rounded-lg border border-stroke p-4" aria-label={`Option set ${group.name}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div><p className="text-xs text-content-muted">{group.code}</p><h3 className="font-semibold">{group.name}</h3></div>
+                          <Badge variant={group.status === "active" ? "success" : "neutral"}>{group.status}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-content-muted">Choose at least {group.minimum_selections} and at most {group.maximum_selections}.</p>
+                        <ol className="mt-3 space-y-2">
+                          {groupOptions.map((choice) => {
+                            const service = catalog.data?.service_items.find((item) => item.id === choice.service_item_id);
+                            return <li key={choice.id} className="rounded-md bg-surface-muted p-3 text-sm"><strong>{choice.label}</strong><span className="text-content-muted"> · {service ? `${service.code} · ${service.name}` : "Connected service unavailable"}</span></li>;
+                          })}
+                        </ol>
+                        {groupOptions.length === 0 && <p className="mt-3 text-sm text-content-muted">No service choices are connected yet.</p>}
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-stroke p-4 text-sm text-content-muted">No customer option sets are configured.</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
               <CardTitle>Service prices</CardTitle>
               <CardDescription>
                 Search by customer language or service code. Activation remains
@@ -1255,12 +1539,16 @@ export function PriceBookRoute() {
                   onChange={(event) => {
                     setSearch(event.target.value);
                     setCandidateOffset(0);
+                    setCatalogOffset(0);
                   }}
                 />
                 <Select
                   aria-label="Filter Price Book category"
                   value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  onChange={(event) => {
+                    setCategoryFilter(event.target.value);
+                    setCatalogOffset(0);
+                  }}
                 >
                   <option value="all">All categories</option>
                   {catalog.data?.categories.map((category) => (
@@ -1272,7 +1560,10 @@ export function PriceBookRoute() {
                 <Select
                   aria-label="Filter Price Book status"
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setCatalogOffset(0);
+                  }}
                 >
                   <option value="all">All states</option>
                   <option value="draft">Draft</option>
@@ -1285,7 +1576,10 @@ export function PriceBookRoute() {
                 <Button
                   type="button"
                   variant={categoryFilter === "all" ? "primary" : "ghost"}
-                  onClick={() => setCategoryFilter("all")}
+                  onClick={() => {
+                    setCategoryFilter("all");
+                    setCatalogOffset(0);
+                  }}
                 >
                   All categories
                 </Button>
@@ -1294,14 +1588,17 @@ export function PriceBookRoute() {
                     key={category.id}
                     type="button"
                     variant={categoryFilter === category.id ? "primary" : "ghost"}
-                    onClick={() => setCategoryFilter(category.id)}
+                    onClick={() => {
+                      setCategoryFilter(category.id);
+                      setCatalogOffset(0);
+                    }}
                   >
                     {category.name}
                   </Button>
                 ))}
               </nav>
               <p className="mb-3 text-sm text-content-muted" aria-live="polite">
-                Showing {filteredServices.length} of {services.length} services.
+                Showing {catalog.data?.total_service_items ? catalogOffset + 1 : 0}–{Math.min(catalogOffset + services.length, catalog.data?.total_service_items ?? 0)} of {catalog.data?.total_service_items ?? 0} services.
               </p>
               {selectedService && (
                 <section
@@ -1324,6 +1621,11 @@ export function PriceBookRoute() {
                     </Button>
                   </div>
                   <p className="mt-2">{selectedService.customer_description}</p>
+                  {canManage && selectedService.internal_description && (
+                    <p className="mt-2 rounded-md bg-surface-muted p-3 text-sm">
+                      <strong>Internal notes:</strong> {selectedService.internal_description}
+                    </p>
+                  )}
                   {selectedService.status === "draft" && (
                     <Alert>
                       This Draft service is available for owner review. It cannot be selected in an Estimate until an authorized owner explicitly activates it.
@@ -1405,6 +1707,7 @@ export function PriceBookRoute() {
                                   code: service.code,
                                   name: service.name,
                                   customer_description: service.customer_description,
+                                  internal_description: service.internal_description ?? "",
                                 });
                                 setEditItem({
                                   id: service.id,
@@ -1437,6 +1740,16 @@ export function PriceBookRoute() {
                                   Expected direct cost {version.currency} {version.expected_direct_cost} · Expected direct contribution {version.currency} {version.expected_direct_contribution}
                                 </p>
                               )}
+                              {canManage && version.components.length > 0 && (
+                                <ul className="mt-2 space-y-1 text-xs text-content-muted" aria-label={`Expected inputs for revision ${version.revision}`}>
+                                  {version.components.map((component) => (
+                                    <li key={`${component.position}:${component.label}`}>
+                                      {component.component_type.replaceAll("_", " ")} · {component.label} · {component.quantity}
+                                      {component.unit_cost == null ? " · cost evidence missing" : ` × ${version.currency} ${component.unit_cost}`}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                               {version.status === "draft" && itemVersions.some((candidate) => candidate.status === "active") && (
                                 <p className="text-xs font-medium text-content-muted">
                                   Change from active: {version.currency} {(Number(version.unit_price) - Number(itemVersions.find((candidate) => candidate.status === "active")?.unit_price ?? 0)).toFixed(2)}
@@ -1444,18 +1757,51 @@ export function PriceBookRoute() {
                               )}
                             </div>
                             {canActivate && version.status === "draft" && (
-                              <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button><Button
-                                onClick={() =>
-                                  void performMutation(() =>
-                                    mutations.activate.mutateAsync({
-                                      id: version.id,
-                                      version: version.version,
-                                    }),
-                                  )
-                                }
+                              <Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button>
+                            )}
+                            {canManage && version.status === "draft" && (
+                              <Button
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditDraft({ id: version.id, version: version.version });
+                                  setDraft({
+                                    itemId: version.service_item_id,
+                                    taxId: version.tax_classification_id,
+                                    price: version.unit_price,
+                                    effective: version.effective_at.slice(0, 16),
+                                    componentType: "labor",
+                                    componentLabel: "",
+                                    componentQuantity: "1",
+                                    componentCost: "",
+                                  });
+                                  setDraftComponents(version.components.map((component) => ({
+                                    component_type: component.component_type,
+                                    label: component.label,
+                                    quantity: component.quantity,
+                                    unit_cost: component.unit_cost,
+                                  })));
+                                }}
                               >
-                                Activate version
-                              </Button></div>
+                                Edit draft price
+                              </Button>
+                            )}
+                            {canActivate && version.status === "active" && (
+                              <Button
+                                variant="ghost"
+                                loading={mutations.versionLifecycle.isPending}
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "inactivate", expectedVersion: version.version })}
+                              >
+                                Inactivate price version
+                              </Button>
+                            )}
+                            {canActivate && version.status === "inactive" && (
+                              <Button
+                                variant="ghost"
+                                loading={mutations.versionLifecycle.isPending}
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "archive", expectedVersion: version.version })}
+                              >
+                                Archive price version
+                              </Button>
                             )}
                           </div>
                         ))}
@@ -1464,6 +1810,24 @@ export function PriceBookRoute() {
                   );
                 })}
               </ul>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={catalogOffset === 0}
+                  onClick={() => setCatalogOffset((offset) => Math.max(0, offset - catalogPageSize))}
+                >
+                  Previous services
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={catalogOffset + services.length >= (catalog.data?.total_service_items ?? 0)}
+                  onClick={() => setCatalogOffset((offset) => offset + catalogPageSize)}
+                >
+                  Next services
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </>

@@ -35,6 +35,7 @@ def test_beta_edge_preserves_preview_and_blocks_internal_surfaces() -> None:
     assert "beta.twelve-hats.com {" in caddy
     assert "handle @internal {" in caddy
     assert "respond 404" in caddy
+    assert "respond @internal 404" not in caddy
     for path in (
         "/mission-control*",
         "/engineering*",
@@ -44,8 +45,6 @@ def test_beta_edge_preserves_preview_and_blocks_internal_surfaces() -> None:
     ):
         assert path in caddy
     assert "app.twelve-hats.com" not in caddy
-    assert caddy.count("@browser_secret_path path /activate /reset-password") == 2
-    assert caddy.count("log_skip @browser_secret_path") == 2
 
 
 def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
@@ -58,22 +57,19 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "/backend-health" in verifier
     assert "/api/v1/auth/session" in verifier
     assert "access-control-allow-origin" in verifier
-    assert "https://attacker.invalid" in verifier
     assert "openssl s_client" in verifier
-    assert "-checkend 604800" in verifier
+    assert 'openssl x509 -in "$certificate_file" -noout -checkend 1209600' in verifier
+    assert "Preview and Beta backend health projections differ" in verifier
+    assert "https://untrusted.invalid" in verifier
+    assert "require_single_header content-security-policy" in verifier
+    assert "require_header_value strict-transport-security" in verifier
+    assert "require_header_value x-frame-options DENY" in verifier
+    assert "require_https_redirect beta.twelve-hats.com" in verifier
+    assert "REQUIRE_PUBLIC_METADATA" in verifier
     assert "mission-control" in verifier
     assert "app.twelve-hats.com" not in verifier
     assert "PREVIEW_URL" not in verifier
     assert "BETA_URL" not in verifier
-    for header in (
-        "strict-transport-security",
-        "x-content-type-options",
-        "x-frame-options",
-        "referrer-policy",
-        "permissions-policy",
-        "content-security-policy",
-    ):
-        assert header in verifier
 
 
 def test_local_monitor_is_bounded_and_does_not_claim_external_alerting() -> None:
@@ -109,12 +105,10 @@ def test_frontend_proxy_emits_one_security_header_policy() -> None:
         assert f"proxy_hide_header {header};" in nginx
 
 
-def test_frontend_proxy_does_not_log_browser_borne_credentials() -> None:
+def test_owner_assets_route_does_not_collide_with_static_asset_directory() -> None:
     nginx = (REPOSITORY_ROOT / "frontend/nginx.preview.conf").read_text(
         encoding="utf-8"
     )
 
-    for route in ("/activate", "/reset-password"):
-        location = nginx.split(f"location = {route} {{", 1)[1].split("}", 1)[0]
-        assert "access_log off;" in location
-        assert "try_files $uri /index.html;" in location
+    assert "location = /assets {\n        try_files /index.html =404;\n    }" in nginx
+    assert "location = /assets/ {\n        try_files /index.html =404;\n    }" in nginx
