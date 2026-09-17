@@ -116,6 +116,35 @@ def test_executed_evidence_is_private_and_digest_bound(tmp_path: Path) -> None:
     assert artifact.stat().st_mode & 0o777 == 0o600
 
 
+def test_existing_evidence_is_never_overwritten(tmp_path: Path) -> None:
+    module = _module()
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    sealed = evidence / "qualification-packet.json"
+    sealed.write_text('{"sealed":true}\n', encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="must be empty"):
+        module.prepare_evidence_directory(evidence)
+
+    assert sealed.read_text(encoding="utf-8") == '{"sealed":true}\n'
+
+
+def test_evidence_directory_and_artifacts_are_private_and_exclusive(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    evidence = tmp_path / "nested" / "evidence"
+    module.prepare_evidence_directory(evidence)
+    artifact = evidence / "check.log"
+    module.write_private_artifact(artifact, "first\n")
+
+    assert evidence.stat().st_mode & 0o777 == 0o700
+    assert artifact.stat().st_mode & 0o777 == 0o600
+    with pytest.raises(FileExistsError):
+        module.write_private_artifact(artifact, "replacement\n")
+    assert artifact.read_text(encoding="utf-8") == "first\n"
+
+
 @pytest.mark.parametrize("status", ["FAIL", "BLOCKED"])
 def test_incomplete_executed_qualification_fails_closed(status: str) -> None:
     module = _module()

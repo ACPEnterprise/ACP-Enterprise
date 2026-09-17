@@ -114,6 +114,26 @@ def count_skips(output: str) -> int | None:
     return sum(values) if values else 0
 
 
+def prepare_evidence_directory(path: Path) -> None:
+    """Create a private, empty evidence directory without altering sealed output."""
+    if path.is_symlink():
+        raise SystemExit("evidence directory must not be a symbolic link")
+    if path.exists():
+        if not path.is_dir():
+            raise SystemExit("evidence path must be a directory")
+        if any(path.iterdir()):
+            raise SystemExit("evidence directory must be empty")
+    else:
+        path.mkdir(mode=0o700, parents=True)
+    path.chmod(0o700)
+
+
+def write_private_artifact(path: Path, content: str) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(content)
+
+
 def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Result:
     assert check.command is not None
     missing = [tool for tool in check.required_tools if not tool_available(tool)]
@@ -126,8 +146,7 @@ def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Res
     started = datetime.now(timezone.utc)
     completed = subprocess.run(check.command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     duration = (datetime.now(timezone.utc) - started).total_seconds()
-    artifact.write_text(completed.stdout, encoding="utf-8")
-    artifact.chmod(0o600)
+    write_private_artifact(artifact, completed.stdout)
     status = "PASS" if completed.returncode == 0 else "FAIL"
     if check.key == "repository_cleanliness" and completed.stdout:
         status, reason = "FAIL", "working tree is not clean"
@@ -199,8 +218,7 @@ def main() -> int:
     candidate = args.candidate_sha or head
     if not re.fullmatch(r"[0-9a-f]{40}", candidate):
         raise SystemExit("candidate SHA must be a full 40-character lowercase SHA")
-    args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    args.evidence_dir.chmod(0o700)
+    prepare_evidence_directory(args.evidence_dir)
     results: list[Result] = []
     for check in checks():
         artifact = args.evidence_dir / f"{check.key}.log"
