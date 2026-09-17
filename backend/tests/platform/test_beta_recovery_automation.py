@@ -36,6 +36,10 @@ def test_host_audit_fails_closed_for_runtime_disk_and_backup_drift() -> None:
     assert "(unhealthy\\)|Restarting" in script
     assert "MAX_BACKUP_AGE_HOURS:-26" in script
     assert '"$backup_mode" != "600"' in script
+    assert "newest Preview backup has no SHA-256 sidecar" in script
+    assert "checksum does not bind the newest dump" in script
+    assert "sha256sum --check --status" in script
+    assert "latest_preview_backup_checksum=verified" in script
     assert 'script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' in script
     assert '"$script_dir/verify-beta-connectivity.sh"' in script
 

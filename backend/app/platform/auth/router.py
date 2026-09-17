@@ -42,6 +42,13 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 rate_limiter = AuthenticationRateLimiter()
 
 
+def development_token(plaintext_token: str | None, *, environment: str) -> str | None:
+    """Expose one-time tokens only in explicitly non-deployed environments."""
+    if environment not in {"development", "test"}:
+        return None
+    return plaintext_token
+
+
 def client_metadata(request: Request) -> tuple[str | None, str | None]:
     ip_address = request.client.host if request.client else None
     return ip_address, request.headers.get("user-agent")
@@ -227,7 +234,10 @@ async def request_password_reset(
     )
     return GenericResponse(
         message="If the account is eligible, recovery instructions will be sent.",
-        development_token=(delivery.plaintext_token if delivery is not None else None),
+        development_token=development_token(
+            delivery.plaintext_token if delivery is not None else None,
+            environment=settings.environment,
+        ),
     )
 
 
@@ -275,10 +285,9 @@ async def request_email_verification(
     )
     return GenericResponse(
         message="Verification instructions will be sent.",
-        development_token=(
-            delivery.plaintext_token
-            if settings.environment in {"development", "test"}
-            else None
+        development_token=development_token(
+            delivery.plaintext_token,
+            environment=settings.environment,
         ),
     )
 

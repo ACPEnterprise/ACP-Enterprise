@@ -5,6 +5,8 @@ preview.allcountyhomeservices.com {
 
 	@qbo_oauth_callback path /api/v1/integrations/qbo/oauth/callback /api/v1/integrations/qbo/production/oauth/callback
 	log_skip @qbo_oauth_callback
+	@browser_secret_path path /activate /reset-password
+	log_skip @browser_secret_path
 
 	handle /mission-control* {
 		reverse_proxy 127.0.0.1:18008
@@ -47,6 +49,8 @@ beta.twelve-hats.com {
 
 	@qbo_oauth_callback path /api/v1/integrations/qbo/oauth/callback /api/v1/integrations/qbo/production/oauth/callback
 	log_skip @qbo_oauth_callback
+	@browser_secret_path path /activate /reset-password
+	log_skip @browser_secret_path
 
 	handle {
 		reverse_proxy 127.0.0.1:8080 {

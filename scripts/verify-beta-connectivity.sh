@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-preview_url=${PREVIEW_URL:-https://preview.allcountyhomeservices.com}
-beta_url=${BETA_URL:-https://beta.twelve-hats.com}
+preview_url=https://preview.allcountyhomeservices.com
+beta_url=https://beta.twelve-hats.com
 expected_beta_ipv4=${EXPECTED_BETA_IPV4:-162.243.234.193}
 
 temporary_headers=$(mktemp)
@@ -30,6 +30,15 @@ require_single_header() {
   fi
 }
 
+require_header_value() {
+  header_name=$1
+  expected=$2
+  if ! grep -Eiq "^${header_name}:[[:space:]]*${expected}[[:space:]]*\r?$" "$temporary_headers"; then
+    echo "Missing or unsafe $header_name response header." >&2
+    exit 1
+  fi
+}
+
 require_https_redirect() {
   hostname=$1
   curl --silent --show-error --max-time 15 --head "http://$hostname/" >"$temporary_headers"
@@ -47,13 +56,30 @@ for base_url in "$preview_url" "$beta_url"; do
   require_status 200 "$base_url/"
   require_status 200 "$base_url/healthz"
   require_status 200 "$base_url/backend-health"
+  require_status 200 "$base_url/health/live"
+  require_status 200 "$base_url/health/ready"
   require_status 200 "$base_url/employees"
   require_status 401 "$base_url/api/v1/auth/session"
   curl --silent --show-error --max-time 15 --head "$base_url/" >"$temporary_headers"
   require_single_header strict-transport-security
   require_single_header content-security-policy
   require_single_header x-content-type-options
-  grep -iq '^x-content-type-options: nosniff' "$temporary_headers"
+  require_single_header x-frame-options
+  require_single_header referrer-policy
+  require_single_header permissions-policy
+  require_header_value strict-transport-security 'max-age=(31536000|[4-9][0-9]{7,}|[1-9][0-9]{8,});[[:space:]]*includeSubDomains'
+  require_header_value x-content-type-options nosniff
+  require_header_value x-frame-options DENY
+  require_header_value referrer-policy no-referrer
+  require_header_value permissions-policy '.+'
+  require_header_value content-security-policy '.+'
+done
+
+for base_url in "$preview_url" "$beta_url"; do
+  curl --fail --silent --show-error --max-time 15 "$base_url/health/live" >"$temporary_body"
+  grep -q '"status":"alive"' "$temporary_body"
+  curl --fail --silent --show-error --max-time 15 "$base_url/health/ready" >"$temporary_body"
+  grep -q '"state":"HEALTHY"' "$temporary_body"
 done
 
 require_https_redirect preview.allcountyhomeservices.com

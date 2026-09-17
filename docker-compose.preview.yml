@@ -49,7 +49,7 @@ x-default-logging: &default-logging
 services:
   postgres:
     logging: *default-logging
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-acp_enterprise_preview}
       POSTGRES_USER: ${POSTGRES_USER:-acp_enterprise}
@@ -67,7 +67,7 @@ services:
 
   redis:
     logging: *default-logging
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     command: ["redis-server", "--save", "", "--appendonly", "no", "--aclfile", "/run/secrets/redis/users.acl", "--protected-mode", "yes"]
     volumes:
       - preview_redis_data:/data
@@ -92,6 +92,13 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       preview:
 
@@ -125,6 +132,13 @@ services:
       start_period: 10s
       retries: 12
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       preview:
 
@@ -166,6 +180,13 @@ services:
       start_period: 10s
       retries: 12
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       preview:
       mission-control:
@@ -190,6 +211,14 @@ services:
       start_period: 5s
       retries: 12
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=4m,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       mission-control:
 
@@ -206,6 +235,13 @@ services:
       - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro
       - ${REDIS_SECRET_DIR_HOST:?Set REDIS_SECRET_DIR_HOST in .env.preview}:/run/secrets/redis:ro
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       preview:
 
@@ -335,6 +371,14 @@ services:
       start_period: 5s
       retries: 12
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=4m,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       preview:
 
