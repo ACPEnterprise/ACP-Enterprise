@@ -9,6 +9,21 @@ def _compose(path: str) -> dict[str, object]:
     return yaml.safe_load((REPOSITORY_ROOT / path).read_text(encoding="utf-8"))
 
 
+def test_compose_state_images_are_immutable() -> None:
+    for compose_name in (
+        "docker-compose.yml",
+        "docker-compose.preview.yml",
+        "docker-compose.migration-rehearsal.yml",
+        "docker-compose.redis-qualification.yml",
+        "docker-compose.release-qualification.yml",
+    ):
+        services = _compose(compose_name)["services"]
+        for service_name in ("postgres", "redis"):
+            service = services.get(service_name)
+            if service is not None:
+                assert "@sha256:" in service["image"]
+
+
 def test_development_service_ports_are_loopback_only() -> None:
     compose = _compose("docker-compose.yml")
 

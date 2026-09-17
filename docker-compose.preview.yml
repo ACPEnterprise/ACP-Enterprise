@@ -49,7 +49,7 @@ x-default-logging: &default-logging
 services:
   postgres:
     logging: *default-logging
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-acp_enterprise_preview}
       POSTGRES_USER: ${POSTGRES_USER:-acp_enterprise}
@@ -67,7 +67,7 @@ services:
 
   redis:
     logging: *default-logging
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     command: ["redis-server", "--save", "", "--appendonly", "no", "--aclfile", "/run/secrets/redis/users.acl", "--protected-mode", "yes"]
     volumes:
       - preview_redis_data:/data
