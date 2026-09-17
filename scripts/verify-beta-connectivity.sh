@@ -56,6 +56,8 @@ for base_url in "$preview_url" "$beta_url"; do
   require_status 200 "$base_url/"
   require_status 200 "$base_url/healthz"
   require_status 200 "$base_url/backend-health"
+  require_status 200 "$base_url/health/live"
+  require_status 200 "$base_url/health/ready"
   require_status 200 "$base_url/employees"
   require_status 401 "$base_url/api/v1/auth/session"
   curl --silent --show-error --max-time 15 --head "$base_url/" >"$temporary_headers"
@@ -71,6 +73,13 @@ for base_url in "$preview_url" "$beta_url"; do
   require_header_value referrer-policy no-referrer
   require_header_value permissions-policy '.+'
   require_header_value content-security-policy '.+'
+done
+
+for base_url in "$preview_url" "$beta_url"; do
+  curl --fail --silent --show-error --max-time 15 "$base_url/health/live" >"$temporary_body"
+  grep -q '"status":"alive"' "$temporary_body"
+  curl --fail --silent --show-error --max-time 15 "$base_url/health/ready" >"$temporary_body"
+  grep -q '"state":"HEALTHY"' "$temporary_body"
 done
 
 require_https_redirect preview.allcountyhomeservices.com

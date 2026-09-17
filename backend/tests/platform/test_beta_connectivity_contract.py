@@ -55,6 +55,10 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert PREVIEW in verifier
     assert BETA in verifier
     assert "/backend-health" in verifier
+    assert 'require_status 200 "$base_url/health/live"' in verifier
+    assert 'require_status 200 "$base_url/health/ready"' in verifier
+    assert '"status":"alive"' in verifier
+    assert '"state":"HEALTHY"' in verifier
     assert "/api/v1/auth/session" in verifier
     assert "access-control-allow-origin" in verifier
     assert "openssl s_client" in verifier
@@ -103,6 +107,17 @@ def test_frontend_proxy_emits_one_security_header_policy() -> None:
         "Strict-Transport-Security",
     ):
         assert f"proxy_hide_header {header};" in nginx
+
+
+def test_frontend_proxies_canonical_liveness_and_readiness_exactly() -> None:
+    nginx = (REPOSITORY_ROOT / "frontend/nginx.preview.conf").read_text(
+        encoding="utf-8"
+    )
+
+    assert "location = /health/live {" in nginx
+    assert "proxy_pass http://backend:8000/health/live;" in nginx
+    assert "location = /health/ready {" in nginx
+    assert "proxy_pass http://backend:8000/health/ready;" in nginx
 
 
 def test_owner_assets_route_does_not_collide_with_static_asset_directory() -> None:
