@@ -65,6 +65,7 @@ def checks() -> tuple[Check, ...]:
         Check("repository_cleanliness", "Repository cleanliness", execution_profiles, ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
         Check("repository_provenance", "Repository provenance", execution_profiles, ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
         Check("backend_dependencies", "Backend dependency/install verification", ("local",), (py, "-m", "pip", "check"), "No broken requirements", (py,)),
+        Check("backend_dependency_pins", "Backend direct dependency pin verification", ("local",), ("python3", "scripts/release-backend-pin-check.py"), "Every direct runtime and qualification dependency is exactly pinned", ("python3",)),
         Check("backend_vulnerabilities", "Backend dependency vulnerability audit", ("local",), (py, "-m", "pip_audit", "-r", "backend/requirements.txt"), "No known runtime dependency vulnerabilities", (py,)),
         Check("frontend_dependencies", "Frontend dependency/install verification", ("local",), ("npm", "ci", "--prefix", "frontend", "--ignore-scripts"), "Lockfile install succeeds", ("npm",), "workspace_dependencies"),
         Check("frontend_vulnerabilities", "Frontend dependency vulnerability audit", ("local",), ("npm", "audit", "--prefix", "frontend", "--audit-level=low"), "No known dependency vulnerabilities", ("npm",)),
