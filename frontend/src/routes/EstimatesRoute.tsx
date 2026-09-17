@@ -127,6 +127,7 @@ export function EstimatesRoute() {
       search: serviceSearch.trim() || undefined,
       categoryId: serviceCategory || undefined,
       itemStatus: "active",
+      sellableOnly: true,
     },
   );
   const activeServices =
@@ -626,6 +627,13 @@ export function EstimatesRoute() {
                     </option>
                   ))}
               </Select>
+              {form.optionGroup && (
+                <p className="text-sm text-content-muted sm:col-span-2">
+                  Good/Better/Best labels organize genuine choices. Each choice
+                  keeps its authoritative Price Book service and price; the label
+                  does not create a pricing tier or change a price.
+                </p>
+              )}
               {form.optionGroup ? (
                 <Select
                   aria-label="Price Book option"

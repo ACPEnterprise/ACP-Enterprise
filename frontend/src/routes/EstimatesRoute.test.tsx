@@ -123,6 +123,10 @@ vi.mock("../api/estimates", () => ({
   convertEstimateToJob: vi.fn(),
 }));
 vi.mock("../api/priceBook", () => ({
+  getCompanyTaxPolicy: vi.fn().mockResolvedValue({ current: null, history: [] }),
+  createCompanyTaxPolicy: vi.fn(),
+  updateCompanyTaxPolicy: vi.fn(),
+  certifyCompanyTaxPolicy: vi.fn(),
   getPriceBook: vi.fn().mockResolvedValue({
     categories: [
       { id: "category-1", code: "DRAIN", name: "Drain Cleaning", status: "active" },
@@ -296,7 +300,11 @@ describe("EstimatesRoute", () => {
     await waitFor(() =>
       expect(priceBookApi.getPriceBook).toHaveBeenCalledWith(
         "11111111-1111-4111-8111-111111111111",
-        expect.objectContaining({ search: "drain", itemStatus: "active" }),
+        expect.objectContaining({
+          search: "drain",
+          itemStatus: "active",
+          sellableOnly: true,
+        }),
       ),
     );
 
@@ -310,6 +318,7 @@ describe("EstimatesRoute", () => {
           search: "drain",
           categoryId: "category-1",
           itemStatus: "active",
+          sellableOnly: true,
         }),
       ),
     );
