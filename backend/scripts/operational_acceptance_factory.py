@@ -122,14 +122,48 @@ def _digest_output(output: str) -> str:
     return hashlib.sha256(output.encode("utf-8", errors="replace")).hexdigest()
 
 
-def run(*, authority_sha: str, schema_head: str, output_path: Path) -> int:
+def _test_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["ENVIRONMENT"] = "test"
+    environment.setdefault("PYTHONPATH", ".")
+    # Test mode supplies deterministic non-production keys itself. Inherited
+    # qualification keys must not leak into tests which instantiate an explicit
+    # Preview/Production Settings object to prove fail-closed configuration.
+    for name in (
+        "ACCESS_TOKEN_KEYS",
+        "ACCESS_TOKEN_SIGNING_KEY",
+        "ACCESS_TOKEN_ACTIVE_KID",
+        "SECURITY_TOKEN_HMAC_KEY",
+    ):
+        environment.pop(name, None)
+    return environment
+
+
+def _selected_scenarios(scenario_ids: tuple[str, ...]) -> tuple[Scenario, ...]:
+    if not scenario_ids:
+        return SCENARIOS
+    requested = set(scenario_ids)
+    known = {scenario.scenario_id for scenario in SCENARIOS}
+    unknown = sorted(requested - known)
+    if unknown:
+        raise ValueError(f"unknown acceptance scenario(s): {', '.join(unknown)}")
+    return tuple(
+        scenario for scenario in SCENARIOS if scenario.scenario_id in requested
+    )
+
+
+def run(
+    *,
+    authority_sha: str,
+    schema_head: str,
+    output_path: Path,
+    scenario_ids: tuple[str, ...] = (),
+) -> int:
     started = time.time()
     results: list[dict[str, object]] = []
     failures = 0
-    environment = os.environ.copy()
-    environment.setdefault("ENVIRONMENT", "test")
-    environment.setdefault("PYTHONPATH", ".")
-    for scenario in SCENARIOS:
+    environment = _test_environment()
+    for scenario in _selected_scenarios(scenario_ids):
         if scenario.gate_classification:
             classification = scenario.gate_classification
             result = "GATED"
@@ -187,11 +221,22 @@ def main() -> int:
     parser.add_argument("--authority", required=True)
     parser.add_argument("--schema-head", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        default=[],
+        help=(
+            "Run only the named scenario. Repeat for multiple scenarios. "
+            "Use one scenario per fresh migrated database when collecting "
+            "independent acceptance evidence."
+        ),
+    )
     args = parser.parse_args()
     return run(
         authority_sha=args.authority,
         schema_head=args.schema_head,
         output_path=args.output,
+        scenario_ids=tuple(args.scenario),
     )
 
 
