@@ -195,3 +195,46 @@ required escalation.
   `e4947b66f5ef3bb6f6e095fd42d29ce14fa650d2` before the latest OM2 scheduling
   and dispatch authority, with no Intelligence file overlap. Final fetch
   currentness is recorded in the release handoff.
+
+## ABC consolidation maximum 1 (current remote sweep)
+
+- Current protected authority at sweep: `b527d75eecb2d271a29bcb0bacb9e1b16b33784b`.
+  Prior Intelligence `fd4cb2d061281811fba8c531507d1d661a453c59` was rebased
+  onto it; protected history was not modified.
+- Laptop-A `work/lia-connected-assistant-night-shift-1` at
+  `092c2d34fe57b899b1104139d74b2f3d414b1432`: first cumulative patch already
+  contained; four later connected-LIA/voice/acceptance patches consumed. No
+  migrations.
+- Laptop-B `work/cosmic-intelligence-realdata-maximum-1` at
+  `917d87eafac141cc15b1c165f29e64f221bffa54`: cumulative Analytics,
+  Beacon/reporting, and unsupported-scope patches already contained; the
+  overlapping Luminary UI patch was skipped to preserve the current period-
+  delta model; later presentation-state content consumed. No migrations.
+  Analytics still lacks an authoritative currency source contract and does not
+  assume USD.
+- Phone/C `work/laptop1-phone-lia-client-maximum-1` at
+  `90aa2c9b750051c8ab08f3f6eb41d4145843ce7b`: three date/beta patches already
+  contained; actual permission-gated employee LIA client consumed. No
+  migrations. It uses only the employee-safe route and remains fail-safe until
+  released/deployed authority exists.
+- Integration order: A, compatible B presentation-state content, then C.
+  Existing canonical Luminary finding IDs and evidence result IDs already
+  provide scope/period/provenance identity; no new contextual-link migration
+  was warranted. Existing authorization/not-found behavior fails closed for
+  absent, stale, or unauthorized identities.
+- Employee-safe truth remains `POST /api/v1/lia/employee/ask`, guarded by
+  `COMPANY_EMPLOYEE_OPERATIONS_OWN_LIA_READ`, with tenant, membership,
+  eligibility, assignment, default-deny, and protected-field enforcement; no
+  owner-route fallback. Mobile now consumes that contract.
+- Qualification: backend `386 passed, 3 warnings`, disposable PostgreSQL
+  migration-to-head passed with one Alembic head `o1q9s27h4u0v`; frontend 43
+  affected tests, ESLint, TypeScript, and Vite build passed; Mobile 16 suites /
+  143 tests, typecheck, lint, config validation, and iOS/Android exports
+  passed. Xcode Release remains blocked by missing generated
+  `Pods-ACPEmployee.release.xcconfig`. Python compilation and diff-check passed;
+  host Ruff, MyPy, and Alembic were unavailable.
+- Real All County acceptance remains pending: no deployment occurred,
+  authenticated owner/employee execution was not observable, and no business
+  data was mutated. Source-domain handoffs remain Scheduling/Dispatch,
+  Price Book, Revenue Cycle, Timekeeping, Customer/Job historical identity,
+  and Analytics currency contracts.
