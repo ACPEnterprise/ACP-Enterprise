@@ -26,6 +26,7 @@ export interface PriceBookServiceItem {
   code: string;
   name: string;
   customer_description: string;
+  internal_description: string | null;
   status: string;
   current_version_id: string | null;
   version: number;
