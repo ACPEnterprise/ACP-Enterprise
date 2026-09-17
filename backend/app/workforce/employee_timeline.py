@@ -124,7 +124,7 @@ class EmployeeTimelineService:
                         else "ROLE_ASSIGNED",
                         assignment.assigned_at,
                         "membership_role",
-                        f"{role.display_name} role assigned.",
+                        f"{role.name} role assigned.",
                         employee_id,
                         assignment.assigned_by_user_id,
                     )
@@ -137,7 +137,7 @@ class EmployeeTimelineService:
                             else "ROLE_REMOVED",
                             assignment.revoked_at,
                             "membership_role",
-                            f"{role.display_name} role removed.",
+                            f"{role.name} role removed.",
                             employee_id,
                             None,
                         )
