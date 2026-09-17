@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as revenueHook from "../hooks/useRevenueTrend";
@@ -60,5 +60,8 @@ describe("RevenueTrendChart", () => {
     render(<RevenueTrendChart />);
     expect(screen.getByText(/America\/New_York · PARTIAL evidence/)).toBeInTheDocument();
     expect(screen.getByText(/1 monetary event\(s\) excluded/)).toBeInTheDocument();
+    expect(revenueHook.useRevenueTrend).toHaveBeenCalledWith(7);
+    fireEvent.change(screen.getByLabelText("Trend period"), { target: { value: "30" } });
+    expect(revenueHook.useRevenueTrend).toHaveBeenLastCalledWith(30);
   });
 });

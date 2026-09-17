@@ -7,6 +7,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useState } from "react";
 
 import { useRevenueTrend } from "../hooks/useRevenueTrend";
 
@@ -19,7 +20,8 @@ function formatCurrency(value: number): string {
 }
 
 export function RevenueTrendChart() {
-  const { data, isLoading, isError } = useRevenueTrend();
+  const [days, setDays] = useState(7);
+  const { data, isLoading, isError } = useRevenueTrend(days);
 
   const chartData =
     data?.points.map((point) => ({
@@ -57,10 +59,20 @@ export function RevenueTrendChart() {
 
   return (
     <div className="mt-ui-5 min-w-0 rounded-xl border border-stroke bg-surface-subtle p-ui-2 sm:p-ui-4">
-      <p className="mb-ui-2 text-xs text-content-muted">
-        {data?.period_start ? `${new Date(data.period_start).toLocaleDateString()}–${new Date(data.period_end).toLocaleDateString()} · ${data.timezone}` : "Period unavailable"}
-        {data?.completeness ? ` · ${data.completeness} evidence` : ""}
-      </p>
+      <div className="mb-ui-2 flex flex-wrap items-center justify-between gap-ui-2">
+        <p className="text-xs text-content-muted">
+          {data?.period_start ? `${new Date(data.period_start).toLocaleDateString()}–${new Date(data.period_end).toLocaleDateString()} · ${data.timezone}` : "Period unavailable"}
+          {data?.completeness ? ` · ${data.completeness} evidence` : ""}
+        </p>
+        <label className="text-xs font-medium text-content-secondary">
+          Trend period
+          <select className="ml-ui-2 rounded-md border border-stroke bg-surface px-ui-2 py-ui-1" value={days} onChange={(event) => setDays(Number(event.target.value))}>
+            <option value={7}>7 days</option>
+            <option value={30}>30 days</option>
+            <option value={90}>90 days</option>
+          </select>
+        </label>
+      </div>
       {data?.excluded_event_count ? <p className="mb-ui-2 text-xs text-status-warning">{data.excluded_event_count} monetary event(s) excluded because their amount evidence was unavailable or invalid.</p> : null}
       <div className="h-56 sm:h-72 landscape:max-h-48">
       <ResponsiveContainer width="100%" height="100%">
