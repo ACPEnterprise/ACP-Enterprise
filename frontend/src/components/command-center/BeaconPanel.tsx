@@ -489,7 +489,11 @@ export function BeaconPanel({
   ) => void;
   readonly retry: () => void;
 }) {
-  const visibleSignals = signals ?? [];
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const availableCategories = [...new Set((signals ?? []).map((signal) => signal.category))].sort();
+  const visibleSignals = (signals ?? []).filter(
+    (signal) => !categoryFilter || signal.category === categoryFilter,
+  );
   const acknowledgedCount = visibleSignals.filter(
     (signal) => signal.workflow?.acknowledged,
   ).length;
@@ -545,6 +549,17 @@ export function BeaconPanel({
           or invalid. Refresh the authoritative queue before trying again.
         </Alert>
       )}
+      {!loading && !error && signals && signals.length > 0 && (
+        <div className="mb-ui-4 flex justify-end">
+          <label className="text-body-s font-medium text-content-secondary">
+            Attention category
+            <select className="ml-ui-2 rounded-md border border-stroke bg-surface px-ui-2 py-ui-1" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="">All categories</option>
+              {availableCategories.map((category) => <option key={category} value={category}>{category.replaceAll("_", " ")}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
       {!loading && !error && visibleSignals.length > 0 && (
         <dl className="mb-ui-4 grid gap-ui-2 text-body-s sm:grid-cols-4">
           <div className="rounded-md border border-stroke p-ui-3">
@@ -585,7 +600,7 @@ export function BeaconPanel({
       {!loading && !error && signals && signals.length > 0 && (
         <div className="space-y-ui-5" aria-label="Owner attention queue" role="list">
           {attentionWindows.map((window) => {
-            const items = signals.filter(
+            const items = visibleSignals.filter(
               (signal) => attentionWindow(signal) === window,
             );
             if (items.length === 0) return null;
@@ -619,6 +634,12 @@ export function BeaconPanel({
             </section>;
           })}
         </div>
+      )}
+      {!loading && !error && signals && signals.length > 0 && visibleSignals.length === 0 && (
+        <EmptyState
+          title="No Beacon signals match this category"
+          description="The authoritative queue is unchanged. Choose another category or show all categories."
+        />
       )}
       {!loading &&
         !error &&
