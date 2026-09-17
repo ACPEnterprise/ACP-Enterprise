@@ -184,7 +184,12 @@ export function LuminaryRoute() {
   const [scope, setScope] = useState({ start: monthStart, end: today });
   const [scenarioKind, setScenarioKind] = useState("PRICE_PERCENT");
   const [scenarioChange, setScenarioChange] = useState("0");
-  const [scenario, setScenario] = useState<{ kind: string; change: number }>();
+  const [scenario, setScenario] = useState<{ kind: string; change?: number }>();
+  const scenarioAcceptsChange = !["CLOSE_RATE_PERCENT", "ADD_TRUCK"].includes(scenarioKind);
+  const parsedScenarioChange = Number(scenarioChange);
+  const invalidScenarioChange = scenarioAcceptsChange && (
+    scenarioChange.trim() === "" || !Number.isFinite(parsedScenarioChange) || parsedScenarioChange < -10000 || parsedScenarioChange > 10000
+  );
   const invalidPeriod = !start || !end || start > end;
   const briefing = useLuminaryBriefing(scope.start, scope.end, canRead);
   const readiness = useLuminarySourceReadiness(scope.start, scope.end, canRead);
@@ -452,11 +457,13 @@ export function LuminaryRoute() {
             <section className="rounded-lg border border-stroke p-4" aria-labelledby="scenario-title">
               <h3 className="font-semibold" id="scenario-title">Read-only scenario</h3>
               <p className="mt-1 text-sm text-content-muted">Hypothetical decision support only. Evaluating a scenario cannot change pricing or operations.</p>
-              <form className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); setScenario({ kind: scenarioKind, change: Number(scenarioChange) }); }}>
+              <form className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); if (invalidScenarioChange) return; setScenario({ kind: scenarioKind, change: scenarioAcceptsChange ? parsedScenarioChange : undefined }); }}>
                 <label>Assumption<select className="block w-full" value={scenarioKind} onChange={(event) => setScenarioKind(event.target.value)}><option value="PRICE_PERCENT">Price percent</option><option value="AVERAGE_TICKET_PERCENT">Average ticket percent</option><option value="LABOR_EFFICIENCY_PERCENT">Labor efficiency percent</option><option value="MATERIAL_COST_PERCENT">Material cost percent</option><option value="CLOSE_RATE_PERCENT">Close rate percent</option><option value="ADD_TRUCK">Add truck</option></select></label>
-                <label>Change (basis points)<Input max={10000} min={-10000} type="number" value={scenarioChange} onChange={(event) => setScenarioChange(event.target.value)} /></label>
+                <label>Change (basis points)<Input disabled={!scenarioAcceptsChange} max={10000} min={-10000} type="number" value={scenarioChange} onChange={(event) => setScenarioChange(event.target.value)} /></label>
                 <Button type="submit">Evaluate scenario</Button>
               </form>
+              {!scenarioAcceptsChange ? <p className="mt-2 text-xs text-content-muted">This scenario is evidence-gated. ACP will report the missing prerequisite without inventing a numeric change.</p> : null}
+              {invalidScenarioChange ? <p className="mt-2 text-sm text-status-danger" role="alert">Enter a basis-point change between -10,000 and 10,000.</p> : null}
               {ownerEconomics.data.scenario ? <div className="mt-3 text-sm"><p>Scenario state: <strong>{words(ownerEconomics.data.scenario.state)}</strong></p>{ownerEconomics.data.scenario.missing_prerequisites.length ? <p className="text-content-muted">Missing evidence: {ownerEconomics.data.scenario.missing_prerequisites.map(words).join(" · ")}</p> : <p className="text-content-muted">Deterministic deltas: {Object.entries(ownerEconomics.data.scenario.deltas ?? {}).map(([key, value]) => `${words(key)} ${value}`).join(" · ")}</p>}<p className="text-content-muted">No operational action occurred.</p></div> : <p className="mt-3 text-sm text-content-muted">No hypothetical scenario selected.</p>}
             </section>
             {ownerEconomics.data.recommendation_candidates.length ? (
