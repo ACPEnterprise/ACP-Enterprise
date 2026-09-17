@@ -130,3 +130,34 @@ result: 83 passed; no new actionable LIA-owned defect.
 
 The remaining backlog is source-domain or human/provider gated. No owned P0,
 P1, or P2 defect remains after these three consecutive sweeps.
+
+### Successor sweep 4 — actionable defects found
+
+Re-exercised financial wording, exact Beacon explanations, and the
+Luminary/Economics/Beacon transitions into LIA. Repaired six bounded LIA-owned
+defects (LIA-N1-019 through LIA-N1-024). This sweep does not count as clean.
+
+### Successor clean sweep 1 — retrieval, authorization, and existence hiding
+
+Covered Customer, Job, Employee, Appointment/Dispatch, Beacon, financial
+numeric safety, governed retrieval, injection/exfiltration, tenant/Branch
+scope, and no-mutation boundaries. Focused result: 96 passed; no new owned
+defect.
+
+### Successor clean sweep 2 — conversation, periods, and owner wording
+
+Covered correction, ambiguity, referents, topic switching, period resolution
+and comparison, owner question breadth, Payroll actionability, contextual
+composition, and operational intelligence contracts. Focused result: 88
+passed; no new owned defect.
+
+### Successor clean sweep 3 — web, navigation, and voice contracts
+
+Covered LIA screen context, Customer/Job/Invoice entry, Beacon/Luminary/
+Economics handoff, voice lifecycle, transcript intent, safe navigation, and
+responsive interaction contracts. Focused result: 48 passed across 9 frontend
+files; no new owned defect. Full frontend result remains 554 assertions passed
+with one source-owned Estimate workspace unhandled exception already recorded
+above.
+
+No owned P0/P1/P2 defect remains after the successor three-clean-sweep cycle.
