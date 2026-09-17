@@ -86,7 +86,7 @@ export function PayrollRoute() {
       <header>
         <p className="text-sm font-semibold text-action-primary">Financial Operations</p>
         <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll Administration</h1>
-        <p className="mt-2 text-content-muted">Readiness, reconciliation, reporting, payment, remittance, statements, and correction evidence. Provider execution and filing remain disabled.</p>
+        <p className="mt-2 text-content-muted">Prepare, calculate, review, approve, and document Payroll. Paper-check issuance is recorded here; provider execution, ACH, and tax filing remain disabled.</p>
       </header>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
       {canReadCutover && <PayrollCutoverReview />}
@@ -126,7 +126,7 @@ export function PayrollRoute() {
       <Card>
         <CardHeader>
           <CardTitle>Current pay-period review</CardTitle>
-          <CardDescription>Accepted time through compensation, withholding, and gross-pay readiness. This view does not calculate or transmit Payroll.</CardDescription>
+          <CardDescription>Accepted time through compensation, withholding, and gross-pay readiness. Calculate and approval actions become available only after every required authority is complete.</CardDescription>
         </CardHeader>
         <CardContent>
           {!canReadTime && (
@@ -268,6 +268,27 @@ export function PayrollRoute() {
         </Card>
       </section>
       <section className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Operator workflow</CardTitle>
+            <CardDescription>Use the governed sequence below. Each step remains unavailable until its prerequisite evidence and permission are present.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["1", "Select pay period", "Choose or create the Company-scoped period."],
+                ["2", "Readiness and calculate", "Approved policy, Employee inputs, and accepted time are required; missing values are not zero."],
+                ["3", "Review and approve", "Authorized reviewers approve the immutable run evidence."],
+                ["4", "Paper-check evidence", "Record a paper-check release only after approval. No bank settlement or ACH is performed."],
+              ].map(([step, title, description]) => (
+                <li className="rounded-lg border border-stroke p-3" key={step}>
+                  <strong>{step}. {title}</strong>
+                  <p className="mt-1 text-content-muted">{description}</p>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Payroll runs</CardTitle>

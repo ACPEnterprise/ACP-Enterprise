@@ -14,9 +14,58 @@ import type {
   PriceBookSnapshot,
   PriceBookVersion,
   TaxClassification,
+  CompanyTaxPolicy,
+  CompanyTaxPolicyPage,
 } from "../types/priceBook";
 
 const path = "/api/v1/price-book";
+export async function getCompanyTaxPolicy(): Promise<CompanyTaxPolicyPage> {
+  return (
+    await apiClient.get<CompanyTaxPolicyPage>(`${path}/company-tax-policy`)
+  ).data;
+}
+export async function createCompanyTaxPolicy(data: {
+  policy_identity: string;
+  effective_at: string;
+  customer_service_treatment: string;
+  customer_material_treatment: string;
+  purchase_material_tax_handling: string;
+  authority_source: string;
+  authority_notes?: string;
+  authorized_exceptions: Array<Record<string, unknown>>;
+}): Promise<CompanyTaxPolicy> {
+  return (
+    await apiClient.post<CompanyTaxPolicy>(`${path}/company-tax-policy`, data)
+  ).data;
+}
+export async function certifyCompanyTaxPolicy(
+  policyId: string,
+  expectedVersion: number,
+): Promise<CompanyTaxPolicy> {
+  return (
+    await apiClient.post<CompanyTaxPolicy>(
+      `${path}/company-tax-policy/${policyId}/certify`,
+      {
+        expected_version: expectedVersion,
+        certification_reason:
+          "Authorized finance approver certified the Company tax policy.",
+      },
+    )
+  ).data;
+}
+export async function updateCompanyTaxPolicy(
+  policyId: string,
+  data: Parameters<typeof createCompanyTaxPolicy>[0] & {
+    expected_version: number;
+  },
+): Promise<CompanyTaxPolicy> {
+  return (
+    await apiClient.put<CompanyTaxPolicy>(
+      `${path}/company-tax-policy/${policyId}`,
+      data,
+    )
+  ).data;
+}
 export async function getPriceBook(
   branchId?: string,
   filters: {
@@ -40,8 +89,14 @@ export async function getPriceBook(
     })
   ).data;
 }
-export async function getActivationReadiness(versionId: string): Promise<PriceBookActivationReadiness> {
-  return (await apiClient.get<PriceBookActivationReadiness>(`${path}/versions/${versionId}/activation-readiness`)).data;
+export async function getActivationReadiness(
+  versionId: string,
+): Promise<PriceBookActivationReadiness> {
+  return (
+    await apiClient.get<PriceBookActivationReadiness>(
+      `${path}/versions/${versionId}/activation-readiness`,
+    )
+  ).data;
 }
 export async function recordActivationReview(
   versionId: string,
@@ -49,14 +104,25 @@ export async function recordActivationReview(
   expectedVersion: number,
   reason: string,
 ): Promise<PriceBookActivationReadiness> {
-  return (await apiClient.post<PriceBookActivationReadiness>(`${path}/versions/${versionId}/review/${decision}`, {
-    expected_version: expectedVersion,
-    reason,
-    idempotency_key: crypto.randomUUID(),
-  })).data;
+  return (
+    await apiClient.post<PriceBookActivationReadiness>(
+      `${path}/versions/${versionId}/review/${decision}`,
+      {
+        expected_version: expectedVersion,
+        reason,
+        idempotency_key: crypto.randomUUID(),
+      },
+    )
+  ).data;
 }
-export async function getPriceBookAudit(entityId: string): Promise<PriceBookAuditItem[]> {
-  return (await apiClient.get<PriceBookAuditItem[]>(`${path}/audit`, { params: { entity_id: entityId } })).data;
+export async function getPriceBookAudit(
+  entityId: string,
+): Promise<PriceBookAuditItem[]> {
+  return (
+    await apiClient.get<PriceBookAuditItem[]>(`${path}/audit`, {
+      params: { entity_id: entityId },
+    })
+  ).data;
 }
 export async function getCandidateReview(params: {
   search?: string;
@@ -67,9 +133,12 @@ export async function getCandidateReview(params: {
   offset?: number;
 }): Promise<PriceBookCandidateReviewPage> {
   return (
-    await apiClient.get<PriceBookCandidateReviewPage>(`${path}/candidate-review`, {
-      params,
-    })
+    await apiClient.get<PriceBookCandidateReviewPage>(
+      `${path}/candidate-review`,
+      {
+        params,
+      },
+    )
   ).data;
 }
 export async function createCommercialSnapshot(
@@ -114,7 +183,10 @@ export async function updateCategory(
   },
 ): Promise<PriceBookCategory> {
   return (
-    await apiClient.put<PriceBookCategory>(`${path}/categories/${categoryId}`, data)
+    await apiClient.put<PriceBookCategory>(
+      `${path}/categories/${categoryId}`,
+      data,
+    )
   ).data;
 }
 export async function createTax(data: {
@@ -152,7 +224,10 @@ export async function updateServiceItem(
   },
 ): Promise<PriceBookServiceItem> {
   return (
-    await apiClient.put<PriceBookServiceItem>(`${path}/service-items/${itemId}`, data)
+    await apiClient.put<PriceBookServiceItem>(
+      `${path}/service-items/${itemId}`,
+      data,
+    )
   ).data;
 }
 export async function createPriceVersion(
@@ -210,7 +285,12 @@ export async function updateDraftPriceVersion(
     }>;
   },
 ): Promise<PriceBookVersion> {
-  return (await apiClient.put<PriceBookVersion>(`${path}/versions/${versionId}/draft`, data)).data;
+  return (
+    await apiClient.put<PriceBookVersion>(
+      `${path}/versions/${versionId}/draft`,
+      data,
+    )
+  ).data;
 }
 export async function transitionPriceVersion(
   versionId: string,
@@ -218,10 +298,13 @@ export async function transitionPriceVersion(
   expectedVersion: number,
 ): Promise<PriceBookVersion> {
   return (
-    await apiClient.post<PriceBookVersion>(`${path}/versions/${versionId}/${action}`, {
-      expected_version: expectedVersion,
-      reason: `Owner explicitly requested ${action} through Price Book maintenance.`,
-    })
+    await apiClient.post<PriceBookVersion>(
+      `${path}/versions/${versionId}/${action}`,
+      {
+        expected_version: expectedVersion,
+        reason: `Owner explicitly requested ${action} through Price Book maintenance.`,
+      },
+    )
   ).data;
 }
 export async function createOptionGroup(data: {
@@ -303,7 +386,12 @@ export async function createAdjustmentProposal(data: {
 }
 export async function decideAdjustmentProposal(
   proposalId: string,
-  data: { expected_version: number; expected_digest: string; decision: "approved" | "returned" | "rejected"; reason: string },
+  data: {
+    expected_version: number;
+    expected_digest: string;
+    decision: "approved" | "returned" | "rejected";
+    reason: string;
+  },
 ): Promise<PriceBookAdjustmentProposal> {
   return (
     await apiClient.post<PriceBookAdjustmentProposal>(
@@ -314,7 +402,11 @@ export async function decideAdjustmentProposal(
 }
 export async function materializeAdjustmentProposal(
   proposalId: string,
-  data: { expected_version: number; expected_digest: string; idempotency_key: string },
+  data: {
+    expected_version: number;
+    expected_digest: string;
+    idempotency_key: string;
+  },
 ): Promise<PriceBookBulkMaterialization> {
   return (
     await apiClient.post<PriceBookBulkMaterialization>(

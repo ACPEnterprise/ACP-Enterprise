@@ -23,6 +23,10 @@ from app.platform.idempotency.reliability import (
 )
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import PriceBookPermission
+from app.tax_policy.company_policy import (
+    customer_treatment,
+    effective_company_tax_policy,
+)
 
 from .errors import PriceBookConflict, PriceBookNotFound, PriceBookValidation
 from .models import (
@@ -922,10 +926,34 @@ class PriceBookService:
                 )
                 if review is None or review.draft_version != target.version:
                     raise PriceBookConflict("Candidate approvals are missing or stale.")
+                component_types = set(
+                    (
+                        await session.scalars(
+                            select(PriceBookComponent.component_type).where(
+                                PriceBookComponent.company_id == context.company.id,
+                                PriceBookComponent.price_version_id == target.id,
+                            )
+                        )
+                    ).all()
+                )
+                company_policy = await effective_company_tax_policy(
+                    session,
+                    company_id=context.company.id,
+                    effective_at=target.effective_at,
+                )
+                policy_tax_resolved = bool(
+                    company_policy
+                    and customer_treatment(
+                        company_policy,
+                        component_types=component_types,
+                        service_item_id=target.service_item_id,
+                    )
+                    != "REVIEW_REQUIRED"
+                )
                 if not all(
                     (
                         review.price_approved_at,
-                        review.tax_approved_at,
+                        review.tax_approved_at or policy_tax_resolved,
                         review.effective_approved_at,
                         review.activation_authorized_at,
                     )
@@ -1080,13 +1108,37 @@ class PriceBookService:
             if review is not None and review.draft_version == version.version
             else None
         )
+        components = set(
+            (
+                await session.scalars(
+                    select(PriceBookComponent.component_type).where(
+                        PriceBookComponent.price_version_id == version.id,
+                        PriceBookComponent.company_id == context.company.id,
+                    )
+                )
+            ).all()
+        )
+        company_policy = await effective_company_tax_policy(
+            session,
+            company_id=context.company.id,
+            effective_at=version.effective_at,
+        )
+        policy_treatment = (
+            customer_treatment(
+                company_policy,
+                component_types=components,
+                service_item_id=version.service_item_id,
+            )
+            if company_policy
+            else "REVIEW_REQUIRED"
+        )
+        tax_resolved_by_policy = policy_treatment != "REVIEW_REQUIRED"
         states = {
             "PRICE_APPROVAL_REQUIRED": bool(
                 current_review and current_review.price_approved_at
             ),
-            "TAX_REVIEW_REQUIRED": bool(
-                current_review and current_review.tax_approved_at
-            ),
+            "TAX_REVIEW_REQUIRED": tax_resolved_by_policy
+            or bool(current_review and current_review.tax_approved_at),
             "EFFECTIVE_DATE_REQUIRED": bool(
                 current_review and current_review.effective_approved_at
             ),
@@ -1099,6 +1151,18 @@ class PriceBookService:
         if conflict:
             blockers.append("SOURCE_CONFLICT")
         evidence = binding.candidate_evidence
+        rationale = (
+            {key: str(value) for key, value in current_review.rationale.items()}
+            if current_review
+            else {}
+        )
+        if tax_resolved_by_policy and company_policy:
+            rationale["tax"] = (
+                f"Resolved by Company Tax Policy "
+                f"{company_policy.policy_identity} v{company_policy.version}."
+            )
+        elif company_policy:
+            rationale["tax"] = "Company Tax Policy requires exception review."
         return ActivationReadinessItem(
             price_version_id=version.id,
             draft_version=version.version,
@@ -1113,11 +1177,7 @@ class PriceBookService:
             source_conflict=conflict,
             activation_ready=not blockers,
             remaining_blockers=tuple(blockers),
-            rationale={
-                key: str(value) for key, value in current_review.rationale.items()
-            }
-            if current_review
-            else {},
+            rationale=rationale,
         )
 
     async def record_activation_review(

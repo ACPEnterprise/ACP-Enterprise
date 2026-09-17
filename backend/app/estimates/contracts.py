@@ -96,6 +96,7 @@ class CreateEstimateRevisionSpec:
     lines: tuple[EstimateLineSpec, ...]
     discount_type: str | None = None
     discount_value: Decimal | None = None
+    approved_proposal_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)

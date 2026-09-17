@@ -10,6 +10,13 @@ export function useAgreementPlans() {
     queryFn: api.listAgreementPlans,
   });
 }
+export function useCustomerMembershipEntitlements(customerId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...key, "customer-entitlements", customerId],
+    queryFn: () => api.getCustomerMembershipEntitlements(customerId),
+    enabled: enabled && Boolean(customerId),
+  });
+}
 export function useAgreementMutations() {
   const client = useQueryClient();
   const refresh = () => client.invalidateQueries({ queryKey: key });

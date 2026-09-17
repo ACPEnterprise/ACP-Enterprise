@@ -1,5 +1,68 @@
 {
   "entries": [
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Company-scoped governed run identity and immutable assembly digest","method":"POST","operation_id":"assemble_run_api_v1_payroll_operator_runs_assemble_post","path":"/api/v1/payroll/operator/runs/assemble","reason":"Run assembly is replay-safe and population scoped.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and append-only review evidence","method":"POST","operation_id":"review_run_api_v1_payroll_operator_runs__run_id__review_post","path":"/api/v1/payroll/operator/runs/{run_id}/review","reason":"Review initiation converges on the governed run lifecycle.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and immutable review decision evidence","method":"POST","operation_id":"decide_run_review_api_v1_payroll_operator_runs__run_id__review_decision_post","path":"/api/v1/payroll/operator/runs/{run_id}/review/decision","reason":"Review decisions are append-only and reject contradictory replay.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and immutable approval evidence","method":"POST","operation_id":"approve_run_api_v1_payroll_operator_runs__run_id__approve_post","path":"/api/v1/payroll/operator/runs/{run_id}/approve","reason":"Approval is state-bound and auditable.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Company-scoped paper-check destination identity and durable authority","method":"POST","operation_id":"create_paper_check_destination_api_v1_payroll_operator_paper_check_destinations_post","path":"/api/v1/payroll/operator/paper-check-destinations","reason":"Paper-check destination setup is replay-safe and does not execute payment.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Destination row lock and approval evidence","method":"POST","operation_id":"approve_paper_check_destination_api_v1_payroll_operator_paper_check_destinations__destination_id__approve_post","path":"/api/v1/payroll/operator/paper-check-destinations/{destination_id}/approve","reason":"Destination approval is state-bound.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Deterministic release package identity and durable instruction uniqueness","method":"POST","operation_id":"assemble_paper_check_release_api_v1_payroll_operator_runs__run_id__paper_check_release_assemble_post","path":"/api/v1/payroll/operator/runs/{run_id}/paper-check-release/assemble","reason":"Release assembly replays to one package and never executes payment.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Payment release row lock and review evidence","method":"POST","operation_id":"review_paper_check_release_api_v1_payroll_operator_paper_check_releases__release_id__review_post","path":"/api/v1/payroll/operator/paper-check-releases/{release_id}/review","reason":"Release review is lifecycle-bound.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Payment release row lock and immutable decision evidence","method":"POST","operation_id":"decide_paper_check_review_api_v1_payroll_operator_paper_check_releases__release_id__review_decision_post","path":"/api/v1/payroll/operator/paper-check-releases/{release_id}/review/decision","reason":"Release review decisions reject contradictory replay.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Payment release row lock and approval evidence","method":"POST","operation_id":"approve_paper_check_release_api_v1_payroll_operator_paper_check_releases__release_id__approve_post","path":"/api/v1/payroll/operator/paper-check-releases/{release_id}/approve","reason":"Paper-check release approval remains pre-execution evidence.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"price_book","mechanism":"Company-scoped tax-policy identity and canonical request digest","method":"POST","operation_id":"create_tax_policy_api_v1_price_book_company_tax_policy_post","path":"/api/v1/price-book/company-tax-policy","reason":"Tax-policy authority is versioned and replay-safe.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"price_book","mechanism":"Policy version and optimistic target-state identity","method":"PUT","operation_id":"update_tax_policy_api_v1_price_book_company_tax_policy__policy_id__put","path":"/api/v1/price-book/company-tax-policy/{policy_id}","reason":"Policy updates reject stale or contradictory replay.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"price_book","mechanism":"Policy row lock and immutable certification evidence","method":"POST","operation_id":"certify_tax_policy_api_v1_price_book_company_tax_policy__policy_id__certify_post","path":"/api/v1/price-book/company-tax-policy/{policy_id}/certify","reason":"Certification converges on one approved policy version.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "estimates",
+      "mechanism": "Company-scoped proposal identity and canonical request digest",
+      "method": "POST",
+      "operation_id": "propose_technician_discount_api_v1_estimates__estimate_id__discount_proposals_post",
+      "path": "/api/v1/estimates/{estimate_id}/discount-proposals",
+      "reason": "Identical technician discount proposals converge on one durable proposal; contradictory replay is rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "estimates",
+      "mechanism": "Proposal row lock and immutable decision evidence",
+      "method": "POST",
+      "operation_id": "decide_technician_discount_api_v1_estimates__estimate_id__discount_proposals__proposal_id__decision_post",
+      "path": "/api/v1/estimates/{estimate_id}/discount-proposals/{proposal_id}/decision",
+      "reason": "A proposal decision is append-only and contradictory replay fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "estimates",
+      "mechanism": "Approved proposal application identity and immutable Estimate revision lineage",
+      "method": "POST",
+      "operation_id": "apply_discount_proposal_api_v1_estimates__estimate_id__discount_proposals__proposal_id__apply_post",
+      "path": "/api/v1/estimates/{estimate_id}/discount-proposals/{proposal_id}/apply",
+      "reason": "Repeated application returns the existing revision and cannot create duplicate economics.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "estimates",
+      "mechanism": "Estimate revision identity bound to active membership entitlement and request digest",
+      "method": "POST",
+      "operation_id": "same_day_membership_revision_api_v1_estimates__estimate_id__same_day_membership_revision_post",
+      "path": "/api/v1/estimates/{estimate_id}/same-day-membership-revision",
+      "reason": "Same-day entitlement application preserves one revision lineage and rejects conflicting replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "service_agreements",
+      "mechanism": "Company-scoped enrollment command identity and activation lineage",
+      "method": "POST",
+      "operation_id": "same_day_sale_api_v1_service_agreements_same_day_sale_post",
+      "path": "/api/v1/service-agreements/same-day-sale",
+      "reason": "Identical same-day sale replay returns one Agreement and entitlement authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
     {
       "classification": "NON_MUTATING_READ_ONLY",
       "domain": "identity_onboarding",
@@ -3199,6 +3262,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2562b1975992f1deac86d4c6842d3e21cb4a09b5b057e8dfaf0c06ec459a6335",
+  "fingerprint": "68c6d9c27f2ca8d9ddecf27dba25b8d166a296b494fcd4241fdbc3d8aa457207",
   "schema_version": "1"
 }

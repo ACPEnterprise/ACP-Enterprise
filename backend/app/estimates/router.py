@@ -3,6 +3,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -20,7 +21,13 @@ from app.estimates.errors import (
     EstimateNotFoundError,
     EstimateValidationError,
 )
+from app.estimates.models import Estimate, EstimateRevision, TechnicianDiscountProposal
+from app.estimates.pricing_authority import (
+    create_discount_proposal,
+    decide_discount_proposal,
+)
 from app.estimates.schemas import (
+    ApplyDiscountProposalInput,
     ConversionInput,
     ConversionItem,
     DecisionInput,
@@ -28,8 +35,11 @@ from app.estimates.schemas import (
     EstimateList,
     ProposalInput,
     RevisionInput,
+    SameDayMembershipRevisionInput,
     TaxPolicyInput,
     TaxPolicyItem,
+    TechnicianDiscountDecisionInput,
+    TechnicianDiscountProposalInput,
     TransitionInput,
 )
 from app.estimates.service import estimate_service
@@ -38,6 +48,7 @@ from app.platform.permissions.codes import EstimatePermission
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+from app.service_agreements.models import ServiceAgreement
 from app.tax_policy.models import OperationalTaxPolicy
 
 router = APIRouter(prefix="/api/v1/estimates", tags=["Estimates"])
@@ -170,6 +181,154 @@ async def create_estimate(
                 lines=_lines(payload),
                 discount_type=payload.discount_type,
                 discount_value=payload.discount_value,
+            ),
+        )
+        return EstimateItem.model_validate(result)
+    except EstimateError as error:
+        raise _error(error) from error
+
+
+@router.post("/{estimate_id}/discount-proposals", status_code=status.HTTP_201_CREATED)
+async def propose_technician_discount(
+    estimate_id: UUID,
+    payload: TechnicianDiscountProposalInput,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> dict[str, object]:
+    _branch(context, payload.branch_id)
+    estimate = await session.scalar(select(Estimate).where(
+        Estimate.company_id == context.company.id,
+        Estimate.branch_id == payload.branch_id,
+        Estimate.id == estimate_id,
+    ))
+    revision = await session.scalar(select(EstimateRevision).where(
+        EstimateRevision.company_id == context.company.id,
+        EstimateRevision.id == payload.revision_id,
+        EstimateRevision.estimate_id == estimate_id,
+    ))
+    if estimate is None or revision is None:
+        raise _error(EstimateNotFoundError("Estimate revision was not found."))
+    try:
+        proposal = await create_discount_proposal(
+            session,
+            company_id=context.company.id,
+            branch_id=payload.branch_id,
+            estimate_id=estimate_id,
+            revision=revision,
+            requester_user_id=context.user.id,
+            discount_type=payload.discount_type,
+            requested_value=payload.requested_value,
+            reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
+            job_id=payload.job_id,
+        )
+        await session.commit()
+        return {"id": proposal.id, "state": proposal.state, "proposed_final_amount": proposal.proposed_final_amount}
+    except ValueError as error:
+        raise _error(EstimateValidationError(str(error))) from error
+
+
+@router.post("/{estimate_id}/discount-proposals/{proposal_id}/decision")
+async def decide_technician_discount(
+    estimate_id: UUID,
+    proposal_id: UUID,
+    payload: TechnicianDiscountDecisionInput,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> dict[str, object]:
+    _branch(context, payload.branch_id)
+    try:
+        proposal = await decide_discount_proposal(
+            session,
+            proposal_id=proposal_id,
+            company_id=context.company.id,
+            approver_user_id=context.user.id,
+            approve=payload.approve,
+            reason=payload.reason,
+        )
+        if proposal.estimate_id != estimate_id or proposal.branch_id != payload.branch_id:
+            raise ValueError("Discount proposal is outside the requested Estimate scope.")
+        await session.commit()
+        return {"id": proposal.id, "state": proposal.state, "decided_at": proposal.decided_at}
+    except ValueError as error:
+        raise _error(EstimateValidationError(str(error))) from error
+
+
+@router.post("/{estimate_id}/discount-proposals/{proposal_id}/apply", response_model=EstimateItem)
+async def apply_discount_proposal(
+    estimate_id: UUID,
+    proposal_id: UUID,
+    payload: ApplyDiscountProposalInput,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> EstimateItem:
+    _branch(context, payload.branch_id)
+    current = await estimate_service.repository.get(session, company_id=context.company.id, estimate_id=estimate_id)
+    if current is None or current.branch_id != payload.branch_id:
+        raise _error(EstimateNotFoundError("Estimate was not found."))
+    revision = current.current_revision
+    applied = await session.scalar(select(TechnicianDiscountProposal).where(
+        TechnicianDiscountProposal.company_id == context.company.id,
+        TechnicianDiscountProposal.id == proposal_id,
+        TechnicianDiscountProposal.estimate_id == estimate_id,
+        TechnicianDiscountProposal.applied_revision_id.is_not(None),
+    ))
+    if applied is not None:
+        return EstimateItem.model_validate(current)
+    try:
+        result = await estimate_service.revise(
+            session,
+            spec=CreateEstimateRevisionSpec(
+                company_id=context.company.id, branch_id=payload.branch_id,
+                estimate_id=estimate_id, expected_version=payload.expected_version,
+                actor_user_id=context.user.id, proposal_title=revision.proposal_title,
+                customer_message=revision.customer_message, terms=revision.terms,
+                expires_at=revision.expires_at,
+                lines=tuple(EstimateLineSpec(snapshot_id=line.snapshot_id, title=line.title, description=line.description) for line in revision.lines),
+                approved_proposal_id=proposal_id,
+            ),
+        )
+        return EstimateItem.model_validate(result)
+    except EstimateError as error:
+        raise _error(error) from error
+
+
+@router.post("/{estimate_id}/same-day-membership-revision", response_model=EstimateItem)
+async def same_day_membership_revision(
+    estimate_id: UUID,
+    payload: SameDayMembershipRevisionInput,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> EstimateItem:
+    _branch(context, payload.branch_id)
+    agreement = await session.scalar(select(ServiceAgreement).where(
+        ServiceAgreement.company_id == context.company.id,
+        ServiceAgreement.id == payload.agreement_id,
+        ServiceAgreement.status == "active",
+    ))
+    current = await estimate_service.repository.get(
+        session, company_id=context.company.id, estimate_id=estimate_id
+    )
+    if agreement is None or current is None or current.customer_id != agreement.customer_id:
+        raise _error(EstimateValidationError("Active membership and Estimate Customer must match."))
+    revision = current.current_revision
+    try:
+        result = await estimate_service.revise(
+            session,
+            spec=CreateEstimateRevisionSpec(
+                company_id=context.company.id,
+                branch_id=payload.branch_id,
+                estimate_id=estimate_id,
+                expected_version=payload.expected_version,
+                actor_user_id=context.user.id,
+                proposal_title=revision.proposal_title,
+                customer_message=revision.customer_message,
+                terms=revision.terms,
+                expires_at=revision.expires_at,
+                lines=tuple(
+                    EstimateLineSpec(snapshot_id=line.snapshot_id, title=line.title, description=line.description)
+                    for line in revision.lines
+                ),
             ),
         )
         return EstimateItem.model_validate(result)

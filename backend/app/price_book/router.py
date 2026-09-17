@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -12,6 +13,20 @@ from app.platform.permissions.codes import AccountingPermission, PriceBookPermis
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+from app.tax_policy.company_policy import (
+    certify_company_tax_policy,
+    create_company_tax_policy,
+    effective_company_tax_policy,
+    list_company_tax_policies,
+    update_company_tax_policy,
+)
+from app.tax_policy.schemas import (
+    CompanyTaxPolicyCertify,
+    CompanyTaxPolicyCreate,
+    CompanyTaxPolicyItem,
+    CompanyTaxPolicyPage,
+    CompanyTaxPolicyUpdate,
+)
 
 from .candidate_admission import candidate_review_page
 from .errors import (
@@ -71,6 +86,75 @@ FinanceApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(AccountingPermission.FINANCE_APPROVE)),
 ]
+
+
+@router.get("/company-tax-policy", response_model=CompanyTaxPolicyPage)
+async def company_tax_policy(
+    context: ReadContext, session: DatabaseSession
+) -> CompanyTaxPolicyPage:
+    history = await list_company_tax_policies(session, company_id=context.company.id)
+    current = await effective_company_tax_policy(
+        session,
+        company_id=context.company.id,
+        effective_at=datetime.now(timezone.utc),
+    )
+    return CompanyTaxPolicyPage(
+        current=CompanyTaxPolicyItem.model_validate(current) if current else None,
+        history=[CompanyTaxPolicyItem.model_validate(item) for item in history],
+    )
+
+
+@router.post(
+    "/company-tax-policy", response_model=CompanyTaxPolicyItem, status_code=201
+)
+async def create_tax_policy(
+    payload: CompanyTaxPolicyCreate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> CompanyTaxPolicyItem:
+    return CompanyTaxPolicyItem.model_validate(
+        await create_company_tax_policy(session, context=context, payload=payload)
+    )
+
+
+@router.put("/company-tax-policy/{policy_id}", response_model=CompanyTaxPolicyItem)
+async def update_tax_policy(
+    policy_id: UUID,
+    payload: CompanyTaxPolicyUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> CompanyTaxPolicyItem:
+    try:
+        return CompanyTaxPolicyItem.model_validate(
+            await update_company_tax_policy(
+                session, context=context, policy_id=policy_id, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/company-tax-policy/{policy_id}/certify", response_model=CompanyTaxPolicyItem
+)
+async def certify_tax_policy(
+    policy_id: UUID,
+    payload: CompanyTaxPolicyCertify,
+    context: FinanceApproveContext,
+    session: DatabaseSession,
+) -> CompanyTaxPolicyItem:
+    try:
+        return CompanyTaxPolicyItem.model_validate(
+            await certify_company_tax_policy(
+                session,
+                context=context,
+                policy_id=policy_id,
+                expected_version=payload.expected_version,
+                reason=payload.certification_reason,
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
 
 
 @router.get("/candidate-review", response_model=CandidateReviewPage)
