@@ -7,6 +7,16 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.database.session import get_database_session
@@ -47,15 +57,6 @@ from app.timekeeping.models import (
 from app.timekeeping.permissions import TimekeepingPermission
 from app.timekeeping.schemas import PayPeriodCreateInput
 from app.timekeeping.service import WorkdayTimeService
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=timezone.utc)
 
@@ -511,6 +512,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
             TimekeepingPermission.CORRECT,
             TimekeepingPermission.APPROVE,
             TimekeepingPermission.ADMIN_READ,
+            TimekeepingPermission.PAY_PERIOD_MANAGE,
         },
         manager=True,
     )
@@ -812,6 +814,7 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
             TimekeepingPermission.CORRECT,
             TimekeepingPermission.APPROVE,
             TimekeepingPermission.ADMIN_READ,
+            TimekeepingPermission.PAY_PERIOD_MANAGE,
         },
         manager=True,
     )

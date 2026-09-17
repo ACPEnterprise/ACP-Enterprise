@@ -1,9 +1,13 @@
 from pathlib import Path
 
+import pytest
+
 from scripts.operational_acceptance_factory import (
     ALLOWED_CLASSIFICATIONS,
     SCENARIO_VERSION,
     SCENARIOS,
+    _selected_scenarios,
+    _test_environment,
 )
 
 
@@ -56,3 +60,32 @@ def test_employee_time_payroll_scenario_reuses_bounded_authoritative_proofs() ->
     assert "test_reporting.py" in serialized
     assert "payment_execution" not in serialized
     assert "payment_release" not in serialized
+
+
+def test_focused_scenario_selection_is_ordered_and_fails_closed() -> None:
+    selected = _selected_scenarios(("dispatch", "scheduling"))
+    assert [scenario.scenario_id for scenario in selected] == [
+        "scheduling",
+        "dispatch",
+    ]
+
+    with pytest.raises(ValueError, match="unknown acceptance scenario"):
+        _selected_scenarios(("not-a-real-scenario",))
+
+
+def test_child_test_environment_does_not_inherit_qualification_secrets(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ACCESS_TOKEN_KEYS", '{"qualification":"secret"}')
+    monkeypatch.setenv("ACCESS_TOKEN_SIGNING_KEY", "secret")
+    monkeypatch.setenv("ACCESS_TOKEN_ACTIVE_KID", "qualification")
+    monkeypatch.setenv("SECURITY_TOKEN_HMAC_KEY", "secret")
+
+    environment = _test_environment()
+
+    assert environment["ENVIRONMENT"] == "test"
+    assert environment["PYTHONPATH"]
+    assert "ACCESS_TOKEN_KEYS" not in environment
+    assert "ACCESS_TOKEN_SIGNING_KEY" not in environment
+    assert "ACCESS_TOKEN_ACTIVE_KID" not in environment
+    assert "SECURITY_TOKEN_HMAC_KEY" not in environment
