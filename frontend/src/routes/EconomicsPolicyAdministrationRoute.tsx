@@ -396,7 +396,7 @@ export function EconomicsPolicyAdministrationRoute() {
           </Link>
           <Link
             className="inline-flex min-h-11 items-center justify-center rounded-md bg-action-primary px-ui-4 text-center text-body-s font-semibold text-content-inverse hover:bg-action-primary-hover"
-            to="/lia"
+            to="/lia?contextDomain=business-economics"
           >
             Ask LIA
           </Link>
