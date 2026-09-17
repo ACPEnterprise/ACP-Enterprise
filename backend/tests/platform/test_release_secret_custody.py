@@ -56,7 +56,7 @@ def test_secret_custody_accepts_tracked_nonsecret_content(tmp_path: Path) -> Non
 def test_secret_custody_rejects_signature_without_printing_value(
     tmp_path: Path,
 ) -> None:
-    secret = b"ghp_1234567890abcdefghijklmnop"
+    secret = b"ghp_" + b"1234567890abcdefghijklmnop"
     repository, env_example = _repository(tmp_path, secret + b"\n")
 
     result = _run(repository, env_example)
