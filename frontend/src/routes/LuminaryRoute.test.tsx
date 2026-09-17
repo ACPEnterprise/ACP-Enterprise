@@ -284,4 +284,15 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("Review measured Job contribution")).toBeVisible();
     expect(screen.getByText(/No price, Employee, Payroll, payment, or Accounting state can be changed/i)).toBeVisible();
   });
+
+  it("does not submit an invented numeric change for evidence-gated scenarios", () => {
+    renderRoute();
+    fireEvent.change(screen.getByLabelText("Assumption"), {
+      target: { value: "ADD_TRUCK" },
+    });
+    expect(screen.getByLabelText("Change (basis points)")).toBeDisabled();
+    expect(screen.getByText(/scenario is evidence-gated/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate scenario" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
