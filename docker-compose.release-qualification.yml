@@ -24,7 +24,7 @@ services:
     environment:
       APP_ENV: test
       DATABASE_URL: postgresql+asyncpg://release_qualification:release-qualification-disposable-only@postgres:5432/release_qualification
-      ACCESS_TOKEN_KEYS: '[{"kid":"release-qualification","key":"release-qualification-disposable-signing-key-32-bytes"}]'
+      ACCESS_TOKEN_KEYS: '{"release-qualification":"release-qualification-disposable-signing-key-32-bytes"}'
       ACCESS_TOKEN_ACTIVE_KID: release-qualification
       INVITATION_TOKEN_HMAC_KEY: release-qualification-disposable-hmac-key-32-bytes
     command:
