@@ -26,6 +26,7 @@ class RecognitionMock {
 
 class UtteranceMock {
   text: string;
+  lang = "";
   rate = 1;
   pitch = 1;
   volume = 1;
@@ -39,17 +40,15 @@ class UtteranceMock {
   }
 }
 
+let voicesChanged: (() => void) | undefined;
+let availableVoices: SpeechSynthesisVoice[] = [];
 const speech = {
   cancel: vi.fn(),
-  getVoices: vi.fn(() => [
-    {
-      default: true,
-      lang: "en-US",
-      localService: true,
-      name: "System English",
-      voiceURI: "system-english",
-    } satisfies SpeechSynthesisVoice,
-  ]),
+  getVoices: vi.fn(() => availableVoices),
+  addEventListener: vi.fn((event: string, listener: () => void) => {
+    if (event === "voiceschanged") voicesChanged = listener;
+  }),
+  removeEventListener: vi.fn(),
   speak: vi.fn((utterance: UtteranceMock) => {
     utterance.onstart?.();
   }),
@@ -87,6 +86,14 @@ const response = (): LiaResponse => ({
 describe("LIA voice panel", () => {
   beforeEach(() => {
     RecognitionMock.latest = undefined;
+    voicesChanged = undefined;
+    availableVoices = [{
+      default: true,
+      lang: "en-US",
+      localService: true,
+      name: "System English",
+      voiceURI: "system-english",
+    } satisfies SpeechSynthesisVoice];
     vi.clearAllMocks();
     Object.defineProperty(window, "SpeechRecognition", {
       configurable: true,
@@ -162,11 +169,32 @@ describe("LIA voice panel", () => {
     expect(speech.speak).toHaveBeenCalledOnce();
     const utterance = speech.speak.mock.calls[0]?.[0];
     expect(utterance?.rate).toBe(0.94);
+    expect(utterance?.pitch).toBe(1);
+    expect(utterance?.lang).toBe("en-US");
     expect(utterance?.voice?.name).toBe("System English");
     expect(screen.getByText("SPEAKING")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Interrupt LIA" }));
     expect(speech.cancel).toHaveBeenCalled();
     expect(screen.getByText("LISTENING")).toBeVisible();
+  });
+
+  it("refreshes deterministic inventory when the browser announces voiceschanged", () => {
+    const view = render(
+      <LiaVoicePanel busy={false} onDraft={vi.fn()} onSubmit={vi.fn()} />,
+    );
+    expect(speech.addEventListener).toHaveBeenCalledWith("voiceschanged", expect.any(Function));
+    availableVoices = [{
+      default: true,
+      lang: "en-GB",
+      localService: true,
+      name: "Reviewed Local English",
+      voiceURI: "reviewed-local",
+    } satisfies SpeechSynthesisVoice];
+    act(() => voicesChanged?.());
+    view.rerender(
+      <LiaVoicePanel busy={false} result={response()} onDraft={vi.fn()} onSubmit={vi.fn()} />,
+    );
+    expect(speech.speak.mock.calls.at(-1)?.[0].voice?.voiceURI).toBe("reviewed-local");
   });
 
   it("ends active capture and never exposes a mutation control", () => {
