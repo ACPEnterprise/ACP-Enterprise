@@ -9,7 +9,7 @@ import {
   type StatementRow,
   type TrialBalance,
 } from "../api/financialReporting";
-import { useHasPermission } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
 import { QboSourceEvidence } from "../components/accounting/QboSourceEvidence";
 import { useFinancialReport } from "../hooks/useFinancialReporting";
 import {
@@ -165,6 +165,7 @@ function ReportBody({ report }: { report: FinancialReport }) {
 }
 
 export function FinancialReportsRoute() {
+  const { activeCompany } = useAuth();
   const canRead = useHasPermission("COMPANY_ACCOUNTING_REPORT_READ");
   const [reportName, setReportName] = useState<ReportName>("trial-balance");
   const [startDate, setStartDate] = useState(yearStart);
@@ -257,11 +258,18 @@ export function FinancialReportsRoute() {
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
               />
-              <Input
-                aria-label="Branch ID (optional)"
+              <Select
+                aria-label="Branch"
                 value={branchId}
                 onChange={(event) => setBranchId(event.target.value)}
-              />
+              >
+                <option value="">Company-wide</option>
+                {(activeCompany?.branches ?? []).map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}{branch.code ? ` (${branch.code})` : ""}
+                  </option>
+                ))}
+              </Select>
               <Button type="submit">Generate</Button>
             </form>
             {invalidPeriod ? (

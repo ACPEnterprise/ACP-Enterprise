@@ -5,7 +5,14 @@ import { useFinancialReport } from "../hooks/useFinancialReporting";
 import { FinancialReportsRoute } from "./FinancialReportsRoute";
 
 let allowed = false;
-vi.mock("../auth", () => ({ useHasPermission: () => allowed }));
+vi.mock("../auth", () => ({
+  useHasPermission: () => allowed,
+  useAuth: () => ({
+    activeCompany: {
+      branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }],
+    },
+  }),
+}));
 vi.mock("../hooks/useFinancialReporting", () => ({
   useFinancialReport: vi.fn(() => ({
     isPending: false,
@@ -81,6 +88,8 @@ describe("FinancialReportsRoute", () => {
     expect(
       screen.getByText(/did not infer zeros or substitute native\/HCP data/i),
     ).toBeVisible();
+    expect(screen.getByRole("option", { name: "Main Branch (MAIN)" })).toBeVisible();
+    expect(screen.queryByLabelText(/Branch ID/i)).not.toBeInTheDocument();
   });
 
   it("rejects reversed report periods before changing the authoritative request", () => {
