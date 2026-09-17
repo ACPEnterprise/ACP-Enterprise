@@ -159,6 +159,11 @@ describe("BeaconPanel", () => {
     expect(queue).toHaveTextContent(signal.title);
     expect(queue).toHaveTextContent(lowerPriority.title);
     expect(screen.getByText(/Priority 2 · operations · jobs/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Attention category"), {
+      target: { value: "revenue" },
+    });
+    expect(queue).toHaveTextContent(signal.title);
+    expect(queue).not.toHaveTextContent(lowerPriority.title);
   });
 
   it("renders an honest empty state", () => {
