@@ -3,6 +3,7 @@ import { ApiFailure } from "../src/api/types";
 import { LiaScreen } from "../src/screens/LiaScreen";
 import { createLiaService } from "../src/api/lia";
 import type { LiaResponse, LiaService } from "../src/api/lia";
+import { ACTIVE_SPEECH_RENDERER, spokenTextForResponse, twelveHatsAudioSchema, twelveHatsSpeech } from "../src/lia/speech";
 
 const response: LiaResponse = {
   request_id: "10000000-0000-4000-8000-000000000001", conversation_id: "20000000-0000-4000-8000-000000000001", classification: "KNOWN", authority: "ACP_AUTHORITATIVE", answer: "Your next assigned appointment is synthetic.", response_mode: "NORMAL", evidence: [{ domain: "employee-operations", label: "My authorized assigned work", authority: "EMPLOYEE.DAY.v1", observed_at: "2026-09-16T12:00:00Z", freshness: "CURRENT_QUERY", evidence_digest: "a".repeat(64), branch_ids: [], limitations: ["Only your active assignments are included."] }], limitations: [], navigation: [], completeness: "COMPLETE_FOR_EMPLOYEE_SAFE_ADAPTERS", freshness: "CURRENT_QUERY", provider: "deterministic-acp", provider_version: "v1", policy_version: "LIA.EMPLOYEE_SAFE.v1", evidence_digest: "a".repeat(64), authorization_version: 1, company_id: "30000000-0000-4000-8000-000000000001", branch_ids: [], source_systems: ["employee-operations"], missing_evidence: [], safe_next_action: "Open My Day", as_of: "2026-09-16T12:00:00Z", generated_at: "2026-09-16T12:00:00Z", temporal: null,
@@ -10,6 +11,7 @@ const response: LiaResponse = {
 function service() { return { ask: jest.fn(async () => response) } satisfies LiaService; }
 
 describe("employee-safe Mobile LIA", () => {
+  it("defaults to local speech and keeps the owned engine disabled", () => { expect(ACTIVE_SPEECH_RENDERER).toBe("DEVICE_LOCAL_FALLBACK"); expect(twelveHatsSpeech).toBeNull(); expect(spokenTextForResponse(response)).toBe(response.answer); expect(twelveHatsAudioSchema.safeParse({ audio: "data", content_type: "audio/mpeg", duration_ms: 10, model_version: "v1", render_version: "v1", render_digest: "z".repeat(64) }).success).toBe(false); });
   it("uses only the employee-safe endpoint", async () => { const client = { request: jest.fn(async () => response) }; await createLiaService(client as never).ask("What is my next job?"); const calls = client.request.mock.calls as unknown[][]; expect(calls[0]?.[0]).toBe("/api/v1/lia/employee/ask"); expect(calls.some(([path]) => path === "/api/v1/lia/ask")).toBe(false); });
   it("submits through the employee-safe service and preserves conversation continuity", async () => {
     const lia = service(); render(<LiaScreen service={lia} />);
