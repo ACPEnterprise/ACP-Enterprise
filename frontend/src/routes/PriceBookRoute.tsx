@@ -541,14 +541,17 @@ export function PriceBookRoute() {
       !versions.some((version) => version.service_item_id === service.id),
   ).length;
   const categoryDisplayName = (categoryId: string) => {
-    const category = catalog.data?.categories.find(
-      (candidate) => candidate.id === categoryId,
-    );
-    if (!category) return "Category unavailable";
-    const parent = catalog.data?.categories.find(
-      (candidate) => candidate.id === category.parent_id,
-    );
-    return parent ? `${parent.name} › ${category.name}` : category.name;
+    const categories = catalog.data?.categories ?? [];
+    const byId = new Map(categories.map((category) => [category.id, category]));
+    const names: string[] = [];
+    const visited = new Set<string>();
+    let current = byId.get(categoryId);
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      names.unshift(current.name);
+      current = current.parent_id ? byId.get(current.parent_id) : undefined;
+    }
+    return names.length ? names.join(" › ") : "Category unavailable";
   };
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
