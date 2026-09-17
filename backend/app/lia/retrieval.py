@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta, timezone
 from typing import Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
@@ -606,7 +607,14 @@ class GovernedRetrievalService:
             domains is None or "beacon" in domains
         ):
             if temporal is None:
-                evidence.extend(await self._beacon(session, context, observed_at))
+                evidence.extend(
+                    await self._beacon(
+                        session,
+                        context,
+                        observed_at,
+                        entity_id=entity_id if entity_domain == "beacon" else None,
+                    )
+                )
             else:
                 evidence.extend(
                     await self._beacon_history(
@@ -773,12 +781,46 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _beacon(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        *,
+        entity_id: UUID | None = None,
     ) -> tuple[EvidenceReference, ...]:
         queue = await beacon_query_service.get_attention_queue(
             session, context=context, now=observed_at
         )
         signals = (*queue.active, *queue.snoozed)
+        if entity_id is not None:
+            signal = next((item for item in signals if item.id == entity_id), None)
+            if signal is None:
+                return ()
+            state = (
+                f"{signal.title} | Severity {signal.severity.value}; priority {signal.priority.band.value}. "
+                f"Why: {signal.priority.explanation} Recommended review: {signal.recommended_action}"
+            )
+            return (
+                EvidenceReference(
+                    domain="beacon",
+                    label="Beacon attention condition",
+                    authority="BEACON.INTELLIGENCE.v1",
+                    observed_at=observed_at,
+                    freshness="CURRENT_QUERY",
+                    entity_id=signal.id,
+                    evidence_digest=signal.evidence_digest,
+                    count=1,
+                    state=state,
+                    source_contract_version="BEACON.INTELLIGENCE.v1",
+                    company_id=context.company.id,
+                    branch_ids=(context.active_branch.id,)
+                    if context.active_branch is not None
+                    else tuple(sorted(context.authorized_branch_ids, key=str)),
+                    authorization_version=context.authorization_version,
+                    limitations=(
+                        "Beacon recommendation is read-only and does not establish business authority or execute remediation.",
+                    ),
+                ),
+            )
         states = {
             "active": len(queue.active),
             "snoozed": len(queue.snoozed),
