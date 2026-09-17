@@ -56,31 +56,45 @@ as an acceptance metric.
 - **Humor/lightness:** rare and situational; never around Payroll, employment,
   money, safety, legal, or missing evidence.
 
-## Current protected TTS implementation
+## Current TTS implementation audit
 
-Protected authority uses the browser Web Speech API in
-`frontend/src/hooks/useLiaVoice.ts`:
+Current Intelligence authority uses two device-owned engines:
 
-- engine/provider: browser/device-selected `window.speechSynthesis`;
-- voice: platform default; no stable ACP voice identity is selected;
+- web engine/provider: browser/device-selected `window.speechSynthesis` in
+  `frontend/src/hooks/useLiaVoice.ts`;
+- mobile engine/provider: `expo-speech` 57.0.3, backed by the installed native
+  device speech service in `mobile/src/lia/speech.ts`;
+- web voice: normalized `getVoices()` inventory refreshed by `voiceschanged`;
+  explicitly reviewed identifiers are preferred when configured, followed by
+  deterministic English local/default fallbacks;
+- mobile voice: operating-system default for `en-US`; no reviewed mobile voice
+  identifier is currently admitted;
 - response shaping: first two sentences plus `safe_next_action`, implemented in
-  `frontend/src/components/lia/voiceSpeech.ts`;
-- configured synthesis parameter: `SpeechSynthesisUtterance.rate = 0.94`;
-- unconfigured available properties: `voice`, `lang`, `pitch`, and `volume`;
+  `frontend/src/components/lia/voiceSpeech.ts` for web. Mobile speaks the
+  server-composed answer and does not invent a second semantic renderer;
+- configured controls: relative rate `0.94`, pitch `1`, volume `1` on web, and
+  language `en-US`; mobile maps language, relative rate, and pitch;
 - pause behavior: punctuation and the device engine; no deterministic pause
-  plan;
+  duration control;
 - style prompting/stability controls: unavailable;
-- voice inventory: device-dependent `speechSynthesis.getVoices()`;
-- SSML: the API accepts text that may contain SSML, but unsupported devices may
-  strip tags, so ACP cannot treat SSML behavior as portable authority;
+- expressiveness control: semantic `RESTRAINED` intent exists, but current
+  device engines do not expose a portable expressiveness or stability control;
+- SSML/prosody: not a portable Web Speech or `expo-speech` contract and not used
+  by ACP; markup must not be passed expecting deterministic interpretation;
 - audio artifact/delivery evidence: none; playback is ephemeral client output.
 
-The current engine can improve materially through response shaping, bounded
-rate/pitch settings, language selection, and explicit device-voice admission.
-It cannot guarantee the same voice, cadence, pause realization, or quality
-across browsers and operating systems. A stable Twelve Hats voice therefore
-requires a future provider/runtime admission, but not before Variant A/B device
-acceptance.
+On the qualifying macOS 26.5.2 host, the installed command-line voice inventory
+included multiple English voices, including Samantha and Kathy, plus regional
+English voices. This proves only device inventory—not browser availability,
+quality, gender suitability, or product admission. Runtime `getVoices()` and an
+on-device human review remain authoritative for Variant B.
+
+The present stack can improve phrasing, language choice, relative rate,
+pitch/volume, and device-voice selection. It cannot guarantee the same voice,
+pause timing, cadence, or quality across browsers and operating systems. A
+provider successor is warranted only if cross-device acceptance proves those
+limits material; it is not warranted merely because richer controls exist
+elsewhere.
 
 ## Distinct base-voice requirements
 
@@ -104,16 +118,12 @@ evidence sentences.
 
 ### Variant A — current device voice plus spoken-response layer
 
-1. Reconcile the existing dirty spoken-response draft in the dedicated
-   `work/lia-spoken-presence-maximum-1` lane; do not overwrite it from this
-   packet.
-2. Add a typed `LiaDeliveryStyle` configuration with `rate: 0.94`, `pitch: 1.0`,
-   `volume: 1.0`, `lang: "en-US"`, sentence budgets, and response modes.
-3. Apply the style when constructing `SpeechSynthesisUtterance`.
-4. Retain full visual evidence while speaking a conclusion, limitation, and
-   next step.
-5. Add tests proving missing evidence, source authority, identifiers, and safe
-   next actions remain truthful after spoken shaping.
+**Status: implemented in current Intelligence authority.**
+
+The typed `LiaDeliveryStyle`, `0.94` relative browser rate, neutral pitch,
+language, response modes, spoken semantic renderer, and invariant tests are in
+place. Full visual evidence remains authoritative. Device acceptance is still
+required because relative rate is not an absolute WPM guarantee.
 
 This is the fastest safe improvement. It does not yield a consistent voice
 across devices.
@@ -132,10 +142,14 @@ across devices.
    ratings—never reference-speaker similarity.
 
 Variant B is device-specific and should not be called ACP-wide voice admission.
+Inventory discovery, stable preference rules, and fallback are implemented.
+No voice has been admitted as “best”: that requires the same 12-item corpus to
+be reviewed on the intended Preview Mac/browser and iPhone, using quality—not
+similarity to Lianne—as the rubric.
 
 ### Variant C — provider-neutral successor
 
-A provider change is warranted if acceptance requires the same distinct voice
+A provider change would be warranted if acceptance requires the same distinct voice
 across desktop and mobile, deterministic pause/prosody control, renderable audio,
 or provider delivery/quality evidence. Introduce a server-side `LiaSpeechRenderer`
 interface only after owner/provider admission. It should accept spoken text,
@@ -146,11 +160,15 @@ receive arbitrary database access or hidden business context.
 Provider evaluation must score style prompting, rate/prosody/pause control,
 voice stability, pronunciation dictionaries, streaming latency, data retention,
 training-use policy, regional processing, accessibility, cost, and failover.
-No provider is selected by this packet.
+The provider-neutral `LiaSpeechRenderer` request/result boundary now exists in
+`voiceDelivery.ts`; no external adapter is implemented and no provider is
+selected by this packet.
 
-## Ten-response comparison corpus
+## Twelve-response comparison corpus
 
-Use identical authoritative/synthetic-safe content for all variants:
+Use the checked-in `liaVoiceEvaluationCorpus` for all variants. It includes the
+ten categories below plus explicit percentage/date-time and employee-safe
+denial coverage:
 
 1. Customer: identity, two Locations, and one incomplete-history limitation.
 2. Job: current status, next Appointment, and a safe Job drill-down.
@@ -195,14 +213,12 @@ copies locally:
 
 Laptop Enterprise should:
 
-1. Integrate this documentation packet independently.
-2. Assign the dirty `voiceSpeech.ts` draft to its current owner for reconciliation.
-3. Supply `New Recording.m4a` or the existing segment manifest to Laptop1-B by a
+1. Integrate this corrected current-state packet independently.
+2. Supply `New Recording.m4a` or the existing segment manifest to Laptop1-B by a
    sanctioned local path; no cloud upload is required.
-4. After measurement, implement Variant A in `useLiaVoice.ts` and
-   `voiceSpeech.ts`, with tests in `LiaVoicePanel.test.tsx` and a dedicated
-   spoken-response corpus test.
-5. Run Variant B only on the intended Preview desktop/iPhone devices because
+3. Run Variant B only on the intended Preview desktop/iPhone devices because
    browser voice inventories are device-dependent.
-6. Defer Variant C procurement and credentials to a separately approved provider
+4. Record reviewed device voice identifiers only after the 12-item comparison;
+   do not infer voice attributes from name or audio biometrics.
+5. Defer Variant C procurement and credentials to a separately approved provider
    admission milestone.
