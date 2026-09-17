@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+
 from app.lia.contracts import LiaContext, LiaRequest, TruthClassification
 from app.lia.conversation import (
     ActionRisk,
@@ -189,6 +190,27 @@ async def test_capability_answer_reflects_read_only_boundary() -> None:
     assert result.classification is TruthClassification.KNOWN
     assert "cannot" in result.answer
     assert result.proposals == ()
+    retrieval.retrieve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "mode"),
+    (
+        ("Can you run payroll? Short version.", "BRIEF"),
+        ("Can you run payroll?", "NORMAL"),
+        ("Can you run payroll? Walk me through it.", "DETAILED"),
+        ("Can you run payroll? Show me the evidence.", "EVIDENCE"),
+    ),
+)
+async def test_response_envelope_preserves_requested_presentation_mode(
+    question: str, mode: str
+) -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    result = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(), context=_context(), request=LiaRequest(question=question)
+    )
+    assert result.response_mode == mode
     retrieval.retrieve.assert_not_awaited()
 
 
