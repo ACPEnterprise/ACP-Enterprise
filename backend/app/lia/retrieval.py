@@ -20,7 +20,9 @@ from app.business_economics.models import EconomicsProfitabilityResultRecord
 from app.customers.lia_context import customer_lia_context_service
 from app.customers.models import Customer
 from app.data_quality.catalog import QUALITY_CATALOG
+from app.dispatch.errors import DispatchNotFound
 from app.dispatch.models import DispatchAssignment
+from app.dispatch.service import dispatch_service
 from app.estimates.models import Estimate
 from app.financial_reporting.errors import (
     ReportingIntegrityError,
@@ -86,6 +88,8 @@ class AdapterSpec:
     temporal_start_column: Any | None = None
     temporal_end_column: Any | None = None
     temporal_kind: str | None = None
+    entity_column: Any | None = None
+    entity_columns: dict[str, Any] | None = None
 
 
 ADAPTERS = (
@@ -116,6 +120,12 @@ ADAPTERS = (
         DispatchAssignment.window_start_at,
         DispatchAssignment.window_end_at,
         "datetime_overlap",
+        None,
+        {
+            "workforce": DispatchAssignment.primary_employee_id,
+            "scheduling": DispatchAssignment.appointment_id,
+            "jobs": DispatchAssignment.job_id,
+        },
     ),
     AdapterSpec(
         "estimates",
@@ -173,6 +183,7 @@ ADAPTERS = (
         WorkdayTimeEntryRevision.work_date,
         None,
         "date_start",
+        WorkdayTimeEntryRevision.employee_id,
     ),
     AdapterSpec(
         "accounting",
@@ -209,13 +220,17 @@ class GovernedRetrievalService:
         context: AuthorizationContext,
         domains: set[str] | None = None,
         entity_id: Any | None = None,
+        entity_domain: str | None = None,
         temporal: LiaTemporalContext | None = None,
         requested_accounting_basis: str | None = None,
     ) -> tuple[EvidenceReference, ...]:
+        observed_at = datetime.now(timezone.utc)
         contextual_domains = (
             {"customers", "jobs", "assets", "workforce"} & domains if domains else set()
         )
         contextual_reference: EvidenceReference | None = None
+        dispatch_reference: EvidenceReference | None = None
+        contextual_dispatch_attempted = False
         if entity_id is not None and len(contextual_domains) == 1 and temporal is None:
             domain = next(iter(contextual_domains))
             if domain == "customers":
@@ -302,6 +317,87 @@ class GovernedRetrievalService:
                         authorization_version=workforce_projection.authorization_version,
                         limitations=workforce_projection.limitations,
                     )
+        if (
+            entity_id is not None
+            and entity_domain == "scheduling"
+            and domains is not None
+            and "dispatch" in domains
+            and context.has_permission(DispatchPermission.READ)
+        ):
+            contextual_dispatch_attempted = True
+            appointment_branches = (
+                frozenset({context.active_branch.id})
+                if context.active_branch is not None
+                else context.authorized_branch_ids
+            )
+            authorized_appointment = await session.scalar(
+                select(Appointment.id).where(
+                    Appointment.id == entity_id,
+                    Appointment.company_id == context.company.id,
+                    Appointment.branch_id.in_(appointment_branches),
+                )
+            )
+            if authorized_appointment is not None:
+                try:
+                    assignment = await dispatch_service.detail(
+                        session, context=context, appointment_id=entity_id
+                    )
+                except DispatchNotFound:
+                    assignment = None
+                state = (
+                    f"ASSIGNED|Appointment {assignment.appointment_number} is assigned to "
+                    f"{assignment.primary_employee_name or 'no primary technician'}; "
+                    f"assignment {assignment.status}; field state {assignment.arrival_state}."
+                    if assignment is not None
+                    else "UNASSIGNED|This Appointment has no authoritative Dispatch assignment."
+                )
+                dispatch_payload = {
+                    "contract": "DISPATCH.LIA_CONTEXT.v1",
+                    "company_id": str(context.company.id),
+                    "appointment_id": str(entity_id),
+                    "assignment_id": str(assignment.id)
+                    if assignment is not None
+                    else None,
+                    "assignment_version": assignment.version
+                    if assignment is not None
+                    else None,
+                    "primary_employee_id": str(assignment.primary_employee_id)
+                    if assignment is not None
+                    and assignment.primary_employee_id is not None
+                    else None,
+                    "status": assignment.status
+                    if assignment is not None
+                    else "unassigned",
+                    "arrival_state": assignment.arrival_state
+                    if assignment is not None
+                    else None,
+                }
+                dispatch_reference = EvidenceReference(
+                    domain="dispatch",
+                    label="Appointment Dispatch context",
+                    authority="DISPATCH.LIA_CONTEXT.v1",
+                    observed_at=observed_at,
+                    freshness="CURRENT_QUERY",
+                    entity_id=entity_id,
+                    evidence_digest=hashlib.sha256(
+                        json.dumps(
+                            dispatch_payload, sort_keys=True, separators=(",", ":")
+                        ).encode()
+                    ).hexdigest(),
+                    count=1 if assignment is not None else 0,
+                    state=state,
+                    source_contract_version="DISPATCH.LIA_CONTEXT.v1",
+                    company_id=context.company.id,
+                    branch_ids=(
+                        (assignment.branch_id,)
+                        if assignment is not None
+                        else (context.active_branch.id,)
+                        if context.active_branch is not None
+                        else ()
+                    ),
+                    authorization_version=context.authorization_version,
+                    limitations=("read_only_no_assignment_mutation",),
+                )
         # Permission checks select adapters before any protected query is executed.
         permitted = tuple(
             adapter
@@ -309,12 +405,14 @@ class GovernedRetrievalService:
             if context.has_permission(adapter.permission)
             and (domains is None or adapter.domain in domains)
             and not (entity_id is not None and adapter.domain in contextual_domains)
+            and not (contextual_dispatch_attempted and adapter.domain == "dispatch")
             and (temporal is None or adapter.temporal_kind is not None)
         )
-        observed_at = datetime.now(timezone.utc)
         evidence: list[EvidenceReference] = (
             [contextual_reference] if contextual_reference is not None else []
         )
+        if dispatch_reference is not None:
+            evidence.append(dispatch_reference)
         for adapter in permitted:
             predicates = [adapter.model.company_id == context.company.id]
             evidence_branch_ids: tuple[Any, ...] = ()
@@ -332,7 +430,21 @@ class GovernedRetrievalService:
                 predicates.append(branch_predicate)
                 evidence_branch_ids = tuple(sorted(branch_ids, key=str))
             if entity_id is not None:
-                predicates.append(adapter.model.id == entity_id)
+                scoped_entity_column = (
+                    adapter.entity_columns.get(entity_domain)
+                    if adapter.entity_columns is not None and entity_domain is not None
+                    else None
+                )
+                predicates.append(
+                    (
+                        scoped_entity_column
+                        if scoped_entity_column is not None
+                        else adapter.entity_column
+                        if adapter.entity_column is not None
+                        else adapter.model.id
+                    )
+                    == entity_id
+                )
             if temporal is not None:
                 predicates.extend(_temporal_predicates(adapter, temporal))
             rows = (
