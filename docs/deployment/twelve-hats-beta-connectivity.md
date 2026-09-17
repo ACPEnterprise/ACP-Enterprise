@@ -6,21 +6,20 @@ Leak remains the tenant and owns its business data. `beta.twelve-hats.com` is th
 Twelve Hats-owned public beta entry point. This packet does not touch
 `app.twelve-hats.com` and creates no Production resource.
 
-## Current evidence — 2026-09-16
+## Current evidence — 2026-09-17
 
 - Preview resolves to `162.243.234.193` and terminates valid Let's Encrypt TLS in
   Caddy before proxying to loopback frontend Nginx on port 8080.
 - Frontend, backend, PostgreSQL and Redis containers are healthy. The backend health
   projection reports database, schema and Redis healthy.
-- `beta.twelve-hats.com` is absent from DNS. The `twelve-hats.com` zone uses GoDaddy
-  nameservers, so the exact external action is an `A` record named `beta`, value
-  `162.243.234.193`, TTL 600. Do not create or change `app.twelve-hats.com`.
+- `beta.twelve-hats.com` resolves only to `162.243.234.193` with the approved A
+  record. Preserve that record and do not create or change `app.twelve-hats.com`.
 - The host Caddy service is active and automatically owns certificate issuance and
   renewal. Its current Preview certificate is valid through 2026-10-18.
 - Only ports 22, 80 and 443 are host-firewall accessible. SSH is currently permitted
   from anywhere, which is a hardening follow-up; database, Redis and backend have no
   public host ports.
-- Root disk utilization is 80% with approximately 16 GiB available. Treat 85% as a
+- Root disk utilization is 85% with approximately 12 GiB available. Treat 85% as a
   warning and 90% as a blocker; remove only classified disposable build/cache data,
   never databases, evidence, backups or rollback packages.
 - No cookie domain migration exists. Web refresh tokens are held in per-origin
@@ -29,15 +28,14 @@ Twelve Hats-owned public beta entry point. This packet does not touch
   preserved Preview API.
 - Public `/`, `/healthz`, `/backend-health`, and SPA direct routes work on Preview.
   `/api/v1/auth/session` fails closed with 401 when unauthenticated.
-- The deployed frontend currently duplicates browser security headers on proxied API
-  responses because both FastAPI and Nginx add them. This candidate hides upstream
-  copies at Nginx and emits the edge policy once; deploy with the next reviewed
-  frontend image rather than editing a running container.
-- Preview Mission Control is currently unavailable: its web container restarts because
-  upstream `backend` is unresolved, and its API reports an application/schema-head
-  mismatch. This does not affect the healthy tenant application, but it must be owned
-  as a separate internal-runtime repair. Beta deliberately returns 404 for Mission
-  Control, engineering APIs/assets and worker transport.
+- The deployed frontend emits one edge-owned browser security-header policy on both
+  application and proxied API responses.
+- Preview Mission Control is healthy and independently version-bound. Beta deliberately
+  returns 404 for Mission Control, engineering APIs/assets and worker transport.
+- Daily scheduled PostgreSQL backups are active and publish mode-0600 custom-format
+  dumps with bound SHA-256 sidecars. The host audit selects only this controlled
+  scheduled backup namespace; ad hoc pre-release dumps are not backup-freshness
+  authority.
 
 ## Safe activation order
 
@@ -47,12 +45,12 @@ Twelve Hats-owned public beta entry point. This packet does not touch
    registrations are separately migrated.
 2. Install the reviewed Caddyfile and run `caddy validate --config /etc/caddy/Caddyfile`.
    Save the previous file mode-0600 under the existing configuration-backup boundary.
-3. At GoDaddy DNS, create only:
+3. At the authoritative DNS provider, preserve only:
 
    `beta  A  162.243.234.193  TTL 600`
 
-4. Wait for authoritative and public resolution. Caddy then obtains the Beta
-   certificate automatically. Do not use a temporary certificate or disable TLS
+4. Verify authoritative and public resolution. Caddy owns the Beta certificate
+   lifecycle automatically. Do not use a temporary certificate or disable TLS
    verification.
 5. Run `scripts/verify-beta-connectivity.sh`. Then perform an authenticated browser
    pass using a sanctioned Beta employee/owner identity and verify Company/Branch,
