@@ -244,8 +244,16 @@ async def request_password_reset(
 @router.post("/password-reset/confirm", response_model=GenericResponse)
 async def confirm_password_reset(
     data: PasswordResetConfirmRequest,
+    request: Request,
     session: DatabaseSession,
 ) -> GenericResponse:
+    ip_address, _ = client_metadata(request)
+    await enforce_rate_limit(
+        bucket="password-reset-confirm",
+        identifier=ip_address or "unknown-client",
+        limit=10,
+        window_seconds=300,
+    )
     try:
         await recovery_service.confirm_password_reset(
             session,
@@ -295,8 +303,16 @@ async def request_email_verification(
 @router.post("/email-verification/confirm", response_model=GenericResponse)
 async def confirm_email_verification(
     data: EmailVerificationConfirmRequest,
+    request: Request,
     session: DatabaseSession,
 ) -> GenericResponse:
+    ip_address, _ = client_metadata(request)
+    await enforce_rate_limit(
+        bucket="email-verification-confirm",
+        identifier=ip_address or "unknown-client",
+        limit=10,
+        window_seconds=300,
+    )
     try:
         await recovery_service.confirm_email_verification(
             session,
