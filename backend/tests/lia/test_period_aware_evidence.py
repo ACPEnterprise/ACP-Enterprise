@@ -448,7 +448,9 @@ async def test_comparison_retrieves_each_period_separately() -> None:
 
 
 @pytest.mark.asyncio
-async def test_comparison_answer_preserves_each_period_without_inventing_delta() -> None:
+async def test_comparison_answer_preserves_each_period_without_inventing_delta() -> (
+    None
+):
     retrieval = AsyncMock(spec=GovernedRetrievalService)
 
     async def period_evidence(*_args, **kwargs):
