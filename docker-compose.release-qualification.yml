@@ -27,6 +27,7 @@ services:
       ACCESS_TOKEN_KEYS: '{"release-qualification":"release-qualification-disposable-signing-key-32-bytes"}'
       ACCESS_TOKEN_ACTIVE_KID: release-qualification
       INVITATION_TOKEN_HMAC_KEY: release-qualification-disposable-hmac-key-32-bytes
+      SECURITY_TOKEN_HMAC_KEY: release-qualification-disposable-security-hmac-key
     command:
       - /bin/sh
       - -ec

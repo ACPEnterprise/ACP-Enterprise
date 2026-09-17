@@ -27,13 +27,17 @@ def test_compose_state_images_are_immutable() -> None:
 
 def test_release_qualification_access_token_keys_use_runtime_mapping_shape() -> None:
     compose = _compose("docker-compose.release-qualification.yml")
-    encoded_keys = compose["services"]["qualifier"]["environment"][
-        "ACCESS_TOKEN_KEYS"
-    ]
+    environment = compose["services"]["qualifier"]["environment"]
+    encoded_keys = environment["ACCESS_TOKEN_KEYS"]
 
     assert json.loads(encoded_keys) == {
         "release-qualification": "release-qualification-disposable-signing-key-32-bytes"
     }
+    assert len(environment["SECURITY_TOKEN_HMAC_KEY"]) >= 32
+    assert (
+        environment["SECURITY_TOKEN_HMAC_KEY"]
+        != environment["INVITATION_TOKEN_HMAC_KEY"]
+    )
 
 
 def test_development_service_ports_are_loopback_only() -> None:
