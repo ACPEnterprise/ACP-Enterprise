@@ -386,6 +386,12 @@ function SignalRow({
         >
           View ownership history
         </Button>
+        <a
+          className="inline-flex min-h-11 items-center justify-center rounded-md px-ui-3 text-body-s font-semibold text-action-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+          href={`/lia?contextDomain=beacon&contextId=${encodeURIComponent(signal.id)}`}
+        >
+          Ask LIA why
+        </a>
       </div>
       {historyError && (
         <p className="mt-ui-2 text-body-s text-status-danger">

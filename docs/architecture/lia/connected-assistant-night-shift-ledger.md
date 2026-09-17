@@ -33,6 +33,7 @@ a stop condition. Source domains continue to own their facts and calculations.
 | LIA-N1-021 | Contextual Beacon explanation | A selected Beacon signal ID survived in response context, but retrieval ignored it and summarized the entire attention queue for “Explain this one” | BLOCKS_WORK | Exact Beacon context now selects only the currently authorized signal and returns its accepted explanation, severity, priority, recommendation, evidence digest, and scope; unknown/foreign identities reveal nothing |
 | LIA-N1-022 | Luminary → LIA handoff | “Ask LIA about this evidence” opened an unscoped LIA session, so follow-up language such as “What does this mean?” had no safe referent | SLOWS_WORK | The handoff now declares the Luminary domain and lets the server retrieve the latest authorized briefing; no finding identifier or evidence payload is trusted from the browser |
 | LIA-N1-023 | Economics → LIA handoff | The Economics administration surface opened a generic LIA session and discarded its safe source-domain context | SLOWS_WORK | Economics now passes a domain-only context; browser data grants no authority and the server retrieves only currently permitted measured results |
+| LIA-N1-024 | Beacon → LIA discoverability | Beacon exposed explanation evidence but offered no direct way for an owner to continue asking about the selected signal | SLOWS_WORK | Each visible signal now links to LIA with only its opaque signal UUID; the server re-evaluates authorization and resolves the exact current signal before explaining it |
 
 ## UI friction ledger
 
