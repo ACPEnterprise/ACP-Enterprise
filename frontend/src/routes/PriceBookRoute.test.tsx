@@ -468,7 +468,7 @@ describe("PriceBookRoute", () => {
       screen.getByRole("button", { name: "Create tax classification" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Create option group" }),
+      screen.getByRole("button", { name: "Create service choice group" }),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Review activation" }),

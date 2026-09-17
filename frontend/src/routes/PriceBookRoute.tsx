@@ -586,13 +586,46 @@ export function PriceBookRoute() {
               {priceBookRecoveryMessage(failedMutation.error)}
             </Alert>
           )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Browse Price Book by category</CardTitle>
+              <CardDescription>
+                Start with an authoritative category, then review the services
+                in that category. Candidate review and activation remain
+                separate administrative workflows below.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button
+                variant={categoryFilter === "all" ? "primary" : "secondary"}
+                onClick={() => {
+                  setCategoryFilter("all");
+                  setCatalogOffset(0);
+                }}
+              >
+                All categories
+              </Button>
+              {(catalog.data?.categories ?? []).map((catalogCategory) => (
+                <Button
+                  key={catalogCategory.id}
+                  variant={categoryFilter === catalogCategory.id ? "primary" : "secondary"}
+                  onClick={() => {
+                    setCategoryFilter(catalogCategory.id);
+                    setCatalogOffset(0);
+                  }}
+                >
+                  {catalogCategory.name}
+                </Button>
+              ))}
+            </CardContent>
+          </Card>
           <section
             aria-label="Price Book readiness"
             className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
           >
             <Card>
               <CardHeader>
-                <CardDescription>Services</CardDescription>
+                <CardDescription>Loaded catalog page</CardDescription>
                 <CardTitle>{services.length}</CardTitle>
               </CardHeader>
             </Card>
@@ -604,13 +637,13 @@ export function PriceBookRoute() {
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>Ready for owner review</CardDescription>
+                <CardDescription>Draft services in this page</CardDescription>
                 <CardTitle>{ownerReviewCount + draftCount}</CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>Missing price evidence</CardDescription>
+                <CardDescription>Missing price evidence in this page</CardDescription>
                 <CardTitle>{missingPriceCount}</CardTitle>
               </CardHeader>
             </Card>
@@ -1351,9 +1384,9 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>Customer option group</CardTitle>
+                  <CardTitle>Service choice group</CardTitle>
                   <CardDescription>
-                    Define explicit required and maximum selections.
+                      Define the choices an authorized customer may select for this service.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1410,7 +1443,7 @@ export function PriceBookRoute() {
                       type="submit"
                       loading={mutations.optionGroup.isPending}
                     >
-                      Create option group
+                      Create service choice group
                     </Button>
                   </form>
                 </CardContent>
@@ -1432,7 +1465,7 @@ export function PriceBookRoute() {
                       }
                       required
                     >
-                      <option value="">Option group</option>
+                      <option value="">Service choice group</option>
                       {catalog.data?.option_groups.map((group) => (
                         <option key={group.id} value={group.id}>
                           {group.name}
