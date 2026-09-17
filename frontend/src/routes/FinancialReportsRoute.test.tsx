@@ -5,6 +5,7 @@ import { useFinancialReport } from "../hooks/useFinancialReporting";
 import { FinancialReportsRoute } from "./FinancialReportsRoute";
 
 let allowed = false;
+let reportRows: Array<Record<string, string>> = [];
 vi.mock("../auth", () => ({
   useHasPermission: () => allowed,
   useAuth: () => ({
@@ -38,17 +39,7 @@ vi.mock("../hooks/useFinancialReporting", () => ({
         reconciliation: "reconciled",
         review: "unreviewed",
       },
-      rows: [{
-        account_id: "account-1",
-        code: "1100",
-        name: "Accounts Receivable",
-        classification: "asset",
-        beginning_balance: "125.5",
-        debits: "20",
-        credits: "5",
-        ending_balance: "140.5",
-        display_balance: "140.5",
-      }],
+      rows: reportRows,
       total_beginning_balance: "0",
       total_debits: "0",
       total_credits: "0",
@@ -74,6 +65,11 @@ vi.mock("../hooks/useQboAccountingEvidence", () => ({
 describe("FinancialReportsRoute", () => {
   beforeEach(() => {
     allowed = false;
+    reportRows = [{
+      account_id: "account-1", code: "1100", name: "Accounts Receivable",
+      classification: "asset", beginning_balance: "125.5", debits: "20",
+      credits: "5", ending_balance: "140.5", display_balance: "140.5",
+    }];
   });
 
   it("fails closed without report-read permission", () => {
@@ -119,5 +115,12 @@ describe("FinancialReportsRoute", () => {
       "Choose a start date on or before the end date",
     );
     expect(vi.mocked(useFinancialReport).mock.calls.at(-1)?.[0]).toEqual(requestBefore);
+  });
+
+  it("explains an empty native report without implying a loading failure", () => {
+    allowed = true;
+    reportRows = [];
+    render(<FinancialReportsRoute />);
+    expect(screen.getByText(/No posted account balances exist for this report scope/i)).toBeVisible();
   });
 });
