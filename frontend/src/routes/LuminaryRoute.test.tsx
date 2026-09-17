@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AxiosError } from "axios";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LuminaryRoute } from "./LuminaryRoute";
@@ -168,10 +168,16 @@ vi.mock("../hooks/useLuminary", () => ({
   }),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
+}
+
 const renderRoute = () =>
   render(
     <MemoryRouter>
       <LuminaryRoute />
+      <LocationProbe />
     </MemoryRouter>,
   );
 
@@ -257,6 +263,12 @@ describe("Luminary workspace recovery", () => {
     expect(
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
     ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ask LIA about this evidence" }),
+    );
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/lia?contextDomain=luminary",
+    );
     expect(screen.getByText("Owner economics decision support")).toBeVisible();
     expect(screen.getByText("What changed from the prior equal period")).toBeVisible();
     expect(screen.getByText("+$25.00")).toBeVisible();

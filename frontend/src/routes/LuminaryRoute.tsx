@@ -217,7 +217,10 @@ export function LuminaryRoute() {
             associations, limitations, and the next evidence worth inspecting.
           </p>
         </div>
-        <Button variant="secondary" onClick={() => navigate("/lia")}>
+        <Button
+          variant="secondary"
+          onClick={() => navigate("/lia?contextDomain=luminary")}
+        >
           Ask LIA about this evidence
         </Button>
       </header>
