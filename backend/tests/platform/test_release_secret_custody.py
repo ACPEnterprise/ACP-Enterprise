@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPOSITORY_ROOT / "scripts/release-secret-custody-check.py"
 
@@ -53,14 +55,33 @@ def test_secret_custody_accepts_tracked_nonsecret_content(tmp_path: Path) -> Non
     assert "Tracked credential signatures detected: 0" in result.stdout
 
 
+@pytest.mark.parametrize(
+    ("classification", "secret"),
+    (
+        ("github_token", b"ghp_" + b"1234567890abcdefghijklmnop"),
+        ("gitlab_token", b"glpat-" + b"1234567890abcdefghijklmnop"),
+        ("google_api_key", b"AIza" + b"1234567890abcdefghijklmnopqrstuvwxy"),
+        ("npm_token", b"npm_" + b"1234567890abcdefghijklmnopqrstuvwxyz"),
+        (
+            "sendgrid_api_key",
+            b"SG." + b"1234567890abcdefghij" + b"." + b"1234567890abcdefghijklmnop",
+        ),
+        ("twilio_api_key", b"SK" + b"0123456789abcdef0123456789abcdef"),
+        (
+            "private_key",
+            b"-----BEGIN ENCRYPTED PRIVATE KEY-----\n"
+            + b"A" * 64
+            + b"\n-----END ENCRYPTED PRIVATE KEY-----",
+        ),
+    ),
+)
 def test_secret_custody_rejects_signature_without_printing_value(
-    tmp_path: Path,
+    tmp_path: Path, classification: str, secret: bytes
 ) -> None:
-    secret = b"ghp_" + b"1234567890abcdefghijklmnop"
     repository, env_example = _repository(tmp_path, secret + b"\n")
 
     result = _run(repository, env_example)
 
     assert result.returncode == 1
-    assert "candidate.txt (github_token)" in result.stdout
+    assert f"candidate.txt ({classification})" in result.stdout
     assert secret.decode() not in result.stdout

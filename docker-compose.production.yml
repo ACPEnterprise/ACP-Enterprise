@@ -99,6 +99,7 @@ services:
 
   frontend:
     image: ${ACP_FRONTEND_IMAGE:?Set an immutable frontend image digest}
+    user: "101:101"
     init: true
     stop_grace_period: 15s
     cpus: ${FRONTEND_CPUS:-1.0}
@@ -106,8 +107,8 @@ services:
     pids_limit: ${FRONTEND_PIDS_LIMIT:-128}
     read_only: true
     tmpfs:
-      - /var/cache/nginx:size=32m,mode=0755
-      - /var/run:size=4m,mode=0755
+      - /var/cache/nginx:size=32m,mode=0755,uid=101,gid=101
+      - /var/run:size=4m,mode=0755,uid=101,gid=101
     ports:
       - "127.0.0.1:${PRODUCTION_HTTP_PORT:-8081}:80"
     depends_on:

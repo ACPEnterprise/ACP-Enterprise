@@ -7,7 +7,6 @@ import {
   usePriceBookAudit,
   usePriceBook,
   usePriceBookMutations,
-  useCompanyTaxPolicy,
 } from "../hooks/usePriceBook";
 import {
   Alert,
@@ -69,9 +68,6 @@ export function PriceBookRoute() {
     limit: catalogPageSize,
     offset: catalogOffset,
   });
-  const companyTaxPolicy = useCompanyTaxPolicy(
-    canRead && Boolean(activeCompany),
-  );
   const mutations = usePriceBookMutations();
   const emptyCategory = {
     code: "",
@@ -82,22 +78,8 @@ export function PriceBookRoute() {
     status: "draft" as "draft" | "active" | "archived",
   };
   const [category, setCategory] = useState(emptyCategory);
-  const [editCategory, setEditCategory] = useState<{
-    id: string;
-    version: number;
-  } | null>(null);
+  const [editCategory, setEditCategory] = useState<{ id: string; version: number } | null>(null);
   const [tax, setTax] = useState({ code: "", name: "", taxable: true });
-  const [policyDraft, setPolicyDraft] = useState({
-    effective: "",
-    service: "NOT_TAXED",
-    material: "NOT_TAXED",
-    purchase: "PAID_AT_PURCHASE",
-    notes: "",
-  });
-  const [editingPolicy, setEditingPolicy] = useState<{
-    id: string;
-    version: number;
-  } | null>(null);
   const [optionGroup, setOptionGroup] = useState({
     code: "",
     name: "",
@@ -132,25 +114,18 @@ export function PriceBookRoute() {
     componentQuantity: "1",
     componentCost: "",
   });
-  const [draftComponents, setDraftComponents] = useState<
-    Array<{
-      component_type: "labor" | "material" | "other_direct";
-      label: string;
-      quantity: string;
-      unit_cost?: string;
-    }>
-  >([]);
-  const [editDraft, setEditDraft] = useState<{
-    id: string;
-    version: number;
-  } | null>(null);
+  const [draftComponents, setDraftComponents] = useState<Array<{
+    component_type: "labor" | "material" | "other_direct";
+    label: string;
+    quantity: string;
+    unit_cost?: string;
+  }>>([]);
+  const [editDraft, setEditDraft] = useState<{ id: string; version: number } | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string>();
   const [candidateOffset, setCandidateOffset] = useState(0);
   const candidatePageSize = 50;
   const [candidateCategory, setCandidateCategory] = useState("");
-  const [candidateAdmission, setCandidateAdmission] = useState<
-    "" | "admitted" | "held"
-  >("");
+  const [candidateAdmission, setCandidateAdmission] = useState<"" | "admitted" | "held">("");
   const [candidateReviewFlag, setCandidateReviewFlag] = useState("");
   const [reviewVersionId, setReviewVersionId] = useState<string>();
   const activationReadiness = useActivationReadiness(reviewVersionId);
@@ -231,9 +206,7 @@ export function PriceBookRoute() {
                 name: category.name,
                 description: category.description || undefined,
                 parent_id: category.parentId || undefined,
-                position: category.position
-                  ? Number(category.position)
-                  : undefined,
+                position: category.position ? Number(category.position) : undefined,
                 status: category.status,
                 expected_version: editCategory.version,
               },
@@ -243,9 +216,7 @@ export function PriceBookRoute() {
               name: category.name,
               description: category.description || undefined,
               parent_id: category.parentId || undefined,
-              position: category.position
-                ? Number(category.position)
-                : undefined,
+              position: category.position ? Number(category.position) : undefined,
             }),
       () => {
         setCategory(emptyCategory);
@@ -258,29 +229,6 @@ export function PriceBookRoute() {
     await performMutation(
       () => mutations.tax.mutateAsync(tax),
       () => setTax({ code: "", name: "", taxable: true }),
-    );
-  };
-  const submitCompanyTaxPolicy = async (event: FormEvent) => {
-    event.preventDefault();
-    const data = {
-      policy_identity: "COMPANY_OPERATING_TAX_POLICY",
-      effective_at: new Date(policyDraft.effective).toISOString(),
-      customer_service_treatment: policyDraft.service,
-      customer_material_treatment: policyDraft.material,
-      purchase_material_tax_handling: policyDraft.purchase,
-      authority_source: "OWNER_OPERATIONAL_POLICY",
-      authority_notes: policyDraft.notes || undefined,
-      authorized_exceptions: [],
-    };
-    await performMutation(
-      () =>
-        editingPolicy
-          ? mutations.updateCompanyTaxPolicy.mutateAsync({
-              policyId: editingPolicy.id,
-              data: { ...data, expected_version: editingPolicy.version },
-            })
-          : mutations.companyTaxPolicy.mutateAsync(data),
-      () => setEditingPolicy(null),
     );
   };
   const submitOptionGroup = async (event: FormEvent) => {
@@ -345,40 +293,37 @@ export function PriceBookRoute() {
   const submitDraft = async (event: FormEvent) => {
     event.preventDefault();
     const pendingComponent = draft.componentLabel
-      ? [
-          {
-            component_type: draft.componentType,
-            label: draft.componentLabel,
-            quantity: draft.componentQuantity,
-            unit_cost: draft.componentCost || undefined,
-          },
-        ]
+      ? [{
+          component_type: draft.componentType,
+          label: draft.componentLabel,
+          quantity: draft.componentQuantity,
+          unit_cost: draft.componentCost || undefined,
+        }]
       : [];
-    await performMutation(
-      () =>
-        editDraft
-          ? mutations.versionUpdate.mutateAsync({
-              versionId: editDraft.id,
-              data: {
-                expected_version: editDraft.version,
-                tax_classification_id: draft.taxId,
-                currency: "USD",
-                unit_price: draft.price,
-                effective_at: new Date(draft.effective).toISOString(),
-                components: [...draftComponents, ...pendingComponent],
-              },
-            })
-          : mutations.version.mutateAsync({
-              itemId: draft.itemId,
-              data: {
-                branch_id: branch || undefined,
-                tax_classification_id: draft.taxId,
-                currency: "USD",
-                unit_price: draft.price,
-                effective_at: new Date(draft.effective).toISOString(),
-                components: [...draftComponents, ...pendingComponent],
-              },
-            }),
+    await performMutation(() =>
+      editDraft
+        ? mutations.versionUpdate.mutateAsync({
+            versionId: editDraft.id,
+            data: {
+              expected_version: editDraft.version,
+              tax_classification_id: draft.taxId,
+              currency: "USD",
+              unit_price: draft.price,
+              effective_at: new Date(draft.effective).toISOString(),
+              components: [...draftComponents, ...pendingComponent],
+            },
+          })
+        : mutations.version.mutateAsync({
+        itemId: draft.itemId,
+        data: {
+          branch_id: branch || undefined,
+          tax_classification_id: draft.taxId,
+          currency: "USD",
+          unit_price: draft.price,
+          effective_at: new Date(draft.effective).toISOString(),
+          components: [...draftComponents, ...pendingComponent],
+        },
+          }),
       () => {
         setDraftComponents([]);
         setEditDraft(null);
@@ -562,7 +507,9 @@ export function PriceBookRoute() {
         service.customer_description,
         serviceCategory?.code,
         serviceCategory?.name,
-      ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch));
+      ].some((value) =>
+        value?.toLocaleLowerCase().includes(normalizedSearch),
+      );
     return (
       matchesCategory &&
       matchesSearch &&
@@ -593,6 +540,19 @@ export function PriceBookRoute() {
     (service) =>
       !versions.some((version) => version.service_item_id === service.id),
   ).length;
+  const categoryDisplayName = (categoryId: string) => {
+    const categories = catalog.data?.categories ?? [];
+    const byId = new Map(categories.map((category) => [category.id, category]));
+    const names: string[] = [];
+    const visited = new Set<string>();
+    let current = byId.get(categoryId);
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      names.unshift(current.name);
+      current = current.parent_id ? byId.get(current.parent_id) : undefined;
+    }
+    return names.length ? names.join(" › ") : "Category unavailable";
+  };
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
       <header>
@@ -626,200 +586,6 @@ export function PriceBookRoute() {
               </option>
             ))}
           </Select>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Company tax policy</CardTitle>
-          <CardDescription>
-            Customer tax treatment is separate from sales tax paid when the
-            Company buys materials.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {companyTaxPolicy.isPending ? (
-            <Spinner label="Loading Company tax policy" />
-          ) : companyTaxPolicy.isError ? (
-            <Alert variant="danger">
-              Company tax policy could not be loaded.
-            </Alert>
-          ) : companyTaxPolicy.data?.current ? (
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <p>
-                <strong>Status:</strong> Certified and effective
-              </p>
-              <p>
-                <strong>Effective:</strong>{" "}
-                {new Date(
-                  companyTaxPolicy.data.current.effective_at,
-                ).toLocaleString()}
-              </p>
-              <p>
-                <strong>Customer service/labor:</strong>{" "}
-                {companyTaxPolicy.data.current.customer_service_treatment.replaceAll(
-                  "_",
-                  " ",
-                )}
-              </p>
-              <p>
-                <strong>Customer parts/materials:</strong>{" "}
-                {companyTaxPolicy.data.current.customer_material_treatment.replaceAll(
-                  "_",
-                  " ",
-                )}
-              </p>
-              <p>
-                <strong>Material purchases:</strong>{" "}
-                {companyTaxPolicy.data.current.purchase_material_tax_handling.replaceAll(
-                  "_",
-                  " ",
-                )}
-              </p>
-              <p>
-                <strong>Exceptions:</strong>{" "}
-                {companyTaxPolicy.data.current.authorized_exceptions.length ||
-                  "None"}
-              </p>
-            </div>
-          ) : (
-            <Alert>
-              No certified Company tax policy is currently effective.
-            </Alert>
-          )}
-          {canManage && (
-            <form
-              className="grid gap-3 sm:grid-cols-2"
-              onSubmit={submitCompanyTaxPolicy}
-            >
-              <Input
-                aria-label="Tax policy effective date"
-                type="datetime-local"
-                required
-                value={policyDraft.effective}
-                onChange={(event) =>
-                  setPolicyDraft({
-                    ...policyDraft,
-                    effective: event.target.value,
-                  })
-                }
-              />
-              <Select
-                aria-label="Customer service tax treatment"
-                value={policyDraft.service}
-                onChange={(event) =>
-                  setPolicyDraft({
-                    ...policyDraft,
-                    service: event.target.value,
-                  })
-                }
-              >
-                <option value="NOT_TAXED">
-                  Customer service/labor — not taxed
-                </option>
-                <option value="TAXED">Customer service/labor — taxed</option>
-                <option value="REVIEW_REQUIRED">
-                  Customer service/labor — review required
-                </option>
-              </Select>
-              <Select
-                aria-label="Customer material tax treatment"
-                value={policyDraft.material}
-                onChange={(event) =>
-                  setPolicyDraft({
-                    ...policyDraft,
-                    material: event.target.value,
-                  })
-                }
-              >
-                <option value="NOT_TAXED">
-                  Customer parts/materials — not taxed
-                </option>
-                <option value="TAXED">Customer parts/materials — taxed</option>
-                <option value="REVIEW_REQUIRED">
-                  Customer parts/materials — review required
-                </option>
-              </Select>
-              <Select
-                aria-label="Purchase material tax handling"
-                value={policyDraft.purchase}
-                onChange={(event) =>
-                  setPolicyDraft({
-                    ...policyDraft,
-                    purchase: event.target.value,
-                  })
-                }
-              >
-                <option value="PAID_AT_PURCHASE">
-                  Company pays tax when purchasing
-                </option>
-                <option value="EXEMPT">Purchase is exempt</option>
-                <option value="REVIEW_REQUIRED">
-                  Purchase treatment needs review
-                </option>
-              </Select>
-              <Input
-                aria-label="Tax policy notes"
-                value={policyDraft.notes}
-                onChange={(event) =>
-                  setPolicyDraft({ ...policyDraft, notes: event.target.value })
-                }
-                placeholder="Authority and policy notes"
-              />
-              <Button type="submit">
-                {editingPolicy
-                  ? "Save draft changes"
-                  : "Save future draft policy"}
-              </Button>
-            </form>
-          )}
-          {companyTaxPolicy.data?.history.map((policy) => (
-            <div
-              key={policy.id}
-              className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm"
-            >
-              <span>
-                Version {policy.version} · {policy.status} · effective{" "}
-                {new Date(policy.effective_at).toLocaleDateString()}
-              </span>
-              <span className="flex gap-2">
-                {policy.status === "draft" && canManage && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setEditingPolicy({
-                        id: policy.id,
-                        version: policy.version,
-                      });
-                      setPolicyDraft({
-                        effective: policy.effective_at.slice(0, 16),
-                        service: policy.customer_service_treatment,
-                        material: policy.customer_material_treatment,
-                        purchase: policy.purchase_material_tax_handling,
-                        notes: policy.authority_notes ?? "",
-                      });
-                    }}
-                  >
-                    Edit draft
-                  </Button>
-                )}
-                {policy.status === "draft" && canApproveTax && (
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      void performMutation(() =>
-                        mutations.certifyCompanyTaxPolicy.mutateAsync({
-                          policyId: policy.id,
-                          expectedVersion: policy.version,
-                        }),
-                      )
-                    }
-                  >
-                    Certify policy
-                  </Button>
-                )}
-              </span>
-            </div>
-          ))}
         </CardContent>
       </Card>
       {catalog.isPending ? (
@@ -865,7 +631,7 @@ export function PriceBookRoute() {
                     setCatalogOffset(0);
                   }}
                 >
-                  {catalogCategory.name}
+                  {categoryDisplayName(catalogCategory.id)}
                 </Button>
               ))}
             </CardContent>
@@ -876,7 +642,7 @@ export function PriceBookRoute() {
           >
             <Card>
               <CardHeader>
-                <CardDescription>Loaded catalog page</CardDescription>
+                <CardDescription>Services</CardDescription>
                 <CardTitle>{services.length}</CardTitle>
               </CardHeader>
             </Card>
@@ -888,15 +654,13 @@ export function PriceBookRoute() {
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>Draft services in this page</CardDescription>
+                <CardDescription>Ready for owner review</CardDescription>
                 <CardTitle>{ownerReviewCount + draftCount}</CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>
-                  Missing price evidence in this page
-                </CardDescription>
+                <CardDescription>Missing price evidence</CardDescription>
                 <CardTitle>{missingPriceCount}</CardTitle>
               </CardHeader>
             </Card>
@@ -921,37 +685,10 @@ export function PriceBookRoute() {
               ) : (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                      <strong>
-                        {candidateReview.data?.counts.admitted ?? 0}
-                      </strong>
-                      <p className="text-sm text-content-muted">
-                        Draft — ready for review
-                      </p>
-                    </div>
-                    <div>
-                      <strong>{candidateReview.data?.counts.held ?? 0}</strong>
-                      <p className="text-sm text-content-muted">
-                        Held — source conflict
-                      </p>
-                    </div>
-                    <div>
-                      <strong>
-                        {candidateReview.data?.counts
-                          .material_mapping_required ?? 0}
-                      </strong>
-                      <p className="text-sm text-content-muted">
-                        Need material mapping
-                      </p>
-                    </div>
-                    <div>
-                      <strong>
-                        {candidateReview.data?.counts.activation_ready ?? 0}
-                      </strong>
-                      <p className="text-sm text-content-muted">
-                        Activation ready
-                      </p>
-                    </div>
+                    <div><strong>{candidateReview.data?.counts.admitted ?? 0}</strong><p className="text-sm text-content-muted">Draft — ready for review</p></div>
+                    <div><strong>{candidateReview.data?.counts.held ?? 0}</strong><p className="text-sm text-content-muted">Held — source conflict</p></div>
+                    <div><strong>{candidateReview.data?.counts.material_mapping_required ?? 0}</strong><p className="text-sm text-content-muted">Need material mapping</p></div>
+                    <div><strong>{candidateReview.data?.counts.activation_ready ?? 0}</strong><p className="text-sm text-content-muted">Activation ready</p></div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <Input
@@ -967,9 +704,7 @@ export function PriceBookRoute() {
                       aria-label="Filter candidate admission state"
                       value={candidateAdmission}
                       onChange={(event) => {
-                        setCandidateAdmission(
-                          event.target.value as "" | "admitted" | "held",
-                        );
+                        setCandidateAdmission(event.target.value as "" | "admitted" | "held");
                         setCandidateOffset(0);
                       }}
                     >
@@ -986,22 +721,13 @@ export function PriceBookRoute() {
                       }}
                     >
                       <option value="">All review requirements</option>
-                      <option value="PRICE_EVIDENCE_REVIEW_REQUIRED">
-                        Price review required
-                      </option>
-                      <option value="TAX_REVIEW_REQUIRED">
-                        Tax review required
-                      </option>
-                      <option value="MATERIAL_MAPPING_REQUIRED">
-                        Material mapping required
-                      </option>
+                      <option value="PRICE_EVIDENCE_REVIEW_REQUIRED">Price review required</option>
+                      <option value="TAX_REVIEW_REQUIRED">Tax review required</option>
+                      <option value="MATERIAL_MAPPING_REQUIRED">Material mapping required</option>
                       <option value="SOURCE_CONFLICT">Source conflict</option>
                     </Select>
                   </div>
-                  <div
-                    className="space-y-3"
-                    aria-label="All County candidate services"
-                  >
+                  <div className="space-y-3" aria-label="All County candidate services">
                     {(candidateReview.data?.items ?? []).map((candidate) => (
                       <article
                         key={candidate.candidate_identity}
@@ -1009,113 +735,48 @@ export function PriceBookRoute() {
                       >
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs text-content-muted">
-                              {candidate.category} · {candidate.service_code}
-                            </p>
+                            <p className="text-xs text-content-muted">{candidate.category} · {candidate.service_code}</p>
                             <h3 className="font-semibold">{candidate.name}</h3>
                           </div>
-                          <Badge
-                            variant={
-                              candidate.admission_status === "held"
-                                ? "danger"
-                                : "warning"
-                            }
-                          >
-                            {candidate.admission_status === "held"
-                              ? "Held — source conflict"
-                              : "Draft — ready for review"}
+                          <Badge variant={candidate.admission_status === "held" ? "danger" : "warning"}>
+                            {candidate.admission_status === "held" ? "Held — source conflict" : "Draft — ready for review"}
                           </Badge>
                         </div>
-                        <p className="mt-2 text-sm">
-                          {candidate.customer_description}
-                        </p>
+                        <p className="mt-2 text-sm">{candidate.customer_description}</p>
                         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                          <div>
-                            <dt className="text-content-muted">
-                              Candidate price
-                            </dt>
-                            <dd>
-                              $
-                              {candidate.candidate_prices.standard ??
-                                "Not supplied"}{" "}
-                              — not active
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-content-muted">Source</dt>
-                            <dd>
-                              {candidate.source_sheet}, row{" "}
-                              {candidate.source_row}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-content-muted">
-                              Price evidence
-                            </dt>
-                            <dd>
-                              {candidate.price_derivation === "OWNER_OVERRIDE"
-                                ? "Owner workbook value"
-                                : "Workbook formula"}
-                            </dd>
-                          </div>
+                          <div><dt className="text-content-muted">Candidate price</dt><dd>${candidate.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
+                          <div><dt className="text-content-muted">Source</dt><dd>{candidate.source_sheet}, row {candidate.source_row}</dd></div>
+                          <div><dt className="text-content-muted">Price evidence</dt><dd>{candidate.price_derivation === "OWNER_OVERRIDE" ? "Owner workbook value" : "Workbook formula"}</dd></div>
                         </dl>
                         <p className="mt-3 text-xs text-content-muted">
-                          {candidate.review_flags
-                            .map((flag) =>
-                              flag.replaceAll("_", " ").toLocaleLowerCase(),
-                            )
-                            .join(" · ")}
+                          {candidate.review_flags.map((flag) => flag.replaceAll("_", " ").toLocaleLowerCase()).join(" · ")}
                         </p>
                         {candidate.conflict_reason && (
                           <Alert variant="warning">
-                            Workbook pricing differs from illustrative Water
-                            Heater script examples. No source was selected
-                            automatically.
+                            Workbook pricing differs from illustrative Water Heater script examples. No source was selected automatically.
                           </Alert>
                         )}
                       </article>
                     ))}
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p
-                      className="text-sm text-content-muted"
-                      aria-live="polite"
-                    >
-                      Showing{" "}
-                      {candidateReview.data?.total ? candidateOffset + 1 : 0}–
-                      {Math.min(
-                        candidateOffset +
-                          (candidateReview.data?.items.length ?? 0),
-                        candidateReview.data?.total ?? 0,
-                      )}{" "}
-                      of {candidateReview.data?.total ?? 0} candidates.
+                    <p className="text-sm text-content-muted" aria-live="polite">
+                      Showing {candidateReview.data?.total ? candidateOffset + 1 : 0}–{Math.min(candidateOffset + (candidateReview.data?.items.length ?? 0), candidateReview.data?.total ?? 0)} of {candidateReview.data?.total ?? 0} candidates.
                     </p>
                     <div className="flex gap-2">
                       <Button
                         type="button"
                         variant="ghost"
                         disabled={candidateOffset === 0}
-                        onClick={() =>
-                          setCandidateOffset((offset) =>
-                            Math.max(0, offset - candidatePageSize),
-                          )
-                        }
+                        onClick={() => setCandidateOffset((offset) => Math.max(0, offset - candidatePageSize))}
                       >
                         Previous candidates
                       </Button>
                       <Button
                         type="button"
                         variant="ghost"
-                        disabled={
-                          candidateOffset +
-                            (candidateReview.data?.items.length ?? 0) >=
-                          (candidateReview.data?.total ?? 0)
-                        }
-                        onClick={() =>
-                          setCandidateOffset(
-                            (offset) => offset + candidatePageSize,
-                          )
-                        }
+                        disabled={candidateOffset + (candidateReview.data?.items.length ?? 0) >= (candidateReview.data?.total ?? 0)}
+                        onClick={() => setCandidateOffset((offset) => offset + candidatePageSize)}
                       >
                         Next candidates
                       </Button>
@@ -1130,161 +791,41 @@ export function PriceBookRoute() {
               <CardHeader>
                 <CardTitle>Activation checklist</CardTitle>
                 <CardDescription>
-                  Each approval applies only to this exact draft revision.
-                  Editing the draft makes prior approvals stale. Activation
-                  remains a separate final action.
+                  Each approval applies only to this exact draft revision. Editing the draft makes prior approvals stale. Activation remains a separate final action.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {activationReadiness.isPending ? (
-                  <Spinner label="Loading activation checklist" />
-                ) : activationReadiness.isError ? (
-                  <Alert variant="danger">
-                    Activation evidence could not be loaded.
-                  </Alert>
-                ) : (
-                  activationReadiness.data && (
-                    <>
-                      <p>
-                        <strong>{activationReadiness.data.service_code}</strong>{" "}
-                        ·{" "}
-                        {activationReadiness.data.activation_ready
-                          ? "Ready for explicit activation"
-                          : "Not ready to activate"}
-                      </p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {activationReadiness.data.remaining_blockers.map(
-                          (blocker) => (
-                            <div
-                              key={blocker}
-                              className="rounded border border-stroke p-3 text-sm"
-                            >
-                              {blocker.replaceAll("_", " ").toLocaleLowerCase()}
-                            </div>
-                          ),
-                        )}
-                      </div>
-                      {activationReadiness.data.material_mapping_required && (
-                        <Alert variant="warning">
-                          Material mapping is incomplete. This affects internal
-                          material readiness; it is not silently treated as
-                          Inventory consumption.
-                        </Alert>
+                {activationReadiness.isPending ? <Spinner label="Loading activation checklist" /> : activationReadiness.isError ? (
+                  <Alert variant="danger">Activation evidence could not be loaded.</Alert>
+                ) : activationReadiness.data && (
+                  <>
+                    <p><strong>{activationReadiness.data.service_code}</strong> · {activationReadiness.data.activation_ready ? "Ready for explicit activation" : "Not ready to activate"}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {activationReadiness.data.remaining_blockers.map((blocker) => (
+                        <div key={blocker} className="rounded border border-stroke p-3 text-sm">
+                          {blocker.replaceAll("_", " ").toLocaleLowerCase()}
+                        </div>
+                      ))}
+                    </div>
+                    {activationReadiness.data.material_mapping_required && (
+                      <Alert variant="warning">Material mapping is incomplete. This affects internal material readiness; it is not silently treated as Inventory consumption.</Alert>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {canManage && !activationReadiness.data.price_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "price", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the ACP selling price shown for this exact draft." })}>Approve selling price</Button>}
+                      {canApproveTax && !activationReadiness.data.tax_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "tax", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized finance reviewer approved the selected tax classification for this exact draft." })}>Approve tax classification</Button>}
+                      {canManage && !activationReadiness.data.effective_date_approved && <Button onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "effective-date", expectedVersion: activationReadiness.data!.draft_version, reason: "Owner approved the effective date shown for this exact draft." })}>Approve effective date</Button>}
+                      {canActivate && !activationReadiness.data.activation_authorized && <Button disabled={!activationReadiness.data.price_approved || !activationReadiness.data.tax_approved || !activationReadiness.data.effective_date_approved} onClick={() => void mutations.activationReview.mutateAsync({ versionId: reviewVersionId, decision: "activation-authorization", expectedVersion: activationReadiness.data!.draft_version, reason: "Authorized owner approved this exact draft for a later explicit activation command." })}>Authorize later activation</Button>}
+                      {canActivate && activationReadiness.data.activation_ready && <Button onClick={() => void performMutation(() => mutations.activate.mutateAsync({ id: reviewVersionId, version: activationReadiness.data!.draft_version }))}>Activate reviewed version</Button>}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Review and activation history</h3>
+                      {reviewAudit.isPending ? <Spinner label="Loading Price Book history" /> : (
+                        <ul className="mt-2 space-y-2 text-sm">
+                          {(reviewAudit.data ?? []).map((entry) => <li key={entry.id}><strong>{entry.action.replaceAll("_", " ")}</strong> · {entry.reason} · {new Date(entry.occurred_at).toLocaleString()}</li>)}
+                        </ul>
                       )}
-                      <div className="flex flex-wrap gap-2">
-                        {canManage &&
-                          !activationReadiness.data.price_approved && (
-                            <Button
-                              onClick={() =>
-                                void mutations.activationReview.mutateAsync({
-                                  versionId: reviewVersionId,
-                                  decision: "price",
-                                  expectedVersion:
-                                    activationReadiness.data!.draft_version,
-                                  reason:
-                                    "Owner approved the ACP selling price shown for this exact draft.",
-                                })
-                              }
-                            >
-                              Approve selling price
-                            </Button>
-                          )}
-                        {canApproveTax &&
-                          !activationReadiness.data.tax_approved && (
-                            <Button
-                              onClick={() =>
-                                void mutations.activationReview.mutateAsync({
-                                  versionId: reviewVersionId,
-                                  decision: "tax",
-                                  expectedVersion:
-                                    activationReadiness.data!.draft_version,
-                                  reason:
-                                    "Authorized finance reviewer approved the selected tax classification for this exact draft.",
-                                })
-                              }
-                            >
-                              Approve tax classification
-                            </Button>
-                          )}
-                        {canManage &&
-                          !activationReadiness.data.effective_date_approved && (
-                            <Button
-                              onClick={() =>
-                                void mutations.activationReview.mutateAsync({
-                                  versionId: reviewVersionId,
-                                  decision: "effective-date",
-                                  expectedVersion:
-                                    activationReadiness.data!.draft_version,
-                                  reason:
-                                    "Owner approved the effective date shown for this exact draft.",
-                                })
-                              }
-                            >
-                              Approve effective date
-                            </Button>
-                          )}
-                        {canActivate &&
-                          !activationReadiness.data.activation_authorized && (
-                            <Button
-                              disabled={
-                                !activationReadiness.data.price_approved ||
-                                !activationReadiness.data.tax_approved ||
-                                !activationReadiness.data
-                                  .effective_date_approved
-                              }
-                              onClick={() =>
-                                void mutations.activationReview.mutateAsync({
-                                  versionId: reviewVersionId,
-                                  decision: "activation-authorization",
-                                  expectedVersion:
-                                    activationReadiness.data!.draft_version,
-                                  reason:
-                                    "Authorized owner approved this exact draft for a later explicit activation command.",
-                                })
-                              }
-                            >
-                              Authorize later activation
-                            </Button>
-                          )}
-                        {canActivate &&
-                          activationReadiness.data.activation_ready && (
-                            <Button
-                              onClick={() =>
-                                void performMutation(() =>
-                                  mutations.activate.mutateAsync({
-                                    id: reviewVersionId,
-                                    version:
-                                      activationReadiness.data!.draft_version,
-                                  }),
-                                )
-                              }
-                            >
-                              Activate reviewed version
-                            </Button>
-                          )}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">
-                          Review and activation history
-                        </h3>
-                        {reviewAudit.isPending ? (
-                          <Spinner label="Loading Price Book history" />
-                        ) : (
-                          <ul className="mt-2 space-y-2 text-sm">
-                            {(reviewAudit.data ?? []).map((entry) => (
-                              <li key={entry.id}>
-                                <strong>
-                                  {entry.action.replaceAll("_", " ")}
-                                </strong>{" "}
-                                · {entry.reason} ·{" "}
-                                {new Date(entry.occurred_at).toLocaleString()}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </>
-                  )
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1375,9 +916,8 @@ export function PriceBookRoute() {
               <CardHeader>
                 <CardTitle>Bulk price adjustment</CardTitle>
                 <CardDescription>
-                  Preview the currently filtered active services. Approval
-                  creates successor drafts only; activation remains a separate
-                  action.
+                  Preview the currently filtered active services. Approval creates
+                  successor drafts only; activation remains a separate action.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1401,10 +941,7 @@ export function PriceBookRoute() {
                     step="0.01"
                     value={adjustment.value}
                     onChange={(event) =>
-                      setAdjustment({
-                        ...adjustment,
-                        value: event.target.value,
-                      })
+                      setAdjustment({ ...adjustment, value: event.target.value })
                     }
                   />
                   <Input
@@ -1420,13 +957,7 @@ export function PriceBookRoute() {
                   />
                 </div>
                 <p className="text-sm text-content-muted">
-                  Preview scope:{" "}
-                  {
-                    filteredServices.filter(
-                      (service) => service.current_version_id,
-                    ).length
-                  }{" "}
-                  active-priced services. No historical version will be changed.
+                  Preview scope: {filteredServices.filter((service) => service.current_version_id).length} active-priced services. No historical version will be changed.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -1439,9 +970,7 @@ export function PriceBookRoute() {
                   {canActivate && (
                     <Button
                       onClick={() => void approveAdjustment()}
-                      disabled={
-                        !savedAdjustment || savedAdjustment.status !== "draft"
-                      }
+                      disabled={!savedAdjustment || savedAdjustment.status !== "draft"}
                       loading={mutations.adjustmentDecision.isPending}
                     >
                       Approve preview
@@ -1449,9 +978,7 @@ export function PriceBookRoute() {
                   )}
                   <Button
                     onClick={() => void createAdjustmentDrafts()}
-                    disabled={
-                      !savedAdjustment || savedAdjustment.status !== "approved"
-                    }
+                    disabled={!savedAdjustment || savedAdjustment.status !== "approved"}
                     loading={mutations.adjustmentMaterialize.isPending}
                   >
                     Create successor drafts
@@ -1466,8 +993,7 @@ export function PriceBookRoute() {
                 </div>
                 {savedAdjustment && (
                   <Alert variant="success" role="status">
-                    Exact preview saved for {savedAdjustment.count} services ·{" "}
-                    {savedAdjustment.status}. No price is active.
+                    Exact preview saved for {savedAdjustment.count} services · {savedAdjustment.status}. No price is active.
                   </Alert>
                 )}
               </CardContent>
@@ -1496,18 +1022,14 @@ export function PriceBookRoute() {
                           setCategory(emptyCategory);
                           return;
                         }
-                        setEditCategory({
-                          id: selected.id,
-                          version: selected.version,
-                        });
+                        setEditCategory({ id: selected.id, version: selected.version });
                         setCategory({
                           code: selected.code,
                           name: selected.name,
                           description: selected.description ?? "",
                           parentId: selected.parent_id ?? "",
                           position: selected.position?.toString() ?? "",
-                          status: selected.status as
-                            "draft" | "active" | "archived",
+                          status: selected.status as "draft" | "active" | "archived",
                         });
                       }}
                     >
@@ -1540,30 +1062,17 @@ export function PriceBookRoute() {
                       aria-label="Category description"
                       placeholder="Description"
                       value={category.description}
-                      onChange={(e) =>
-                        setCategory({
-                          ...category,
-                          description: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setCategory({ ...category, description: e.target.value })}
                     />
                     <Select
                       aria-label="Parent category"
                       value={category.parentId}
-                      onChange={(e) =>
-                        setCategory({ ...category, parentId: e.target.value })
-                      }
+                      onChange={(e) => setCategory({ ...category, parentId: e.target.value })}
                     >
                       <option value="">No parent category</option>
                       {catalog.data?.categories
-                        .filter(
-                          (candidate) => candidate.id !== editCategory?.id,
-                        )
-                        .map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {candidate.name}
-                          </option>
-                        ))}
+                        .filter((candidate) => candidate.id !== editCategory?.id)
+                        .map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
                     </Select>
                     <Input
                       aria-label="Category order"
@@ -1571,21 +1080,13 @@ export function PriceBookRoute() {
                       min="1"
                       placeholder="Display order"
                       value={category.position}
-                      onChange={(e) =>
-                        setCategory({ ...category, position: e.target.value })
-                      }
+                      onChange={(e) => setCategory({ ...category, position: e.target.value })}
                     />
                     {editCategory && (
                       <Select
                         aria-label="Category status"
                         value={category.status}
-                        onChange={(e) =>
-                          setCategory({
-                            ...category,
-                            status: e.target.value as
-                              "draft" | "active" | "archived",
-                          })
-                        }
+                        onChange={(e) => setCategory({ ...category, status: e.target.value as "draft" | "active" | "archived" })}
                       >
                         <option value="draft">Draft</option>
                         <option value="active">Active</option>
@@ -1595,23 +1096,12 @@ export function PriceBookRoute() {
                     <Button
                       fullWidth
                       type="submit"
-                      loading={
-                        mutations.category.isPending ||
-                        mutations.categoryUpdate.isPending
-                      }
+                      loading={mutations.category.isPending || mutations.categoryUpdate.isPending}
                     >
                       {editCategory ? "Save category" : "Create category"}
                     </Button>
                     {editCategory && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        fullWidth
-                        onClick={() => {
-                          setEditCategory(null);
-                          setCategory(emptyCategory);
-                        }}
-                      >
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditCategory(null); setCategory(emptyCategory); }}>
                         Cancel category edit
                       </Button>
                     )}
@@ -1620,9 +1110,7 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>
-                    {editItem ? "Edit service item" : "New service item"}
-                  </CardTitle>
+                  <CardTitle>{editItem ? "Edit service item" : "New service item"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form
@@ -1678,20 +1166,12 @@ export function PriceBookRoute() {
                       aria-label="Internal service notes"
                       placeholder="Internal technical or cost notes"
                       value={item.internal_description}
-                      onChange={(e) =>
-                        setItem({
-                          ...item,
-                          internal_description: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setItem({ ...item, internal_description: e.target.value })}
                     />
                     <Button
                       fullWidth
                       type="submit"
-                      loading={
-                        mutations.item.isPending ||
-                        mutations.itemUpdate.isPending
-                      }
+                      loading={mutations.item.isPending || mutations.itemUpdate.isPending}
                     >
                       {editItem ? "Save service item" : "Create service item"}
                     </Button>
@@ -1702,13 +1182,7 @@ export function PriceBookRoute() {
                         variant="ghost"
                         onClick={() => {
                           setEditItem(null);
-                          setItem({
-                            category_id: "",
-                            code: "",
-                            name: "",
-                            customer_description: "",
-                            internal_description: "",
-                          });
+                          setItem({ category_id: "", code: "", name: "", customer_description: "", internal_description: "" });
                         }}
                       >
                         Cancel edit
@@ -1719,11 +1193,7 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>
-                    {editDraft
-                      ? "Edit draft price version"
-                      : "Draft price version"}
-                  </CardTitle>
+                  <CardTitle>{editDraft ? "Edit draft price version" : "Draft price version"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form
@@ -1787,8 +1257,7 @@ export function PriceBookRoute() {
                       onChange={(e) =>
                         setDraft({
                           ...draft,
-                          componentType: e.target.value as
-                            "labor" | "material" | "other_direct",
+                          componentType: e.target.value as "labor" | "material" | "other_direct",
                         })
                       }
                     >
@@ -1812,10 +1281,7 @@ export function PriceBookRoute() {
                       step="0.0001"
                       value={draft.componentQuantity}
                       onChange={(e) =>
-                        setDraft({
-                          ...draft,
-                          componentQuantity: e.target.value,
-                        })
+                        setDraft({ ...draft, componentQuantity: e.target.value })
                       }
                       required
                     />
@@ -1831,17 +1297,13 @@ export function PriceBookRoute() {
                       }
                     />
                     <p className="text-xs text-content-muted">
-                      Expected inputs support planning only. They do not prove
-                      purchased or consumed materials, and missing cost is never
-                      treated as zero.
+                      Expected inputs support planning only. They do not prove purchased or consumed materials, and missing cost is never treated as zero.
                     </p>
                     <Button
                       type="button"
                       variant="outline"
                       fullWidth
-                      disabled={
-                        !draft.componentLabel || !draft.componentQuantity
-                      }
+                      disabled={!draft.componentLabel || !draft.componentQuantity}
                       onClick={() => {
                         setDraftComponents([
                           ...draftComponents,
@@ -1863,35 +1325,11 @@ export function PriceBookRoute() {
                       Add expected input
                     </Button>
                     {draftComponents.length > 0 && (
-                      <ul
-                        className="space-y-2 text-sm"
-                        aria-label="Staged expected inputs"
-                      >
+                      <ul className="space-y-2 text-sm" aria-label="Staged expected inputs">
                         {draftComponents.map((component, index) => (
-                          <li
-                            key={`${component.component_type}:${component.label}:${index}`}
-                            className="flex items-center justify-between gap-3 rounded-md bg-surface-muted p-2"
-                          >
-                            <span>
-                              {component.component_type.replaceAll("_", " ")} ·{" "}
-                              {component.label} · {component.quantity}
-                              {component.unit_cost
-                                ? ` × USD ${component.unit_cost}`
-                                : " · cost evidence missing"}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() =>
-                                setDraftComponents(
-                                  draftComponents.filter(
-                                    (_, candidate) => candidate !== index,
-                                  ),
-                                )
-                              }
-                            >
-                              Remove
-                            </Button>
+                          <li key={`${component.component_type}:${component.label}:${index}`} className="flex items-center justify-between gap-3 rounded-md bg-surface-muted p-2">
+                            <span>{component.component_type.replaceAll("_", " ")} · {component.label} · {component.quantity}{component.unit_cost ? ` × USD ${component.unit_cost}` : " · cost evidence missing"}</span>
+                            <Button type="button" variant="ghost" onClick={() => setDraftComponents(draftComponents.filter((_, candidate) => candidate !== index))}>Remove</Button>
                           </li>
                         ))}
                       </ul>
@@ -1899,23 +1337,12 @@ export function PriceBookRoute() {
                     <Button
                       fullWidth
                       type="submit"
-                      loading={
-                        mutations.version.isPending ||
-                        mutations.versionUpdate.isPending
-                      }
+                      loading={mutations.version.isPending || mutations.versionUpdate.isPending}
                     >
                       {editDraft ? "Save draft price version" : "Create draft"}
                     </Button>
                     {editDraft && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        fullWidth
-                        onClick={() => {
-                          setEditDraft(null);
-                          setDraftComponents([]);
-                        }}
-                      >
+                      <Button type="button" variant="ghost" fullWidth onClick={() => { setEditDraft(null); setDraftComponents([]); }}>
                         Cancel draft edit
                       </Button>
                     )}
@@ -1974,10 +1401,9 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>Service choice group</CardTitle>
+                  <CardTitle>Customer option group</CardTitle>
                   <CardDescription>
-                    Define the choices an authorized customer may select for
-                    this service.
+                    Define explicit required and maximum selections.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -2034,7 +1460,7 @@ export function PriceBookRoute() {
                       type="submit"
                       loading={mutations.optionGroup.isPending}
                     >
-                      Create service choice group
+                      Create option group
                     </Button>
                   </form>
                 </CardContent>
@@ -2056,7 +1482,7 @@ export function PriceBookRoute() {
                       }
                       required
                     >
-                      <option value="">Service choice group</option>
+                      <option value="">Option group</option>
                       {catalog.data?.option_groups.map((group) => (
                         <option key={group.id} value={group.id}>
                           {group.name}
@@ -2113,82 +1539,36 @@ export function PriceBookRoute() {
             <CardHeader>
               <CardTitle>Customer option sets</CardTitle>
               <CardDescription>
-                Good/Better/Best and other genuine alternatives connected to
-                Price Book services.
+                Good/Better/Best and other genuine alternatives connected to Price Book services.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {catalog.data?.option_groups.length ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   {catalog.data.option_groups.map((group) => {
-                    const groupOptions =
-                      catalog.data?.options
-                        .filter(
-                          (candidate) => candidate.option_group_id === group.id,
-                        )
-                        .sort(
-                          (left, right) => left.position - right.position,
-                        ) ?? [];
+                    const groupOptions = catalog.data?.options
+                      .filter((candidate) => candidate.option_group_id === group.id)
+                      .sort((left, right) => left.position - right.position) ?? [];
                     return (
-                      <section
-                        key={group.id}
-                        className="rounded-lg border border-stroke p-4"
-                        aria-label={`Option set ${group.name}`}
-                      >
+                      <section key={group.id} className="rounded-lg border border-stroke p-4" aria-label={`Option set ${group.name}`}>
                         <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs text-content-muted">
-                              {group.code}
-                            </p>
-                            <h3 className="font-semibold">{group.name}</h3>
-                          </div>
-                          <Badge
-                            variant={
-                              group.status === "active" ? "success" : "neutral"
-                            }
-                          >
-                            {group.status}
-                          </Badge>
+                          <div><p className="text-xs text-content-muted">{group.code}</p><h3 className="font-semibold">{group.name}</h3></div>
+                          <Badge variant={group.status === "active" ? "success" : "neutral"}>{group.status}</Badge>
                         </div>
-                        <p className="mt-2 text-xs text-content-muted">
-                          Choose at least {group.minimum_selections} and at most{" "}
-                          {group.maximum_selections}.
-                        </p>
+                        <p className="mt-2 text-xs text-content-muted">Choose at least {group.minimum_selections} and at most {group.maximum_selections}.</p>
                         <ol className="mt-3 space-y-2">
                           {groupOptions.map((choice) => {
-                            const service = catalog.data?.service_items.find(
-                              (item) => item.id === choice.service_item_id,
-                            );
-                            return (
-                              <li
-                                key={choice.id}
-                                className="rounded-md bg-surface-muted p-3 text-sm"
-                              >
-                                <strong>{choice.label}</strong>
-                                <span className="text-content-muted">
-                                  {" "}
-                                  ·{" "}
-                                  {service
-                                    ? `${service.code} · ${service.name}`
-                                    : "Connected service unavailable"}
-                                </span>
-                              </li>
-                            );
+                            const service = catalog.data?.service_items.find((item) => item.id === choice.service_item_id);
+                            return <li key={choice.id} className="rounded-md bg-surface-muted p-3 text-sm"><strong>{choice.label}</strong><span className="text-content-muted"> · {service ? `${service.code} · ${service.name}` : "Connected service unavailable"}</span></li>;
                           })}
                         </ol>
-                        {groupOptions.length === 0 && (
-                          <p className="mt-3 text-sm text-content-muted">
-                            No service choices are connected yet.
-                          </p>
-                        )}
+                        {groupOptions.length === 0 && <p className="mt-3 text-sm text-content-muted">No service choices are connected yet.</p>}
                       </section>
                     );
                   })}
                 </div>
               ) : (
-                <p className="rounded-lg border border-dashed border-stroke p-4 text-sm text-content-muted">
-                  No customer option sets are configured.
-                </p>
+                <p className="rounded-lg border border-dashed border-stroke p-4 text-sm text-content-muted">No customer option sets are configured.</p>
               )}
             </CardContent>
           </Card>
@@ -2223,7 +1603,7 @@ export function PriceBookRoute() {
                   <option value="all">All categories</option>
                   {catalog.data?.categories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {categoryDisplayName(category.id)}
                     </option>
                   ))}
                 </Select>
@@ -2242,10 +1622,7 @@ export function PriceBookRoute() {
                   <option value="archived">Archived</option>
                 </Select>
               </div>
-              <nav
-                aria-label="Browse Price Book categories"
-                className="mb-4 flex flex-wrap gap-2"
-              >
+              <nav aria-label="Browse Price Book categories" className="mb-4 flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant={categoryFilter === "all" ? "primary" : "ghost"}
@@ -2260,26 +1637,18 @@ export function PriceBookRoute() {
                   <Button
                     key={category.id}
                     type="button"
-                    variant={
-                      categoryFilter === category.id ? "primary" : "ghost"
-                    }
+                    variant={categoryFilter === category.id ? "primary" : "ghost"}
                     onClick={() => {
                       setCategoryFilter(category.id);
                       setCatalogOffset(0);
                     }}
                   >
-                    {category.name}
+                    {categoryDisplayName(category.id)}
                   </Button>
                 ))}
               </nav>
               <p className="mb-3 text-sm text-content-muted" aria-live="polite">
-                Showing{" "}
-                {catalog.data?.total_service_items ? catalogOffset + 1 : 0}–
-                {Math.min(
-                  catalogOffset + services.length,
-                  catalog.data?.total_service_items ?? 0,
-                )}{" "}
-                of {catalog.data?.total_service_items ?? 0} services.
+                Showing {catalog.data?.total_service_items ? catalogOffset + 1 : 0}–{Math.min(catalogOffset + services.length, catalog.data?.total_service_items ?? 0)} of {catalog.data?.total_service_items ?? 0} services.
               </p>
               {selectedService && (
                 <section
@@ -2289,12 +1658,12 @@ export function PriceBookRoute() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-xs text-content-muted">
-                        {selectedCategory?.name ?? "Category unavailable"} ·{" "}
+                        {selectedCategory
+                          ? categoryDisplayName(selectedCategory.id)
+                          : "Category unavailable"} ·{" "}
                         {selectedService.code}
                       </p>
-                      <h3 className="text-lg font-semibold">
-                        {selectedService.name}
-                      </h3>
+                      <h3 className="text-lg font-semibold">{selectedService.name}</h3>
                     </div>
                     <Button
                       type="button"
@@ -2307,70 +1676,33 @@ export function PriceBookRoute() {
                   <p className="mt-2">{selectedService.customer_description}</p>
                   {canManage && selectedService.internal_description && (
                     <p className="mt-2 rounded-md bg-surface-muted p-3 text-sm">
-                      <strong>Internal notes:</strong>{" "}
-                      {selectedService.internal_description}
+                      <strong>Internal notes:</strong> {selectedService.internal_description}
                     </p>
                   )}
                   {selectedService.status === "draft" && (
                     <Alert>
-                      This Draft service is available for owner review. It
-                      cannot be selected in an Estimate until an authorized
-                      owner explicitly activates it.
+                      This Draft service is available for owner review. It cannot be selected in an Estimate until an authorized owner explicitly activates it.
                     </Alert>
                   )}
                   {selectedCandidate.isPending ? (
                     <Spinner label="Loading service evidence" />
                   ) : selectedCandidate.isError || !selectedEvidence ? (
                     <Alert variant="warning">
-                      Native service details are available, but source evidence
-                      could not be loaded.
+                      Native service details are available, but source evidence could not be loaded.
                     </Alert>
                   ) : (
                     <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                      <div>
-                        <dt className="text-content-muted">Status</dt>
-                        <dd>
-                          {selectedEvidence.admission_status === "held"
-                            ? "Held — source conflict"
-                            : "Draft — ready for review"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-content-muted">Candidate price</dt>
-                        <dd>
-                          $
-                          {selectedEvidence.candidate_prices.standard ??
-                            "Not supplied"}{" "}
-                          — not active
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-content-muted">Source</dt>
-                        <dd>
-                          {selectedEvidence.source_sheet}, row{" "}
-                          {selectedEvidence.source_row}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-content-muted">Remaining review</dt>
-                        <dd>
-                          {selectedEvidence.review_flags.length
-                            ? selectedEvidence.review_flags
-                                .map((flag) =>
-                                  flag.replaceAll("_", " ").toLocaleLowerCase(),
-                                )
-                                .join(" · ")
-                            : "No review flags"}
-                        </dd>
-                      </div>
+                      <div><dt className="text-content-muted">Status</dt><dd>{selectedEvidence.admission_status === "held" ? "Held — source conflict" : "Draft — ready for review"}</dd></div>
+                      <div><dt className="text-content-muted">Candidate price</dt><dd>${selectedEvidence.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
+                      <div><dt className="text-content-muted">Source</dt><dd>{selectedEvidence.source_sheet}, row {selectedEvidence.source_row}</dd></div>
+                      <div><dt className="text-content-muted">Remaining review</dt><dd>{selectedEvidence.review_flags.length ? selectedEvidence.review_flags.map((flag) => flag.replaceAll("_", " ").toLocaleLowerCase()).join(" · ") : "No review flags"}</dd></div>
                     </dl>
                   )}
                 </section>
               )}
               {!catalog.isPending && filteredServices.length === 0 && (
                 <Alert variant="warning">
-                  No Price Book services match this search and filter
-                  combination.
+                  No Price Book services match this search and filter combination.
                 </Alert>
               )}
               <ul className="space-y-3">
@@ -2427,19 +1759,13 @@ export function PriceBookRoute() {
                                   category_id: service.category_id,
                                   code: service.code,
                                   name: service.name,
-                                  customer_description:
-                                    service.customer_description,
-                                  internal_description:
-                                    service.internal_description ?? "",
+                                  customer_description: service.customer_description,
+                                  internal_description: service.internal_description ?? "",
                                 });
                                 setEditItem({
                                   id: service.id,
                                   version: service.version,
-                                  status: service.status as
-                                    | "draft"
-                                    | "active"
-                                    | "inactive"
-                                    | "archived",
+                                  status: service.status as "draft" | "active" | "inactive" | "archived",
                                 });
                               }}
                             >
@@ -2460,99 +1786,65 @@ export function PriceBookRoute() {
                                 {version.unit_price} · {version.status}
                               </span>
                               <p className="text-xs text-content-muted">
-                                Effective{" "}
-                                {new Date(
-                                  version.effective_at,
-                                ).toLocaleString()}{" "}
-                                ·{" "}
-                                {version.cost_readiness === "COST_COMPLETE"
-                                  ? "Cost evidence complete"
-                                  : "Insufficient cost evidence"}
+                                Effective {new Date(version.effective_at).toLocaleString()} · {version.cost_readiness === "COST_COMPLETE" ? "Cost evidence complete" : "Insufficient cost evidence"}
                               </p>
                               {canManage && version.expected_direct_cost && (
                                 <p className="text-xs text-content-muted">
-                                  Expected direct cost {version.currency}{" "}
-                                  {version.expected_direct_cost} · Expected
-                                  direct contribution {version.currency}{" "}
-                                  {version.expected_direct_contribution}
+                                  Expected direct cost {version.currency} {version.expected_direct_cost} · Expected direct contribution {version.currency} {version.expected_direct_contribution}
                                 </p>
                               )}
                               {canManage && version.components.length > 0 && (
-                                <ul
-                                  className="mt-2 space-y-1 text-xs text-content-muted"
-                                  aria-label={`Expected inputs for revision ${version.revision}`}
-                                >
-                                  {version.components.map((component) => (
-                                    <li
-                                      key={`${component.position}:${component.label}`}
-                                    >
-                                      {component.component_type.replaceAll(
-                                        "_",
-                                        " ",
-                                      )}{" "}
-                                      · {component.label} · {component.quantity}
-                                      {component.unit_cost == null
-                                        ? " · cost evidence missing"
-                                        : ` × ${version.currency} ${component.unit_cost}`}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              {version.status === "draft" &&
-                                itemVersions.some(
-                                  (candidate) => candidate.status === "active",
-                                ) && (
-                                  <p className="text-xs font-medium text-content-muted">
-                                    Change from active: {version.currency}{" "}
-                                    {(
-                                      Number(version.unit_price) -
-                                      Number(
-                                        itemVersions.find(
-                                          (candidate) =>
-                                            candidate.status === "active",
-                                        )?.unit_price ?? 0,
-                                      )
-                                    ).toFixed(2)}
+                                <div className="mt-2 text-xs text-content-muted">
+                                  <p>
+                                    Expected inputs only — these do not record a
+                                    purchase, Inventory movement, or Job consumption.
                                   </p>
-                                )}
+                                  <ul
+                                    className="mt-1 space-y-1"
+                                    aria-label={`Expected inputs for revision ${version.revision}`}
+                                  >
+                                    {version.components.map((component) => (
+                                      <li key={`${component.position}:${component.label}`}>
+                                        {component.component_type.replaceAll("_", " ")} ·{" "}
+                                        {component.label} · {component.quantity}
+                                        {component.unit_cost == null
+                                          ? " · cost evidence missing"
+                                          : ` × ${version.currency} ${component.unit_cost}`}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {version.status === "draft" && itemVersions.some((candidate) => candidate.status === "active") && (
+                                <p className="text-xs font-medium text-content-muted">
+                                  Change from active: {version.currency} {(Number(version.unit_price) - Number(itemVersions.find((candidate) => candidate.status === "active")?.unit_price ?? 0)).toFixed(2)}
+                                </p>
+                              )}
                             </div>
                             {canActivate && version.status === "draft" && (
-                              <Button
-                                variant="secondary"
-                                onClick={() => setReviewVersionId(version.id)}
-                              >
-                                Review activation
-                              </Button>
+                              <Button variant="secondary" onClick={() => setReviewVersionId(version.id)}>Review activation</Button>
                             )}
                             {canManage && version.status === "draft" && (
                               <Button
                                 variant="ghost"
                                 onClick={() => {
-                                  setEditDraft({
-                                    id: version.id,
-                                    version: version.version,
-                                  });
+                                  setEditDraft({ id: version.id, version: version.version });
                                   setDraft({
                                     itemId: version.service_item_id,
                                     taxId: version.tax_classification_id,
                                     price: version.unit_price,
-                                    effective: version.effective_at.slice(
-                                      0,
-                                      16,
-                                    ),
+                                    effective: version.effective_at.slice(0, 16),
                                     componentType: "labor",
                                     componentLabel: "",
                                     componentQuantity: "1",
                                     componentCost: "",
                                   });
-                                  setDraftComponents(
-                                    version.components.map((component) => ({
-                                      component_type: component.component_type,
-                                      label: component.label,
-                                      quantity: component.quantity,
-                                      unit_cost: component.unit_cost,
-                                    })),
-                                  );
+                                  setDraftComponents(version.components.map((component) => ({
+                                    component_type: component.component_type,
+                                    label: component.label,
+                                    quantity: component.quantity,
+                                    unit_cost: component.unit_cost,
+                                  })));
                                 }}
                               >
                                 Edit draft price
@@ -2562,13 +1854,7 @@ export function PriceBookRoute() {
                               <Button
                                 variant="ghost"
                                 loading={mutations.versionLifecycle.isPending}
-                                onClick={() =>
-                                  void mutations.versionLifecycle.mutateAsync({
-                                    versionId: version.id,
-                                    action: "inactivate",
-                                    expectedVersion: version.version,
-                                  })
-                                }
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "inactivate", expectedVersion: version.version })}
                               >
                                 Inactivate price version
                               </Button>
@@ -2577,13 +1863,7 @@ export function PriceBookRoute() {
                               <Button
                                 variant="ghost"
                                 loading={mutations.versionLifecycle.isPending}
-                                onClick={() =>
-                                  void mutations.versionLifecycle.mutateAsync({
-                                    versionId: version.id,
-                                    action: "archive",
-                                    expectedVersion: version.version,
-                                  })
-                                }
+                                onClick={() => void mutations.versionLifecycle.mutateAsync({ versionId: version.id, action: "archive", expectedVersion: version.version })}
                               >
                                 Archive price version
                               </Button>
@@ -2600,24 +1880,15 @@ export function PriceBookRoute() {
                   type="button"
                   variant="secondary"
                   disabled={catalogOffset === 0}
-                  onClick={() =>
-                    setCatalogOffset((offset) =>
-                      Math.max(0, offset - catalogPageSize),
-                    )
-                  }
+                  onClick={() => setCatalogOffset((offset) => Math.max(0, offset - catalogPageSize))}
                 >
                   Previous services
                 </Button>
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={
-                    catalogOffset + services.length >=
-                    (catalog.data?.total_service_items ?? 0)
-                  }
-                  onClick={() =>
-                    setCatalogOffset((offset) => offset + catalogPageSize)
-                  }
+                  disabled={catalogOffset + services.length >= (catalog.data?.total_service_items ?? 0)}
+                  onClick={() => setCatalogOffset((offset) => offset + catalogPageSize)}
                 >
                   Next services
                 </Button>

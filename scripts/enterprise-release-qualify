@@ -65,7 +65,12 @@ def checks() -> tuple[Check, ...]:
         Check("repository_cleanliness", "Repository cleanliness", execution_profiles, ("git", "status", "--porcelain=v1"), "empty output", ("git",)),
         Check("repository_provenance", "Repository provenance", execution_profiles, ("git", "rev-parse", "HEAD"), "HEAD equals recorded candidate SHA", ("git",)),
         Check("backend_dependencies", "Backend dependency/install verification", ("local",), (py, "-m", "pip", "check"), "No broken requirements", (py,)),
+        Check("backend_dependency_pins", "Backend direct dependency pin verification", ("local",), ("python3", "scripts/release-backend-pin-check.py"), "Every direct runtime and qualification dependency is exactly pinned", ("python3",)),
+        Check("backend_vulnerabilities", "Backend dependency vulnerability audit", ("local",), (py, "-m", "pip_audit", "-r", "backend/requirements.txt"), "No known runtime dependency vulnerabilities", (py,)),
         Check("frontend_dependencies", "Frontend dependency/install verification", ("local",), ("npm", "ci", "--prefix", "frontend", "--ignore-scripts"), "Lockfile install succeeds", ("npm",), "workspace_dependencies"),
+        Check("frontend_vulnerabilities", "Frontend dependency vulnerability audit", ("local",), ("npm", "audit", "--prefix", "frontend", "--audit-level=low"), "No known dependency vulnerabilities", ("npm",)),
+        Check("mobile_dependencies", "Mobile dependency/install verification", ("local",), ("npm", "ci", "--prefix", "mobile", "--ignore-scripts"), "Lockfile install succeeds", ("npm",), "workspace_dependencies"),
+        Check("mobile_vulnerabilities", "Mobile dependency vulnerability audit", ("local",), ("npm", "audit", "--prefix", "mobile", "--audit-level=low"), "No undisposed dependency vulnerabilities", ("npm",)),
         Check("backend_lint", "Backend Ruff", ("local",), (py, "-m", "ruff", "check", "backend"), "All checks passed", (py,)),
         Check("backend_format", "Backend Ruff format", ("local",), (py, "-m", "ruff", "format", "--check", "backend"), "No formatting changes required", (py,)),
         Check("backend_types", "Backend MyPy", ("local",), (py, "-m", "mypy", "backend/app", "backend/scripts"), "No type errors", (py,)),
@@ -74,6 +79,10 @@ def checks() -> tuple[Check, ...]:
         Check("frontend_types", "Frontend TypeScript", ("local",), ("frontend/node_modules/.bin/tsc", "-b", "frontend/tsconfig.json", "--pretty", "false"), "No type errors", ("npm",)),
         Check("frontend_tests", "Frontend complete test suite", ("local",), ("npm", "run", "test:run", "--prefix", "frontend", "--", "--reporter=verbose"), "All tests pass; skips disclosed", ("npm",)),
         Check("frontend_build", "Frontend production build", ("local",), ("npm", "run", "build", "--prefix", "frontend"), "Production bundle succeeds", ("npm",)),
+        Check("mobile_lint", "Mobile ESLint", ("local",), ("npm", "run", "lint", "--prefix", "mobile"), "No lint errors", ("npm",)),
+        Check("mobile_types", "Mobile TypeScript", ("local",), ("npm", "run", "typecheck", "--prefix", "mobile"), "No type errors", ("npm",)),
+        Check("mobile_tests", "Mobile complete test suite", ("local",), ("npm", "test", "--prefix", "mobile", "--", "--runInBand"), "All tests pass; skips disclosed", ("npm",)),
+        Check("mobile_configuration", "Mobile release configuration", ("local",), ("npm", "run", "config:validate", "--prefix", "mobile"), "Beta configuration valid and Production inactive", ("npm",)),
         Check("migration_heads", "Exactly one Alembic head", ("local", "preview"), (py, "-m", "alembic", "-c", "backend/alembic.ini", "heads"), "Exactly one line marked head", (py,)),
         Check("migration_rehearsal", "Fresh PostgreSQL zero-to-head and drift rehearsal", ("database",), ("scripts/qualify-release-database",), "Fresh upgrade reaches the sole head and drift is zero", ("docker",), "disposable_database"),
         Check("api_health", "API health", ("postdeploy",), None, "GET /backend-health reports healthy"),
@@ -106,6 +115,26 @@ def count_skips(output: str) -> int | None:
     return sum(values) if values else 0
 
 
+def prepare_evidence_directory(path: Path) -> None:
+    """Create a private, empty evidence directory without altering sealed output."""
+    if path.is_symlink():
+        raise SystemExit("evidence directory must not be a symbolic link")
+    if path.exists():
+        if not path.is_dir():
+            raise SystemExit("evidence path must be a directory")
+        if any(path.iterdir()):
+            raise SystemExit("evidence directory must be empty")
+    else:
+        path.mkdir(mode=0o700, parents=True)
+    path.chmod(0o700)
+
+
+def write_private_artifact(path: Path, content: str) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(content)
+
+
 def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Result:
     assert check.command is not None
     missing = [tool for tool in check.required_tools if not tool_available(tool)]
@@ -118,8 +147,7 @@ def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Res
     started = datetime.now(timezone.utc)
     completed = subprocess.run(check.command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     duration = (datetime.now(timezone.utc) - started).total_seconds()
-    artifact.write_text(completed.stdout, encoding="utf-8")
-    artifact.chmod(0o600)
+    write_private_artifact(artifact, completed.stdout)
     status = "PASS" if completed.returncode == 0 else "FAIL"
     if check.key == "repository_cleanliness" and completed.stdout:
         status, reason = "FAIL", "working tree is not clean"
@@ -191,8 +219,7 @@ def main() -> int:
     candidate = args.candidate_sha or head
     if not re.fullmatch(r"[0-9a-f]{40}", candidate):
         raise SystemExit("candidate SHA must be a full 40-character lowercase SHA")
-    args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    args.evidence_dir.chmod(0o700)
+    prepare_evidence_directory(args.evidence_dir)
     results: list[Result] = []
     for check in checks():
         artifact = args.evidence_dir / f"{check.key}.log"

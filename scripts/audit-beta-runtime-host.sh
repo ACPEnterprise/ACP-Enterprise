@@ -2,7 +2,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-backup_root=${BACKUP_ROOT:-/opt/acp-enterprise/backups}
+backup_root=${BACKUP_ROOT:-/opt/acp-enterprise/backups/scheduled}
 max_backup_age_hours=${MAX_BACKUP_AGE_HOURS:-26}
 disk_warning_percent=${DISK_WARNING_PERCENT:-85}
 disk_blocker_percent=${DISK_BLOCKER_PERCENT:-90}

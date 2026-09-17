@@ -152,6 +152,9 @@ app = FastAPI(
     version=settings.app_version,
     description=("Real-time business operating system for home-service companies."),
     lifespan=lifespan,
+    docs_url="/docs" if settings.api_documentation_enabled else None,
+    redoc_url="/redoc" if settings.api_documentation_enabled else None,
+    openapi_url="/openapi.json" if settings.api_documentation_enabled else None,
 )
 
 app.add_middleware(

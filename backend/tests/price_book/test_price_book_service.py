@@ -8,10 +8,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -43,6 +39,9 @@ from app.price_book.schemas import (
     TaxClassificationCreate,
 )
 from app.price_book.service import PriceBookService
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -463,9 +462,27 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             payload=OptionCreate(service_item_id=item.id, label="Standard", position=1),
         )
     async with factory() as session:
+        await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="UNUSED", name="Unused draft category"),
+        )
+    async with factory() as session:
         catalog = await service.catalog(session, context=context)
     assert catalog.option_groups[0].id == group.id
     assert catalog.options[0].id == option.id
+    async with factory() as session:
+        sellable = await service.catalog(
+            session,
+            context=context,
+            branch_id=branch.id,
+            sellable_only=True,
+            sellable_at=effective + timedelta(minutes=1),
+        )
+    assert sellable.service_items == ()
+    assert sellable.categories == ()
+    assert sellable.option_groups == ()
+    assert sellable.options == ()
     async with factory() as session:
         await service.activate(
             session,
@@ -474,6 +491,18 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             expected_version=1,
             reason="Launch",
         )
+    async with factory() as session:
+        sellable = await service.catalog(
+            session,
+            context=context,
+            branch_id=branch.id,
+            sellable_only=True,
+            sellable_at=effective + timedelta(minutes=1),
+        )
+    assert [value.id for value in sellable.service_items] == [item.id]
+    assert [value.code for value in sellable.categories] == ["DRAIN"]
+    assert [value.id for value in sellable.option_groups] == [group.id]
+    assert [value.id for value in sellable.options] == [option.id]
     first_request = SnapshotRequest(
         branch_id=branch.id,
         quantity=Decimal(1),
