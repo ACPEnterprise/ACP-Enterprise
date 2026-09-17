@@ -6,7 +6,7 @@ import { BeaconPanel } from "./BeaconPanel";
 import { attentionWindow } from "./beaconAttention";
 
 const signal: BeaconSignal = {
-  id: "signal-id",
+  id: "11111111-1111-4111-8111-111111111111",
   condition_key: "condition-id",
   evidence_digest: "a".repeat(64),
   definition_id: "revenue.past_due_invoices",
@@ -129,6 +129,10 @@ describe("BeaconPanel", () => {
     expect(screen.getByText("Open source workflow")).toHaveAttribute(
       "href",
       "/invoices/invoice-1",
+    );
+    expect(screen.getByRole("link", { name: "Ask LIA why" })).toHaveAttribute(
+      "href",
+      "/lia?contextDomain=beacon&contextId=11111111-1111-4111-8111-111111111111",
     );
     expect(
       screen.getByText(/measured ranking factors contribute 37 points/),
