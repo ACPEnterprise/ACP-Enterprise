@@ -164,6 +164,22 @@ def compose_owner_answer(
             "Open Financial Reports",
         )
 
+    if "price-book" in by_domain:
+        item = by_domain["price-book"]
+        if item.authority == "PRICE_BOOK.LIA_CONTEXT.v1" and item.state:
+            state, _, summary = item.state.partition("|")
+            if state == "CURRENT_PRICE":
+                return OwnerAnswer(
+                    summary
+                    + " This is the current authorized customer price; cost and margin evidence are not included.",
+                    "Open Price Book",
+                )
+            return OwnerAnswer(
+                summary
+                + " LIA did not substitute a draft, historical, or calculated price.",
+                "Open Price Book",
+            )
+
     if "scheduling" in by_domain or "dispatch" in by_domain:
         schedule_parts: list[str] = []
         for domain in ("scheduling", "dispatch"):

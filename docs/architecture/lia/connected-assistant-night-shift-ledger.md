@@ -23,6 +23,8 @@ a stop condition. Source domains continue to own their facts and calculations.
 | LIA-N1-011 | Job follow-up | A question containing “Job JOB-000306” outside the narrow “show/open” form lost exact subject resolution | BLOCKS_WORK | Extracts the explicit canonical Job reference without fuzzy matching |
 | LIA-N1-012 | Brief answer mode | “Short version” could return a complete long owner-answer line | ANNOYING | Deterministic, word-safe 320-character presentation cap; evidence metadata remains intact |
 | LIA-N1-013 | Voice conversation timeout/cancel | Inactivity could label the session IDLE without aborting active recognition; Cancel did not end every capture/speech path | BLOCKS_WORK | Inactivity and Cancel now abort recognition, cancel speech, clear timers, and exit conversation mode |
+| LIA-N1-014 | Exact Price Book lookup | “What’s our price for drain cleaning?” routed to Price Book but returned catalog status counts instead of the authorized current customer price | BLOCKS_WORK | Added exact name/code, selected-Branch retrieval over the authoritative catalog pointer; ambiguous/no-match/Branch-missing cases fail closed and costs remain excluded |
+| LIA-N1-015 | Operational record lookup | Natural Estimate, Invoice, and Appointment references were classified by domain but degraded to company/Branch aggregate counts | BLOCKS_WORK | Canonical `EST-`, `INV-`, and `APT-` references now resolve exactly inside current Company/Branch permission scope; foreign and unknown identities remain hidden |
 
 ## UI friction ledger
 
@@ -38,8 +40,10 @@ a stop condition. Source domains continue to own their facts and calculations.
 
 - Scheduling/Dispatch: bounded ordered record references are required for “the
   first appointment,” assignment drill-back, and exact cross-view navigation.
-- Price Book: an exact Branch-safe service/current-price evidence projection is
-  required; LIA must not reproduce catalog joins.
+- Price Book current price: closed after protected authority exposed the same
+  active-version pointer used by the operator catalog. LIA now consumes that
+  read model with exact identity and selected-Branch scope; historical charge,
+  cost, and margin questions remain owned by Revenue Cycle/Economics.
 - Revenue Cycle: Invoice/Payment relationship, application, settlement, cash,
   and historical-as-of evidence require domain-owned projections.
 - Timekeeping: Employee/period accepted interval and hours evidence requires a
@@ -47,12 +51,15 @@ a stop condition. Source domains continue to own their facts and calculations.
 - Luminary/Economics presentation: contextual entry points currently claim
   evidence context without passing an accepted entity identifier. Coordinate
   with the active `work/cosmic-intelligence-realdata-maximum-1` lane.
-- Protected frontend test ownership: the full suite currently has eight
-  non-LIA failures. Invoice route mocks omit `getInvoiceCandidates` (five),
-  Customer operations reliability fixtures lack a `QueryClientProvider` after
-  source-history composition (two), and the Financial Reports mock omits
-  `useQboSourceBackedProfitAndLoss` (one). LIA-focused tests remain green; these
-  fixture repairs belong with their newly integrated source-domain changes.
+- Protected frontend test ownership: the prior eight Invoice, Customer-history,
+  and Financial Reports fixture failures are now repaired in protected
+  authority. They remain recorded in history but are no longer active handoffs.
+- Estimate operator UI: after the protected fixture repairs, all 554 assertions
+  pass, but the full run reports one unhandled exception in
+  `EstimatesRoute.tsx` when `estimate.data.current_revision` becomes undefined
+  after “preserves staged services while searching for another line.” The
+  Estimate workspace must either keep the selected revision coherent or render
+  a truthful unavailable state; LIA does not patch Estimate lifecycle state.
 
 ## Sweep record
 

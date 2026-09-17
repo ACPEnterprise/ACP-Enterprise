@@ -276,6 +276,23 @@ def plan_question(
 
 
 def _named_subject(question: str) -> tuple[str, str] | None:
+    price_reference = re.fullmatch(
+        r"\s*(?:what(?:'s| is)\s+)?(?:our\s+)?price\s+(?:for|of)\s+(.+?)[?.!]?\s*",
+        question,
+        re.IGNORECASE,
+    )
+    if price_reference:
+        return ("price-book", " ".join(price_reference.group(1).split()))
+    for domain, label, prefix in (
+        ("estimates", "estimate", "EST"),
+        ("invoicing", "invoice", "INV"),
+        ("scheduling", "appointment", "APT"),
+    ):
+        record_reference = re.search(
+            rf"\b{label}\s+({prefix}-\d+)\b", question, re.IGNORECASE
+        )
+        if record_reference:
+            return (domain, record_reference.group(1).upper())
     job_reference = re.search(
         r"\bjob\s+([A-Z]+(?:-[A-Z]+)*-?\d+|\d+)\b", question, re.IGNORECASE
     )
