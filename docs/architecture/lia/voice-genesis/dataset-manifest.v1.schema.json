@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://twelve-hats.com/schemas/lia-voice-dataset-manifest.v1.json",
+  "title": "LIA Voice Dataset Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["dataset_version", "corpus_version", "pronunciation_version", "assets", "manifest_digest"],
+  "properties": {
+    "dataset_version": {"type": "string"},
+    "corpus_version": {"type": "string"},
+    "pronunciation_version": {"type": "string"},
+    "assets": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["asset_id", "source_file_digest", "transcript_digest", "rights_status", "quality_status", "admission_status"], "properties": {"asset_id": {"type": "string"}, "source_file_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, "transcript_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, "rights_status": {"const": "APPROVED"}, "quality_status": {"const": "PASSED"}, "admission_status": {"const": "ADMITTED"}}}, "uniqueItems": true},
+    "manifest_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "LIA_VOICE_DATASET_ADMISSION.v1",
+  "statuses": ["PROPOSED", "RIGHTS_PENDING", "QUALITY_PENDING", "ADMITTED", "QUARANTINED", "REJECTED", "REVOKED"],
+  "admission_requirements": {
+    "rights_approval_status": "APPROVED",
+    "quality_status": "PASSED",
+    "exclusivity_status": "EXCLUSIVE_TWELVE_HATS",
+    "all_training_and_commercial_rights": true,
+    "source_and_transcript_digests": true
+  },
+  "prohibited_sources": [
+    "SCRAPED_VOICE", "CELEBRITY_OR_PERSONALITY_RECORDING", "CUSTOMER_CALL", "EMPLOYEE_CALL", "VOICEMAIL", "MEETING_RECORDING",
+    "PRODUCTION_TELEPHONE_AUDIO", "UNSANCTIONED_PERSONAL_RECORDING", "FOUND_ON_DEVICE_REFERENCE_AUDIO", "COMMERCIAL_TTS_SYNTHETIC_AUDIO"
+  ],
+  "new_recording_m4a_status": "REFERENCE_MEASUREMENT_PENDING",
+  "reference_measurement_is_training_admission": false,
+  "fail_closed": true
+}

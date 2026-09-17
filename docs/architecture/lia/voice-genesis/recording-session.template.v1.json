@@ -1,0 +1,16 @@
+{
+  "session_id": "LIA-SESSION-PROPOSED-001",
+  "contributor_reference": "RIGHTS-CLEARED-CONTRIBUTOR-REFERENCE-PENDING",
+  "microphone_setup_identifier": "CALIBRATION-PENDING",
+  "room_environment_class": "CONTROLLED_RECORDING_ROOM",
+  "sample_rate_hz": 48000,
+  "channel_format": "MONO_PROPOSED_CALIBRATION_PENDING",
+  "gain_configuration": "CALIBRATION_PENDING",
+  "session_started_at": "2026-09-17T00:00:00Z",
+  "session_ended_at": "2026-09-17T00:00:00Z",
+  "script_block_ids": ["GENERAL-ENGLISH"],
+  "operator_reference": "OPERATOR-REFERENCE-PENDING",
+  "rights_status": "PENDING",
+  "quality_status": "CALIBRATION_PENDING",
+  "takes": []
+}

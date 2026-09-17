@@ -102,3 +102,13 @@ The owned engine requires a separately approved architecture and privacy
 review, rights-cleared training-data ledger, model/license decision, security
 review, deployment qualification, cross-platform evaluation, and owner
 acceptance. This mission does not build the neural engine or select a provider.
+
+## Genesis corpus and rights authority
+
+The pre-recording authority lives in `voice-genesis/`. It defines LIA's distinct
+synthetic identity, an original fictional/non-PII recording corpus, per-asset
+rights lineage, fail-closed admission states, recording-session lineage,
+technical quality gates, deterministic dataset identity, and separated storage
+custody. No audio is admitted by these documents. `New Recording.m4a` and any
+other found reference remain `REFERENCE_MEASUREMENT_PENDING` unless separately
+sanctioned; reference measurement never grants training rights.
