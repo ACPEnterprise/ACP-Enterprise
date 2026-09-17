@@ -264,6 +264,29 @@ class LiaService:
                 ),
             )
 
+        if re.search(r"\bwhat did (?:we|the business) make\b", question.casefold()):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "“Make” could mean invoiced amount, earned revenue, collected cash, "
+                    "QuickBooks income, net income, or contribution. Which measure do you want?"
+                ),
+                limitations=(
+                    "No financially material definition was chosen silently.",
+                    "No amount was calculated or inferred.",
+                ),
+                navigation=(
+                    NavigationSuggestion(
+                        label="Open Financial Reports",
+                        internal_path="/financial-reports",
+                    ),
+                ),
+            )
+
         plan = plan_question(
             question,
             request.context.domain if request.context else None,
@@ -641,12 +664,7 @@ class LiaService:
                 ),
             )
 
-        numeric_amount_request = bool(
-            re.search(
-                r"\bhow\s+much\b|\btotal\s+(?:amount|invoiced|paid|collected)\b",
-                question.casefold(),
-            )
-        )
+        numeric_amount_request = _requests_financial_amount(question)
         has_authoritative_financial_amount = any(
             item.authority == "ACP_POSTED_LEDGER_AUTHORITY" for item in evidence
         )
@@ -1182,6 +1200,18 @@ def _period_answer(
             + suffix
         )
     return prefix + answer[0].lower() + answer[1:] + suffix
+
+
+def _requests_financial_amount(question: str) -> bool:
+    normalized = question.casefold()
+    return bool(
+        re.search(
+            r"\bhow\s+much\b"
+            r"|\btotal\s+(?:amount|invoiced|paid|collected)\b"
+            r"|\bwhat\s+(?:were|was)\s+(?:sales|revenue|income|profit)\b",
+            normalized,
+        )
+    )
 
 
 def _period_evidence_summary(evidence: tuple[EvidenceReference, ...]) -> str:
