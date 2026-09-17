@@ -46,6 +46,7 @@ def _evidence(domain: str, *, authority: str, state: str) -> EvidenceReference:
         ("How much did we invoice in May?", "invoicing", "open=2, paid=1"),
         ("How much did we collect in May?", "payments", "payments=3"),
         ("How much is owed to us?", "accounting", "reporting_ready=1"),
+        ("What were sales in May?", "accounting", "reporting_ready=1"),
     ),
 )
 async def test_amount_questions_never_turn_record_counts_into_dollars(
@@ -64,6 +65,24 @@ async def test_amount_questions_never_turn_record_counts_into_dollars(
     assert "does not provide the authoritative monetary aggregate" in response.answer
     assert "Record counts were not presented as dollars." in response.limitations
     assert all("$3" not in value for value in (response.answer, *response.limitations))
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_make_question_requires_financial_definition() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(),
+        request=LiaRequest(question="What did we make in May?"),
+    )
+
+    assert response.classification is TruthClassification.INCOMPLETE
+    assert "invoiced amount" in response.answer
+    assert "collected cash" in response.answer
+    assert "net income" in response.answer
+    assert response.navigation[0].internal_path == "/financial-reports"
+    retrieval.retrieve.assert_not_awaited()
 
 
 @pytest.mark.asyncio

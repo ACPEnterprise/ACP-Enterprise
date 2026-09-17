@@ -69,6 +69,12 @@ def compose_owner_answer(
 
     if "beacon" in by_domain:
         item = by_domain["beacon"]
+        if item.authority == "BEACON.INTELLIGENCE.v1" and item.state:
+            return OwnerAnswer(
+                item.state
+                + " Beacon supplies the accepted explanation and review guidance; LIA did not infer a cause or clear the signal.",
+                "Open Beacon attention",
+            )
         states = _states(item)
         active = states.get("active", 0)
         snoozed = states.get("snoozed", 0)
@@ -107,11 +113,11 @@ def compose_owner_answer(
         item = by_domain["migration"]
         states = _states(item)
         if not states or item.count == 0:
-            conclusion = "ACP has no admitted migration-run evidence in the authorized scope."
-        else:
             conclusion = (
-                f"ACP has {item.count} migration-run record(s): {_plain_states(states)}."
+                "ACP has no admitted migration-run evidence in the authorized scope."
             )
+        else:
+            conclusion = f"ACP has {item.count} migration-run record(s): {_plain_states(states)}."
         return OwnerAnswer(
             conclusion
             + " Acquisition, admission, and operational availability are separate; this evidence alone does not prove historical records are usable in ACP.",
@@ -151,13 +157,9 @@ def compose_owner_answer(
         if unavailable:
             conclusion = "No authoritative Accounting period evidence is available for this request."
         else:
-            conclusion = (
-                f"ACP has {item.count} Accounting period record(s): {_plain_states(states)}."
-            )
+            conclusion = f"ACP has {item.count} Accounting period record(s): {_plain_states(states)}."
         if any(term in normalized for term in ("p&l", "profit and loss", "sales")):
-            conclusion += (
-                " Period readiness is not itself a financial statement, so LIA will not manufacture the requested figures."
-            )
+            conclusion += " Period readiness is not itself a financial statement, so LIA will not manufacture the requested figures."
         return OwnerAnswer(
             conclusion
             + " Source evidence, reconciled Accounting evidence, and ACP-posted ledger authority remain distinct.",
