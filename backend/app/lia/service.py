@@ -186,6 +186,7 @@ class LiaService:
                 limitations=("No business fact was changed or inferred.",),
             )
         if conversation.capability_question:
+            allowed_navigation_domains = permitted_domain_names(context)
             return self._response(
                 context=context,
                 request=request,
@@ -197,7 +198,9 @@ class LiaService:
                     "LIA is read-only and cannot execute operational or financial changes.",
                     "Answers remain limited to the principal's current ACP permissions.",
                 ),
-                navigation=_capability_navigation(question),
+                navigation=_capability_navigation(
+                    question, allowed_domains=allowed_navigation_domains
+                ),
             )
         if conversation.action is not None or matches_any(
             question, HIGH_IMPACT_PATTERNS
@@ -228,7 +231,10 @@ class LiaService:
                     "No action proposal was created: an exact target, authoritative evidence, current version, and required permission are mandatory.",
                     "A future proposal must satisfy LIA_PROPOSED_ACTION.v1 and remains non-executing.",
                 ),
-                navigation=_action_navigation(action.risk if action else None),
+                navigation=_action_navigation(
+                    action.risk if action else None,
+                    allowed_domains=permitted_domain_names(context),
+                ),
             )
 
         if conversation.correction is CorrectionKind.BACK:
@@ -1085,7 +1091,9 @@ def _capability_answer(question: str) -> str:
     )
 
 
-def _capability_navigation(question: str) -> tuple[NavigationSuggestion, ...]:
+def _capability_navigation(
+    question: str, *, allowed_domains: set[str]
+) -> tuple[NavigationSuggestion, ...]:
     normalized = question.casefold()
     for term, domain in (
         ("schedule", "scheduling"),
@@ -1094,6 +1102,8 @@ def _capability_navigation(question: str) -> tuple[NavigationSuggestion, ...]:
         ("payroll", "payroll"),
     ):
         if term in normalized:
+            if domain not in allowed_domains:
+                return ()
             return (
                 NavigationSuggestion(
                     label=f"Open {domain.replace('-', ' ').title()}",
@@ -1103,7 +1113,9 @@ def _capability_navigation(question: str) -> tuple[NavigationSuggestion, ...]:
     return ()
 
 
-def _action_navigation(risk: ActionRisk | None) -> tuple[NavigationSuggestion, ...]:
+def _action_navigation(
+    risk: ActionRisk | None, *, allowed_domains: set[str]
+) -> tuple[NavigationSuggestion, ...]:
     if risk is None:
         return ()
     domain = {
@@ -1117,7 +1129,7 @@ def _action_navigation(risk: ActionRisk | None) -> tuple[NavigationSuggestion, .
         ActionRisk.PERMISSION_CHANGE: "workforce",
         ActionRisk.LOW_IMPACT_OPERATION: "purchasing",
     }.get(risk)
-    if domain is None:
+    if domain is None or domain not in allowed_domains:
         return ()
     return (
         NavigationSuggestion(

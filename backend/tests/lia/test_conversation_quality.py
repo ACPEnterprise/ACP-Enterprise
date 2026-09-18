@@ -231,7 +231,7 @@ async def test_action_intent_is_refused_and_navigable_without_mutation() -> None
     retrieval = AsyncMock(spec=GovernedRetrievalService)
     result = await LiaService(retrieval=retrieval).ask(
         AsyncMock(),
-        context=_context(),
+        context=_context("COMPANY_SCHEDULING_READ"),
         request=LiaRequest(
             question="Move this job to tomorrow",
             context=LiaContext(domain="jobs", entity_id=uuid4()),
@@ -254,6 +254,40 @@ async def test_capability_answer_reflects_read_only_boundary() -> None:
     )
     assert result.classification is TruthClassification.KNOWN
     assert "cannot" in result.answer
+    assert result.proposals == ()
+    retrieval.retrieve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "question",
+    (
+        "Can you run payroll?",
+        "Can you schedule this?",
+        "Move this job to tomorrow",
+        "Approve payroll",
+    ),
+)
+async def test_prompt_text_cannot_authorize_workspace_navigation(question: str) -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    result = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(), context=_context(), request=LiaRequest(question=question)
+    )
+
+    assert result.navigation == ()
+    retrieval.retrieve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_current_read_permission_allows_non_mutating_workspace_navigation() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    result = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context("COMPANY_PAYROLL_REPORTING_READ"),
+        request=LiaRequest(question="Can you run payroll?"),
+    )
+
+    assert result.navigation[0].internal_path == "/payroll"
     assert result.proposals == ()
     retrieval.retrieve.assert_not_awaited()
 
