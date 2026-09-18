@@ -10,6 +10,7 @@ import {
   economicsAdministrationHandle,
   luminaryHandle,
   administrationHandle,
+  factoryControlHandle,
   auditHandle,
   dataQualityHandle,
   reportsHandle,
@@ -324,6 +325,13 @@ export const appRoutes: RouteObject[] = [
               Component: (
                 await import("../features/administration/AdministrationRoute")
               ).AdministrationRoute,
+            }),
+          },
+          {
+            path: "admin/factory-control",
+            handle: factoryControlHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/FactoryControlRoute")).FactoryControlRoute,
             }),
           },
           {
