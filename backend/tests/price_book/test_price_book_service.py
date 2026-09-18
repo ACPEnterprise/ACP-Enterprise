@@ -8,6 +8,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -27,6 +31,7 @@ from app.price_book.schemas import (
     AdjustmentProposalDecision,
     BulkMaterializeRequest,
     CategoryCreate,
+    CategoryUpdate,
     ComponentCreate,
     OptionCreate,
     OptionGroupCreate,
@@ -39,9 +44,6 @@ from app.price_book.schemas import (
     TaxClassificationCreate,
 )
 from app.price_book.service import PriceBookService
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -293,6 +295,50 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
         category_search.service_items[0].internal_description
         == "Use approved cable and inspect trap."
     )
+
+    async with factory() as session:
+        child_category = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(
+                code="DRAIN-CHILD",
+                name="Main Line",
+                parent_id=item.category_id,
+            ),
+        )
+    async with factory() as session:
+        child_item = await service.create_item(
+            session,
+            context=context,
+            payload=ServiceItemCreate(
+                category_id=child_category.id,
+                code="DRAIN-MAIN",
+                name="Main drain clearing",
+                customer_description="Clear the main drain line.",
+                internal_description="Use approved main-line equipment.",
+                branch_id=None,
+            ),
+        )
+    async with factory() as session:
+        parent_category = await service.catalog(
+            session,
+            context=manager_context,
+            category_id=item.category_id,
+        )
+    assert {record.id for record in parent_category.service_items} == {
+        item.id,
+        child_item.id,
+    }
+    async with factory() as session:
+        parent_category_search = await service.catalog(
+            session,
+            context=manager_context,
+            search="drain services",
+        )
+    assert {record.id for record in parent_category_search.service_items} == {
+        item.id,
+        child_item.id,
+    }
     assert "internal_description" not in str(serialized_catalog)
     async with factory() as session:
         assert (
@@ -468,6 +514,35 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             payload=CategoryCreate(code="UNUSED", name="Unused draft category"),
         )
     async with factory() as session:
+        root = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="PLUMBING", name="Plumbing"),
+        )
+    async with factory() as session:
+        middle = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(
+                code="DRAINAGE",
+                name="Drainage",
+                parent_id=root.id,
+            ),
+        )
+    async with factory() as session:
+        await service.update_category(
+            session,
+            context=context,
+            category_id=item.category_id,
+            payload=CategoryUpdate(
+                code="DRAIN",
+                name="Drain Services",
+                parent_id=middle.id,
+                status="draft",
+                expected_version=1,
+            ),
+        )
+    async with factory() as session:
         catalog = await service.catalog(session, context=context)
     assert catalog.option_groups[0].id == group.id
     assert catalog.options[0].id == option.id
@@ -500,7 +575,11 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             sellable_at=effective + timedelta(minutes=1),
         )
     assert [value.id for value in sellable.service_items] == [item.id]
-    assert [value.code for value in sellable.categories] == ["DRAIN"]
+    assert {value.code for value in sellable.categories} == {
+        "PLUMBING",
+        "DRAINAGE",
+        "DRAIN",
+    }
     assert [value.id for value in sellable.option_groups] == [group.id]
     assert [value.id for value in sellable.options] == [option.id]
     first_request = SnapshotRequest(
