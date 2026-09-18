@@ -2,76 +2,45 @@ import { apiClient } from "./client";
 
 export const FACTORY_CONTROL_OVERVIEW_PATH = "/api/v1/platform/factory-control/overview";
 
-export type FactoryGate = {
-  code: string;
-  kind: "human" | "provider";
-  label: string;
-  detail?: string | null;
-  blocked_lanes: number;
-};
-
 export type FactoryLane = {
-  lane_id: string;
-  worker: "OM1" | "OM2" | "Laptop" | string;
-  domain: string;
-  state: "active" | "eligible_idle" | "blocked" | "terminal" | string;
-  assignment?: string | null;
-  priority?: "P0" | "P1" | "P2" | string | null;
-  handoff_at?: string | null;
-  updated_at: string;
-  blocker?: string | null;
+  lane_code: string;
+  milestone_code?: string | null;
+  lifecycle_state: string;
+  queue_depth: number;
+  active_since?: string | null;
+  last_handoff_at?: string | null;
+  last_event_at: string;
 };
 
-export type FactoryQueue = {
-  queue_id: "OM1E" | "OM2E" | "LaptopE" | string;
-  active: number;
-  eligible_idle: number;
-  blocked: number;
-  oldest_handoff_at?: string | null;
-};
-
-export type FactoryVelocity = {
-  window: "1d" | "3d" | "7d";
-  completed: number;
-  weighted_progress: number;
+export type FactoryMetrics = {
+  engineering_percent: number;
+  beta_percent: number;
+  owner_percent: number;
+  closed_percent: number;
+  weighted_delivery_percent: number;
+  delivery_1d_percent: number;
+  delivery_3d_percent: number;
+  delivery_7d_percent: number;
+  open_defects: number;
+  open_gates: number;
+  utilization_percent: number;
+  pickup_latency_seconds?: number | null;
+  queue_depth: number;
+  oldest_handoff_seconds?: number | null;
+  rework_rate_percent: number;
+  first_pass_yield_percent: number;
 };
 
 export type FactoryControlOverview = {
-  as_of: string;
-  authority_sha: string;
-  completion: {
-    closed_percent: number;
-    engineering_percent: number;
-    beta_percent: number;
-    owner_percent: number;
-    today_weighted_progress: number;
-  };
-  backlog: { p0: number; p1: number };
+  roadmap_digest: string;
+  roadmap_milestones: number;
+  metrics: FactoryMetrics;
   lanes: FactoryLane[];
-  queues: FactoryQueue[];
-  oldest_handoff?: FactoryLane | null;
-  bottleneck?: { label: string; detail?: string | null; lane_id?: string | null } | null;
-  gates: FactoryGate[];
-  migration: {
-    completeness_percent: number;
-    complete: number;
-    total: number;
-    limitations?: string[];
-  };
-  velocity: FactoryVelocity[];
+  generated_at: string;
 };
 
-export type FactoryControlFilters = { lane?: string; domain?: string };
+export type FactoryControlFilters = { lane?: string };
 
-export async function getFactoryControlOverview(
-  filters: FactoryControlFilters = {},
-): Promise<FactoryControlOverview> {
-  return (
-    await apiClient.get<FactoryControlOverview>(FACTORY_CONTROL_OVERVIEW_PATH, {
-      params: {
-        lane: filters.lane || undefined,
-        domain: filters.domain || undefined,
-      },
-    })
-  ).data;
+export async function getFactoryControlOverview(): Promise<FactoryControlOverview> {
+  return (await apiClient.get<FactoryControlOverview>(FACTORY_CONTROL_OVERVIEW_PATH)).data;
 }

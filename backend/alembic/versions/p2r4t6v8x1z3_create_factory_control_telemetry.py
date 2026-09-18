@@ -1,16 +1,15 @@
 """create factory control telemetry
 
 Revision ID: p2r4t6v8x1z3
-Revises: o1q9s27h4u0v
+Revises: p2r4t6v8x0z2
 """
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
-
 revision = "p2r4t6v8x1z3"
-down_revision = "o1q9s27h4u0v"
+down_revision = "p2r4t6v8x0z2"
 branch_labels = None
 depends_on = None
 

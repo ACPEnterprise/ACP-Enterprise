@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.platform.factory_control.roadmap import (
     RoadmapError,
     load_roadmap,
@@ -80,7 +79,12 @@ def test_packaged_roadmap_is_deterministically_generated_and_validated(tmp_path)
 
 def test_event_details_reject_secrets_payroll_values_and_unbounded_documents():
     assert safe_event_details({"result": "passed", "count": 4})["count"] == 4
-    for prohibited in ({"access_token": "x"}, {"payroll_value": 12}, {"wage_rate": 20}):
+    for prohibited in (
+        {"access_token": "x"},
+        {"payroll_value": 12},
+        {"wage_rate": 20},
+        {"evidence": [{"secret_reference": "x"}]},
+    ):
         with pytest.raises(RoadmapError, match="prohibited"):
             safe_event_details(prohibited)
     with pytest.raises(RoadmapError, match="bounded size"):

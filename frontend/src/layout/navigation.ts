@@ -234,7 +234,7 @@ export const navigationCatalog = [
     path: "/owner-operations",
     icon: ShieldCheck,
     availability: "available",
-    requiredPermission: "COMPANY_ADMINISTER",
+    requiredPermission: "PLATFORM_FACTORY_CONTROL_READ",
   },
   {
     id: "data-quality",
