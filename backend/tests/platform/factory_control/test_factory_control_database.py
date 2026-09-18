@@ -646,3 +646,37 @@ async def test_live_sync_projects_canonical_controller_lane_heartbeat(database) 
     assert lane.current_assignment == "Qualify current release"
     assert lane.queue_depth == 1
     assert lane.last_event_at == observed_at
+
+
+@pytest.mark.asyncio
+async def test_live_sync_preserves_original_integration_handoff_time(database) -> None:
+    fixture = await seed_controller(database, label=f"WAIT{uuid4().hex[:6]}")
+    observed_at = datetime.now(timezone.utc)
+    handoff_at = observed_at - timedelta(hours=1)
+    target = FactoryLiveLaneTarget(
+        lane_code="OM2E",
+        worker_id=fixture.worker_id,
+        controlling_enterprise="OM2E",
+        lifecycle_state="WAITING_INTEGRATION",
+        self_refill_health="WAITING_INTEGRATION",
+        milestone_code="PAYROLL.MUTATION.AUTHORITY",
+        current_assignment="Issue 449 cumulative integration",
+        queue_depth=3,
+        last_handoff_at=handoff_at,
+        evidence=["PR 450", "PR 470", "PR 471"],
+    )
+    async with database() as session, session.begin():
+        await factory_control_service.sync_authoritative_lanes(
+            session,
+            controller_worker_identity_id=fixture.identity_id,
+            controller_tenant_company_id=fixture.company_id,
+            targets=[target],
+            observed_at=observed_at,
+        )
+    async with database() as session:
+        lane = await session.scalar(
+            select(FactoryLaneState).where(FactoryLaneState.lane_code == "OM2E")
+        )
+    assert lane is not None
+    assert lane.lifecycle_state == "WAITING_INTEGRATION"
+    assert lane.last_handoff_at == handoff_at

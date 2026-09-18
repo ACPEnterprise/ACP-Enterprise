@@ -211,7 +211,8 @@ configure exact OM1E/OM2E/LaptopE worker IDs and controller-authoritative state
 in `FACTORY_CONTROL_LANE_TARGETS`. An execution node being `available` is
 capacity evidence, not proof that its Enterprise controller is idle. Each live
 target therefore carries its lifecycle state, current assignment where
-applicable, self-refill state, queue depth, and at least one evidence reference.
+applicable, self-refill state, queue depth, original handoff timestamp when
+waiting for integration, and at least one evidence reference.
 Only an explicit `ELIGIBLE_IDLE` controller observation starts the ten-minute
 refill SLA.
 Start it without recreating Preview data services:
