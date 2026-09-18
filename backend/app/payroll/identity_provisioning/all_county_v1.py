@@ -52,7 +52,9 @@ class TimekeepingRoleProfile:
         ):
             raise ProvisioningManifestError("Timekeeping role profile is invalid.")
         if any(code not in TimekeepingPermission.ALL for code in self.permission_codes):
-            raise ProvisioningManifestError("Role profile exceeds Timekeeping authority.")
+            raise ProvisioningManifestError(
+                "Role profile exceeds Timekeeping authority."
+            )
 
 
 BASE_TIMEKEEPING = TimekeepingRoleProfile(
@@ -144,7 +146,10 @@ class AllCountyIdentityProvisioningV1:
             login_email = None
             existing_user_id = self.michael_existing_user_id
         else:
-            if protected_login is None or not protected_login.get_secret_value().strip():
+            if (
+                protected_login is None
+                or not protected_login.get_secret_value().strip()
+            ):
                 raise ProvisioningManifestError("Protected login input is required.")
             login_email = protected_login.get_secret_value()
             existing_user_id = None
@@ -216,9 +221,19 @@ def _employee(
 
 
 EMPLOYEES: Final = (
-    _employee("michael-fouse", "Michael Fouse", "salaried", "owner_salaried_management", existing=True),
-    _employee("lianne-hernandez", "Lianne Hernandez", "salaried", "salaried_office_management"),
-    _employee("alex-donahue", "Alex Donahue", "hourly", "hourly_supervisor", supervisor=True),
+    _employee(
+        "michael-fouse",
+        "Michael Fouse",
+        "salaried",
+        "owner_salaried_management",
+        existing=True,
+    ),
+    _employee(
+        "lianne-hernandez", "Lianne Hernandez", "salaried", "salaried_office_management"
+    ),
+    _employee(
+        "alex-donahue", "Alex Donahue", "hourly", "hourly_supervisor", supervisor=True
+    ),
     _employee("melvin-santiago", "Melvin Santiago", "hourly", "hourly_labor"),
     _employee("adam-mari", "Adam Mari", "hourly", "hourly_labor"),
     _employee("dareis-montgomery", "Dareis Montgomery", "hourly", "hourly_labor"),

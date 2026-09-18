@@ -8,8 +8,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import ValidationError
-
 from app.customer_migration.adapter_import import (
     CustomerAdapterImportReport,
     review_adapter_output,
@@ -28,6 +26,7 @@ from app.customer_migration.pilot_execution import (
 )
 from app.customer_migration.pilot_selection import CustomerPilotSelectionService
 from app.customers.schemas import CustomerCreate, CustomerStatus, CustomerType
+from pydantic import ValidationError
 
 
 def digest(value: str) -> str:

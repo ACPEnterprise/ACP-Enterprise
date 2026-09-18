@@ -238,8 +238,7 @@ class PurchasingService:
                     PurchasingDocumentEvidence.company_id == context.company.id,
                     PurchasingDocumentEvidence.entity_type == payload.entity_type,
                     PurchasingDocumentEvidence.entity_id == payload.entity_id,
-                    PurchasingDocumentEvidence.content_digest
-                    == payload.content_digest,
+                    PurchasingDocumentEvidence.content_digest == payload.content_digest,
                 )
             )
             if existing_content is not None:
@@ -418,9 +417,7 @@ class PurchasingService:
                     )
                 )
                 if job_id is None:
-                    raise PurchasingNotFound(
-                        "Requisition Job provenance was not found"
-                    )
+                    raise PurchasingNotFound("Requisition Job provenance was not found")
             if payload.suggested_vendor_id is not None:
                 vendor = await self.repository.vendor(
                     session, context.company.id, payload.suggested_vendor_id
@@ -3850,11 +3847,7 @@ class PurchasingService:
         if session.get_bind().dialect.name == "postgresql":
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
-                {
-                    "identity": (
-                        f"purchasing-command:{context.company.id}:{key}"
-                    )
-                },
+                {"identity": (f"purchasing-command:{context.company.id}:{key}")},
             )
         receipt = await self.repository.receipt(session, context.company.id, key)
         if receipt is None:

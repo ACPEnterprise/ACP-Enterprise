@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from typing import Self
 
 import pytest
-
 from app.operational_migration import hcp_migration2_command as command
 from app.operational_migration.hcp_migration2_command import (
     ProtectedExecutionAuthority,
@@ -141,9 +140,7 @@ async def test_public_command_routes_only_through_application(
             calls.append("qualify")
             return {"state": "QUALIFIED"}
 
-        async def execute(
-            self, *_args: object, **_kwargs: object
-        ) -> dict[str, object]:
+        async def execute(self, *_args: object, **_kwargs: object) -> dict[str, object]:
             calls.append("execute")
             return {"state": expected}
 

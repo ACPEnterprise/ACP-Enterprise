@@ -8,14 +8,6 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.analytics.service import AnalyticsService
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
@@ -52,6 +44,13 @@ from app.scheduling.models import (
     BranchSchedulingWeeklyInterval,
 )
 from app.scheduling.router import router, translate_scheduling_error
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @dataclass(frozen=True)

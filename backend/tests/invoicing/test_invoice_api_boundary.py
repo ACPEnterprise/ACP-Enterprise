@@ -8,7 +8,12 @@ def test_invoice_errors_use_safe_recovery_envelopes_without_reflection() -> None
     secret = f"sql-provider-secret-{uuid4()}"
     cases = (
         (InvoiceNotFound(secret), 404, "not_found", "TERMINAL_FAILURE"),
-        (InvoiceConflict(secret), 409, "resource_state_conflict", "RETRY_AFTER_REFRESH"),
+        (
+            InvoiceConflict(secret),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
         (InvoiceValidation(secret), 422, "validation", "USER_CORRECTION_REQUIRED"),
     )
     for error, status, code, recovery in cases:

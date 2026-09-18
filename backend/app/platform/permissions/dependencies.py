@@ -126,7 +126,9 @@ def require_all_permissions(
     async def dependency(
         context: ResolvedAuthorization,
     ) -> AuthorizationContext:
-        missing = [code for code in permission_codes if not context.has_permission(code)]
+        missing = [
+            code for code in permission_codes if not context.has_permission(code)
+        ]
         if not missing:
             return context
         authorization_decision_logger.denied(

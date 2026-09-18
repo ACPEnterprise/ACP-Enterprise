@@ -58,9 +58,7 @@ class _Balance:
 
 
 class FinancialReportingService:
-    def __init__(
-        self, repository: FinancialReportingRepository | None = None
-    ) -> None:
+    def __init__(self, repository: FinancialReportingRepository | None = None) -> None:
         self.repository = repository or financial_reporting_repository
 
     async def trial_balance(
@@ -296,7 +294,9 @@ class FinancialReportingService:
             raise ReportingNotFound("Active Accounting reporting context was not found")
         period = None
         if period_id is not None:
-            period = await self.repository.period(session, context.company.id, period_id)
+            period = await self.repository.period(
+                session, context.company.id, period_id
+            )
             if period is None:
                 raise ReportingNotFound("Accounting period was not found")
             expected_start = period.start_date if start_date is not None else None
@@ -344,9 +344,7 @@ class FinancialReportingService:
             ):
                 raise ReportingIntegrityError("account_lifecycle_conflict")
             if not (
-                line.period_start_date
-                <= line.effective_date
-                <= line.period_end_date
+                line.period_start_date <= line.effective_date <= line.period_end_date
             ):
                 raise ReportingIntegrityError("journal_period_conflict")
             if not (
@@ -397,14 +395,14 @@ class FinancialReportingService:
             else:
                 balance.debits += line.debit
                 balance.credits += line.credit
-        return tuple(sorted(balances.values(), key=lambda row: (row.code, row.account_id)))
+        return tuple(
+            sorted(balances.values(), key=lambda row: (row.code, row.account_id))
+        )
 
     @staticmethod
     def _account_row(balance: _Balance) -> AccountBalanceRow:
         display = (
-            balance.ending
-            if balance.normal_balance == "debit"
-            else -balance.ending
+            balance.ending if balance.normal_balance == "debit" else -balance.ending
         )
         return AccountBalanceRow(
             account_id=balance.account_id,
@@ -434,9 +432,7 @@ class FinancialReportingService:
             if balance.classification != classification:
                 continue
             canonical = (
-                balance.debits - balance.credits
-                if activity_only
-                else balance.ending
+                balance.debits - balance.credits if activity_only else balance.ending
             )
             amount = canonical if balance.normal_balance == "debit" else -canonical
             rows.append(
@@ -453,7 +449,11 @@ class FinancialReportingService:
 
     @staticmethod
     def _detail_row(line: LedgerLineFact, running: Decimal) -> GeneralLedgerRow:
-        if line.posted_at is None or line.approved_by_user_id is None or line.correlation_id is None:
+        if (
+            line.posted_at is None
+            or line.approved_by_user_id is None
+            or line.correlation_id is None
+        ):
             raise ReportingIntegrityError("missing_general_ledger_provenance")
         return GeneralLedgerRow(
             line_id=line.line_id,

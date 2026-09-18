@@ -404,13 +404,11 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
                 ),
                 update(ServiceLocationReconciliationEvidence)
                 .where(
-                    ServiceLocationReconciliationEvidence.id
-                    == first_reconciliation.id
+                    ServiceLocationReconciliationEvidence.id == first_reconciliation.id
                 )
                 .values(evidence_digest="0" * 64),
                 delete(ServiceLocationReconciliationEvidence).where(
-                    ServiceLocationReconciliationEvidence.id
-                    == first_reconciliation.id
+                    ServiceLocationReconciliationEvidence.id == first_reconciliation.id
                 ),
                 update(CustomerIdentityConsolidationEvidence)
                 .where(CustomerIdentityConsolidationEvidence.id == first_customer.id)
@@ -463,13 +461,11 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             for attack in (
                 update(CustomerMigrationCutoverReadinessEvidence)
                 .where(
-                    CustomerMigrationCutoverReadinessEvidence.id
-                    == first_readiness.id
+                    CustomerMigrationCutoverReadinessEvidence.id == first_readiness.id
                 )
                 .values(evidence_digest="0" * 64),
                 delete(CustomerMigrationCutoverReadinessEvidence).where(
-                    CustomerMigrationCutoverReadinessEvidence.id
-                    == first_readiness.id
+                    CustomerMigrationCutoverReadinessEvidence.id == first_readiness.id
                 ),
             ):
                 with pytest.raises(IntegrityError):
@@ -549,13 +545,11 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
                 ),
                 update(CustomerMigrationCutoverRehearsalEvidence)
                 .where(
-                    CustomerMigrationCutoverRehearsalEvidence.id
-                    == first_rehearsal.id
+                    CustomerMigrationCutoverRehearsalEvidence.id == first_rehearsal.id
                 )
                 .values(evidence_digest="0" * 64),
                 delete(CustomerMigrationCutoverRehearsalEvidence).where(
-                    CustomerMigrationCutoverRehearsalEvidence.id
-                    == first_rehearsal.id
+                    CustomerMigrationCutoverRehearsalEvidence.id == first_rehearsal.id
                 ),
                 update(CustomerMigrationCutoverRehearsalStepEvidence)
                 .where(

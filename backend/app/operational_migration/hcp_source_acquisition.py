@@ -140,9 +140,16 @@ def seal_source_envelope(
 
 def preserve_conflict(*assertions: SourceAssertion) -> tuple[SourceAssertion, ...]:
     """Return all source assertions in deterministic order; choose no winner."""
-    if len({(a.provider, a.native_entity, a.native_id, a.field) for a in assertions}) != len(assertions):
+    if len(
+        {(a.provider, a.native_entity, a.native_id, a.field) for a in assertions}
+    ) != len(assertions):
         raise ValueError("duplicate source assertion")
-    return tuple(sorted(assertions, key=lambda a: (a.field, a.provider, a.native_entity, a.native_id)))
+    return tuple(
+        sorted(
+            assertions,
+            key=lambda a: (a.field, a.provider, a.native_entity, a.native_id),
+        )
+    )
 
 
 def evidence_key(

@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_owner_disposition import (
     BranchScopeBinding,
     DispositionAlternative,

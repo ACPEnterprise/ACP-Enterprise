@@ -60,7 +60,10 @@ class ProviderCompletenessManifest:
     def verify(self) -> None:
         payload = asdict(self)
         observed = payload.pop("digest")
-        if self.contract != CONTRACT or observed != hashlib.sha256(_canonical(payload)).hexdigest():
+        if (
+            self.contract != CONTRACT
+            or observed != hashlib.sha256(_canonical(payload)).hexdigest()
+        ):
             raise ValueError("provider completeness digest mismatch")
         for provider in self.providers:
             if not provider.get("provider") or not provider.get("environment"):
@@ -134,7 +137,9 @@ def build_provider_completeness_manifest(
         "owner_input": ("employee native identity certification",),
         "accountant_input": ("HCP/QBO financial overlap",),
         "never_infer": NEVER_INFER,
-        "retries_or_errors": ({"family": "appointments", "relationship_errors": appointment_errors},),
+        "retries_or_errors": (
+            {"family": "appointments", "relationship_errors": appointment_errors},
+        ),
         "sandbox_production_isolation": "production evidence; no sandbox artifacts",
         "mutation_count": 0,
         "artifact_sha256": {
@@ -153,9 +158,17 @@ def build_provider_completeness_manifest(
             registrations.append(value)
             registration_shas[path.name] = _sha(path)
     kinds = sorted({str(value["kind"]) for value in registrations})
-    counts = {kind: sum(value.get("kind") == kind for value in registrations) for kind in kinds}
+    counts = {
+        kind: sum(value.get("kind") == kind for value in registrations)
+        for kind in kinds
+    }
     missing = tuple(sorted(set(QBO_REQUESTED) - set(kinds)))
-    realms = sorted({str(value.get("realm_id") or value.get("realm") or "UNAVAILABLE") for value in registrations})
+    realms = sorted(
+        {
+            str(value.get("realm_id") or value.get("realm") or "UNAVAILABLE")
+            for value in registrations
+        }
+    )
     qbo: dict[str, object] = {
         "provider": "quickbooks_online",
         "company_or_realm": realms,

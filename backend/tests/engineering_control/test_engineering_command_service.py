@@ -4,12 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+import app.platform.permissions.models  # noqa: F401
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-import app.platform.permissions.models  # noqa: F401
 from app.core.config import settings
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
@@ -55,6 +52,8 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.users.models import User
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 def utc_now() -> datetime:

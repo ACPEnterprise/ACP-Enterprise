@@ -1,16 +1,16 @@
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 import pytest
-
-from app.platform.company.membership_models import Membership
 from app.platform.company.admin_service import (
     AccessPolicyNotFoundError,
     CompanyAdministrationService,
 )
+from app.platform.company.membership_models import Membership
 from app.platform.permissions.catalog import JOB_DEFINITIONS, permission_catalog
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.models import Permission, Role, RolePermission
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
 from tests.jobs.test_jobs_persistence import JobsFixture
 from tests.platform.test_company_administration import seed_admin_fixture
 

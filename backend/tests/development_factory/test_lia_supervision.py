@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from development_factory.lia import LiaSupervisor
 from development_factory.lia_contract import (
     LiaContractError,
@@ -29,7 +28,6 @@ from development_factory.lia_roles import AgentRole, AgentRoleError, load_agent_
 from development_factory.models import RepositoryState
 from development_factory.run_records import RunActionAudit
 from development_factory.workflow import Action, WorkflowError
-
 
 HEAD = "a" * 40
 

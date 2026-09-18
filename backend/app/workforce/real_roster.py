@@ -25,9 +25,7 @@ class RealRosterPerson:
             RealRosterRole.ADMIN: frozenset({"COMPANY_ADMINISTRATOR"}),
             RealRosterRole.OFFICE_MANAGER: frozenset({"OFFICE_MANAGER"}),
             RealRosterRole.OFFICE_STAFF: frozenset({"SERVICE_CSR"}),
-            RealRosterRole.FIELD_TECH: frozenset(
-                {"TECHNICIAN", "ACP_EMPLOYEE_MOBILE"}
-            ),
+            RealRosterRole.FIELD_TECH: frozenset({"TECHNICIAN", "ACP_EMPLOYEE_MOBILE"}),
         }[self.role]
 
 
@@ -46,4 +44,6 @@ REAL_ALL_COUNTY_ROSTER = (
     RealRosterPerson("jason-calci", "Jason Calci", RealRosterRole.FIELD_TECH),
 )
 
-REAL_ALL_COUNTY_ROSTER_BY_KEY = {person.key: person for person in REAL_ALL_COUNTY_ROSTER}
+REAL_ALL_COUNTY_ROSTER_BY_KEY = {
+    person.key: person for person in REAL_ALL_COUNTY_ROSTER
+}

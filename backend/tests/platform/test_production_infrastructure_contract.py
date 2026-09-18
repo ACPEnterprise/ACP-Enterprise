@@ -77,9 +77,7 @@ def test_production_runtime_has_bounded_processes_and_no_reload_server() -> None
         assert service["stop_grace_period"]
     assert frontend["read_only"] is True
     assert frontend["user"] == "101:101"
-    assert "/var/cache/nginx:size=32m,mode=0755,uid=101,gid=101" in frontend[
-        "tmpfs"
-    ]
+    assert "/var/cache/nginx:size=32m,mode=0755,uid=101,gid=101" in frontend["tmpfs"]
     assert "/var/run:size=4m,mode=0755,uid=101,gid=101" in frontend["tmpfs"]
 
 

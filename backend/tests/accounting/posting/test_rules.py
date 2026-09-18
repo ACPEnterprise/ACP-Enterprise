@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-
 from app.accounting.errors import AccountingConflict, AccountingValidation
 from app.accounting.posting.contracts import (
     PostingFact,
@@ -53,7 +52,10 @@ def test_rule_resolution_is_company_and_effective_date_scoped() -> None:
     company_id = uuid4()
     selected = _rule(company_id=company_id)
     other_company = _rule()
-    assert PostingRuleRegistry((selected, other_company)).resolve(_fact(company_id)) is selected
+    assert (
+        PostingRuleRegistry((selected, other_company)).resolve(_fact(company_id))
+        is selected
+    )
 
 
 def test_overlapping_enabled_rules_fail_closed() -> None:

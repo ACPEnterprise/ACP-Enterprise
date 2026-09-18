@@ -48,7 +48,9 @@ def build_employee_packet(
             {
                 "hcp_employee_source_id": source_id,
                 "source_name": " ".join(
-                    value for value in (employee["first_name"], employee["last_name"]) if value
+                    value
+                    for value in (employee["first_name"], employee["last_name"])
+                    if value
                 ),
                 "source_role": employee.get("role"),
                 "source_company_id": employee["company_id"],
@@ -60,7 +62,9 @@ def build_employee_packet(
                     predecessor["relevant_assignments"] if predecessor else None
                 ),
                 "predecessor_disposition": (
-                    "OWNER_DISPOSITION_RECORDED" if predecessor else "JASON_CALCI_ADDENDUM"
+                    "OWNER_DISPOSITION_RECORDED"
+                    if predecessor
+                    else "JASON_CALCI_ADDENDUM"
                 ),
                 "candidate_acp_employee_id": None,
                 "classification": "OWNER_CERTIFICATION_REQUIRED",

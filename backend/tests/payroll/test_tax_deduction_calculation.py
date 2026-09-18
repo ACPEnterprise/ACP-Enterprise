@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.payroll.contracts import PayrollAuthorizationError, canonical_digest
 from app.payroll.permissions import PayrollPermission
 from app.payroll.tax_authority import (
@@ -27,6 +26,7 @@ from app.payroll.tax_calculation import (
     TaxDeductionCalculationError,
     TaxResponsibility,
 )
+
 from tests.payroll.test_gross_pay_calculation import (
     NOW,
     calculate,
@@ -78,9 +78,7 @@ def resolution(
             else None
         ),
         protected_input_digest=(
-            canonical_digest({"synthetic-protected-input": key})
-            if protected
-            else None
+            canonical_digest({"synthetic-protected-input": key}) if protected else None
         ),
         limitations=(),
     )
@@ -102,10 +100,13 @@ def admission(
         definition_version="payroll.tax-deduction-admission.v1",
         state=state,
         resolutions=resolutions,
-        blockers=(f"synthetic:{state.value}",) if state not in {
+        blockers=(f"synthetic:{state.value}",)
+        if state
+        not in {
             TaxDeductionAdmissionState.READY,
             TaxDeductionAdmissionState.NOT_APPLICABLE,
-        } else (),
+        }
+        else (),
         admission_digest="",
     )
     return replace(
@@ -172,9 +173,7 @@ def engine() -> PayrollTaxDeductionCalculationEngine:
 def execute(**values):  # type: ignore[no-untyped-def]
     values.setdefault("calculated_at", NOW)
     return engine().calculate(
-        actor_permissions=frozenset(
-            {PayrollPermission.TAX_CALCULATION_EXECUTE}
-        ),
+        actor_permissions=frozenset({PayrollPermission.TAX_CALCULATION_EXECUTE}),
         **values,
     )
 
@@ -183,9 +182,7 @@ def test_no_applicable_authority_produces_zero_components_and_full_net() -> None
     gross = gross_evidence()
     result = execute(
         gross=gross,
-        admission=admission(
-            gross, (), state=TaxDeductionAdmissionState.NOT_APPLICABLE
-        ),
+        admission=admission(gross, (), state=TaxDeductionAdmissionState.NOT_APPLICABLE),
     )
     result.verify()
     assert result.components == ()
@@ -414,9 +411,7 @@ def test_replay_provider_and_gross_changes_and_production_synthetic_barrier() ->
         PayrollTaxDeductionCalculationEngine(
             runtime_environment=ProviderEnvironment.PRODUCTION
         ).calculate(
-            actor_permissions=frozenset(
-                {PayrollPermission.TAX_CALCULATION_EXECUTE}
-            ),
+            actor_permissions=frozenset({PayrollPermission.TAX_CALCULATION_EXECUTE}),
             gross=gross,
             admission=values["admission"],  # type: ignore[arg-type]
             tax_instructions=(first_instruction,),
@@ -441,9 +436,7 @@ def test_negative_net_and_sensitive_safe_output_fail_closed() -> None:
                 ),
             ),
         )
-    tax = resolution(
-        gross, PayrollInputDomain.TAX, "safe-output", protected=True
-    )
+    tax = resolution(gross, PayrollInputDomain.TAX, "safe-output", protected=True)
     result = execute(
         gross=gross,
         admission=admission(gross, (tax,)),

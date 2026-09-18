@@ -5,9 +5,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-
 from app.inventory.contracts import (
     AllocateReservation,
     CreateReservation,
@@ -26,6 +23,9 @@ from app.inventory.models import (
     ReservationAllocation,
     StockMovement,
 )
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
+
 from tests.inventory.test_inventory_foundation import (
     inventory_fixture,  # noqa: F401
     opening_spec,

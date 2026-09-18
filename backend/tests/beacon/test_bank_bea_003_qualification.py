@@ -63,9 +63,7 @@ def semantics_payload() -> list[dict[str, object]]:
 
 def test_qualification_binds_canonical_semantics() -> None:
     payload = evidence()
-    assert payload["implementation_sha"] == (
-        "cce44ec4227418b7543d05b977b81c9656e21f25"
-    )
+    assert payload["implementation_sha"] == ("cce44ec4227418b7543d05b977b81c9656e21f25")
     assert payload["semantics_digest"] == digest(semantics_payload())
     assert payload["definition_count"] == 21
     assert payload["freshness_policy_count"] == 2
@@ -89,9 +87,7 @@ def test_durable_and_deterministic_as_of_evidence_do_not_age() -> None:
 
 def test_missing_conflicting_and_reordered_evidence_fail_or_replay_safely() -> None:
     source = quality_input()
-    missing = EVIDENCE_QUALITY_SERVICE.evaluate(
-        replace(source, observed_as_of=None)
-    )
+    missing = EVIDENCE_QUALITY_SERVICE.evaluate(replace(source, observed_as_of=None))
     conflicting = EVIDENCE_QUALITY_SERVICE.evaluate(
         replace(
             source,

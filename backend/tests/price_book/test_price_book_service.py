@@ -8,10 +8,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -44,6 +40,9 @@ from app.price_book.schemas import (
     TaxClassificationCreate,
 )
 from app.price_book.service import PriceBookService
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -278,9 +277,7 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
     assert manager_catalog.costs_visible is True
     assert manager_catalog.versions[0].cost_readiness == "COST_COMPLETE"
     assert manager_catalog.versions[0].expected_direct_cost == Decimal("75.75")
-    assert manager_catalog.versions[0].expected_direct_contribution == Decimal(
-        "74.20"
-    )
+    assert manager_catalog.versions[0].expected_direct_contribution == Decimal("74.20")
     async with factory() as session:
         category_search = await service.catalog(
             session,

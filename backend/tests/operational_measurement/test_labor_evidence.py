@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-
 from app.operational_measurement.labor_evidence import (
     Confidence,
     EmployeeJobLink,

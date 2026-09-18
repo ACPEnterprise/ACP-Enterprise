@@ -54,8 +54,14 @@ ReportingRead = Annotated[
     AuthorizationContext,
     Depends(require_permission(PayrollPermission.REPORTING_READ)),
 ]
-ReportingManage = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.REPORTING_MANAGE))]
-ReportingApprove = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.REPORTING_APPROVE))]
+ReportingManage = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PayrollPermission.REPORTING_MANAGE)),
+]
+ReportingApprove = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PayrollPermission.REPORTING_APPROVE)),
+]
 
 
 class StatementMetadata(BaseModel):
@@ -185,7 +191,19 @@ def _compliance() -> PayrollComplianceService:
 
 
 def _schema_metadata(value: PayrollComplianceSchemaRecord) -> ComplianceSchemaMetadata:
-    return ComplianceSchemaMetadata(id=value.id, jurisdiction_reference=value.jurisdiction_reference, package_family=value.package_family, tax_year=value.tax_year, quarter=value.quarter, schema_version=value.schema_version, rule_version=value.rule_version, required_evidence=value.required_evidence, legal_content_slots=value.legal_content_slots, lifecycle=value.lifecycle, schema_digest=value.schema_digest)
+    return ComplianceSchemaMetadata(
+        id=value.id,
+        jurisdiction_reference=value.jurisdiction_reference,
+        package_family=value.package_family,
+        tax_year=value.tax_year,
+        quarter=value.quarter,
+        schema_version=value.schema_version,
+        rule_version=value.rule_version,
+        required_evidence=value.required_evidence,
+        legal_content_slots=value.legal_content_slots,
+        lifecycle=value.lifecycle,
+        schema_digest=value.schema_digest,
+    )
 
 
 def _report_metadata(value: PayrollReportingSnapshotRecord) -> PayrollReportingMetadata:
@@ -282,9 +300,29 @@ async def list_payroll_reporting(
 
 
 @router.get("/operations/summary", response_model=dict[str, object])
-async def payroll_operations_summary(context: ReportingRead, session: Session) -> dict[str, object]:
+async def payroll_operations_summary(
+    context: ReportingRead, session: Session
+) -> dict[str, object]:
     value = await PayrollOperationsService().summary(session, context=context)
-    return {"run_counts": value.run_counts, "member_dispositions": value.member_dispositions, "payment_counts": value.payment_counts, "remittance_counts": value.remittance_counts, "reporting_counts": value.reporting_counts, "statement_counts": value.statement_counts, "adjustment_counts": value.adjustment_counts, "history_ready": value.history_ready, "aggregate_approved_gross": str(value.aggregate_approved_gross), "aggregate_approved_net": str(value.aggregate_approved_net), "blocker_count": value.blocker_count, "reconciliation_state": value.reconciliation_state, "provider_readiness": {"filing": value.filing_provider_state, "payment": value.payment_provider_state, "remittance": value.remittance_provider_state}}
+    return {
+        "run_counts": value.run_counts,
+        "member_dispositions": value.member_dispositions,
+        "payment_counts": value.payment_counts,
+        "remittance_counts": value.remittance_counts,
+        "reporting_counts": value.reporting_counts,
+        "statement_counts": value.statement_counts,
+        "adjustment_counts": value.adjustment_counts,
+        "history_ready": value.history_ready,
+        "aggregate_approved_gross": str(value.aggregate_approved_gross),
+        "aggregate_approved_net": str(value.aggregate_approved_net),
+        "blocker_count": value.blocker_count,
+        "reconciliation_state": value.reconciliation_state,
+        "provider_readiness": {
+            "filing": value.filing_provider_state,
+            "payment": value.payment_provider_state,
+            "remittance": value.remittance_provider_state,
+        },
+    }
 
 
 @router.get(
@@ -306,9 +344,13 @@ async def payroll_period_operations(
         period_start=value.period_start,
         period_end=value.period_end,
         policy_readiness=value.policy_readiness,
-        employees=[PayrollPeriodEmployeeMetadata(**asdict(item)) for item in value.employees],
+        employees=[
+            PayrollPeriodEmployeeMetadata(**asdict(item)) for item in value.employees
+        ],
         limitations=list(value.limitations),
     )
+
+
 @router.get("/operations/registers", response_model=list[dict[str, object]])
 async def payroll_operating_registers(
     context: ReportingRead, session: Session
@@ -340,61 +382,139 @@ async def compliance_schemas(
 
 
 @router.post("/compliance/schemas", response_model=ComplianceSchemaMetadata)
-async def create_compliance_schema(body: ComplianceSchemaWrite, context: ReportingManage, session: Session) -> ComplianceSchemaMetadata:
+async def create_compliance_schema(
+    body: ComplianceSchemaWrite, context: ReportingManage, session: Session
+) -> ComplianceSchemaMetadata:
     try:
-        value = await _compliance().create_schema(session, context=context, draft=DraftComplianceSchema(body.jurisdiction_reference, body.package_family, body.tax_year, body.quarter, body.schema_version, body.rule_version, tuple(body.required_evidence), tuple(body.legal_content_slots), body.effective_start, body.effective_end))
+        value = await _compliance().create_schema(
+            session,
+            context=context,
+            draft=DraftComplianceSchema(
+                body.jurisdiction_reference,
+                body.package_family,
+                body.tax_year,
+                body.quarter,
+                body.schema_version,
+                body.rule_version,
+                tuple(body.required_evidence),
+                tuple(body.legal_content_slots),
+                body.effective_start,
+                body.effective_end,
+            ),
+        )
     except (PayrollAuthorizationError, PayrollConflictError, ValueError) as error:
         raise _error(error) from error
     return _schema_metadata(value)
 
 
-@router.post("/compliance/schemas/{schema_id}/approve", response_model=ComplianceSchemaMetadata)
-async def approve_compliance_schema(schema_id: UUID, context: ReportingApprove, session: Session) -> ComplianceSchemaMetadata:
+@router.post(
+    "/compliance/schemas/{schema_id}/approve", response_model=ComplianceSchemaMetadata
+)
+async def approve_compliance_schema(
+    schema_id: UUID, context: ReportingApprove, session: Session
+) -> ComplianceSchemaMetadata:
     try:
-        return _schema_metadata(await _compliance().approve_schema(session, context=context, schema_id=schema_id))
+        return _schema_metadata(
+            await _compliance().approve_schema(
+                session, context=context, schema_id=schema_id
+            )
+        )
     except (PayrollAuthorizationError, PayrollConflictError) as error:
         raise _error(error) from error
 
 
 @router.post("/reporting/{report_id}/artifact", response_model=dict[str, object])
-async def render_payroll_report(report_id: UUID, context: ReportingManage, session: Session) -> dict[str, object]:
+async def render_payroll_report(
+    report_id: UUID, context: ReportingManage, session: Session
+) -> dict[str, object]:
     try:
-        value = await _compliance().render_report(session, context=context, report_id=report_id)
+        value = await _compliance().render_report(
+            session, context=context, report_id=report_id
+        )
     except (PayrollAuthorizationError, PayrollConflictError) as error:
         raise _error(error) from error
-    return {"artifact_id": value.id, "source_type": value.source_type, "source_id": value.source_id, "artifact_digest": value.digest, "media_type": value.media_type, "lifecycle": value.lifecycle}
+    return {
+        "artifact_id": value.id,
+        "source_type": value.source_type,
+        "source_id": value.source_id,
+        "artifact_digest": value.digest,
+        "media_type": value.media_type,
+        "lifecycle": value.lifecycle,
+    }
 
 
 @router.post("/filing-packages/prepare", response_model=PayrollFilingPackageMetadata)
-async def prepare_filing_package(body: FilingPackagePrepare, context: ReportingApprove, session: Session) -> PayrollFilingPackageMetadata:
+async def prepare_filing_package(
+    body: FilingPackagePrepare, context: ReportingApprove, session: Session
+) -> PayrollFilingPackageMetadata:
     try:
-        value = await _compliance().prepare_package(session, context=context, report_id=body.report_id, schema_id=body.schema_id, supersedes_package_id=body.supersedes_package_id, amendment_evidence=({"reason": body.amendment_reason} if body.supersedes_package_id and body.amendment_reason else None))
+        value = await _compliance().prepare_package(
+            session,
+            context=context,
+            report_id=body.report_id,
+            schema_id=body.schema_id,
+            supersedes_package_id=body.supersedes_package_id,
+            amendment_evidence=(
+                {"reason": body.amendment_reason}
+                if body.supersedes_package_id and body.amendment_reason
+                else None
+            ),
+        )
     except (PayrollAuthorizationError, PayrollConflictError, ValueError) as error:
         raise _error(error) from error
-    return PayrollFilingPackageMetadata(id=value.id, reporting_snapshot_id=value.reporting_snapshot_id, jurisdiction_reference=value.jurisdiction_reference, package_type=value.package_type, schema_version=value.schema_version, state=value.state, package_digest=value.package_digest)
+    return PayrollFilingPackageMetadata(
+        id=value.id,
+        reporting_snapshot_id=value.reporting_snapshot_id,
+        jurisdiction_reference=value.jurisdiction_reference,
+        package_type=value.package_type,
+        schema_version=value.schema_version,
+        state=value.state,
+        package_digest=value.package_digest,
+    )
 
 
 @router.post("/filing-packages/{package_id}/artifact", response_model=dict[str, object])
-async def render_filing_package_preview(package_id: UUID, context: ReportingManage, session: Session) -> dict[str, object]:
+async def render_filing_package_preview(
+    package_id: UUID, context: ReportingManage, session: Session
+) -> dict[str, object]:
     try:
-        value = await _compliance().render_filing_preview(session, context=context, package_id=package_id)
+        value = await _compliance().render_filing_preview(
+            session, context=context, package_id=package_id
+        )
     except (PayrollAuthorizationError, PayrollConflictError) as error:
         raise _error(error) from error
-    return {"artifact_id": value.id, "source_type": value.source_type, "source_id": value.source_id, "artifact_digest": value.digest, "media_type": value.media_type, "lifecycle": value.lifecycle}
+    return {
+        "artifact_id": value.id,
+        "source_type": value.source_type,
+        "source_id": value.source_id,
+        "artifact_digest": value.digest,
+        "media_type": value.media_type,
+        "lifecycle": value.lifecycle,
+    }
 
 
 @router.get("/reporting-artifacts/{artifact_id}")
-async def retrieve_payroll_report_artifact(artifact_id: UUID, context: ReportingRead, session: Session) -> Response:
+async def retrieve_payroll_report_artifact(
+    artifact_id: UUID, context: ReportingRead, session: Session
+) -> Response:
     try:
-        artifact, data = await _compliance().retrieve(session, context=context, artifact_id=artifact_id)
+        artifact, data = await _compliance().retrieve(
+            session, context=context, artifact_id=artifact_id
+        )
     except (PayrollAuthorizationError, PayrollConflictError) as error:
         raise _error(error) from error
-    return Response(data, media_type=artifact.media_type, headers={"Content-Disposition": f'inline; filename="payroll-report-{artifact.id}.html"', "ETag": f'"{artifact.digest}"', "Cache-Control": "private, no-store"})
+    return Response(
+        data,
+        media_type=artifact.media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="payroll-report-{artifact.id}.html"',
+            "ETag": f'"{artifact.digest}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
-@router.get(
-    "/reporting/{report_id}", response_model=PayrollReportingMetadata
-)
+@router.get("/reporting/{report_id}", response_model=PayrollReportingMetadata)
 async def payroll_reporting_detail(
     report_id: UUID, context: ReportingRead, session: Session
 ) -> PayrollReportingMetadata:
@@ -483,7 +603,14 @@ async def own_payroll_status(context: OwnRead, session: Session) -> dict[str, ob
         )
     except (PayrollAuthorizationError, PayrollConflictError) as error:
         raise _error(error) from error
-    return {"statement_count": statement_count, "current_statement_id": current.id if current else None, "current_pay_period_id": current.pay_period_id if current else None, "payment_status": current.payment_status if current else "unavailable", "ytd_status": current.ytd_status if current else "unavailable", "has_correction": bool(current and current.version > 1)}
+    return {
+        "statement_count": statement_count,
+        "current_statement_id": current.id if current else None,
+        "current_pay_period_id": current.pay_period_id if current else None,
+        "payment_status": current.payment_status if current else "unavailable",
+        "ytd_status": current.ytd_status if current else "unavailable",
+        "has_correction": bool(current and current.version > 1),
+    }
 
 
 @router.get("/me/pay-statements/{statement_id}", response_model=StatementMetadata)

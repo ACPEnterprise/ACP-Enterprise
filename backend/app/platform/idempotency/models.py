@@ -18,7 +18,9 @@ class MutationReceipt(Base):
     __tablename__ = "platform_mutation_receipts"
     __table_args__ = (
         UniqueConstraint(
-            "company_id", "operation", "idempotency_key",
+            "company_id",
+            "operation",
+            "idempotency_key",
             name="uq_platform_mutation_receipts_company_operation_key",
         ),
         CheckConstraint(
@@ -40,7 +42,9 @@ class MutationReceipt(Base):
     operation: Mapped[str] = mapped_column(String(160), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    state: Mapped[str] = mapped_column(String(32), nullable=False, default="in_progress")
+    state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="in_progress"
+    )
     result_type: Mapped[str | None] = mapped_column(String(120))
     result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     response_status: Mapped[int | None]

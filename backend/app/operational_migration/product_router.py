@@ -123,9 +123,7 @@ async def hcp_customer_source_history(
                 select(CustomerSourceIdentity).where(
                     CustomerSourceIdentity.company_id == context.company.id,
                     CustomerSourceIdentity.customer_id == customer_id,
-                    CustomerSourceIdentity.branch_id.in_(
-                        context.authorized_branch_ids
-                    ),
+                    CustomerSourceIdentity.branch_id.in_(context.authorized_branch_ids),
                     CustomerSourceIdentity.source_system.in_(
                         ("housecall_pro", "housecall_pro_source4")
                     ),
@@ -151,6 +149,4 @@ async def hcp_customer_source_history(
             content={"detail": "Historical source evidence is unavailable."},
             headers={"Cache-Control": "private, no-store"},
         )
-    return JSONResponse(
-        content=result, headers={"Cache-Control": "private, no-store"}
-    )
+    return JSONResponse(content=result, headers={"Cache-Control": "private, no-store"})

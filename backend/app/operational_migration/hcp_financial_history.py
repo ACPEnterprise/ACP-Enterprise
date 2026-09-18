@@ -106,9 +106,7 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
                 "SOURCE_DISPLAYABLE_NONAGGREGATED"
                 if payment.get("payment_method") == "imported_from_quickbooks"
                 else (
-                    "HCP_ONLY"
-                    if payment.get("status") == "succeeded"
-                    else "UNRESOLVED"
+                    "HCP_ONLY" if payment.get("status") == "succeeded" else "UNRESOLVED"
                 )
             ),
             "display_authority": (

@@ -51,9 +51,7 @@ class DeterministicBoundary:
     def read(self, principal: IsolationIdentity, resource: IsolationIdentity) -> bool:
         return self._allowed(principal, resource)
 
-    def mutate(
-        self, principal: IsolationIdentity, resource: IsolationIdentity
-    ) -> bool:
+    def mutate(self, principal: IsolationIdentity, resource: IsolationIdentity) -> bool:
         return self._allowed(principal, resource)
 
     def link(
@@ -70,9 +68,7 @@ class DeterministicBoundary:
         resources: Iterable[IsolationIdentity],
     ) -> tuple[IsolationIdentity, ...]:
         return tuple(
-            resource
-            for resource in resources
-            if self._allowed(principal, resource)
+            resource for resource in resources if self._allowed(principal, resource)
         )
 
     def event_visible(
@@ -115,12 +111,28 @@ def test_coverage_ledger_is_complete_and_fingerprinted() -> None:
     assert fingerprint == expected
     domains = {item["domain"] for item in coverage["domains"]}
     assert domains == {
-        "Customers", "Contacts", "Service Locations", "Jobs",
-        "Scheduling/Appointments", "Dispatch", "Workforce/Employees",
-        "Inventory", "Purchasing", "Price Book", "Estimates", "Invoices/AR",
-        "Payments", "Accounts Payable", "Accounting", "Business Events",
-        "Beacon", "Business Economics Policy", "Platform Authorization Objects",
-        "Workday Time", "Payroll Policy Authority", "Operational Projections",
+        "Customers",
+        "Contacts",
+        "Service Locations",
+        "Jobs",
+        "Scheduling/Appointments",
+        "Dispatch",
+        "Workforce/Employees",
+        "Inventory",
+        "Purchasing",
+        "Price Book",
+        "Estimates",
+        "Invoices/AR",
+        "Payments",
+        "Accounts Payable",
+        "Accounting",
+        "Business Events",
+        "Beacon",
+        "Business Economics Policy",
+        "Platform Authorization Objects",
+        "Workday Time",
+        "Payroll Policy Authority",
+        "Operational Projections",
     }
 
 
@@ -143,7 +155,22 @@ def test_every_coverage_claim_references_a_real_test() -> None:
 def test_high_risk_domains_have_relationship_and_runtime_layer_evidence() -> None:
     coverage = _coverage()
     by_domain = {item["domain"]: item for item in coverage["domains"]}
-    for domain in ("Jobs", "Scheduling/Appointments", "Inventory", "Purchasing", "Estimates", "Invoices/AR", "Accounting", "Workday Time"):
+    for domain in (
+        "Jobs",
+        "Scheduling/Appointments",
+        "Inventory",
+        "Purchasing",
+        "Estimates",
+        "Invoices/AR",
+        "Accounting",
+        "Workday Time",
+    ):
         assert "relationship" in by_domain[domain]["layers"]
-    for domain in ("Customers", "Jobs", "Scheduling/Appointments", "Inventory", "Beacon"):
+    for domain in (
+        "Customers",
+        "Jobs",
+        "Scheduling/Appointments",
+        "Inventory",
+        "Beacon",
+    ):
         assert set(by_domain[domain]["layers"]) & {"repository", "service", "api"}

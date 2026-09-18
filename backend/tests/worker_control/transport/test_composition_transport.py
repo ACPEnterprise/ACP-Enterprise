@@ -4,8 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_execution.composition.contracts import (
     ProviderAttemptState,
@@ -36,6 +34,8 @@ from app.worker_control.transport.persistence.models import (
     WorkerTransportReceipt,
     WorkerTransportSession,
 )
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,

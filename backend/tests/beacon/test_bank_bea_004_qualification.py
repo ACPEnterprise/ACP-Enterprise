@@ -14,6 +14,7 @@ from app.beacon.operational_prioritization import (
     URGENCY_POLICIES,
     OperationalSignalPrioritizer,
 )
+
 from tests.beacon.test_beacon import COMPANY_ID, snapshot
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -73,9 +74,7 @@ def contract_payload() -> dict[str, object]:
 
 def test_qualification_binds_canonical_prioritization_contract() -> None:
     payload = evidence()
-    assert payload["implementation_sha"] == (
-        "2a6a83c9a6a7e20ab9ce5af7964ed27ae28e27d0"
-    )
+    assert payload["implementation_sha"] == ("2a6a83c9a6a7e20ab9ce5af7964ed27ae28e27d0")
     assert payload["contract_digest"] == digest(contract_payload())
     unsigned = dict(payload)
     unsigned.pop("qualification_fingerprint")

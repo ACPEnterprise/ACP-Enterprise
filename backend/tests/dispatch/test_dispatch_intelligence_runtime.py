@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.dispatch.errors import DispatchValidation
 from app.dispatch.intelligence import (
     CandidatePlacement,
@@ -34,7 +33,9 @@ def _window(start: datetime = NOW, minutes: int = 60) -> TimeWindow:
     return TimeWindow(start, start + timedelta(minutes=minutes))
 
 
-def _duration(index: int, minutes: int, *, branch_id: UUID = BRANCH) -> MeasuredDuration:
+def _duration(
+    index: int, minutes: int, *, branch_id: UUID = BRANCH
+) -> MeasuredDuration:
     completed = NOW - timedelta(days=index)
     return MeasuredDuration(
         job_id=UUID(int=index + 10),
@@ -49,7 +50,12 @@ def _duration(index: int, minutes: int, *, branch_id: UUID = BRANCH) -> Measured
 
 
 def test_duration_history_is_descriptive_deterministic_and_scope_safe() -> None:
-    rows = (_duration(1, 30), _duration(2, 60), _duration(3, 90), _duration(4, 999, branch_id=UUID(int=99)))
+    rows = (
+        _duration(1, 30),
+        _duration(2, 60),
+        _duration(3, 90),
+        _duration(4, 999, branch_id=UUID(int=99)),
+    )
     kwargs = {
         "company_id": COMPANY,
         "branch_id": BRANCH,
@@ -60,7 +66,12 @@ def test_duration_history_is_descriptive_deterministic_and_scope_safe() -> None:
     first = aggregate_measured_durations(rows, **kwargs)
     second = aggregate_measured_durations(tuple(reversed(rows)), **kwargs)
     assert first.state is DurationState.MEASURED_HISTORY_AVAILABLE
-    assert (first.sample_count, first.median_minutes, first.minimum_minutes, first.maximum_minutes) == (3, 60, 30, 90)
+    assert (
+        first.sample_count,
+        first.median_minutes,
+        first.minimum_minutes,
+        first.maximum_minutes,
+    ) == (3, 60, 30, 90)
     assert first.digest == second.digest
     assert all("prediction" in item or "minimum" in item for item in first.limitations)
 
@@ -72,12 +83,25 @@ def test_duration_readiness_fails_closed() -> None:
         "period": _window(NOW - timedelta(days=30), 60 * 24 * 31),
         "measured_at": NOW,
     }
-    assert aggregate_measured_durations((), service_category="synthetic", **kwargs).state is DurationState.SOURCE_REQUIRED
-    assert aggregate_measured_durations((_duration(1, 30),), service_category="synthetic_service", **kwargs).state is DurationState.INSUFFICIENT_SAMPLE
-    assert aggregate_measured_durations((), service_category=None, **kwargs).state is DurationState.CATEGORY_UNCLASSIFIED
+    assert (
+        aggregate_measured_durations((), service_category="synthetic", **kwargs).state
+        is DurationState.SOURCE_REQUIRED
+    )
+    assert (
+        aggregate_measured_durations(
+            (_duration(1, 30),), service_category="synthetic_service", **kwargs
+        ).state
+        is DurationState.INSUFFICIENT_SAMPLE
+    )
+    assert (
+        aggregate_measured_durations((), service_category=None, **kwargs).state
+        is DurationState.CATEGORY_UNCLASSIFIED
+    )
 
 
-def test_candidate_windows_use_only_customer_boundaries_and_scheduled_duration() -> None:
+def test_candidate_windows_use_only_customer_boundaries_and_scheduled_duration() -> (
+    None
+):
     promised = _window(NOW, 180)
     windows = derive_candidate_windows(promised, 60)
     assert windows == (_window(NOW, 60), _window(NOW + timedelta(hours=2), 60))
@@ -127,7 +151,10 @@ class _Adapter:
 @pytest.mark.asyncio
 async def test_runtime_service_is_proposal_only_and_useful_without_routing() -> None:
     result = await DispatchRecommendationService(_Adapter()).recommend(
-        object(), context=object(), job_id=JOB, proposed_windows=(_window(),)  # type: ignore[arg-type]
+        object(),
+        context=object(),
+        job_id=JOB,
+        proposed_windows=(_window(),),  # type: ignore[arg-type]
     )
     assert result.mutation_authority == "none"
     assert result.candidates[0].eligible is True
@@ -148,12 +175,14 @@ async def test_acp_adapter_composes_owning_domain_projections(monkeypatch) -> No
         priority=SimpleNamespace(value="high"),
         concurrency_version=2,
         updated_at=start,
-        appointments=(SimpleNamespace(
-            appointment_id=appointment_id,
-            arrival_window_start_at=start,
-            arrival_window_end_at=end,
-            expected_duration_minutes=60,
-        ),),
+        appointments=(
+            SimpleNamespace(
+                appointment_id=appointment_id,
+                arrival_window_start_at=start,
+                arrival_window_end_at=end,
+                expected_duration_minutes=60,
+            ),
+        ),
     )
     appointment = SimpleNamespace(
         id=appointment_id, concurrency_version=3, updated_at=start
@@ -166,27 +195,51 @@ async def test_acp_adapter_composes_owning_domain_projections(monkeypatch) -> No
         availability_confidence="authoritative",
         decision="eligible",
     )
+
     async def job_detail(*args, **kwargs):
         return detail
+
     async def appointment_detail(*args, **kwargs):
         return appointment
+
     async def board(*args, **kwargs):
         return SimpleNamespace(items=())
+
     async def eligible(*args, **kwargs):
         return (employee,)
-    monkeypatch.setattr("app.dispatch.intelligence_runtime.jobs_query_service.get_job_detail", job_detail)
-    monkeypatch.setattr("app.dispatch.intelligence_runtime.scheduling_query_service.get_appointment", appointment_detail)
-    monkeypatch.setattr("app.dispatch.intelligence_runtime.dispatch_service.board", board)
-    monkeypatch.setattr("app.dispatch.intelligence_runtime.workforce_eligibility_service.eligible_technicians", eligible)
+
+    monkeypatch.setattr(
+        "app.dispatch.intelligence_runtime.jobs_query_service.get_job_detail",
+        job_detail,
+    )
+    monkeypatch.setattr(
+        "app.dispatch.intelligence_runtime.scheduling_query_service.get_appointment",
+        appointment_detail,
+    )
+    monkeypatch.setattr(
+        "app.dispatch.intelligence_runtime.dispatch_service.board", board
+    )
+    monkeypatch.setattr(
+        "app.dispatch.intelligence_runtime.workforce_eligibility_service.eligible_technicians",
+        eligible,
+    )
     context = SimpleNamespace(
         company=SimpleNamespace(id=COMPANY),
         authorized_branch_ids=frozenset({BRANCH}),
         can_access_branch=lambda value: value == BRANCH,
     )
     snapshot = await AcpDispatchRuntimeAdapter().snapshot(
-        object(), context=context, job_id=JOB, proposed_windows=()  # type: ignore[arg-type]
+        object(),
+        context=context,
+        job_id=JOB,
+        proposed_windows=(),  # type: ignore[arg-type]
     )
     assert len(snapshot.candidates) == 2
-    assert all(item.travel_state is EvidenceState.EXTERNAL_GATE for item in snapshot.candidates)
+    assert all(
+        item.travel_state is EvidenceState.EXTERNAL_GATE for item in snapshot.candidates
+    )
     assert snapshot.job.fleet_required is False
-    assert {ref.authority for ref in snapshot.job.evidence} == {"jobs.job-detail", "scheduling.appointment"}
+    assert {ref.authority for ref in snapshot.job.evidence} == {
+        "jobs.job-detail",
+        "scheduling.appointment",
+    }

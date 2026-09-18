@@ -50,9 +50,7 @@ def test_known_valid_authorization_matrix_passes() -> None:
         AuthorizationMatrixInput(
             backend_requirements=(requirement(),),
             frontend_exposures=(
-                FrontendAuthorizationExposure(
-                    "work.read", READ.code, "WorkRoute:read"
-                ),
+                FrontendAuthorizationExposure("work.read", READ.code, "WorkRoute:read"),
             ),
             role_permissions=(RolePermissionReference("DISPATCHER", READ.code),),
         ),
@@ -123,7 +121,9 @@ def test_invalid_role_permission_reference_is_detected() -> None:
             role_permissions=(RolePermissionReference("BROKEN", "COMPANY_UNKNOWN"),),
         ),
     )
-    assert AuthorizationMatrixFindingCode.INVALID_ROLE_PERMISSION in finding_codes(report)
+    assert AuthorizationMatrixFindingCode.INVALID_ROLE_PERMISSION in finding_codes(
+        report
+    )
 
 
 def test_company_branch_scope_mismatch_is_detected() -> None:
@@ -157,9 +157,7 @@ def test_fingerprint_binds_exact_enforcement_evidence() -> None:
     )
     second = verify_authorization_matrix(
         PermissionCatalog((READ,)),
-        AuthorizationMatrixInput(
-            (requirement(points=("app.work.router:get_work",)),)
-        ),
+        AuthorizationMatrixInput((requirement(points=("app.work.router:get_work",)),)),
     )
     assert first.fingerprint != second.fingerprint
 

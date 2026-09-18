@@ -10,7 +10,6 @@ from app.platform.company.membership_models import Membership
 from app.platform.users.identity_models import PendingEmailChange
 from app.platform.users.models import User, UserCredential
 
-
 EMAIL_LOCK_NAMESPACE = 7_321_941
 
 

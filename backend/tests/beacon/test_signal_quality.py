@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.beacon.evaluation import SignalEvaluationService
 from app.beacon.evidence_evaluation import EvaluationReadiness
 from app.beacon.quality import (
@@ -18,6 +17,7 @@ from app.beacon.quality import (
     StaleEvidenceBehavior,
 )
 from app.beacon.router import signal_quality_semantics
+
 from tests.beacon.test_beacon import COMPANY_ID, snapshot
 
 NOW = datetime(2026, 8, 28, 16, 0, tzinfo=timezone.utc)

@@ -8,7 +8,6 @@ from typing import Self
 from uuid import UUID
 
 import pytest
-
 from app.financials.service import FinancialService, FinancialValidationError
 from app.operational_migration.financial import (
     FinancialLineItemRecord,

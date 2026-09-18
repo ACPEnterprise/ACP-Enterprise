@@ -11,7 +11,9 @@ class CollectInput(BaseModel):
     invoice_id: UUID | None = None
     amount: Decimal = Field(gt=0, decimal_places=2)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
-    opaque_payment_method: str = Field(pattern=r"^opaque_[A-Za-z0-9_.:-]+$", max_length=255)
+    opaque_payment_method: str = Field(
+        pattern=r"^opaque_[A-Za-z0-9_.:-]+$", max_length=255
+    )
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 

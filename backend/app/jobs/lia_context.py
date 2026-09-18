@@ -120,8 +120,7 @@ class JobLiaContextService:
                     .where(
                         Job.company_id == context.company.id,
                         Job.branch_id.in_(branch_ids),
-                        func.upper(func.trim(Job.job_number))
-                        == normalized,
+                        func.upper(func.trim(Job.job_number)) == normalized,
                     )
                     .order_by(Job.id)
                     .limit(2)
@@ -327,7 +326,10 @@ class JobLiaContextService:
                 (EstimatePermission.READ, "estimate_context_not_authorized"),
                 (InvoicePermission.READ, "invoice_context_not_authorized"),
                 (PaymentPermission.READ, "payment_context_not_authorized"),
-                (TimekeepingPermission.ADMIN_READ, "timekeeping_context_not_authorized"),
+                (
+                    TimekeepingPermission.ADMIN_READ,
+                    "timekeeping_context_not_authorized",
+                ),
             )
             if not context.has_permission(permission)
         )

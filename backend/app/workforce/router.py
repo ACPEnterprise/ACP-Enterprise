@@ -349,12 +349,18 @@ async def prepare_field_readiness(
             status.HTTP_403_FORBIDDEN, "Availability management authority is required."
         )
     try:
-        profile_id, capability_id, availability_id = (
-            await workforce_administration_service.prepare_field_readiness(
-                session, context=context, employee_id=employee_id,
-                branch_id=data.branch_id, start_at=data.window_start_at,
-                end_at=data.window_end_at, reason=data.reason,
-            )
+        (
+            profile_id,
+            capability_id,
+            availability_id,
+        ) = await workforce_administration_service.prepare_field_readiness(
+            session,
+            context=context,
+            employee_id=employee_id,
+            branch_id=data.branch_id,
+            start_at=data.window_start_at,
+            end_at=data.window_end_at,
+            reason=data.reason,
         )
     except WorkforceAdministrationConflict as error:
         raise _workforce_conflict(error) from error

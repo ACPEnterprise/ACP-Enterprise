@@ -111,9 +111,10 @@ def test_executed_evidence_is_private_and_digest_bound(tmp_path: Path) -> None:
     observed = module.run_command(check, tmp_path, artifact, "a" * 40)
 
     assert observed.status == "PASS"
-    assert observed.artifact_sha256 == module.hashlib.sha256(
-        artifact.read_bytes()
-    ).hexdigest()
+    assert (
+        observed.artifact_sha256
+        == module.hashlib.sha256(artifact.read_bytes()).hexdigest()
+    )
     assert artifact.stat().st_mode & 0o777 == 0o600
 
 
@@ -150,7 +151,9 @@ def test_migration_head_check_requires_release_ready_canonical_lineage(
         (sys.executable, "-c", "print('not-json')"),
         "release ready",
     )
-    failed = module.run_command(check=invalid, root=tmp_path, artifact=tmp_path / "fail.log", candidate="a" * 40)
+    failed = module.run_command(
+        check=invalid, root=tmp_path, artifact=tmp_path / "fail.log", candidate="a" * 40
+    )
     assert failed.status == "FAIL"
     assert failed.reason == "canonical migration lineage is not release-ready"
 
@@ -197,9 +200,7 @@ def test_evidence_directory_and_artifacts_are_private_and_exclusive(
         ("mobile_tests", "  console.warn unexpected\n", "console output"),
     ),
 )
-def test_ui_test_warnings_fail_closed(
-    check_key: str, output: str, reason: str
-) -> None:
+def test_ui_test_warnings_fail_closed(check_key: str, output: str, reason: str) -> None:
     module = _module()
 
     assert reason in module.test_output_warning(check_key, output)

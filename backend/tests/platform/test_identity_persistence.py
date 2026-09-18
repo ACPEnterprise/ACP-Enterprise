@@ -4,16 +4,15 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, func, insert, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.users.models import User, UserCredential
+from sqlalchemy import delete, func, insert, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
 def utc_now() -> datetime:

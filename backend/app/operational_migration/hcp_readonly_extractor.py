@@ -167,10 +167,14 @@ def qualify_records(
     return tuple(result)
 
 
-def parse_collection(body: bytes, collection: str) -> tuple[list[dict[str, Any]], dict[str, int]]:
+def parse_collection(
+    body: bytes, collection: str
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     document = json.loads(body)
     records = document.get(collection)
-    if not isinstance(records, list) or not all(isinstance(row, dict) for row in records):
+    if not isinstance(records, list) or not all(
+        isinstance(row, dict) for row in records
+    ):
         raise ValueError(f"invalid HCP {collection} collection")
     pagination = {
         key: document[key]

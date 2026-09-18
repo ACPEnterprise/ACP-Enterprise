@@ -15,7 +15,10 @@ class PostingRuleRegistry:
         for rule in self._rules:
             if not rule.version.strip() or not rule.event_type.strip():
                 raise AccountingValidation("Posting rule identity is required")
-            if rule.effective_to is not None and rule.effective_to < rule.effective_from:
+            if (
+                rule.effective_to is not None
+                and rule.effective_to < rule.effective_from
+            ):
                 raise AccountingValidation("Posting rule effective range is invalid")
             if len(rule.legs) < 2:
                 raise AccountingValidation("Posting rules require at least two legs")

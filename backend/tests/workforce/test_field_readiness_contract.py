@@ -4,10 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
@@ -22,6 +18,9 @@ from app.workforce.models import (
 )
 from app.workforce.router import prepare_field_readiness
 from app.workforce.schemas import FieldReadinessRequest
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -34,28 +33,41 @@ async def field_readiness_database():
     async with factory() as session, session.begin():
         session.add(
             Company(
-                id=company_id, name="Field Readiness Test", code=f"FR{uuid4().hex[:8].upper()}",
-                status="active", timezone="America/New_York",
+                id=company_id,
+                name="Field Readiness Test",
+                code=f"FR{uuid4().hex[:8].upper()}",
+                status="active",
+                timezone="America/New_York",
             )
         )
         await session.flush()
         session.add_all(
             [
                 Branch(
-                    id=branch_id, company_id=company_id, name="Test Branch",
-                    code=f"B{uuid4().hex[:8].upper()}", status="active",
-                    timezone="America/New_York", is_primary=True,
+                    id=branch_id,
+                    company_id=company_id,
+                    name="Test Branch",
+                    code=f"B{uuid4().hex[:8].upper()}",
+                    status="active",
+                    timezone="America/New_York",
+                    is_primary=True,
                 ),
                 Employee(
-                    id=employee_id, company_id=company_id, home_branch_id=branch_id,
-                    employee_number=f"E{uuid4().hex[:8].upper()}", first_name="Field",
-                    last_name="Employee", display_name="Field Employee",
-                    employee_type="employee", status="active",
+                    id=employee_id,
+                    company_id=company_id,
+                    home_branch_id=branch_id,
+                    employee_number=f"E{uuid4().hex[:8].upper()}",
+                    first_name="Field",
+                    last_name="Employee",
+                    display_name="Field Employee",
+                    employee_type="employee",
+                    status="active",
                 ),
             ]
         )
     context = SimpleNamespace(
-        company=SimpleNamespace(id=company_id), user=SimpleNamespace(id=user_id),
+        company=SimpleNamespace(id=company_id),
+        user=SimpleNamespace(id=user_id),
         active_branch=SimpleNamespace(id=branch_id),
         can_access_branch=lambda value: value == branch_id,
     )
@@ -76,12 +88,22 @@ async def test_field_readiness_atomically_creates_canonical_evidence(
     start = datetime.now(timezone.utc)
     async with factory() as session:
         first = await service.prepare_field_readiness(
-            session, context=context, employee_id=employee_id, branch_id=branch_id,
-            start_at=start, end_at=start + timedelta(hours=2), reason="Owner confirmed shift",
+            session,
+            context=context,
+            employee_id=employee_id,
+            branch_id=branch_id,
+            start_at=start,
+            end_at=start + timedelta(hours=2),
+            reason="Owner confirmed shift",
         )
         second = await service.prepare_field_readiness(
-            session, context=context, employee_id=employee_id, branch_id=branch_id,
-            start_at=start, end_at=start + timedelta(hours=2), reason="Owner confirmed shift",
+            session,
+            context=context,
+            employee_id=employee_id,
+            branch_id=branch_id,
+            start_at=start,
+            end_at=start + timedelta(hours=2),
+            reason="Owner confirmed shift",
         )
         assert first == second
         profile = await session.scalar(
@@ -116,22 +138,32 @@ async def test_field_readiness_rolls_back_profile_when_catalog_conflicts(
     async with factory() as session, session.begin():
         session.add(
             CapabilityCategory(
-                company_id=context.company.id, code="field_service",
-                display_name="Retired Field Service", status="inactive",
+                company_id=context.company.id,
+                code="field_service",
+                display_name="Retired Field Service",
+                status="inactive",
             )
         )
     start = datetime.now(timezone.utc)
     async with factory() as session:
         with pytest.raises(ValueError, match="category conflicts"):
             await service.prepare_field_readiness(
-                session, context=context, employee_id=employee_id, branch_id=branch_id,
-                start_at=start, end_at=start + timedelta(hours=1), reason="Owner confirmed shift",
+                session,
+                context=context,
+                employee_id=employee_id,
+                branch_id=branch_id,
+                start_at=start,
+                end_at=start + timedelta(hours=1),
+                reason="Owner confirmed shift",
             )
-        assert await session.scalar(
-            select(WorkforceCapabilityProfile).where(
-                WorkforceCapabilityProfile.employee_id == employee_id
+        assert (
+            await session.scalar(
+                select(WorkforceCapabilityProfile).where(
+                    WorkforceCapabilityProfile.employee_id == employee_id
+                )
             )
-        ) is None
+            is None
+        )
 
 
 @pytest.mark.asyncio

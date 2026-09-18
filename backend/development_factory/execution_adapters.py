@@ -9,7 +9,6 @@ from typing import Any, Literal, Protocol
 from development_factory.lia_contract import ResourceClaim
 from development_factory.reports import redact
 
-
 OPERATIONS_VERSION = "1.0"
 OperationKind = Literal[
     "inspect_file",
@@ -353,9 +352,12 @@ def _parse_operation(value: object) -> WorkerOperation:
         raise ExecutionAdapterError("inspect_paths requires at least one path")
     if kind != "inspect_paths" and optional_strings["path"] is None:
         raise ExecutionAdapterError(f"{kind} requires path")
-    if kind in MUTATION_OPERATIONS and kind != "replace_exact_text":
-        if optional_strings["text"] is None:
-            raise ExecutionAdapterError(f"{kind} requires text")
+    if (
+        kind in MUTATION_OPERATIONS
+        and kind != "replace_exact_text"
+        and optional_strings["text"] is None
+    ):
+        raise ExecutionAdapterError(f"{kind} requires text")
     if kind == "replace_exact_text" and (
         optional_strings["expected_text"] is None
         or optional_strings["replacement_text"] is None

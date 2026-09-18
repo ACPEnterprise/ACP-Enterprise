@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-
 from app.qbo_source.callback import (
     CALLBACK_PATH,
     ProtectedAuthorizationStateStore,

@@ -42,7 +42,12 @@ def validate_request(request: ProviderExecutionRequest) -> None:
     operations = set(boundary.permitted_operations)
     if request.repository_mutation_allowed:
         if request.execution_capability_profile != "code_change" or operations != {
-            "inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"
+            "inspect",
+            "modify",
+            "validate",
+            "commit",
+            "mechanical_reconcile",
+            "push",
         }:
             raise BoundaryViolation("Code-changing authority is incomplete.")
     elif (

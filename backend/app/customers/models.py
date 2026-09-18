@@ -80,9 +80,7 @@ class Customer(Base):
             "customer_number",
             name="uq_customers_company_id_customer_number",
         ),
-        UniqueConstraint(
-            "company_id", "id", name="uq_customers_company_id_id"
-        ),
+        UniqueConstraint("company_id", "id", name="uq_customers_company_id_id"),
         Index("ix_customers_company_id_status", "company_id", "status"),
         Index("ix_customers_company_id_display_name", "company_id", "display_name"),
         Index(

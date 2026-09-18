@@ -72,7 +72,9 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
         "base-uri 'self'",
         "form-action 'self'",
     ):
-        assert f"require_header_contains content-security-policy \"{directive}\"" in verifier
+        assert (
+            f'require_header_contains content-security-policy "{directive}"' in verifier
+        )
     assert "require_header_value strict-transport-security" in verifier
     assert "require_header_value x-frame-options DENY" in verifier
     assert (

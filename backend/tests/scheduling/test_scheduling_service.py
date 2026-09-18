@@ -392,14 +392,20 @@ async def test_unassigned_creation_skips_capacity_and_replays_without_duplicate(
     response = appointment_response(first)
     assert response.capacity_units is None
     async with factory() as session:
-        assert await SchedulingRepository.get_capacity_reservation(
-            session,
-            company_id=fixture.company.id,
-            appointment_id=first.id,
-        ) is None
-        assert await session.scalar(
-            select(func.count(Appointment.id)).where(Appointment.id == first.id)
-        ) == 1
+        assert (
+            await SchedulingRepository.get_capacity_reservation(
+                session,
+                company_id=fixture.company.id,
+                appointment_id=first.id,
+            )
+            is None
+        )
+        assert (
+            await session.scalar(
+                select(func.count(Appointment.id)).where(Appointment.id == first.id)
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio

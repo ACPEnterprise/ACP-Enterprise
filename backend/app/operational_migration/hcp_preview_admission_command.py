@@ -121,9 +121,7 @@ class PreviewAdmissionAuthority:
                         if value.get("successor_manifest_path")
                         else None
                     ),
-                    "successor_manifest_digest": value.get(
-                        "successor_manifest_digest"
-                    ),
+                    "successor_manifest_digest": value.get("successor_manifest_digest"),
                     "customer_control_sha256": value.get("customer_control_sha256"),
                     "zero_migration_drift": value.get("zero_migration_drift", False),
                     "rollback_verified": value.get("rollback_verified", False),
@@ -230,7 +228,9 @@ async def run(
         raise SafeEvidenceError("preview_runtime_boundary_invalid", "0" * 64)
     async with factory() as session:
         schemas = tuple(
-            (await session.scalars(text("SELECT version_num FROM alembic_version"))).all()
+            (
+                await session.scalars(text("SELECT version_num FROM alembic_version"))
+            ).all()
         )
         schema = schemas[0] if len(schemas) == 1 else None
         context = await resolve_rehearsal_context(session, authority, credentialed=True)  # type: ignore[arg-type]

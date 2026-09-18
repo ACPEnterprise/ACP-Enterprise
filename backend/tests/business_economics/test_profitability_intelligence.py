@@ -3,7 +3,6 @@ from datetime import date, datetime, timezone
 from uuid import uuid4
 
 import pytest
-
 from app.business_economics.profitability_domain import EconomicCategory
 from app.business_economics.profitability_intelligence import (
     AllocationBoundary,

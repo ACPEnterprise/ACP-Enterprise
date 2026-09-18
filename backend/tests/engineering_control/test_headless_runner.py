@@ -90,9 +90,7 @@ async def test_runner_rejects_delegation_for_another_authority() -> None:
     application = SimpleNamespace()
     runner = HeadlessRunner(application)
     runner.delegations = SimpleNamespace(
-        require_live=AsyncMock(
-            return_value=SimpleNamespace(authority_sha="b" * 40)
-        )
+        require_live=AsyncMock(return_value=SimpleNamespace(authority_sha="b" * 40))
     )
 
     with pytest.raises(

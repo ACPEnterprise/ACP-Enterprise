@@ -10,7 +10,6 @@ from app.jobs.query_repository import JobQueryRepository, job_query_repository
 from app.jobs.query_types import JobDetail, PaginatedJobs
 from app.platform.permissions.authorization import AuthorizationContext
 
-
 MAX_SEARCH_LENGTH = 200
 TYPE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 JOB_NUMBER = re.compile(r"^JOB-[0-9]{6,}$")

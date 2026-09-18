@@ -3,8 +3,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-
 from app.financial_reporting.errors import (
     ReportingIntegrityError,
     ReportingNotFound,
@@ -14,6 +12,7 @@ from app.financial_reporting.router import _generate
 from app.financial_reporting.router import (
     accounting_service as router_accounting_service,
 )
+from fastapi import HTTPException
 
 
 @pytest.mark.asyncio

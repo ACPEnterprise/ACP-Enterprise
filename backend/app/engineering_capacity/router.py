@@ -179,9 +179,7 @@ async def configure_worker_capacity(
         raise capacity_http_error(error) from error
 
 
-@router.post(
-    "/permanent-bindings", response_model=PermanentCapacityBindingResponse
-)
+@router.post("/permanent-bindings", response_model=PermanentCapacityBindingResponse)
 async def bind_permanent_capacity(
     data: PermanentCapacityBindingRequest,
     context: ManageContext,

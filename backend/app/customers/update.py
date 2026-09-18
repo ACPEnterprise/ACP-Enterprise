@@ -97,9 +97,7 @@ class CustomerUpdateService:
             )
         if "email" in requested:
             requested["normalized_email"] = (
-                normalize_email(str(requested["email"]))
-                if requested["email"]
-                else None
+                normalize_email(str(requested["email"])) if requested["email"] else None
             )
         changed_fields = CustomerRepository.apply_updates(customer, requested)
         business_fields = sorted(

@@ -34,7 +34,9 @@ def test_roadmap_maps_all_original_families_and_assigns_every_item() -> None:
 def test_migration_children_have_complete_truth_accounting() -> None:
     data = roadmap()
     children = [
-        item for item in data["milestones"] if item["id"].startswith("MIG.COMPLETENESS.")
+        item
+        for item in data["milestones"]
+        if item["id"].startswith("MIG.COMPLETENESS.")
     ]
     assert len(children) == 9
     required = {
@@ -50,7 +52,10 @@ def test_migration_children_have_complete_truth_accounting() -> None:
     assert all(set(item["migration_completeness"]) == required for item in children)
     customer = next(item for item in children if item["id"].endswith("CUSTOMERS"))
     assert customer["migration_completeness"]["NATIVE_BOUND"] == "2069"
-    assert customer["migration_completeness"]["PENDING_ADMISSION"] == "2241_ACCEPTED_UNBOUND"
+    assert (
+        customer["migration_completeness"]["PENDING_ADMISSION"]
+        == "2241_ACCEPTED_UNBOUND"
+    )
     assert customer["migration_completeness"]["BETA_OPERABLE"] == "FAIL"
 
 

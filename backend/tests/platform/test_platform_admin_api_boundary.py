@@ -60,7 +60,9 @@ def test_authentication_metadata_is_bounded_and_control_free() -> None:
     assert ip_address == "203.0.113.20"
     assert user_agent is not None
     assert len(user_agent) == MAX_RETAINED_USER_AGENT_LENGTH
-    assert not any(ord(character) < 32 or ord(character) == 127 for character in user_agent)
+    assert not any(
+        ord(character) < 32 or ord(character) == 127 for character in user_agent
+    )
     assert bounded_user_agent(" \x00\x7f ") is None
 
 

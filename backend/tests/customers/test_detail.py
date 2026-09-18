@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 import pytest_asyncio
+from app.core.config import settings
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -10,7 +11,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import settings
 from tests.customers.test_api import build_app, seed_customer_fixture
 
 

@@ -227,10 +227,18 @@ class IdentityOnboardingService:
                 sorted(permission.code for permission in permissions)
             ),
             readiness_stages={
-                "IDENTITY": "READY" if classification == "NEW_EMPLOYEE_CANDIDATE" else "REVIEW_REQUIRED",
-                "BRANCH": "READY" if branch is not None and context.can_access_branch(branch_id) else "BLOCKED",
-                "ROLE": "READY" if roles and "role_not_authorized" not in blockers else "BLOCKED",
-                "PERMISSIONS": "READY" if "permission_not_assignable" not in blockers else "BLOCKED",
+                "IDENTITY": "READY"
+                if classification == "NEW_EMPLOYEE_CANDIDATE"
+                else "REVIEW_REQUIRED",
+                "BRANCH": "READY"
+                if branch is not None and context.can_access_branch(branch_id)
+                else "BLOCKED",
+                "ROLE": "READY"
+                if roles and "role_not_authorized" not in blockers
+                else "BLOCKED",
+                "PERMISSIONS": "READY"
+                if "permission_not_assignable" not in blockers
+                else "BLOCKED",
                 "INVITATION": "PROVIDER_REQUIRED",
                 "ACTIVATION": "PENDING_INVITATION",
                 "MOBILE": "PENDING_ACTIVATION",
@@ -524,7 +532,9 @@ class IdentityOnboardingService:
                             )
                         )
                 if command.additional_permission_ids:
-                    permission_ids = tuple(sorted(set(command.additional_permission_ids), key=str))
+                    permission_ids = tuple(
+                        sorted(set(command.additional_permission_ids), key=str)
+                    )
                     permissions = tuple(
                         await session.scalars(
                             select(Permission).where(
@@ -898,7 +908,9 @@ class IdentityOnboardingService:
                 .with_for_update()
             )
             if request is None or not context.can_access_branch(request.branch_id):
-                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+                raise OnboardingConflictError(
+                    "Invitation delivery retry is unavailable."
+                )
             invitation = await session.scalar(
                 select(IdentityOnboardingInvitation)
                 .where(
@@ -929,7 +941,9 @@ class IdentityOnboardingService:
                 or not envelope.nonce
                 or user is None
             ):
-                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+                raise OnboardingConflictError(
+                    "Invitation delivery retry is unavailable."
+                )
             message = await session.scalar(
                 select(NotificationOutbox).where(
                     NotificationOutbox.company_id == context.company.id,
@@ -940,7 +954,9 @@ class IdentityOnboardingService:
                 )
             )
             if message is None:
-                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+                raise OnboardingConflictError(
+                    "Invitation delivery retry is unavailable."
+                )
             reason_digest = _digest(
                 {
                     "action": "owner_authorized_definitive_rejection_retry",
@@ -949,17 +965,21 @@ class IdentityOnboardingService:
                     "message_id": str(message.id),
                 }
             )
-            retried = await NotificationOutboxRepository.authorize_definitive_rejection_retry(
-                session,
-                notification_id=message.id,
-                company_id=context.company.id,
-                branch_id=request.branch_id,
-                actor_user_id=context.user.id,
-                retried_at=now,
-                reason_digest=reason_digest,
+            retried = (
+                await NotificationOutboxRepository.authorize_definitive_rejection_retry(
+                    session,
+                    notification_id=message.id,
+                    company_id=context.company.id,
+                    branch_id=request.branch_id,
+                    actor_user_id=context.user.id,
+                    retried_at=now,
+                    reason_digest=reason_digest,
+                )
             )
             if retried is None:
-                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+                raise OnboardingConflictError(
+                    "Invitation delivery retry is unavailable."
+                )
             audit_service.stage(
                 session,
                 AuditEntry(

@@ -4,7 +4,6 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-
 from app.platform.audit.access_service import AuditAccessService
 from app.platform.audit.contracts import AuditQuery
 from app.platform.permissions.authorization import AuthorizationContext

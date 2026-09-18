@@ -489,10 +489,7 @@ class WorkstreamRuntimeService:
                     EngineeringWorkstreamRuntime.acknowledged_control_version
                     < EngineeringWorkstreamControl.version,
                     *(
-                        (
-                            EngineeringWorkstreamRuntime.worker_session_id
-                            != session_id,
-                        )
+                        (EngineeringWorkstreamRuntime.worker_session_id != session_id,)
                         if session_id is not None
                         else (
                             EngineeringWorkstreamRuntime.acknowledgement_expires_at
@@ -521,7 +518,8 @@ class WorkstreamRuntimeService:
                     ),
                     else_=4,
                 ),
-                EngineeringWorkstreamControl.updated_at, EngineeringWorkstreamControl.id
+                EngineeringWorkstreamControl.updated_at,
+                EngineeringWorkstreamControl.id,
             )
             .limit(10)
         )

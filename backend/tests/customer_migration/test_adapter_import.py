@@ -6,14 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customer_migration.adapter_import import (
     BOUNDARY_VERSION,
@@ -54,6 +46,13 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def digest(value: str) -> str:
@@ -437,7 +436,9 @@ async def test_fails_closed_on_approved_boundary_mismatch(
 
 
 @pytest.mark.asyncio
-async def test_similarity_and_child_exceptions_do_not_block_parent_admission(database) -> None:
+async def test_similarity_and_child_exceptions_do_not_block_parent_admission(
+    database,
+) -> None:
     _, factory = database
     context = await seed_context(factory)
     raw = mock_output()
@@ -518,7 +519,9 @@ async def test_rejects_tampered_review_and_staging_candidate(database) -> None:
 
 
 @pytest.mark.asyncio
-async def test_name_only_operational_match_does_not_merge_native_identity(database) -> None:
+async def test_name_only_operational_match_does_not_merge_native_identity(
+    database,
+) -> None:
     _, factory = database
     context = await seed_context(factory)
     reviewed = review_adapter_output(mock_output(), source_system="synthetic")

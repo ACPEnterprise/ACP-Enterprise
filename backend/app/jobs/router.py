@@ -108,9 +108,7 @@ def translate_job_error(error: JobError) -> HTTPException:
             ClientRecovery.RETRY_AFTER_REFRESH,
             current_correlation_id(),
         )
-        return HTTPException(
-            status_code=409, detail=failure.detail()
-        )
+        return HTTPException(status_code=409, detail=failure.detail())
     if isinstance(error, (JobValidationError, JobQueryValidationError)):
         failure = SafeFailure(
             FailureCode.VALIDATION,
@@ -118,9 +116,7 @@ def translate_job_error(error: JobError) -> HTTPException:
             ClientRecovery.USER_CORRECTION_REQUIRED,
             current_correlation_id(),
         )
-        return HTTPException(
-            status_code=422, detail=failure.detail()
-        )
+        return HTTPException(status_code=422, detail=failure.detail())
     failure = SafeFailure(
         FailureCode.INTERNAL_FAILURE,
         "Job operation could not be completed.",

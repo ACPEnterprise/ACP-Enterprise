@@ -68,7 +68,9 @@ def test_every_useful_standalone_question_routes_to_bounded_sources() -> None:
                 if case.family == "job"
                 else None
             ),
-            topic_domains=() if case.family not in follow_up_families else (case.family,),
+            topic_domains=()
+            if case.family not in follow_up_families
+            else (case.family,),
         )
         assert plan.intent is not QuestionIntent.UNSUPPORTED, case.case_id
         assert plan.domains, case.case_id

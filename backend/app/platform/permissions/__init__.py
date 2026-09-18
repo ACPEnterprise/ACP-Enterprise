@@ -1,12 +1,12 @@
+from app.platform.permissions.authorization import (
+    AuthorizationContext,
+    AuthorizationService,
+)
 from app.platform.permissions.models import (
     MembershipRole,
     Permission,
     Role,
     RolePermission,
-)
-from app.platform.permissions.authorization import (
-    AuthorizationContext,
-    AuthorizationService,
 )
 
 __all__ = [

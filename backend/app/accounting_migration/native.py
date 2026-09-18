@@ -178,12 +178,13 @@ class NativeOpeningStateService:
             policy.materiality_policy_reference,
         )
         if any(not value.strip() for value in references):
-            raise AccountingValidation("Every opening Finance policy reference is required")
+            raise AccountingValidation(
+                "Every opening Finance policy reference is required"
+            )
         if len(policy.currency) != 3 or policy.currency != policy.currency.upper():
             raise AccountingValidation("Opening currency must be an ISO currency")
         if len(policy.approval_evidence_digest) != 64 or any(
-            value not in "0123456789abcdef"
-            for value in policy.approval_evidence_digest
+            value not in "0123456789abcdef" for value in policy.approval_evidence_digest
         ):
             raise AccountingValidation("Opening approval evidence digest is invalid")
 
@@ -202,34 +203,49 @@ class NativeOpeningStateService:
         OpeningMigrationRuntime.validate_plan(package, plan)
         self._validate_policy(policy)
         company_id = UUID(package.binding.target_company_id)
-        if preparer.company.id != company_id or finance_approver.company.id != company_id:
+        if (
+            preparer.company.id != company_id
+            or finance_approver.company.id != company_id
+        ):
             raise AccountingNotFound("Opening target Company was not found")
         if preparer.user.id == finance_approver.user.id:
-            raise AccountingConflict("Opening preparer and Finance approver must differ")
-        if not preparer.has_permission(AccountingPermission.JOURNAL_PREPARE) or not preparer.has_permission(
-            AccountingPermission.RECONCILE
-        ):
+            raise AccountingConflict(
+                "Opening preparer and Finance approver must differ"
+            )
+        if not preparer.has_permission(
+            AccountingPermission.JOURNAL_PREPARE
+        ) or not preparer.has_permission(AccountingPermission.RECONCILE):
             raise AccountingValidation("Opening preparer lacks Accounting authority")
         if not finance_approver.has_permission(AccountingPermission.FINANCE_APPROVE):
             raise AccountingValidation("Opening Finance approval authority is required")
         cutoff = datetime.fromisoformat(package.cutoff)
         if cutoff.tzinfo is None or cutoff.date() != policy.cutover_date:
-            raise AccountingValidation("Approved cutover date conflicts with package evidence")
+            raise AccountingValidation(
+                "Approved cutover date conflicts with package evidence"
+            )
         if package.binding.currency != policy.currency:
             raise AccountingValidation("Opening package currency conflicts with policy")
 
         chart = await self.repository.active_chart(session, company_id)
         period = await self.repository.period(session, company_id, policy.period_id)
         if chart is None or chart.currency != policy.currency:
-            raise AccountingValidation("Active native chart and opening currency are required")
+            raise AccountingValidation(
+                "Active native chart and opening currency are required"
+            )
         if chart.accounting_basis != package.binding.accounting_basis:
-            raise AccountingValidation("Opening accounting basis conflicts with native chart")
+            raise AccountingValidation(
+                "Opening accounting basis conflicts with native chart"
+            )
         if period is None or not (
             period.start_date <= policy.cutover_date <= period.end_date
         ):
-            raise AccountingValidation("Opening cutover date has no valid Accounting period")
+            raise AccountingValidation(
+                "Opening cutover date has no valid Accounting period"
+            )
         if period.status not in {"open", "reopened"}:
-            raise AccountingConflict("Opening Accounting period does not accept posting")
+            raise AccountingConflict(
+                "Opening Accounting period does not accept posting"
+            )
 
         account_map: dict[str, AccountTargetBinding] = {}
         duplicate_accounts: set[str] = set()
@@ -244,7 +260,9 @@ class NativeOpeningStateService:
                 duplicate_branches.add(branch_binding_item.source_branch_id)
             branch_map[branch_binding_item.source_branch_id] = branch_binding_item
 
-        artifact_map = {artifact.artifact_id: artifact for artifact in package.artifacts}
+        artifact_map = {
+            artifact.artifact_id: artifact for artifact in package.artifacts
+        }
         native_lines: list[OpeningReconciliationLine] = []
         limitations: set[str] = set()
         for line in plan.journal_lines:
@@ -253,13 +271,20 @@ class NativeOpeningStateService:
             branch_binding = branch_map.get(line.branch_id)
             line_limitations: list[str] = []
             state = ReconciliationState.RECONCILED
-            target_account_id = account_binding.target_account_id if account_binding else None
-            target_branch_id = branch_binding.target_branch_id if branch_binding else None
+            target_account_id = (
+                account_binding.target_account_id if account_binding else None
+            )
+            target_branch_id = (
+                branch_binding.target_branch_id if branch_binding else None
+            )
             component = account_binding.component if account_binding else None
             if line.account_source_id in duplicate_accounts:
                 state = ReconciliationState.CONFLICTING
                 line_limitations.append("duplicate_account_mapping")
-            elif account_binding is None or not account_binding.finance_mapping_reference.strip():
+            elif (
+                account_binding is None
+                or not account_binding.finance_mapping_reference.strip()
+            ):
                 state = ReconciliationState.MISSING_EVIDENCE
                 line_limitations.append("account_mapping_missing")
             if line.branch_id in duplicate_branches:
@@ -268,7 +293,9 @@ class NativeOpeningStateService:
             elif branch_binding is None:
                 state = ReconciliationState.MISSING_EVIDENCE
                 line_limitations.append("branch_mapping_missing")
-            elif not preparer.can_access_branch(branch_binding.target_branch_id) or not finance_approver.can_access_branch(
+            elif not preparer.can_access_branch(
+                branch_binding.target_branch_id
+            ) or not finance_approver.can_access_branch(
                 branch_binding.target_branch_id
             ):
                 raise AccountingNotFound("Opening target Branch was not found")
@@ -306,8 +333,12 @@ class NativeOpeningStateService:
                         state = ReconciliationState.MISSING_EVIDENCE
                         line_limitations.append("control_account_assignment_missing")
 
-            expected_debit = line.debit if state is ReconciliationState.RECONCILED else None
-            expected_credit = line.credit if state is ReconciliationState.RECONCILED else None
+            expected_debit = (
+                line.debit if state is ReconciliationState.RECONCILED else None
+            )
+            expected_credit = (
+                line.credit if state is ReconciliationState.RECONCILED else None
+            )
             imported_digest = _digest(
                 {
                     "artifact_sha256": artifact.sha256,
@@ -446,8 +477,13 @@ class NativeOpeningStateService:
         finance_approver: AuthorizationContext,
         poster: AuthorizationContext,
     ) -> NativeOpeningReceipt:
-        if not reconciliation.eligible_for_posting or reconciliation.state is not ReconciliationState.APPROVED_ELIGIBLE:
-            raise AccountingValidation("Opening reconciliation is not eligible for posting")
+        if (
+            not reconciliation.eligible_for_posting
+            or reconciliation.state is not ReconciliationState.APPROVED_ELIGIBLE
+        ):
+            raise AccountingValidation(
+                "Opening reconciliation is not eligible for posting"
+            )
         if (
             preparer.user.id != reconciliation.prepared_by_user_id
             or finance_approver.user.id != reconciliation.approved_by_user_id
@@ -463,7 +499,10 @@ class NativeOpeningStateService:
         if not poster.has_permission(AccountingPermission.JOURNAL_POST):
             raise AccountingValidation("Opening poster lacks Accounting authority")
         if not all(
-            all(context.can_access_branch(branch_id) for branch_id in reconciliation.branch_ids)
+            all(
+                context.can_access_branch(branch_id)
+                for branch_id in reconciliation.branch_ids
+            )
             for context in (preparer, finance_approver, poster)
         ):
             raise AccountingNotFound("Opening target Branch was not found")

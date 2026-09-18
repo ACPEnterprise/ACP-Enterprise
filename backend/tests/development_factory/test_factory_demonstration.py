@@ -9,13 +9,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from development_factory.owner_review import OwnerReviewManager
 from development_factory.review_records import canonical_digest
 from development_factory.worker_execution import WorkerExecutor
 from development_factory.worker_records import load_worker_record_payload
 from development_factory.workspaces import WorkspaceManager
-
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None,

@@ -21,9 +21,9 @@ from app.workforce.models import (
     WorkRestriction,
 )
 from app.workforce.records import (
+    WorkforceBranchEligibilityRecord,
     WorkforceCapabilityProfileRecord,
     WorkforceCapabilityRecord,
-    WorkforceBranchEligibilityRecord,
     WorkforceCertificationRecord,
     WorkforceEquipmentRecord,
     WorkforceGeographicCoverageRecord,
@@ -605,7 +605,7 @@ def _profile_record(
 async def _add(session: AsyncSession, record: object) -> UUID:
     session.add(record)
     await session.flush()
-    record_id = getattr(record, "id")
+    record_id = getattr(record, "id", None)
     if not isinstance(record_id, UUID):
         raise TypeError("persisted workforce record did not receive a UUID")
     return record_id

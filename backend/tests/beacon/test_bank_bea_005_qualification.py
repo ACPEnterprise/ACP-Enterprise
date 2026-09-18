@@ -35,9 +35,7 @@ def contract_payload() -> dict[str, object]:
 
 def test_qualification_binds_canonical_workflow_contract() -> None:
     payload = evidence()
-    assert payload["implementation_sha"] == (
-        "64e2cc6ce850529ad52682802cb47f5184a2de02"
-    )
+    assert payload["implementation_sha"] == ("64e2cc6ce850529ad52682802cb47f5184a2de02")
     assert payload["contract_digest"] == digest(contract_payload())
     unsigned = dict(payload)
     unsigned.pop("qualification_fingerprint")

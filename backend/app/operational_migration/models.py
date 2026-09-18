@@ -1041,11 +1041,15 @@ class HcpSource4NativeBindingEvidence(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
-            "company_id", "domain", "source4_source_id",
+            "company_id",
+            "domain",
+            "source4_source_id",
             name="uq_hcp_source4_binding_source",
         ),
         UniqueConstraint(
-            "company_id", "domain", "native_id",
+            "company_id",
+            "domain",
+            "native_id",
             name="uq_hcp_source4_binding_target",
         ),
         UniqueConstraint("binding_digest", name="uq_hcp_source4_binding_digest"),

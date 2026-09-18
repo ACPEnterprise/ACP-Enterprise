@@ -156,8 +156,7 @@ async def acquire_and_reconcile(
         "counts": dict(sorted(counts.items())),
         "unavailable": dict(sorted(unavailable.items())),
         "zero_deltas": all(
-            value == "0.00" or value == "0"
-            for value in reconciliation.deltas.values()
+            value == "0.00" or value == "0" for value in reconciliation.deltas.values()
         ),
         "invariants": dict(sorted(reconciliation.invariants.items())),
     }
@@ -207,9 +206,7 @@ def main() -> None:
         print(json.dumps(result, sort_keys=True))
     except SandboxFixtureError as error:
         print(
-            json.dumps(
-                {"state": "REJECTED", "error_code": error.code}, sort_keys=True
-            )
+            json.dumps({"state": "REJECTED", "error_code": error.code}, sort_keys=True)
         )
         raise SystemExit(2) from None
     except Exception:  # noqa: BLE001 - command output must remain source-safe

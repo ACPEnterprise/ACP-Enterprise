@@ -1,5 +1,4 @@
 import pytest
-
 from app.operational_migration.hcp_legacy_projection_classification import (
     LegacyProjectionDisposition,
     ProjectionCorrelationEvidence,
@@ -59,8 +58,7 @@ def test_every_supported_domain_classifies_create_new(domain: str) -> None:
         current_bindings=(), sealed_source4=(SealedIdentity(domain, "source"),)
     )
     assert (
-        result.records[0].disposition
-        == LegacyProjectionDisposition.SEALED_CREATE_NEW
+        result.records[0].disposition == LegacyProjectionDisposition.SEALED_CREATE_NEW
     )
     assert result.report.canonical_admission_allowed is True
 
@@ -72,10 +70,7 @@ def test_source4_without_matching_legacy_is_a_conflict() -> None:
         ),
         sealed_source4=(SealedIdentity("payment", "source"),),
     )
-    assert (
-        result.records[0].disposition
-        == LegacyProjectionDisposition.GENUINE_CONFLICT
-    )
+    assert result.records[0].disposition == LegacyProjectionDisposition.GENUINE_CONFLICT
     assert result.report.canonical_blocker_count == 1
 
 
@@ -121,12 +116,12 @@ def test_invalid_evidence_fails_closed(
     bindings: tuple[IdentityBinding, ...], sealed: tuple[SealedIdentity, ...]
 ) -> None:
     with pytest.raises(ValueError):
-        classify_legacy_projections(
-            current_bindings=bindings, sealed_source4=sealed
-        )
+        classify_legacy_projections(current_bindings=bindings, sealed_source4=sealed)
 
 
-def test_correlated_classification_uses_unique_content_and_holds_negative_match() -> None:
+def test_correlated_classification_uses_unique_content_and_holds_negative_match() -> (
+    None
+):
     exact = "1" * 64
     missing = "2" * 64
     result = classify_correlated_legacy(
@@ -134,9 +129,7 @@ def test_correlated_classification_uses_unique_content_and_holds_negative_match(
             ProjectionCorrelationEvidence("customer", "old-a", "target-a", (exact,)),
             ProjectionCorrelationEvidence("customer", "old-b", "target-b", (missing,)),
         ),
-        sealed=(
-            ProjectionCorrelationEvidence("customer", "new-a", None, (exact,)),
-        ),
+        sealed=(ProjectionCorrelationEvidence("customer", "new-a", None, (exact,)),),
     )
     assert [item.disposition for item in result.records] == [
         LegacyProjectionDisposition.EXACT_SUCCESSOR,
@@ -161,8 +154,7 @@ def test_authoritative_provider_nonmatch_proves_unrelated() -> None:
         ),
     )
     assert (
-        result.records[0].disposition
-        == LegacyProjectionDisposition.PROVABLY_UNRELATED
+        result.records[0].disposition == LegacyProjectionDisposition.PROVABLY_UNRELATED
     )
     assert result.report.canonical_admission_allowed is True
 
@@ -179,7 +171,4 @@ def test_disagreeing_unique_signals_are_a_genuine_conflict() -> None:
             ProjectionCorrelationEvidence("customer", "new-b", None, ("2" * 64,)),
         ),
     )
-    assert (
-        result.records[0].disposition
-        == LegacyProjectionDisposition.GENUINE_CONFLICT
-    )
+    assert result.records[0].disposition == LegacyProjectionDisposition.GENUINE_CONFLICT

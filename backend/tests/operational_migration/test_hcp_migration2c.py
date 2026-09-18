@@ -2,7 +2,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_migration2b import (
     SOURCE4_PACKAGE_DIGEST,
     MasterRunCommand,

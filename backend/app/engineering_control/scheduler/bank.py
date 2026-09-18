@@ -78,10 +78,7 @@ class MilestoneBankRecord(BankModel):
                 or self.external_gate != "none"
             ):
                 raise ValueError("READY milestone has an unresolved gate")
-        if (
-            self.readiness_state == "BLOCKED_DEPENDENCY"
-            and not self.dependencies
-        ):
+        if self.readiness_state == "BLOCKED_DEPENDENCY" and not self.dependencies:
             raise ValueError("dependency-blocked milestone has no dependency")
         if self.ownership_state == "ACTIVE_OWNED":
             if not self.owner_decision_required:
@@ -98,10 +95,7 @@ class MilestoneBankRecord(BankModel):
             and not self.finance_decision_required
         ):
             raise ValueError("Finance-blocked milestone has no Finance gate")
-        if (
-            self.readiness_state == "BLOCKED_EXTERNAL"
-            and self.external_gate == "none"
-        ):
+        if self.readiness_state == "BLOCKED_EXTERNAL" and self.external_gate == "none":
             raise ValueError("externally blocked milestone has no external gate")
         return self
 
@@ -116,9 +110,7 @@ class MilestoneBank(BankModel):
     canonical_runtime_manifest: str = Field(min_length=1)
     integration_rule: str = Field(min_length=1)
     active_ownership: dict[str, str]
-    milestones: tuple[MilestoneBankRecord, ...] = Field(
-        min_length=200, max_length=300
-    )
+    milestones: tuple[MilestoneBankRecord, ...] = Field(min_length=200, max_length=300)
     fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
@@ -178,9 +170,7 @@ def ingest_milestone_bank(raw: Mapping[str, object]) -> MilestoneBank:
 
 def load_milestone_bank() -> MilestoneBank:
     """Load the packaged authoritative planning artifact."""
-    path = files("app.engineering_control.scheduler").joinpath(
-        "milestone-bank.v2.json"
-    )
+    path = files("app.engineering_control.scheduler").joinpath("milestone-bank.v2.json")
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -221,9 +211,7 @@ def _validate_graph_and_provenance(bank: MilestoneBank) -> None:
     if len(names) != len(set(names)):
         raise MilestoneBankIngestionError("duplicate milestone name")
     by_id = {item.milestone_id: item for item in bank.milestones}
-    expected_evidence = (
-        f"origin/customer-management-v1@{bank.authoritative_start_sha}"
-    )
+    expected_evidence = f"origin/customer-management-v1@{bank.authoritative_start_sha}"
     for item in bank.milestones:
         if expected_evidence not in item.repository_evidence:
             raise MilestoneBankIngestionError(
