@@ -8,6 +8,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -39,9 +43,6 @@ from app.price_book.schemas import (
     TaxClassificationCreate,
 )
 from app.price_book.service import PriceBookService
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -293,6 +294,50 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
         category_search.service_items[0].internal_description
         == "Use approved cable and inspect trap."
     )
+
+    async with factory() as session:
+        child_category = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(
+                code="DRAIN-CHILD",
+                name="Main Line",
+                parent_id=item.category_id,
+            ),
+        )
+    async with factory() as session:
+        child_item = await service.create_item(
+            session,
+            context=context,
+            payload=ServiceItemCreate(
+                category_id=child_category.id,
+                code="DRAIN-MAIN",
+                name="Main drain clearing",
+                customer_description="Clear the main drain line.",
+                internal_description="Use approved main-line equipment.",
+                branch_id=None,
+            ),
+        )
+    async with factory() as session:
+        parent_category = await service.catalog(
+            session,
+            context=manager_context,
+            category_id=item.category_id,
+        )
+    assert {record.id for record in parent_category.service_items} == {
+        item.id,
+        child_item.id,
+    }
+    async with factory() as session:
+        parent_category_search = await service.catalog(
+            session,
+            context=manager_context,
+            search="drain services",
+        )
+    assert {record.id for record in parent_category_search.service_items} == {
+        item.id,
+        child_item.id,
+    }
     assert "internal_description" not in str(serialized_catalog)
     async with factory() as session:
         assert (
