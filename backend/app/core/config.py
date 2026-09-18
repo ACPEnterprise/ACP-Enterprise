@@ -111,7 +111,10 @@ class Settings(BaseSettings):
     hsts_max_age_seconds: int = 31536000
     hsts_include_subdomains: bool = True
     hsts_preload: bool = False
-    content_security_policy: str = "default-src 'self'; frame-ancestors 'none'"
+    content_security_policy: str = (
+        "default-src 'self'; script-src 'self'; object-src 'none'; "
+        "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    )
     permissions_policy: str = "camera=(), microphone=(self), geolocation=()"
     referrer_policy: str = "strict-origin-when-cross-origin"
 

@@ -39,6 +39,16 @@ require_header_value() {
   fi
 }
 
+require_header_contains() {
+  header_name=$1
+  required_directive=$2
+  header_value=$(grep -i "^${header_name}:" "$temporary_headers" || true)
+  if ! printf '%s\n' "$header_value" | grep -Fq "$required_directive"; then
+    echo "Missing required $header_name directive: $required_directive" >&2
+    exit 1
+  fi
+}
+
 require_https_redirect() {
   hostname=$1
   curl --silent --show-error --max-time 15 --head "http://$hostname/" >"$temporary_headers"
@@ -73,6 +83,10 @@ for base_url in "$preview_url" "$beta_url"; do
   require_header_value referrer-policy strict-origin-when-cross-origin
   require_header_value permissions-policy '.+'
   require_header_value content-security-policy '.+'
+  require_header_contains content-security-policy "script-src 'self'"
+  require_header_contains content-security-policy "object-src 'none'"
+  require_header_contains content-security-policy "base-uri 'self'"
+  require_header_contains content-security-policy "form-action 'self'"
 done
 
 # General application navigation may retain same-origin context, while pages

@@ -40,6 +40,7 @@ from app.platform.security.metrics import security_metrics
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 rate_limiter = AuthenticationRateLimiter()
+MAX_RETAINED_USER_AGENT_LENGTH = 512
 
 
 def development_token(plaintext_token: str | None, *, environment: str) -> str | None:
@@ -49,9 +50,20 @@ def development_token(plaintext_token: str | None, *, environment: str) -> str |
     return plaintext_token
 
 
+def bounded_user_agent(value: str | None) -> str | None:
+    if value is None:
+        return None
+    printable = "".join(
+        character if ord(character) >= 32 and ord(character) != 127 else " "
+        for character in value
+    )
+    normalized = " ".join(printable.split())[:MAX_RETAINED_USER_AGENT_LENGTH]
+    return normalized or None
+
+
 def client_metadata(request: Request) -> tuple[str | None, str | None]:
     ip_address = request.client.host if request.client else None
-    return ip_address, request.headers.get("user-agent")
+    return ip_address, bounded_user_agent(request.headers.get("user-agent"))
 
 
 async def enforce_rate_limit(
