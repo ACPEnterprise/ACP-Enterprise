@@ -175,6 +175,7 @@ class FactoryLiveLaneTarget(StrictSchema):
     )
     next_queued_item: Optional[str] = Field(default=None, min_length=1, max_length=200)
     queue_depth: int = Field(default=0, ge=0, le=10000)
+    last_handoff_at: Optional[datetime] = None
     evidence: list[str] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
@@ -188,6 +189,10 @@ class FactoryLiveLaneTarget(StrictSchema):
             raise ValueError("active controller state requires a current assignment")
         if self.lifecycle_state == "ELIGIBLE_IDLE" and self.current_assignment is not None:
             raise ValueError("eligible idle controller cannot retain an assignment")
+        if self.lifecycle_state == "WAITING_INTEGRATION" and self.last_handoff_at is None:
+            raise ValueError("waiting integration requires the handoff timestamp")
+        if self.last_handoff_at is not None and self.last_handoff_at.tzinfo is None:
+            raise ValueError("last_handoff_at must include a timezone")
         return self
 
 

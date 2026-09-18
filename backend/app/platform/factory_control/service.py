@@ -636,6 +636,7 @@ class FactoryControlService:
         reported_current_assignment: str | None = None,
         reported_next_queued_item: str | None = None,
         reported_queue_depth: int | None = None,
+        reported_handoff_at: datetime | None = None,
         reported_evidence: list[str] | None = None,
         observed_at: datetime | None = None,
     ) -> tuple[FactoryControlEvent, bool]:
@@ -732,6 +733,9 @@ class FactoryControlService:
                 "queue_depth": projected_queue_depth,
                 "current_assignment": current_assignment,
                 "next_queued_item": next_queued_item,
+                "last_handoff_at": reported_handoff_at.isoformat()
+                if reported_handoff_at
+                else None,
                 "evidence": reported_evidence or [],
             }
         )
@@ -762,7 +766,7 @@ class FactoryControlService:
             }[worker.lifecycle_state],
         )
         self_refill_health = reported_self_refill_health or node_self_refill_health
-        return await self.ingest(
+        event, duplicate = await self.ingest(
             session,
             controller_worker_identity_id=controller_worker_identity_id,
             controller_tenant_company_id=controller_tenant_company_id,
@@ -798,6 +802,19 @@ class FactoryControlService:
                 },
             ),
         )
+        if reported_handoff_at is not None:
+            lane = await session.scalar(
+                select(FactoryLaneState)
+                .where(FactoryLaneState.lane_code == (lane_code or worker.name))
+                .with_for_update()
+            )
+            if lane is not None and (
+                lane.last_handoff_at is None
+                or reported_handoff_at > lane.last_handoff_at
+            ):
+                lane.last_handoff_at = reported_handoff_at
+                await session.flush()
+        return event, duplicate
 
     async def sync_authoritative_lanes(
         self,
@@ -826,6 +843,7 @@ class FactoryControlService:
                     reported_current_assignment=target.current_assignment,
                     reported_next_queued_item=target.next_queued_item,
                     reported_queue_depth=target.queue_depth,
+                    reported_handoff_at=target.last_handoff_at,
                     reported_evidence=target.evidence,
                     observed_at=observed_at,
                 )

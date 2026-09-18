@@ -29,6 +29,7 @@ def environment(tmp_path: Path) -> dict[str, str]:
                     "milestone_code": "PAYROLL.MUTATION.AUTHORITY",
                     "current_assignment": "Issue #449 cumulative integration",
                     "queue_depth": 3,
+                    "last_handoff_at": "2026-09-18T20:14:05Z",
                     "evidence": ["PR #450", "PR #470", "PR #471"],
                 }
             ]
@@ -46,6 +47,7 @@ def test_live_config_preserves_controller_state_separately_from_node_capacity(
 
     assert config.targets[0]["lifecycle_state"] == "WAITING_INTEGRATION"
     assert config.targets[0]["queue_depth"] == 3
+    assert config.targets[0]["last_handoff_at"] == "2026-09-18T20:14:05Z"
     assert config.targets[0]["evidence"] == ["PR #450", "PR #470", "PR #471"]
 
 
