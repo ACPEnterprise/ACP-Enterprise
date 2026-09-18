@@ -180,3 +180,65 @@ dependency drift or Podfile repair was claimed.
   current Intelligence, preserve the shared semantic renderer, and qualify
   native speech lifecycle/build behavior. Do not revive the stale raw-answer
   path.
+
+## Factory 2.0 current-authority reconciliation — 2026-09-17
+
+- Protected authority remained `785511810d9399c33c8d8727cf6fe01420fc1226`.
+- Prior Intelligence head was `d484fcd605d220dc73d5f532881ff64669322042`.
+- Protected reconciliation was already applied before this cycle; the new
+  protected authority remains an ancestor.
+
+### New worker dispositions
+
+- Laptop-B `origin/work/lia-delivery-style-device-prototype-1` at
+  `2f9d41efc303e4ebe22e1edc15dd7ae2c8d30a51`: `USEFUL_NOW`, integrated as a
+  bounded current-Beta voice improvement. It preserves the semantic renderer
+  and material values while adding deterministic local-English voice inventory,
+  reviewed browser-local preference, safe fallback, and same-corpus A/B
+  evaluation. No provider, cloning, or schema change.
+- Phone `origin/work/laptop1-phone-twelve-hats-speech-readiness-1` at
+  `cbebae37f68bc62e7180a4feacb681c0f30b4b34`: `PARTIALLY_CONTAINED /
+  USEFUL_NOW`. The current branch was based on stale `2602beb...`; its
+  reconciled shared-renderer restoration is compatible. The previously
+  integrated lifecycle salvage was retained, and the current Phone checkpoint
+  is not replayed wholesale because its remaining diff includes stale
+  semantic/test changes. No owner-route fallback was admitted.
+- Older Phone raw-answer branches remain rejected as regressive.
+
+### Current product classification
+
+- Variant A: improved semantic spoken renderer — `CURRENT`.
+- Variant B: reviewed distinct local/device voice selection — `BETA-CAPABLE`.
+- Variant C: governed cross-device Twelve Hats-owned TTS successor — justified
+  future work, not a commercial-provider integration.
+- Web browser speech and Mobile Expo/native speech remain transitional local
+  fallbacks. They cannot guarantee stable expressive identity across devices.
+
+### Resulting bounded work
+
+- A’s LIA continuation checkpoint: `0a9074e1`.
+- Phone lifecycle checkpoint: `d3d4cd14`.
+- B device-voice checkpoint: integrated in the current cumulative head.
+- Current cumulative head after this ledger/code update: to be recorded at
+  push completion below.
+- No migration or Alembic change. Employee-safe authorization and semantic
+  Web/Mobile parity remain unchanged.
+
+### Qualification
+
+- Web LIA/voice focused tests: passed; full frontend qualification remains
+  available from the prior cumulative checkpoint.
+- Mobile LIA focused tests: 9/9 passed after lifecycle salvage; Mobile
+  typecheck, ESLint, and config validation passed.
+- Python compilation and `git diff --check` passed.
+- Backend pytest and disposable PostgreSQL migration remain unavailable in
+  this environment and are not claimed as passed.
+
+### Worker refill
+
+- Laptop-A: continue LIA spoken-presence and contract-acceptance defects.
+- Laptop-B: evaluate the current device voice prototype against the 12-case
+  corpus and return to delivery-style evidence; no external provider path.
+- Phone: rebase from the resulting cumulative head for TestFlight readiness,
+  preserving semantic speech, background cancellation, and employee-safe
+  routing.
