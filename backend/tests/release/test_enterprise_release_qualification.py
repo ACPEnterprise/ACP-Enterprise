@@ -146,6 +146,34 @@ def test_evidence_directory_and_artifacts_are_private_and_exclusive(
     assert artifact.read_text(encoding="utf-8") == "first\n"
 
 
+@pytest.mark.parametrize(
+    ("check_key", "output", "reason"),
+    (
+        ("frontend_tests", "stderr | route test\n", "test suite emitted stderr"),
+        (
+            "mobile_tests",
+            "The current testing environment is not configured to support act(...)\n",
+            "React updates escaped act",
+        ),
+        ("frontend_tests", "Warning: unsafe update\n", "runtime warning"),
+        ("mobile_tests", "  console.warn unexpected\n", "console output"),
+    ),
+)
+def test_ui_test_warnings_fail_closed(
+    check_key: str, output: str, reason: str
+) -> None:
+    module = _module()
+
+    assert reason in module.test_output_warning(check_key, output)
+
+
+def test_clean_ui_and_backend_output_is_not_misclassified() -> None:
+    module = _module()
+
+    assert module.test_output_warning("frontend_tests", "550 passed\n") is None
+    assert module.test_output_warning("backend_tests", "Warning: recorded\n") is None
+
+
 @pytest.mark.parametrize("status", ["FAIL", "BLOCKED"])
 def test_incomplete_executed_qualification_fails_closed(status: str) -> None:
     module = _module()
