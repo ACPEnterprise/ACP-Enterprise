@@ -392,7 +392,7 @@ describe("LIA workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
     state.askMutate.mock.calls.at(-1)?.[1].onSuccess({
       conversation_id: "broad-conversation",
-      subject_domain: "jobs",
+      subject_domain: null,
       subject_id: null,
       authorization_version: 41,
       evidence_digest: "d".repeat(64),
@@ -407,7 +407,12 @@ describe("LIA workspace", () => {
       {
         question: "Why?",
         conversation_id: "broad-conversation",
-        context: expect.objectContaining({ topic_domains: domains }),
+        context: {
+          authorization_version: 41,
+          evidence_digest: "d".repeat(64),
+          as_of: "2026-09-17T20:00:00Z",
+          topic_domains: domains,
+        },
       },
       expect.any(Object),
     );
