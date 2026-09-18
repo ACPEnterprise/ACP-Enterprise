@@ -117,9 +117,12 @@ _PRIVATE_KEY = re.compile(
     r"-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
     re.DOTALL,
 )
+_SECRET_FIELD_ASSIGNMENTS = "|".join(
+    re.escape(name).replace("_", "[_-]?")
+    for name in sorted(SECRET_FIELDS, key=lambda value: (-len(value), value))
+)
 _SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(?P<name>api[_-]?key|access[_-]?token|refresh[_-]?token|"
-    r"client[_-]?secret|password|secret|token)\s*[:=]\s*"
+    rf"(?i)\b(?P<name>{_SECRET_FIELD_ASSIGNMENTS})\s*[:=]\s*"
     r"(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;&]+)"
 )
 _LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
