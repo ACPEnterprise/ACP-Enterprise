@@ -16,13 +16,21 @@ from app.database.session import get_database_session
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.payroll.calculation import PayrollGrossCalculationEngine
+from app.payroll.calculation_authority import (
+    build_federal_authority_inputs,
+    configured_input_cipher,
+)
 from app.payroll.calculation_inputs import resolve_tax_deduction_requirements
 from app.payroll.contracts import PayrollConflictError, canonical_digest
+from app.payroll.finalization import GrossReviewDecision, PayrollGrossResultService
 from app.payroll.models import (
-    PayrollPaperCheckEvidenceRecord,
     PayrollCalculationInputSnapshotRecord,
     PayrollGrossCalculationResultRecord,
+    PayrollInputAuthorityVersion,
+    PayrollPaperCheckEvidenceRecord,
     PayrollPaymentDestinationVersion,
+    PayrollProtectedInputEnvelope,
     PayrollRunCloseRecord,
     PayrollRunMemberRecord,
     PayrollRunRecord,
@@ -43,9 +51,21 @@ from app.payroll.run_finalization import (
     PayrollRunReviewDecision,
     PayrollRunService,
 )
+from app.payroll.service import PayrollAuthorityService
+from app.payroll.tax_authority import (
+    AuthorityRequirement,
+    PayrollInputAuthorityService,
+    PayrollInputDomain,
+)
+from app.payroll.tax_calculation import (
+    ApprovedGrossPayEvidence,
+    PayrollTaxDeductionCalculationEngine,
+    ProviderEnvironment,
+)
+from app.payroll.tax_finalization import PayrollTaxDeductionResultService
 from app.platform.audit.service import AuditEntry, AuditService
-from app.platform.idempotency.models import MutationReceipt
 from app.platform.employees.models import Employee
+from app.platform.idempotency.models import MutationReceipt
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
 from app.timekeeping.models import PayPeriod
@@ -304,6 +324,58 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
         blockers.extend(resolution.blockers)
     if blockers:
         raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": blockers})
+    # A pending-calculation member has no output authority yet.  Resolve the
+    # canonical policy/compensation inputs and execute the governed engines;
+    # existing result references are only used for replay.
+    if any(item.gross_result_id is None for item in members):
+        period = await session.scalar(select(PayPeriod).where(PayPeriod.company_id == context.company.id, PayPeriod.id == run.pay_period_id))
+        if period is None:
+            raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": ["PAY_PERIOD_MISSING"]})
+        authority = PayrollAuthorityService()
+        gross_service = PayrollGrossResultService()
+        tax_service = PayrollTaxDeductionResultService()
+        gross_engine = PayrollGrossCalculationEngine()
+        tax_engine = PayrollTaxDeductionCalculationEngine(runtime_environment=ProviderEnvironment.PRODUCTION)
+        for member in members:
+            if member.gross_result_id is not None:
+                continue
+            policy = await authority.resolve_policy(session, company_id=context.company.id, as_of_date=period.period_start)
+            compensation = await authority.resolve_period_compensation(session, company_id=context.company.id, employee_id=member.employee_id, period_start=period.period_start, period_end=period.period_end)
+            if policy is None or compensation is None:
+                raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": [f"MISSING_COMPENSATION_OR_POLICY:{member.employee_id}"]})
+            if compensation.compensation_type.value == "hourly":
+                raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": [f"APPROVED_TIME_RESOLVER_REQUIRED:{member.employee_id}"]})
+            admission = await authority.evaluate_admission(session, context=context, identity_resolved=True, policy=policy, compensation=compensation, time_input=None, pay_period_schedule_definition_id=period.schedule_definition_id, pay_period_schedule_version=int(period.schedule_version))
+            from app.payroll.calculation_adapter import build_gross_inputs
+            inputs = build_gross_inputs(company_id=context.company.id, employee_id=member.employee_id, pay_period_id=period.id, period_start=period.period_start, period_end=period.period_end, schedule_definition_id=period.schedule_definition_id, schedule_version=int(period.schedule_version), admission=admission, policy=policy, compensation=compensation)
+            candidate = gross_engine.calculate(actor_permissions=context.permission_codes, company_id=inputs.company_id, employee_id=inputs.employee_id, period=inputs.period, admission=inputs.admission, policy=inputs.policy, compensation=inputs.compensation, time_input=None, currency=run.currency, calculated_at=datetime.now(timezone.utc))
+            persisted_gross = await gross_service.persist_candidate(session, context=context, candidate=candidate)
+            # The tax engine consumes an approved gross evidence contract.  Use
+            # the existing governed review transition rather than fabricating a
+            # second gross result authority.
+            await gross_service.initiate_review(session, context=context, result_id=persisted_gross.id, reason_code="operator_calculate")
+            await gross_service.decide_review(session, context=context, result_id=persisted_gross.id, decision=GrossReviewDecision.ACCEPTED, reason_code="operator_calculate")
+            requirements = (AuthorityRequirement(PayrollInputDomain.TAX, "federal_income_tax", member.employee_id), AuthorityRequirement(PayrollInputDomain.TAX, "social_security_employee", member.employee_id), AuthorityRequirement(PayrollInputDomain.TAX, "medicare_employee", member.employee_id))
+            tax_admission = await PayrollInputAuthorityService(cipher=configured_input_cipher()).evaluate_admission(session, context=context, gross_result_id=persisted_gross.id, as_of_date=period.period_start, requirements=requirements)
+            if tax_admission.state.value not in {"ready", "not_applicable"}:
+                raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": list(tax_admission.blockers)})
+            resolutions = tuple(item for item in tax_admission.resolutions if item.authority_id is not None)
+            authority_rows = tuple((await session.scalars(select(PayrollInputAuthorityVersion).where(PayrollInputAuthorityVersion.company_id == context.company.id, PayrollInputAuthorityVersion.id.in_([item.authority_id for item in resolutions])))).all())
+            envelope_ids = [item.protected_envelope_id for item in authority_rows if item.protected_envelope_id is not None]
+            envelope_rows = tuple((await session.scalars(select(PayrollProtectedInputEnvelope).where(PayrollProtectedInputEnvelope.company_id == context.company.id, PayrollProtectedInputEnvelope.id.in_(envelope_ids)))).all()) if envelope_ids else ()
+            envelopes = {item.id: item for item in envelope_rows}
+            federal = build_federal_authority_inputs(company_id=context.company.id, employee_id=member.employee_id, effective_on=period.period_start, pay_frequency=str(policy.definition.pay_frequency), authorities=authority_rows, envelopes=envelopes, cipher=configured_input_cipher())
+            evidence = ApprovedGrossPayEvidence(persisted_result_id=persisted_gross.id, persisted_lifecycle="approved", persisted_company_id=persisted_gross.company_id, persisted_employee_id=persisted_gross.employee_id, persisted_pay_period_id=persisted_gross.pay_period_id, persisted_calculation_digest=persisted_gross.calculation_digest, persisted_currency=persisted_gross.currency, persisted_gross_pay_total=persisted_gross.gross_pay_total, candidate=candidate)
+            tax_candidate = tax_engine.calculate(actor_permissions=context.permission_codes, gross=evidence, admission=tax_admission, tax_instructions=federal.tax_instructions, deduction_instructions=federal.deduction_instructions, calculated_at=datetime.now(timezone.utc))
+            persisted_tax = await tax_service.persist_candidate(session, context=context, candidate=tax_candidate, admission=tax_admission)
+            member.gross_result_id = persisted_gross.id
+            member.gross_result_digest = persisted_gross.calculation_digest
+            member.tax_result_id = persisted_tax.id
+            member.tax_result_digest = persisted_tax.calculation_digest
+            member.disposition = "ready"
+            await session.commit()
+        members = tuple((await session.scalars(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.company_id == context.company.id, PayrollRunMemberRecord.run_id == run.id))).all())
+
     gross_ids = [item.gross_result_id for item in members if item.gross_result_id is not None]
     gross_rows = tuple((await session.scalars(select(PayrollGrossCalculationResultRecord).where(PayrollGrossCalculationResultRecord.company_id == context.company.id, PayrollGrossCalculationResultRecord.id.in_(gross_ids)))).all()) if gross_ids else ()
     policy_refs = [{"policy_id": str(item.policy_id), "policy_digest": item.policy_digest} for item in gross_rows]
