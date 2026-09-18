@@ -24,7 +24,7 @@ describe("RealRosterActivationConsole", () => {
       prepareFieldReadiness: { isPending: false, mutate },
       query: { isLoading: false, isError: false, data: { total: 8, bound: 1, field_tech_total: 5, field_tech_capability_ready: 1, items: [{
         roster_key: "melvin-santiago", display_name: "Melvin Santiago", operating_role: "FIELD_TECH", field_tech: true,
-        employee_id: "employee-melvin", employee_display_name: "Melvin Santiago", user_state: "USER_READY", employee_state: "EMPLOYEE_READY",
+        employee_id: "employee-melvin", employee_display_name: "Melvin Santiago", employment_status: "active", user_state: "USER_READY", employee_state: "EMPLOYEE_READY",
         membership_state: "MEMBERSHIP_READY", branch_state: "MAIN_BRANCH_READY", role_state: "ROLE_READY", workforce_profile_state: "WORKFORCE_PROFILE_READY",
         technician_capability_state: "TECHNICIAN_CAPABILITY_READY", mobile_state: "MOBILE_READY", credential_state: "ACP_LOGIN_READY",
         availability_state: "EXPLICIT_WINDOW_REQUIRED", dispatch_state: "READY_FOR_WINDOW_EVALUATION", timekeeping_state: "LINKED",
@@ -35,6 +35,8 @@ describe("RealRosterActivationConsole", () => {
     const user = userEvent.setup();
     render(<MemoryRouter><RealRosterActivationConsole /></MemoryRouter>);
     expect(screen.getByText("Identity and access ready")).toBeVisible();
+    expect(screen.getByText("Employment")).toBeVisible();
+    expect(screen.getByText("active")).toBeVisible();
     expect(screen.getByText("Timekeeping handoff")).toBeVisible();
     expect(screen.getByText("LINKED")).toBeVisible();
     expect(screen.getByText("LINKED INPUTS NOT EVALUATED")).toBeVisible();
