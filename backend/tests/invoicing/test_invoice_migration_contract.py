@@ -1,8 +1,9 @@
 import ast
 from pathlib import Path
 
-MIGRATION = Path(
-    "alembic/versions/w8m0i2k4n619_create_invoice_accounts_receivable_.py"
+MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic/versions/w8m0i2k4n619_create_invoice_accounts_receivable_.py"
 )
 
 
