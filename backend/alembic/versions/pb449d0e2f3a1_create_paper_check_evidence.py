@@ -7,7 +7,7 @@ from sqlalchemy.dialects import postgresql
 
 revision: str = "pb449d0e2f3a1"
 down_revision: Union[str, Sequence[str], None] = "pa449c0d1e2f"
-branch_labels: Union[str, Sequence[str], None] = ("payroll_issue449",)
+branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
