@@ -5,6 +5,7 @@ import { useLiaVoice } from "../../hooks/useLiaVoice";
 import type { LiaResponse } from "../../types/lia";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui";
 import { spokenAnswer } from "./voiceSpeech";
+import { liaDeliveryStyle, type DeliveryCategory } from "./voiceDelivery";
 
 export function LiaVoicePanel({
   result,
@@ -26,7 +27,17 @@ export function LiaVoicePanel({
   useEffect(() => {
     if (!result || result.request_id === lastSpokenRequest.current) return;
     lastSpokenRequest.current = result.request_id;
-    voice.speak(spokenAnswer(result, result.response_mode));
+    const deliveryCategory: DeliveryCategory = result.classification === "KNOWN"
+      ? "KNOWN"
+      : result.classification === "UNAVAILABLE"
+        ? "BLOCKER"
+        : result.classification === "INCOMPLETE"
+          ? "LIMITED"
+          : "UNCERTAIN";
+    voice.speak(
+      spokenAnswer(result, result.response_mode),
+      liaDeliveryStyle(result.response_mode, deliveryCategory),
+    );
   }, [result, voice]);
 
   return (

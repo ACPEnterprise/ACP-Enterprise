@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  applyBrowserDeliveryStyle,
+  liaDeliveryStyle,
+  selectPreferredVoice,
+  type LiaDeliveryStyle,
+} from "../components/lia/voiceDelivery";
+
 export type LiaVoiceState =
   | "IDLE"
   | "LISTENING"
@@ -90,6 +97,8 @@ export function useLiaVoice({
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string>();
   const [lastSpokenAnswer, setLastSpokenAnswer] = useState("");
+  const [voiceInventory, setVoiceInventory] = useState<SpeechSynthesisVoice[]>([]);
+  const lastDeliveryStyle = useRef<LiaDeliveryStyle>(liaDeliveryStyle("NORMAL"));
 
   const supported =
     typeof window !== "undefined" &&
@@ -99,6 +108,15 @@ export function useLiaVoice({
   useEffect(() => {
     conversationModeRef.current = conversationMode;
   }, [conversationMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const synthesis = window.speechSynthesis;
+    const refreshVoices = () => setVoiceInventory(synthesis.getVoices?.() ?? []);
+    refreshVoices();
+    synthesis.addEventListener?.("voiceschanged", refreshVoices);
+    return () => synthesis.removeEventListener?.("voiceschanged", refreshVoices);
+  }, []);
 
   const clearTimers = useCallback(() => {
     if (stopTimer.current) window.clearTimeout(stopTimer.current);
@@ -175,23 +193,14 @@ export function useLiaVoice({
   }, [clearTimers, onConversationTranscript, onTranscript, silenceMs]);
 
   const speak = useCallback(
-    (answer: string) => {
+    (answer: string, style: LiaDeliveryStyle = liaDeliveryStyle("NORMAL")) => {
       if (!supported || !answer.trim()) return;
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(answer);
-      const voices = window.speechSynthesis.getVoices?.() ?? [];
-      const englishVoices = voices.filter((voice) =>
-        voice.lang.toLocaleLowerCase().startsWith("en"),
-      );
-      utterance.voice =
-        englishVoices.find((voice) => voice.default && voice.localService) ??
-        englishVoices.find((voice) => voice.localService) ??
-        englishVoices.find((voice) => voice.default) ??
-        englishVoices[0] ??
-        null;
-      utterance.rate = 0.94;
-      utterance.pitch = 1;
-      utterance.volume = 1;
+      const voices = voiceInventory.length
+        ? voiceInventory
+        : (window.speechSynthesis.getVoices?.() ?? []);
+      applyBrowserDeliveryStyle(utterance, style, selectPreferredVoice(voices));
       utterance.onstart = () => setState("SPEAKING");
       utterance.onerror = () => {
         setError("The spoken response could not be played. The full answer remains visible.");
@@ -208,9 +217,10 @@ export function useLiaVoice({
         }
       };
       setLastSpokenAnswer(answer);
+      lastDeliveryStyle.current = style;
       window.speechSynthesis.speak(utterance);
     },
-    [inactivityMs, startListening, supported],
+    [inactivityMs, startListening, supported, voiceInventory],
   );
 
   const beginConversation = useCallback(() => {
@@ -238,7 +248,7 @@ export function useLiaVoice({
   }, []);
 
   const replay = useCallback(() => {
-    if (lastSpokenAnswer) speak(lastSpokenAnswer);
+    if (lastSpokenAnswer) speak(lastSpokenAnswer, lastDeliveryStyle.current);
   }, [lastSpokenAnswer, speak]);
 
   const interruptAndListen = useCallback(() => {
