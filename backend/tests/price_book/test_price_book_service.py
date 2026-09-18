@@ -31,6 +31,7 @@ from app.price_book.schemas import (
     AdjustmentProposalDecision,
     BulkMaterializeRequest,
     CategoryCreate,
+    CategoryUpdate,
     ComponentCreate,
     OptionCreate,
     OptionGroupCreate,
@@ -513,6 +514,35 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             payload=CategoryCreate(code="UNUSED", name="Unused draft category"),
         )
     async with factory() as session:
+        root = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="PLUMBING", name="Plumbing"),
+        )
+    async with factory() as session:
+        middle = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(
+                code="DRAINAGE",
+                name="Drainage",
+                parent_id=root.id,
+            ),
+        )
+    async with factory() as session:
+        await service.update_category(
+            session,
+            context=context,
+            category_id=item.category_id,
+            payload=CategoryUpdate(
+                code="DRAIN",
+                name="Drain Services",
+                parent_id=middle.id,
+                status="draft",
+                expected_version=1,
+            ),
+        )
+    async with factory() as session:
         catalog = await service.catalog(session, context=context)
     assert catalog.option_groups[0].id == group.id
     assert catalog.options[0].id == option.id
@@ -545,7 +575,11 @@ async def test_customer_options_and_snapshot_idempotency_collision_fail_closed(
             sellable_at=effective + timedelta(minutes=1),
         )
     assert [value.id for value in sellable.service_items] == [item.id]
-    assert [value.code for value in sellable.categories] == ["DRAIN"]
+    assert {value.code for value in sellable.categories} == {
+        "PLUMBING",
+        "DRAINAGE",
+        "DRAIN",
+    }
     assert [value.id for value in sellable.option_groups] == [group.id]
     assert [value.id for value in sellable.options] == [option.id]
     first_request = SnapshotRequest(

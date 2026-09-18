@@ -234,13 +234,17 @@ class PriceBookService:
                 ).all()
             )
             by_category_id = {category.id: category for category in categories}
-            parent_ids = {
-                by_category_id[category_id].parent_id
-                for category_id in visible_category_ids
-                if category_id in by_category_id
-                and by_category_id[category_id].parent_id is not None
-            }
-            visible_category_ids.update(parent_ids)
+            while True:
+                parent_ids = {
+                    by_category_id[visible_id].parent_id
+                    for visible_id in visible_category_ids
+                    if visible_id in by_category_id
+                    and by_category_id[visible_id].parent_id is not None
+                }
+                new_parent_ids = parent_ids.difference(visible_category_ids)
+                if not new_parent_ids:
+                    break
+                visible_category_ids.update(new_parent_ids)
             categories = tuple(
                 category
                 for category in categories
