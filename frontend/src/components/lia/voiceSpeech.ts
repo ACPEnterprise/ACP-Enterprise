@@ -35,6 +35,29 @@ const contractions: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bthere is\b/gi, "there's"],
 ];
 
+const pronunciationTerms: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bP\s*&\s*L\b/gi, "profit and loss"],
+  [/\bQBO\b/g, "Q B O"],
+  [/\bACP\b/g, "A C P"],
+  [/\bHVAC\b/g, "H V A C"],
+  [/\bJOB-(\d+)\b/gi, "Job $1"],
+  [/\bINV-(\d+)\b/gi, "Invoice $1"],
+  [/\bEST-(\d+)\b/gi, "Estimate $1"],
+  [/\bAPT-(\d+)\b/gi, "Appointment $1"],
+];
+
+function normalizeSpokenSemantics(value: string): string {
+  let text = value
+    .replace(/(^|[\s(])-\$(\d[\d,]*(?:\.\d+)?)/g, "$1negative $$$2")
+    .replace(/(^|[\s(])-([\d,.]+)%(?=\s|[,.!?;:]|$)/g, "$1negative $2 percent")
+    .replace(/([\d,.]+)%(?=\s|[,.!?;:]|$)/g, "$1 percent");
+
+  for (const [pattern, replacement] of pronunciationTerms) {
+    text = text.replace(pattern, replacement);
+  }
+  return text;
+}
+
 function cleanVisualScaffolding(value: string): string {
   let text = value
     .replace(/^ACP's native authorized records show:\s*/i, "")
@@ -53,6 +76,8 @@ function cleanVisualScaffolding(value: string): string {
   for (const [pattern, replacement] of contractions) {
     text = text.replace(pattern, replacement);
   }
+
+  text = normalizeSpokenSemantics(text);
 
   return text
     .replace(/\bCustomer status active\b/gi, "I found the customer; they're active")

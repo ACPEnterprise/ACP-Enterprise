@@ -53,7 +53,7 @@ describe("LIA spoken presentation", () => {
     {
       family: "Job",
       answer: "Job JOB-313 is complete. Jason is assigned. The appointment is tomorrow at 9:00 AM.",
-      expected: ["JOB-313", "Jason", "tomorrow", "9:00 AM"],
+      expected: ["Job 313", "Jason", "tomorrow", "9:00 AM"],
     },
     {
       family: "Scheduling",
@@ -69,7 +69,7 @@ describe("LIA spoken presentation", () => {
     {
       family: "Invoice",
       answer: "Invoice INV-204 is open. The authoritative balance is $842.15 as of September 17, 2026.",
-      expected: ["INV-204", "$842.15", "September 17, 2026"],
+      expected: ["Invoice 204", "$842.15", "September 17, 2026"],
     },
     {
       family: "Payroll blocker",
@@ -128,5 +128,39 @@ describe("LIA spoken presentation", () => {
     );
     expect(spoken).not.toContain("45f0cd83");
     expect(spoken).toContain("Acme Plumbing");
+  });
+
+  it("preserves material spoken semantics while normalizing pronunciation", () => {
+    const spoken = spokenAnswer(
+      response(
+        "ACP's P&L shows -$125.50, down -5.25%, across 7 jobs on September 17, 2026 at 9:30 AM. JOB-313, INV-204, EST-19, and APT-267 remain available.",
+      ),
+      "EVIDENCE",
+    );
+
+    expect(spoken).toContain("profit and loss");
+    expect(spoken).toContain("negative $125.50");
+    expect(spoken).toContain("negative 5.25 percent");
+    expect(spoken).toContain("7 jobs");
+    expect(spoken).toContain("September 17, 2026");
+    expect(spoken).toContain("9:30 AM");
+    expect(spoken).toContain("Job 313");
+    expect(spoken).toContain("Invoice 204");
+    expect(spoken).toContain("Estimate 19");
+    expect(spoken).toContain("Appointment 267");
+    expect(spoken).toContain("remain available");
+  });
+
+  it("preserves uncertainty and source authority without changing a person's name", () => {
+    const spoken = spokenAnswer(
+      response("Lianne Hernandez may be missing accepted time; the evidence is incomplete.", {
+        authority: "SOURCE_BACKED",
+      }),
+    );
+
+    expect(spoken).toContain("Lianne Hernandez");
+    expect(spoken).toContain("may be missing");
+    expect(spoken).toContain("incomplete");
+    expect(spoken).toContain("source-backed evidence");
   });
 });
