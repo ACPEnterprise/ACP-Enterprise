@@ -8,7 +8,10 @@ from app.core.config import settings
 from app.platform.company.models import Company
 from app.platform.factory_control.router import overview
 from app.platform.factory_control.schemas import FactoryEventIn
-from app.platform.factory_control.service import factory_control_service
+from app.platform.factory_control.service import (
+    FactoryEventConflict,
+    factory_control_service,
+)
 from app.platform.users.models import User
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -111,3 +114,45 @@ async def test_snapshot_key_replay_returns_original_without_duplicate(database) 
     assert replay_duplicate is True
     assert replay.id == first.id
     assert replay.captured_at == first.captured_at
+
+
+@pytest.mark.asyncio
+async def test_concurrent_event_replay_converges_and_conflict_is_deterministic(
+    database,
+) -> None:
+    company = Company(
+        name="Concurrent Factory", code="CONCURRENTFACTORY", timezone="UTC"
+    )
+    actor = User(
+        normalized_email="concurrent-owner@example.test",
+        first_name="Concurrent",
+        last_name="Owner",
+        display_name="Concurrent Owner",
+        status="active",
+    )
+    async with database() as session, session.begin():
+        session.add_all([company, actor])
+    evidence = FactoryEventIn(
+        lane_code="OM1-1",
+        event_type="work_started",
+        lifecycle_state="ACTIVE",
+        idempotency_key="concurrent-event-1",
+        occurred_at=datetime(2026, 9, 18, tzinfo=timezone.utc),
+    )
+
+    async def ingest(data: FactoryEventIn):
+        async with database() as session, session.begin():
+            event, duplicate = await factory_control_service.ingest(
+                session, company_id=company.id, actor_user_id=actor.id, data=data
+            )
+            return event.id, duplicate
+
+    first, second = await asyncio.gather(ingest(evidence), ingest(evidence))
+    assert first[0] == second[0]
+    assert sorted((first[1], second[1])) == [False, True]
+    conflicting = evidence.model_copy(update={"event_type": "closed"})
+    with pytest.raises(FactoryEventConflict):
+        await ingest(conflicting)
+
+
+import asyncio

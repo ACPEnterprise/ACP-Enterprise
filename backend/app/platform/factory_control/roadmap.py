@@ -26,6 +26,9 @@ class RoadmapMilestone:
     beta_deployment_status: str | None = None
     owner_acceptance_status: str | None = None
     lifecycle_status: str | None = None
+    title: str | None = None
+    next_admissible_action: str | None = None
+    human_provider_gates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,9 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
                 row.get("beta_deployment_status"),
                 row.get("owner_acceptance_status"),
                 row.get("lifecycle_status"),
+                row.get("title"),
+                row.get("next_admissible_action"),
+                tuple(row.get("human_provider_gates", ())),
             )
         )
     canonical = json.dumps(

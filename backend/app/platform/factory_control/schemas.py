@@ -108,6 +108,11 @@ class FactoryOverviewResponse(StrictSchema):
     metrics: FactoryMetricsResponse
     lanes: list[FactoryLaneResponse]
     generated_at: datetime
+    p0_backlog: int
+    p1_backlog: int
+    human_gates: int
+    provider_gates: int
+    owner_actions: list[dict[str, Any]]
 
 
 class FactoryLaneDrilldownResponse(StrictSchema):
