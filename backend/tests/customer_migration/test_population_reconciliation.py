@@ -38,7 +38,10 @@ from app.platform.audit.models import AuditRecord
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
-from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.authorization import (
+    AuthorizationContext,
+    PermissionDeniedError,
+)
 from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
@@ -634,6 +637,30 @@ def test_operator_command_has_no_name_based_admission_surface() -> None:
                 "--customer-name",
                 "Hammer Haag",
             ]
+        )
+
+
+@pytest.mark.asyncio
+async def test_operator_command_cannot_bypass_customer_manage_permission(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Unauthorized Operator Tenant")
+    assert context.active_branch is not None
+    refresh = reconciliation_parser().parse_args(
+        [
+            "--company-id",
+            str(context.company.id),
+            "--branch-id",
+            str(context.active_branch.id),
+            "refresh",
+        ]
+    )
+    with pytest.raises(PermissionDeniedError, match="Permission denied"):
+        await execute_reconciliation_action(
+            refresh,
+            context=replace(context, effective_permissions=()),
+            factory=factory,
         )
 
 
