@@ -74,7 +74,7 @@ export interface RealRosterReadinessItem {
   field_tech: boolean;
   employee_id: string | null;
   employee_display_name: string | null;
-  employment_status: string | null;
+  employment_status: "active" | "inactive" | "leave" | "terminated" | null;
   user_state: string;
   employee_state: string;
   membership_state: string;
