@@ -33,6 +33,7 @@ from app.platform.permissions.codes import (
     EconomicsPolicyPermission,
     InvoicePermission,
     PaymentPermission,
+    PriceBookPermission,
     WorkforcePermission,
 )
 from app.platform.permissions.dependencies import (
@@ -52,6 +53,7 @@ from .owner_intelligence import (
     OwnerQuestion,
 )
 from .policy_administration import EconomicsPolicyAdministrationService
+from .pricebook_feedback_readiness import PriceBookFeedbackReadinessService
 from .result_history import EconomicsResultHistoryError, EconomicsResultHistoryService
 from .source_completeness import source_completeness_matrix
 from .workspace import EconomicsWorkspaceService
@@ -90,6 +92,15 @@ OperationalSourceReader = Annotated[
         )
     ),
 ]
+PriceBookFeedbackReader = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            EconomicsPolicyPermission.MEASUREMENT_READ,
+            PriceBookPermission.READ,
+        )
+    ),
+]
 
 
 @router.get("/capabilities", response_model=dict[str, object])
@@ -100,6 +111,29 @@ async def economics_capabilities(context: Reader) -> dict[str, object]:
         "company_id": str(context.company.id),
         "branch_id": str(context.active_branch.id) if context.active_branch else None,
     }
+
+
+@router.get("/pricebook-feedback-readiness", response_model=dict[str, object])
+async def pricebook_feedback_readiness(
+    session: Session,
+    context: PriceBookFeedbackReader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    try:
+        return await PriceBookFeedbackReadinessService().project(
+            session, context=context, period_start=start, period_end=end
+        )
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Price Book feedback readiness request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error
 
 
 @router.get("/measurement-foundation", response_model=dict[str, object])
