@@ -14,6 +14,24 @@ Evidence timestamp: 2026-09-16 after remote fetch.
 The historical branch at `b0ff279c5aeb` is expected and converges through
 merge revision `e3c2a71f8d4b`; it is not a current multi-head condition.
 
+## Factory 2.0 refresh — 2026-09-17
+
+- Current protected SHA: `1be3de4456afc7b67ed6bb9f54644468318dd6e4`.
+- Protected schema remains 178 revisions, one root, one head
+  `o1q9s27h4u0v`, with lineage digest
+  `9436cd69cd5a6d7603d339013f98af5db6eb69820abbaa819f6396610c391e8e`.
+- OM2E `0fdc0cea502c1ce2bad7b8136efe02f10cb929f3` is structurally linear at
+  180 revisions and one head `oa7oa8p9q012`. It adds no destructive upgrade,
+  duplicate schema object, modified protected revision, fork, or orphan. This
+  does not admit its application mutations; Payroll and membership replay
+  governance remain separate blocking Release gates.
+- LaptopE `2602bebacf8424ba1e24c93cbf9717c70b8c1f08` retains the protected
+  178-revision graph unchanged. Its current voice-foundation work is not a
+  launch-critical schema dependency.
+- The candidate sweep was executed directly against both fetched cumulative
+  refs. It reported no graph risks and did not check either branch out into the
+  protected worktree.
+
 ## Cumulative lanes
 
 | Lane | SHA / relationship | Migration disposition |
