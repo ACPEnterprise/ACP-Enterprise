@@ -111,3 +111,72 @@ brief remains truthful and reports comparison as unavailable.
 - No schema or Alembic change. No Preview/Production deployment. Authenticated
   All County acceptance remains pending; the deployed Preview SHA and employee
   environment availability must be rechecked by OM1 after release.
+
+## Factory 2.0 worker reconciliation — 2026-09-17
+
+- Protected authority refreshed to `785511810d9399c33c8d8727cf6fe01420fc1226`.
+  The protected merge was reconciled into this lane before worker integration;
+  protected authority remains an ancestor and was not modified.
+- Prior Intelligence head `2602bebacf8424ba1e24c93cbf9717c70b8c1f08` was
+  preserved. A’s candidate was based directly on it. The resulting bounded LIA
+  checkpoint is `0a9074e1`; the resulting Mobile lifecycle checkpoint is
+  `d3d4cd14`.
+
+### Laptop-A
+
+`origin/work/lia-current-contract-acceptance-1` at
+`ba92adcabc7c6d2c19df906d43954470562f0c3f` was `PARTIALLY_CONTAINED`:
+protected reconciliation already supplied its backend contract changes, while
+the genuinely new frontend multi-domain continuation and bounded topic-context
+behavior were integrated as `0a9074e1`. Focused LIA/voice and route tests pass
+14/14. Authorization, evidence digests, safe navigation, and multi-domain
+context remain bounded and server-authoritative.
+
+### Laptop-B
+
+- `e7b96734d657312cd3c7c1a685f4d779614cb9e6` — `POST_PRODUCTION_FOUNDATION`;
+  Genesis-to-training admission governance is not required for current Beta
+  spoken experience and was not replayed.
+- `e5f707879d9fc577929c620fc22119f5761f57c6` — `POST_PRODUCTION_FOUNDATION`;
+  pronunciation authority is useful for a future owned engine but does not
+  change current local fallback behavior and was not replayed.
+- `68d5c91e885acac5ab08d15defecbce401f8c7e4` — `DEPENDENCY_BLOCKED /
+  POST_PRODUCTION_FOUNDATION`; model promotion ledger depends on the
+  pronunciation admission path and is not current Beta functionality.
+- `d6cdf7aaf03d255d9085e0bde98f4411969444bd` — `DEPENDENCY_BLOCKED /
+  POST_PRODUCTION_FOUNDATION`; training-run ledger depends on model promotion.
+
+These four commits are not patch-equivalent to the current head, but remain
+qualified governance backlog rather than implementation to absorb merely for
+throughput. No Beacon/Luminary/Analytics implementation candidate was newly
+published in this sweep.
+
+### Phone
+
+`origin/work/laptop1-phone-twelve-hats-speech-readiness-1` at
+`c5539e489f3934d7fbef8bc684172c0eb2f10aec` was `STALE_BASE /
+CONFLICTING`. Its whole patch would remove the shared semantic renderer and
+restore raw-answer speech; its broad lockfile/Podfile changes were therefore
+not cherry-picked. The non-regressive lifecycle subset was manually reconciled
+as `d3d4cd14`: AppState background cancellation, speaking-state cleanup, and
+native completion/stop callback handling, with regression coverage. No
+dependency drift or Podfile repair was claimed.
+
+### Meaningful cumulative delta and worker refill
+
+- LIA: bounded multi-domain conversation retention and context-safe follow-up
+  navigation; no source-domain joins or authorization widening.
+- Mobile: speech cannot continue behind a backgrounded screen, and completion
+  or stop returns UI state to idle; employee-safe endpoint and shared semantic
+  speech remain unchanged.
+- Beacon/Luminary/Analytics: no new implementation delta; existing evidence,
+  incomplete-state, provenance, and currency boundaries remain protected.
+- Next Laptop-A assignment: `LIA.SPOKEN.PRESENCE` continuation and real-data
+  acceptance defects only.
+- Next Laptop-B assignment: `LIA.DELIVERY.STYLE.PROFILE.1` audit of cadence,
+  current TTS capabilities, and distinct synthetic voice options; no cloning,
+  upload, purchase, or provider commitment.
+- Next Phone assignment: rebase a TestFlight-ready Mobile checkpoint from
+  current Intelligence, preserve the shared semantic renderer, and qualify
+  native speech lifecycle/build behavior. Do not revive the stale raw-answer
+  path.
