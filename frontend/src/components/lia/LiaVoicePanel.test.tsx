@@ -95,6 +95,7 @@ describe("LIA voice panel", () => {
       voiceURI: "system-english",
     } satisfies SpeechSynthesisVoice];
     vi.clearAllMocks();
+    window.localStorage.clear();
     Object.defineProperty(window, "SpeechRecognition", {
       configurable: true,
       value: RecognitionMock,
@@ -195,6 +196,44 @@ describe("LIA voice panel", () => {
       <LiaVoicePanel busy={false} result={response()} onDraft={vi.fn()} onSubmit={vi.fn()} />,
     );
     expect(speech.speak.mock.calls.at(-1)?.[0].voice?.voiceURI).toBe("reviewed-local");
+  });
+
+  it("previews a reviewed local voice without changing LIA semantics", () => {
+    availableVoices = [
+      {
+        default: true,
+        lang: "en-US",
+        localService: true,
+        name: "Default English",
+        voiceURI: "default-english",
+      } satisfies SpeechSynthesisVoice,
+      {
+        default: false,
+        lang: "en-US",
+        localService: true,
+        name: "Reviewed Distinct Voice",
+        voiceURI: "reviewed-distinct",
+      } satisfies SpeechSynthesisVoice,
+    ];
+    render(<LiaVoicePanel busy={false} onDraft={vi.fn()} onSubmit={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("English voice available on this device"), {
+      target: { value: "reviewed-distinct" },
+    });
+    fireEvent.change(screen.getByLabelText("Evaluation response"), {
+      target: { value: "missing-evidence" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview LIA style" }));
+
+    const utterance = speech.speak.mock.calls.at(-1)?.[0];
+    expect(utterance).toBeDefined();
+    if (!utterance) throw new Error("Expected a preview utterance");
+    expect(utterance.voice?.voiceURI).toBe("reviewed-distinct");
+    expect(utterance.rate).toBe(0.94);
+    expect(utterance.text).toContain("material cost is unavailable");
+    expect(window.localStorage.getItem("twelve-hats.lia.device-voice.v1")).toBe(
+      "reviewed-distinct",
+    );
   });
 
   it("ends active capture and never exposes a mutation control", () => {
