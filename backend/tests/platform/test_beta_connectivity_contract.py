@@ -66,6 +66,13 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "Preview and Beta backend health projections differ" in verifier
     assert "https://untrusted.invalid" in verifier
     assert "require_single_header content-security-policy" in verifier
+    for directive in (
+        "script-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+    ):
+        assert f"require_header_contains content-security-policy \"{directive}\"" in verifier
     assert "require_header_value strict-transport-security" in verifier
     assert "require_header_value x-frame-options DENY" in verifier
     assert (
