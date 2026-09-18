@@ -1,7 +1,9 @@
 # Enterprise Intelligence Owner Action Queue
 
 Current protected authority observed: `fcf57fb7a719a00b7ded7309fde52acfb8652b73`.
-Current Intelligence reconciliation head before this queue: `ca574b773e600fa9c7b1cba766a46bd807246660`.
+Current Intelligence watch head: `50a86bc2fbc79fd58f0ea943986725aaa7fc2958`.
+The protected authority is reconciled into the isolated lane; the local
+reconciliation merge is not a protected-branch mutation.
 
 This queue contains only actions that require Michael, Lianne, an authorized
 accountant, Apple/platform custody, or physical Beta use. Engineering work is
@@ -40,3 +42,21 @@ Luminary, Economics presentation, Analytics presentation, and Mobile LIA are
 qualified for their respective acceptance workflows. The Twelve Hats-owned
 speech engine remains a human/provider-governed future boundary; current local
 Web/Expo speech is Beta-capable but not a permanent voice identity.
+
+## Factory Control
+
+`HUMAN_GATED / SOURCE_DOMAIN_WATCH`
+
+This lane is not `ELIGIBLE_IDLE`. Reactivation triggers are:
+
+- a real Michael/Lianne/employee acceptance defect;
+- newly protected Customer, Payroll, Revenue Cycle, Timekeeping, Accounting,
+  Dispatch, or Price Book authority that can be consumed without duplication;
+- a newly qualified Laptop-A, Laptop-B, or Phone checkpoint;
+- OM1 Release feedback identifying a bounded Intelligence defect; or
+- a changed Preview/Beta acceptance state.
+
+The latest sweep found no new qualified Intelligence worker checkpoint. A
+Customer population reconciliation worker exists remotely but is not protected
+authority and remains OM2/Customer-owned. The protected Price Book advance was
+reconciled into this lane; no new Intelligence consumer defect was evidenced.
