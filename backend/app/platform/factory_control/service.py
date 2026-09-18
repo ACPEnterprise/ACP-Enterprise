@@ -50,6 +50,20 @@ def calculate_metrics(
 ) -> dict:
     roadmap_codes = {item.code for item in roadmap.milestones}
     milestone_stages: dict[str, set[str]] = defaultdict(set)
+    for milestone in roadmap.milestones:
+        if milestone.engineering_status in {
+            "ENGINEERING_READY",
+            "INTEGRATED",
+            "DEPLOYED_BETA",
+            "CLOSED",
+        }:
+            milestone_stages[milestone.code].add("engineering_complete")
+        if milestone.beta_deployment_status in {"DEPLOYED_BETA", "CLOSED"}:
+            milestone_stages[milestone.code].add("beta_complete")
+        if milestone.owner_acceptance_status in {"ACCEPTED", "CLOSED"}:
+            milestone_stages[milestone.code].add("owner_accepted")
+        if milestone.lifecycle_status == "CLOSED":
+            milestone_stages[milestone.code].add("closed")
     defect_state: dict[str, bool] = {}
     gate_state: dict[str, bool] = {}
     handoffs: dict[str, datetime] = {}
@@ -282,7 +296,15 @@ class FactoryControlService:
         actor_user_id: UUID,
         snapshot_key: str,
         now: datetime | None = None,
-    ) -> FactoryControlSnapshot:
+    ) -> tuple[FactoryControlSnapshot, bool]:
+        existing = await session.scalar(
+            select(FactoryControlSnapshot).where(
+                FactoryControlSnapshot.company_id == company_id,
+                FactoryControlSnapshot.snapshot_key == snapshot_key,
+            )
+        )
+        if existing is not None:
+            return existing, True
         roadmap, _, lanes, metrics, captured = await self.overview(
             session, company_id=company_id, now=now
         )
@@ -305,7 +327,7 @@ class FactoryControlService:
         )
         session.add(snapshot)
         await session.flush()
-        return snapshot
+        return snapshot, False
 
 
 factory_control_service = FactoryControlService()

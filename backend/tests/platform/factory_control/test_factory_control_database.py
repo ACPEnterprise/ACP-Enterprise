@@ -78,3 +78,36 @@ async def test_overview_api_is_tenant_scoped(database) -> None:
     assert [lane.lane_code for lane in response.lanes] == ["OM1-1"]
     assert response.metrics.queue_depth == 1
     assert response.roadmap_milestones > 0
+
+
+@pytest.mark.asyncio
+async def test_snapshot_key_replay_returns_original_without_duplicate(database) -> None:
+    company = Company(name="Snapshot Factory", code="SNAPSHOTFACTORY", timezone="UTC")
+    actor = User(
+        normalized_email="snapshot-owner@example.test",
+        first_name="Snapshot",
+        last_name="Owner",
+        display_name="Snapshot Owner",
+        status="active",
+    )
+    async with database() as session, session.begin():
+        session.add_all([company, actor])
+    async with database() as session, session.begin():
+        first, duplicate = await factory_control_service.capture_snapshot(
+            session,
+            company_id=company.id,
+            actor_user_id=actor.id,
+            snapshot_key="controller-cycle-1",
+            now=datetime(2026, 9, 18, tzinfo=timezone.utc),
+        )
+        replay, replay_duplicate = await factory_control_service.capture_snapshot(
+            session,
+            company_id=company.id,
+            actor_user_id=actor.id,
+            snapshot_key="controller-cycle-1",
+            now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        )
+    assert duplicate is False
+    assert replay_duplicate is True
+    assert replay.id == first.id
+    assert replay.captured_at == first.captured_at

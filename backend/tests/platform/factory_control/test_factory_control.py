@@ -171,3 +171,30 @@ def test_empty_metrics_are_defined_without_division_errors(tmp_path):
     assert metrics["utilization_percent"] == 0.0
     assert metrics["pickup_latency_seconds"] is None
     assert metrics["oldest_handoff_seconds"] is None
+
+
+def test_canonical_roadmap_statuses_are_the_zero_event_baseline(tmp_path):
+    path = tmp_path / "roadmap.yaml"
+    path.write_text(
+        json.dumps(
+            {
+                "milestones": [
+                    {
+                        "id": "M1",
+                        "engineering_status": "ENGINEERING_READY",
+                        "protected_integration_status": "INTEGRATED",
+                        "beta_deployment_status": "DEPLOYED_BETA",
+                        "owner_acceptance_status": "ACCEPTED",
+                        "lifecycle_status": "CLOSED",
+                    }
+                ]
+            }
+        )
+    )
+    metrics = calculate_metrics(
+        roadmap=load_roadmap(path), events=[], lanes=[], now=NOW
+    )
+    assert metrics["engineering_percent"] == 100.0
+    assert metrics["beta_percent"] == 100.0
+    assert metrics["owner_percent"] == 100.0
+    assert metrics["closed_percent"] == 100.0

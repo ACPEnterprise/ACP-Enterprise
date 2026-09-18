@@ -157,7 +157,7 @@ async def capture_snapshot(
 ) -> dict[str, str]:
     try:
         async with session.begin():
-            snapshot = await factory_control_service.capture_snapshot(
+            snapshot, duplicate = await factory_control_service.capture_snapshot(
                 session,
                 company_id=context.company.id,
                 actor_user_id=context.user.id,
@@ -169,4 +169,8 @@ async def capture_snapshot(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Canonical factory roadmap is unavailable.",
         ) from error
-    return {"id": str(snapshot.id), "snapshot_key": snapshot.snapshot_key}
+    return {
+        "id": str(snapshot.id),
+        "snapshot_key": snapshot.snapshot_key,
+        "duplicate": str(duplicate).lower(),
+    }
