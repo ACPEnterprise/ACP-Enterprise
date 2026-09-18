@@ -30,6 +30,7 @@ from app.payroll.payment_release import (
     PayrollPaymentReleaseService,
 )
 from app.payroll.models import PayrollPaymentDestinationVersion
+from app.payroll.models import PayrollPaperCheckEvidenceRecord, PayrollTaxDeductionResultRecord
 from app.payroll.permissions import PayrollPermission
 from app.payroll.run_finalization import (
     PayrollPopulationEvidence,
@@ -80,6 +81,22 @@ class ReviewInput(BaseModel):
 
 class CalculateInput(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=255)
+
+
+class PaperCheckIssueInput(BaseModel):
+    employee_id: UUID
+    check_number: str = Field(min_length=1, max_length=80)
+    issue_date: date
+    idempotency_key: str = Field(min_length=1, max_length=255)
+
+
+class PaperCheckVoidInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+
+
+class PaperCheckReissueInput(PaperCheckIssueInput):
+    original_check_id: UUID
 
 
 class PaperCheckDestinationInput(BaseModel):
@@ -388,6 +405,60 @@ async def approve_paper_check_destination(destination_id: UUID, context: Payment
     except (PayrollConflictError, ValueError) as error:
         raise HTTPException(422, str(error)) from error
     return {"destination_id": value.id, "employee_id": value.employee_id, "method": value.method_type, "lifecycle": value.lifecycle, "masked_display": value.masked_display}
+
+
+@router.post("/runs/{run_id}/paper-checks")
+async def issue_paper_check(run_id: UUID, payload: PaperCheckIssueInput, context: PaymentManage, session: Session) -> dict[str, object]:
+    run = await session.scalar(select(PayrollRunRecord).where(PayrollRunRecord.company_id == context.company.id, PayrollRunRecord.id == run_id, PayrollRunRecord.lifecycle == "approved"))
+    if run is None:
+        raise HTTPException(409, "approved Payroll authority is required before issuing paper-check evidence")
+    member = await session.scalar(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.company_id == context.company.id, PayrollRunMemberRecord.run_id == run_id, PayrollRunMemberRecord.employee_id == payload.employee_id, PayrollRunMemberRecord.disposition == "ready"))
+    if member is None or member.tax_result_id is None:
+        raise HTTPException(409, "payable Employee is not present in the approved Payroll run")
+    tax = await session.scalar(select(PayrollTaxDeductionResultRecord).where(PayrollTaxDeductionResultRecord.company_id == context.company.id, PayrollTaxDeductionResultRecord.id == member.tax_result_id, PayrollTaxDeductionResultRecord.calculation_digest == member.tax_result_digest, PayrollTaxDeductionResultRecord.lifecycle == "approved"))
+    if tax is None:
+        raise HTTPException(409, "approved net-pay evidence is unavailable")
+    digest = canonical_digest({"run_id": str(run_id), "employee_id": str(payload.employee_id), "check_number": payload.check_number, "issue_date": payload.issue_date.isoformat(), "amount": str(tax.net_pay_candidate)})
+    existing = await session.scalar(select(PayrollPaperCheckEvidenceRecord).where(PayrollPaperCheckEvidenceRecord.company_id == context.company.id, PayrollPaperCheckEvidenceRecord.replay_identity == payload.idempotency_key))
+    if existing is not None:
+        if existing.evidence_digest != digest:
+            raise HTTPException(409, "paper-check replay conflicts with the original evidence")
+        return {"check_id": existing.id, "lifecycle": existing.lifecycle, "replayed": True, "amount": str(existing.amount), "execution": "not_performed"}
+    value = PayrollPaperCheckEvidenceRecord(company_id=context.company.id, run_id=run_id, employee_id=payload.employee_id, amount=tax.net_pay_candidate, currency=tax.currency, check_number=payload.check_number, issue_date=payload.issue_date, lifecycle="issued", replay_identity=payload.idempotency_key, evidence_digest=digest, actor_user_id=context.user.id)
+    session.add(value)
+    AuditService.stage(session, AuditEntry(action="payroll.paper_check.issued", resource_type="payroll_paper_check", actor_user_id=context.user.id, company_id=context.company.id, resource_id=value.id, reason_code="paper_check_issued", details={"run_id": str(run_id), "employee_id": str(payload.employee_id), "amount": str(tax.net_pay_candidate)}))
+    await session.commit()
+    return {"check_id": value.id, "lifecycle": value.lifecycle, "replayed": False, "amount": str(value.amount), "execution": "not_performed"}
+
+
+@router.post("/paper-checks/{check_id}/void")
+async def void_paper_check(check_id: UUID, payload: PaperCheckVoidInput, context: PaymentManage, session: Session) -> dict[str, object]:
+    value = await session.scalar(select(PayrollPaperCheckEvidenceRecord).where(PayrollPaperCheckEvidenceRecord.company_id == context.company.id, PayrollPaperCheckEvidenceRecord.id == check_id).with_for_update())
+    if value is None:
+        raise HTTPException(404, "paper-check evidence was not found")
+    existing = await session.scalar(select(PayrollPaperCheckEvidenceRecord).where(PayrollPaperCheckEvidenceRecord.company_id == context.company.id, PayrollPaperCheckEvidenceRecord.replay_identity == payload.idempotency_key))
+    if existing is not None:
+        if existing.supersedes_id != value.id or existing.lifecycle != "voided":
+            raise HTTPException(409, "paper-check void replay conflicts with the original evidence")
+        return {"check_id": existing.id, "lifecycle": existing.lifecycle, "replayed": True}
+    if value.lifecycle != "issued" and value.lifecycle != "reissued":
+        raise HTTPException(409, "only issued paper-check evidence can be voided")
+    value.lifecycle = "voided"
+    replacement = PayrollPaperCheckEvidenceRecord(company_id=value.company_id, run_id=value.run_id, employee_id=value.employee_id, amount=value.amount, currency=value.currency, check_number=f"VOID-{value.check_number}-{str(value.id)[:8]}", issue_date=value.issue_date, lifecycle="voided", supersedes_id=value.id, replay_identity=payload.idempotency_key, evidence_digest=canonical_digest({"voids": str(value.id), "reason": payload.reason}), actor_user_id=context.user.id, void_reason=payload.reason)
+    session.add(replacement)
+    AuditService.stage(session, AuditEntry(action="payroll.paper_check.voided", resource_type="payroll_paper_check", actor_user_id=context.user.id, company_id=context.company.id, resource_id=value.id, reason_code="paper_check_voided", details={"replacement_id": str(replacement.id), "reason": payload.reason}))
+    await session.commit()
+    return {"check_id": replacement.id, "original_check_id": value.id, "lifecycle": replacement.lifecycle, "replayed": False}
+
+
+@router.post("/runs/{run_id}/paper-checks/reissue")
+async def reissue_paper_check(run_id: UUID, payload: PaperCheckReissueInput, context: PaymentManage, session: Session) -> dict[str, object]:
+    original = await session.scalar(select(PayrollPaperCheckEvidenceRecord).where(PayrollPaperCheckEvidenceRecord.company_id == context.company.id, PayrollPaperCheckEvidenceRecord.id == payload.original_check_id, PayrollPaperCheckEvidenceRecord.run_id == run_id))
+    if original is None or original.lifecycle != "voided":
+        raise HTTPException(409, "voided original paper-check evidence is required")
+    issue = PaperCheckIssueInput(employee_id=payload.employee_id, check_number=payload.check_number, issue_date=payload.issue_date, idempotency_key=payload.idempotency_key)
+    result = await issue_paper_check(run_id, issue, context, session)
+    return {**result, "reissued_from": original.id}
 
 
 @router.get("/runs/{run_id}/payment-readiness")
