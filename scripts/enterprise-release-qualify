@@ -115,6 +115,22 @@ def count_skips(output: str) -> int | None:
     return sum(values) if values else 0
 
 
+def test_output_warning(check_key: str, output: str) -> str | None:
+    if check_key not in {"frontend_tests", "mobile_tests"}:
+        return None
+    warning_patterns = (
+        (r"(?m)^stderr\s*\|", "test suite emitted stderr"),
+        (r"(?m)^\s*console\.(?:error|warn)\b", "test suite emitted console output"),
+        (r"\bWarning:", "test suite emitted a runtime warning"),
+        (r"not configured to support act\(\.\.\.\)", "React updates escaped act"),
+        (r"HydrateFallback", "router hydration fallback is missing"),
+    )
+    return next(
+        (reason for pattern, reason in warning_patterns if re.search(pattern, output)),
+        None,
+    )
+
+
 def prepare_evidence_directory(path: Path) -> None:
     """Create a private, empty evidence directory without altering sealed output."""
     if path.is_symlink():
@@ -149,6 +165,9 @@ def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Res
     duration = (datetime.now(timezone.utc) - started).total_seconds()
     write_private_artifact(artifact, completed.stdout)
     status = "PASS" if completed.returncode == 0 else "FAIL"
+    warning_reason = test_output_warning(check.key, completed.stdout)
+    if status == "PASS" and warning_reason is not None:
+        status, reason = "FAIL", warning_reason
     if check.key == "repository_cleanliness" and completed.stdout:
         status, reason = "FAIL", "working tree is not clean"
     if check.key == "repository_provenance" and completed.stdout.strip() != candidate:
