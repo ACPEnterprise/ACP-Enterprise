@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 
 import {
   addCustomerContact,
@@ -12,12 +13,14 @@ import {
   listCustomers,
   listCustomerConsents,
   recordCustomerConsent,
+  refreshCustomerPopulation,
   restoreCustomer,
   searchCustomers,
   updateCustomer,
   updateCustomerContact,
   updateCustomerProperty,
 } from "../api/customers";
+import { useAuth } from "../auth";
 import type { CustomerSearchCriteria } from "../types/customers";
 
 export function useCustomerList(search: string, limit: number, offset: number) {
@@ -41,6 +44,32 @@ export function useCustomerDetail(customerId: string | null, enabled = true) {
     queryKey: ["customer", customerId],
     queryFn: () => getCustomer(customerId as string),
     enabled: enabled && Boolean(customerId),
+  });
+}
+
+export function useCustomerPopulationRefresh() {
+  const queryClient = useQueryClient();
+  const { activeCompany } = useAuth();
+  const idempotencyKey = useRef<string | null>(null);
+  const branchId =
+    activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? null;
+  return useMutation({
+    mutationFn: () => {
+      if (!branchId) {
+        throw new Error("An active Branch is required to refresh source classification.");
+      }
+      idempotencyKey.current ??= `customer-population-refresh-${crypto.randomUUID()}`;
+      return refreshCustomerPopulation(idempotencyKey.current, branchId);
+    },
+    onSuccess: async () => {
+      idempotencyKey.current = null;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["administration", "migration-readiness"],
+        }),
+      ]);
+    },
   });
 }
 export function useCustomerConsents(customerId: string | null) {

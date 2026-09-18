@@ -5,8 +5,18 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from uuid import uuid4
 
+import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customer_migration.models import (
     CustomerMigrationCandidate,
@@ -14,6 +24,7 @@ from app.customer_migration.models import (
     CustomerMigrationSourceRow,
     CustomerPopulationReconciliationCommand,
     CustomerPopulationReconciliationDisposition,
+    CustomerPopulationRefreshRun,
     CustomerSourceIdentity,
 )
 from app.customer_migration.population_reconciliation import (
@@ -21,6 +32,7 @@ from app.customer_migration.population_reconciliation import (
     CustomerPopulationReconciliationService,
     ExactCustomerAdmissionCommand,
 )
+from app.customer_migration.population_router import router as population_router
 from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.customers.repository import CustomerRepository
 from app.customers.schemas import (
@@ -32,30 +44,26 @@ from app.customers.schemas import (
     CustomerType,
     ServiceLocationCreate,
 )
+from app.database.session import get_database_session
 from app.events.models import BusinessEvent
 from app.operational_migration.models import HcpMigrationMasterRun  # noqa: F401
 from app.platform.audit.models import AuditRecord
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.idempotency.models import MutationReceipt
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     PermissionDeniedError,
 )
 from app.platform.permissions.codes import CustomerPermission
+from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
 from scripts.customer_population_reconciliation import (
     execute_action as execute_reconciliation_action,
 )
 from scripts.customer_population_reconciliation import parser as reconciliation_parser
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 HAMMER_PROVIDER_ID = "147405829"
 
@@ -140,6 +148,27 @@ async def seed_context(
         credential_version=1,
         authorization_version=1,
     )
+
+
+def population_app(
+    factory: async_sessionmaker[AsyncSession],
+    context: AuthorizationContext | None,
+) -> FastAPI:
+    app = FastAPI()
+    app.include_router(population_router)
+
+    async def database_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_database_session] = database_override
+    if context is not None:
+
+        async def context_override() -> AuthorizationContext:
+            return context
+
+        app.dependency_overrides[get_authorization_context] = context_override
+    return app
 
 
 def hammer_aggregate() -> tuple[
@@ -233,6 +262,281 @@ async def stage_hammer(
                 )
             )
     return artifact
+
+
+@pytest.mark.asyncio
+async def test_http_population_refresh_is_authorized_replay_safe_and_non_admitting(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Population Refresh API")
+    await stage_hammer(factory, context)
+    app = population_app(factory, context)
+
+    async def refresh() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return await client.post(
+                "/api/v1/customer-migration/population/refresh",
+                json={"source_system": "housecall_pro"},
+                headers={"Idempotency-Key": "population-refresh-network-retry"},
+            )
+
+    first, concurrent_replay = await asyncio.gather(refresh(), refresh())
+    assert first.status_code == concurrent_replay.status_code == 200
+    assert first.json()["run_id"] == concurrent_replay.json()["run_id"]
+    assert first.json()["receipt_id"] == concurrent_replay.json()["receipt_id"]
+    assert {first.json()["replay"], concurrent_replay.json()["replay"]} == {
+        "executed",
+        "replayed",
+    }
+    assert first.json()["counts"] == {
+        "total": 1,
+        "bound": 0,
+        "held": 0,
+        "ambiguous": 0,
+        "unexplained": 1,
+    }
+    assert first.json()["customer_admission_performed"] is False
+    assert first.headers["Cache-Control"] == "private, no-store"
+
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Customer)
+                .where(Customer.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerContact)
+                .join(Customer, Customer.id == CustomerContact.customer_id)
+                .where(Customer.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ServiceLocation)
+                .join(Customer, Customer.id == ServiceLocation.customer_id)
+                .where(Customer.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerSourceIdentity)
+                .where(CustomerSourceIdentity.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerPopulationReconciliationDisposition)
+                .where(
+                    CustomerPopulationReconciliationDisposition.company_id
+                    == context.company.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerPopulationRefreshRun)
+                .where(CustomerPopulationRefreshRun.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(MutationReceipt)
+                .where(
+                    MutationReceipt.company_id == context.company.id,
+                    MutationReceipt.operation
+                    == "customer_population_reconciliation.refresh",
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(AuditRecord)
+                .where(
+                    AuditRecord.company_id == context.company.id,
+                    AuditRecord.action
+                    == "customer_population_reconciliation.refreshed",
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(BusinessEvent.company_id == context.company.id)
+            )
+            == 0
+        )
+
+    restricted = replace(context, effective_permissions=())
+    restricted_app = population_app(factory, restricted)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=restricted_app), base_url="http://test"
+    ) as client:
+        denied = await client.post(
+            "/api/v1/customer-migration/population/refresh",
+            json={"source_system": "housecall_pro"},
+            headers={"Idempotency-Key": "population-refresh-network-retry"},
+        )
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "Permission denied."
+
+
+@pytest.mark.asyncio
+async def test_concurrent_distinct_refresh_commands_converge_without_admission(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Distinct Population Refresh")
+    await stage_hammer(factory, context)
+    app = population_app(factory, context)
+
+    async def refresh(key: str) -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return await client.post(
+                "/api/v1/customer-migration/population/refresh",
+                json={"source_system": "housecall_pro"},
+                headers={"Idempotency-Key": key},
+            )
+
+    first, second = await asyncio.gather(
+        refresh("population-refresh-distinct-one"),
+        refresh("population-refresh-distinct-two"),
+    )
+    assert first.status_code == second.status_code == 200
+    assert first.json()["replay"] == second.json()["replay"] == "executed"
+    assert first.json()["run_id"] != second.json()["run_id"]
+
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerPopulationReconciliationDisposition)
+                .where(
+                    CustomerPopulationReconciliationDisposition.company_id
+                    == context.company.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerPopulationRefreshRun)
+                .where(CustomerPopulationRefreshRun.company_id == context.company.id)
+            )
+            == 2
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Customer)
+                .where(Customer.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerSourceIdentity)
+                .where(CustomerSourceIdentity.company_id == context.company.id)
+            )
+            == 0
+        )
+
+
+@pytest.mark.asyncio
+async def test_http_population_refresh_conflicting_branch_and_tenant_scope(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Population Refresh Scope")
+    assert context.active_branch is not None
+    await stage_hammer(factory, context)
+    app = population_app(factory, context)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post(
+            "/api/v1/customer-migration/population/refresh",
+            json={"source_system": "housecall_pro"},
+            headers={"Idempotency-Key": "population-refresh-scoped-key"},
+        )
+    assert first.status_code == 200
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        unsupported_source = await client.post(
+            "/api/v1/customer-migration/population/refresh",
+            json={"source_system": "quickbooks"},
+            headers={"Idempotency-Key": "population-refresh-scoped-key"},
+        )
+    assert unsupported_source.status_code == 422
+
+    async with factory() as session, session.begin():
+        branch = Branch(
+            company_id=context.company.id,
+            name="OTHER",
+            code=f"OTHER-{uuid4().hex[:8].upper()}",
+            status="active",
+            timezone="America/New_York",
+            is_primary=False,
+        )
+        session.add(branch)
+        await session.flush()
+    other_branch_context = replace(
+        context,
+        authorized_branches=(context.active_branch, branch),
+        active_branch=branch,
+    )
+    branch_app = population_app(factory, other_branch_context)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=branch_app), base_url="http://test"
+    ) as client:
+        conflict = await client.post(
+            "/api/v1/customer-migration/population/refresh",
+            json={"source_system": "housecall_pro"},
+            headers={"Idempotency-Key": "population-refresh-scoped-key"},
+        )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "idempotency_conflict"
+
+    other_context = await seed_context(factory, name="Other Population Tenant")
+    other_app = population_app(factory, other_context)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=other_app), base_url="http://test"
+    ) as client:
+        isolated = await client.post(
+            "/api/v1/customer-migration/population/refresh",
+            json={"source_system": "housecall_pro"},
+            headers={"Idempotency-Key": "population-refresh-scoped-key"},
+        )
+    assert isolated.status_code == 200
+    assert isolated.json()["run_id"] != first.json()["run_id"]
+    assert isolated.json()["counts"]["total"] == 0
 
 
 def command(

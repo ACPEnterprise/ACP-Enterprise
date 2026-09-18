@@ -8,6 +8,7 @@ import {
   createCustomer,
   getCustomer,
   listCustomers,
+  refreshCustomerPopulation,
   searchCustomers,
   updateCustomer,
 } from "./customers";
@@ -68,6 +69,35 @@ describe("customer response normalization", () => {
     });
     expect(response).toMatchObject({ page: 2, total_count: 41, total_pages: 3 });
     expect(response.items[0]?.source).toBe("unknown");
+  });
+
+  it("initiates population refresh with a caller-owned replay identity", async () => {
+    const result = {
+      classification: "CUSTOMER_POPULATION_RECONCILED",
+      run_id: "run-1",
+      receipt_id: "receipt-1",
+      replay: "executed",
+      source_system: "housecall_pro",
+      counts: { total: 1, bound: 0, held: 0, ambiguous: 0, unexplained: 1 },
+      evidence_digest: "a".repeat(64),
+      completed_at: "2026-09-17T22:00:00Z",
+      customer_admission_performed: false,
+    } as const;
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: result } as never);
+
+    await expect(
+      refreshCustomerPopulation("refresh-request-1", "branch-1"),
+    ).resolves.toEqual(result);
+    expect(post).toHaveBeenCalledWith(
+      "/api/v1/customer-migration/population/refresh",
+      { source_system: "housecall_pro" },
+      {
+        headers: {
+          "Idempotency-Key": "refresh-request-1",
+          "X-Branch-ID": "branch-1",
+        },
+      },
+    );
   });
 
   it("projects preferred Contact details into roster phone and email", async () => {

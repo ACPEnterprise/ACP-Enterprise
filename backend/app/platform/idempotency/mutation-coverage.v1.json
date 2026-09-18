@@ -818,6 +818,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "customers",
+      "mechanism": "Company-scoped Platform mutation receipt, canonical Branch/source digest, advisory-locked exact-source dispositions, immutable refresh-run ledger, and transactional audit",
+      "method": "POST",
+      "operation_id": "refresh_customer_population_api_v1_customer_migration_population_refresh_post",
+      "path": "/api/v1/customer-migration/population/refresh",
+      "reason": "A protected refresh records one bounded exact-provider classification result without Customer admission; exact replay returns the original ledger and conflicting scoped reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "customers",
       "mechanism": "optional Platform transactional receipt; headerless legacy compatibility remains",
@@ -3199,6 +3209,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2562b1975992f1deac86d4c6842d3e21cb4a09b5b057e8dfaf0c06ec459a6335",
+  "fingerprint": "500794596cbb0adb9998ab682f74d8ddf1dec5bf2d5f1512211ffe192c532e31",
   "schema_version": "1"
 }

@@ -1183,6 +1183,61 @@ class CustomerPopulationReconciliationDisposition(Base):
     )
 
 
+class CustomerPopulationRefreshRun(Base):
+    """Bounded result ledger for an operator-initiated population refresh."""
+
+    __tablename__ = "customer_population_refresh_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "total_count >= 0 AND bound_count >= 0 AND held_count >= 0 "
+            "AND ambiguous_count >= 0 AND unexplained_count >= 0",
+            name="ck_customer_population_refresh_counts_nonnegative",
+        ),
+        CheckConstraint(
+            "total_count = bound_count + held_count + ambiguous_count "
+            "+ unexplained_count",
+            name="ck_customer_population_refresh_counts_reconcile",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_population_refresh_branch_company",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_customer_population_refresh_scope",
+            "company_id",
+            "branch_id",
+            "completed_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    total_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    bound_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    held_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    ambiguous_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unexplained_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    initiated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class CustomerPopulationReconciliationCommand(Base):
     """Durable replay receipt for one exact-provider reconciliation command."""
 
