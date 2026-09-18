@@ -87,9 +87,30 @@ def test_controller_validator_and_pull_are_deterministic() -> None:
     assert first.returncode == second.returncode == 0
     assert first.stdout == second.stdout
     selected = json.loads(first.stdout)
-    assert selected["id"] == "PRICEBOOK.REALWORLD.COMPLETION"
+    assert selected["id"] == "MIG.COMPLETENESS.CUSTOMERS"
     assert selected["priority"] == "P0"
     assert selected["lane"] == "OM2-A"
+
+
+def test_owner_acceptance_work_is_not_dispatched_to_engineering_workers() -> None:
+    data = roadmap()
+    owner_acceptance_ids = {
+        item["id"]
+        for item in data["milestones"]
+        if item["lifecycle_status"] == "OWNER_ACCEPTANCE_REQUIRED"
+    }
+    assert "PRICEBOOK.REALWORLD.COMPLETION" in owner_acceptance_ids
+
+    for factory in ("OM1", "OM2", "LAPTOP"):
+        selected = subprocess.run(
+            [str(COMMAND), "next", "--factory", factory],
+            cwd=ROOT,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if selected.returncode == 0:
+            assert json.loads(selected.stdout)["id"] not in owner_acceptance_ids
 
 
 def test_closed_is_not_inferred_from_deployment() -> None:

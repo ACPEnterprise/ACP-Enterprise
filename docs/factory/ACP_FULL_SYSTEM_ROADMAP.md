@@ -177,6 +177,9 @@ scripts/factory-roadmap next --factory LAPTOP
 items, and requires every prerequisite to be at least engineering-ready and
 protected/deployed/accepted as represented by the lifecycle state. The output
 contains the stable item, preferred lane, priority, and exact next action.
+`OWNER_ACCEPTANCE_REQUIRED` items remain in the durable owner-action queue and
+are never returned as engineering assignments; an idle lane continues to the
+next dependency-safe engineering-owned item.
 
 - OM1E reads the full graph and owns canonical Alembic, protected integration,
   Release, schema/security/platform gates, and cross-factory arbitration.
