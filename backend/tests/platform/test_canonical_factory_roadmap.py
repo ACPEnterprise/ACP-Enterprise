@@ -83,7 +83,7 @@ def test_controller_validator_and_pull_are_deterministic() -> None:
     assert first.returncode == second.returncode == 0
     assert first.stdout == second.stdout
     selected = json.loads(first.stdout)
-    assert selected["id"] == "PRICEBOOK.FOUNDATION"
+    assert selected["id"] == "PRICEBOOK.REALWORLD.COMPLETION"
     assert selected["priority"] == "P0"
     assert selected["lane"] == "OM2-A"
 
@@ -96,4 +96,3 @@ def test_closed_is_not_inferred_from_deployment() -> None:
     assert pricebook["owner_acceptance_status"] == "OWNER_ACCEPTANCE_REQUIRED"
     assert pricebook["lifecycle_status"] != "CLOSED"
     assert by_id["BETA.DOMAIN.ACTIVATION"]["lifecycle_status"] == "CLOSED"
-

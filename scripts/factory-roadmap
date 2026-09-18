@@ -174,12 +174,24 @@ def dependency_safe(item: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> b
 def eligible(data: dict[str, Any], *, factory: str | None = None) -> list[dict[str, Any]]:
     items = data["milestones"]
     by_id = {item["id"]: item for item in items}
+
+    def has_actionable_direct_successor(item: dict[str, Any]) -> bool:
+        successors = item.get("successor_supersession", {}).get("successors", [])
+        return any(
+            successor in by_id
+            and item["id"] in by_id[successor]["prerequisites"]
+            and by_id[successor]["lifecycle_status"] in PULLABLE
+            and dependency_safe(by_id[successor], by_id)
+            for successor in successors
+        )
+
     candidates = [
         item
         for item in items
         if item["lifecycle_status"] in PULLABLE
         and (factory is None or item["owning_factory"] == factory)
         and dependency_safe(item, by_id)
+        and not has_actionable_direct_successor(item)
     ]
     rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
     return sorted(candidates, key=lambda item: (rank[item["priority"]], item["sequence"], item["id"]))
