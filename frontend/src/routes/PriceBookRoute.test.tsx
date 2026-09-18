@@ -37,59 +37,46 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => authState.permissionCodes.includes(code),
 }));
 vi.mock("../hooks/usePriceBook", () => ({
-  useCompanyTaxPolicy: () => ({
-    isPending: false,
-    isError: false,
-    data: { current: null, history: [] },
-  }),
-  useActivationReadiness: () => ({
-    isPending: false,
-    isError: false,
-    data: undefined,
-  }),
+  useActivationReadiness: () => ({ isPending: false, isError: false, data: undefined }),
   usePriceBookAudit: () => ({ isPending: false, isError: false, data: [] }),
   useCandidateReview: (params: Record<string, unknown>) => {
     candidateReviewState.calls.push(params);
-    return {
-      isPending: false,
-      isError: false,
-      data: {
-        items: [
-          {
-            candidate_identity: "flat-rate:SVC-001",
-            native_service_item_id: "item-1",
-            service_code: "SVC-001",
-            name: "Standard service call",
-            customer_description: "Diagnostic visit",
-            category: "Service Calls",
-            admission_status: "admitted",
-            review_flags: ["TAX_REVIEW_REQUIRED"],
-            activation_blockers: ["OWNER_APPROVAL_REQUIRED"],
-            candidate_prices: { standard: "129.00" },
-            price_derivation: "OWNER_OVERRIDE",
-            source_sheet: "Service Calls",
-            source_row: 5,
-            source_digest: "a".repeat(64),
-            evidence_digest: "b".repeat(64),
-            tax_decision_group: "CATEGORY_SERVICE_CALLS",
-            conflict_reason: null,
-          },
-        ],
-        counts: {
-          admitted: 179,
-          held: 39,
-          material_mapping_required: 194,
-          activation_ready: 0,
+    return ({
+    isPending: false,
+    isError: false,
+    data: {
+      items: [
+        {
+          candidate_identity: "flat-rate:SVC-001",
+          native_service_item_id: "item-1",
+          service_code: "SVC-001",
+          name: "Standard service call",
+          customer_description: "Diagnostic visit",
+          category: "Service Calls",
+          admission_status: "admitted",
+          review_flags: ["TAX_REVIEW_REQUIRED"],
+          activation_blockers: ["OWNER_APPROVAL_REQUIRED"],
+          candidate_prices: { standard: "129.00" },
+          price_derivation: "OWNER_OVERRIDE",
+          source_sheet: "Service Calls",
+          source_row: 5,
+          source_digest: "a".repeat(64),
+          evidence_digest: "b".repeat(64),
+          tax_decision_group: "CATEGORY_SERVICE_CALLS",
+          conflict_reason: null,
         },
-        total: 218,
+      ],
+      counts: {
+        admitted: 179,
+        held: 39,
+        material_mapping_required: 194,
+        activation_ready: 0,
       },
-    };
+      total: 218,
+    },
+    });
   },
-  usePriceBook: (
-    _branch: string | undefined,
-    _enabled: boolean,
-    filters: Record<string, unknown>,
-  ) => {
+  usePriceBook: (_branch: string | undefined, _enabled: boolean, filters: Record<string, unknown>) => {
     catalogQueryState.calls.push(filters);
     return {
       isPending: false,
@@ -105,6 +92,26 @@ vi.mock("../hooks/usePriceBook", () => ({
             position: 1,
             status: "active",
             version: 2,
+          },
+          {
+            id: "category-2",
+            name: "Sewer",
+            code: "SEWER",
+            description: "Sewer services",
+            parent_id: "category-1",
+            position: 2,
+            status: "active",
+            version: 1,
+          },
+          {
+            id: "category-3",
+            name: "Main Line",
+            code: "MAIN-LINE",
+            description: "Main sewer line services",
+            parent_id: "category-2",
+            position: 3,
+            status: "active",
+            version: 1,
           },
         ],
         tax_classifications: [
@@ -194,24 +201,6 @@ vi.mock("../hooks/usePriceBook", () => ({
       mutateAsync: mutationState.categoryUpdateMutate,
     },
     tax: {
-      isPending: false,
-      isError: false,
-      error: null,
-      mutateAsync: vi.fn(),
-    },
-    companyTaxPolicy: {
-      isPending: false,
-      isError: false,
-      error: null,
-      mutateAsync: vi.fn(),
-    },
-    updateCompanyTaxPolicy: {
-      isPending: false,
-      isError: false,
-      error: null,
-      mutateAsync: vi.fn(),
-    },
-    certifyCompanyTaxPolicy: {
       isPending: false,
       isError: false,
       error: null,
@@ -311,6 +300,14 @@ describe("PriceBookRoute", () => {
     mutationState.versionLifecycleMutate.mockReset();
   });
 
+  it("shows category hierarchy in owner browsing controls", () => {
+    render(<PriceBookRoute />, { wrapper: MemoryRouter });
+    expect(screen.getAllByText("Drain › Sewer").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Drain › Sewer › Main Line").length,
+    ).toBeGreaterThan(0);
+  });
+
   it("edits category hierarchy and lifecycle through governed authority", async () => {
     mutationState.categoryUpdateMutate.mockResolvedValueOnce({});
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
@@ -318,9 +315,7 @@ describe("PriceBookRoute", () => {
     fireEvent.change(screen.getByLabelText("Choose category to edit"), {
       target: { value: "category-1" },
     });
-    expect(screen.getByLabelText("Category description")).toHaveValue(
-      "Drain services",
-    );
+    expect(screen.getByLabelText("Category description")).toHaveValue("Drain services");
     fireEvent.change(screen.getByLabelText("Category status"), {
       target: { value: "archived" },
     });
@@ -343,61 +338,27 @@ describe("PriceBookRoute", () => {
     mutationState.versionMutate.mockResolvedValueOnce({});
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
 
-    fireEvent.change(screen.getByLabelText("Price service item"), {
-      target: { value: "item-1" },
-    });
-    fireEvent.change(screen.getByLabelText("Tax classification"), {
-      target: { value: "tax-1" },
-    });
-    fireEvent.change(screen.getByLabelText("Unit price"), {
-      target: { value: "199" },
-    });
-    fireEvent.change(screen.getByLabelText("Effective time"), {
-      target: { value: "2026-10-01T08:00" },
-    });
-    fireEvent.change(screen.getByLabelText("Component label"), {
-      target: { value: "Expected labor" },
-    });
-    fireEvent.change(screen.getByLabelText("Expected component quantity"), {
-      target: { value: "2" },
-    });
-    fireEvent.change(screen.getByLabelText("Expected component unit cost"), {
-      target: { value: "80" },
-    });
+    fireEvent.change(screen.getByLabelText("Price service item"), { target: { value: "item-1" } });
+    fireEvent.change(screen.getByLabelText("Tax classification"), { target: { value: "tax-1" } });
+    fireEvent.change(screen.getByLabelText("Unit price"), { target: { value: "199" } });
+    fireEvent.change(screen.getByLabelText("Effective time"), { target: { value: "2026-10-01T08:00" } });
+    fireEvent.change(screen.getByLabelText("Component label"), { target: { value: "Expected labor" } });
+    fireEvent.change(screen.getByLabelText("Expected component quantity"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Expected component unit cost"), { target: { value: "80" } });
     fireEvent.click(screen.getByRole("button", { name: "Add expected input" }));
-    fireEvent.change(screen.getByLabelText("Component type"), {
-      target: { value: "material" },
-    });
-    fireEvent.change(screen.getByLabelText("Component label"), {
-      target: { value: "Expected fittings" },
-    });
-    fireEvent.change(screen.getByLabelText("Expected component quantity"), {
-      target: { value: "3" },
-    });
+    fireEvent.change(screen.getByLabelText("Component type"), { target: { value: "material" } });
+    fireEvent.change(screen.getByLabelText("Component label"), { target: { value: "Expected fittings" } });
+    fireEvent.change(screen.getByLabelText("Expected component quantity"), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
 
-    await waitFor(() =>
-      expect(mutationState.versionMutate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            components: [
-              expect.objectContaining({
-                component_type: "labor",
-                label: "Expected labor",
-                quantity: "2",
-                unit_cost: "80",
-              }),
-              expect.objectContaining({
-                component_type: "material",
-                label: "Expected fittings",
-                quantity: "3",
-                unit_cost: undefined,
-              }),
-            ],
-          }),
-        }),
-      ),
-    );
+    await waitFor(() => expect(mutationState.versionMutate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        components: [
+          expect.objectContaining({ component_type: "labor", label: "Expected labor", quantity: "2", unit_cost: "80" }),
+          expect.objectContaining({ component_type: "material", label: "Expected fittings", quantity: "3", unit_cost: undefined }),
+        ],
+      }),
+    })));
   });
 
   it("edits an existing draft price without rewriting history", async () => {
@@ -405,38 +366,23 @@ describe("PriceBookRoute", () => {
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
     fireEvent.click(screen.getByRole("button", { name: "Edit draft price" }));
     expect(screen.getByLabelText("Unit price")).toHaveValue(149.95);
-    fireEvent.change(screen.getByLabelText("Unit price"), {
-      target: { value: "159.95" },
-    });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save draft price version" }),
-    );
-    await waitFor(() =>
-      expect(mutationState.versionUpdateMutate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          versionId: "version-1",
-          data: expect.objectContaining({
-            expected_version: 1,
-            unit_price: "159.95",
-          }),
-        }),
-      ),
-    );
+    fireEvent.change(screen.getByLabelText("Unit price"), { target: { value: "159.95" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft price version" }));
+    await waitFor(() => expect(mutationState.versionUpdateMutate).toHaveBeenCalledWith(expect.objectContaining({
+      versionId: "version-1",
+      data: expect.objectContaining({ expected_version: 1, unit_price: "159.95" }),
+    })));
   });
 
   it("inactivates an active price through the explicit lifecycle contract", async () => {
     mutationState.versionLifecycleMutate.mockResolvedValueOnce({});
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Inactivate price version" }),
-    );
-    await waitFor(() =>
-      expect(mutationState.versionLifecycleMutate).toHaveBeenCalledWith({
-        versionId: "version-active",
-        action: "inactivate",
-        expectedVersion: 2,
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Inactivate price version" }));
+    await waitFor(() => expect(mutationState.versionLifecycleMutate).toHaveBeenCalledWith({
+      versionId: "version-active",
+      action: "inactivate",
+      expectedVersion: 2,
+    }));
   });
 
   it("pages through the native service catalog", async () => {
@@ -455,9 +401,7 @@ describe("PriceBookRoute", () => {
   it("pages through every candidate instead of hiding records past the first page", async () => {
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
 
-    expect(
-      screen.getByText("Showing 1–1 of 218 candidates."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Showing 1–1 of 218 candidates.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next candidates" }));
 
     await waitFor(() =>
@@ -469,18 +413,12 @@ describe("PriceBookRoute", () => {
   it("filters coherent candidate review cohorts without activating them", async () => {
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
 
-    fireEvent.change(
-      screen.getByLabelText("Filter candidate admission state"),
-      {
-        target: { value: "held" },
-      },
-    );
-    fireEvent.change(
-      screen.getByLabelText("Filter candidate review requirement"),
-      {
-        target: { value: "MATERIAL_MAPPING_REQUIRED" },
-      },
-    );
+    fireEvent.change(screen.getByLabelText("Filter candidate admission state"), {
+      target: { value: "held" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter candidate review requirement"), {
+      target: { value: "MATERIAL_MAPPING_REQUIRED" },
+    });
 
     await waitFor(() =>
       expect(candidateReviewState.calls).toContainEqual(
@@ -515,9 +453,7 @@ describe("PriceBookRoute", () => {
       </MemoryRouter>,
     );
     expect(screen.getAllByText("Drain clearing")).not.toHaveLength(0);
-    expect(
-      screen.getByRole("region", { name: "Option set Service level" }),
-    ).toHaveTextContent("Better · DRAIN-CLEAR · Drain clearing");
+    expect(screen.getByRole("region", { name: "Option set Service level" })).toHaveTextContent("Better · DRAIN-CLEAR · Drain clearing");
     expect(
       screen.queryByRole("button", { name: "Create category" }),
     ).not.toBeInTheDocument();
@@ -586,7 +522,7 @@ describe("PriceBookRoute", () => {
       screen.getByRole("button", { name: "Create tax classification" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Create service choice group" }),
+      screen.getByRole("button", { name: "Create option group" }),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Review activation" }),

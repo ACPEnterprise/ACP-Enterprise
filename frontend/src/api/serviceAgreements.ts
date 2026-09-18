@@ -4,6 +4,7 @@ import type {
   AgreementWorkspace,
   ServiceAgreement,
   ServiceEntitlement,
+  CustomerMembershipEntitlement,
 } from "../types/serviceAgreements";
 const root = "/api/v1/service-agreements";
 export const getAgreementWorkspace = async () =>
@@ -23,6 +24,8 @@ export const transitionAgreement = async (
 ) =>
   (await apiClient.post<ServiceAgreement>(`${root}/${id}/${action}`, input))
     .data;
+export const getCustomerMembershipEntitlements = async (customerId: string) =>
+  (await apiClient.get<CustomerMembershipEntitlement[]>(`${root}/customers/${encodeURIComponent(customerId)}/entitlements`)).data;
 export const generateEntitlements = async (id: string) =>
   (await apiClient.post<ServiceEntitlement[]>(`${root}/${id}/entitlements`))
     .data;

@@ -18,6 +18,12 @@ function harness(initial: PunchState = states.not_clocked_in, connected = true) 
 }
 
 describe("native employee timeclock", () => {
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    });
+  });
+
   it("renders Clock In while authoritatively clocked out and sends no identity or timestamp", async () => { const h = harness(); render(<TimeScreen service={h.service} network={h.network} canPunch />); expect(await screen.findByText("Clock In")).toBeEnabled(); fireEvent.press(screen.getByText("Clock In")); await waitFor(() => expect(h.service.punch).toHaveBeenCalledWith("clock_in", "opaque-idempotency-key")); expect(JSON.stringify((h.service.punch as jest.Mock).mock.calls)).not.toMatch(/employee|occurred_at|timestamp/); });
   it("uses authoritative Clock In response", async () => { const h = harness(); render(<TimeScreen service={h.service} network={h.network} canPunch />); fireEvent.press(await screen.findByText("Clock In")); expect(await screen.findByText("Clocked in")).toBeOnTheScreen(); });
   it("offers Start Break and Clock Out while clocked in", async () => { const h = harness(states.clocked_in); render(<TimeScreen service={h.service} network={h.network} canPunch />); expect(await screen.findByText("Start Break")).toBeEnabled(); expect(screen.getByText("Clock Out")).toBeEnabled(); });

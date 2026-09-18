@@ -301,6 +301,7 @@ class InvoiceService:
                 total_amount=revision.total_amount,
                 open_amount=Decimal("0.00"),
                 calculation_digest=_digest(revision.calculation_evidence),
+                pricing_evidence=dict(revision.calculation_evidence),
                 legacy_evidence_missing=False,
                 created_by_user_id=spec.actor_user_id,
                 updated_by_user_id=spec.actor_user_id,

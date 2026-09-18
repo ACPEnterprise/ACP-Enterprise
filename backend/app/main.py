@@ -57,6 +57,7 @@ from app.operational_migration.product_router import router as migration_product
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
 from app.payroll.cutover_router import router as payroll_cutover_router
+from app.payroll.operator_router import router as payroll_operator_router
 from app.payroll.router import router as payroll_router
 from app.payroll.setup_router import router as payroll_setup_router
 from app.platform.audit.router import router as platform_audit_router
@@ -151,6 +152,9 @@ app = FastAPI(
     version=settings.app_version,
     description=("Real-time business operating system for home-service companies."),
     lifespan=lifespan,
+    docs_url="/docs" if settings.api_documentation_enabled else None,
+    redoc_url="/redoc" if settings.api_documentation_enabled else None,
+    openapi_url="/openapi.json" if settings.api_documentation_enabled else None,
 )
 
 app.add_middleware(
@@ -206,6 +210,7 @@ app.include_router(invoicing_router)
 app.include_router(payments_router)
 app.include_router(payroll_router)
 app.include_router(payroll_setup_router)
+app.include_router(payroll_operator_router)
 app.include_router(payroll_cutover_router)
 app.include_router(accounts_payable_router)
 app.include_router(communications_router)

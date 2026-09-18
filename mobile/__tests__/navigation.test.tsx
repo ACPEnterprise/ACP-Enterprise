@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react-native";
+import { act, render, screen } from "@testing-library/react-native";
 import { HomeScreen } from "../src/screens/HomeScreen";
 import { SignInScreen } from "../src/screens/SignInScreen";
 import { TimeScreen } from "../src/screens/TimeScreen";
@@ -9,5 +9,5 @@ const network = { isConnected: async () => true, subscribe: () => () => undefine
 describe("application shell", () => {
   it("boots an unauthenticated sign-in foundation", () => { render(<SignInScreen onSignIn={jest.fn()} />); expect(screen.getByText("ACP Employee")).toBeOnTheScreen(); });
   it("renders authenticated Home without business fixtures", () => { render(<HomeScreen />); expect(screen.getByText("Home")).toBeOnTheScreen(); expect(screen.queryByText(/job|hours|alert|schedule/i)).not.toBeOnTheScreen(); });
-  it("renders the native My Time route boundary", async () => { render(<TimeScreen service={service} network={network} canPunch />); expect(screen.getByText("My Time")).toBeOnTheScreen(); expect(await screen.findByText("Clock In")).toBeOnTheScreen(); });
+  it("renders the native My Time route boundary", async () => { render(<TimeScreen service={service} network={network} canPunch />); expect(screen.getByText("My Time")).toBeOnTheScreen(); expect(await screen.findByText("Clock In")).toBeOnTheScreen(); await act(async () => { await new Promise((resolve) => setTimeout(resolve, 75)); }); });
 });

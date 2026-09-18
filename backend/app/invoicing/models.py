@@ -165,6 +165,7 @@ class Invoice(Base):
     total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     open_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     calculation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    pricing_evidence: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     legacy_evidence_missing: Mapped[bool] = mapped_column(nullable=False, default=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

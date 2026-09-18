@@ -98,6 +98,7 @@ export function EstimatesRoute() {
       optionGroup?: string;
       optionLabel?: string;
       quantity: string;
+      displayPrice?: string;
     }>
   >([]);
   const [serviceSearch, setServiceSearch] = useState("");
@@ -127,12 +128,22 @@ export function EstimatesRoute() {
       search: serviceSearch.trim() || undefined,
       categoryId: serviceCategory || undefined,
       itemStatus: "active",
+      sellableOnly: true,
     },
   );
   const activeServices =
     priceBook.data?.service_items.filter(
       (item) => item.status === "active" && item.current_version_id,
     ) ?? [];
+  const currentPriceFor = (serviceId: string) => {
+    const service = priceBook.data?.service_items.find(
+      (item) => item.id === serviceId,
+    );
+    return priceBook.data?.versions.find(
+      (version) =>
+        version.id === service?.current_version_id && version.status === "active",
+    );
+  };
 
   if (!canRead)
     return (
@@ -626,6 +637,13 @@ export function EstimatesRoute() {
                     </option>
                   ))}
               </Select>
+              {form.optionGroup && (
+                <p className="text-sm text-content-muted sm:col-span-2">
+                  Good/Better/Best labels organize genuine choices. Each choice
+                  keeps its authoritative Price Book service and price; the label
+                  does not create a pricing tier or change a price.
+                </p>
+              )}
               {form.optionGroup ? (
                 <Select
                   aria-label="Price Book option"
@@ -655,6 +673,9 @@ export function EstimatesRoute() {
                             (item) => item.id === option.service_item_id,
                           )?.name
                         }
+                        {currentPriceFor(option.service_item_id)
+                          ? ` · $${Number(currentPriceFor(option.service_item_id)?.unit_price).toFixed(2)}`
+                          : ""}
                       </option>
                     ))}
                 </Select>
@@ -680,10 +701,31 @@ export function EstimatesRoute() {
                   {activeServices.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.code} · {item.name}
+                        {currentPriceFor(item.id)
+                          ? ` · $${Number(currentPriceFor(item.id)?.unit_price).toFixed(2)}`
+                          : ""}
                       </option>
                     ))}
                 </Select>
               )}
+              {form.serviceItem &&
+                (() => {
+                  const service = priceBook.data?.service_items.find(
+                    (item) => item.id === form.serviceItem,
+                  );
+                  const price = currentPriceFor(form.serviceItem);
+                  return service ? (
+                    <div className="rounded-lg border border-stroke bg-surface-muted p-3 text-sm sm:col-span-2">
+                      <strong>{service.name}</strong>
+                      <p>{service.customer_description}</p>
+                      <p className="mt-1 font-semibold">
+                        {price
+                          ? `${price.currency} ${Number(price.unit_price).toFixed(2)}`
+                          : "Current selling price unavailable"}
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
               {!priceBook.isPending &&
                 form.branch.length === 36 &&
                 activeServices.length === 0 && (
@@ -724,6 +766,7 @@ export function EstimatesRoute() {
                       optionGroup: selectedOption?.option_group_id,
                       optionLabel: selectedOption?.label,
                       quantity: form.quantity,
+                      displayPrice: currentPriceFor(service.id)?.unit_price,
                     },
                   ]);
                   setForm({
@@ -753,6 +796,9 @@ export function EstimatesRoute() {
                           {line.optionLabel ? `${line.optionLabel} · ` : ""}
                           {line.serviceName}{" "}
                           × {line.quantity}
+                          {line.displayPrice
+                            ? ` · $${Number(line.displayPrice).toFixed(2)} each`
+                            : ""}
                         </span>
                         <Button
                           type="button"
