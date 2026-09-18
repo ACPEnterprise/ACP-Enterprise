@@ -29,6 +29,7 @@ from app.payroll.payment_release import (
     PaymentReleaseReviewDecision,
     PayrollPaymentReleaseService,
 )
+from app.payroll.models import PayrollPaymentDestinationVersion
 from app.payroll.permissions import PayrollPermission
 from app.payroll.run_finalization import (
     PayrollPopulationEvidence,
@@ -38,6 +39,7 @@ from app.payroll.run_finalization import (
     PayrollRunService,
 )
 from app.platform.audit.service import AuditEntry, AuditService
+from app.platform.idempotency.models import MutationReceipt
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
@@ -83,6 +85,7 @@ class PaperCheckDestinationInput(BaseModel):
     effective_start: date
     effective_end: date | None = None
     audit_reason: str = Field(min_length=1, max_length=500)
+    idempotency_key: str = Field(min_length=1, max_length=255)
 
 
 class ReviewDecisionInput(ReviewInput):
@@ -314,6 +317,29 @@ async def create_paper_check_destination(payload: PaperCheckDestinationInput, co
     )
     if employee is None:
         raise HTTPException(404, "active Employee was not found in this Company")
+    request_digest = canonical_digest({
+        "employee_id": str(payload.employee_id),
+        "check_reference": payload.check_reference,
+        "masked_display": payload.masked_display,
+        "effective_start": payload.effective_start.isoformat(),
+        "effective_end": payload.effective_end.isoformat() if payload.effective_end else None,
+        "audit_reason": payload.audit_reason,
+    })
+    operation = "payroll.paper_check_destination.create"
+    replay = await session.scalar(select(MutationReceipt).where(
+        MutationReceipt.company_id == context.company.id,
+        MutationReceipt.operation == operation,
+        MutationReceipt.idempotency_key == payload.idempotency_key,
+    ))
+    if replay is not None:
+        if replay.request_digest != request_digest:
+            raise HTTPException(409, "paper-check destination idempotency identity conflicts with the original request")
+        if replay.result_id is None:
+            raise HTTPException(409, "paper-check destination replay is not recoverable")
+        existing = await session.scalar(select(PayrollPaymentDestinationVersion).where(PayrollPaymentDestinationVersion.company_id == context.company.id, PayrollPaymentDestinationVersion.id == replay.result_id))
+        if existing is None:
+            raise HTTPException(409, "paper-check destination replay evidence is unavailable")
+        return {"destination_id": existing.id, "employee_id": existing.employee_id, "method": existing.method_type, "lifecycle": existing.lifecycle, "masked_display": existing.masked_display, "replayed": True}
     try:
         value = await PayrollPaymentReleaseService().create_destination(
             session,
@@ -333,7 +359,9 @@ async def create_paper_check_destination(payload: PaperCheckDestinationInput, co
         )
     except (PayrollConflictError, ValueError) as error:
         raise HTTPException(422, str(error)) from error
-    return {"destination_id": value.id, "employee_id": value.employee_id, "method": value.method_type, "lifecycle": value.lifecycle, "masked_display": value.masked_display}
+    session.add(MutationReceipt(company_id=context.company.id, actor_user_id=context.user.id, operation=operation, idempotency_key=payload.idempotency_key, request_digest=request_digest, state="completed", result_type="payroll_payment_destination", result_id=value.id, response_status=200, retention_class="financial_audit", completed_at=datetime.now(timezone.utc)))
+    await session.commit()
+    return {"destination_id": value.id, "employee_id": value.employee_id, "method": value.method_type, "lifecycle": value.lifecycle, "masked_display": value.masked_display, "replayed": False}
 
 
 @router.post("/paper-check-destinations/{destination_id}/approve")
