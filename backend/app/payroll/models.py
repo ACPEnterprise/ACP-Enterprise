@@ -1043,11 +1043,88 @@ class PayrollRunRecord(Base):
     )
 
 
+class PayrollRunCloseRecord(Base):
+    """Append-only terminal evidence for an approved Payroll run."""
+    __tablename__ = "payroll_run_close_records"
+    __table_args__ = (
+        UniqueConstraint("company_id", "run_id", name="uq_payroll_run_close_company_run"),
+        UniqueConstraint("company_id", "replay_identity", name="uq_payroll_run_close_replay"),
+        UniqueConstraint("company_id", "close_digest", name="uq_payroll_run_close_digest"),
+        ForeignKeyConstraint(["company_id", "run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        CheckConstraint("close_state = 'closed'", name="ck_payroll_run_close_state"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    prior_run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    close_state: Mapped[str] = mapped_column(String(16), nullable=False, default="closed")
+    close_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    closed_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    close_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    register_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    replay_identity: Mapped[str] = mapped_column(String(160), nullable=False)
+    close_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollCalculationInputSnapshotRecord(Base):
+    """Immutable, Company-scoped binding of every authority used by Calculate."""
+    __tablename__ = "payroll_calculation_input_snapshots"
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "run_id", "snapshot_version", name="uq_payroll_calc_snapshot_run_version"),
+        UniqueConstraint("company_id", "input_digest", name="uq_payroll_calc_snapshot_digest"),
+        CheckConstraint("snapshot_version >= 1", name="ck_payroll_calc_snapshot_version"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    pay_period_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_bindings: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    policy_reference: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    authority_references: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    replay_identity: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollPaperCheckEvidenceRecord(Base):
+    """Append-only manual paper-check evidence; never claims bank settlement."""
+    __tablename__ = "payroll_paper_check_evidence"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('issued','voided','reissued')", name="ck_payroll_paper_check_lifecycle"),
+        UniqueConstraint("company_id", "replay_identity", name="uq_payroll_paper_check_replay"),
+        UniqueConstraint("company_id", "check_number", name="uq_payroll_paper_check_number"),
+        ForeignKeyConstraint(["company_id", "run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "employee_id"], ["employees.company_id", "employees.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["supersedes_id"], ["payroll_paper_check_evidence.id"], ondelete="RESTRICT"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    check_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    issue_date: Mapped[date] = mapped_column(Date, nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False, default="issued")
+    supersedes_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    replay_identity: Mapped[str] = mapped_column(String(180), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    void_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class PayrollRunMemberRecord(Base):
     __tablename__ = "payroll_run_members"
     __table_args__ = (
         CheckConstraint(
-            "disposition IN ('ready','blocked','excluded','not_applicable')",
+            "disposition IN ('pending_calculation','ready','blocked','excluded','not_applicable')",
             name="ck_payroll_run_member_disposition",
         ),
         ForeignKeyConstraint(
@@ -1298,7 +1375,7 @@ class PayrollPaymentInstructionRecord(Base):
     __tablename__ = "payroll_payment_instructions"
     __table_args__ = (
         CheckConstraint(
-            "disposition IN ('ready','blocked','excluded','not_applicable')",
+            "disposition IN ('pending_calculation','ready','blocked','excluded','not_applicable')",
             name="ck_payroll_payment_instruction_disposition",
         ),
         ForeignKeyConstraint(

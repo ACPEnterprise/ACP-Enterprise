@@ -62,6 +62,12 @@ export function PayrollRoute() {
     else next.delete("period");
     setSearchParams(next, { replace: true });
   };
+  const operatorAction = async (runId: string, action: "calculate" | "close") => {
+    const path = `/api/v1/payroll/operator/runs/${runId}/${action}`;
+    const body = action === "close" ? { reason_code: "Operator confirmed Payroll register review", idempotency_key: crypto.randomUUID() } : { idempotency_key: crypto.randomUUID() };
+    await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body) });
+    await registers.refetch();
+  };
   const submitPayPeriod = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPeriodMessage("");
@@ -361,9 +367,9 @@ export function PayrollRoute() {
                 const hasCalculatedMember = register.members.some((member) => member.calculation_digest != null);
                 return (
                   <section key={register.run_id} className="space-y-3">
-                    <h3 className="font-semibold">
+                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">
                       {register.period_start} – {register.period_end} · {label(register.lifecycle)} / {label(register.review_state)}
-                    </h3>
+                    </h3><div className="flex gap-2"><Button size="small" variant="outline" disabled={register.lifecycle === "approved"} onClick={() => void operatorAction(register.run_id, "calculate")}>Calculate</Button><Button size="small" disabled={register.lifecycle !== "approved"} onClick={() => void operatorAction(register.run_id, "close")}>Close Payroll</Button></div></div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>

@@ -36,6 +36,7 @@ PAYROLL_RUN_HANDOFF_VERSION = "payroll.run-approved-handoff.v1"
 
 
 class PayrollRunDisposition(StrEnum):
+    PENDING_CALCULATION = "pending_calculation"
     READY = "ready"
     BLOCKED = "blocked"
     EXCLUDED = "excluded"
@@ -471,6 +472,8 @@ class PayrollRunService:
             if gross is None:
                 raise PayrollConflictError("Employee gross/net-pay lineage is invalid")
             fields = (gross.id, gross.calculation_digest, tax.id, tax.calculation_digest, None, None, tax.gross_pay, tax.employee_tax_total, tax.employee_deduction_total, tax.net_pay_candidate, tax.employer_contribution_total)
+        elif value.disposition is PayrollRunDisposition.PENDING_CALCULATION:
+            fields = (None, None, None, None, None, canonical_digest({"pending_calculation": str(value.employee_id)}), zero, zero, zero, zero, zero)
         elif value.disposition is PayrollRunDisposition.BLOCKED:
             admission = value.blocked_admission
             if admission is None or value.tax_result_id or value.disposition_authority_digest:
