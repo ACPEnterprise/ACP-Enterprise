@@ -62,6 +62,7 @@ class EventType(str, Enum):
     PAYROLL_RUN_REVIEW_ACCEPTED = "payroll.run_review_accepted"
     PAYROLL_RUN_REVIEW_REJECTED = "payroll.run_review_rejected"
     PAYROLL_RUN_APPROVED = "payroll.run_approved"
+    PAYROLL_RUN_CLOSED = "payroll.run_closed"
     PAYROLL_RUN_SUPERSEDED = "payroll.run_superseded"
     PAYROLL_RUN_VOIDED = "payroll.run_voided"
     PAYROLL_PAYMENT_DESTINATION_CREATED = "payroll.payment_destination_created"
