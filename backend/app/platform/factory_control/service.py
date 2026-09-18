@@ -65,8 +65,20 @@ def calculate_metrics(
     now: datetime,
 ) -> dict:
     roadmap_codes = {item.code for item in roadmap.milestones}
+    superseded_codes = {
+        code
+        for milestone in roadmap.milestones
+        for code in milestone.supersedes
+        if code in roadmap_codes
+    }
+    represented = tuple(
+        milestone
+        for milestone in roadmap.milestones
+        if milestone.code not in superseded_codes
+    )
+    represented_codes = {item.code for item in represented}
     milestone_stages: dict[str, set[str]] = defaultdict(set)
-    for milestone in roadmap.milestones:
+    for milestone in represented:
         if milestone.engineering_status in {
             "ENGINEERING_READY",
             "INTEGRATED",
@@ -74,24 +86,65 @@ def calculate_metrics(
             "CLOSED",
         }:
             milestone_stages[milestone.code].add("engineering_complete")
-        if milestone.beta_deployment_status in {"DEPLOYED_BETA", "CLOSED"}:
+        # DEPLOYED_BETA alone is not proof of operator usability.  The stricter
+        # Beta score advances from a beta_complete event or a CLOSED roadmap
+        # milestone, never merely from a deployment label.
+        if milestone.beta_deployment_status == "CLOSED":
             milestone_stages[milestone.code].add("beta_complete")
         if milestone.owner_acceptance_status in {"ACCEPTED", "CLOSED"}:
             milestone_stages[milestone.code].add("owner_accepted")
         if milestone.lifecycle_status == "CLOSED":
-            milestone_stages[milestone.code].add("closed")
+            milestone_stages[milestone.code].update(STAGES)
     defect_state: dict[str, bool] = {}
+    defects_discovered = defects_closed = defects_reopened = 0
     gate_state: dict[str, bool] = {}
-    handoffs: dict[str, datetime] = {}
+    handoffs: dict[str, tuple[datetime, str | None]] = {}
     pickup_latencies: list[float] = []
+    domain_pickup_latencies: list[float] = []
+    release_pickup_latencies: list[float] = []
+    integrations: dict[str, datetime] = {}
+    release_latencies: list[float] = []
+    closed_event_times: dict[str, datetime] = {}
     rework = first_pass = 0
     for event in sorted(events, key=lambda item: (item.occurred_at, str(item.id))):
-        if event.milestone_code in roadmap_codes and event.event_type in STAGES:
-            milestone_stages[event.milestone_code].add(event.event_type)
+        milestone_code = event.milestone_code
+        if milestone_code in represented_codes:
+            stages = milestone_stages[milestone_code]
+            if event.event_type == "engineering_complete":
+                stages.add("engineering_complete")
+            elif event.event_type == "beta_complete":
+                stages.update(("engineering_complete", "beta_complete"))
+            elif event.event_type == "owner_accepted":
+                stages.update(
+                    ("engineering_complete", "beta_complete", "owner_accepted")
+                )
+            elif event.event_type == "closed":
+                stages.update(STAGES)
+                closed_event_times[milestone_code] = event.occurred_at
+            elif event.event_type == "engineering_reopened":
+                stages.difference_update(STAGES)
+                closed_event_times.pop(milestone_code, None)
+            elif event.event_type == "beta_reopened":
+                stages.difference_update(
+                    ("beta_complete", "owner_accepted", "closed")
+                )
+                closed_event_times.pop(milestone_code, None)
+            elif event.event_type == "owner_acceptance_reopened":
+                stages.difference_update(("owner_accepted", "closed"))
+                closed_event_times.pop(milestone_code, None)
+            elif event.event_type == "milestone_reopened":
+                stages.discard("closed")
+                closed_event_times.pop(milestone_code, None)
         identity = str(event.details.get("defect_id", event.milestone_code or event.id))
         if event.event_type == "defect_opened":
+            if identity not in defect_state:
+                defects_discovered += 1
+            elif defect_state[identity] is False:
+                defects_reopened += 1
             defect_state[identity] = True
         elif event.event_type == "defect_closed":
+            if defect_state.get(identity) is True:
+                defects_closed += 1
             defect_state[identity] = False
         gate_id = str(event.details.get("gate_id", event.milestone_code or event.id))
         if event.event_type == "gate_opened":
@@ -102,25 +155,35 @@ def calculate_metrics(
             event.details.get("handoff_id", event.milestone_code or event.id)
         )
         if event.event_type == "handoff":
-            handoffs[handoff_key] = event.occurred_at
+            handoffs[handoff_key] = (
+                event.occurred_at,
+                getattr(event, "controlling_enterprise", None),
+            )
         elif event.event_type == "pickup" and handoff_key in handoffs:
-            pickup_latencies.append(
+            handoff_at, handoff_controller = handoffs.pop(handoff_key)
+            latency = max(0.0, (event.occurred_at - handoff_at).total_seconds())
+            pickup_latencies.append(latency)
+            controller = getattr(event, "controlling_enterprise", None)
+            controller = controller or handoff_controller
+            if controller in {"OM2E", "LaptopE"}:
+                domain_pickup_latencies.append(latency)
+            elif controller == "OM1E":
+                release_pickup_latencies.append(latency)
+        elif event.event_type == "integration":
+            integrations[handoff_key] = event.occurred_at
+        elif event.event_type == "release" and handoff_key in integrations:
+            release_latencies.append(
                 max(
-                    0.0, (event.occurred_at - handoffs.pop(handoff_key)).total_seconds()
+                    0.0,
+                    (event.occurred_at - integrations.pop(handoff_key)).total_seconds(),
                 )
             )
         elif event.event_type == "rework_started":
             rework += 1
         elif event.event_type == "first_pass_complete":
             first_pass += 1
-    total = len(roadmap.milestones)
-    closed_event_times: dict[str, list[datetime]] = defaultdict(list)
-    for event in events:
-        if event.event_type == "closed" and event.milestone_code:
-            closed_event_times[event.milestone_code].append(event.occurred_at)
-    completed_times = {
-        milestone: max(stamps) for milestone, stamps in closed_event_times.items()
-    }.values()
+    total = len(represented)
+    completed_times = closed_event_times.values()
     rates = {
         days: percent(
             sum(stamp >= now - timedelta(days=days) for stamp in completed_times), total
@@ -128,25 +191,58 @@ def calculate_metrics(
         for days in (1, 3, 7)
     }
     active = sum(lane.lifecycle_state.upper() == "ACTIVE" for lane in lanes)
+    assigned = sum(lane.lifecycle_state.upper() == "ASSIGNED" for lane in lanes)
+    eligible_states = {"ACTIVE", "ASSIGNED", "ELIGIBLE_IDLE", "WAITING_INTEGRATION"}
+    eligible = sum(lane.lifecycle_state.upper() in eligible_states for lane in lanes)
+    eligible_idle_seconds = sum(
+        max(
+            0.0,
+            (
+                now
+                - cast(datetime, getattr(lane, "eligible_idle_since", now))
+            ).total_seconds(),
+        )
+        for lane in lanes
+        if lane.lifecycle_state.upper() == "ELIGIBLE_IDLE"
+        and getattr(lane, "eligible_idle_since", None) is not None
+    )
     completed = sum("closed" in stages for stages in milestone_stages.values())
     attempts = first_pass + rework
-    oldest = min(handoffs.values()) if handoffs else None
+    oldest = min(value[0] for value in handoffs.values()) if handoffs else None
+    engineering_count = sum(
+        "engineering_complete" in stages for stages in milestone_stages.values()
+    )
+    beta_count = sum(
+        "beta_complete" in stages for stages in milestone_stages.values()
+    )
+    owner_count = sum(
+        "owner_accepted" in stages for stages in milestone_stages.values()
+    )
+    human_gated = sum(
+        milestone.owner_acceptance_status
+        in {"HUMAN_GATE", "OWNER_ACCEPTANCE_REQUIRED"}
+        and "closed" not in milestone_stages[milestone.code]
+        for milestone in represented
+    )
+    provider_gated = sum(
+        milestone.owner_acceptance_status == "PROVIDER_GATE"
+        and "closed" not in milestone_stages[milestone.code]
+        for milestone in represented
+    )
     return {
-        "engineering_percent": percent(
-            sum(
-                "engineering_complete" in stages for stages in milestone_stages.values()
-            ),
-            total,
-        ),
-        "beta_percent": percent(
-            sum("beta_complete" in stages for stages in milestone_stages.values()),
-            total,
-        ),
-        "owner_percent": percent(
-            sum("owner_accepted" in stages for stages in milestone_stages.values()),
-            total,
-        ),
+        "represented_milestones": total,
+        "superseded_milestones": len(superseded_codes),
+        "engineering_count": engineering_count,
+        "beta_count": beta_count,
+        "owner_count": owner_count,
+        "closed_count": completed,
+        "engineering_percent": percent(engineering_count, total),
+        "beta_percent": percent(beta_count, total),
+        "owner_percent": percent(owner_count, total),
         "closed_percent": percent(completed, total),
+        "engineering_remaining_weight": total - engineering_count,
+        "human_gated_remaining_weight": human_gated,
+        "provider_gated_remaining_weight": provider_gated,
         "weighted_delivery_percent": round(
             0.5 * rates[1] + 0.3 * rates[3] + 0.2 * rates[7], 2
         ),
@@ -154,10 +250,24 @@ def calculate_metrics(
         "delivery_3d_percent": rates[3],
         "delivery_7d_percent": rates[7],
         "open_defects": sum(defect_state.values()),
+        "defects_discovered": defects_discovered,
+        "defects_closed": defects_closed,
+        "defects_reopened": defects_reopened,
         "open_gates": sum(gate_state.values()),
         "utilization_percent": percent(active, len(lanes)),
+        "effective_utilization_percent": percent(active + assigned, eligible),
+        "eligible_idle_seconds": round(eligible_idle_seconds, 2),
         "pickup_latency_seconds": round(fmean(pickup_latencies), 2)
         if pickup_latencies
+        else None,
+        "domain_pickup_latency_seconds": round(fmean(domain_pickup_latencies), 2)
+        if domain_pickup_latencies
+        else None,
+        "release_pickup_latency_seconds": round(fmean(release_pickup_latencies), 2)
+        if release_pickup_latencies
+        else None,
+        "release_latency_seconds": round(fmean(release_latencies), 2)
+        if release_latencies
         else None,
         "queue_depth": sum(lane.queue_depth for lane in lanes),
         "oldest_handoff_seconds": round((now - oldest).total_seconds(), 2)
@@ -165,6 +275,11 @@ def calculate_metrics(
         else None,
         "rework_rate_percent": percent(rework, attempts),
         "first_pass_yield_percent": percent(first_pass, attempts),
+        "event_history_status": "MEASURED" if events else "NOT_YET_MEASURED",
+        "lane_history_status": "MEASURED" if lanes else "NOT_YET_MEASURED",
+        "velocity_history_status": (
+            "MEASURED" if closed_event_times else "NOT_YET_MEASURED"
+        ),
     }
 
 

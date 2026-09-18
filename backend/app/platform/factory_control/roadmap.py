@@ -30,6 +30,7 @@ class RoadmapMilestone:
     next_admissible_action: str | None = None
     human_provider_gates: tuple[str, ...] = ()
     prerequisites: tuple[str, ...] = ()
+    supersedes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -57,15 +58,41 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
         raise RoadmapError("canonical factory roadmap must contain milestones")
     milestones: list[RoadmapMilestone] = []
     seen: set[str] = set()
+    required_status_fields = (
+        "engineering_status",
+        "protected_integration_status",
+        "beta_deployment_status",
+        "owner_acceptance_status",
+        "lifecycle_status",
+    )
     for row in rows:
         if not isinstance(row, dict):
             raise RoadmapError("roadmap milestone must be an object")
         code = row.get("code") or row.get("id") or row.get("milestone_code")
         if not isinstance(code, str) or not code.strip() or code in seen:
             raise RoadmapError("roadmap milestone code is missing or duplicated")
+        if any(
+            not isinstance(row.get(field), str) or not row[field].strip()
+            for field in required_status_fields
+        ):
+            raise RoadmapError(
+                f"roadmap milestone {code} is missing an authoritative status"
+            )
         seen.add(code)
         lane = row.get("lane") or row.get("owner")
         launch_class = row.get("launch_class") or row.get("priority")
+        successor_contract = row.get("successor_supersession", {})
+        if not isinstance(successor_contract, dict):
+            raise RoadmapError(
+                f"roadmap milestone {code} has an invalid supersession contract"
+            )
+        supersedes = successor_contract.get("supersedes", [])
+        if not isinstance(supersedes, list) or any(
+            not isinstance(item, str) or not item.strip() for item in supersedes
+        ):
+            raise RoadmapError(
+                f"roadmap milestone {code} has an invalid supersedes list"
+            )
         milestones.append(
             RoadmapMilestone(
                 code,
@@ -80,8 +107,35 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
                 row.get("next_admissible_action"),
                 tuple(row.get("human_provider_gates", ())),
                 tuple(row.get("prerequisites", ())),
+                tuple(supersedes),
             )
         )
+    codes = {item.code for item in milestones}
+    for milestone in milestones:
+        missing = sorted(set(milestone.prerequisites) - codes)
+        if missing:
+            raise RoadmapError(
+                f"roadmap milestone {milestone.code} has unknown prerequisites: "
+                + ", ".join(missing)
+            )
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    graph = {item.code: item.prerequisites for item in milestones}
+
+    def visit(code: str) -> None:
+        if code in visited:
+            return
+        if code in visiting:
+            raise RoadmapError("canonical factory roadmap dependency graph is cyclic")
+        visiting.add(code)
+        for dependency in graph[code]:
+            visit(dependency)
+        visiting.remove(code)
+        visited.add(code)
+
+    for code in graph:
+        visit(code)
     canonical = json.dumps(
         document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     ).encode()
