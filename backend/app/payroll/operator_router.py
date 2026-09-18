@@ -16,6 +16,7 @@ from app.database.session import get_database_session
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.payroll.calculation_inputs import resolve_tax_deduction_requirements
 from app.payroll.contracts import PayrollConflictError, canonical_digest
 from app.payroll.models import (
     PayrollCalculationInputSnapshotRecord,
@@ -298,6 +299,9 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
         return {"run_id": run.id, "status": "calculated", "calculation": "existing_governed_results", "run_digest": run.run_digest, "replayed": True}
     members = tuple((await session.scalars(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.company_id == context.company.id, PayrollRunMemberRecord.run_id == run.id))).all())
     blockers = _run_blockers(run, members)
+    for member in members:
+        resolution = await resolve_tax_deduction_requirements(session, company_id=context.company.id, employee_id=member.employee_id, as_of_date=run.assembled_at.date())
+        blockers.extend(resolution.blockers)
     if blockers:
         raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": blockers})
     gross_ids = [item.gross_result_id for item in members if item.gross_result_id is not None]
