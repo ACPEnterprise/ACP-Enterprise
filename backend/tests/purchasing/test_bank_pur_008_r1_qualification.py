@@ -6,9 +6,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, func, select, update
-from sqlalchemy.exc import DBAPIError
-
 from app.accounting.models import Journal
 from app.accounts_payable.models import VendorBill
 from app.events.models import BusinessEvent
@@ -35,6 +32,8 @@ from app.purchasing.schemas import (
     VendorCreate,
 )
 from app.purchasing.service import PurchasingService
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import DBAPIError
 
 pytest_plugins = ("tests.purchasing.test_purchasing_foundation",)
 

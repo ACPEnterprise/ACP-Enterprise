@@ -547,11 +547,7 @@ class NotificationOutboxRepository:
             statement = statement.where(
                 NotificationOutbox.notification_type.in_(notification_types)
             )
-        records = tuple(
-            (
-                await session.scalars(statement)
-            ).all()
-        )
+        records = tuple((await session.scalars(statement)).all())
         for record in records:
             prior_worker = record.claimed_by
             prior_token = record.claim_token
@@ -613,7 +609,8 @@ class NotificationOutboxRepository:
                     .where(
                         NotificationOutbox.notification_type.in_(notification_types),
                         NotificationOutbox.status == "ambiguous",
-                        NotificationOutbox.last_error_code == "postmark_request_rejected",
+                        NotificationOutbox.last_error_code
+                        == "postmark_request_rejected",
                         NotificationOutbox.provider_reference.is_(None),
                     )
                     .with_for_update(skip_locked=True)
@@ -672,9 +669,7 @@ class NotificationOutboxRepository:
                 NotificationOutbox.terminal_failure.is_(True),
                 NotificationOutbox.provider_reference.is_(None),
                 NotificationOutbox.submitted_at.is_(None),
-                NotificationOutbox.last_error_code.like(
-                    "postmark_request_rejected_4%"
-                ),
+                NotificationOutbox.last_error_code.like("postmark_request_rejected_4%"),
             )
             .with_for_update()
         )

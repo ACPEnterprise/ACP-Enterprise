@@ -148,14 +148,17 @@ def qualify_cutover(authority: CutoverAuthority) -> ReadinessResult:
     if len(entity_types) != len(set(entity_types)):
         blockers.append("duplicate_entity_accounting")
     for item in authority.entity_accounting:
-        if min(
-            item.source,
-            item.migrated,
-            item.held,
-            item.exception,
-            item.non_applicable,
-            item.deferred_with_authority,
-        ) < 0:
+        if (
+            min(
+                item.source,
+                item.migrated,
+                item.held,
+                item.exception,
+                item.non_applicable,
+                item.deferred_with_authority,
+            )
+            < 0
+        ):
             blockers.append(f"{item.entity_type}_negative_count")
         elif not item.reconciled:
             blockers.append(f"{item.entity_type}_unexplained_delta")
@@ -171,15 +174,13 @@ def qualify_cutover(authority: CutoverAuthority) -> ReadinessResult:
     if window.starts_on is not None and window.opening_evidence_digest is None:
         blockers.append("historical_opening_evidence_required")
     phase_order = _PHASE_ORDER[authority.phase.value]
-    if (
-        phase_order >= _PHASE_ORDER[CutoverPhase.SOURCE_FROZEN.value]
-        and not _sha(authority.source_freeze_evidence_digest)
+    if phase_order >= _PHASE_ORDER[CutoverPhase.SOURCE_FROZEN.value] and not _sha(
+        authority.source_freeze_evidence_digest
     ):
         blockers.append("source_freeze_evidence_required")
-    if (
-        phase_order >= _PHASE_ORDER[CutoverPhase.FINAL_DELTAS_ACQUIRED.value]
-        and not _sha(authority.final_delta_digest)
-    ):
+    if phase_order >= _PHASE_ORDER[
+        CutoverPhase.FINAL_DELTAS_ACQUIRED.value
+    ] and not _sha(authority.final_delta_digest):
         blockers.append("final_delta_evidence_required")
     canonical = {
         "contract_version": MODULE_CONTRACT_VERSION,
@@ -187,7 +188,12 @@ def qualify_cutover(authority: CutoverAuthority) -> ReadinessResult:
     }
     authority_digest = _digest(canonical)
     reconciliation_digest = _digest(
-        tuple(sorted((item.entity_type, item.reconciled) for item in authority.entity_accounting))
+        tuple(
+            sorted(
+                (item.entity_type, item.reconciled)
+                for item in authority.entity_accounting
+            )
+        )
     )
     non_production_blockers = tuple(
         item
@@ -196,7 +202,9 @@ def qualify_cutover(authority: CutoverAuthority) -> ReadinessResult:
         and not item.endswith("_production_source_gate")
     )
     ready_non_production = not non_production_blockers
-    ready_production = not blockers and authority.phase is CutoverPhase.ACTIVATION_ELIGIBLE
+    ready_production = (
+        not blockers and authority.phase is CutoverPhase.ACTIVATION_ELIGIBLE
+    )
     return ReadinessResult(
         state="READY" if ready_non_production else "BLOCKED",
         go_no_go_state=_go_no_go_state(tuple(sorted(set(blockers)))),
@@ -219,7 +227,8 @@ def _go_no_go_state(blockers: tuple[str, ...]) -> GoNoGoState:
         return GoNoGoState.SOURCE_CHANGED
     if any(
         item.endswith("_production_source_gate")
-        or item in {
+        or item
+        in {
             "production_execution_not_authorized",
             "source_freeze_evidence_required",
             "final_delta_evidence_required",

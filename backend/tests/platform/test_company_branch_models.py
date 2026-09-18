@@ -2,13 +2,12 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import CheckConstraint, Table, UniqueConstraint
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
+from sqlalchemy import CheckConstraint, Table, UniqueConstraint
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def test_company_model_shape() -> None:

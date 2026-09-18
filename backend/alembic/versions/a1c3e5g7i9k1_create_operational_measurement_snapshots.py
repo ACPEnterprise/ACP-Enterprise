@@ -58,9 +58,7 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "company_id", "snapshot_digest", name="uq_eco_measurement_snapshot_digest"
         ),
-        sa.UniqueConstraint(
-            "company_id", "id", name="uq_eco_measurement_company_id"
-        ),
+        sa.UniqueConstraint("company_id", "id", name="uq_eco_measurement_company_id"),
         sa.UniqueConstraint(
             "predecessor_snapshot_id", name="uq_eco_measurement_successor"
         ),

@@ -3,7 +3,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.payroll.compliance import DraftComplianceSchema, ProtectedPayrollReportStorage
 from app.payroll.contracts import PayrollConflictError
 

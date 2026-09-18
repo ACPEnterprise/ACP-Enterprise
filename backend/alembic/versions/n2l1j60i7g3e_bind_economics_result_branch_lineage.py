@@ -15,12 +15,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _install_validator(*, include_branch: bool) -> None:
-    branch_comparison = (
-        "predecessor.branch_id, " if include_branch else ""
-    )
-    successor_branch_comparison = (
-        "successor.branch_id, " if include_branch else ""
-    )
+    branch_comparison = "predecessor.branch_id, " if include_branch else ""
+    successor_branch_comparison = "successor.branch_id, " if include_branch else ""
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION acp_validate_economics_result_supersession()

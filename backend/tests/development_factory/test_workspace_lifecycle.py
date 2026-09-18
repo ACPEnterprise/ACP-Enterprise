@@ -7,9 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from development_factory.workspaces import WorkspaceError, WorkspaceManager
-
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None,

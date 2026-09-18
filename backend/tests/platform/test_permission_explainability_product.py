@@ -5,7 +5,6 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-
 from app.platform.launch_controls import LAUNCH_ROLE_MATRIX
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.router import (

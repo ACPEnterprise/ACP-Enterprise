@@ -26,7 +26,10 @@ class Rows:
 @pytest.mark.asyncio
 async def test_timeline_composes_native_authority_without_payroll_details():
     company_id, employee_id, membership_id, actor_id = (
-        uuid4(), uuid4(), uuid4(), uuid4()
+        uuid4(),
+        uuid4(),
+        uuid4(),
+        uuid4(),
     )
     created_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
     assigned_at = datetime(2026, 9, 2, tzinfo=timezone.utc)
@@ -119,7 +122,11 @@ async def test_real_role_model_renders_assigned_and_revoked_history(
     timeline_database,
 ):
     company_id, user_id, membership_id, employee_id, role_id = (
-        uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+        uuid4(),
+        uuid4(),
+        uuid4(),
+        uuid4(),
+        uuid4(),
     )
     assigned_at = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
     revoked_at = datetime(2026, 9, 2, 12, tzinfo=timezone.utc)

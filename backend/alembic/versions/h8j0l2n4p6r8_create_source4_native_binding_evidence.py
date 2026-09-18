@@ -24,18 +24,41 @@ def upgrade() -> None:
         sa.Column("domain", sa.String(length=40), nullable=False),
         sa.Column("source4_source_id", sa.String(length=191), nullable=False),
         sa.Column("native_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("legacy_source_identity_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("source4_source_identity_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column(
+            "legacy_source_identity_id", postgresql.UUID(as_uuid=True), nullable=False
+        ),
+        sa.Column(
+            "source4_source_identity_id", postgresql.UUID(as_uuid=True), nullable=False
+        ),
         sa.Column("package_digest", sa.String(length=64), nullable=False),
         sa.Column("predecessor_source_digest", sa.String(length=64), nullable=False),
         sa.Column("binding_digest", sa.String(length=64), nullable=False),
         sa.Column("evidence", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("domain IN ('customer','service_location','job','appointment')", name="ck_hcp_source4_binding_domain"),
-        sa.ForeignKeyConstraint(["master_run_id", "company_id", "branch_id"], ["hcp_migration_master_runs.id", "hcp_migration_master_runs.company_id", "hcp_migration_master_runs.branch_id"], name="fk_hcp_source4_binding_master_scope", ondelete="RESTRICT"),
+        sa.CheckConstraint(
+            "domain IN ('customer','service_location','job','appointment')",
+            name="ck_hcp_source4_binding_domain",
+        ),
+        sa.ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_source4_binding_master_scope",
+            ondelete="RESTRICT",
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("company_id", "domain", "source4_source_id", name="uq_hcp_source4_binding_source"),
-        sa.UniqueConstraint("company_id", "domain", "native_id", name="uq_hcp_source4_binding_target"),
+        sa.UniqueConstraint(
+            "company_id",
+            "domain",
+            "source4_source_id",
+            name="uq_hcp_source4_binding_source",
+        ),
+        sa.UniqueConstraint(
+            "company_id", "domain", "native_id", name="uq_hcp_source4_binding_target"
+        ),
         sa.UniqueConstraint("binding_digest", name="uq_hcp_source4_binding_digest"),
     )
 

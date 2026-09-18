@@ -8,7 +8,6 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "m3n5p7r9t1v3"
@@ -126,7 +125,9 @@ def downgrade() -> None:
               AND r.is_system IS TRUE
               AND p.code IN :codes
             """
-        ).bindparams(sa.bindparam("codes", expanding=True), codes=ADDED_PERMISSION_CODES)
+        ).bindparams(
+            sa.bindparam("codes", expanding=True), codes=ADDED_PERMISSION_CODES
+        )
     )
     _insert_permissions(("COMPANY_PRICE_BOOK_ACTIVATE",))
     _advance_affected_users()

@@ -6,7 +6,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayExecutor,
     CurrentOverlayManifest,
@@ -50,14 +49,18 @@ class MemoryRepository:
         return self.fingerprints.get((domain, fingerprint), ())
 
     async def create(self, record: OverlayRecord) -> OverlaySourceState:
-        state = OverlaySourceState(record.source_digest, f"native-{record.source_id}", record.payload)
+        state = OverlaySourceState(
+            record.source_digest, f"native-{record.source_id}", record.payload
+        )
         self.states[record.key] = state
         return state
 
     async def update(
         self, state: OverlaySourceState, record: OverlayRecord
     ) -> OverlaySourceState:
-        updated = OverlaySourceState(record.source_digest, state.native_id, record.payload)
+        updated = OverlaySourceState(
+            record.source_digest, state.native_id, record.payload
+        )
         self.states[record.key] = updated
         return updated
 
@@ -84,7 +87,9 @@ def record(
         assertion,
         source_digest,
         ACQUIRED,
-        {} if assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE} else {"status": "ready"},
+        {}
+        if assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
+        else {"status": "ready"},
         prior,
         parents,
         fingerprint,
@@ -106,10 +111,17 @@ def manifest(*records: OverlayRecord) -> CurrentOverlayManifest:
 async def test_executes_create_update_hold_and_removal_with_replay() -> None:
     repository = MemoryRepository()
     existing = OverlayKey("job", "existing")
-    repository.states[existing] = OverlaySourceState(DIGEST, "native-existing", {"status": "draft"})
+    repository.states[existing] = OverlaySourceState(
+        DIGEST, "native-existing", {"status": "draft"}
+    )
     value = manifest(
         record("new", OverlayAssertion.CREATE),
-        record("existing", OverlayAssertion.UPDATE, source_digest=OTHER_DIGEST, prior=DIGEST),
+        record(
+            "existing",
+            OverlayAssertion.UPDATE,
+            source_digest=OTHER_DIGEST,
+            prior=DIGEST,
+        ),
         record("held", OverlayAssertion.HOLD),
         record("removed", OverlayAssertion.REMOVE),
     )
@@ -130,7 +142,12 @@ async def test_executes_create_update_hold_and_removal_with_replay() -> None:
 
     assert first == replay
     assert repository.transaction_entries == 2
-    assert first.counts == {"created": 1, "updated": 1, "held": 1, "removal_recorded": 1}
+    assert first.counts == {
+        "created": 1,
+        "updated": 1,
+        "held": 1,
+        "removal_recorded": 1,
+    }
     assert len(repository.assertions) == 2
 
 
@@ -143,7 +160,9 @@ async def test_rejects_stale_update_and_duplicate_create() -> None:
     with pytest.raises(ValueError, match="compare-before-write"):
         await CurrentOverlayExecutor().execute(
             repository,
-            manifest=manifest(record("existing", OverlayAssertion.UPDATE, prior=OTHER_DIGEST)),
+            manifest=manifest(
+                record("existing", OverlayAssertion.UPDATE, prior=OTHER_DIGEST)
+            ),
             expected_base_source4_digest=DIGEST,
             rollback_backup_digest=BACKUP,
         )
@@ -169,7 +188,9 @@ async def test_rejects_stale_update_and_duplicate_create() -> None:
     with pytest.raises(ValueError, match="duplicate native truth"):
         await CurrentOverlayExecutor().execute(
             repository,
-            manifest=manifest(record("new", OverlayAssertion.CREATE, fingerprint=OTHER_DIGEST)),
+            manifest=manifest(
+                record("new", OverlayAssertion.CREATE, fingerprint=OTHER_DIGEST)
+            ),
             expected_base_source4_digest=DIGEST,
             rollback_backup_digest=BACKUP,
         )
@@ -214,7 +235,9 @@ async def test_requires_parent_closure_and_matching_authority() -> None:
 
 
 @pytest.mark.asyncio
-async def test_applies_parent_domains_before_children_when_packet_is_child_first() -> None:
+async def test_applies_parent_domains_before_children_when_packet_is_child_first() -> (
+    None
+):
     repository = MemoryRepository()
     customer = record("customer", OverlayAssertion.CREATE, domain="customer")
     location = record(

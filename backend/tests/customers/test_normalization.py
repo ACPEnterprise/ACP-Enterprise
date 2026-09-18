@@ -1,5 +1,4 @@
 import pytest
-
 from app.customers.normalization import (
     build_normalized_address,
     build_normalized_name,

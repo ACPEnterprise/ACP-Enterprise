@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.dry_run_preflight import (
     REQUIRED_AUDIT_EVENTS,
     REQUIRED_EXTERNAL_GATES,

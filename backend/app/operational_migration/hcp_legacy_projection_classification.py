@@ -153,9 +153,10 @@ def classify_correlated_legacy(
             successor_id = next(iter(unique))
             disposition = LegacyProjectionDisposition.EXACT_SUCCESSOR
             blocker = False
-        elif row.authoritative_provider_id and not provider[
-            (row.domain, row.authoritative_provider_id)
-        ]:
+        elif (
+            row.authoritative_provider_id
+            and not provider[(row.domain, row.authoritative_provider_id)]
+        ):
             successor_id = None
             disposition = LegacyProjectionDisposition.PROVABLY_UNRELATED
             blocker = False

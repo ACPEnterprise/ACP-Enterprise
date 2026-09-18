@@ -1,8 +1,6 @@
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-
 from app.purchasing.errors import (
     PurchasingConflict,
     PurchasingError,
@@ -11,6 +9,7 @@ from app.purchasing.errors import (
 )
 from app.purchasing.router import decide_requisition, http_error
 from app.purchasing.schemas import PurchaseRequisitionTransition
+from fastapi import HTTPException
 
 
 def test_purchasing_errors_use_safe_recovery_envelopes_without_reflection() -> None:
@@ -45,7 +44,9 @@ def test_purchasing_errors_use_safe_recovery_envelopes_without_reflection() -> N
 
 
 @pytest.mark.asyncio
-async def test_unsupported_requisition_action_uses_concealed_not_found_contract() -> None:
+async def test_unsupported_requisition_action_uses_concealed_not_found_contract() -> (
+    None
+):
     with pytest.raises(HTTPException) as captured:
         await decide_requisition(
             uuid4(),

@@ -208,7 +208,9 @@ async def test_archived_customer_search_is_explicit_and_detail_remains_restorabl
     assert detail.status_code == 200, detail.text
     assert detail.json()["archived_at"] is not None
     assert timeline.status_code == 200, timeline.text
-    assert any(item["event_type"] == "customer.archived" for item in timeline.json()["items"])
+    assert any(
+        item["event_type"] == "customer.archived" for item in timeline.json()["items"]
+    )
 
 
 @pytest.mark.asyncio

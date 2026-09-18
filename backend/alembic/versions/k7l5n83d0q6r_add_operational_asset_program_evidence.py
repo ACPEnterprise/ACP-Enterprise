@@ -45,9 +45,7 @@ def upgrade() -> None:
             name="fk_asset_action_asset",
             ondelete="RESTRICT",
         ),
-        sa.ForeignKeyConstraint(
-            ["actor_user_id"], ["users.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.CheckConstraint(
             "action_type IN ('equipment_install','equipment_remove','equipment_replace','warranty_evidence','warranty_review','service_link','vehicle_assignment','inspection','maintenance','out_of_service','custody_transfer','custody_return','document_binding')",
             name="ck_asset_action_type",
@@ -82,6 +80,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_asset_action_queue", table_name="operational_asset_action_evidence")
-    op.drop_index("ix_asset_action_history", table_name="operational_asset_action_evidence")
+    op.drop_index(
+        "ix_asset_action_queue", table_name="operational_asset_action_evidence"
+    )
+    op.drop_index(
+        "ix_asset_action_history", table_name="operational_asset_action_evidence"
+    )
     op.drop_table("operational_asset_action_evidence")

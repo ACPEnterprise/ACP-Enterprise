@@ -7,7 +7,6 @@ Revises: i0z2v4x6a831
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "j1a3w5y7b942"
@@ -29,9 +28,7 @@ def upgrade() -> None:
         "UPDATE timekeeping_punch_events SET request_digest = event_digest "
         "WHERE request_digest IS NULL"
     )
-    op.alter_column(
-        "timekeeping_punch_events", "request_digest", nullable=False
-    )
+    op.alter_column("timekeeping_punch_events", "request_digest", nullable=False)
     op.create_unique_constraint(
         "uq_time_punch_idempotency",
         "timekeeping_punch_events",

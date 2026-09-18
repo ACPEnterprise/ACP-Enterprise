@@ -11,7 +11,6 @@ from app.platform.permissions.catalog import (
 )
 from app.platform.permissions.models import Permission
 
-
 PERMISSION_CATALOG_SYNC_LOCK_ID = 4_701_871_310_042_022
 
 

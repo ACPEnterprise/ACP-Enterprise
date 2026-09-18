@@ -51,12 +51,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "ck_procurement_match_line_amounts", TABLE, type_="check"
-    )
-    op.drop_constraint(
-        "ck_procurement_match_line_net_accepted", TABLE, type_="check"
-    )
-    op.drop_constraint(
-        "ck_procurement_match_line_quantities", TABLE, type_="check"
-    )
+    op.drop_constraint("ck_procurement_match_line_amounts", TABLE, type_="check")
+    op.drop_constraint("ck_procurement_match_line_net_accepted", TABLE, type_="check")
+    op.drop_constraint("ck_procurement_match_line_quantities", TABLE, type_="check")

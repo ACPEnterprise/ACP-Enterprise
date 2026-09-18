@@ -23,8 +23,12 @@ def upgrade() -> None:
         "notification_delivery_evidence",
         ["outbox_id", "provider_event_key"],
     )
-    op.drop_constraint("ck_notification_outbox_lifecycle", "notification_outbox", type_="check")
-    op.drop_constraint("ck_notification_outbox_status", "notification_outbox", type_="check")
+    op.drop_constraint(
+        "ck_notification_outbox_lifecycle", "notification_outbox", type_="check"
+    )
+    op.drop_constraint(
+        "ck_notification_outbox_status", "notification_outbox", type_="check"
+    )
     op.create_check_constraint(
         "ck_notification_outbox_status",
         "notification_outbox",
@@ -42,7 +46,11 @@ def upgrade() -> None:
         "(status = 'ambiguous' AND claim_token IS NULL AND ambiguous_at IS NOT NULL AND sent_at IS NULL AND failed_at IS NULL) OR "
         "(status IN ('canceled','suppressed') AND claim_token IS NULL AND sent_at IS NULL AND failed_at IS NULL)",
     )
-    op.drop_constraint("ck_notification_delivery_evidence_outcome", "notification_delivery_evidence", type_="check")
+    op.drop_constraint(
+        "ck_notification_delivery_evidence_outcome",
+        "notification_delivery_evidence",
+        type_="check",
+    )
     op.create_check_constraint(
         "ck_notification_delivery_evidence_outcome",
         "notification_delivery_evidence",
@@ -54,14 +62,22 @@ def downgrade() -> None:
     op.execute(
         "DO $$ BEGIN IF EXISTS (SELECT 1 FROM notification_outbox WHERE status = 'accepted') OR EXISTS (SELECT 1 FROM notification_delivery_evidence WHERE outcome IN ('accepted','deferred','bounced','rejected','complaint','expired')) THEN RAISE EXCEPTION 'cannot downgrade notification acceptance evidence'; END IF; END $$"
     )
-    op.drop_constraint("ck_notification_delivery_evidence_outcome", "notification_delivery_evidence", type_="check")
+    op.drop_constraint(
+        "ck_notification_delivery_evidence_outcome",
+        "notification_delivery_evidence",
+        type_="check",
+    )
     op.create_check_constraint(
         "ck_notification_delivery_evidence_outcome",
         "notification_delivery_evidence",
         "outcome IN ('claimed','submitted','delivered','retryable','failed','ambiguous','recovered','canceled','suppressed')",
     )
-    op.drop_constraint("ck_notification_outbox_lifecycle", "notification_outbox", type_="check")
-    op.drop_constraint("ck_notification_outbox_status", "notification_outbox", type_="check")
+    op.drop_constraint(
+        "ck_notification_outbox_lifecycle", "notification_outbox", type_="check"
+    )
+    op.drop_constraint(
+        "ck_notification_outbox_status", "notification_outbox", type_="check"
+    )
     op.create_check_constraint(
         "ck_notification_outbox_status",
         "notification_outbox",

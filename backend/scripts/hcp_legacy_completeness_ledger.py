@@ -34,14 +34,24 @@ def main() -> int:
         qbo_controls_root=args.qbo_controls_root,
         native_binding_snapshot_path=args.native_binding_snapshot,
     )
-    payload = json.dumps(asdict(ledger), sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    payload = (
+        json.dumps(asdict(ledger), sort_keys=True, separators=(",", ":")).encode()
+        + b"\n"
+    )
     args.output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     args.output.parent.chmod(0o700)
     descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "wb") as stream:
         stream.write(payload)
     args.output.chmod(0o600)
-    print(json.dumps({"digest": ledger.digest, "file_sha256": hashlib.sha256(payload).hexdigest()}))
+    print(
+        json.dumps(
+            {
+                "digest": ledger.digest,
+                "file_sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        )
+    )
     return 0
 
 

@@ -5,19 +5,11 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.events.models import BusinessEvent
-from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.audit.models import AuditRecord
 from app.platform.audit.service import AuditEntry, AuditService
+from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.branch import models as branch_models  # noqa: F401
 from app.platform.company import membership_models  # noqa: F401
 from app.platform.company.membership_models import Membership
@@ -39,6 +31,13 @@ from app.platform.users.identity_service import (
     IdentityAdministrationTokenError,
 )
 from app.platform.users.models import User, UserCredential
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def utc_now() -> datetime:

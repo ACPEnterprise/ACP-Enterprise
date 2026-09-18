@@ -5,6 +5,12 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from app.core.config import settings
+from app.platform.notifications.models import (
+    NotificationDeliveryEvidence,
+    NotificationOutbox,
+)
+from app.platform.notifications.repository import NotificationOutboxRepository
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -12,13 +18,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
-from app.core.config import settings
-from app.platform.notifications.models import (
-    NotificationDeliveryEvidence,
-    NotificationOutbox,
-)
-from app.platform.notifications.repository import NotificationOutboxRepository
 
 
 def utc_now() -> datetime:

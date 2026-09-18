@@ -1,10 +1,10 @@
 from uuid import uuid4
 
 import pytest
-
 from app.inventory.costing import MaterialCostingService
 from app.inventory.models import InventoryItem, StockLocation
 from app.purchasing.service import PurchasingService
+
 from tests.purchasing.test_purchasing_foundation import (
     issued_order,
     purchasing_fixture,  # noqa: F401

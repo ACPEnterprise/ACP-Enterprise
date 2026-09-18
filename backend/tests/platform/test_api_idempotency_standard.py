@@ -147,7 +147,9 @@ def test_append_only_classification_requires_concrete_replay_evidence() -> None:
     assert all(entry.replay_evidence for entry in append_only)
     for entry in append_only:
         for evidence_path in entry.replay_evidence:
-            evidence = (BACKEND_ROOT / evidence_path).read_text(encoding="utf-8").lower()
+            evidence = (
+                (BACKEND_ROOT / evidence_path).read_text(encoding="utf-8").lower()
+            )
             assert "replay" in evidence or "duplicate" in evidence
 
     unsupported = replace(append_only[0], replay_evidence=())
@@ -178,9 +180,9 @@ def test_replenishment_decision_has_concrete_company_scoped_replay_evidence() ->
     assert entry.classification is MutationClassification.REQUIRED
     assert entry.tenant_scope == "COMPANY_WITH_BRANCH_CONTEXT"
 
-    evidence = (BACKEND_ROOT / "tests/purchasing/test_purchasing_foundation.py").read_text(
-        encoding="utf-8"
-    )
+    evidence = (
+        BACKEND_ROOT / "tests/purchasing/test_purchasing_foundation.py"
+    ).read_text(encoding="utf-8")
     runtime = (BACKEND_ROOT / "app/purchasing/service.py").read_text(encoding="utf-8")
     model = (BACKEND_ROOT / "app/purchasing/models.py").read_text(encoding="utf-8")
     router = (BACKEND_ROOT / "app/purchasing/router.py").read_text(encoding="utf-8")

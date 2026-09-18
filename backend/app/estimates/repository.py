@@ -93,9 +93,13 @@ class EstimateRepository:
         customer_id: UUID | None = None,
         status: str | None = None,
     ) -> int:
-        statement = select(func.count()).select_from(Estimate).where(
-            Estimate.company_id == company_id,
-            Estimate.branch_id.in_(branch_ids),
+        statement = (
+            select(func.count())
+            .select_from(Estimate)
+            .where(
+                Estimate.company_id == company_id,
+                Estimate.branch_id.in_(branch_ids),
+            )
         )
         if customer_id is not None:
             statement = statement.where(Estimate.customer_id == customer_id)

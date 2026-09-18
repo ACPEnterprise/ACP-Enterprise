@@ -7,9 +7,8 @@ Revises: c0t2p4r6u831
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "d1u3q5s7v942"
 down_revision: str | None = "c0t2p4r6u831"
@@ -44,17 +43,55 @@ def upgrade() -> None:
         sa.Column("approved_at", sa.DateTime(timezone=True)),
         sa.Column("supersedes_result_id", postgresql.UUID(as_uuid=True)),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("lifecycle IN ('calculated','under_review','approved','applied_to_successor_authority','rejected','superseded','voided')", name="ck_payroll_adjustment_result_lifecycle"),
-        sa.ForeignKeyConstraint(["company_id", "adjustment_id"], ["payroll_adjustment_authorities.company_id", "payroll_adjustment_authorities.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["approved_by_user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["supersedes_result_id"], ["payroll_adjustment_results.id"], ondelete="RESTRICT"),
-        sa.UniqueConstraint("company_id", "id", name="uq_payroll_adjustment_result_company_id"),
-        sa.UniqueConstraint("company_id", "result_identity", name="uq_payroll_adjustment_result_identity"),
-        sa.UniqueConstraint("company_id", "calculation_digest", name="uq_payroll_adjustment_result_digest"),
-        sa.UniqueConstraint("supersedes_result_id", name="uq_payroll_adjustment_result_successor"),
+        sa.CheckConstraint(
+            "lifecycle IN ('calculated','under_review','approved','applied_to_successor_authority','rejected','superseded','voided')",
+            name="ck_payroll_adjustment_result_lifecycle",
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id", "adjustment_id"],
+            [
+                "payroll_adjustment_authorities.company_id",
+                "payroll_adjustment_authorities.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["approved_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["supersedes_result_id"],
+            ["payroll_adjustment_results.id"],
+            ondelete="RESTRICT",
+        ),
+        sa.UniqueConstraint(
+            "company_id", "id", name="uq_payroll_adjustment_result_company_id"
+        ),
+        sa.UniqueConstraint(
+            "company_id",
+            "result_identity",
+            name="uq_payroll_adjustment_result_identity",
+        ),
+        sa.UniqueConstraint(
+            "company_id",
+            "calculation_digest",
+            name="uq_payroll_adjustment_result_digest",
+        ),
+        sa.UniqueConstraint(
+            "supersedes_result_id", name="uq_payroll_adjustment_result_successor"
+        ),
     )
-    op.create_index("uq_payroll_adjustment_result_active", "payroll_adjustment_results", ["company_id", "adjustment_id"], unique=True, postgresql_where=sa.text("lifecycle IN ('calculated','under_review','approved')"))
+    op.create_index(
+        "uq_payroll_adjustment_result_active",
+        "payroll_adjustment_results",
+        ["company_id", "adjustment_id"],
+        unique=True,
+        postgresql_where=sa.text(
+            "lifecycle IN ('calculated','under_review','approved')"
+        ),
+    )
     op.create_table(
         "payroll_adjustment_result_reviews",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -68,11 +105,24 @@ def upgrade() -> None:
         sa.Column("result_digest", sa.String(64), nullable=False),
         sa.Column("review_digest", sa.String(64), nullable=False),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("decision IN ('initiated','accepted','rejected','approved')", name="ck_payroll_adjustment_result_review_decision"),
-        sa.ForeignKeyConstraint(["company_id", "result_id"], ["payroll_adjustment_results.company_id", "payroll_adjustment_results.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["reviewer_user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.UniqueConstraint("result_id", "sequence", name="uq_payroll_adjustment_result_review_sequence"),
-        sa.UniqueConstraint("review_digest", name="uq_payroll_adjustment_result_review_digest"),
+        sa.CheckConstraint(
+            "decision IN ('initiated','accepted','rejected','approved')",
+            name="ck_payroll_adjustment_result_review_decision",
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id", "result_id"],
+            ["payroll_adjustment_results.company_id", "payroll_adjustment_results.id"],
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["reviewer_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
+        sa.UniqueConstraint(
+            "result_id", "sequence", name="uq_payroll_adjustment_result_review_sequence"
+        ),
+        sa.UniqueConstraint(
+            "review_digest", name="uq_payroll_adjustment_result_review_digest"
+        ),
     )
     op.create_table(
         "payroll_adjustment_applications",
@@ -86,15 +136,27 @@ def upgrade() -> None:
         sa.Column("application_digest", sa.String(64), nullable=False),
         sa.Column("applied_by_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("applied_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["company_id", "result_id"], ["payroll_adjustment_results.company_id", "payroll_adjustment_results.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["applied_by_user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.UniqueConstraint("result_id", "purpose", name="uq_payroll_adjustment_application_purpose"),
-        sa.UniqueConstraint("application_digest", name="uq_payroll_adjustment_application_digest"),
+        sa.ForeignKeyConstraint(
+            ["company_id", "result_id"],
+            ["payroll_adjustment_results.company_id", "payroll_adjustment_results.id"],
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["applied_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
+        sa.UniqueConstraint(
+            "result_id", "purpose", name="uq_payroll_adjustment_application_purpose"
+        ),
+        sa.UniqueConstraint(
+            "application_digest", name="uq_payroll_adjustment_application_digest"
+        ),
     )
 
 
 def downgrade() -> None:
     op.drop_table("payroll_adjustment_applications")
     op.drop_table("payroll_adjustment_result_reviews")
-    op.drop_index("uq_payroll_adjustment_result_active", table_name="payroll_adjustment_results")
+    op.drop_index(
+        "uq_payroll_adjustment_result_active", table_name="payroll_adjustment_results"
+    )
     op.drop_table("payroll_adjustment_results")

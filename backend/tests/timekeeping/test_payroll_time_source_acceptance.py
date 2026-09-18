@@ -5,9 +5,6 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.payroll.contracts import PayrollConflictError
 from app.payroll.finalization import PayrollGrossResultService
 from app.timekeeping.commands import (
@@ -35,6 +32,8 @@ from app.timekeeping.job_participation import (
 from app.timekeeping.models import PayrollTimeInputRecord
 from app.timekeeping.permissions import TimekeepingPermission
 from app.timekeeping.service import WorkdayTimeService
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.timekeeping.test_workday_authority import (
     FakeContext,
     SeededTimekeeping,

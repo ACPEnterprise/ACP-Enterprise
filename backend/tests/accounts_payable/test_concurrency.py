@@ -5,9 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.accounts_payable.contracts import PostingReceiptSpec
 from app.accounts_payable.errors import APConflict, APNotFound
 from app.accounts_payable.models import (
@@ -28,6 +25,8 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling import models as scheduling_models  # noqa: F401
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -119,7 +118,9 @@ async def ap_application_fixture():
 async def test_concurrent_disbursement_replay_has_one_application_and_conserves_amounts(
     ap_application_fixture,
 ) -> None:
-    factory, (company_id, branch_id, bill_id, disbursement_id, actor_id) = ap_application_fixture
+    factory, (company_id, branch_id, bill_id, disbursement_id, actor_id) = (
+        ap_application_fixture
+    )
     service = AccountsPayableService()
     key = f"apply-{uuid4()}"
 
@@ -142,9 +143,27 @@ async def test_concurrent_disbursement_replay_has_one_application_and_conserves_
         bill = await session.get(VendorBill, bill_id)
         disbursement = await session.get(Disbursement, disbursement_id)
         assert bill is not None and bill.open_amount == Decimal("40.00")
-        assert disbursement is not None and disbursement.available_amount == Decimal("40.00")
-        assert await session.scalar(select(func.count(DisbursementApplication.id)).where(DisbursementApplication.company_id == company_id, DisbursementApplication.idempotency_key == key)) == 1
-        assert await session.scalar(select(func.count(APSubledgerEntry.id)).where(APSubledgerEntry.company_id == company_id, APSubledgerEntry.source_id == first.id)) == 1
+        assert disbursement is not None and disbursement.available_amount == Decimal(
+            "40.00"
+        )
+        assert (
+            await session.scalar(
+                select(func.count(DisbursementApplication.id)).where(
+                    DisbursementApplication.company_id == company_id,
+                    DisbursementApplication.idempotency_key == key,
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(APSubledgerEntry.id)).where(
+                    APSubledgerEntry.company_id == company_id,
+                    APSubledgerEntry.source_id == first.id,
+                )
+            )
+            == 1
+        )
 
     async with factory() as session:
         with pytest.raises(APConflict):
@@ -177,7 +196,9 @@ async def test_concurrent_disbursement_replay_has_one_application_and_conserves_
 async def test_posting_receipt_replay_binds_complete_source_authority(
     ap_application_fixture,
 ) -> None:
-    factory, (company_id, _branch_id, bill_id, _disbursement_id, _actor_id) = ap_application_fixture
+    factory, (company_id, _branch_id, bill_id, _disbursement_id, _actor_id) = (
+        ap_application_fixture
+    )
     service = AccountsPayableService()
     spec = PostingReceiptSpec(
         company_id=company_id,
@@ -198,7 +219,15 @@ async def test_posting_receipt_replay_binds_complete_source_authority(
     first, replay = await asyncio.gather(record(spec), record(spec))
     assert first.id == replay.id
     async with factory() as session:
-        assert await session.scalar(select(func.count(APPostingReceipt.id)).where(APPostingReceipt.company_id == company_id, APPostingReceipt.source_event_id == spec.source_event_id)) == 1
+        assert (
+            await session.scalar(
+                select(func.count(APPostingReceipt.id)).where(
+                    APPostingReceipt.company_id == company_id,
+                    APPostingReceipt.source_event_id == spec.source_event_id,
+                )
+            )
+            == 1
+        )
 
     contradictory = PostingReceiptSpec(
         company_id=company_id,

@@ -96,9 +96,7 @@ class GrossPayEarningComponent:
             "category": self.category,
             "payable_minutes": self.payable_minutes,
             "rate": str(self.rate) if self.rate is not None else None,
-            "multiplier": str(self.multiplier)
-            if self.multiplier is not None
-            else None,
+            "multiplier": str(self.multiplier) if self.multiplier is not None else None,
             "amount": str(self.amount),
             "currency": self.currency,
             "evidence_digests": self.evidence_digests,
@@ -174,7 +172,9 @@ def _money(value: Decimal, currency: str) -> Decimal:
 
 
 def _covers_period(
-    effective_start: date, effective_end: date | None, period: PayPeriodCalculationContext
+    effective_start: date,
+    effective_end: date | None,
+    period: PayPeriodCalculationContext,
 ) -> bool:
     return effective_start <= period.period_start and (
         effective_end is None or period.period_end < effective_end
@@ -212,13 +212,14 @@ def _validate_inputs(
     if (
         period.schedule_definition_id != policy.definition.schedule_definition_id
         or period.schedule_version != policy.definition.schedule_version
-        or admission.pay_period_schedule_definition_id
-        != period.schedule_definition_id
+        or admission.pay_period_schedule_definition_id != period.schedule_definition_id
         or admission.pay_period_schedule_version != period.schedule_version
     ):
         raise GrossPayCalculationError("pay-period schedule authority mismatch")
     if not _covers_period(policy.effective_start, policy.effective_end, period):
-        raise GrossPayCalculationError("mid-period policy change requires proration policy")
+        raise GrossPayCalculationError(
+            "mid-period policy change requires proration policy"
+        )
     if not _covers_period(
         compensation.effective_start, compensation.effective_end, period
     ):
@@ -359,7 +360,9 @@ class PayrollGrossCalculationEngine:
             ):
                 raise GrossPayCalculationError("additional earning is not authorized")
             if earning.currency != currency:
-                raise GrossPayCalculationError("cross-currency calculation is prohibited")
+                raise GrossPayCalculationError(
+                    "cross-currency calculation is prohibited"
+                )
             components.append(
                 GrossPayEarningComponent(
                     EarningsComponentType.ADDITIONAL,

@@ -2,7 +2,6 @@ import csv
 from io import StringIO
 
 import pytest
-
 from app.customer_migration.housecall_pro_adapter import (
     HOUSECALL_PRO_CUSTOMER_EXPORT_CONTRACTS,
 )

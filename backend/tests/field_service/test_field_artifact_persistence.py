@@ -4,9 +4,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, update
-from sqlalchemy.exc import IntegrityError
-
 from app.dispatch.models import DispatchAssignment
 from app.field_service.artifacts import FieldArtifactService
 from app.field_service.models import FieldArtifactEvidence
@@ -16,11 +13,16 @@ from app.field_service.schemas import (
 )
 from app.field_service.service import FieldService
 from app.jobs.models import Job
+from sqlalchemy import delete, update
+from sqlalchemy.exc import IntegrityError
+
 from tests.dispatch.test_dispatch_service import dispatch_fixture
 
 
 @pytest.mark.asyncio
-async def test_field_artifact_replay_and_database_immutability(dispatch_fixture) -> None:
+async def test_field_artifact_replay_and_database_immutability(
+    dispatch_fixture,
+) -> None:
     factory, context, appointment, technician, _ = dispatch_fixture
     now = datetime.now(timezone.utc)
     async with factory() as session, session.begin():

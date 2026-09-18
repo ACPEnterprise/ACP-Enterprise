@@ -5,6 +5,7 @@ from uuid import UUID
 from app.beacon.briefing import OwnerAttentionWindow, build_morning_brief
 from app.beacon.contracts import BeaconPriorityBand, BeaconSeverity
 from app.beacon.evaluation import signal_evaluation_service
+
 from tests.beacon.test_beacon import snapshot
 
 COMPANY_ID = UUID("10000000-0000-0000-0000-000000000001")

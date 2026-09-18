@@ -47,11 +47,19 @@ class PostmarkIdentityProvider:
             raise ValueError("Postmark credential is invalid.")
         return token
 
-    def _request(self, *, path: str, method: str = "GET", payload: dict[str, str] | None = None) -> dict[str, object]:
+    def _request(
+        self, *, path: str, method: str = "GET", payload: dict[str, str] | None = None
+    ) -> dict[str, object]:
         body = None if payload is None else json.dumps(payload).encode()
         request = urllib.request.Request(
-            f"{POSTMARK_API_ORIGIN}{path}", data=body, method=method,
-            headers={"X-Postmark-Server-Token": self._token(), "Accept": "application/json", "Content-Type": "application/json"},
+            f"{POSTMARK_API_ORIGIN}{path}",
+            data=body,
+            method=method,
+            headers={
+                "X-Postmark-Server-Token": self._token(),
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
         )
         try:
             with urllib.request.urlopen(request, timeout=10) as response:
@@ -59,13 +67,23 @@ class PostmarkIdentityProvider:
                 return decoded if isinstance(decoded, dict) else {}
         except urllib.error.HTTPError as error:
             if error.code in {401, 403}:
-                raise NotificationProviderTransportError("postmark_authentication_failed", retryable=False, submission_possible=False) from error
+                raise NotificationProviderTransportError(
+                    "postmark_authentication_failed",
+                    retryable=False,
+                    submission_possible=False,
+                ) from error
             if error.code == 429 or error.code >= 500:
-                raise NotificationProviderTransportError("postmark_temporarily_unavailable", retryable=True, submission_possible=method == "POST") from error
+                raise NotificationProviderTransportError(
+                    "postmark_temporarily_unavailable",
+                    retryable=True,
+                    submission_possible=method == "POST",
+                ) from error
             provider_code = None
             try:
                 response = json.loads(error.read().decode())
-                value = response.get("ErrorCode") if isinstance(response, dict) else None
+                value = (
+                    response.get("ErrorCode") if isinstance(response, dict) else None
+                )
                 provider_code = value if isinstance(value, int) else None
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
@@ -78,7 +96,11 @@ class PostmarkIdentityProvider:
                 safe_code, retryable=False, submission_possible=False
             ) from error
         except (OSError, TimeoutError) as error:
-            raise NotificationProviderTransportError("postmark_transport_uncertain", retryable=False, submission_possible=method == "POST") from error
+            raise NotificationProviderTransportError(
+                "postmark_transport_uncertain",
+                retryable=False,
+                submission_possible=method == "POST",
+            ) from error
 
     async def verify_authentication(self) -> bool:
         result = await asyncio.to_thread(self._request, path="/server")
@@ -86,16 +108,34 @@ class PostmarkIdentityProvider:
 
     async def deliver(self, message: NotificationMessage) -> NotificationDeliveryResult:
         if message.notification_type not in IDENTITY_NOTIFICATION_TYPES:
-            return NotificationDeliveryResult(outcome=NotificationProviderOutcome.REJECTED, error_code="identity_provider_scope_rejected")
+            return NotificationDeliveryResult(
+                outcome=NotificationProviderOutcome.REJECTED,
+                error_code="identity_provider_scope_rejected",
+            )
         result = await asyncio.to_thread(
-            self._request, path="/email", method="POST",
-            payload={"From": self._sender, "To": message.recipient, "Subject": message.subject, "TextBody": message.plain_text, "HtmlBody": message.html, "MessageStream": "outbound", "Tag": "acp-identity-security"},
+            self._request,
+            path="/email",
+            method="POST",
+            payload={
+                "From": self._sender,
+                "To": message.recipient,
+                "Subject": message.subject,
+                "TextBody": message.plain_text,
+                "HtmlBody": message.html,
+                "MessageStream": "outbound",
+                "Tag": "acp-identity-security",
+            },
         )
         message_id = result.get("MessageID")
         error_code = result.get("ErrorCode")
         if error_code != 0 or not isinstance(message_id, str) or not message_id:
-            return NotificationDeliveryResult(outcome=NotificationProviderOutcome.REJECTED, error_code="postmark_submission_rejected")
-        return NotificationDeliveryResult(outcome=NotificationProviderOutcome.ACCEPTED, provider_message_id=message_id)
+            return NotificationDeliveryResult(
+                outcome=NotificationProviderOutcome.REJECTED,
+                error_code="postmark_submission_rejected",
+            )
+        return NotificationDeliveryResult(
+            outcome=NotificationProviderOutcome.ACCEPTED, provider_message_id=message_id
+        )
 
 
 async def _verify_from_settings() -> int:

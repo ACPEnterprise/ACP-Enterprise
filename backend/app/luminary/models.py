@@ -73,9 +73,7 @@ class LuminaryFindingRecord(Base):
         ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    branch_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True)
-    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     finding_class: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -98,9 +96,7 @@ class LuminaryFindingRecord(Base):
     lifecycle: Mapped[str] = mapped_column(
         String(20), nullable=False, default="accepted"
     )
-    supersedes_finding_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True)
-    )
+    supersedes_finding_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -156,9 +152,7 @@ class LuminaryBriefingRecord(Base):
         ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    branch_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True)
-    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     evidence_package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -171,9 +165,7 @@ class LuminaryBriefingRecord(Base):
     definition_version: Mapped[str] = mapped_column(String(100), nullable=False)
     briefing_identity: Mapped[str] = mapped_column(String(100), nullable=False)
     briefing_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    supersedes_briefing_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True)
-    )
+    supersedes_briefing_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

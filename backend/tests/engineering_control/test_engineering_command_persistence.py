@@ -1,16 +1,12 @@
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError, dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-import asyncio
+import app.platform.permissions.models  # noqa: F401
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-import app.platform.permissions.models  # noqa: F401
 from app.core.config import settings
 from app.engineering_control.models import (
     EngineeringCommand,
@@ -28,6 +24,9 @@ from app.engineering_control.repository import EngineeringCommandRepository
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.users.models import User
+from sqlalchemy import delete
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @dataclass(frozen=True)

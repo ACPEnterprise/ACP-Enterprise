@@ -3,7 +3,6 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-
 from app.operational_migration.hcp_migration2_command import (
     _rehearsal_context_is_valid,
 )
@@ -38,9 +37,7 @@ def _is_valid(parts: dict[str, object]) -> bool:
         company=cast(Company, parts["company"]),
         branch=cast(Branch, parts["branch"]),
         membership=cast(Membership, parts["membership"]),
-        branch_access=cast(
-            MembershipBranchAccess | None, parts["branch_access"]
-        ),
+        branch_access=cast(MembershipBranchAccess | None, parts["branch_access"]),
         credential=cast(UserCredential | None, parts["credential"]),
         credentialed=cast(bool, parts["credentialed"]),
     )

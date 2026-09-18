@@ -636,10 +636,13 @@ class ControlledExecutionProvider:
             raise ProviderFailure("Duplicate completed execution is rejected.")
         if prior not in {None, ProviderPhase.QUEUED}:
             self.journal.append(
-                request, ProviderPhase.RECONCILIATION_REQUIRED,
+                request,
+                ProviderPhase.RECONCILIATION_REQUIRED,
                 reason="ambiguous_read_only_interruption",
             )
-            raise ProviderFailure("Interrupted read-only execution requires reconciliation.")
+            raise ProviderFailure(
+                "Interrupted read-only execution requires reconciliation."
+            )
         with self.workspaces.locked(request):
             self.journal.append(request, ProviderPhase.COMPOSED)
             workspace = self.workspaces.prepare(request)
@@ -647,7 +650,8 @@ class ControlledExecutionProvider:
                 workspace, request.boundary.validation_requirements
             )
             self.journal.append(
-                request, ProviderPhase.WORKSPACE_READY,
+                request,
+                ProviderPhase.WORKSPACE_READY,
                 head=request.boundary.expected_head,
                 validation_environment=environment,
             )
@@ -666,23 +670,37 @@ class ControlledExecutionProvider:
             after = self.workspaces.changed_files(workspace)
             if after:
                 self.journal.append(
-                    request, ProviderPhase.FAILED,
+                    request,
+                    ProviderPhase.FAILED,
                     reason="read_only_repository_mutation_detected",
-                    files=list(after), repository_mutated=False,
+                    files=list(after),
+                    repository_mutated=False,
                 )
                 raise ProviderFailure("Read-only validation changed repository files.")
             if not validations or not all(validations.values()):
                 self.journal.append(
-                    request, ProviderPhase.FAILED,
-                    reason="required_validation_failed", files=[],
-                    validation=validations, validation_runs=runs,
+                    request,
+                    ProviderPhase.FAILED,
+                    reason="required_validation_failed",
+                    files=[],
+                    validation=validations,
+                    validation_runs=runs,
                     repository_mutated=False,
                 )
                 return ProviderExecutionResult(
-                    request.execution_id, request.lease_id, ProviderPhase.FAILED,
-                    request.boundary.expected_head, None, None, (), validations,
-                    {"validation_runs": runs, "validation_environment": environment,
-                     "repository_mutated": False},
+                    request.execution_id,
+                    request.lease_id,
+                    ProviderPhase.FAILED,
+                    request.boundary.expected_head,
+                    None,
+                    None,
+                    (),
+                    validations,
+                    {
+                        "validation_runs": runs,
+                        "validation_environment": environment,
+                        "repository_mutated": False,
+                    },
                     "required_validation_failed",
                 )
             evidence = {
@@ -693,13 +711,21 @@ class ControlledExecutionProvider:
                 "phases": ["composed", "workspace_ready", "validating", "completed"],
             }
             self.journal.append(
-                request, ProviderPhase.COMPLETED, head=request.boundary.expected_head,
+                request,
+                ProviderPhase.COMPLETED,
+                head=request.boundary.expected_head,
                 repository_mutated=False,
             )
             return ProviderExecutionResult(
-                request.execution_id, request.lease_id, ProviderPhase.COMPLETED,
-                request.boundary.expected_head, request.boundary.expected_head,
-                None, (), validations, evidence,
+                request.execution_id,
+                request.lease_id,
+                ProviderPhase.COMPLETED,
+                request.boundary.expected_head,
+                request.boundary.expected_head,
+                None,
+                (),
+                validations,
+                evidence,
             )
 
     def _validate(

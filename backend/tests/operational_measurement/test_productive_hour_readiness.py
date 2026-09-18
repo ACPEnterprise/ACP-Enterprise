@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-
 from app.operational_measurement.labor_evidence import (
     EmployeeJobLink,
     IntervalKind,
@@ -167,8 +166,7 @@ def test_missing_actual_time_is_absent_and_schedule_never_substitutes():
     )
     assert employee_values[ProductiveHourMeasure.ACTUAL_WORKED_MINUTES].minutes is None
     assert (
-        employee_values[ProductiveHourMeasure.UNCLASSIFIED_PAID_MINUTES].minutes
-        is None
+        employee_values[ProductiveHourMeasure.UNCLASSIFIED_PAID_MINUTES].minutes is None
     )
 
 

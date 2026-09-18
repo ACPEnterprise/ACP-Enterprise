@@ -6,14 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customer_migration.housecall_pro_adapter import (
     HOUSECALL_PRO_CUSTOMER_EXPORT_CONTRACTS,
@@ -38,6 +30,13 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @pytest_asyncio.fixture

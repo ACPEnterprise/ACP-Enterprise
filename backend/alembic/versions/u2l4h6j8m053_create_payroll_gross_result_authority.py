@@ -7,9 +7,8 @@ Revises: t1k3g5i7l942
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "u2l4h6j8m053"
 down_revision: str | None = "t1k3g5i7l942"
@@ -43,9 +42,7 @@ def upgrade() -> None:
         sa.Column("gross_pay_total", sa.Numeric(18, 2), nullable=False),
         sa.Column("calculation_digest", sa.String(64), nullable=False),
         sa.Column("calculated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "created_by_user_id", postgresql.UUID(as_uuid=True), nullable=False
-        ),
+        sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("lifecycle", sa.String(24), nullable=False),
         sa.Column("review_state", sa.String(24), nullable=False),
         sa.Column("supersedes_result_id", postgresql.UUID(as_uuid=True)),

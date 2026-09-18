@@ -1,7 +1,6 @@
 from dataclasses import FrozenInstanceError, fields
 
 import pytest
-
 from app.engineering_control.registry import (
     EngineeringRepositoryDefinition,
     EngineeringRepositoryRegistry,

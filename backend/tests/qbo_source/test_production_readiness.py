@@ -9,8 +9,6 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.core.config import Settings
 from app.main import app
 from app.platform.permissions.authorization import AuthorizationContext
@@ -47,6 +45,7 @@ from app.qbo_source.secrets import (
     ProtectedProductionSecretProvider,
     ProtectedSandboxSecretProvider,
 )
+from fastapi.testclient import TestClient
 
 
 class _Closable:

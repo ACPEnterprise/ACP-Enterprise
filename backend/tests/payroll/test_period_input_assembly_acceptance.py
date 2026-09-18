@@ -6,8 +6,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.payroll.commands import DraftCompensationAuthority, DraftPayrollPolicy
 from app.payroll.contracts import (
     CompensationType,
@@ -17,6 +15,8 @@ from app.payroll.contracts import (
 )
 from app.payroll.permissions import PayrollPermission
 from app.payroll.service import PayrollAuthorityService
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from tests.payroll.test_policy_authority import (
     FakeContext,
     approved_time_snapshot,

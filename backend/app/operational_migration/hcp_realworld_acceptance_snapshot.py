@@ -82,9 +82,10 @@ async def build_realworld_snapshot(
     ) in _FAMILIES.items():
         branch_filter = "AND i.branch_id = :branch_id" if family != "customers" else ""
         row = (
-            await session.execute(
-                text(
-                    f"""
+            (
+                await session.execute(
+                    text(
+                        f"""
                     SELECT count(*) AS admitted,
                            count(n.id) AS projected
                     FROM {identity_table} i
@@ -95,10 +96,13 @@ async def build_realworld_snapshot(
                       AND i.source_system = :source
                       {branch_filter}
                     """
-                ),
-                scope,
+                    ),
+                    scope,
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
         families[family] = {
             "admitted": int(row["admitted"]),
             "projected": int(row["projected"]),
@@ -122,9 +126,10 @@ async def build_realworld_snapshot(
     holds = {str(row["entity_kind"]): int(row["count"]) for row in hold_rows}
 
     operations = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text(
+                    """
                 SELECT
                   count(DISTINCT jsi.source_job_id) FILTER (
                     WHERE j.status IN ('ready','in_progress','paused')
@@ -149,10 +154,13 @@ async def build_realworld_snapshot(
                   AND jsi.branch_id = :branch_id
                   AND jsi.source_system = :source
                 """
-            ),
-            {**scope, "observed_at": observed_at},
+                ),
+                {**scope, "observed_at": observed_at},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
 
     journeys = list(
         (
@@ -205,9 +213,14 @@ async def build_realworld_snapshot(
         "mutation_authority": "none",
         "families": families,
         "held_by_entity_kind": holds,
-        "current_operations": {key: int(value or 0) for key, value in operations.items()},
+        "current_operations": {
+            key: int(value or 0) for key, value in operations.items()
+        },
         "historical_customer_journeys": [
-            {key: str(value) if isinstance(value, UUID) else value for key, value in row.items()}
+            {
+                key: str(value) if isinstance(value, UUID) else value
+                for key, value in row.items()
+            }
             for row in journeys
         ],
         "limitations": [

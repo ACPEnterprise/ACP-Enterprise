@@ -7,9 +7,8 @@ Revises: m3n5p7r9t1v3
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "n4p6r8t0v2x4"
 down_revision: str | Sequence[str] | None = "m3n5p7r9t1v3"
@@ -33,9 +32,7 @@ def upgrade() -> None:
             "roster_key ~ '^[a-z][a-z0-9-]{0,63}$'",
             name="ck_real_workforce_roster_binding_key",
         ),
-        sa.ForeignKeyConstraint(
-            ["company_id"], ["companies.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["confirmed_by_user_id"], ["users.id"], ondelete="RESTRICT"
         ),
@@ -47,7 +44,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "company_id", "employee_id", name="uq_real_workforce_roster_binding_employee"
+            "company_id",
+            "employee_id",
+            name="uq_real_workforce_roster_binding_employee",
         ),
         sa.UniqueConstraint(
             "company_id", "roster_key", name="uq_real_workforce_roster_binding_key"

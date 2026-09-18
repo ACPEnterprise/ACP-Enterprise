@@ -7,9 +7,8 @@ Revises: w4n6i8k0p275
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "w4n6j8l0o275"
 down_revision: str | Sequence[str] | None = "w4n6i8k0p275"
@@ -32,9 +31,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["created_by_user_id"], ["users.id"], ondelete="RESTRICT"
         ),
-        sa.UniqueConstraint(
-            "company_id", "id", name="uq_payroll_protected_company_id"
-        ),
+        sa.UniqueConstraint("company_id", "id", name="uq_payroll_protected_company_id"),
     )
     op.create_table(
         "payroll_input_authority_versions",
@@ -103,12 +100,16 @@ def upgrade() -> None:
             ["payroll_input_authority_versions.id"],
             ondelete="RESTRICT",
         ),
-        sa.ForeignKeyConstraint(["drafted_by_user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["approved_by_user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["retired_by_user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.UniqueConstraint(
-            "company_id", "id", name="uq_payroll_input_company_id"
+        sa.ForeignKeyConstraint(
+            ["drafted_by_user_id"], ["users.id"], ondelete="RESTRICT"
         ),
+        sa.ForeignKeyConstraint(
+            ["approved_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["retired_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
+        sa.UniqueConstraint("company_id", "id", name="uq_payroll_input_company_id"),
         sa.UniqueConstraint(
             "company_id",
             "employee_id",

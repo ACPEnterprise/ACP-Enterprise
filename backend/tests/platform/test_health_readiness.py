@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
-
 from app.core.config import Settings
 from app.platform.health.contracts import ComponentHealth, HealthState
 from app.platform.health.service import PlatformHealthService
@@ -23,10 +22,18 @@ def _component(name: str, state: HealthState, *, required: bool) -> ComponentHea
 
 @pytest.mark.asyncio
 async def test_required_component_failure_makes_process_not_ready() -> None:
-    service = PlatformHealthService(configuration=Settings(environment="test"), engine=AsyncMock())
-    service.database = AsyncMock(return_value=_component("database", HealthState.HEALTHY, required=True))
-    service.schema = AsyncMock(return_value=_component("schema", HealthState.NOT_READY, required=True))
-    service.redis = AsyncMock(return_value=_component("redis", HealthState.HEALTHY, required=True))
+    service = PlatformHealthService(
+        configuration=Settings(environment="test"), engine=AsyncMock()
+    )
+    service.database = AsyncMock(
+        return_value=_component("database", HealthState.HEALTHY, required=True)
+    )
+    service.schema = AsyncMock(
+        return_value=_component("schema", HealthState.NOT_READY, required=True)
+    )
+    service.redis = AsyncMock(
+        return_value=_component("redis", HealthState.HEALTHY, required=True)
+    )
 
     result = await service.inspect()
 
@@ -35,10 +42,18 @@ async def test_required_component_failure_makes_process_not_ready() -> None:
 
 @pytest.mark.asyncio
 async def test_optional_dependency_failure_is_truthfully_degraded() -> None:
-    service = PlatformHealthService(configuration=Settings(environment="test"), engine=AsyncMock())
-    service.database = AsyncMock(return_value=_component("database", HealthState.HEALTHY, required=True))
-    service.schema = AsyncMock(return_value=_component("schema", HealthState.HEALTHY, required=True))
-    service.redis = AsyncMock(return_value=_component("redis", HealthState.DEGRADED, required=False))
+    service = PlatformHealthService(
+        configuration=Settings(environment="test"), engine=AsyncMock()
+    )
+    service.database = AsyncMock(
+        return_value=_component("database", HealthState.HEALTHY, required=True)
+    )
+    service.schema = AsyncMock(
+        return_value=_component("schema", HealthState.HEALTHY, required=True)
+    )
+    service.redis = AsyncMock(
+        return_value=_component("redis", HealthState.DEGRADED, required=False)
+    )
 
     result = await service.inspect()
 
@@ -47,10 +62,18 @@ async def test_optional_dependency_failure_is_truthfully_degraded() -> None:
 
 @pytest.mark.asyncio
 async def test_health_projection_contains_safe_classifications_only() -> None:
-    service = PlatformHealthService(configuration=Settings(environment="test"), engine=AsyncMock())
-    service.database = AsyncMock(return_value=_component("database", HealthState.HEALTHY, required=True))
-    service.schema = AsyncMock(return_value=_component("schema", HealthState.HEALTHY, required=True))
-    service.redis = AsyncMock(return_value=_component("redis", HealthState.HEALTHY, required=True))
+    service = PlatformHealthService(
+        configuration=Settings(environment="test"), engine=AsyncMock()
+    )
+    service.database = AsyncMock(
+        return_value=_component("database", HealthState.HEALTHY, required=True)
+    )
+    service.schema = AsyncMock(
+        return_value=_component("schema", HealthState.HEALTHY, required=True)
+    )
+    service.redis = AsyncMock(
+        return_value=_component("redis", HealthState.HEALTHY, required=True)
+    )
 
     payload = (await service.inspect()).model_dump(mode="json")
 

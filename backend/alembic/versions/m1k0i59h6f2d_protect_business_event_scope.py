@@ -7,7 +7,6 @@ Revises: h6f8j0l2n497
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "m1k0i59h6f2d"
@@ -17,7 +16,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _scope_check(table: str, name: str) -> None:
-    op.create_check_constraint(name, table, "branch_id IS NULL OR company_id IS NOT NULL")
+    op.create_check_constraint(
+        name, table, "branch_id IS NULL OR company_id IS NOT NULL"
+    )
 
 
 def upgrade() -> None:
@@ -106,10 +107,26 @@ def upgrade() -> None:
         "ck_business_event_evidence_branch_requires_company",
     )
     for name, local, remote in (
-        ("fk_business_event_evidence_company_delivery", ["company_id", "delivery_id"], ["company_id", "id"]),
-        ("fk_business_event_evidence_delivery_event", ["delivery_id", "event_id"], ["id", "event_id"]),
-        ("fk_business_event_evidence_delivery_branch", ["delivery_id", "branch_id"], ["id", "branch_id"]),
-        ("fk_business_event_evidence_delivery_consumer", ["delivery_id", "consumer_name"], ["id", "consumer_name"]),
+        (
+            "fk_business_event_evidence_company_delivery",
+            ["company_id", "delivery_id"],
+            ["company_id", "id"],
+        ),
+        (
+            "fk_business_event_evidence_delivery_event",
+            ["delivery_id", "event_id"],
+            ["id", "event_id"],
+        ),
+        (
+            "fk_business_event_evidence_delivery_branch",
+            ["delivery_id", "branch_id"],
+            ["id", "branch_id"],
+        ),
+        (
+            "fk_business_event_evidence_delivery_consumer",
+            ["delivery_id", "consumer_name"],
+            ["id", "consumer_name"],
+        ),
     ):
         op.create_foreign_key(
             name,
@@ -191,9 +208,21 @@ def downgrade() -> None:
         "business_event_deliveries",
         type_="check",
     )
-    op.drop_constraint("fk_audit_records_company_branch", "audit_records", type_="foreignkey")
-    op.drop_constraint("ck_audit_records_branch_requires_company", "audit_records", type_="check")
-    op.drop_constraint("fk_business_events_company_branch", "business_events", type_="foreignkey")
-    op.drop_constraint("uq_business_events_id_branch", "business_events", type_="unique")
-    op.drop_constraint("uq_business_events_company_id", "business_events", type_="unique")
-    op.drop_constraint("ck_business_events_branch_requires_company", "business_events", type_="check")
+    op.drop_constraint(
+        "fk_audit_records_company_branch", "audit_records", type_="foreignkey"
+    )
+    op.drop_constraint(
+        "ck_audit_records_branch_requires_company", "audit_records", type_="check"
+    )
+    op.drop_constraint(
+        "fk_business_events_company_branch", "business_events", type_="foreignkey"
+    )
+    op.drop_constraint(
+        "uq_business_events_id_branch", "business_events", type_="unique"
+    )
+    op.drop_constraint(
+        "uq_business_events_company_id", "business_events", type_="unique"
+    )
+    op.drop_constraint(
+        "ck_business_events_branch_requires_company", "business_events", type_="check"
+    )

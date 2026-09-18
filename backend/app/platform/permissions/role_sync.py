@@ -146,7 +146,9 @@ class CanonicalRoleSyncService:
                 .limit(1)
             )
             if actor_has_authority is None:
-                raise CanonicalRoleSyncConflict("Permission management authority is required.")
+                raise CanonicalRoleSyncConflict(
+                    "Permission management authority is required."
+                )
             roles = tuple(
                 (
                     await session.scalars(
@@ -157,7 +159,9 @@ class CanonicalRoleSyncService:
                 ).all()
             )
             if len(roles) != 1 or roles[0].id != expected_role_id:
-                raise CanonicalRoleSyncConflict("Canonical role identity changed before repair.")
+                raise CanonicalRoleSyncConflict(
+                    "Canonical role identity changed before repair."
+                )
             role = roles[0]
             assigned_rows = tuple(
                 (
@@ -178,19 +182,24 @@ class CanonicalRoleSyncService:
                     role.id, role.code, False, (), (), 0
                 )
             if digest != expected_permission_digest:
-                raise CanonicalRoleSyncConflict("Legacy role permissions changed before repair.")
+                raise CanonicalRoleSyncConflict(
+                    "Legacy role permissions changed before repair."
+                )
             permission_rows = {
                 item.code: item
                 for item in (
                     await session.scalars(
                         select(Permission).where(
-                            Permission.code.in_(canonical), Permission.status == "active"
+                            Permission.code.in_(canonical),
+                            Permission.status == "active",
                         )
                     )
                 ).all()
             }
             if set(permission_rows) != set(canonical):
-                raise CanonicalRoleSyncConflict("Canonical Permission catalog is incomplete.")
+                raise CanonicalRoleSyncConflict(
+                    "Canonical Permission catalog is incomplete."
+                )
             removed = tuple(sorted(assigned - canonical))
             added = tuple(sorted(canonical - assigned))
             if removed:
@@ -264,9 +273,7 @@ class CanonicalRoleSyncService:
                 role.id, role.code, True, added, removed, len(users)
             )
 
-    async def plan(
-        self, session: AsyncSession, *, company_id: UUID
-    ) -> RoleSyncPlan:
+    async def plan(self, session: AsyncSession, *, company_id: UUID) -> RoleSyncPlan:
         canonical_permissions = frozenset(
             definition.code for definition in permission_catalog.definitions
         )
@@ -371,7 +378,9 @@ class CanonicalRoleSyncService:
         expected_plan_digest: str | None = None,
     ) -> RoleSyncResult:
         if not context.has_permission(AdministrationPermission.PERMISSION_MANAGE):
-            raise CanonicalRoleSyncConflict("Permission management authority is required.")
+            raise CanonicalRoleSyncConflict(
+                "Permission management authority is required."
+            )
         created: list[str] = []
         added: list[str] = []
         restored: list[str] = []
@@ -389,15 +398,18 @@ class CanonicalRoleSyncService:
                 expected_plan_digest is not None
                 and expected_plan_digest != plan.digest
                 and any(
-                    item.classification
-                    is not RoleSyncClassification.ALREADY_CONFORMING
+                    item.classification is not RoleSyncClassification.ALREADY_CONFORMING
                     or item.metadata_update_required
                     for item in plan.items
                 )
             ):
-                raise CanonicalRoleSyncConflict("Canonical role plan changed before apply.")
+                raise CanonicalRoleSyncConflict(
+                    "Canonical role plan changed before apply."
+                )
             if not plan.safe_to_apply:
-                raise CanonicalRoleSyncConflict("Canonical role conflicts require review.")
+                raise CanonicalRoleSyncConflict(
+                    "Canonical role conflicts require review."
+                )
             permissions = {
                 value.code: value
                 for value in (
@@ -413,7 +425,9 @@ class CanonicalRoleSyncService:
                         select(Role).where(
                             Role.company_id == company.id,
                             Role.is_system.is_(True),
-                            Role.code.in_(item.code for item in CANONICAL_ROLE_DEFINITIONS),
+                            Role.code.in_(
+                                item.code for item in CANONICAL_ROLE_DEFINITIONS
+                            ),
                         )
                     )
                 ).all()
@@ -452,7 +466,10 @@ class CanonicalRoleSyncService:
                 assigned = frozenset(
                     await session.scalars(
                         select(Permission.code)
-                        .join(RolePermission, RolePermission.permission_id == Permission.id)
+                        .join(
+                            RolePermission,
+                            RolePermission.permission_id == Permission.id,
+                        )
                         .where(RolePermission.role_id == role.id)
                     )
                 )
@@ -513,7 +530,9 @@ class CanonicalRoleSyncService:
                     resource_id=company.id,
                     actor_user_id=context.user.id,
                     company_id=company.id,
-                    branch_id=context.active_branch.id if context.active_branch else None,
+                    branch_id=context.active_branch.id
+                    if context.active_branch
+                    else None,
                     details={
                         "plan_digest": plan.digest,
                         "expected_plan_digest": expected_plan_digest,
@@ -523,7 +542,10 @@ class CanonicalRoleSyncService:
                         "metadata_restored": list(result.metadata_restored),
                         "authorization_users_advanced": result.authorization_users_advanced,
                         "classification_before": [
-                            {"code": item.code, "classification": item.classification.value}
+                            {
+                                "code": item.code,
+                                "classification": item.classification.value,
+                            }
                             for item in plan.items
                         ],
                     },

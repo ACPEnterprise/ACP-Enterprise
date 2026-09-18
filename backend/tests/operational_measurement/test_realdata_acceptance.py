@@ -61,9 +61,7 @@ def lineage() -> tuple[OperationalLineageProjection, ...]:
         BRANCH,
         (
             ParentLineage(OperationalDomain.CUSTOMER, "cus_source", CUSTOMER),
-            ParentLineage(
-                OperationalDomain.SERVICE_LOCATION, "loc_source", LOCATION
-            ),
+            ParentLineage(OperationalDomain.SERVICE_LOCATION, "loc_source", LOCATION),
         ),
         "f" * 64,
     )
@@ -76,9 +74,7 @@ def lineage() -> tuple[OperationalLineageProjection, ...]:
         BRANCH,
         (
             ParentLineage(OperationalDomain.CUSTOMER, "cus_source", CUSTOMER),
-            ParentLineage(
-                OperationalDomain.SERVICE_LOCATION, "loc_source", LOCATION
-            ),
+            ParentLineage(OperationalDomain.SERVICE_LOCATION, "loc_source", LOCATION),
             ParentLineage(OperationalDomain.JOB, "job_source", JOB),
         ),
         "2" * 64,
@@ -201,8 +197,9 @@ def test_missing_native_and_orphan_relationships_fail_closed() -> None:
         is AcceptanceClassification.ORPHANED
     )
     assert (
-        by_identity[("OPERATIONAL_PROJECTION", "APPOINTMENT", "appt_source")]
-        .classification
+        by_identity[
+            ("OPERATIONAL_PROJECTION", "APPOINTMENT", "appt_source")
+        ].classification
         is AcceptanceClassification.MISSING_NATIVE
     )
 
@@ -223,7 +220,9 @@ def test_schedule_dispatch_disagreement_is_conflicting(
     dispatch_change: dict[str, object], condition: str
 ) -> None:
     result = report(dispatches=(dispatch(**dispatch_change),))
-    finding = next(item for item in result.findings if item.stage == "OPERATIONAL_PROJECTION")
+    finding = next(
+        item for item in result.findings if item.stage == "OPERATIONAL_PROJECTION"
+    )
     assert finding.classification is AcceptanceClassification.CONFLICTING
     assert condition in finding.conditions
 
@@ -237,7 +236,9 @@ def test_unmapped_technician_remains_partial_not_fabricated() -> None:
         company_id=COMPANY,
         branch_id=BRANCH,
     )
-    projection = next(item for item in result.findings if item.stage == "OPERATIONAL_PROJECTION")
+    projection = next(
+        item for item in result.findings if item.stage == "OPERATIONAL_PROJECTION"
+    )
     assert projection.classification is AcceptanceClassification.PARTIAL
     assert projection.conditions == ("TECHNICIAN_MAPPING_INCOMPLETE",)
 

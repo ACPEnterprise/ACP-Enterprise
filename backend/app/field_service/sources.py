@@ -62,9 +62,7 @@ class FieldSourceService:
         )
         invoice = self._invoice(invoice_record)
         payment = await self._payment(session, context.company.id, invoice_record)
-        communications = await self._communications(
-            session, context.company.id, job_id
-        )
+        communications = await self._communications(session, context.company.id, job_id)
         completion = await self.field.state(session, context=context, job_id=job_id)
         return FieldJobSources(
             job_id=job.id,
@@ -93,8 +91,14 @@ class FieldSourceService:
                 select(PriceBookServiceItem, PriceBookPriceVersion)
                 .join(
                     PriceBookPriceVersion,
-                    (PriceBookPriceVersion.company_id == PriceBookServiceItem.company_id)
-                    & (PriceBookPriceVersion.id == PriceBookServiceItem.current_version_id),
+                    (
+                        PriceBookPriceVersion.company_id
+                        == PriceBookServiceItem.company_id
+                    )
+                    & (
+                        PriceBookPriceVersion.id
+                        == PriceBookServiceItem.current_version_id
+                    ),
                 )
                 .where(
                     PriceBookServiceItem.company_id == context.company.id,
@@ -226,10 +230,17 @@ class FieldSourceService:
                 communication_id=record.id,
                 message_class=str(record.payload.get("communication_type", "unknown")),
                 channel=record.channel or "unknown",
-                state=("delivered" if record.status == "sent" else "uncertain" if record.status == "ambiguous" else record.status),
+                state=(
+                    "delivered"
+                    if record.status == "sent"
+                    else "uncertain"
+                    if record.status == "ambiguous"
+                    else record.status
+                ),
                 created_at=record.created_at,
             )
             for record in records
         )
+
 
 field_source_service = FieldSourceService(FieldService())

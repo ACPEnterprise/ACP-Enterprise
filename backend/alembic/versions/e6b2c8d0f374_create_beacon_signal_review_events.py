@@ -9,9 +9,8 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "e6b2c8d0f374"
 down_revision: str | Sequence[str] | None = "d5a1b7c9f263"

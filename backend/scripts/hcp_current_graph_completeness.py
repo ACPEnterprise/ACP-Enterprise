@@ -16,7 +16,17 @@ from app.operational_migration.hcp_current_graph_completeness import (
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    for name in ("v3", "overlay", "delta", "baseline", "classifier", "successor-manifest", "refresh-root", "schedule-root", "output"):
+    for name in (
+        "v3",
+        "overlay",
+        "delta",
+        "baseline",
+        "classifier",
+        "successor-manifest",
+        "refresh-root",
+        "schedule-root",
+        "output",
+    ):
         parser.add_argument(f"--{name}", required=True, type=Path)
     parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()

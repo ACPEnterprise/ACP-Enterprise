@@ -5,9 +5,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select, update
-from sqlalchemy.exc import DBAPIError
-
 from app.inventory.contracts import PostInventoryAdjustment
 from app.inventory.errors import (
     InventoryConflict,
@@ -15,6 +12,9 @@ from app.inventory.errors import (
     InventoryValidation,
 )
 from app.inventory.models import InventoryAdjustment, InventoryQuantity, StockMovement
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import DBAPIError
+
 from tests.inventory.test_inventory_foundation import (
     inventory_fixture,  # noqa: F401
     opening_spec,

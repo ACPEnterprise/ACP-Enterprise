@@ -25,7 +25,11 @@ def upgrade() -> None:
     op.alter_column(
         "engineering_workstream_controls", "requested_action", nullable=False
     )
-    op.create_check_constraint("ck_workstream_controls_requested_action", "engineering_workstream_controls", "requested_action IN ('start','pause','resume','cancel')")
+    op.create_check_constraint(
+        "ck_workstream_controls_requested_action",
+        "engineering_workstream_controls",
+        "requested_action IN ('start','pause','resume','cancel')",
+    )
     op.create_table(
         "engineering_workstream_runtimes",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -92,12 +96,18 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["command_id"], ["engineering_commands.id"], ondelete="RESTRICT"
         ),
-        sa.UniqueConstraint("company_id", "idempotency_key", name="uq_workstream_event_idempotency"),
+        sa.UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_workstream_event_idempotency"
+        ),
     )
 
 
 def downgrade() -> None:
     op.drop_table("engineering_workstream_events")
     op.drop_table("engineering_workstream_runtimes")
-    op.drop_constraint("ck_workstream_controls_requested_action", "engineering_workstream_controls", type_="check")
+    op.drop_constraint(
+        "ck_workstream_controls_requested_action",
+        "engineering_workstream_controls",
+        type_="check",
+    )
     op.drop_column("engineering_workstream_controls", "requested_action")

@@ -5,6 +5,9 @@ from uuid import UUID
 import httpx
 import pytest
 import pytest_asyncio
+from app.core.config import settings
+from app.customers.models import Customer
+from app.events.models import BusinessEvent
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -13,9 +16,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import settings
-from app.customers.models import Customer
-from app.events.models import BusinessEvent
 from tests.customers.test_api import build_app, seed_customer_fixture
 
 
@@ -134,7 +134,9 @@ async def test_customer_update_transition_tenant_and_archive_guards(
     assert prohibited.status_code == 409
     detail = prohibited.json()["detail"]
     assert detail["code"] == "resource_state_conflict"
-    assert detail["message"] == "The requested Customer status transition is not allowed."
+    assert (
+        detail["message"] == "The requested Customer status transition is not allowed."
+    )
     assert detail["recovery"] == "RETRY_AFTER_REFRESH"
 
     other_app = build_app(factory, fixture.other_context)

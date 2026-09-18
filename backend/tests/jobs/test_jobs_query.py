@@ -1,11 +1,10 @@
+from collections.abc import Callable
 from dataclasses import FrozenInstanceError, fields
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-
 from app.jobs.errors import JobNotFoundError, JobQueryValidationError
 from app.jobs.models import JobAppointmentLink
 from app.jobs.query import (
@@ -20,6 +19,8 @@ from app.jobs.query_service import JobsQueryService
 from app.jobs.query_types import JobDetail, JobListItem
 from app.jobs.repository import JobRepository
 from app.jobs.types import JobPriority, JobStatus
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
 from tests.jobs.test_jobs_persistence import (
     JobsFixture,
     build_appointment,

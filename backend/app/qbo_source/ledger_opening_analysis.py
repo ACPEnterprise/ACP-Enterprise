@@ -7,13 +7,16 @@ import hashlib
 import json
 import re
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
-from .evidence import ControlEvidenceRegistry, EvidenceStoreError
-from .evidence import ProtectedFilesystemEvidenceStore
+from .evidence import (
+    ControlEvidenceRegistry,
+    EvidenceStoreError,
+    ProtectedFilesystemEvidenceStore,
+)
 
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _OPENING = re.compile(
@@ -88,9 +91,7 @@ def analyze_registered_general_ledger(
         "earliest_ledger_date": metrics["earliest_ledger_date"],
         "ledger_rows_2021": metrics["ledger_rows_2021"],
         "first_activity_classification": "TRANSFER_ONLY_EVIDENCE",
-        "explicit_opening_keyword_matches": metrics[
-            "explicit_opening_keyword_matches"
-        ],
+        "explicit_opening_keyword_matches": metrics["explicit_opening_keyword_matches"],
         "next_report": "QBO_AUDIT_LOG_2021-07-07_2022-01-03",
     }
 
@@ -145,9 +146,7 @@ def _workbook_metrics(path: Path) -> dict[str, object]:
         "earliest_ledger_date": earliest.isoformat(),
         "latest_ledger_date": latest.isoformat(),
         "ledger_rows_2021": sum(item[0].year == 2021 for item in transactions),
-        "earliest_date_row_count": sum(
-            item[0] == earliest for item in transactions
-        ),
+        "earliest_date_row_count": sum(item[0] == earliest for item in transactions),
         "earliest_date_transaction_types": dict(sorted(earliest_types.items())),
         "earliest_date_transfer_only": set(earliest_types) == {"Transfer"},
         "first_non_transfer_date": min(
@@ -203,7 +202,7 @@ def _column(reference: str) -> int:
 
 def _date(value: str) -> date | None:
     try:
-        return datetime.strptime(value, "%m/%d/%Y").date()
+        return datetime.strptime(value, "%m/%d/%Y").replace(tzinfo=timezone.utc).date()
     except ValueError:
         return None
 

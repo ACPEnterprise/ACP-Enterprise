@@ -8,10 +8,9 @@ Create Date: 2026-08-13
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
 from app.accounting import models as accounting_models  # noqa: F401
+from sqlalchemy.dialects import postgresql
 
 revision: str = "w8m0i2e4f619"
 down_revision: str | None = "u6k8f0h2j497"

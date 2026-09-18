@@ -5,9 +5,8 @@ Revises: n0p8r16g3t9u
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "b2d4f6h8j0l2"
 down_revision = "n0p8r16g3t9u"

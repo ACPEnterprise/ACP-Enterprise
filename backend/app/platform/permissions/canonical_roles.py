@@ -37,4 +37,6 @@ def validate_canonical_roles(canonical_permission_codes: frozenset[str]) -> None
         if permission not in canonical_permission_codes
     }
     if unknown:
-        raise ValueError(f"Canonical roles contain unknown permissions: {sorted(unknown)}")
+        raise ValueError(
+            f"Canonical roles contain unknown permissions: {sorted(unknown)}"
+        )

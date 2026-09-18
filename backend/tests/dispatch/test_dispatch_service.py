@@ -4,9 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.dispatch.errors import DispatchConflict, DispatchNotFound
@@ -28,6 +25,8 @@ from app.workforce.models import (
     WorkforceCapabilityProfile,
     WorkforceWorkingAvailability,
 )
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -557,9 +556,12 @@ async def test_assignment_history_is_tenant_scoped_and_names_actor(dispatch_fixt
     factory, context, appointment, technician, _ = dispatch_fixture
     service = DispatchService()
     async with factory() as session:
-        assert await service.history(
-            session, context=context, appointment_id=appointment.id
-        ) == ()
+        assert (
+            await service.history(
+                session, context=context, appointment_id=appointment.id
+            )
+            == ()
+        )
     async with factory() as session:
         assigned = await service.assign(
             session,

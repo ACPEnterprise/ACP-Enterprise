@@ -8,7 +8,6 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "l2n4o6q8s0u2"

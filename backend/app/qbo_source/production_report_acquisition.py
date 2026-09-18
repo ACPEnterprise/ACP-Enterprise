@@ -83,9 +83,7 @@ async def acquire_production_profit_and_loss(
         raise EvidenceStoreError("production_evidence_root_unavailable")
 
     document, marker = await reader(
-        ProductionProfitAndLossRequest(
-            command.start_date, command.end_date, basis
-        ),
+        ProductionProfitAndLossRequest(command.start_date, command.end_date, basis),
         configuration,
     )
     realm_id = _required_text(marker, "realm_id")

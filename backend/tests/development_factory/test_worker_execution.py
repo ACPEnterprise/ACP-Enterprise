@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from development_factory.execution_adapters import ExecutionAdapterError
 from development_factory.worker_execution import (
     WorkerExecutionError,
@@ -18,7 +17,6 @@ from development_factory.worker_execution import (
 )
 from development_factory.worker_records import render_worker_markdown
 from development_factory.workspaces import WorkspaceManager
-
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None,

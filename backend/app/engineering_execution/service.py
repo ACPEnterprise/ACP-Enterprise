@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.engineering_control.records import (
     EngineeringApprovalState,
     EngineeringCommandRecord,
+)
+from app.engineering_control.records import (
     EngineeringExecutionState as CommandExecutionState,
 )
 from app.engineering_control.repository import (

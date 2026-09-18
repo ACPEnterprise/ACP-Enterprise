@@ -169,7 +169,9 @@ class PayrollAdjustmentCalculationCandidate:
             "company_id": str(self.company_id),
             "employee_id": str(self.employee_id) if self.employee_id else None,
             "original_pay_period_id": (
-                str(self.original_pay_period_id) if self.original_pay_period_id else None
+                str(self.original_pay_period_id)
+                if self.original_pay_period_id
+                else None
             ),
             "correction_pay_period_id": (
                 str(self.correction_pay_period_id)
@@ -189,7 +191,10 @@ class PayrollAdjustmentCalculationCandidate:
 
     def verify(self) -> None:
         digest = canonical_digest(self.canonical_content())
-        if self.calculation_digest != digest or self.result_identity != f"payroll-adjustment-calculation:{digest}":
+        if (
+            self.calculation_digest != digest
+            or self.result_identity != f"payroll-adjustment-calculation:{digest}"
+        ):
             raise AdjustmentCalculationError("Payroll adjustment candidate is invalid")
 
 
@@ -226,15 +231,23 @@ class PayrollAdjustmentCalculationService:
         self._verify_authority_digest(adjustment)
         components = tuple(
             self._component(adjustment, classification, item, provider)
-            for item in sorted(adjustment.delta_components, key=lambda value: str(value["component"]))
+            for item in sorted(
+                adjustment.delta_components, key=lambda value: str(value["component"])
+            )
         )
         consequences = self._consequences(adjustment, classification)
         content = {
             "definition_version": ADJUSTMENT_CALCULATION_VERSION,
             "company_id": str(adjustment.company_id),
-            "employee_id": str(adjustment.employee_id) if adjustment.employee_id else None,
-            "original_pay_period_id": str(adjustment.original_pay_period_id) if adjustment.original_pay_period_id else None,
-            "correction_pay_period_id": str(adjustment.off_cycle_pay_period_id) if adjustment.off_cycle_pay_period_id else None,
+            "employee_id": str(adjustment.employee_id)
+            if adjustment.employee_id
+            else None,
+            "original_pay_period_id": str(adjustment.original_pay_period_id)
+            if adjustment.original_pay_period_id
+            else None,
+            "correction_pay_period_id": str(adjustment.off_cycle_pay_period_id)
+            if adjustment.off_cycle_pay_period_id
+            else None,
             "adjustment_id": str(adjustment.id),
             "adjustment_digest": adjustment.adjustment_digest,
             "source_type": adjustment.source_type,
@@ -281,8 +294,12 @@ class PayrollAdjustmentCalculationService:
         except Exception as exc:
             raise AdjustmentCalculationError("adjustment delta is invalid") from exc
         if not authorized_delta.is_finite() or authorized_delta == 0:
-            raise AdjustmentCalculationError("zero or invalid adjustment delta is prohibited")
-        PayrollAdjustmentCalculationService._validate_component(classification, component)
+            raise AdjustmentCalculationError(
+                "zero or invalid adjustment delta is prohibited"
+            )
+        PayrollAdjustmentCalculationService._validate_component(
+            classification, component
+        )
         output = provider.calculate(
             AdjustmentRuleRequest(
                 classification=classification,
@@ -318,7 +335,10 @@ class PayrollAdjustmentCalculationService:
             "payroll_run": (PayrollRunRecord, "run_digest"),
             "payment_release": (PayrollPaymentReleaseRecord, "package_digest"),
             "payment_execution": (PayrollPaymentExecutionRecord, "execution_digest"),
-            "settlement_evidence": (PayrollPaymentExecutionEvidenceRecord, "evidence_digest"),
+            "settlement_evidence": (
+                PayrollPaymentExecutionEvidenceRecord,
+                "evidence_digest",
+            ),
         }
         if adjustment.source_type == "posted_accounting_journal":
             value = await session.scalar(
@@ -332,9 +352,14 @@ class PayrollAdjustmentCalculationService:
         else:
             definition = definitions.get(adjustment.source_type)
             if definition is None:
-                if adjustment.source_type == "payroll_posting_fact_candidate" and adjustment.source_evidence.get("posted") is False:
+                if (
+                    adjustment.source_type == "payroll_posting_fact_candidate"
+                    and adjustment.source_evidence.get("posted") is False
+                ):
                     return
-                raise AdjustmentCalculationError("adjustment source type is unsupported")
+                raise AdjustmentCalculationError(
+                    "adjustment source type is unsupported"
+                )
             model, digest_field = definition
             value = await session.scalar(
                 select(model).where(
@@ -344,12 +369,22 @@ class PayrollAdjustmentCalculationService:
                 )
             )
         if value is None:
-            raise AdjustmentCalculationError("adjustment source evidence is stale or unavailable")
+            raise AdjustmentCalculationError(
+                "adjustment source evidence is stale or unavailable"
+            )
         source_employee_id = getattr(value, "employee_id", None)
-        if adjustment.employee_id and source_employee_id and adjustment.employee_id != source_employee_id:
+        if (
+            adjustment.employee_id
+            and source_employee_id
+            and adjustment.employee_id != source_employee_id
+        ):
             raise AdjustmentCalculationError("adjustment Employee scope mismatch")
         source_period_id = getattr(value, "pay_period_id", None)
-        if adjustment.original_pay_period_id and source_period_id and adjustment.original_pay_period_id != source_period_id:
+        if (
+            adjustment.original_pay_period_id
+            and source_period_id
+            and adjustment.original_pay_period_id != source_period_id
+        ):
             raise AdjustmentCalculationError("adjustment pay-period scope mismatch")
         source_currency = getattr(value, "currency", None)
         if source_currency and adjustment.currency != source_currency:
@@ -369,32 +404,63 @@ class PayrollAdjustmentCalculationService:
             "evidence_digest": adjustment.evidence_digest,
             "deltas": tuple(
                 (str(item["component"]), str(item["amount"]))
-                for item in sorted(adjustment.delta_components, key=lambda value: str(value["component"]))
+                for item in sorted(
+                    adjustment.delta_components,
+                    key=lambda value: str(value["component"]),
+                )
             ),
-            "employee_id": str(adjustment.employee_id) if adjustment.employee_id else None,
-            "original_pay_period_id": str(adjustment.original_pay_period_id) if adjustment.original_pay_period_id else None,
-            "off_cycle_pay_period_id": str(adjustment.off_cycle_pay_period_id) if adjustment.off_cycle_pay_period_id else None,
-            "supersedes_adjustment_id": str(adjustment.supersedes_adjustment_id) if adjustment.supersedes_adjustment_id else None,
+            "employee_id": str(adjustment.employee_id)
+            if adjustment.employee_id
+            else None,
+            "original_pay_period_id": str(adjustment.original_pay_period_id)
+            if adjustment.original_pay_period_id
+            else None,
+            "off_cycle_pay_period_id": str(adjustment.off_cycle_pay_period_id)
+            if adjustment.off_cycle_pay_period_id
+            else None,
+            "supersedes_adjustment_id": str(adjustment.supersedes_adjustment_id)
+            if adjustment.supersedes_adjustment_id
+            else None,
             "definition_version": adjustment.definition_version,
         }
         if canonical_digest(canonical) != adjustment.adjustment_digest:
-            raise AdjustmentCalculationError("approved adjustment authority failed integrity verification")
+            raise AdjustmentCalculationError(
+                "approved adjustment authority failed integrity verification"
+            )
 
     @staticmethod
-    def _validate_component(classification: PayrollCorrectionType, component: str) -> None:
-        tax = {"employee_tax_withholding", "employee_payroll_tax", "employer_payroll_tax"}
+    def _validate_component(
+        classification: PayrollCorrectionType, component: str
+    ) -> None:
+        tax = {
+            "employee_tax_withholding",
+            "employee_payroll_tax",
+            "employer_payroll_tax",
+        }
         deductions = {"employee_deduction", "employer_contribution"}
         settlement = {"wage_settlement", "net_pay_settlement"}
-        if classification is PayrollCorrectionType.TAX_CORRECTION and component not in tax:
+        if (
+            classification is PayrollCorrectionType.TAX_CORRECTION
+            and component not in tax
+        ):
             raise AdjustmentCalculationError("tax correction component is invalid")
-        if classification is PayrollCorrectionType.DEDUCTION_CORRECTION and component not in deductions:
-            raise AdjustmentCalculationError("deduction correction component is invalid")
-        if classification in {
-            PayrollCorrectionType.PAYMENT_RETURN,
-            PayrollCorrectionType.PAYMENT_REJECTION,
-            PayrollCorrectionType.PAYMENT_REVERSAL,
-            PayrollCorrectionType.SETTLEMENT_CORRECTION,
-        } and component not in settlement:
+        if (
+            classification is PayrollCorrectionType.DEDUCTION_CORRECTION
+            and component not in deductions
+        ):
+            raise AdjustmentCalculationError(
+                "deduction correction component is invalid"
+            )
+        if (
+            classification
+            in {
+                PayrollCorrectionType.PAYMENT_RETURN,
+                PayrollCorrectionType.PAYMENT_REJECTION,
+                PayrollCorrectionType.PAYMENT_REVERSAL,
+                PayrollCorrectionType.SETTLEMENT_CORRECTION,
+            }
+            and component not in settlement
+        ):
             raise AdjustmentCalculationError(
                 "payment correction cannot recreate Payroll accrual components"
             )
@@ -439,7 +505,10 @@ class PayrollAdjustmentCalculationService:
             PayrollCorrectionType.ACCOUNTING_ADJUSTMENT_REQUIRED: AdjustmentConsequenceType.ACCOUNTING_ADJUSTMENT_REQUIRED,
         }
         values = [mapping[classification]]
-        if adjustment.source_type == "posted_accounting_journal" and AdjustmentConsequenceType.ACCOUNTING_ADJUSTMENT_REQUIRED not in values:
+        if (
+            adjustment.source_type == "posted_accounting_journal"
+            and AdjustmentConsequenceType.ACCOUNTING_ADJUSTMENT_REQUIRED not in values
+        ):
             values.append(AdjustmentConsequenceType.ACCOUNTING_ADJUSTMENT_REQUIRED)
         if adjustment.source_type == "payroll_posting_fact_candidate":
             values.append(AdjustmentConsequenceType.UNPOSTED_POSTING_FACT_SUPERSESSION)
@@ -448,4 +517,6 @@ class PayrollAdjustmentCalculationService:
     @staticmethod
     def _require(context: AuthorizationContext, permission: str) -> None:
         if not context.has_permission(permission):
-            raise PayrollAuthorizationError("Payroll adjustment calculation permission denied")
+            raise PayrollAuthorizationError(
+                "Payroll adjustment calculation permission denied"
+            )

@@ -71,7 +71,9 @@ class DomainPostingReceiptSink:
                 ),
             )
             return
-        if receipt.source_type.startswith("accounts_payable") or receipt.source_type in {
+        if receipt.source_type.startswith(
+            "accounts_payable"
+        ) or receipt.source_type in {
             "bill",
             "vendor_credit",
             "disbursement",

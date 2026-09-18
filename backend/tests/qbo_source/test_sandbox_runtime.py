@@ -11,9 +11,6 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
-
 from app.database.session import get_security_database_session
 from app.main import app
 from app.platform.permissions.authorization import AuthorizationContext
@@ -41,6 +38,8 @@ from app.qbo_source.secrets import (
     ProtectedSandboxSecretProvider,
     SandboxSecretStoreError,
 )
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 
 
 class _Runtime:

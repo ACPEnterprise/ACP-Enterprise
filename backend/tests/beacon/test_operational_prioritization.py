@@ -8,6 +8,7 @@ from app.beacon.operational_prioritization import (
     RANKING_VERSION,
     OperationalSignalPrioritizer,
 )
+
 from tests.beacon.test_beacon import COMPANY_ID, snapshot
 
 NOW = datetime(2026, 7, 28, 16, 0, tzinfo=timezone.utc)

@@ -412,9 +412,7 @@ def _rehearsal_context_is_valid(
 ) -> bool:
     if user is None or company is None or branch is None or membership is None:
         return False
-    branch_is_authorized = (
-        membership.has_all_branch_access or branch_access is not None
-    )
+    branch_is_authorized = membership.has_all_branch_access or branch_access is not None
     return bool(
         branch_is_authorized
         and ((credential is not None) if credentialed else (credential is None))
