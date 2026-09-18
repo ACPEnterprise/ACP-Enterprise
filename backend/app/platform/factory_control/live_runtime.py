@@ -15,6 +15,7 @@ from uuid import UUID
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from app.platform.factory_control.schemas import FactoryLiveLaneTarget
 from app.worker_control.contracts import WorkerCapability
 from app.worker_control.transport.crypto import decode_private_key, encode_signature
 from app.worker_runtime.client import WorkerRuntimeTransportError, WorkerTransportClient
@@ -46,9 +47,10 @@ class LiveFactoryControlConfig:
         for raw in raw_targets:
             if not isinstance(raw, dict):
                 raise TypeError("Factory Control target must be an object")
-            lane = raw.get("lane_code")
-            enterprise = raw.get("controlling_enterprise")
-            worker_id = UUID(str(raw.get("worker_id")))
+            target = FactoryLiveLaneTarget.model_validate(raw)
+            lane = target.lane_code
+            enterprise = target.controlling_enterprise
+            worker_id = target.worker_id
             if (
                 lane not in CANONICAL_LANES
                 or enterprise != lane
@@ -58,13 +60,7 @@ class LiveFactoryControlConfig:
                 raise ValueError("Factory Control target mapping is invalid")
             seen_lanes.add(lane)
             seen_workers.add(worker_id)
-            targets.append(
-                {
-                    "lane_code": lane,
-                    "controlling_enterprise": enterprise,
-                    "worker_id": str(worker_id),
-                }
-            )
+            targets.append(target.model_dump(mode="json"))
         config = cls(
             base_url=os.environ["FACTORY_CONTROL_BASE_URL"].rstrip("/"),
             worker_id=UUID(os.environ["FACTORY_CONTROL_WORKER_ID"]),

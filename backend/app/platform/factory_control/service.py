@@ -608,9 +608,38 @@ class FactoryControlService:
         lane_code: str | None = None,
         controlling_enterprise_override: Literal["OM1E", "OM2E", "LaptopE"]
         | None = None,
+        reported_state: Literal[
+            "ACTIVE",
+            "ASSIGNED",
+            "ELIGIBLE_IDLE",
+            "WAITING_INTEGRATION",
+            "HUMAN_GATE",
+            "PROVIDER_GATE",
+            "DEPENDENCY_BLOCKED",
+            "RATE_LIMITED",
+            "UNSAFE_STOP",
+        ]
+        | None = None,
+        reported_self_refill_health: Literal[
+            "SELF_REFILL_HEALTHY",
+            "ELIGIBLE_IDLE",
+            "WAITING_INTEGRATION",
+            "HUMAN_GATE",
+            "PROVIDER_GATE",
+            "DEPENDENCY_BLOCKED",
+            "RATE_LIMITED",
+            "UNSAFE_STOP",
+            "UNKNOWN",
+        ]
+        | None = None,
+        reported_milestone_code: str | None = None,
+        reported_current_assignment: str | None = None,
+        reported_next_queued_item: str | None = None,
+        reported_queue_depth: int | None = None,
+        reported_evidence: list[str] | None = None,
         observed_at: datetime | None = None,
     ) -> tuple[FactoryControlEvent, bool]:
-        """Project existing Development Factory truth; do not accept asserted state."""
+        """Project controller-authoritative state and execution-node evidence."""
         worker = await session.scalar(
             select(EngineeringWorker).where(
                 EngineeringWorker.id == (target_worker_id or controller_worker_id),
@@ -654,7 +683,7 @@ class FactoryControlService:
                 ControlledExecutionOfferModel.id,
             )
         )
-        state = cast(
+        node_state = cast(
             Literal[
                 "ACTIVE",
                 "ASSIGNED",
@@ -670,6 +699,26 @@ class FactoryControlService:
                 "disabled": "DEPENDENCY_BLOCKED",
             }[worker.lifecycle_state],
         )
+        state = reported_state or node_state
+        projected_queue_depth = (
+            reported_queue_depth
+            if reported_queue_depth is not None
+            else queue_depth
+        )
+        current_assignment = (
+            reported_current_assignment
+            if reported_state is not None
+            else str(active_offer.command_id)
+            if active_offer
+            else None
+        )
+        next_queued_item = (
+            reported_next_queued_item
+            if reported_state is not None
+            else str(next_offer.command_id)
+            if next_offer
+            else None
+        )
         source_digest = evidence_digest(
             {
                 "worker_id": str(worker.id),
@@ -678,11 +727,12 @@ class FactoryControlService:
                 "lifecycle_state": worker.lifecycle_state,
                 "version": worker.version,
                 "updated_at": worker.updated_at.isoformat(),
-                "queue_depth": queue_depth,
-                "current_assignment": str(active_offer.command_id)
-                if active_offer
-                else None,
-                "next_queued_item": str(next_offer.command_id) if next_offer else None,
+                "node_state": worker.lifecycle_state,
+                "reported_state": reported_state,
+                "queue_depth": projected_queue_depth,
+                "current_assignment": current_assignment,
+                "next_queued_item": next_queued_item,
+                "evidence": reported_evidence or [],
             }
         )
         controlling_enterprise = controlling_enterprise_override or cast(
@@ -695,7 +745,7 @@ class FactoryControlService:
             if worker.name.upper().startswith(("LAPTOP", "PHONE"))
             else None,
         )
-        self_refill_health = cast(
+        node_self_refill_health = cast(
             Literal[
                 "SELF_REFILL_HEALTHY",
                 "ELIGIBLE_IDLE",
@@ -711,6 +761,7 @@ class FactoryControlService:
                 "disabled": "DEPENDENCY_BLOCKED",
             }[worker.lifecycle_state],
         )
+        self_refill_health = reported_self_refill_health or node_self_refill_health
         return await self.ingest(
             session,
             controller_worker_identity_id=controller_worker_identity_id,
@@ -719,13 +770,12 @@ class FactoryControlService:
                 tenant_company_id=controller_tenant_company_id,
                 lane_code=lane_code or worker.name,
                 event_type="controller_sync",
+                milestone_code=reported_milestone_code,
                 lifecycle_state=state,
-                queue_depth=queue_depth,
+                queue_depth=projected_queue_depth,
                 machine=worker.provider_identifier,
-                current_assignment=str(active_offer.command_id)
-                if active_offer
-                else None,
-                next_queued_item=str(next_offer.command_id) if next_offer else None,
+                current_assignment=current_assignment,
+                next_queued_item=next_queued_item,
                 controlling_enterprise=controlling_enterprise,
                 self_refill_health=self_refill_health,
                 idempotency_key=(
@@ -737,11 +787,14 @@ class FactoryControlService:
                 ),
                 occurred_at=observed_at or worker.updated_at,
                 details={
-                    "source_kind": "engineering_worker",
+                    "source_kind": "controller_authority_observation"
+                    if reported_state is not None
+                    else "engineering_worker",
                     "source_id": str(worker.id),
                     "digest": source_digest,
                     "status": worker.lifecycle_state,
-                    "count": queue_depth,
+                    "count": projected_queue_depth,
+                    "evidence": reported_evidence or [],
                 },
             ),
         )
@@ -767,6 +820,13 @@ class FactoryControlService:
                     target_worker_id=target.worker_id,
                     lane_code=target.lane_code,
                     controlling_enterprise_override=target.controlling_enterprise,
+                    reported_state=target.lifecycle_state,
+                    reported_self_refill_health=target.self_refill_health,
+                    reported_milestone_code=target.milestone_code,
+                    reported_current_assignment=target.current_assignment,
+                    reported_next_queued_item=target.next_queued_item,
+                    reported_queue_depth=target.queue_depth,
+                    reported_evidence=target.evidence,
                     observed_at=observed_at,
                 )
             )
