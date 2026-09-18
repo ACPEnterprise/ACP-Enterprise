@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.platform.factory_control.roadmap import (
     RoadmapError,
     load_roadmap,
@@ -37,7 +36,16 @@ def roadmap(tmp_path, count=4):
         json.dumps(
             {
                 "milestones": [
-                    {"code": f"M{i}", "lane": "OM1"} for i in range(1, count + 1)
+                    {
+                        "code": f"M{i}",
+                        "lane": "OM1",
+                        "engineering_status": "NOT_STARTED",
+                        "protected_integration_status": "NOT_STARTED",
+                        "beta_deployment_status": "NOT_STARTED",
+                        "owner_acceptance_status": "BLOCKED",
+                        "lifecycle_status": "NOT_STARTED",
+                    }
+                    for i in range(1, count + 1)
                 ]
             }
         )
@@ -50,14 +58,37 @@ def test_json_compatible_yaml_roadmap_is_canonical_and_rejects_duplicates(tmp_pa
     assert [item.code for item in first.milestones] == ["M1", "M2"]
     assert len(first.digest) == 64
     path = tmp_path / "duplicate.yaml"
-    path.write_text('{"milestones":[{"code":"M1"},{"code":"M1"}]}')
+    row = {
+        "code": "M1",
+        "engineering_status": "NOT_STARTED",
+        "protected_integration_status": "NOT_STARTED",
+        "beta_deployment_status": "NOT_STARTED",
+        "owner_acceptance_status": "BLOCKED",
+        "lifecycle_status": "NOT_STARTED",
+    }
+    path.write_text(json.dumps({"milestones": [row, row]}))
     with pytest.raises(RoadmapError, match="duplicated"):
         load_roadmap(path)
 
 
 def test_packaged_roadmap_fails_closed_when_digest_is_missing_or_wrong(tmp_path):
     path = tmp_path / "roadmap.json"
-    path.write_text('{"milestones":[{"code":"M1"}]}')
+    path.write_text(
+        json.dumps(
+            {
+                "milestones": [
+                    {
+                        "code": "M1",
+                        "engineering_status": "NOT_STARTED",
+                        "protected_integration_status": "NOT_STARTED",
+                        "beta_deployment_status": "NOT_STARTED",
+                        "owner_acceptance_status": "BLOCKED",
+                        "lifecycle_status": "NOT_STARTED",
+                    }
+                ]
+            }
+        )
+    )
     digest_path = tmp_path / "roadmap.sha256"
     with pytest.raises(RoadmapError, match="digest is unavailable"):
         load_roadmap(path, digest_path=digest_path)
@@ -68,10 +99,26 @@ def test_packaged_roadmap_fails_closed_when_digest_is_missing_or_wrong(tmp_path)
 
 def test_packaged_roadmap_is_deterministically_generated_and_validated(tmp_path):
     source = tmp_path / "source.yaml"
-    source.write_text('{"milestones": [{"lane": "OM1", "code": "M1"}]}')
+    source.write_text(
+        json.dumps(
+            {
+                "milestones": [
+                    {
+                        "lane": "OM1",
+                        "code": "M1",
+                        "engineering_status": "NOT_STARTED",
+                        "protected_integration_status": "NOT_STARTED",
+                        "beta_deployment_status": "NOT_STARTED",
+                        "owner_acceptance_status": "BLOCKED",
+                        "lifecycle_status": "NOT_STARTED",
+                    }
+                ]
+            }
+        )
+    )
     destination = tmp_path / "runtime" / "roadmap.json"
     digest = sync(source, destination)
-    assert destination.read_text() == ('{"milestones":[{"code":"M1","lane":"OM1"}]}\n')
+    assert json.loads(destination.read_text()) == json.loads(source.read_text())
     assert destination.with_suffix(".sha256").read_text() == f"{digest}\n"
     assert (
         load_roadmap(destination, digest_path=destination.with_suffix(".sha256")).digest
@@ -172,22 +219,42 @@ def test_metrics_cover_delivery_quality_capacity_and_flow(tmp_path):
         now=NOW,
     )
     assert metrics == {
-        "engineering_percent": 25.0,
-        "beta_percent": 25.0,
-        "owner_percent": 25.0,
+        "represented_milestones": 4,
+        "superseded_milestones": 0,
+        "engineering_count": 3,
+        "beta_count": 3,
+        "owner_count": 3,
+        "closed_count": 3,
+        "engineering_percent": 75.0,
+        "beta_percent": 75.0,
+        "owner_percent": 75.0,
         "closed_percent": 75.0,
+        "engineering_remaining_weight": 1,
+        "human_gated_remaining_weight": 0,
+        "provider_gated_remaining_weight": 0,
         "weighted_delivery_percent": 42.5,
         "delivery_1d_percent": 25.0,
         "delivery_3d_percent": 50.0,
         "delivery_7d_percent": 75.0,
         "open_defects": 1,
+        "defects_discovered": 2,
+        "defects_closed": 1,
+        "defects_reopened": 0,
         "open_gates": 1,
         "utilization_percent": 50.0,
+        "effective_utilization_percent": 100.0,
+        "eligible_idle_seconds": 0,
         "pickup_latency_seconds": 3600.0,
+        "domain_pickup_latency_seconds": None,
+        "release_pickup_latency_seconds": None,
+        "release_latency_seconds": None,
         "queue_depth": 5,
         "oldest_handoff_seconds": 10800.0,
         "rework_rate_percent": 33.33,
         "first_pass_yield_percent": 66.67,
+        "event_history_status": "MEASURED",
+        "lane_history_status": "MEASURED",
+        "velocity_history_status": "MEASURED",
     }
 
 
@@ -199,6 +266,9 @@ def test_empty_metrics_are_defined_without_division_errors(tmp_path):
     assert metrics["utilization_percent"] == 0.0
     assert metrics["pickup_latency_seconds"] is None
     assert metrics["oldest_handoff_seconds"] is None
+    assert metrics["event_history_status"] == "NOT_YET_MEASURED"
+    assert metrics["lane_history_status"] == "NOT_YET_MEASURED"
+    assert metrics["velocity_history_status"] == "NOT_YET_MEASURED"
 
 
 def test_canonical_roadmap_statuses_are_the_zero_event_baseline(tmp_path):
@@ -226,3 +296,139 @@ def test_canonical_roadmap_statuses_are_the_zero_event_baseline(tmp_path):
     assert metrics["beta_percent"] == 100.0
     assert metrics["owner_percent"] == 100.0
     assert metrics["closed_percent"] == 100.0
+
+
+def test_safe_non_authoritative_movement_recomputes_without_closing_real_work(tmp_path):
+    fixture = roadmap(tmp_path, 2)
+    baseline = calculate_metrics(roadmap=fixture, events=[], lanes=[], now=NOW)
+    moved = calculate_metrics(
+        roadmap=fixture,
+        events=[event("engineering_complete", milestone="M1")],
+        lanes=[],
+        now=NOW,
+    )
+    assert baseline["engineering_percent"] == 0.0
+    assert moved["engineering_percent"] == 50.0
+    assert moved["beta_percent"] == 0.0
+    assert moved["owner_percent"] == 0.0
+    assert moved["closed_percent"] == 0.0
+
+
+def test_deployment_label_alone_does_not_claim_beta_operability(tmp_path):
+    path = tmp_path / "roadmap.yaml"
+    path.write_text(
+        json.dumps(
+            {
+                "milestones": [
+                    {
+                        "id": "M1",
+                        "engineering_status": "ENGINEERING_READY",
+                        "protected_integration_status": "INTEGRATED",
+                        "beta_deployment_status": "DEPLOYED_BETA",
+                        "owner_acceptance_status": "OWNER_ACCEPTANCE_REQUIRED",
+                        "lifecycle_status": "OWNER_ACCEPTANCE_REQUIRED",
+                    }
+                ]
+            }
+        )
+    )
+    metrics = calculate_metrics(
+        roadmap=load_roadmap(path), events=[], lanes=[], now=NOW
+    )
+    assert metrics["engineering_percent"] == 100.0
+    assert metrics["beta_percent"] == 0.0
+
+
+def test_canonical_supersession_and_reopen_do_not_double_count_progress(tmp_path):
+    status = {
+        "engineering_status": "NOT_STARTED",
+        "protected_integration_status": "NOT_STARTED",
+        "beta_deployment_status": "NOT_STARTED",
+        "owner_acceptance_status": "BLOCKED",
+        "lifecycle_status": "NOT_STARTED",
+    }
+    path = tmp_path / "roadmap.yaml"
+    path.write_text(
+        json.dumps(
+            {
+                "milestones": [
+                    dict(status, code="OLD"),
+                    dict(
+                        status,
+                        code="NEW",
+                        successor_supersession={"supersedes": ["OLD"]},
+                    ),
+                ]
+            }
+        )
+    )
+    fixture = load_roadmap(path)
+    metrics = calculate_metrics(
+        roadmap=fixture,
+        events=[
+            event("closed", milestone="NEW"),
+            event("milestone_reopened", milestone="NEW"),
+        ],
+        lanes=[],
+        now=NOW,
+    )
+    assert metrics["represented_milestones"] == 1
+    assert metrics["superseded_milestones"] == 1
+    assert metrics["closed_percent"] == 0.0
+
+
+def test_defect_reopen_is_counted_as_a_transition(tmp_path):
+    metrics = calculate_metrics(
+        roadmap=roadmap(tmp_path, 1),
+        events=[
+            event(
+                "defect_opened",
+                occurred_at=NOW - timedelta(minutes=3),
+                details={"defect_id": "D1"},
+            ),
+            event(
+                "defect_closed",
+                occurred_at=NOW - timedelta(minutes=2),
+                details={"defect_id": "D1"},
+            ),
+            event(
+                "defect_opened",
+                occurred_at=NOW - timedelta(minutes=1),
+                details={"defect_id": "D1"},
+            ),
+        ],
+        lanes=[],
+        now=NOW,
+    )
+    assert metrics["defects_discovered"] == 1
+    assert metrics["defects_closed"] == 1
+    assert metrics["defects_reopened"] == 1
+    assert metrics["open_defects"] == 1
+
+
+def test_runtime_roadmap_rejects_unknown_dependencies_and_cycles(tmp_path):
+    base = {
+        "engineering_status": "NOT_STARTED",
+        "protected_integration_status": "NOT_STARTED",
+        "beta_deployment_status": "NOT_STARTED",
+        "owner_acceptance_status": "BLOCKED",
+        "lifecycle_status": "NOT_STARTED",
+    }
+    path = tmp_path / "invalid.yaml"
+    path.write_text(
+        json.dumps({"milestones": [dict(base, code="M1", prerequisites=["M2"])]})
+    )
+    with pytest.raises(RoadmapError, match="unknown prerequisites"):
+        load_roadmap(path)
+    path.write_text(
+        json.dumps(
+            {
+                "milestones": [
+                    dict(base, code="M1", prerequisites=["M2"]),
+                    dict(base, code="M2", prerequisites=["M1"]),
+                ]
+            }
+        )
+    )
+    with pytest.raises(RoadmapError, match="cyclic"):
+        load_roadmap(path)

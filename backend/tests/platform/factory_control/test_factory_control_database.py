@@ -7,10 +7,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.platform.auth.models import AuthenticationSession
@@ -19,6 +15,7 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.factory_control.authority import revoke_platform_authority_assignment
 from app.platform.factory_control.models import (
+    FactoryControlEvent,
     FactoryLaneState,
     PlatformAuthorityAssignment,
 )
@@ -36,6 +33,9 @@ from app.worker_control.transport.http.dependencies import (
     get_worker_http_identity,
 )
 from app.worker_identity.models import WorkerIdentity
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @dataclass(frozen=True)
@@ -381,6 +381,14 @@ async def test_http_read_requires_active_authenticated_global_grant(database) ->
             json={},
         )
     assert permitted.status_code == 200
+    overview = permitted.json()
+    assert overview["roadmap_milestones"] == 60
+    assert overview["metrics"]["represented_milestones"] == 60
+    assert overview["metrics"]["engineering_count"] == 29
+    assert overview["metrics"]["beta_count"] == 1
+    assert overview["metrics"]["owner_count"] == 1
+    assert overview["metrics"]["closed_count"] == 1
+    assert overview["telemetry_freshness"] in {"LIVE", "NOT_YET_MEASURED"}
     assert tenant_only.status_code == 403
     assert inactive.status_code == 401
     assert human_post.status_code == 401
@@ -469,3 +477,71 @@ async def test_http_ingest_requires_exact_active_global_worker_grant(database) -
             "/api/v1/platform/factory-control/internal/events", json=payload
         )
     assert revoked.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_existing_controller_sync_connection_projects_authoritative_worker_state(
+    database,
+) -> None:
+    fixture = await seed_controller(database, label=f"HTTPSYNC{uuid4().hex[:6]}")
+    grant = PlatformAuthorityAssignment(
+        principal_type="WORKER_IDENTITY",
+        worker_identity_id=fixture.identity_id,
+        authority_code="FACTORY_CONTROLLER",
+        permission_code="PLATFORM_FACTORY_CONTROL_INGEST",
+        status="active",
+        grant_reason="Explicit isolated controller-sync acceptance grant",
+        granted_by_user_id=fixture.actor_id,
+        granted_at=datetime.now(timezone.utc),
+        version=1,
+    )
+    async with database() as session, session.begin():
+        session.add(grant)
+
+    app = FastAPI()
+    app.include_router(factory_control_router)
+
+    async def session_override():
+        async with database() as session:
+            yield session
+
+    async def worker_identity_override():
+        return WorkerHttpIdentity(
+            context=AuthenticatedWorkerContext(
+                company_id=fixture.company_id,
+                worker_id=fixture.worker_id,
+                provider_identifier="factory-test",
+                authentication_subject="credential:test-public-key",
+                authenticated_at=datetime.now(timezone.utc),
+            ),
+            session_id=uuid4(),
+        )
+
+    app.dependency_overrides[get_database_session] = session_override
+    app.dependency_overrides[get_security_database_session] = session_override
+    app.dependency_overrides[get_worker_http_identity] = worker_identity_override
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        accepted = await client.post("/api/v1/platform/factory-control/internal/sync")
+        replay = await client.post("/api/v1/platform/factory-control/internal/sync")
+    assert accepted.status_code == 202
+    assert accepted.json()["duplicate"] is False
+    assert replay.status_code == 202
+    assert replay.json()["duplicate"] is True
+    async with database() as session:
+        lane = await session.scalar(
+            select(FactoryLaneState).where(
+                FactoryLaneState.lane_code.like("HTTPSYNC%")
+            )
+        )
+        persisted = await session.scalar(
+            select(FactoryControlEvent).where(
+                FactoryControlEvent.controller_worker_identity_id
+                == fixture.identity_id,
+                FactoryControlEvent.event_type == "controller_sync",
+            )
+        )
+    assert lane is not None
+    assert lane.lifecycle_state == "ELIGIBLE_IDLE"
+    assert persisted is not None
+    assert persisted.source == "development_factory_controller"

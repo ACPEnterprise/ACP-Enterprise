@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Annotated, Literal, cast
 
@@ -199,6 +200,18 @@ def _roadmap_owner_action(
     }
 
 
+def _backlog_item(item: RoadmapMilestone) -> dict[str, object]:
+    return {
+        "milestone_code": item.code,
+        "title": item.title,
+        "priority": item.launch_class,
+        "lifecycle_status": item.lifecycle_status,
+        "engineering_status": item.engineering_status,
+        "owner_acceptance_status": item.owner_acceptance_status,
+        "next_admissible_action": item.next_admissible_action,
+    }
+
+
 @router.get("/overview", response_model=FactoryOverviewResponse)
 async def overview(
     _: PlatformReader, session: DatabaseSession
@@ -217,6 +230,27 @@ async def overview(
             detail="Canonical factory roadmap is unavailable.",
         ) from error
     milestones = {item.code: item for item in roadmap.milestones}
+    active_p0 = [
+        _backlog_item(item)
+        for item in roadmap.milestones
+        if item.launch_class == "P0" and item.lifecycle_status != "CLOSED"
+    ]
+    active_p1 = [
+        _backlog_item(item)
+        for item in roadmap.milestones
+        if item.launch_class == "P1" and item.lifecycle_status != "CLOSED"
+    ]
+    engineering_complete = {"ENGINEERING_READY", "INTEGRATED", "DEPLOYED_BETA", "CLOSED"}
+    bottlenecks = [
+        item
+        for item in (*active_p0, *active_p1)
+        if item["engineering_status"] not in engineering_complete
+        and item["lifecycle_status"]
+        not in {"HUMAN_GATE", "PROVIDER_GATE", "OWNER_ACCEPTANCE_REQUIRED"}
+    ]
+    current_bottleneck: dict[str, object] | None = next(
+        iter(bottlenecks or active_p0 or active_p1), None
+    )
     roadmap_actions = [
         action
         for item in roadmap.milestones
@@ -244,6 +278,29 @@ async def overview(
             for item in roadmap.milestones
         ),
         owner_actions=_durable_owner_actions(roadmap_actions, events),
+        lifecycle_counts=dict(
+            sorted(
+                Counter(str(item.lifecycle_status) for item in roadmap.milestones).items()
+            )
+        ),
+        active_p0=active_p0,
+        active_p1=active_p1,
+        current_bottleneck=current_bottleneck,
+        recent_movements=[
+            {
+                "id": str(event.id),
+                "event_type": event.event_type,
+                "milestone_code": event.milestone_code,
+                "lane_code": event.lane_code,
+                "occurred_at": event.occurred_at.isoformat(),
+            }
+            for event in sorted(
+                events,
+                key=lambda row: (row.occurred_at, row.idempotency_key),
+                reverse=True,
+            )[:20]
+        ],
+        telemetry_freshness="LIVE" if events else "NOT_YET_MEASURED",
     )
 
 

@@ -32,6 +32,16 @@ class FactoryEventIn(StrictSchema):
         "rework_started",
         "first_pass_complete",
         "controller_sync",
+        "engineering_reopened",
+        "beta_reopened",
+        "owner_acceptance_reopened",
+        "milestone_reopened",
+        "integration",
+        "beta_deployment",
+        "acceptance",
+        "release",
+        "roadmap_added",
+        "roadmap_superseded",
     ]
     lifecycle_state: Optional[
         Literal[
@@ -150,22 +160,42 @@ class FactoryLaneResponse(StrictSchema):
 
 
 class FactoryMetricsResponse(StrictSchema):
+    represented_milestones: int
+    superseded_milestones: int
+    engineering_count: int
+    beta_count: int
+    owner_count: int
+    closed_count: int
     engineering_percent: float
     beta_percent: float
     owner_percent: float
     closed_percent: float
+    engineering_remaining_weight: float
+    human_gated_remaining_weight: float
+    provider_gated_remaining_weight: float
     weighted_delivery_percent: float
     delivery_1d_percent: float
     delivery_3d_percent: float
     delivery_7d_percent: float
     open_defects: int
+    defects_discovered: int
+    defects_closed: int
+    defects_reopened: int
     open_gates: int
     utilization_percent: float
+    effective_utilization_percent: float
+    eligible_idle_seconds: float
     pickup_latency_seconds: Optional[float]
+    domain_pickup_latency_seconds: Optional[float]
+    release_pickup_latency_seconds: Optional[float]
+    release_latency_seconds: Optional[float]
     queue_depth: int
     oldest_handoff_seconds: Optional[float]
     rework_rate_percent: float
     first_pass_yield_percent: float
+    event_history_status: Literal["MEASURED", "NOT_YET_MEASURED"]
+    lane_history_status: Literal["MEASURED", "NOT_YET_MEASURED"]
+    velocity_history_status: Literal["MEASURED", "NOT_YET_MEASURED"]
 
 
 class FactoryOverviewResponse(StrictSchema):
@@ -179,6 +209,12 @@ class FactoryOverviewResponse(StrictSchema):
     human_gates: int
     provider_gates: int
     owner_actions: list[dict[str, Any]]
+    lifecycle_counts: dict[str, int]
+    active_p0: list[dict[str, Any]]
+    active_p1: list[dict[str, Any]]
+    current_bottleneck: Optional[dict[str, Any]]
+    recent_movements: list[dict[str, Any]]
+    telemetry_freshness: Literal["LIVE", "NOT_YET_MEASURED"]
 
 
 class FactoryLaneDrilldownResponse(StrictSchema):

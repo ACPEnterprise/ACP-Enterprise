@@ -21,22 +21,52 @@ export type FactoryLane = {
 };
 
 export type FactoryMetrics = {
+  represented_milestones: number;
+  superseded_milestones: number;
+  engineering_count: number;
+  beta_count: number;
+  owner_count: number;
+  closed_count: number;
   engineering_percent: number;
   beta_percent: number;
   owner_percent: number;
   closed_percent: number;
+  engineering_remaining_weight: number;
+  human_gated_remaining_weight: number;
+  provider_gated_remaining_weight: number;
   weighted_delivery_percent: number;
   delivery_1d_percent: number;
   delivery_3d_percent: number;
   delivery_7d_percent: number;
   open_defects: number;
+  defects_discovered: number;
+  defects_closed: number;
+  defects_reopened: number;
   open_gates: number;
   utilization_percent: number;
+  effective_utilization_percent: number;
+  eligible_idle_seconds: number;
   pickup_latency_seconds?: number | null;
+  domain_pickup_latency_seconds?: number | null;
+  release_pickup_latency_seconds?: number | null;
+  release_latency_seconds?: number | null;
   queue_depth: number;
   oldest_handoff_seconds?: number | null;
   rework_rate_percent: number;
   first_pass_yield_percent: number;
+  event_history_status: "MEASURED" | "NOT_YET_MEASURED";
+  lane_history_status: "MEASURED" | "NOT_YET_MEASURED";
+  velocity_history_status: "MEASURED" | "NOT_YET_MEASURED";
+};
+
+export type FactoryBacklogItem = {
+  milestone_code: string;
+  title?: string | null;
+  priority?: string | null;
+  lifecycle_status?: string | null;
+  engineering_status?: string | null;
+  owner_acceptance_status?: string | null;
+  next_admissible_action?: string | null;
 };
 
 export type FactoryControlOverview = {
@@ -50,6 +80,18 @@ export type FactoryControlOverview = {
   human_gates: number;
   provider_gates: number;
   owner_actions: Array<Record<string, unknown>>;
+  lifecycle_counts: Record<string, number>;
+  active_p0: FactoryBacklogItem[];
+  active_p1: FactoryBacklogItem[];
+  current_bottleneck?: FactoryBacklogItem | null;
+  recent_movements: Array<{
+    id: string;
+    event_type: string;
+    milestone_code?: string | null;
+    lane_code: string;
+    occurred_at: string;
+  }>;
+  telemetry_freshness: "LIVE" | "NOT_YET_MEASURED";
 };
 
 export type FactoryControlFilters = { lane?: string };
