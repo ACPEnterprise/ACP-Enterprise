@@ -1124,7 +1124,7 @@ class PayrollRunMemberRecord(Base):
     __tablename__ = "payroll_run_members"
     __table_args__ = (
         CheckConstraint(
-            "disposition IN ('ready','blocked','excluded','not_applicable')",
+            "disposition IN ('pending_calculation','ready','blocked','excluded','not_applicable')",
             name="ck_payroll_run_member_disposition",
         ),
         ForeignKeyConstraint(
@@ -1375,7 +1375,7 @@ class PayrollPaymentInstructionRecord(Base):
     __tablename__ = "payroll_payment_instructions"
     __table_args__ = (
         CheckConstraint(
-            "disposition IN ('ready','blocked','excluded','not_applicable')",
+            "disposition IN ('pending_calculation','ready','blocked','excluded','not_applicable')",
             name="ck_payroll_payment_instruction_disposition",
         ),
         ForeignKeyConstraint(
