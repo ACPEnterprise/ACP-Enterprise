@@ -25,6 +25,24 @@ type CustomerSummaryResponse = CustomerResponseRecord;
 type CustomerDetailResponse = CustomerResponseRecord;
 type DuplicateMatchResponse = CustomerResponseRecord;
 
+export interface CustomerPopulationRefreshResult {
+  classification: "CUSTOMER_POPULATION_RECONCILED";
+  run_id: string;
+  receipt_id: string;
+  replay: "executed" | "replayed";
+  source_system: "housecall_pro";
+  counts: {
+    total: number;
+    bound: number;
+    held: number;
+    ambiguous: number;
+    unexplained: number;
+  };
+  evidence_digest: string;
+  completed_at: string;
+  customer_admission_performed: false;
+}
+
 function stringValue(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -164,6 +182,24 @@ export async function searchCustomers(
     ...response.data,
     items: response.data.items.map(normalizeCustomerSummary),
   };
+}
+
+export async function refreshCustomerPopulation(
+  idempotencyKey: string,
+  branchId: string,
+): Promise<CustomerPopulationRefreshResult> {
+  return (
+    await apiClient.post<CustomerPopulationRefreshResult>(
+      "/api/v1/customer-migration/population/refresh",
+      { source_system: "housecall_pro" },
+      {
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+          "X-Branch-ID": branchId,
+        },
+      },
+    )
+  ).data;
 }
 
 function normalizeCustomerDetail(

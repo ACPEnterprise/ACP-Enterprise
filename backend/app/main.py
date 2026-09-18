@@ -17,6 +17,9 @@ from app.core.config import settings
 from app.customer_migration.native_location_review import (
     router as location_identity_router,
 )
+from app.customer_migration.population_router import (
+    router as customer_population_router,
+)
 from app.customers.router import router as customers_router
 from app.data_quality.router import router as data_quality_router
 from app.database.session import AsyncSessionFactory, engine
@@ -181,6 +184,7 @@ app.include_router(luminary_router)
 app.include_router(customers_router)
 app.include_router(data_quality_router)
 app.include_router(location_identity_router)
+app.include_router(customer_population_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(platform_audit_router)

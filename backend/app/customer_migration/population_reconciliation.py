@@ -36,11 +36,22 @@ from app.customer_migration.models import (
     CustomerMigrationSourceRow,
     CustomerPopulationReconciliationCommand,
     CustomerPopulationReconciliationDisposition,
+    CustomerPopulationRefreshRun,
     CustomerSourceIdentity,
 )
 from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.customers.schemas import ContactCreate, CustomerCreate, ServiceLocationCreate
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
+from app.platform.idempotency.contracts import (
+    IdempotencyIdentity,
+    canonical_request_digest,
+)
+from app.platform.idempotency.reliability import (
+    AuthoritativeOutcome,
+    MutationDisposition,
+    RetentionClass,
+    mutation_reliability_service,
+)
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     AuthorizationService,
@@ -286,89 +297,92 @@ class CustomerPopulationReconciliationService:
         context: AuthorizationContext,
         source_system: str = HCP_SOURCE_SYSTEM,
     ) -> CustomerPopulationReport:
+        async with factory() as session, session.begin():
+            return await self._refresh_population_in_session(
+                session, context=context, source_system=source_system
+            )
+
+    async def _refresh_population_in_session(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        source_system: str,
+    ) -> CustomerPopulationReport:
         self._authorize(context)
         assert context.active_branch is not None
         evidence: list[str] = []
-        async with factory() as session, session.begin():
-            observations = list(
-                (
-                    await session.execute(
-                        select(
-                            CustomerMigrationSourceRow, CustomerMigrationSourceArtifact
-                        )
-                        .join(
-                            CustomerMigrationSourceArtifact,
-                            CustomerMigrationSourceArtifact.id
-                            == CustomerMigrationSourceRow.artifact_id,
-                        )
-                        .where(
-                            CustomerMigrationSourceArtifact.company_id
-                            == context.company.id,
-                            CustomerMigrationSourceArtifact.branch_id
-                            == context.active_branch.id,
-                            CustomerMigrationSourceArtifact.source_system
-                            == source_system,
-                            CustomerMigrationSourceRow.disposition == "accepted",
-                            CustomerMigrationSourceRow.source_identity.is_not(None),
-                        )
-                        .order_by(
-                            CustomerMigrationSourceRow.source_identity,
-                            CustomerMigrationSourceArtifact.created_at.desc(),
-                            CustomerMigrationSourceRow.created_at.desc(),
-                        )
+        observations = list(
+            (
+                await session.execute(
+                    select(CustomerMigrationSourceRow, CustomerMigrationSourceArtifact)
+                    .join(
+                        CustomerMigrationSourceArtifact,
+                        CustomerMigrationSourceArtifact.id
+                        == CustomerMigrationSourceRow.artifact_id,
                     )
-                ).all()
+                    .where(
+                        CustomerMigrationSourceArtifact.company_id
+                        == context.company.id,
+                        CustomerMigrationSourceArtifact.branch_id
+                        == context.active_branch.id,
+                        CustomerMigrationSourceArtifact.source_system == source_system,
+                        CustomerMigrationSourceRow.disposition == "accepted",
+                        CustomerMigrationSourceRow.source_identity.is_not(None),
+                    )
+                    .order_by(
+                        CustomerMigrationSourceRow.source_identity,
+                        CustomerMigrationSourceArtifact.created_at.desc(),
+                        CustomerMigrationSourceRow.created_at.desc(),
+                    )
+                )
+            ).all()
+        )
+        grouped: dict[
+            str,
+            list[tuple[CustomerMigrationSourceRow, CustomerMigrationSourceArtifact]],
+        ] = defaultdict(list)
+        for source_row, artifact in observations:
+            assert source_row.source_identity is not None
+            grouped[source_row.source_identity].append((source_row, artifact))
+        for source_customer_id, values in sorted(grouped.items()):
+            source_row, artifact = values[0]
+            binding = await session.scalar(
+                select(CustomerSourceIdentity).where(
+                    CustomerSourceIdentity.company_id == context.company.id,
+                    CustomerSourceIdentity.source_system == source_system,
+                    CustomerSourceIdentity.source_customer_id == source_customer_id,
+                )
             )
-            grouped: dict[
-                str,
-                list[
-                    tuple[CustomerMigrationSourceRow, CustomerMigrationSourceArtifact]
-                ],
-            ] = defaultdict(list)
-            for source_row, artifact in observations:
-                assert source_row.source_identity is not None
-                grouped[source_row.source_identity].append((source_row, artifact))
-            for source_customer_id, values in sorted(grouped.items()):
-                source_row, artifact = values[0]
-                binding = await session.scalar(
-                    select(CustomerSourceIdentity).where(
-                        CustomerSourceIdentity.company_id == context.company.id,
-                        CustomerSourceIdentity.source_system == source_system,
-                        CustomerSourceIdentity.source_customer_id == source_customer_id,
-                    )
-                )
-                prior = await self._latest_disposition(
-                    session,
-                    company_id=context.company.id,
-                    source_system=source_system,
-                    source_customer_id=source_customer_id,
-                )
-                if (
-                    binding is not None
-                    and binding.branch_id == context.active_branch.id
-                ):
-                    disposition, reason = "BOUND", "exact_provider_identity_bound"
-                elif binding is not None:
-                    binding = None
-                    disposition, reason = "AMBIGUOUS", "binding_branch_conflict"
-                elif prior is not None and prior.disposition == "HELD":
-                    disposition, reason = "HELD", prior.reason_code
-                elif len({item[0].source_row_sha256 for item in values}) > 1:
-                    disposition, reason = "AMBIGUOUS", "conflicting_source_observations"
-                else:
-                    disposition, reason = "UNEXPLAINED", "accepted_source_not_bound"
-                recorded = await self._record_disposition(
-                    session,
-                    context=context,
-                    artifact=artifact,
-                    source_row=source_row,
-                    disposition=disposition,
-                    reason_code=reason,
-                    binding=binding,
-                )
-                evidence.append(recorded.evidence_digest)
-        counts = await self.current_counts(
-            factory, context=context, source_system=source_system
+            prior = await self._latest_disposition(
+                session,
+                company_id=context.company.id,
+                source_system=source_system,
+                source_customer_id=source_customer_id,
+            )
+            if binding is not None and binding.branch_id == context.active_branch.id:
+                disposition, reason = "BOUND", "exact_provider_identity_bound"
+            elif binding is not None:
+                binding = None
+                disposition, reason = "AMBIGUOUS", "binding_branch_conflict"
+            elif prior is not None and prior.disposition == "HELD":
+                disposition, reason = "HELD", prior.reason_code
+            elif len({item[0].source_row_sha256 for item in values}) > 1:
+                disposition, reason = "AMBIGUOUS", "conflicting_source_observations"
+            else:
+                disposition, reason = "UNEXPLAINED", "accepted_source_not_bound"
+            recorded = await self._record_disposition(
+                session,
+                context=context,
+                artifact=artifact,
+                source_row=source_row,
+                disposition=disposition,
+                reason_code=reason,
+                binding=binding,
+            )
+            evidence.append(recorded.evidence_digest)
+        counts = await self._current_counts_in_session(
+            session, context=context, source_system=source_system
         )
         return CustomerPopulationReport(
             source_system=source_system,
@@ -382,6 +396,20 @@ class CustomerPopulationReconciliationService:
         *,
         context: AuthorizationContext,
         source_system: str = HCP_SOURCE_SYSTEM,
+    ) -> CustomerPopulationCounts:
+        self._authorize(context)
+        assert context.active_branch is not None
+        async with factory() as session:
+            return await self._current_counts_in_session(
+                session, context=context, source_system=source_system
+            )
+
+    async def _current_counts_in_session(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        source_system: str,
     ) -> CustomerPopulationCounts:
         self._authorize(context)
         assert context.active_branch is not None
@@ -403,35 +431,34 @@ class CustomerPopulationReconciliationService:
             .group_by(CustomerPopulationReconciliationDisposition.source_customer_id)
             .subquery()
         )
-        async with factory() as session:
-            rows = (
-                await session.execute(
-                    select(
-                        CustomerPopulationReconciliationDisposition.disposition,
-                        func.count(),
-                    )
-                    .join(
-                        latest,
-                        (
-                            latest.c.source_customer_id
-                            == CustomerPopulationReconciliationDisposition.source_customer_id
-                        )
-                        & (
-                            latest.c.version
-                            == CustomerPopulationReconciliationDisposition.version
-                        ),
-                    )
-                    .where(
-                        CustomerPopulationReconciliationDisposition.company_id
-                        == context.company.id,
-                        CustomerPopulationReconciliationDisposition.branch_id
-                        == context.active_branch.id,
-                        CustomerPopulationReconciliationDisposition.source_system
-                        == source_system,
-                    )
-                    .group_by(CustomerPopulationReconciliationDisposition.disposition)
+        rows = (
+            await session.execute(
+                select(
+                    CustomerPopulationReconciliationDisposition.disposition,
+                    func.count(),
                 )
-            ).all()
+                .join(
+                    latest,
+                    (
+                        latest.c.source_customer_id
+                        == CustomerPopulationReconciliationDisposition.source_customer_id
+                    )
+                    & (
+                        latest.c.version
+                        == CustomerPopulationReconciliationDisposition.version
+                    ),
+                )
+                .where(
+                    CustomerPopulationReconciliationDisposition.company_id
+                    == context.company.id,
+                    CustomerPopulationReconciliationDisposition.branch_id
+                    == context.active_branch.id,
+                    CustomerPopulationReconciliationDisposition.source_system
+                    == source_system,
+                )
+                .group_by(CustomerPopulationReconciliationDisposition.disposition)
+            )
+        ).all()
         values = {str(disposition): int(count) for disposition, count in rows}
         total = sum(values.values())
         return CustomerPopulationCounts(
@@ -441,6 +468,99 @@ class CustomerPopulationReconciliationService:
             ambiguous=values.get("AMBIGUOUS", 0),
             unexplained=values.get("UNEXPLAINED", 0),
         )
+
+    async def refresh_population_idempotent(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        source_system: str,
+        idempotency_key: str,
+    ) -> tuple[CustomerPopulationRefreshRun, MutationDisposition, UUID]:
+        """Refresh dispositions without admitting or creating any Customer."""
+
+        self._authorize(context)
+        branch = context.active_branch
+        assert branch is not None
+        request_digest = canonical_request_digest(
+            {
+                "contract": POPULATION_CONTRACT_VERSION,
+                "source_system": source_system,
+                "branch_id": branch.id,
+            }
+        )
+
+        async def mutate() -> AuthoritativeOutcome[CustomerPopulationRefreshRun]:
+            report = await self._refresh_population_in_session(
+                session, context=context, source_system=source_system
+            )
+            run = CustomerPopulationRefreshRun(
+                company_id=context.company.id,
+                branch_id=branch.id,
+                source_system=source_system,
+                total_count=report.counts.total,
+                bound_count=report.counts.bound,
+                held_count=report.counts.held,
+                ambiguous_count=report.counts.ambiguous,
+                unexplained_count=report.counts.unexplained,
+                evidence_digest=report.evidence_digest,
+                initiated_by_user_id=context.user.id,
+            )
+            session.add(run)
+            await session.flush()
+            self.audit.stage(
+                session,
+                AuditEntry(
+                    action="customer_population_reconciliation.refreshed",
+                    resource_type="customer_population_refresh_run",
+                    resource_id=run.id,
+                    actor_user_id=context.user.id,
+                    company_id=context.company.id,
+                    branch_id=branch.id,
+                    reason_code="operator_population_refresh",
+                    details={
+                        "source_system": source_system,
+                        "total_count": report.counts.total,
+                        "bound_count": report.counts.bound,
+                        "held_count": report.counts.held,
+                        "ambiguous_count": report.counts.ambiguous,
+                        "unexplained_count": report.counts.unexplained,
+                        "evidence_digest": report.evidence_digest,
+                    },
+                ),
+            )
+            return AuthoritativeOutcome(
+                run,
+                "customer_population_refresh_run",
+                run.id,
+                200,
+            )
+
+        async def recover(result_id: UUID) -> CustomerPopulationRefreshRun | None:
+            result = await session.execute(
+                select(CustomerPopulationRefreshRun).where(
+                    CustomerPopulationRefreshRun.id == result_id,
+                    CustomerPopulationRefreshRun.company_id == context.company.id,
+                    CustomerPopulationRefreshRun.branch_id == branch.id,
+                )
+            )
+            return result.scalar_one_or_none()
+
+        result = await mutation_reliability_service.execute(
+            session,
+            identity=IdempotencyIdentity(
+                company_id=context.company.id,
+                branch_id=branch.id,
+                operation="customer_population_reconciliation.refresh",
+                idempotency_key=idempotency_key,
+            ),
+            actor_user_id=context.user.id,
+            request_digest=request_digest,
+            retention_class=RetentionClass.OPERATIONAL,
+            mutate=mutate,
+            recover=recover,
+        )
+        return result.value, result.disposition, result.receipt_id
 
     async def hold_exact(
         self,
