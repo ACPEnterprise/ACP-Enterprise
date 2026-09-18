@@ -195,7 +195,7 @@ export function PayrollRoute() {
                           <strong>{employee.display_name}</strong>
                           <p className="text-xs text-content-muted">{employee.employee_number}</p>
                         </td>
-                        <td>{(employee.accepted_minutes / 60).toFixed(2)}</td>
+                        <td>{employee.accepted_minutes === 0 && employee.exception_codes.includes("TIME_EVIDENCE_MISSING") ? "No time entries" : (employee.accepted_minutes / 60).toFixed(2)}</td>
                         <td>{employee.regular_candidate_minutes === null ? "Not calculated" : (employee.regular_candidate_minutes / 60).toFixed(2)}</td>
                         <td>{employee.overtime_candidate_minutes === null ? "Not calculated" : (employee.overtime_candidate_minutes / 60).toFixed(2)}</td>
                         <td>{label(employee.compensation_readiness)}</td>
@@ -206,7 +206,7 @@ export function PayrollRoute() {
                           {employee.exception_codes.length ? (
                             <ul className="space-y-1">
                               {employee.exception_codes.map((item) => (
-                                <li key={item}>{label(item)}</li>
+                                <li key={item}>{item === "TIME_EVIDENCE_MISSING" && employee.accepted_minutes === 0 ? "No time entries" : label(item)}</li>
                               ))}
                             </ul>
                           ) : (

@@ -34,6 +34,10 @@ describe("RealRosterActivationConsole", () => {
     } as never);
     const user = userEvent.setup();
     render(<MemoryRouter><RealRosterActivationConsole /></MemoryRouter>);
+    expect(screen.getByText("Identity and access ready")).toBeVisible();
+    expect(screen.getByText("Timekeeping handoff")).toBeVisible();
+    expect(screen.getByText("LINKED")).toBeVisible();
+    expect(screen.getByText("LINKED INPUTS NOT EVALUATED")).toBeVisible();
     expect(screen.getByRole("link", { name: "Open access, capabilities and history" })).toHaveAttribute("href", "/employees?employee=employee-melvin");
     const action = screen.getByRole("button", { name: "Record this employee’s bounded readiness" });
     expect(action).toBeDisabled();
