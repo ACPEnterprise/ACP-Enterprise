@@ -32,6 +32,9 @@ class AnswerAuthority(StrEnum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 
 
+MAX_CONTEXT_DOMAINS = 24
+
+
 class LiaTemporalContext(LiaSchema):
     start_date: date
     end_date: date
@@ -70,7 +73,9 @@ class LiaContext(LiaSchema):
     authorization_version: int | None = Field(default=None, ge=0)
     evidence_digest: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
     as_of: datetime | None = None
-    topic_domains: tuple[str, ...] = Field(default=(), max_length=8)
+    topic_domains: tuple[str, ...] = Field(
+        default=(), max_length=MAX_CONTEXT_DOMAINS
+    )
     temporal: LiaTemporalContext | None = None
 
 
@@ -185,7 +190,9 @@ class LiaResponse(LiaSchema):
     branch_ids: tuple[UUID, ...] = ()
     subject_domain: str | None = None
     subject_id: UUID | None = None
-    source_systems: tuple[str, ...] = ()
+    source_systems: tuple[str, ...] = Field(
+        default=(), max_length=MAX_CONTEXT_DOMAINS
+    )
     missing_evidence: tuple[str, ...] = ()
     safe_next_action: str | None = None
     as_of: datetime

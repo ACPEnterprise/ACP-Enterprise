@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.lia.contracts import (
     EvidenceReference,
+    LiaContext,
     NavigationSuggestion,
     evidence_set_digest,
 )
@@ -90,3 +91,11 @@ def test_navigation_contract_accepts_scoped_internal_path() -> None:
         label="Open Invoice", internal_path="/invoices/123?returnTo=%2Fcustomers#detail"
     )
     assert suggestion.internal_path.startswith("/invoices/")
+
+
+def test_cross_domain_continuation_remains_bounded_but_supports_registry_breadth() -> None:
+    domains = tuple(f"domain-{index}" for index in range(24))
+    assert LiaContext(topic_domains=domains).topic_domains == domains
+
+    with pytest.raises(ValidationError):
+        LiaContext(topic_domains=domains + ("domain-24",))

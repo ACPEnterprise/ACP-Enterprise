@@ -369,4 +369,47 @@ describe("LIA workspace", () => {
       expect.any(Object),
     );
   });
+
+  it("preserves a bounded broad evidence set for a cross-domain follow-up", () => {
+    const domains = [
+      "customers",
+      "jobs",
+      "scheduling",
+      "dispatch",
+      "estimates",
+      "invoicing",
+      "payments",
+      "workforce",
+      "timekeeping",
+    ];
+    render(
+      <MemoryRouter>
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    const input = screen.getByRole("textbox", { name: "Ask LIA a question" });
+    fireEvent.change(input, { target: { value: "Give me the operating picture" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    state.askMutate.mock.calls.at(-1)?.[1].onSuccess({
+      conversation_id: "broad-conversation",
+      subject_domain: "jobs",
+      subject_id: null,
+      authorization_version: 41,
+      evidence_digest: "d".repeat(64),
+      as_of: "2026-09-17T20:00:00Z",
+      source_systems: domains,
+    });
+
+    fireEvent.change(input, { target: { value: "Why?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(state.askMutate).toHaveBeenLastCalledWith(
+      {
+        question: "Why?",
+        conversation_id: "broad-conversation",
+        context: expect.objectContaining({ topic_domains: domains }),
+      },
+      expect.any(Object),
+    );
+  });
 });
