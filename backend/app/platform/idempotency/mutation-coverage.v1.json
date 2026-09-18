@@ -1,6 +1,26 @@
 {
   "entries": [
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "factory_control",
+      "mechanism": "Company-scoped event idempotency key with exact evidence comparison",
+      "method": "POST",
+      "operation_id": "ingest_event_api_v1_platform_factory_control_internal_events_post",
+      "path": "/api/v1/platform/factory-control/internal/events",
+      "reason": "Exact controller evidence replay returns the original event while contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "factory_control",
+      "mechanism": "Company-scoped snapshot key uniqueness with convergent original-result replay",
+      "method": "POST",
+      "operation_id": "capture_snapshot_api_v1_platform_factory_control_internal_snapshots_post",
+      "path": "/api/v1/platform/factory-control/internal/snapshots",
+      "reason": "A repeated snapshot key returns the original durable snapshot without creating another row.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "NON_MUTATING_READ_ONLY",
       "domain": "identity_onboarding",
       "mechanism": "read-only tenant-scoped preflight projection with no persistence side effects",
@@ -3209,6 +3229,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "500794596cbb0adb9998ab682f74d8ddf1dec5bf2d5f1512211ffe192c532e31",
+  "fingerprint": "26fdd3404aa2d23a201136100d1dc4276887b9975d79c496beef1227d2e64cb4",
   "schema_version": "1"
 }

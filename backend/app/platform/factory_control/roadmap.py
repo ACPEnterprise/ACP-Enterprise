@@ -16,6 +16,11 @@ class RoadmapMilestone:
     code: str
     lane: str | None
     launch_class: str | None
+    engineering_status: str | None = None
+    protected_integration_status: str | None = None
+    beta_deployment_status: str | None = None
+    owner_acceptance_status: str | None = None
+    lifecycle_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,11 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
                 code,
                 lane if isinstance(lane, str) else None,
                 launch_class if isinstance(launch_class, str) else None,
+                row.get("engineering_status"),
+                row.get("protected_integration_status"),
+                row.get("beta_deployment_status"),
+                row.get("owner_acceptance_status"),
+                row.get("lifecycle_status"),
             )
         )
     canonical = json.dumps(

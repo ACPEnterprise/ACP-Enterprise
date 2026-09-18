@@ -44,6 +44,7 @@ DOMAIN_REPLAY_EVIDENCE = {
     "engineering_executions": "tests/engineering_execution/test_engineering_execution.py",
     "estimates": "tests/estimates/test_estimate_conversion.py",
     "field_purchase": "tests/field_service/test_field_purchase_contract.py",
+    "factory_control": "tests/platform/factory_control/test_factory_control.py",
     "identity_onboarding": "tests/platform/test_identity_onboarding.py",
     "inventory": "tests/inventory/test_inventory_adjustments.py",
     "invoices": "tests/invoicing/test_invoice_ar.py",
@@ -93,7 +94,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 325
+    assert len(operations) == len(coverage) == 327
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
