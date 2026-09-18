@@ -78,6 +78,10 @@ class ReviewInput(BaseModel):
     idempotency_key: str = Field(default="", min_length=0, max_length=160)
 
 
+class CalculateInput(BaseModel):
+    idempotency_key: str = Field(min_length=1, max_length=255)
+
+
 class PaperCheckDestinationInput(BaseModel):
     employee_id: UUID
     check_reference: str = Field(min_length=1, max_length=120)
@@ -249,7 +253,7 @@ async def get_run(run_id: UUID, context: Read, session: Session) -> dict[str, ob
 
 
 @router.post("/runs/{run_id}/calculate")
-async def calculate_run(run_id: UUID, context: Calculate, session: Session) -> dict[str, object]:
+async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculate, session: Session) -> dict[str, object]:
     """Compose the existing calculation authorities for operator use.
 
     Calculation engines persist immutable gross/tax results before run assembly;
@@ -260,10 +264,22 @@ async def calculate_run(run_id: UUID, context: Calculate, session: Session) -> d
     run = await session.scalar(select(PayrollRunRecord).where(PayrollRunRecord.company_id == context.company.id, PayrollRunRecord.id == run_id))
     if run is None:
         raise HTTPException(404, "Payroll run was not found")
+    if await session.scalar(select(PayrollRunCloseRecord.id).where(PayrollRunCloseRecord.company_id == context.company.id, PayrollRunCloseRecord.run_id == run.id)) is not None:
+        raise HTTPException(409, "closed Payroll authority cannot be recalculated")
+    request_digest = canonical_digest({"run_id": str(run_id), "operation": "calculate"})
+    operation = "payroll.run.calculate"
+    replay = await session.scalar(select(MutationReceipt).where(MutationReceipt.company_id == context.company.id, MutationReceipt.operation == operation, MutationReceipt.idempotency_key == payload.idempotency_key))
+    if replay is not None:
+        if replay.request_digest != request_digest or replay.result_id != run.id:
+            raise HTTPException(409, "calculation idempotency identity conflicts with the original request")
+        return {"run_id": run.id, "status": "calculated", "calculation": "existing_governed_results", "run_digest": run.run_digest, "replayed": True}
     members = tuple((await session.scalars(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.company_id == context.company.id, PayrollRunMemberRecord.run_id == run.id))).all())
     blockers = _run_blockers(run, members)
     if blockers:
         raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": blockers})
+    session.add(MutationReceipt(company_id=context.company.id, actor_user_id=context.user.id, operation=operation, idempotency_key=payload.idempotency_key, request_digest=request_digest, state="completed", result_type="payroll_run_calculation", result_id=run.id, response_status=200, retention_class="financial_audit", completed_at=datetime.now(timezone.utc)))
+    AuditService.stage(session, AuditEntry(action="payroll.run.calculated", resource_type="payroll_run", actor_user_id=context.user.id, company_id=context.company.id, resource_id=run.id, reason_code="operator_calculate", details={"run_digest": run.run_digest, "replay_identity": payload.idempotency_key}))
+    await session.commit()
     return {
         "run_id": run.id,
         "status": "calculated",
@@ -271,6 +287,7 @@ async def calculate_run(run_id: UUID, context: Calculate, session: Session) -> d
         "members": [{"employee_id": item.employee_id, "gross_result_id": item.gross_result_id, "tax_result_id": item.tax_result_id} for item in members],
         "run_digest": run.run_digest,
         "replay": "same immutable result references",
+        "replayed": False,
     }
 
 
