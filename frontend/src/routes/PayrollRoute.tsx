@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useHasPermission } from "../auth";
 import { Link, useSearchParams } from "react-router";
 
-import { useComplianceSchemas, usePayrollOperatingRegisters, usePayrollOperationsSummary, usePayrollPeriodOperations, usePayrollReports } from "../hooks/usePayroll";
+import { useComplianceSchemas, usePayrollOperatingRegisters, usePayrollOperationsSummary, usePayrollPeriodOperations, usePayrollReports, usePayrollRunActions } from "../hooks/usePayroll";
 import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup";
@@ -45,6 +45,7 @@ export function PayrollRoute() {
   const effectivePayPeriodId = selectedPayPeriodId || currentPeriod.data?.id || payPeriods.data?.[0]?.id || null;
   const periodOperations = usePayrollPeriodOperations(effectivePayPeriodId, canRead && canReadTime);
   const registers = usePayrollOperatingRegisters(canRead);
+  const runActions = usePayrollRunActions();
   if (!canRead) return <Alert variant="danger">You are not authorized to view Payroll Administration.</Alert>;
   if (operations.isPending || reports.isPending || schemas.isPending || registers.isPending) return <Spinner label="Loading Payroll Administration" />;
   if (operations.isError || reports.isError || schemas.isError || registers.isError || !operations.data)
@@ -366,9 +367,9 @@ export function PayrollRoute() {
                 const hasCalculatedMember = register.members.some((member) => member.calculation_digest != null);
                 return (
                   <section key={register.run_id} className="space-y-3">
-                    <h3 className="font-semibold">
+                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">
                       {register.period_start} – {register.period_end} · {label(register.lifecycle)} / {label(register.review_state)}
-                    </h3>
+                    </h3><div className="flex gap-2"><Button size="small" variant="outline" disabled={runActions.calculate.isPending || register.lifecycle === "approved"} onClick={() => void runActions.calculate.mutateAsync({ runId: register.run_id, idempotencyKey: crypto.randomUUID() })}>Calculate</Button><Button size="small" disabled={runActions.close.isPending || register.lifecycle !== "approved"} onClick={() => void runActions.close.mutateAsync({ runId: register.run_id, reason: "Operator confirmed Payroll register review", idempotencyKey: crypto.randomUUID() })}>Close Payroll</Button></div></div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
