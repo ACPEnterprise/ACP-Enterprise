@@ -221,6 +221,18 @@ export const administrationHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const factoryControlHandle = {
+  workspace: {
+    pageTitle: "Factory Control",
+    breadcrumbs: [
+      { label: "Administration", path: "/administration" },
+      { label: "Factory Control" },
+    ],
+    helpTopic: "factory-control",
+    aiContext: "factory-control-telemetry",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const auditHandle = {
   workspace: { pageTitle: "Audit history", breadcrumbs: [{ label: "Audit history" }], helpTopic: "audit-history" },
 } as const satisfies ShellRouteHandle;

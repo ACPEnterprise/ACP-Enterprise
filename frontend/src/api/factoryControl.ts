@@ -1,0 +1,76 @@
+import { apiClient } from "./client";
+
+export const FACTORY_CONTROL_OVERVIEW_PATH = "/api/v1/platform/factory-control/overview";
+
+export type FactoryLane = {
+  lane_code: string;
+  milestone_code?: string | null;
+  lifecycle_state: string;
+  queue_depth: number;
+  machine?: string | null;
+  current_assignment?: string | null;
+  next_queued_item?: string | null;
+  controlling_enterprise?: string | null;
+  self_refill_health?: string | null;
+  idle_duration_seconds?: number | null;
+  sla_state: "HEALTHY" | "VIOLATED" | "NOT_APPLICABLE";
+  sla_violations: string[];
+  active_since?: string | null;
+  last_handoff_at?: string | null;
+  last_event_at: string;
+};
+
+export type FactoryMetrics = {
+  engineering_percent: number;
+  beta_percent: number;
+  owner_percent: number;
+  closed_percent: number;
+  weighted_delivery_percent: number;
+  delivery_1d_percent: number;
+  delivery_3d_percent: number;
+  delivery_7d_percent: number;
+  open_defects: number;
+  open_gates: number;
+  utilization_percent: number;
+  pickup_latency_seconds?: number | null;
+  queue_depth: number;
+  oldest_handoff_seconds?: number | null;
+  rework_rate_percent: number;
+  first_pass_yield_percent: number;
+};
+
+export type FactoryControlOverview = {
+  roadmap_digest: string;
+  roadmap_milestones: number;
+  metrics: FactoryMetrics;
+  lanes: FactoryLane[];
+  generated_at: string;
+  p0_backlog: number;
+  p1_backlog: number;
+  human_gates: number;
+  provider_gates: number;
+  owner_actions: Array<Record<string, unknown>>;
+};
+
+export type FactoryControlFilters = { lane?: string };
+
+export type FactoryLaneDrilldown = {
+  lane: FactoryLane;
+  events: Array<{
+    id: string;
+    milestone_code?: string | null;
+    event_type: string;
+    lifecycle_state?: string | null;
+    occurred_at: string;
+    details: Record<string, unknown>;
+  }>;
+};
+
+export async function getFactoryControlOverview(): Promise<FactoryControlOverview> {
+  return (await apiClient.get<FactoryControlOverview>(FACTORY_CONTROL_OVERVIEW_PATH)).data;
+}
+
+export async function getFactoryLaneDrilldown(lane: string): Promise<FactoryLaneDrilldown> {
+  const encoded = encodeURIComponent(lane);
+  return (await apiClient.get<FactoryLaneDrilldown>(`/api/v1/platform/factory-control/lanes/${encoded}`)).data;
+}

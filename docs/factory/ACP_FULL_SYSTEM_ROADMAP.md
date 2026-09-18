@@ -10,7 +10,7 @@ controller can validate and query it with the standard Python runtime.
 This roadmap reconciles the original Version 1 planning architecture, the
 Master Milestone Queue, the protected product history, the Owner Acceptance
 ledger, and successor discoveries through protected SHA
-`b3a1a57e7aa2496f09a441957493ea6a2736c075`. Repository evidence supersedes
+`ba7b7473ba51f8499273d2eb42fbb6cd04e7a95b`. Repository evidence supersedes
 stale planning text; it does not turn deployment into acceptance.
 
 For user-facing work:

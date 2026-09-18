@@ -116,16 +116,39 @@ ADMINISTRATION_DEFINITIONS = tuple(
     for code in sorted(AdministrationPermission.ALL)
 )
 
-LAUNCH_PLATFORM_DEFINITIONS = tuple(
+LAUNCH_PLATFORM_DEFINITIONS = (
     PermissionDefinition(
-        code=code,
+        code=LaunchPlatformPermission.AUDIT_READ,
         name="Company Audit Read",
         resource="audit",
         action="read",
         scope=PermissionScope.COMPANY,
         reserved=True,
-    )
-    for code in sorted(LaunchPlatformPermission.ALL)
+    ),
+    PermissionDefinition(
+        code=LaunchPlatformPermission.FACTORY_CONTROL_READ,
+        name="Platform Factory Control Read",
+        resource="factory_control",
+        action="read",
+        scope=PermissionScope.PLATFORM,
+        reserved=False,
+    ),
+    PermissionDefinition(
+        code=LaunchPlatformPermission.FACTORY_CONTROL_INGEST,
+        name="Platform Factory Control Ingest",
+        resource="factory_control",
+        action="ingest",
+        scope=PermissionScope.PLATFORM,
+        reserved=False,
+    ),
+    PermissionDefinition(
+        code=LaunchPlatformPermission.FACTORY_CONTROL_SNAPSHOT,
+        name="Platform Factory Control Snapshot",
+        resource="factory_control",
+        action="snapshot",
+        scope=PermissionScope.PLATFORM,
+        reserved=False,
+    ),
 )
 
 CUSTOMER_DEFINITIONS = tuple(
