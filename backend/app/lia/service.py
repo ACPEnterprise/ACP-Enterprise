@@ -626,6 +626,7 @@ class LiaService:
             classification=classification,
             authority=_answer_authority(classification, evidence),
             answer=answer,
+            response_mode=interpret_conversation(request.question).response_mode.value,
             evidence=evidence,
             limitations=limitations,
             navigation=navigation,
