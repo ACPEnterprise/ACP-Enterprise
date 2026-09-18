@@ -7,9 +7,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.events.models import BusinessEvent
 from app.payroll.contracts import (
@@ -36,6 +33,9 @@ from app.platform.employees.models import Employee
 from app.platform.users.models import User
 from app.timekeeping.contracts import seal_payroll_time_input
 from app.timekeeping.models import PayPeriod, PayrollTimeInputRecord
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.payroll.test_gross_pay_calculation import (
     NOW,
     calculate,
@@ -196,15 +196,18 @@ async def finalization_database() -> AsyncIterator[
             )
         )
     try:
-        yield factory, {
-            "company_id": company_id,
-            "other_company_id": other_company_id,
-            "actor_id": actor_id,
-            "reviewer_id": reviewer_id,
-            "employee_id": employee_id,
-            "policy": policy_value,
-            "compensation": compensation_value,
-        }
+        yield (
+            factory,
+            {
+                "company_id": company_id,
+                "other_company_id": other_company_id,
+                "actor_id": actor_id,
+                "reviewer_id": reviewer_id,
+                "employee_id": employee_id,
+                "policy": policy_value,
+                "compensation": compensation_value,
+            },
+        )
     finally:
         await engine.dispose()
 
@@ -232,7 +235,9 @@ def candidate(
 
 
 async def seed_candidate_time(
-    session: AsyncSession, value, actor_id: UUID  # type: ignore[no-untyped-def]
+    session: AsyncSession,
+    value,
+    actor_id: UUID,  # type: ignore[no-untyped-def]
 ) -> None:
     existing = await session.get(PayPeriod, value.pay_period.pay_period_id)
     if existing is not None:
@@ -288,8 +293,12 @@ async def test_persist_replay_review_and_safe_evidence(
     value = candidate(values)
     async with factory() as session:
         await seed_candidate_time(session, value, values["actor_id"])  # type: ignore[arg-type]
-        first = await service.persist_candidate(session, context=execute, candidate=value)
-        replay = await service.persist_candidate(session, context=execute, candidate=value)
+        first = await service.persist_candidate(
+            session, context=execute, candidate=value
+        )
+        replay = await service.persist_candidate(
+            session, context=execute, candidate=value
+        )
         assert first.id == replay.id
         initiated = await service.initiate_review(
             session,
@@ -331,7 +340,9 @@ async def test_supersession_history_active_uniqueness_and_contradiction(
     first_candidate = candidate(values, 600, pay_period_id=pay_period_id)
     async with factory() as session:
         await seed_candidate_time(
-            session, first_candidate, values["actor_id"]  # type: ignore[arg-type]
+            session,
+            first_candidate,
+            values["actor_id"],  # type: ignore[arg-type]
         )
         first = await service.persist_candidate(
             session, context=context, candidate=first_candidate
@@ -424,7 +435,9 @@ async def test_permissions_company_isolation_and_blocked_period_status(
     factory, values = finalization_database
     service = PayrollGrossResultService()
     no_permission: Any = FakeContext(
-        values["company_id"], values["actor_id"], set()  # type: ignore[arg-type]
+        values["company_id"],
+        values["actor_id"],
+        set(),  # type: ignore[arg-type]
     )
     other_company: Any = FakeContext(
         values["other_company_id"],  # type: ignore[arg-type]
@@ -452,7 +465,9 @@ async def test_permissions_company_isolation_and_blocked_period_status(
         )
         blocked_employee = uuid4()
         blocked_snapshot = time_input(
-            values["company_id"], blocked_employee, 600  # type: ignore[arg-type]
+            values["company_id"],
+            blocked_employee,
+            600,  # type: ignore[arg-type]
         )
         blocked_snapshot = seal_payroll_time_input(
             company_id=blocked_snapshot.company_id,

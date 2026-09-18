@@ -5,7 +5,6 @@ from uuid import UUID
 
 from app.platform.security.metrics import security_metrics
 
-
 logger = logging.getLogger("acp.security.authorization")
 
 

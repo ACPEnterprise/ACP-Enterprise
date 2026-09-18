@@ -7,7 +7,6 @@ from typing import Any
 
 from development_factory.task_contract import VALIDATION_AREAS
 
-
 ROLE_CATALOG_VERSION = "1.0"
 
 

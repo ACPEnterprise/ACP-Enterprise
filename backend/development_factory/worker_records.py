@@ -11,7 +11,6 @@ from development_factory.execution_adapters import OperationResult, WorkerOperat
 from development_factory.provenance import WorkerProvenance, validate_worker_provenance
 from development_factory.reports import redact
 
-
 WORKER_RECORD_VERSION = "1.1"
 WORKER_SECRET_PATTERN = re.compile(
     r"(?i)([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY)"
@@ -115,7 +114,7 @@ def load_worker_record_payload(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"unable to load worker record: {exc}") from exc
     if not isinstance(payload, dict):
-        raise ValueError("worker record must be an object")
+        raise TypeError("worker record must be an object")
     expected = {field.name for field in fields(WorkerExecutionRecord)}
     if payload.keys() != expected:
         raise ValueError("worker record fields are invalid")
@@ -209,13 +208,11 @@ def render_worker_markdown(record: WorkerExecutionRecord) -> str:
             "## Blockers and contamination",
             "",
             *lines(
-                tuple(
-                    (
-                        *record.blockers,
-                        *record.boundary_violations,
-                        *record.resource_violations,
-                        *record.contamination_findings,
-                    )
+                (
+                    *record.blockers,
+                    *record.boundary_violations,
+                    *record.resource_violations,
+                    *record.contamination_findings,
                 )
             ),
             "",
@@ -226,13 +223,17 @@ def render_worker_markdown(record: WorkerExecutionRecord) -> str:
             f"- Pushed by factory: {record.action_audit.pushed_by_factory}",
             f"- Merged by factory: {record.action_audit.merged_by_factory}",
             f"- Deployed by factory: {record.action_audit.deployed_by_factory}",
-            "- Workspace deleted by factory: "
-            f"{record.action_audit.workspace_deleted_by_factory}",
+            (
+                "- Workspace deleted by factory: "
+                f"{record.action_audit.workspace_deleted_by_factory}"
+            ),
             "",
             "## Owner decision",
             "",
-            "Validation and completion do not grant approval. Review this record and "
-            "the unstaged workspace diff before any separately authorized action.",
+            (
+                "Validation and completion do not grant approval. Review this record and "
+                "the unstaged workspace diff before any separately authorized action."
+            ),
             "",
         ]
     )

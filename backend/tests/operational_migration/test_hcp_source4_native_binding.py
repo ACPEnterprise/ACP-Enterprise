@@ -243,7 +243,9 @@ async def test_binding_rolls_back_with_downstream_failure(
 
 
 @pytest.mark.asyncio
-async def test_read_only_inventory_classifies_all_updates_without_short_circuit() -> None:
+async def test_read_only_inventory_classifies_all_updates_without_short_circuit() -> (
+    None
+):
     service = HcpSource4NativeBindingBootstrap(
         company_id=uuid4(),
         branch_id=uuid4(),

@@ -6,9 +6,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.events.models import BusinessEvent
@@ -50,6 +47,8 @@ from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 from app.scheduling.models import Appointment
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 def utc_now() -> datetime:

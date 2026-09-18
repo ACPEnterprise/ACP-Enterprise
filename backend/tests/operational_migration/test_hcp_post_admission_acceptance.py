@@ -1,7 +1,6 @@
 from dataclasses import replace
 
 import pytest
-
 from app.operational_migration.hcp_post_admission_acceptance import (
     CONTRACT,
     AcceptancePlan,

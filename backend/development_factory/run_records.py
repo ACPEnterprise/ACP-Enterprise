@@ -10,7 +10,6 @@ from development_factory.models import RepositoryState
 from development_factory.reports import redact
 from development_factory.workflow import WorkflowState
 
-
 RUN_RECORD_VERSION = "1.0"
 
 

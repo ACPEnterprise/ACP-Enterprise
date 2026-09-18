@@ -6,10 +6,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.accounting.models import Journal
 from app.accounts_payable.models import AccountingVendor, VendorBill
 from app.business_economics.models import CompanyFinancePolicyVersion
@@ -73,6 +69,9 @@ from app.purchasing.schemas import (
     VendorUpdate,
 )
 from app.purchasing.service import PurchasingService
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
@@ -120,22 +119,22 @@ async def test_purchasing_document_custody_is_scoped_append_only_and_idempotent(
         assert replay.id == created.id
         assert "storage_reference" not in replay.model_dump()
         assert (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(PurchasingDocumentEvidence)
-                    .where(PurchasingDocumentEvidence.company_id == company.id)
-                )
+            await session.scalar(
+                select(func.count())
+                .select_from(PurchasingDocumentEvidence)
+                .where(PurchasingDocumentEvidence.company_id == company.id)
+            )
             == 1
         )
         assert (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(BusinessEvent)
-                    .where(
-                        BusinessEvent.company_id == company.id,
-                        BusinessEvent.entity_id == created.id,
-                    )
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(
+                    BusinessEvent.company_id == company.id,
+                    BusinessEvent.entity_id == created.id,
                 )
+            )
             == 1
         )
     async with factory() as session:
@@ -1022,8 +1021,25 @@ async def test_concurrent_requisition_and_policy_business_identities_fail_cleanl
     assert sum(isinstance(item, SupplyChainPolicyItem) for item in policies) == 1
     assert sum(isinstance(item, PurchasingConflict) for item in policies) == 1
     async with factory() as session:
-        assert await session.scalar(select(func.count(PurchaseRequisition.id)).where(PurchaseRequisition.company_id == company.id, PurchaseRequisition.request_number == request_number)) == 1
-        assert await session.scalar(select(func.count(SupplyChainPolicy.id)).where(SupplyChainPolicy.company_id == company.id, SupplyChainPolicy.branch_id == branch.id, SupplyChainPolicy.policy_type == "receipt_accrual")) == 1
+        assert (
+            await session.scalar(
+                select(func.count(PurchaseRequisition.id)).where(
+                    PurchaseRequisition.company_id == company.id,
+                    PurchaseRequisition.request_number == request_number,
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(SupplyChainPolicy.id)).where(
+                    SupplyChainPolicy.company_id == company.id,
+                    SupplyChainPolicy.branch_id == branch.id,
+                    SupplyChainPolicy.policy_type == "receipt_accrual",
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio
@@ -1079,6 +1095,7 @@ async def test_vendor_identity_is_company_owned_idempotent_and_concurrent(
         contact_reference="contact-ref-1",
         idempotency_key="vendor-create-1",
     )
+
     async def create():
         async with factory() as session:
             return await service.create_vendor(

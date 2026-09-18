@@ -76,7 +76,9 @@ def propose_headless_capacity(
         raise ValueError("approved queue contains duplicate milestone identity")
     unknown = set(approved_ids) - set(by_id)
     if unknown:
-        raise ValueError(f"approved queue references unknown milestones: {sorted(unknown)}")
+        raise ValueError(
+            f"approved queue references unknown milestones: {sorted(unknown)}"
+        )
     execution_ids = [item.milestone_id for item in executions]
     if len(execution_ids) != len(set(execution_ids)):
         raise ValueError("execution evidence is ambiguous")
@@ -122,7 +124,9 @@ def propose_headless_capacity(
             blocked.append(f"{item.milestone_id}:{current.current_state}")
             return
         if item.capacity_identity in occupied:
-            blocked.append(f"{item.milestone_id}:capacity_occupied:{item.capacity_identity}")
+            blocked.append(
+                f"{item.milestone_id}:capacity_occupied:{item.capacity_identity}"
+            )
             return
         proposals.append(
             HeadlessProposal(

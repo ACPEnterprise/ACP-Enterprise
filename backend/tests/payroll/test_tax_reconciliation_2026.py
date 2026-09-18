@@ -1,7 +1,6 @@
 from dataclasses import replace
 
 import pytest
-
 from app.payroll.federal_tax_rules_2026 import (
     TaxDeductionCalculationError,
     florida_state_income_tax_applicability,

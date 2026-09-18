@@ -9,7 +9,6 @@ from development_factory.lia_planner import ExecutionPlan, IntegrationPlan
 from development_factory.reports import redact
 from development_factory.run_records import RunActionAudit
 
-
 LIA_REPORT_VERSION = "1.0"
 
 

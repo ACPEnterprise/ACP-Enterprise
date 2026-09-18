@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, is_dataclass
 from enum import StrEnum
+from typing import Any, cast
 
 from app.operational_migration.hcp_successor_reconciliation import (
     LEGACY_SOURCE_SYSTEM,
@@ -152,9 +153,10 @@ def classify_correlated_legacy(
             successor_id = next(iter(unique))
             disposition = LegacyProjectionDisposition.EXACT_SUCCESSOR
             blocker = False
-        elif row.authoritative_provider_id and not provider[
-            (row.domain, row.authoritative_provider_id)
-        ]:
+        elif (
+            row.authoritative_provider_id
+            and not provider[(row.domain, row.authoritative_provider_id)]
+        ):
             successor_id = None
             disposition = LegacyProjectionDisposition.PROVABLY_UNRELATED
             blocker = False
@@ -170,7 +172,11 @@ def classify_correlated_legacy(
                 evidence_digest=_digest(
                     {
                         "legacy": row,
-                        "successor": sealed_by_key.get((row.domain, successor_id)),
+                        "successor": (
+                            sealed_by_key.get((row.domain, successor_id))
+                            if successor_id is not None
+                            else None
+                        ),
                         "disposition": disposition.value,
                     }
                 ),
@@ -185,7 +191,7 @@ def classify_correlated_legacy(
 def _digest(value: object) -> str:
     def normalize(item: object) -> object:
         if is_dataclass(item):
-            return normalize(asdict(item))
+            return normalize(asdict(cast(Any, item)))
         if isinstance(item, dict):
             return {str(key): normalize(child) for key, child in item.items()}
         if isinstance(item, (list, tuple)):

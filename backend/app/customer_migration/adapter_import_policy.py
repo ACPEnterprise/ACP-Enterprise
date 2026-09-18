@@ -71,7 +71,9 @@ class CustomerEventPopulation:
         if any(value < 0 for value in counts):
             raise ValueError("event-population counts cannot be negative")
         if self.customer_admission_events != self.customer_domain_events:
-            raise ValueError("every admitted Customer requires one Customer domain event")
+            raise ValueError(
+                "every admitted Customer requires one Customer domain event"
+            )
         if self.aggregate_domain_events != sum(counts[1:5]):
             raise ValueError("aggregate domain-event count does not reconcile")
         if self.audit_events_in_boundary or self.lineage_events_in_boundary:
@@ -210,8 +212,7 @@ class CustomerAdapterImportPolicy:
                 if len(identities) > 1:
                     clusters[signal].append(tuple(sorted(identities)))
         return {
-            signal: tuple(sorted(values))
-            for signal, values in sorted(clusters.items())
+            signal: tuple(sorted(values)) for signal, values in sorted(clusters.items())
         }
 
     @staticmethod

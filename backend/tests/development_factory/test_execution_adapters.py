@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from development_factory.execution_adapters import (
     ExecutionAdapterError,
     LocalExecutionAdapter,

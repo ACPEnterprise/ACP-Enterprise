@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
 import pytest
-
 from scripts.preview_synthetic_tenant_fixture import execute
 
 
@@ -22,9 +21,7 @@ class SessionContext:
 async def test_command_ends_authorization_read_transaction_before_fixture_mutation():
     security = SimpleNamespace()
     application = SimpleNamespace(rollback=AsyncMock())
-    sessions = Mock(
-        side_effect=(SessionContext(security), SessionContext(application))
-    )
+    sessions = Mock(side_effect=(SessionContext(security), SessionContext(application)))
     context = object()
     authenticated = object()
     result = SimpleNamespace(
@@ -38,9 +35,7 @@ async def test_command_ends_authorization_read_transaction_before_fixture_mutati
     )
     with (
         patch("sys.stdin.read", return_value="opaque-token"),
-        patch(
-            "scripts.preview_synthetic_tenant_fixture.AsyncSessionFactory", sessions
-        ),
+        patch("scripts.preview_synthetic_tenant_fixture.AsyncSessionFactory", sessions),
         patch(
             "scripts.preview_synthetic_tenant_fixture.access_token_service.decode",
             return_value=object(),

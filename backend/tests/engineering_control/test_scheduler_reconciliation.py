@@ -2,9 +2,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
@@ -19,6 +16,9 @@ from app.engineering_control.scheduler.reconciliation import (
     SchedulerReconciliationService,
 )
 from app.engineering_control.service import EngineeringControlService
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     create_input,
     seed_service_fixture,
@@ -69,17 +69,17 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
         "BE.GAP.1",
         "BE.9",
         "INV.2A",
-            "TECH.1",
-            "PHONE.FACTORY.PROOF.OM1",
-            "PHONE.FACTORY.PROOF.OM2",
-            "PHONE.FACTORY.PROOF.LAPTOP1",
-            "PHONE.FACTORY.PROOF2.1",
-            "PHONE.FACTORY.PROOF2.2",
-            "PHONE.FACTORY.PROOF2.3",
-            "PHONE.FACTORY.PROOF3.1",
-            "PHONE.FACTORY.PROOF3.2",
-            "PHONE.FACTORY.PROOF3.3",
-        }
+        "TECH.1",
+        "PHONE.FACTORY.PROOF.OM1",
+        "PHONE.FACTORY.PROOF.OM2",
+        "PHONE.FACTORY.PROOF.LAPTOP1",
+        "PHONE.FACTORY.PROOF2.1",
+        "PHONE.FACTORY.PROOF2.2",
+        "PHONE.FACTORY.PROOF2.3",
+        "PHONE.FACTORY.PROOF3.1",
+        "PHONE.FACTORY.PROOF3.2",
+        "PHONE.FACTORY.PROOF3.3",
+    }
     assert (
         next(
             item for item in manifest.milestones if item.milestone_code == "PLAT.1"

@@ -89,7 +89,9 @@ async def test_exact_authorized_subject_resolves_to_existing_projection(
 ) -> None:
     entity_id = uuid4()
     resolver_owner = (
-        customer_lia_context_service if domain == "customers" else job_lia_context_service
+        customer_lia_context_service
+        if domain == "customers"
+        else job_lia_context_service
     )
     monkeypatch.setattr(
         resolver_owner, resolver_name, AsyncMock(return_value=(entity_id,))
@@ -131,9 +133,13 @@ async def test_ambiguous_and_missing_subjects_fail_closed(
     matches: tuple[UUID, ...],
 ) -> None:
     resolver_owner = (
-        customer_lia_context_service if domain == "customers" else job_lia_context_service
+        customer_lia_context_service
+        if domain == "customers"
+        else job_lia_context_service
     )
-    resolver_name = "resolve_display_name" if domain == "customers" else "resolve_job_number"
+    resolver_name = (
+        "resolve_display_name" if domain == "customers" else "resolve_job_number"
+    )
     monkeypatch.setattr(resolver_owner, resolver_name, AsyncMock(return_value=matches))
     retrieval = AsyncMock(spec=GovernedRetrievalService)
 
@@ -214,7 +220,10 @@ async def test_customer_and_job_follow_ups_retain_authoritative_referent() -> No
 @pytest.mark.asyncio
 async def test_source_resolvers_apply_company_and_branch_scope() -> None:
     for resolver, argument in (
-        (customer_lia_context_service.resolve_display_name, {"display_name": "Known Customer"}),
+        (
+            customer_lia_context_service.resolve_display_name,
+            {"display_name": "Known Customer"},
+        ),
         (job_lia_context_service.resolve_job_number, {"job_number": "306"}),
     ):
         result = MagicMock()

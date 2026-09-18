@@ -280,9 +280,7 @@ def _crosswalk(
     list[Mapping[str, object]],
     dict[str, dict[str, set[int]]],
 ]:
-    allowed = set(
-        cast(Sequence[str], customer_manifest["ordered_source_identities"])
-    )
+    allowed = set(cast(Sequence[str], customer_manifest["ordered_source_identities"]))
     aggregates = [
         item
         for item in cast(
@@ -560,9 +558,7 @@ def select_stage(
         "generated_at": generated_at,
     }
     payload["manifest_sha256"] = "0" * 64
-    provisional = OperationalPhase1Manifest.model_construct(
-        _fields_set=None, **payload
-    )
+    provisional = OperationalPhase1Manifest.model_construct(_fields_set=None, **payload)
     payload["manifest_sha256"] = _sha256_text(
         _canonical(provisional.model_dump(exclude={"manifest_sha256"}, mode="json"))
     )

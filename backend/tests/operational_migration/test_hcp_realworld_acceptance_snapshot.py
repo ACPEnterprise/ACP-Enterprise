@@ -5,7 +5,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_realworld_acceptance_snapshot import (
     build_realworld_snapshot,
 )

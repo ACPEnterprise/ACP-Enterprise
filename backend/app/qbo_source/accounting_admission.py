@@ -9,7 +9,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .evidence import ControlEvidenceRegistry, ProtectedFilesystemEvidenceStore
@@ -107,8 +107,10 @@ def build_coa_mapping_packet(
 def accounting_control_matrix(cutoff: str) -> tuple[dict[str, object], ...]:
     return (
         _control(
-            "AR", "CONTROL_REPORT_REQUIRED",
-            "A/R Aging Detail; Open Invoices; Trial Balance", cutoff,
+            "AR",
+            "CONTROL_REPORT_REQUIRED",
+            "A/R Aging Detail; Open Invoices; Trial Balance",
+            cutoff,
             "prove cutoff open items and control-account tie-out",
         ),
         _control(
@@ -120,44 +122,60 @@ def accounting_control_matrix(cutoff: str) -> tuple[dict[str, object], ...]:
             "reliable transaction family",
         ),
         _control(
-            "AP", "CONTROL_REPORT_REQUIRED",
-            "A/P Aging Detail; Unpaid Bills; Trial Balance", cutoff,
+            "AP",
+            "CONTROL_REPORT_REQUIRED",
+            "A/P Aging Detail; Unpaid Bills; Trial Balance",
+            cutoff,
             "prove zero or open AP independently of empty API families",
         ),
         _control(
-            "cash_bank", "CONTROL_REPORT_REQUIRED",
-            "Balance Sheet; Trial Balance; Account QuickReport", cutoff,
+            "cash_bank",
+            "CONTROL_REPORT_REQUIRED",
+            "Balance Sheet; Trial Balance; Account QuickReport",
+            cutoff,
             "prove each bank/cash ledger balance; deposits and payments are not cash",
         ),
         _control(
-            "credit_card", "CONTROL_REPORT_REQUIRED",
-            "Balance Sheet; Trial Balance; Account QuickReport", cutoff,
+            "credit_card",
+            "CONTROL_REPORT_REQUIRED",
+            "Balance Sheet; Trial Balance; Account QuickReport",
+            cutoff,
             "prove card liabilities and mapping",
         ),
         _control(
-            "liabilities", "CONTROL_REPORT_REQUIRED",
-            "Balance Sheet; Trial Balance; General Ledger", cutoff,
+            "liabilities",
+            "CONTROL_REPORT_REQUIRED",
+            "Balance Sheet; Trial Balance; General Ledger",
+            cutoff,
             "prove liability balances and classifications",
         ),
         _control(
-            "equity", "CONTROL_REPORT_REQUIRED",
-            "Balance Sheet; Trial Balance; General Ledger", cutoff,
+            "equity",
+            "CONTROL_REPORT_REQUIRED",
+            "Balance Sheet; Trial Balance; General Ledger",
+            cutoff,
             "prove retained/opening equity without fabrication",
         ),
         _control(
-            "inventory", "CONTROL_REPORT_REQUIRED",
-            "Balance Sheet; Inventory Valuation Summary", cutoff,
+            "inventory",
+            "CONTROL_REPORT_REQUIRED",
+            "Balance Sheet; Inventory Valuation Summary",
+            cutoff,
             "prove financial inventory control where used",
         ),
         _control(
-            "payroll_liabilities", "OWNER_FINANCE_DECISION",
-            "Balance Sheet; Trial Balance; General Ledger", cutoff,
+            "payroll_liabilities",
+            "OWNER_FINANCE_DECISION",
+            "Balance Sheet; Trial Balance; General Ledger",
+            cutoff,
             "identify authoritative payroll liability accounts and supporting "
             "subledger",
         ),
         _control(
-            "tax_liabilities", "OWNER_FINANCE_DECISION",
-            "Balance Sheet; Trial Balance; General Ledger", cutoff,
+            "tax_liabilities",
+            "OWNER_FINANCE_DECISION",
+            "Balance Sheet; Trial Balance; General Ledger",
+            cutoff,
             "identify authoritative tax liability accounts and supporting detail",
         ),
     )
@@ -167,46 +185,60 @@ def cash_basis_control_matrix(cutoff: str) -> tuple[dict[str, object], ...]:
     """Purpose-specific controls; basis never changes operational obligations."""
     return (
         _basis_control(
-            "historical_cash_results", "Profit & Loss", "cash",
+            "historical_cash_results",
+            "Profit & Loss",
+            "cash",
             "2021-07-07/2026-08-31",
             "preserve historical cash-basis income and expense continuity",
         ),
         _basis_control(
-            "historical_cash_position", "Balance Sheet; Trial Balance", "cash",
+            "historical_cash_position",
+            "Balance Sheet; Trial Balance",
+            "cash",
             cutoff,
             "control the Company's historical cash-basis reported position",
         ),
         _basis_control(
             "open_customer_obligations",
             "A/R Aging Detail; Open Invoices; Customer Balance Detail",
-            "operational", cutoff,
+            "operational",
+            cutoff,
             "preserve invoices, due dates, credits, applications, and open balances",
         ),
         _basis_control(
             "open_vendor_obligations",
             "A/P Aging Detail; Unpaid Bills; Vendor Balance Detail",
-            "operational", cutoff,
+            "operational",
+            cutoff,
             "preserve bills, due dates, credits, payments, and open obligations",
         ),
         _basis_control(
-            "complete_ledger_and_opening", "General Ledger; Trial Balance",
-            "accrual", "2021-07-07/2026-08-31",
+            "complete_ledger_and_opening",
+            "General Ledger; Trial Balance",
+            "accrual",
+            "2021-07-07/2026-08-31",
             "locate first ledger activity and retain transactions omitted by cash "
             "reports",
         ),
         _basis_control(
-            "bank_cash", "Account QuickReport; bank reconciliation/statement",
-            "operational", cutoff,
+            "bank_cash",
+            "Account QuickReport; bank reconciliation/statement",
+            "operational",
+            cutoff,
             "prove each bank/cash book balance and reconciling items",
         ),
         _basis_control(
-            "credit_cards", "Account QuickReport; card statement",
-            "operational", cutoff,
+            "credit_cards",
+            "Account QuickReport; card statement",
+            "operational",
+            cutoff,
             "prove each card liability independently from bank settlement",
         ),
         _basis_control(
-            "undeposited_funds", "Undeposited Funds QuickReport",
-            "operational", cutoff,
+            "undeposited_funds",
+            "Undeposited Funds QuickReport",
+            "operational",
+            cutoff,
             "prove clearing items without treating deposits as revenue",
         ),
     )
@@ -268,7 +300,7 @@ def provision_admission_packet(
             continue
         digest = row.get("raw_sha256")
         if not isinstance(digest, str):
-            raise ValueError("account evidence digest missing")
+            raise TypeError("account evidence digest missing")
         payload = registry.store._read_json(
             registry.store.root / "blobs" / digest[:2] / digest
         )
@@ -378,9 +410,7 @@ def main() -> None:
     )
     registry = ControlEvidenceRegistry(store)
     result = (
-        provision_cash_basis_successor_packet(
-            registry=registry, authority=authority
-        )
+        provision_cash_basis_successor_packet(registry=registry, authority=authority)
         if args.mode == "cash-basis-successor"
         else provision_admission_packet(
             registry=registry,
@@ -433,8 +463,14 @@ def _account_disposition(
     if account_type in recommended:
         return "MAPPING_RECOMMENDED", recommended[account_type]
     if account_type in {
-        "Expense", "Other Expense", "Other Current Asset", "Fixed Asset",
-        "Other Current Liability", "Long Term Liability", "Equity", "Other Income",
+        "Expense",
+        "Other Expense",
+        "Other Current Asset",
+        "Fixed Asset",
+        "Other Current Liability",
+        "Long Term Liability",
+        "Equity",
+        "Other Income",
     }:
         return "OWNER_FINANCE_DECISION", account_type.upper().replace(" ", "_")
     if not account_type:
@@ -456,7 +492,7 @@ def _parent_digest(value: object) -> str | None:
 def _safe_decimal(value: object) -> str | None:
     try:
         return format(Decimal(str(value)), "f") if value is not None else None
-    except Exception:
+    except (InvalidOperation, ValueError):
         return None
 
 

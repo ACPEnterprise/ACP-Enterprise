@@ -21,7 +21,9 @@ from zipfile import ZipFile
 from app.qbo_source.ledger_opening_analysis import _shared_strings, _sheet_rows
 
 CONTRACT: Final = "hcp-qbo-invoice-identity-inventory/v1"
-_HCP_INVOICE_REFERENCE = re.compile(r"(?<![A-Za-z0-9_])(invoice_[0-9a-f]{32})(?![A-Za-z0-9_])")
+_HCP_INVOICE_REFERENCE = re.compile(
+    r"(?<![A-Za-z0-9_])(invoice_[0-9a-f]{32})(?![A-Za-z0-9_])"
+)
 
 
 def _digest(value: object) -> str:
@@ -112,7 +114,9 @@ def build_invoice_identity_inventory(
                 "amount_minor": invoice.get("amount"),
                 "balance_minor": invoice.get("due_amount"),
                 "parent_disposition": (
-                    "EXACT_SOURCE_JOB_PARENT" if job is not None else "SOURCE_JOB_PARENT_MISSING"
+                    "EXACT_SOURCE_JOB_PARENT"
+                    if job is not None
+                    else "SOURCE_JOB_PARENT_MISSING"
                 ),
                 "alternate_history_disposition": (
                     "CUSTOMER_HISTORY_EXACT"
@@ -238,7 +242,9 @@ def classify_payment_control_invoice_links(
     if manifest.get("contract_version") != "hcp-controls-intake/1":
         raise ValueError("unsupported HCP control manifest")
     invoices = _collection(hcp_source_root, "invoices")
-    invoice_numbers = Counter(str(item.get("invoice_number") or "") for item in invoices)
+    invoice_numbers = Counter(
+        str(item.get("invoice_number") or "") for item in invoices
+    )
     rows: list[dict[str, object]] = []
     for entry in manifest.get("entries", []):
         if entry.get("classification") != "PAYMENTS_DETAIL":
@@ -260,7 +266,9 @@ def classify_payment_control_invoice_links(
                     "private_job_id": row.get("Job ID") or None,
                     "private_customer_id": row.get("Customer ID") or None,
                     "invoice_number_supporting_only": invoice_number or None,
-                    "invoice_number_api_candidate_count": invoice_numbers[invoice_number],
+                    "invoice_number_api_candidate_count": invoice_numbers[
+                        invoice_number
+                    ],
                     "payment_type": row.get("Payment Type") or None,
                     "disposition": "NO_BINDING_EVIDENCE",
                     "reason": "control_row_has_no_public_api_invoice_provider_identity",

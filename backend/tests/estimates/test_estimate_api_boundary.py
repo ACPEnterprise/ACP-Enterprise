@@ -2,8 +2,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from fastapi import HTTPException
-
 from app.estimates.errors import (
     EstimateConflictError,
     EstimateError,
@@ -12,6 +10,7 @@ from app.estimates.errors import (
 )
 from app.estimates.router import _branch, _error
 from app.main import app
+from fastapi import HTTPException
 
 
 def test_estimate_errors_use_safe_recovery_envelopes_without_reflection() -> None:
@@ -60,7 +59,9 @@ def test_estimate_branch_denial_uses_safe_forbidden_contract() -> None:
 
 
 @pytest.mark.asyncio
-async def test_estimate_job_conversion_is_authorized_and_not_an_internal_only_seam() -> None:
+async def test_estimate_job_conversion_is_authorized_and_not_an_internal_only_seam() -> (
+    None
+):
     path = "/api/v1/estimates/{estimate_id}/convert-to-job"
     assert path in app.openapi()["paths"]
     async with httpx.AsyncClient(

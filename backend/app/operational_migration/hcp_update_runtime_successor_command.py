@@ -47,8 +47,13 @@ def _cohorts(path: Path) -> dict[tuple[str, str], str]:
     value = _private_json(path)
     if value.get("contract") != COHORT_CONTRACT:
         raise ValueError("runtime cohort contract mismatch")
+    records = value.get("records")
+    if not isinstance(records, list) or not all(
+        isinstance(item, dict) for item in records
+    ):
+        raise ValueError("runtime cohort records must be a list of objects")
     result: dict[tuple[str, str], str] = {}
-    for item in value.get("records", []):
+    for item in records:
         key = (str(item["domain"]), str(item["source_id"]))
         cohort = str(item["cohort"])
         if key in result or cohort not in COHORTS:
@@ -72,7 +77,9 @@ async def run(authority_path: Path, cohort_path: Path) -> dict[str, object]:
     ):
         raise ValueError("runtime inventory requires the sanctioned Preview boundary")
     cohorts = _cohorts(cohort_path)
-    updates = tuple(record for record in manifest.records if record.assertion.value == "update")
+    updates = tuple(
+        record for record in manifest.records if record.assertion.value == "update"
+    )
     update_keys = {(record.domain, record.source_id) for record in updates}
     if set(cohorts) != update_keys:
         raise ValueError("runtime cohorts must classify every UPDATE exactly once")
@@ -87,7 +94,9 @@ async def run(authority_path: Path, cohort_path: Path) -> dict[str, object]:
     async with AsyncSessionFactory() as session:
         await session.execute(text("SET TRANSACTION READ ONLY"))
         schemas = tuple(
-            (await session.scalars(text("SELECT version_num FROM alembic_version"))).all()
+            (
+                await session.scalars(text("SELECT version_num FROM alembic_version"))
+            ).all()
         )
         if schemas != (authority.expected_schema_head,):
             raise ValueError("runtime inventory schema authority mismatch")

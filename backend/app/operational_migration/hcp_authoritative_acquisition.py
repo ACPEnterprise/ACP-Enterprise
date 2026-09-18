@@ -43,10 +43,7 @@ class CollectionSeal:
     def validate(self) -> str:
         if not self.entity or not self.endpoint.startswith("GET "):
             raise ValueError("a read-only source endpoint is required")
-        if (
-            self.record_count < 0
-            or self.unique_native_id_count != self.record_count
-        ):
+        if self.record_count < 0 or self.unique_native_id_count != self.record_count:
             raise ValueError("record count and unique native identities must agree")
         if not self.page_sha256s or any(
             len(value) != 64 for value in self.page_sha256s

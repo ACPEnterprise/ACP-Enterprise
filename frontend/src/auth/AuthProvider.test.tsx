@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -89,12 +89,13 @@ describe("AuthProvider", () => {
   });
 
   it("clears authentication after logout", async () => {
+    const user = userEvent.setup();
     window.sessionStorage.setItem("acp.auth.refresh-token", "stored-refresh-token");
     vi.mocked(authenticationApi.refreshSession).mockResolvedValue(result);
     vi.mocked(authenticationApi.logout).mockResolvedValue();
     render(<AuthProvider><Harness /></AuthProvider>);
     await screen.findByText("Preview Administrator");
-    await act(async () => userEvent.click(screen.getByRole("button", { name: "Sign out" })));
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(screen.getByText("unauthenticated")).toBeInTheDocument());
     expect(window.sessionStorage.getItem("acp.auth.refresh-token")).toBeNull();
   });

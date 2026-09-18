@@ -1,7 +1,6 @@
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.cutover_readiness import (
     CutoverEvidenceSnapshot,
     CutoverPrerequisite,

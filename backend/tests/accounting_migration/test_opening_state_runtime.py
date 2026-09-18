@@ -123,7 +123,9 @@ def _validator(
     )
 
 
-def _plan(package: OpeningPackage, *, rejected_kind: str | None = None) -> OpeningStatePlan:
+def _plan(
+    package: OpeningPackage, *, rejected_kind: str | None = None
+) -> OpeningStatePlan:
     trial_balance = next(
         item for item in package.artifacts if item.kind == "trial_balance"
     )
@@ -140,7 +142,9 @@ def _plan(package: OpeningPackage, *, rejected_kind: str | None = None) -> Openi
     )
     rejections: tuple[RejectionEvidence, ...] = ()
     if rejected_kind is not None:
-        rejected = next(item for item in package.artifacts if item.kind == rejected_kind)
+        rejected = next(
+            item for item in package.artifacts if item.kind == rejected_kind
+        )
         rejections = (
             RejectionEvidence(
                 artifact_id=rejected.artifact_id,
@@ -199,9 +203,7 @@ class OpeningPackageValidationTests(unittest.TestCase):
 
         self.assertEqual(len(package.artifacts), 34)
         self.assertEqual(package.binding.target_company_id, COMPANY_ID)
-        self.assertEqual(
-            package.archive_artifact_ids, ("synthetic-native_archive",)
-        )
+        self.assertEqual(package.archive_artifact_ids, ("synthetic-native_archive",))
 
     def test_artifact_checksum_mismatch_is_rejected(self) -> None:
         manifest = _manifest(self.root)
@@ -278,9 +280,7 @@ class OpeningRuntimeTests(unittest.TestCase):
         self.assertEqual(result.committed_records, 0)
         self.assertEqual(target.committed_records, 0)
         self.assertEqual(target.staged_records, 0)
-        self.assertEqual(
-            result.archive_artifact_ids, ("synthetic-native_archive",)
-        )
+        self.assertEqual(result.archive_artifact_ids, ("synthetic-native_archive",))
 
     def test_unbalanced_opening_state_is_rejected_before_staging(self) -> None:
         unbalanced = replace(
@@ -292,16 +292,16 @@ class OpeningRuntimeTests(unittest.TestCase):
         )
         target = RollbackOnlyTarget()
 
-        with self.assertRaisesRegex(RuntimeValidationError, "opening_journal_unbalanced"):
+        with self.assertRaisesRegex(
+            RuntimeValidationError, "opening_journal_unbalanced"
+        ):
             OpeningMigrationRuntime().run(self.package, unbalanced, target=target)
         self.assertEqual(target.staged_records, 0)
 
     def test_control_account_mismatch_is_rejected(self) -> None:
         mismatch = replace(
             self.plan,
-            controls=(
-                replace(self.plan.controls[0], opening_amount=Decimal("99.99")),
-            ),
+            controls=(replace(self.plan.controls[0], opening_amount=Decimal("99.99")),),
         )
 
         with self.assertRaisesRegex(RuntimeValidationError, "control_account_mismatch"):

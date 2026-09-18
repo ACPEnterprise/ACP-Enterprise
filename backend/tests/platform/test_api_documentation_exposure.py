@@ -29,5 +29,5 @@ def test_application_binds_all_documentation_surfaces_to_the_guard() -> None:
     source = (REPOSITORY_ROOT / "backend/app/main.py").read_text(encoding="utf-8")
 
     for option in ("docs_url", "redoc_url", "openapi_url"):
-        assert f"{option}=\"/" in source
+        assert f'{option}="/' in source
         assert "if settings.api_documentation_enabled else None" in source

@@ -64,9 +64,7 @@ class EmployeeNotificationTargetingService:
         if membership.status != "active" or membership.revoked_at is not None:
             blockers.append("MEMBERSHIP_INACTIVE")
 
-        user = await session.scalar(
-            select(User).where(User.id == membership.user_id)
-        )
+        user = await session.scalar(select(User).where(User.id == membership.user_id))
         if user is None:
             blockers.append("USER_MISSING")
         elif user.status != "active" or user.archived_at is not None:
@@ -80,11 +78,14 @@ class EmployeeNotificationTargetingService:
                 )
             )
         )
-        branch_ready = bool(
-            membership.has_all_branch_access
-            or membership.default_branch_id == branch_id
-            or explicit_branch
-        ) and employee.home_branch_id == branch_id
+        branch_ready = (
+            bool(
+                membership.has_all_branch_access
+                or membership.default_branch_id == branch_id
+                or explicit_branch
+            )
+            and employee.home_branch_id == branch_id
+        )
         if not branch_ready:
             blockers.append("BRANCH_NOT_AUTHORIZED")
 

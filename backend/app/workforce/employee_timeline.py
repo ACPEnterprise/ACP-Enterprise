@@ -153,7 +153,9 @@ class EmployeeTimelineService:
             capabilities = (
                 await session.execute(
                     select(WorkforceCapability, Capability)
-                    .join(Capability, Capability.id == WorkforceCapability.capability_id)
+                    .join(
+                        Capability, Capability.id == WorkforceCapability.capability_id
+                    )
                     .where(
                         WorkforceCapability.company_id == context.company.id,
                         WorkforceCapability.profile_id == profile.id,
@@ -247,10 +249,14 @@ class EmployeeTimelineService:
             actor_ids.add(clock_event.recorded_by_user_id)
             items.append(
                 self._item(
-                    "JOB_CLOCK_STARTED" if clock_event.kind == "start" else "JOB_CLOCK_STOPPED",
+                    "JOB_CLOCK_STARTED"
+                    if clock_event.kind == "start"
+                    else "JOB_CLOCK_STOPPED",
                     clock_event.occurred_at,
                     "job_timekeeping",
-                    "Job clock started." if clock_event.kind == "start" else "Job clock stopped.",
+                    "Job clock started."
+                    if clock_event.kind == "start"
+                    else "Job clock stopped.",
                     employee_id,
                     clock_event.recorded_by_user_id,
                     f"/jobs/{clock_event.job_id}",
@@ -259,7 +265,9 @@ class EmployeeTimelineService:
 
         actors = await self._actors(session, actor_ids)
         resolved = [
-            item.model_copy(update={"actor_display_name": actors.get(str(item.actor_user_id))})
+            item.model_copy(
+                update={"actor_display_name": actors.get(str(item.actor_user_id))}
+            )
             if item.actor_user_id
             else item
             for item in items
@@ -271,11 +279,21 @@ class EmployeeTimelineService:
     async def _actors(session: AsyncSession, actor_ids: set[UUID]) -> dict[str, str]:
         if not actor_ids:
             return {}
-        users = (await session.scalars(select(User).where(User.id.in_(actor_ids)))).all()
+        users = (
+            await session.scalars(select(User).where(User.id.in_(actor_ids)))
+        ).all()
         return {str(user.id): user.display_name for user in users}
 
     @staticmethod
-    def _item(event_type, occurred_at, source, description, employee_id, actor_id, navigation=None):
+    def _item(
+        event_type,
+        occurred_at,
+        source,
+        description,
+        employee_id,
+        actor_id,
+        navigation=None,
+    ):
         return EmployeeTimelineItem(
             event_type=event_type,
             occurred_at=occurred_at,

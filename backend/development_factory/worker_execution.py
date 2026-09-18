@@ -439,13 +439,19 @@ class WorkerExecutor:
         if operations.workspace_id != worker.workspace.workspace_id:
             raise WorkerExecutionError("operations workspace ID mismatch")
         supported_validation = set(contract.validation_requirements)
-        if "all" not in supported_validation and "changed" not in supported_validation:
-            if not set(operations.validation_selections) <= supported_validation:
-                raise WorkerExecutionError("validation exceeds parent selection")
+        if (
+            "all" not in supported_validation
+            and "changed" not in supported_validation
+            and not set(operations.validation_selections) <= supported_validation
+        ):
+            raise WorkerExecutionError("validation exceeds parent selection")
         worker_validation = set(worker.task.required_validation)
-        if "all" not in worker_validation and "changed" not in worker_validation:
-            if not set(operations.validation_selections) <= worker_validation:
-                raise WorkerExecutionError("validation exceeds worker selection")
+        if (
+            "all" not in worker_validation
+            and "changed" not in worker_validation
+            and not set(operations.validation_selections) <= worker_validation
+        ):
+            raise WorkerExecutionError("validation exceeds worker selection")
         role_validation = set(role.default_validation)
         if not set(operations.validation_selections) <= role_validation:
             raise WorkerExecutionError("validation exceeds role capability")

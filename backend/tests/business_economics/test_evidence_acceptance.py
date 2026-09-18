@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
 from app.business_economics.company_policy_configurations.all_county_evidence_v1 import (
     ALL_COUNTY_EVIDENCE_CONTRACTS,
     ALL_COUNTY_GAP_ASSESSMENT,

@@ -41,10 +41,12 @@ import {
   workforceHandle,
 } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
+import { RouteLoading } from "./RouteLoading";
 
 export const appRoutes: RouteObject[] = [
   {
     path: "/activate",
+    HydrateFallback: RouteLoading,
     lazy: async () => {
       const module = await import("../routes/ActivationRoute");
       return { Component: module.ActivationRoute };
@@ -52,6 +54,7 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: "/login",
+    HydrateFallback: RouteLoading,
     lazy: async () => {
       const module = await import("../routes/LoginRoute");
       return { Component: module.LoginRoute };
@@ -59,6 +62,7 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: "/reset-password",
+    HydrateFallback: RouteLoading,
     lazy: async () => {
       const module = await import("../routes/PasswordResetRoute");
       return { Component: module.PasswordResetRoute };
@@ -67,6 +71,7 @@ export const appRoutes: RouteObject[] = [
   {
     path: "/",
     Component: ProtectedRoute,
+    HydrateFallback: RouteLoading,
     children: [
       {
         Component: ApplicationShell,

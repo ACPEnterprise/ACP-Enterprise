@@ -28,7 +28,9 @@ def _pages(root: Path, stem: str, key: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _index(refresh: Path, schedule: Path) -> tuple[dict[str, dict[str, Any]], dict[str, tuple[OverlayKey, ...]]]:
+def _index(
+    refresh: Path, schedule: Path
+) -> tuple[dict[str, dict[str, Any]], dict[str, tuple[OverlayKey, ...]]]:
     customers = _pages(refresh, "customers", "customers")
     jobs = _pages(refresh, "jobs", "jobs")
     values: dict[str, dict[str, Any]] = {}
@@ -76,8 +78,7 @@ def build(args: argparse.Namespace) -> CurrentOverlayManifest:
     held_jobs = {
         row["source_id"]
         for row in delta["records"]
-        if row["domain"] == "job"
-        and row["source_id"] in held_job_ids
+        if row["domain"] == "job" and row["source_id"] in held_job_ids
     }
     records: list[OverlayRecord] = []
     for row in delta["records"]:
@@ -99,7 +100,11 @@ def build(args: argparse.Namespace) -> CurrentOverlayManifest:
             for parent in parents.get(key, ())
         ):
             assertion = OverlayAssertion.HOLD
-        payload = {} if assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE} else values[key]
+        payload = (
+            {}
+            if assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
+            else values[key]
+        )
         records.append(
             OverlayRecord(
                 domain=row["domain"],
@@ -107,7 +112,9 @@ def build(args: argparse.Namespace) -> CurrentOverlayManifest:
                 assertion=assertion,
                 source_digest=row["after_digest"] or row["before_digest"],
                 prior_source_digest=(
-                    row["before_digest"] if assertion is OverlayAssertion.UPDATE else None
+                    row["before_digest"]
+                    if assertion is OverlayAssertion.UPDATE
+                    else None
                 ),
                 acquired_at=delta["as_of"],
                 payload=payload,
@@ -145,7 +152,9 @@ def main() -> int:
     parser.add_argument("--refresh", type=Path, required=True)
     parser.add_argument("--schedule", type=Path, required=True)
     parser.add_argument("--base-source4-digest", required=True)
-    parser.add_argument("--held-job-id", dest="held_job_ids", action="append", default=[])
+    parser.add_argument(
+        "--held-job-id", dest="held_job_ids", action="append", default=[]
+    )
     parser.add_argument("--held-job-detail-root", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()

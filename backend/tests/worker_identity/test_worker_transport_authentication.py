@@ -4,9 +4,6 @@ from typing import cast
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import Table, func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.worker_control.contracts import WorkerCapability, WorkerHealth
 from app.worker_control.models import WorkerHeartbeat
@@ -32,6 +29,9 @@ from app.worker_identity.contracts import (
 )
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
 from app.worker_identity.service import WorkerIdentityService
+from sqlalchemy import Table, func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,

@@ -262,10 +262,14 @@ async def test_admission_is_draft_only_replay_safe_and_searchable(
             limit=200,
         )
         assert held_water_heaters["total"] > 0
-        assert all(item["admission_status"] == "held" for item in held_water_heaters["items"])
+        assert all(
+            item["admission_status"] == "held" for item in held_water_heaters["items"]
+        )
         assert all_held["total"] == 39
         assert native_water_heaters.total_service_items > 0
-        assert all(item.status == "draft" for item in native_water_heaters.service_items)
+        assert all(
+            item.status == "draft" for item in native_water_heaters.service_items
+        )
     assert after == {
         "categories": 16,
         "services": 179,

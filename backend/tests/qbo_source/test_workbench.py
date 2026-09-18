@@ -4,7 +4,6 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-
 from app.qbo_source.handoff import (
     IntelligenceActor,
     IntelligenceEvidenceStep,

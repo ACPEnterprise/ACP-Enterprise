@@ -150,9 +150,9 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         return await self._services.source_state(self._session, key)
 
     async def source_exists(self, key: OverlayKey) -> bool:
-        return await self.source_state(key) is not None or await self._services.source_exists(
-            self._session, key
-        )
+        return await self.source_state(
+            key
+        ) is not None or await self._services.source_exists(self._session, key)
 
     async def fingerprint_owners(
         self, domain: str, fingerprint: str
@@ -204,15 +204,13 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         if self._lineage_bootstrap is not None:
             await self._lineage_bootstrap.finalize(receipt)
 
-    def _record_state(
-        self, record: OverlayRecord, state: OverlaySourceState
-    ) -> None:
+    def _record_state(self, record: OverlayRecord, state: OverlaySourceState) -> None:
         values = self._state()
         values["source_states"][_key(record.key)] = asdict(state)
         if record.native_fingerprint:
-            values["fingerprints"][
-                f"{record.domain}:{record.native_fingerprint}"
-            ] = [state.native_id]
+            values["fingerprints"][f"{record.domain}:{record.native_fingerprint}"] = [
+                state.native_id
+            ]
         self._write_state()
 
     def _state(self) -> dict[str, Any]:

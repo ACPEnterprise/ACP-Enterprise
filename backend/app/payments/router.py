@@ -24,10 +24,18 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 
 router = APIRouter(prefix="/api/v1/payments", tags=["Payments"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
-Read = Annotated[AuthorizationContext, Depends(require_permission(PaymentPermission.READ))]
-Collect = Annotated[AuthorizationContext, Depends(require_permission(PaymentPermission.COLLECT))]
-Apply = Annotated[AuthorizationContext, Depends(require_permission(PaymentPermission.APPLY))]
-RefundPermission = Annotated[AuthorizationContext, Depends(require_permission(PaymentPermission.REFUND))]
+Read = Annotated[
+    AuthorizationContext, Depends(require_permission(PaymentPermission.READ))
+]
+Collect = Annotated[
+    AuthorizationContext, Depends(require_permission(PaymentPermission.COLLECT))
+]
+Apply = Annotated[
+    AuthorizationContext, Depends(require_permission(PaymentPermission.APPLY))
+]
+RefundPermission = Annotated[
+    AuthorizationContext, Depends(require_permission(PaymentPermission.REFUND))
+]
 
 
 def _error(exc: PaymentError) -> HTTPException:
@@ -66,10 +74,21 @@ def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
 
 
 @router.post("/intents", response_model=IntentItem, status_code=status.HTTP_201_CREATED)
-async def collect_payment(payload: CollectInput, context: Collect, session: Session) -> IntentItem:
+async def collect_payment(
+    payload: CollectInput, context: Collect, session: Session
+) -> IntentItem:
     _branch(context, payload.branch_id)
     try:
-        return IntentItem.model_validate(await payment_service.collect(session, CreateIntent(company_id=context.company.id, actor_user_id=context.user.id, **payload.model_dump())))
+        return IntentItem.model_validate(
+            await payment_service.collect(
+                session,
+                CreateIntent(
+                    company_id=context.company.id,
+                    actor_user_id=context.user.id,
+                    **payload.model_dump(),
+                ),
+            )
+        )
     except PaymentError as exc:
         raise _error(exc) from exc
 
@@ -102,18 +121,42 @@ async def get_receipt(receipt_id: UUID, context: Read, session: Session) -> Rece
 
 
 @router.post("/receipts/{receipt_id}/applications", response_model=ReceiptItem)
-async def apply_receipt(receipt_id: UUID, payload: ApplyInput, context: Apply, session: Session) -> ReceiptItem:
+async def apply_receipt(
+    receipt_id: UUID, payload: ApplyInput, context: Apply, session: Session
+) -> ReceiptItem:
     _branch(context, payload.branch_id)
     try:
-        return ReceiptItem.model_validate(await payment_service.apply(session, ApplyReceipt(company_id=context.company.id, receipt_id=receipt_id, actor_user_id=context.user.id, **payload.model_dump())))
+        return ReceiptItem.model_validate(
+            await payment_service.apply(
+                session,
+                ApplyReceipt(
+                    company_id=context.company.id,
+                    receipt_id=receipt_id,
+                    actor_user_id=context.user.id,
+                    **payload.model_dump(),
+                ),
+            )
+        )
     except PaymentError as exc:
         raise _error(exc) from exc
 
 
 @router.post("/receipts/{receipt_id}/refunds", response_model=RefundItem)
-async def refund_receipt(receipt_id: UUID, payload: RefundInput, context: RefundPermission, session: Session) -> RefundItem:
+async def refund_receipt(
+    receipt_id: UUID, payload: RefundInput, context: RefundPermission, session: Session
+) -> RefundItem:
     _branch(context, payload.branch_id)
     try:
-        return RefundItem.model_validate(await payment_service.request_refund(session, RequestRefund(company_id=context.company.id, receipt_id=receipt_id, actor_user_id=context.user.id, **payload.model_dump())))
+        return RefundItem.model_validate(
+            await payment_service.request_refund(
+                session,
+                RequestRefund(
+                    company_id=context.company.id,
+                    receipt_id=receipt_id,
+                    actor_user_id=context.user.id,
+                    **payload.model_dump(),
+                ),
+            )
+        )
     except PaymentError as exc:
         raise _error(exc) from exc

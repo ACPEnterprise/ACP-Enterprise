@@ -6,14 +6,14 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.launch import CustomerLaunchService
 from app.customers.models import CustomerNote
 from app.events.models import BusinessEvent
 from app.platform.permissions.authorization import AuthorizedBranch
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.customers.test_api import build_app, seed_customer_fixture
 
 

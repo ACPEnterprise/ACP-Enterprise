@@ -376,11 +376,7 @@ class LuminaryService:
             if record.branch_id is not None
             else query.where(LuminaryFindingRecord.branch_id.is_(None))
         )
-        records = tuple(
-            (
-                await session.scalars(query)
-            ).all()
-        )
+        records = tuple((await session.scalars(query)).all())
         by_id = {item.id: item for item in records}
         if len(by_id) != len(ids) or len(record.finding_digests) != len(ids):
             raise RuntimeError("Luminary briefing finding authority is incomplete.")

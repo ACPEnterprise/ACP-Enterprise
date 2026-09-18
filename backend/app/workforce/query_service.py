@@ -72,44 +72,53 @@ class WorkforceEligibilityService:
         ).all()
         result: list[EligibleTechnician] = []
         for employee, profile, branch_eligibility in rows:
-            capabilities = () if profile is None else tuple(
-                (
-                    await session.scalars(
-                        select(Capability.code)
-                        .join(
-                            WorkforceCapability,
-                            WorkforceCapability.capability_id == Capability.id,
+            capabilities = (
+                ()
+                if profile is None
+                else tuple(
+                    (
+                        await session.scalars(
+                            select(Capability.code)
+                            .join(
+                                WorkforceCapability,
+                                WorkforceCapability.capability_id == Capability.id,
+                            )
+                            .where(
+                                WorkforceCapability.company_id == query.company_id,
+                                WorkforceCapability.profile_id == profile.id,
+                                WorkforceCapability.status == "active",
+                                Capability.status == "active",
+                            )
+                            .order_by(Capability.code)
                         )
-                        .where(
-                            WorkforceCapability.company_id == query.company_id,
-                            WorkforceCapability.profile_id == profile.id,
-                            WorkforceCapability.status == "active",
-                            Capability.status == "active",
-                        )
-                        .order_by(Capability.code)
-                    )
-                ).all()
+                    ).all()
+                )
             )
-            languages = () if profile is None else tuple(
-                (
-                    await session.scalars(
-                        select(Language.code)
-                        .join(
-                            WorkforceLanguageCapability,
-                            WorkforceLanguageCapability.language_id == Language.id,
+            languages = (
+                ()
+                if profile is None
+                else tuple(
+                    (
+                        await session.scalars(
+                            select(Language.code)
+                            .join(
+                                WorkforceLanguageCapability,
+                                WorkforceLanguageCapability.language_id == Language.id,
+                            )
+                            .where(
+                                WorkforceLanguageCapability.company_id
+                                == query.company_id,
+                                WorkforceLanguageCapability.profile_id == profile.id,
+                                WorkforceLanguageCapability.status == "active",
+                                WorkforceLanguageCapability.customer_facing_eligible.is_(
+                                    True
+                                ),
+                                Language.status == "active",
+                            )
+                            .order_by(Language.code)
                         )
-                        .where(
-                            WorkforceLanguageCapability.company_id == query.company_id,
-                            WorkforceLanguageCapability.profile_id == profile.id,
-                            WorkforceLanguageCapability.status == "active",
-                            WorkforceLanguageCapability.customer_facing_eligible.is_(
-                                True
-                            ),
-                            Language.status == "active",
-                        )
-                        .order_by(Language.code)
-                    )
-                ).all()
+                    ).all()
+                )
             )
             conflict = await session.scalar(
                 select(DispatchAssignment.id)
@@ -169,7 +178,9 @@ class WorkforceEligibilityService:
                 .limit(1)
             )
             reasons: list[str] = []
-            if employee.status != "active" or (profile is not None and profile.status != "active"):
+            if employee.status != "active" or (
+                profile is not None and profile.status != "active"
+            ):
                 reasons.append("inactive")
             if profile is None:
                 reasons.append("missing_workforce_profile")
@@ -186,29 +197,37 @@ class WorkforceEligibilityService:
                 reasons.append("missing_required_language")
             if conflict or crew_conflict:
                 reasons.append("conflicting_assignment")
-            availability = None if profile is None else await session.scalar(
-                select(WorkforceWorkingAvailability)
-                .where(
-                    WorkforceWorkingAvailability.company_id == query.company_id,
-                    WorkforceWorkingAvailability.profile_id == profile.id,
-                    WorkforceWorkingAvailability.branch_id == query.branch_id,
-                    WorkforceWorkingAvailability.status == "available",
-                    WorkforceWorkingAvailability.start_at <= query.window_start_at,
-                    WorkforceWorkingAvailability.end_at >= query.window_end_at,
+            availability = (
+                None
+                if profile is None
+                else await session.scalar(
+                    select(WorkforceWorkingAvailability)
+                    .where(
+                        WorkforceWorkingAvailability.company_id == query.company_id,
+                        WorkforceWorkingAvailability.profile_id == profile.id,
+                        WorkforceWorkingAvailability.branch_id == query.branch_id,
+                        WorkforceWorkingAvailability.status == "available",
+                        WorkforceWorkingAvailability.start_at <= query.window_start_at,
+                        WorkforceWorkingAvailability.end_at >= query.window_end_at,
+                    )
+                    .limit(1)
                 )
-                .limit(1)
             )
-            unavailable = None if profile is None else await session.scalar(
-                select(WorkforceWorkingAvailability.id)
-                .where(
-                    WorkforceWorkingAvailability.company_id == query.company_id,
-                    WorkforceWorkingAvailability.profile_id == profile.id,
-                    WorkforceWorkingAvailability.branch_id == query.branch_id,
-                    WorkforceWorkingAvailability.status == "unavailable",
-                    WorkforceWorkingAvailability.start_at < query.window_end_at,
-                    WorkforceWorkingAvailability.end_at > query.window_start_at,
+            unavailable = (
+                None
+                if profile is None
+                else await session.scalar(
+                    select(WorkforceWorkingAvailability.id)
+                    .where(
+                        WorkforceWorkingAvailability.company_id == query.company_id,
+                        WorkforceWorkingAvailability.profile_id == profile.id,
+                        WorkforceWorkingAvailability.branch_id == query.branch_id,
+                        WorkforceWorkingAvailability.status == "unavailable",
+                        WorkforceWorkingAvailability.start_at < query.window_end_at,
+                        WorkforceWorkingAvailability.end_at > query.window_start_at,
+                    )
+                    .limit(1)
                 )
-                .limit(1)
             )
             if unavailable:
                 reasons.append("unavailable")

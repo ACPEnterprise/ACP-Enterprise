@@ -1,5 +1,4 @@
 import pytest
-
 from app.operational_migration.hcp_migration_rehearsal import (
     CandidateDisposition,
     DecisionPattern,

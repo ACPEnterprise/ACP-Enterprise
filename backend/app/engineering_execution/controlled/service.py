@@ -426,15 +426,16 @@ class ControlledExecutionService:
                             "A conflicting terminal result already exists."
                         )
                 else:
-                    boundary, boundary_provenance = (
-                        await self._resolve_adoption_boundary(
-                            session,
-                            command=command,
-                            execution=execution,
-                            starting_head=starting_head,
-                            boundary_version=boundary_version,
-                            boundary_fingerprint=boundary_fingerprint,
-                        )
+                    (
+                        boundary,
+                        boundary_provenance,
+                    ) = await self._resolve_adoption_boundary(
+                        session,
+                        command=command,
+                        execution=execution,
+                        starting_head=starting_head,
+                        boundary_version=boundary_version,
+                        boundary_fingerprint=boundary_fingerprint,
                     )
                     self._validate_adoption_source(
                         command=command,
@@ -1045,11 +1046,13 @@ class ControlledExecutionService:
                 )
                 .join(
                     EngineeringExecution,
-                    EngineeringExecution.id == ControlledExecutionOfferModel.execution_id,
+                    EngineeringExecution.id
+                    == ControlledExecutionOfferModel.execution_id,
                 )
                 .join(
                     EngineeringMilestone,
-                    EngineeringMilestone.command_id == ControlledExecutionOfferModel.command_id,
+                    EngineeringMilestone.command_id
+                    == ControlledExecutionOfferModel.command_id,
                 )
                 .join(
                     EngineeringRoadmap,
@@ -1237,9 +1240,7 @@ class ControlledExecutionService:
                 readiness_is_current,
             )
 
-            authoritative_head_changed = (
-                roadmap.expected_head != command.expected_head
-            )
+            authoritative_head_changed = roadmap.expected_head != command.expected_head
             repository_readiness_current = readiness_is_current(
                 dict(milestone.starting_commit_evidence),
                 repository_key=command.repository_key,
@@ -1286,13 +1287,15 @@ class ControlledExecutionService:
                 continue
             boundary = dict(command.execution_boundary)
             mutation_allowed = command.requested_code_changes
-            operations = set(
-                _evidence_set(boundary.get("permitted_operations")) or ()
-            )
+            operations = set(_evidence_set(boundary.get("permitted_operations")) or ())
             if mutation_allowed:
                 required_operations = {
-                    "inspect", "modify", "validate", "commit",
-                    "mechanical_reconcile", "push",
+                    "inspect",
+                    "modify",
+                    "validate",
+                    "commit",
+                    "mechanical_reconcile",
+                    "push",
                 }
                 capability_profile = "code_change"
             else:
@@ -1321,7 +1324,9 @@ class ControlledExecutionService:
                     "request_digest": command.request_digest,
                     "boundary": boundary,
                     "boundary_digest": command.execution_boundary_digest,
-                    "commit_subject": _commit_subject(command.command_type, command.ecid),
+                    "commit_subject": _commit_subject(
+                        command.command_type, command.ecid
+                    ),
                     "execution_capability_profile": capability_profile,
                     "repository_mutation_allowed": mutation_allowed,
                 },
@@ -1377,16 +1382,15 @@ class ControlledExecutionService:
                 readiness_is_current,
             )
 
-            if (
-                roadmap.expected_head != offer.payload.get("expected_head")
-                or not readiness_is_current(
-                    dict(milestone.starting_commit_evidence),
-                    repository_key=str(offer.payload.get("repository_key", "")),
-                    branch=str(offer.payload.get("expected_branch", "")),
-                    candidate_head=str(offer.payload.get("expected_head", "")),
-                    worker_id=worker_context.worker_id,
-                    now=now,
-                )
+            if roadmap.expected_head != offer.payload.get(
+                "expected_head"
+            ) or not readiness_is_current(
+                dict(milestone.starting_commit_evidence),
+                repository_key=str(offer.payload.get("repository_key", "")),
+                branch=str(offer.payload.get("expected_branch", "")),
+                candidate_head=str(offer.payload.get("expected_head", "")),
+                worker_id=worker_context.worker_id,
+                now=now,
             ):
                 raise ControlledExecutionIneligibleError(
                     "Execution base is no longer current for this worker."
@@ -1586,7 +1590,9 @@ class ControlledExecutionService:
                     or not isinstance(validation_runs_output, list)
                     or not validation_runs_output
                     or len(validation_runs_output) > MAX_VALIDATION_RUNS
-                    or not all(_valid_validation_run(run) for run in validation_runs_output)
+                    or not all(
+                        _valid_validation_run(run) for run in validation_runs_output
+                    )
                     or not isinstance(output.get("validation_environment"), dict)
                 )
             )

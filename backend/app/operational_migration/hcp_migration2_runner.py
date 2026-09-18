@@ -521,7 +521,9 @@ class HcpMigration2Runner:
                     (domain.removesuffix("s"), row.source_id)
                     for row in getattr(plan, domain)
                 )
-            actual = {(item.domain, item.source_id) for item in successor_manifest.entries}
+            actual = {
+                (item.domain, item.source_id) for item in successor_manifest.entries
+            }
             if expected != actual:
                 raise SafeEvidenceError(
                     "successor_manifest_population_mismatch",

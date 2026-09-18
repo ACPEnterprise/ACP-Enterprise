@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.worker_control.contracts import WorkerCapability
 from app.worker_control.transport.crypto import decode_private_key, verify_signature
 from app.worker_runtime.config import WorkerRuntimeConfig

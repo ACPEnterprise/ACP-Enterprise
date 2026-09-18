@@ -119,7 +119,9 @@ def _lineage_findings(
     company_id: UUID,
     branch_id: UUID | None,
 ) -> tuple[AcceptanceFinding, ...]:
-    grouped: dict[tuple[OperationalDomain, str], list[OperationalLineageProjection]] = {}
+    grouped: dict[
+        tuple[OperationalDomain, str], list[OperationalLineageProjection]
+    ] = {}
     for record in records:
         grouped.setdefault((record.domain, record.source_id), []).append(record)
     findings: list[AcceptanceFinding] = []
@@ -196,9 +198,9 @@ def _projection_findings(
     schedule_native = {item.source_appointment_id: item for item in schedules}
     dispatch_grouped: dict[str, list[DispatchAcceptanceProjection]] = {}
     for dispatch_item in dispatches:
-        dispatch_grouped.setdefault(
-            dispatch_item.source_appointment_id, []
-        ).append(dispatch_item)
+        dispatch_grouped.setdefault(dispatch_item.source_appointment_id, []).append(
+            dispatch_item
+        )
     source_grouped: dict[str, list[OperationalAppointmentEvidence]] = {}
     for source_item in appointments:
         source_grouped.setdefault(source_item.source_id, []).append(source_item)
@@ -244,7 +246,10 @@ def _projection_findings(
             location_parent = parent_by_domain.get(OperationalDomain.SERVICE_LOCATION)
             if job_parent is None or job_parent.source_id != source.source_job_id:
                 conditions.append("JOB_RELATIONSHIP_CONFLICT")
-            if customer_parent is None or customer_parent.native_id != source.customer_id:
+            if (
+                customer_parent is None
+                or customer_parent.native_id != source.customer_id
+            ):
                 conditions.append("CUSTOMER_RELATIONSHIP_CONFLICT")
             if (
                 location_parent is None
@@ -321,9 +326,7 @@ def verify_operational_chain(
     findings = tuple(
         sorted(
             (
-                *_lineage_findings(
-                    lineage, company_id=company_id, branch_id=branch_id
-                ),
+                *_lineage_findings(lineage, company_id=company_id, branch_id=branch_id),
                 *_projection_findings(
                     lineage,
                     appointments,

@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
 from app.business_economics.findings import (
     FindingState,
     FindingSubject,

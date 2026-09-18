@@ -898,9 +898,7 @@ class DispatchService:
         )
 
     @staticmethod
-    def _history(
-        session, item, kind, prior, new, actor, reason, key, request_digest
-    ):
+    def _history(session, item, kind, prior, new, actor, reason, key, request_digest):
         session.add(
             DispatchAssignmentHistory(
                 company_id=item.company_id,

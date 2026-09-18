@@ -406,9 +406,7 @@ class MobileFieldContext:
             evidence = tuple(evidence_by_asset[asset.id])
             latest = {item.evidence_type: item.state for item in reversed(evidence)}
             actions = tuple(actions_by_asset[asset.id])
-            latest_action = {
-                item.action_type: item.state for item in reversed(actions)
-            }
+            latest_action = {item.action_type: item.state for item in reversed(actions)}
             fleet.append(
                 FieldFleetItem(
                     asset_id=asset.id,

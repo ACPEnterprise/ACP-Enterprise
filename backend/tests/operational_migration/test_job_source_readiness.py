@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-
 from app.operational_migration.job_source_readiness import (
     CURRENT_JOB_HEADERS,
     JOB_HEADERS,

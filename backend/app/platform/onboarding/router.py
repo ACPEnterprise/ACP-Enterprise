@@ -159,10 +159,11 @@ async def retry_definitive_rejection(
     request_id: UUID, context: OnboardingAdmin, session: Session
 ) -> OnboardingDeliveryRetryView:
     try:
-        invitation, message = (
-            await identity_onboarding_service.retry_definitive_invitation_rejection(
-                session, context=context, request_id=request_id
-            )
+        (
+            invitation,
+            message,
+        ) = await identity_onboarding_service.retry_definitive_invitation_rejection(
+            session, context=context, request_id=request_id
         )
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
         raise _safe_error(error) from error

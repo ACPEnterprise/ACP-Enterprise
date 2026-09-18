@@ -86,7 +86,9 @@ class PayrollPopulationEvidence:
 
     def verify(self) -> None:
         if len(set(self.employee_ids)) != len(self.employee_ids):
-            raise PayrollConflictError("Payroll population contains duplicate Employees")
+            raise PayrollConflictError(
+                "Payroll population contains duplicate Employees"
+            )
         if canonical_digest(self.canonical_content()) != self.evidence_digest:
             raise PayrollConflictError("Payroll population evidence digest is invalid")
 
@@ -122,7 +124,9 @@ class PayrollRunMember:
         return {
             "employee_id": str(self.employee_id),
             "disposition": self.disposition.value,
-            "gross_result_id": str(self.gross_result_id) if self.gross_result_id else None,
+            "gross_result_id": str(self.gross_result_id)
+            if self.gross_result_id
+            else None,
             "gross_result_digest": self.gross_result_digest,
             "tax_result_id": str(self.tax_result_id) if self.tax_result_id else None,
             "tax_result_digest": self.tax_result_digest,
@@ -172,7 +176,9 @@ class PayrollRunCandidate:
             "aggregate_employee_taxes": str(self.aggregate_employee_taxes),
             "aggregate_employee_deductions": str(self.aggregate_employee_deductions),
             "aggregate_net_pay": str(self.aggregate_net_pay),
-            "aggregate_employer_contributions": str(self.aggregate_employer_contributions),
+            "aggregate_employer_contributions": str(
+                self.aggregate_employer_contributions
+            ),
             "supersedes_run_identity": self.supersedes_run_identity,
         }
 
@@ -185,7 +191,11 @@ class PayrollRunCandidate:
         for item in self.members:
             if canonical_digest(item.canonical_content()) != item.membership_digest:
                 raise PayrollConflictError("Payroll run membership digest is invalid")
-        ready = tuple(item for item in self.members if item.disposition is PayrollRunDisposition.READY)
+        ready = tuple(
+            item
+            for item in self.members
+            if item.disposition is PayrollRunDisposition.READY
+        )
         totals = (
             sum((item.gross for item in ready), Decimal(0)),
             sum((item.employee_taxes for item in ready), Decimal(0)),
@@ -261,10 +271,14 @@ class PayrollRunService:
                     currency=currency,
                     value=item,
                 )
-                for item in sorted(member_inputs, key=lambda item: str(item.employee_id))
+                for item in sorted(
+                    member_inputs, key=lambda item: str(item.employee_id)
+                )
             ]
         )
-        ready = tuple(item for item in members if item.disposition is PayrollRunDisposition.READY)
+        ready = tuple(
+            item for item in members if item.disposition is PayrollRunDisposition.READY
+        )
         provisional = PayrollRunCandidate(
             company_id=context.company.id,
             pay_period_id=population.pay_period_id,
@@ -276,17 +290,25 @@ class PayrollRunService:
             currency=currency,
             members=members,
             aggregate_gross=sum((item.gross for item in ready), Decimal(0)),
-            aggregate_employee_taxes=sum((item.employee_taxes for item in ready), Decimal(0)),
-            aggregate_employee_deductions=sum((item.employee_deductions for item in ready), Decimal(0)),
+            aggregate_employee_taxes=sum(
+                (item.employee_taxes for item in ready), Decimal(0)
+            ),
+            aggregate_employee_deductions=sum(
+                (item.employee_deductions for item in ready), Decimal(0)
+            ),
             aggregate_net_pay=sum((item.net_pay for item in ready), Decimal(0)),
-            aggregate_employer_contributions=sum((item.employer_contributions for item in ready), Decimal(0)),
+            aggregate_employer_contributions=sum(
+                (item.employer_contributions for item in ready), Decimal(0)
+            ),
             run_identity="",
             run_digest="",
             assembled_at=assembled_at,
             supersedes_run_identity=supersedes_run_identity,
         )
         digest = canonical_digest(provisional.canonical_economic_content())
-        value = replace(provisional, run_identity=f"payroll-run:{digest}", run_digest=digest)
+        value = replace(
+            provisional, run_identity=f"payroll-run:{digest}", run_digest=digest
+        )
         value.verify()
         return value
 
@@ -321,7 +343,9 @@ class PayrollRunService:
             .where(
                 PayrollRunRecord.company_id == context.company.id,
                 PayrollRunRecord.pay_period_id == candidate.pay_period_id,
-                PayrollRunRecord.lifecycle.in_(("assembled", "under_review", "reviewed", "approved")),
+                PayrollRunRecord.lifecycle.in_(
+                    ("assembled", "under_review", "reviewed", "approved")
+                ),
             )
             .with_for_update()
         )
@@ -335,7 +359,12 @@ class PayrollRunService:
                 )
                 .with_for_update()
             )
-            if prior is None or active is None or prior.id != active.id or prior.consumed_by_payment_at is not None:
+            if (
+                prior is None
+                or active is None
+                or prior.id != active.id
+                or prior.consumed_by_payment_at is not None
+            ):
                 raise PayrollConflictError("Payroll run supersession lineage conflict")
             prior.lifecycle = PayrollRunLifecycle.SUPERSEDED.value
             await session.flush()
@@ -384,69 +413,199 @@ class PayrollRunService:
             )
         await session.flush()
         if prior:
-            self._stage(session, context, prior, EventType.PAYROLL_RUN_SUPERSEDED, "payroll.run.superseded")
-        self._stage(session, context, value, EventType.PAYROLL_RUN_ASSEMBLED, "payroll.run.assembled")
+            self._stage(
+                session,
+                context,
+                prior,
+                EventType.PAYROLL_RUN_SUPERSEDED,
+                "payroll.run.superseded",
+            )
+        self._stage(
+            session,
+            context,
+            value,
+            EventType.PAYROLL_RUN_ASSEMBLED,
+            "payroll.run.assembled",
+        )
         await session.commit()
         return value
 
-    async def initiate_review(self, session: AsyncSession, *, context: AuthorizationContext, run_id: UUID, reason_code: str, safe_note: str | None = None) -> PayrollRunReviewRecord:
+    async def initiate_review(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        run_id: UUID,
+        reason_code: str,
+        safe_note: str | None = None,
+    ) -> PayrollRunReviewRecord:
         self._require(context, PayrollPermission.RUN_REVIEW)
         value = await self._locked_run(session, context, run_id)
-        if value.lifecycle not in {PayrollRunLifecycle.ASSEMBLED.value, PayrollRunLifecycle.REJECTED.value}:
+        if value.lifecycle not in {
+            PayrollRunLifecycle.ASSEMBLED.value,
+            PayrollRunLifecycle.REJECTED.value,
+        }:
             raise PayrollConflictError("Payroll run cannot enter review")
         value.lifecycle = PayrollRunLifecycle.UNDER_REVIEW.value
         value.review_state = PayrollRunReviewState.UNDER_REVIEW.value
-        evidence = await self._review(session, context, value, PayrollRunReviewDecision.INITIATED, reason_code, safe_note)
-        self._stage(session, context, value, EventType.PAYROLL_RUN_REVIEW_INITIATED, "payroll.run.review_initiated")
+        evidence = await self._review(
+            session,
+            context,
+            value,
+            PayrollRunReviewDecision.INITIATED,
+            reason_code,
+            safe_note,
+        )
+        self._stage(
+            session,
+            context,
+            value,
+            EventType.PAYROLL_RUN_REVIEW_INITIATED,
+            "payroll.run.review_initiated",
+        )
         await session.commit()
         return evidence
 
-    async def decide_review(self, session: AsyncSession, *, context: AuthorizationContext, run_id: UUID, decision: PayrollRunReviewDecision, reason_code: str, safe_note: str | None = None) -> PayrollRunReviewRecord:
+    async def decide_review(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        run_id: UUID,
+        decision: PayrollRunReviewDecision,
+        reason_code: str,
+        safe_note: str | None = None,
+    ) -> PayrollRunReviewRecord:
         self._require(context, PayrollPermission.RUN_REVIEW)
-        if decision not in {PayrollRunReviewDecision.ACCEPTED, PayrollRunReviewDecision.REJECTED}:
+        if decision not in {
+            PayrollRunReviewDecision.ACCEPTED,
+            PayrollRunReviewDecision.REJECTED,
+        }:
             raise PayrollConflictError("Payroll run review decision is invalid")
         value = await self._locked_run(session, context, run_id)
         if value.lifecycle != PayrollRunLifecycle.UNDER_REVIEW.value:
             raise PayrollConflictError("Payroll run is not under review")
         accepted = decision is PayrollRunReviewDecision.ACCEPTED
-        value.lifecycle = PayrollRunLifecycle.REVIEWED.value if accepted else PayrollRunLifecycle.REJECTED.value
-        value.review_state = PayrollRunReviewState.ACCEPTED.value if accepted else PayrollRunReviewState.REJECTED.value
-        evidence = await self._review(session, context, value, decision, reason_code, safe_note)
-        event = EventType.PAYROLL_RUN_REVIEW_ACCEPTED if accepted else EventType.PAYROLL_RUN_REVIEW_REJECTED
-        self._stage(session, context, value, event, f"payroll.run.review_{decision.value}")
+        value.lifecycle = (
+            PayrollRunLifecycle.REVIEWED.value
+            if accepted
+            else PayrollRunLifecycle.REJECTED.value
+        )
+        value.review_state = (
+            PayrollRunReviewState.ACCEPTED.value
+            if accepted
+            else PayrollRunReviewState.REJECTED.value
+        )
+        evidence = await self._review(
+            session, context, value, decision, reason_code, safe_note
+        )
+        event = (
+            EventType.PAYROLL_RUN_REVIEW_ACCEPTED
+            if accepted
+            else EventType.PAYROLL_RUN_REVIEW_REJECTED
+        )
+        self._stage(
+            session, context, value, event, f"payroll.run.review_{decision.value}"
+        )
         await session.commit()
         return evidence
 
-    async def approve(self, session: AsyncSession, *, context: AuthorizationContext, run_id: UUID, reason_code: str, safe_note: str | None = None) -> PayrollRunReviewRecord:
+    async def approve(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        run_id: UUID,
+        reason_code: str,
+        safe_note: str | None = None,
+    ) -> PayrollRunReviewRecord:
         self._require(context, PayrollPermission.RUN_APPROVE)
         value = await self._locked_run(session, context, run_id)
         if value.lifecycle != PayrollRunLifecycle.REVIEWED.value:
             raise PayrollConflictError("reviewed Payroll run is required for approval")
         value.lifecycle = PayrollRunLifecycle.APPROVED.value
-        evidence = await self._review(session, context, value, PayrollRunReviewDecision.APPROVED, reason_code, safe_note)
-        self._stage(session, context, value, EventType.PAYROLL_RUN_APPROVED, "payroll.run.approved")
+        evidence = await self._review(
+            session,
+            context,
+            value,
+            PayrollRunReviewDecision.APPROVED,
+            reason_code,
+            safe_note,
+        )
+        self._stage(
+            session,
+            context,
+            value,
+            EventType.PAYROLL_RUN_APPROVED,
+            "payroll.run.approved",
+        )
         await session.commit()
         return evidence
 
-    async def run(self, session: AsyncSession, *, context: AuthorizationContext, run_id: UUID) -> PayrollRunRecord:
+    async def run(
+        self, session: AsyncSession, *, context: AuthorizationContext, run_id: UUID
+    ) -> PayrollRunRecord:
         self._require(context, PayrollPermission.RUN_READ)
-        value = await session.scalar(select(PayrollRunRecord).where(PayrollRunRecord.company_id == context.company.id, PayrollRunRecord.id == run_id))
+        value = await session.scalar(
+            select(PayrollRunRecord).where(
+                PayrollRunRecord.company_id == context.company.id,
+                PayrollRunRecord.id == run_id,
+            )
+        )
         if value is None:
             raise PayrollConflictError("Payroll run was not found")
         await self._verify_persisted(session, value)
         return value
 
-    async def approved_handoff(self, session: AsyncSession, *, context: AuthorizationContext, run_id: UUID, purpose: str) -> ApprovedPayrollRunHandoff:
+    async def approved_handoff(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        run_id: UUID,
+        purpose: str,
+    ) -> ApprovedPayrollRunHandoff:
         self._require(context, PayrollPermission.RUN_READ)
         value = await self.run(session, context=context, run_id=run_id)
-        if value.lifecycle != PayrollRunLifecycle.APPROVED.value or purpose not in {"future_payment_release", "future_accounting_posting"}:
+        if value.lifecycle != PayrollRunLifecycle.APPROVED.value or purpose not in {
+            "future_payment_release",
+            "future_accounting_posting",
+        }:
             raise PayrollConflictError("approved Payroll run handoff is unavailable")
-        review_digest = await session.scalar(select(PayrollRunReviewRecord.review_digest).where(PayrollRunReviewRecord.run_id == run_id, PayrollRunReviewRecord.decision == "approved"))
+        review_digest = await session.scalar(
+            select(PayrollRunReviewRecord.review_digest).where(
+                PayrollRunReviewRecord.run_id == run_id,
+                PayrollRunReviewRecord.decision == "approved",
+            )
+        )
         if review_digest is None:
             raise PayrollConflictError("Payroll run approval evidence is unavailable")
-        return ApprovedPayrollRunHandoff(PAYROLL_RUN_HANDOFF_VERSION, value.company_id, value.pay_period_id, value.id, value.run_identity, value.run_digest, value.currency, value.aggregate_gross, value.aggregate_employee_taxes, value.aggregate_employee_deductions, value.aggregate_net_pay, value.aggregate_employer_contributions, review_digest, purpose)
+        return ApprovedPayrollRunHandoff(
+            PAYROLL_RUN_HANDOFF_VERSION,
+            value.company_id,
+            value.pay_period_id,
+            value.id,
+            value.run_identity,
+            value.run_digest,
+            value.currency,
+            value.aggregate_gross,
+            value.aggregate_employee_taxes,
+            value.aggregate_employee_deductions,
+            value.aggregate_net_pay,
+            value.aggregate_employer_contributions,
+            review_digest,
+            purpose,
+        )
 
-    async def _resolve_member(self, session: AsyncSession, *, company_id: UUID, pay_period_id: UUID, currency: str, value: PayrollRunMemberInput) -> PayrollRunMember:
+    async def _resolve_member(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        pay_period_id: UUID,
+        currency: str,
+        value: PayrollRunMemberInput,
+    ) -> PayrollRunMember:
         zero = Decimal("0.00")
         fields: tuple[
             UUID | None,
@@ -462,27 +621,114 @@ class PayrollRunService:
             Decimal,
         ]
         if value.disposition is PayrollRunDisposition.READY:
-            if value.tax_result_id is None or value.blocked_admission or value.disposition_authority_digest:
+            if (
+                value.tax_result_id is None
+                or value.blocked_admission
+                or value.disposition_authority_digest
+            ):
                 raise PayrollConflictError("ready Payroll membership shape is invalid")
-            tax = await session.scalar(select(PayrollTaxDeductionResultRecord).where(PayrollTaxDeductionResultRecord.company_id == company_id, PayrollTaxDeductionResultRecord.employee_id == value.employee_id, PayrollTaxDeductionResultRecord.pay_period_id == pay_period_id, PayrollTaxDeductionResultRecord.id == value.tax_result_id, PayrollTaxDeductionResultRecord.lifecycle == "approved", PayrollTaxDeductionResultRecord.currency == currency))
+            tax = await session.scalar(
+                select(PayrollTaxDeductionResultRecord).where(
+                    PayrollTaxDeductionResultRecord.company_id == company_id,
+                    PayrollTaxDeductionResultRecord.employee_id == value.employee_id,
+                    PayrollTaxDeductionResultRecord.pay_period_id == pay_period_id,
+                    PayrollTaxDeductionResultRecord.id == value.tax_result_id,
+                    PayrollTaxDeductionResultRecord.lifecycle == "approved",
+                    PayrollTaxDeductionResultRecord.currency == currency,
+                )
+            )
             if tax is None:
-                raise PayrollConflictError("approved Employee tax result is unavailable")
-            gross = await session.scalar(select(PayrollGrossCalculationResultRecord).where(PayrollGrossCalculationResultRecord.company_id == company_id, PayrollGrossCalculationResultRecord.employee_id == value.employee_id, PayrollGrossCalculationResultRecord.pay_period_id == pay_period_id, PayrollGrossCalculationResultRecord.id == tax.gross_result_id, PayrollGrossCalculationResultRecord.lifecycle == "approved", PayrollGrossCalculationResultRecord.calculation_digest == tax.gross_calculation_digest, PayrollGrossCalculationResultRecord.currency == currency))
+                raise PayrollConflictError(
+                    "approved Employee tax result is unavailable"
+                )
+            gross = await session.scalar(
+                select(PayrollGrossCalculationResultRecord).where(
+                    PayrollGrossCalculationResultRecord.company_id == company_id,
+                    PayrollGrossCalculationResultRecord.employee_id
+                    == value.employee_id,
+                    PayrollGrossCalculationResultRecord.pay_period_id == pay_period_id,
+                    PayrollGrossCalculationResultRecord.id == tax.gross_result_id,
+                    PayrollGrossCalculationResultRecord.lifecycle == "approved",
+                    PayrollGrossCalculationResultRecord.calculation_digest
+                    == tax.gross_calculation_digest,
+                    PayrollGrossCalculationResultRecord.currency == currency,
+                )
+            )
             if gross is None:
                 raise PayrollConflictError("Employee gross/net-pay lineage is invalid")
-            fields = (gross.id, gross.calculation_digest, tax.id, tax.calculation_digest, None, None, tax.gross_pay, tax.employee_tax_total, tax.employee_deduction_total, tax.net_pay_candidate, tax.employer_contribution_total)
+            fields = (
+                gross.id,
+                gross.calculation_digest,
+                tax.id,
+                tax.calculation_digest,
+                None,
+                None,
+                tax.gross_pay,
+                tax.employee_tax_total,
+                tax.employee_deduction_total,
+                tax.net_pay_candidate,
+                tax.employer_contribution_total,
+            )
         elif value.disposition is PayrollRunDisposition.BLOCKED:
             admission = value.blocked_admission
-            if admission is None or value.tax_result_id or value.disposition_authority_digest:
-                raise PayrollConflictError("blocked Payroll membership shape is invalid")
+            if (
+                admission is None
+                or value.tax_result_id
+                or value.disposition_authority_digest
+            ):
+                raise PayrollConflictError(
+                    "blocked Payroll membership shape is invalid"
+                )
             admission.verify()
-            if admission.company_id != company_id or admission.employee_id != value.employee_id or admission.state not in {TaxDeductionAdmissionState.MISSING, TaxDeductionAdmissionState.EXPIRED, TaxDeductionAdmissionState.UNAPPROVED, TaxDeductionAdmissionState.CONFLICTING}:
-                raise PayrollConflictError("blocked Payroll membership evidence is invalid")
-            fields = (None, admission.gross_calculation_digest, None, None, admission.admission_digest, None, zero, zero, zero, zero, zero)
+            if (
+                admission.company_id != company_id
+                or admission.employee_id != value.employee_id
+                or admission.state
+                not in {
+                    TaxDeductionAdmissionState.MISSING,
+                    TaxDeductionAdmissionState.EXPIRED,
+                    TaxDeductionAdmissionState.UNAPPROVED,
+                    TaxDeductionAdmissionState.CONFLICTING,
+                }
+            ):
+                raise PayrollConflictError(
+                    "blocked Payroll membership evidence is invalid"
+                )
+            fields = (
+                None,
+                admission.gross_calculation_digest,
+                None,
+                None,
+                admission.admission_digest,
+                None,
+                zero,
+                zero,
+                zero,
+                zero,
+                zero,
+            )
         else:
-            if value.tax_result_id or value.blocked_admission or not value.disposition_authority_digest:
-                raise PayrollConflictError("excluded Payroll membership requires authority evidence")
-            fields = (None, None, None, None, None, value.disposition_authority_digest, zero, zero, zero, zero, zero)
+            if (
+                value.tax_result_id
+                or value.blocked_admission
+                or not value.disposition_authority_digest
+            ):
+                raise PayrollConflictError(
+                    "excluded Payroll membership requires authority evidence"
+                )
+            fields = (
+                None,
+                None,
+                None,
+                None,
+                None,
+                value.disposition_authority_digest,
+                zero,
+                zero,
+                zero,
+                zero,
+                zero,
+            )
         provisional = PayrollRunMember(
             employee_id=value.employee_id,
             disposition=value.disposition,
@@ -498,18 +744,64 @@ class PayrollRunService:
             net_pay=fields[9],
             employer_contributions=fields[10],
             membership_digest="",
-            blocker_codes=tuple(admission.blockers) if value.disposition is PayrollRunDisposition.BLOCKED and admission else (),
+            blocker_codes=tuple(admission.blockers)
+            if value.disposition is PayrollRunDisposition.BLOCKED and admission
+            else (),
         )
-        return replace(provisional, membership_digest=canonical_digest(provisional.canonical_content()))
+        return replace(
+            provisional,
+            membership_digest=canonical_digest(provisional.canonical_content()),
+        )
 
-    async def _review(self, session: AsyncSession, context: AuthorizationContext, value: PayrollRunRecord, decision: PayrollRunReviewDecision, reason_code: str, safe_note: str | None) -> PayrollRunReviewRecord:
+    async def _review(
+        self,
+        session: AsyncSession,
+        context: AuthorizationContext,
+        value: PayrollRunRecord,
+        decision: PayrollRunReviewDecision,
+        reason_code: str,
+        safe_note: str | None,
+    ) -> PayrollRunReviewRecord:
         reason, note = reason_code.strip(), safe_note.strip() if safe_note else None
-        if not reason or len(reason) > 80 or (note and (len(note) > 500 or "$" in note)):
+        if (
+            not reason
+            or len(reason) > 80
+            or (note and (len(note) > 500 or "$" in note))
+        ):
             raise PayrollConflictError("Payroll run review evidence is unsafe")
-        sequence = (await session.scalar(select(func.count(PayrollRunReviewRecord.id)).where(PayrollRunReviewRecord.run_id == value.id)) or 0) + 1
+        sequence = (
+            await session.scalar(
+                select(func.count(PayrollRunReviewRecord.id)).where(
+                    PayrollRunReviewRecord.run_id == value.id
+                )
+            )
+            or 0
+        ) + 1
         at = datetime.now(timezone.utc)
-        digest = canonical_digest({"run_id": str(value.id), "run_digest": value.run_digest, "sequence": sequence, "actor": str(context.user.id), "decision": decision.value, "reason_code": reason, "safe_note": note, "reviewed_at": at.isoformat()})
-        record = PayrollRunReviewRecord(company_id=value.company_id, run_id=value.id, review_sequence=sequence, actor_user_id=context.user.id, decision=decision.value, reason_code=reason, safe_note=note, run_digest=value.run_digest, review_digest=digest, reviewed_at=at)
+        digest = canonical_digest(
+            {
+                "run_id": str(value.id),
+                "run_digest": value.run_digest,
+                "sequence": sequence,
+                "actor": str(context.user.id),
+                "decision": decision.value,
+                "reason_code": reason,
+                "safe_note": note,
+                "reviewed_at": at.isoformat(),
+            }
+        )
+        record = PayrollRunReviewRecord(
+            company_id=value.company_id,
+            run_id=value.id,
+            review_sequence=sequence,
+            actor_user_id=context.user.id,
+            decision=decision.value,
+            reason_code=reason,
+            safe_note=note,
+            run_digest=value.run_digest,
+            review_digest=digest,
+            reviewed_at=at,
+        )
         session.add(record)
         await session.flush()
         return record
@@ -532,7 +824,9 @@ class PayrollRunService:
             gross = taxes = deductions = net = employer = zero
             if record.disposition == PayrollRunDisposition.READY.value:
                 if record.tax_result_id is None:
-                    raise PayrollConflictError("persisted ready Payroll member is invalid")
+                    raise PayrollConflictError(
+                        "persisted ready Payroll member is invalid"
+                    )
                 tax = await session.scalar(
                     select(PayrollTaxDeductionResultRecord).where(
                         PayrollTaxDeductionResultRecord.company_id == value.company_id,
@@ -542,7 +836,9 @@ class PayrollRunService:
                     )
                 )
                 if tax is None:
-                    raise PayrollConflictError("persisted Payroll member evidence changed")
+                    raise PayrollConflictError(
+                        "persisted Payroll member evidence changed"
+                    )
                 gross, taxes, deductions, net, employer = (
                     tax.gross_pay,
                     tax.employee_tax_total,
@@ -599,8 +895,17 @@ class PayrollRunService:
         ).verify()
 
     @staticmethod
-    async def _locked_run(session: AsyncSession, context: AuthorizationContext, run_id: UUID) -> PayrollRunRecord:
-        value = await session.scalar(select(PayrollRunRecord).where(PayrollRunRecord.company_id == context.company.id, PayrollRunRecord.id == run_id).with_for_update())
+    async def _locked_run(
+        session: AsyncSession, context: AuthorizationContext, run_id: UUID
+    ) -> PayrollRunRecord:
+        value = await session.scalar(
+            select(PayrollRunRecord)
+            .where(
+                PayrollRunRecord.company_id == context.company.id,
+                PayrollRunRecord.id == run_id,
+            )
+            .with_for_update()
+        )
         if value is None:
             raise PayrollConflictError("Payroll run was not found")
         return value
@@ -610,10 +915,42 @@ class PayrollRunService:
         if not context.has_permission(permission):
             raise PayrollAuthorizationError("Payroll run permission denied")
 
-    def _stage(self, session: AsyncSession, context: AuthorizationContext, value: PayrollRunRecord, event_type: EventType, action: str) -> None:
-        details: dict[str, object] = {"run_identity": value.run_identity, "run_digest": value.run_digest, "pay_period_id": str(value.pay_period_id), "lifecycle": value.lifecycle}
-        BusinessEventService.stage(session, BusinessEventCreate(event_type=event_type, entity_type="payroll_run", entity_id=value.id, company_id=value.company_id, user_id=context.user.id, payload=details))
-        self._audit.stage(session, AuditEntry(action=action, resource_type="payroll_run", actor_user_id=context.user.id, company_id=value.company_id, resource_id=value.id, details=details))
+    def _stage(
+        self,
+        session: AsyncSession,
+        context: AuthorizationContext,
+        value: PayrollRunRecord,
+        event_type: EventType,
+        action: str,
+    ) -> None:
+        details: dict[str, object] = {
+            "run_identity": value.run_identity,
+            "run_digest": value.run_digest,
+            "pay_period_id": str(value.pay_period_id),
+            "lifecycle": value.lifecycle,
+        }
+        BusinessEventService.stage(
+            session,
+            BusinessEventCreate(
+                event_type=event_type,
+                entity_type="payroll_run",
+                entity_id=value.id,
+                company_id=value.company_id,
+                user_id=context.user.id,
+                payload=details,
+            ),
+        )
+        self._audit.stage(
+            session,
+            AuditEntry(
+                action=action,
+                resource_type="payroll_run",
+                actor_user_id=context.user.id,
+                company_id=value.company_id,
+                resource_id=value.id,
+                details=details,
+            ),
+        )
 
 
 payroll_run_service = PayrollRunService()

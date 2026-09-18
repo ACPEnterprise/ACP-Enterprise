@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.dry_run_readiness import (
     APPLICATION_ENVIRONMENT_EXCEPTIONS,
     DATA_MAPPING_EXCEPTIONS,

@@ -371,10 +371,14 @@ class BeaconWorkflowService:
             raise BeaconWorkflowConflictError(
                 "Acknowledgement does not accept ownership or version fields."
             )
-        if command.action in (
-            BeaconWorkflowAction.CLAIM,
-            BeaconWorkflowAction.RELEASE,
-        ) and command.owner_user_id is not None:
+        if (
+            command.action
+            in (
+                BeaconWorkflowAction.CLAIM,
+                BeaconWorkflowAction.RELEASE,
+            )
+            and command.owner_user_id is not None
+        ):
             raise BeaconWorkflowConflictError(
                 "Claim and release do not accept an explicit owner."
             )

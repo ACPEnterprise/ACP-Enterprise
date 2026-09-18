@@ -27,14 +27,18 @@ class Session:
 
 @pytest.mark.asyncio
 async def test_fixture_identity_binds_to_onboarding_and_is_idempotency_keyed():
-    onboarding = SimpleNamespace(initiate=AsyncMock(return_value=SimpleNamespace(id=uuid4())))
+    onboarding = SimpleNamespace(
+        initiate=AsyncMock(return_value=SimpleNamespace(id=uuid4()))
+    )
     service = PreviewIdentityFixtureService(
         configuration=SimpleNamespace(environment="preview"), onboarding=onboarding
     )
     command = PreviewIdentityFixtureCommand(
         FIXTURE_KEY, True, uuid4(), "tech@fixture.invalid", (uuid4(),)
     )
-    result = await service.provision_identity(Session(), context=object(), command=command)
+    result = await service.provision_identity(
+        Session(), context=object(), command=command
+    )
     assert result.id
     submitted = onboarding.initiate.await_args.kwargs["command"]
     assert submitted.request_key == FIXTURE_KEY

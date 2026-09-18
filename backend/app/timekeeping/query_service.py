@@ -505,7 +505,10 @@ class WorkdayTimeQueryService:
                     max(
                         0,
                         int(
-                            (min(interval.stop_at, stop) - max(interval.start_at, start)).total_seconds()
+                            (
+                                min(interval.stop_at, stop)
+                                - max(interval.start_at, start)
+                            ).total_seconds()
                         ),
                     )
                     for start, stop in paid
@@ -550,13 +553,17 @@ class WorkdayTimeQueryService:
                 ),
             )
         )
-        accepted_items = tuple(item for item in ordered if item.evidence_state == "ACCEPTED")
+        accepted_items = tuple(
+            item for item in ordered if item.evidence_state == "ACCEPTED"
+        )
         return JobLaborActualsQueue(
             contract_version="WORKFORCE.JOB.LABOR.ACTUALS.v1",
             pay_period=operations.pay_period,
             accepted_interval_count=len(accepted_items),
             review_interval_count=len(ordered) - len(accepted_items),
-            total_accepted_seconds=sum(item.interval.duration_seconds for item in accepted_items),
+            total_accepted_seconds=sum(
+                item.interval.duration_seconds for item in accepted_items
+            ),
             items=ordered,
             limitations=(
                 "Job worked time is actual attribution evidence, not payable-time authority.",

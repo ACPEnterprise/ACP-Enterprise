@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 
 import pytest
-
 from app.operational_migration.hcp_current_graph_completeness import (
     _digest,
     verify_complete_graph,

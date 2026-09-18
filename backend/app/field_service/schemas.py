@@ -148,7 +148,9 @@ class FieldArtifactIntentInput(FieldSchema):
     media_type: Literal["image/jpeg", "image/png", "image/heic", "application/pdf"]
     expected_size: int = Field(gt=0, le=25_000_000)
     expected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
+    )
     expected_assignment_version: int = Field(ge=1)
 
 
@@ -164,7 +166,9 @@ class FieldArtifactFinalizeInput(FieldSchema):
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     size: int = Field(gt=0, le=25_000_000)
     media_type: Literal["image/jpeg", "image/png", "image/heic", "application/pdf"]
-    opaque_storage_reference: str = Field(min_length=8, max_length=160, pattern=r"^[A-Za-z0-9._:-]+$")
+    opaque_storage_reference: str = Field(
+        min_length=8, max_length=160, pattern=r"^[A-Za-z0-9._:-]+$"
+    )
 
 
 class FieldArtifactOut(FieldSchema):

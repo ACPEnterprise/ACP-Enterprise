@@ -2,11 +2,10 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-
 from app.engineering_execution.controlled.errors import ControlledExecutionError
 from app.engineering_execution.controlled.router import adopt_expired_result, service
 from app.engineering_execution.controlled.schemas import AdoptControlledResultRequest
+from fastapi import HTTPException
 
 
 @pytest.mark.asyncio
