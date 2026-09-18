@@ -147,11 +147,47 @@ class FactoryLiveLaneTarget(StrictSchema):
     lane_code: Literal["OM1E", "OM2E", "LaptopE"]
     worker_id: UUID
     controlling_enterprise: Literal["OM1E", "OM2E", "LaptopE"]
+    lifecycle_state: Literal[
+        "ACTIVE",
+        "ASSIGNED",
+        "ELIGIBLE_IDLE",
+        "WAITING_INTEGRATION",
+        "HUMAN_GATE",
+        "PROVIDER_GATE",
+        "DEPENDENCY_BLOCKED",
+        "RATE_LIMITED",
+        "UNSAFE_STOP",
+    ]
+    self_refill_health: Literal[
+        "SELF_REFILL_HEALTHY",
+        "ELIGIBLE_IDLE",
+        "WAITING_INTEGRATION",
+        "HUMAN_GATE",
+        "PROVIDER_GATE",
+        "DEPENDENCY_BLOCKED",
+        "RATE_LIMITED",
+        "UNSAFE_STOP",
+        "UNKNOWN",
+    ]
+    milestone_code: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    current_assignment: Optional[str] = Field(
+        default=None, min_length=1, max_length=200
+    )
+    next_queued_item: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    queue_depth: int = Field(default=0, ge=0, le=10000)
+    evidence: list[str] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
     def require_canonical_controller_mapping(self) -> FactoryLiveLaneTarget:
         if self.lane_code != self.controlling_enterprise:
             raise ValueError("lane must map to its canonical controlling Enterprise")
+        if (
+            self.lifecycle_state in {"ACTIVE", "ASSIGNED", "WAITING_INTEGRATION"}
+            and self.current_assignment is None
+        ):
+            raise ValueError("active controller state requires a current assignment")
+        if self.lifecycle_state == "ELIGIBLE_IDLE" and self.current_assignment is not None:
+            raise ValueError("eligible idle controller cannot retain an assignment")
         return self
 
 

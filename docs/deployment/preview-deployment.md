@@ -207,7 +207,13 @@ Factory Control live measurement uses one narrowly scoped authenticated controll
 caller. Provision its dedicated connectivity-only worker identity with the existing
 `worker-provision` profile, grant only `PLATFORM_FACTORY_CONTROL_INGEST` and
 `PLATFORM_FACTORY_CONTROL_SNAPSHOT` through the governed activation command, then
-configure exact OM1E/OM2E/LaptopE worker IDs in `FACTORY_CONTROL_LANE_TARGETS`.
+configure exact OM1E/OM2E/LaptopE worker IDs and controller-authoritative state
+in `FACTORY_CONTROL_LANE_TARGETS`. An execution node being `available` is
+capacity evidence, not proof that its Enterprise controller is idle. Each live
+target therefore carries its lifecycle state, current assignment where
+applicable, self-refill state, queue depth, and at least one evidence reference.
+Only an explicit `ELIGIBLE_IDLE` controller observation starts the ten-minute
+refill SLA.
 Start it without recreating Preview data services:
 
 ```bash

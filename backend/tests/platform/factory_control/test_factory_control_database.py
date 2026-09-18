@@ -611,6 +611,12 @@ async def test_live_sync_projects_canonical_controller_lane_heartbeat(database) 
         lane_code="OM1E",
         worker_id=fixture.worker_id,
         controlling_enterprise="OM1E",
+        lifecycle_state="ACTIVE",
+        self_refill_health="SELF_REFILL_HEALTHY",
+        milestone_code="DEVELOPMENT.FACTORY",
+        current_assignment="Qualify current release",
+        queue_depth=1,
+        evidence=["protected release assignment"],
     )
     async with database() as session, session.begin():
         first = await factory_control_service.sync_authoritative_lanes(
@@ -636,4 +642,7 @@ async def test_live_sync_projects_canonical_controller_lane_heartbeat(database) 
         )
     assert lane is not None
     assert lane.controlling_enterprise == "OM1E"
+    assert lane.lifecycle_state == "ACTIVE"
+    assert lane.current_assignment == "Qualify current release"
+    assert lane.queue_depth == 1
     assert lane.last_event_at == observed_at
