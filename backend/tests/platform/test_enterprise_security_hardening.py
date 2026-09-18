@@ -25,6 +25,8 @@ from app.platform.security.decisions import (
 )
 from app.platform.security.metrics import SecurityMetrics, security_metrics
 from app.platform.security.middleware import (
+    CORS_ALLOWED_HEADERS,
+    CORS_ALLOWED_METHODS,
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
 )
@@ -42,6 +44,29 @@ def build_settings(**overrides: object) -> Settings:
     }
     values.update(overrides)
     return Settings.model_validate(values)
+
+
+def test_credentialed_cors_surface_is_explicitly_bounded() -> None:
+    assert "*" not in CORS_ALLOWED_METHODS
+    assert "*" not in CORS_ALLOWED_HEADERS
+    assert set(CORS_ALLOWED_METHODS) == {
+        "DELETE",
+        "GET",
+        "OPTIONS",
+        "PATCH",
+        "POST",
+        "PUT",
+    }
+    assert {
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "Last-Event-ID",
+        "X-ACP-Mobile-Version",
+        "X-Branch-ID",
+        "X-Company-ID",
+        "X-Request-ID",
+    } <= set(CORS_ALLOWED_HEADERS)
 
 
 @pytest.mark.asyncio
