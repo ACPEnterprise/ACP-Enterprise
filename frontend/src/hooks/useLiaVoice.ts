@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyBrowserDeliveryStyle,
   liaDeliveryStyle,
+  normalizeVoiceInventory,
   selectPreferredVoice,
   type LiaDeliveryStyle,
 } from "../components/lia/voiceDelivery";
@@ -59,6 +60,7 @@ declare global {
 
 const DEFAULT_SILENCE_MS = 900;
 const DEFAULT_INACTIVITY_MS = 90_000;
+const VOICE_PREFERENCE_KEY = "twelve-hats.lia.device-voice.v1";
 
 const recognitionConstructor = () =>
   window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -98,6 +100,11 @@ export function useLiaVoice({
   const [error, setError] = useState<string>();
   const [lastSpokenAnswer, setLastSpokenAnswer] = useState("");
   const [voiceInventory, setVoiceInventory] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceId, setSelectedVoiceIdState] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : (window.localStorage.getItem(VOICE_PREFERENCE_KEY) ?? ""),
+  );
   const lastDeliveryStyle = useRef<LiaDeliveryStyle>(liaDeliveryStyle("NORMAL"));
 
   const supported =
@@ -200,7 +207,15 @@ export function useLiaVoice({
       const voices = voiceInventory.length
         ? voiceInventory
         : (window.speechSynthesis.getVoices?.() ?? []);
-      applyBrowserDeliveryStyle(utterance, style, selectPreferredVoice(voices));
+      applyBrowserDeliveryStyle(
+        utterance,
+        style,
+        selectPreferredVoice(voices, {
+          reviewedVoiceIds: selectedVoiceId ? [selectedVoiceId] : [],
+          language: style.language,
+          requireLocal: true,
+        }),
+      );
       utterance.onstart = () => setState("SPEAKING");
       utterance.onerror = () => {
         setError("The spoken response could not be played. The full answer remains visible.");
@@ -224,8 +239,14 @@ export function useLiaVoice({
       lastDeliveryStyle.current = style;
       window.speechSynthesis.speak(utterance);
     },
-    [inactivityMs, startListening, supported, voiceInventory],
+    [inactivityMs, selectedVoiceId, startListening, supported, voiceInventory],
   );
+
+  const setSelectedVoiceId = useCallback((voiceId: string) => {
+    setSelectedVoiceIdState(voiceId);
+    if (voiceId) window.localStorage.setItem(VOICE_PREFERENCE_KEY, voiceId);
+    else window.localStorage.removeItem(VOICE_PREFERENCE_KEY);
+  }, []);
 
   const beginConversation = useCallback(() => {
     setConversationMode(true);
@@ -274,6 +295,11 @@ export function useLiaVoice({
     conversationMode,
     interimTranscript,
     hasReplay: Boolean(lastSpokenAnswer),
+    availableVoices: normalizeVoiceInventory(voiceInventory).filter(
+      (item) => item.isLocal && item.language.toLocaleLowerCase().startsWith("en"),
+    ),
+    selectedVoiceId,
+    setSelectedVoiceId,
     startListening,
     stopListening,
     stopSpeaking,
