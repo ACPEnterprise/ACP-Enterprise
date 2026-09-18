@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 from app.platform.factory_control.router import require_platform_owner_admin, router
 from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
+from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import LaunchPlatformPermission
 from fastapi import HTTPException
 
@@ -39,3 +40,14 @@ def test_every_factory_control_api_uses_platform_owner_admin_dependency():
             dependency.call is require_platform_owner_admin
             for dependency in route.dependant.dependencies
         )
+
+
+def test_factory_control_permission_has_platform_catalog_semantics():
+    definition = next(
+        item
+        for item in permission_catalog.definitions
+        if item.code == LaunchPlatformPermission.FACTORY_CONTROL_READ
+    )
+    assert definition.resource == "factory_control"
+    assert definition.action == "read"
+    assert definition.scope.value == "platform"
