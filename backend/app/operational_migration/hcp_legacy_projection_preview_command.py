@@ -17,6 +17,7 @@ import stat
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -35,6 +36,7 @@ from app.operational_migration.hcp_migration2_plan import (
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_successor_reconciliation import (
     LEGACY_SOURCE_SYSTEM,
+    IdentityBinding,
 )
 from app.operational_migration.hcp_successor_reconciliation_command import (
     SuccessorReadAuthority,
@@ -94,8 +96,8 @@ def _address_fingerprint(value: object) -> str | None:
 async def customer_correlation_evidence(
     session: AsyncSession,
     *,
-    plan: object,
-    bindings: tuple[object, ...],
+    plan: Any,
+    bindings: tuple[IdentityBinding, ...],
 ) -> tuple[
     tuple[ProjectionCorrelationEvidence, ...],
     tuple[ProjectionCorrelationEvidence, ...],
