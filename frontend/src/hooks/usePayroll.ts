@@ -9,6 +9,7 @@ import {
   getPayrollEmployeeReadiness, getPayrollEmployeeSetup, draftPayrollCompensation,
   approvePayrollCompensation, approvePayrollInput,
   type CompensationDraft,
+  calculatePayrollRun, closePayrollRun,
 } from "../api/payroll";
 
 export const usePayrollOperationsSummary = (enabled = true) =>
@@ -28,6 +29,15 @@ export const usePayrollPeriodOperations = (payPeriodId: string | null, enabled =
   });
 export const usePayrollOperatingRegisters = (enabled = true) =>
   useQuery({ queryKey: ["payroll", "operating-registers"], queryFn: listPayrollOperatingRegisters, enabled });
+
+export function usePayrollRunActions() {
+  const client = useQueryClient();
+  const refresh = () => { void client.invalidateQueries({ queryKey: ["payroll"] }); };
+  return {
+    calculate: useMutation({ mutationFn: ({ runId, idempotencyKey }: { runId: string; idempotencyKey: string }) => calculatePayrollRun(runId, idempotencyKey), onSuccess: refresh }),
+    close: useMutation({ mutationFn: ({ runId, reason, idempotencyKey }: { runId: string; reason: string; idempotencyKey: string }) => closePayrollRun(runId, reason, idempotencyKey), onSuccess: refresh }),
+  };
+}
 
 export function usePayrollEmployeeSetup(employeeId: string | null, payPeriodId: string | null, enabled = true) {
   const client = useQueryClient();
