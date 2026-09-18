@@ -7,10 +7,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from pydantic import BaseModel
-
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
@@ -25,6 +21,9 @@ from app.platform.security.safe_output import (
     sanitize,
     validate_no_sensitive_fields,
 )
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 CANARIES = {
     "password": "CANARY-PASSWORD-PLAT007",
@@ -140,12 +139,15 @@ def test_logging_filter_redacts_secret_assignments_in_plain_messages() -> None:
     logger.warning(
         "provider failed token=PLAIN-TOKEN-CANARY "
         "api_key: 'PLAIN-API-CANARY' "
-        'client-secret="PLAIN-CLIENT-CANARY" status=retryable'
+        'client-secret="PLAIN-CLIENT-CANARY" '
+        "database_url=PLAIN-DATABASE-CANARY "
+        "cookie:PLAIN-COOKIE-CANARY "
+        "bank-account-number=PLAIN-BANK-CANARY status=retryable"
     )
 
     output = stream.getvalue()
     assert "status=retryable" in output
-    assert output.count(f"{REDACTED}:secret") == 3
+    assert output.count(f"{REDACTED}:secret") == 6
     assert "CANARY" not in output
 
 
