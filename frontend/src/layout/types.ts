@@ -20,6 +20,7 @@ export type NavigationItemId =
   | "lia"
   | "command-center"
   | "mission-control"
+  | "factory-control"
   | "customers"
   | "service-agreements"
   | "scheduling"
