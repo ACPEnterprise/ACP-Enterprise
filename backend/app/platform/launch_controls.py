@@ -67,6 +67,10 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
     }
 )
 
+PLATFORM_OWNER_ADMIN_PERMISSIONS = COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS | {
+    LaunchPlatformPermission.FACTORY_CONTROL_READ
+}
+
 OFFICE_MANAGER_OPERATIONAL_PERMISSIONS = frozenset(
     {
         AdministrationPermission.MEMBERSHIP_READ,
@@ -138,12 +142,12 @@ LAUNCH_ROLE_MATRIX = (
     LaunchRoleDefinition(
         code=LaunchRoleCode.OWNER,
         purpose="Own the Company and administer its access and operating evidence.",
-        permission_codes=COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
+        permission_codes=PLATFORM_OWNER_ADMIN_PERMISSIONS,
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.ADMIN,
         purpose="Administer Company access and inspect operating evidence.",
-        permission_codes=COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
+        permission_codes=PLATFORM_OWNER_ADMIN_PERMISSIONS,
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.MANAGER,
