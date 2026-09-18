@@ -7,6 +7,7 @@ from typing import Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.customer_migration.adapter_import_policy import (
@@ -116,6 +117,11 @@ class AdapterOutput(Protocol):
 
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _advisory_lock_key(*values: object) -> int:
+    digest = hashlib.sha256("\x1f".join(map(str, values)).encode()).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
 def _require_sha256(value: str, field: str) -> None:
@@ -725,6 +731,16 @@ class CustomerAdapterImportService:
             try:
                 reviewed.validate_integrity()
                 async with factory() as session, session.begin():
+                    await session.execute(
+                        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+                        {
+                            "lock_key": _advisory_lock_key(
+                                context.company.id,
+                                reviewed.source_system,
+                                aggregate.source_identity,
+                            )
+                        },
+                    )
                     existing = await self.repository.find_source_identity(
                         session,
                         context=context,
