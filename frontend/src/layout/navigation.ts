@@ -19,6 +19,7 @@ import {
   Megaphone,
   MonitorCog,
   ShieldCheck,
+  Factory,
   ScanSearch,
   Wrench,
   MapPinned,
@@ -272,6 +273,14 @@ export const navigationCatalog = [
     icon: ShieldCheck,
     availability: "available",
     requiredPermission: "COMPANY_ROLE_READ",
+  },
+  {
+    id: "factory-control",
+    label: "Factory Control",
+    path: "/admin/factory-control",
+    icon: Factory,
+    availability: "available",
+    requiredPermission: "COMPANY_ADMINISTER",
   },
   {
     id: "settings",
