@@ -1,0 +1,58 @@
+{
+  "contractVersion": "1",
+  "product": "ACP Employee",
+  "version": "0.2.0",
+  "build": "2",
+  "bundleIdentifier": "com.acpenterprise.employee",
+  "environment": "preview",
+  "apiBaseUrl": "https://preview.allcountyhomeservices.com",
+  "testerSelection": {
+    "owner": "OWNER_SUPPLIES_APPLE_ID_IN_APP_STORE_CONNECT",
+    "employee1": "LIANNE_OWNER_CONFIRMS_APPLE_ID_PRIVATELY",
+    "employee2": "OWNER_SELECTS_AUTHORIZED_NON_DEVELOPMENT_EMPLOYEE",
+    "credentialsInRepository": false
+  },
+  "processingVerification": {
+    "path": "App Store Connect > Apps > ACP Employee > TestFlight > iOS",
+    "expected": "0.2.0 (2) is Ready to Test or Testing",
+    "lastMachineEvidence": "Upload accepted; package entered processing",
+    "requiresAuthenticatedOwnerUi": true
+  },
+  "employeePrerequisites": [
+    "canonical active User",
+    "password established through ACP",
+    "active Company Membership",
+    "active Employee linkage",
+    "All County Plumbing & Leak Company context",
+    "MAIN Branch",
+    "ACP_EMPLOYEE_MOBILE effective permission set",
+    "individual Apple ID added as an internal tester",
+    "sanctioned MAIN assignment for assigned-Job acceptance"
+  ],
+  "acceptance": [
+    "install TestFlight from Apple",
+    "accept individually addressed internal invitation",
+    "install ACP Employee without developer tooling",
+    "verify ACP Employee icon and version/build",
+    "launch and verify Preview environment",
+    "sign in with the same ACP web email and password",
+    "verify Company and MAIN Branch",
+    "verify permission-derived navigation",
+    "open My Day and assigned Job",
+    "Clock On once and verify authoritative active interval",
+    "interrupt and restore connectivity, then refresh",
+    "Clock Off once and verify distinct stop plus completed interval",
+    "verify Jobsite Hours, Timecard, and payroll-period evidence without executing Payroll",
+    "logout and sign in again",
+    "record pass/fail without credentials or protected screenshots"
+  ],
+  "stopConditions": [
+    "Production endpoint appears",
+    "Company or Branch is incorrect",
+    "employee identity is ambiguous",
+    "assignment is not authoritative",
+    "mutation result is uncertain after reconciliation",
+    "duplicate interval appears",
+    "protected data appears outside current permission"
+  ]
+}
