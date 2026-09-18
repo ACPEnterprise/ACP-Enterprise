@@ -74,6 +74,8 @@ from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.router import router as authorization_router
 from app.platform.reliability.correlation import CorrelationMiddleware
 from app.platform.security.middleware import (
+    CORS_ALLOWED_HEADERS,
+    CORS_ALLOWED_METHODS,
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
 )
@@ -160,8 +162,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=CORS_ALLOWED_METHODS,
+    allow_headers=CORS_ALLOWED_HEADERS,
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(TrustedProxyMiddleware, configuration=settings)
