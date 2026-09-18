@@ -7,6 +7,10 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.platform.auth.models import AuthenticationSession
@@ -32,9 +36,6 @@ from app.worker_control.transport.http.dependencies import (
     get_worker_http_identity,
 )
 from app.worker_identity.models import WorkerIdentity
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @dataclass(frozen=True)

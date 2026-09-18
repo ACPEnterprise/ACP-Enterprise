@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+
 from app.platform.factory_control.roadmap import (
     RoadmapError,
     load_roadmap,
