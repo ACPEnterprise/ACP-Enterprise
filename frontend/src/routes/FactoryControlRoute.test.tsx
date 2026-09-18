@@ -16,6 +16,7 @@ const overview: api.FactoryControlOverview = {
   generated_at: "2026-09-17T20:00:00Z", roadmap_digest: "b".repeat(64), roadmap_milestones: 100,
   p0_backlog: 2, p1_backlog: 4, human_gates: 1, provider_gates: 1, owner_actions: [],
   telemetry_freshness: "LIVE", lifecycle_counts: { ACTIVE: 3, CLOSED: 81 },
+  latest_snapshot_at: "2026-09-17T19:59:00Z", last_controller_ingestion_at: "2026-09-17T19:58:00Z",
   active_p0: [{ milestone_code: "PAYROLL.1", title: "Payroll", priority: "P0", lifecycle_status: "ACTIVE", engineering_status: "ACTIVE", owner_acceptance_status: "BLOCKED", next_admissible_action: "Finish Payroll." }],
   active_p1: [], current_bottleneck: { milestone_code: "PAYROLL.1", title: "Payroll", priority: "P0", lifecycle_status: "ACTIVE", engineering_status: "ACTIVE", owner_acceptance_status: "BLOCKED", next_admissible_action: "Finish Payroll." },
   recent_movements: [{ id: "event-1", event_type: "engineering_complete", milestone_code: "RELEASE.1", lane_code: "OM1-A", occurred_at: "2026-09-17T19:45:00Z" }],
@@ -84,5 +85,15 @@ describe("FactoryControlRoute", () => {
     expect(await screen.findByText(/Event telemetry not yet measured/)).toBeVisible();
     expect(screen.getByText("Worker lane telemetry is not yet measured.")).toBeVisible();
     expect(screen.getAllByText("Not yet measured").length).toBeGreaterThan(3);
+  });
+
+  it("warns when controller telemetry exceeds the live synchronization window", async () => {
+    vi.spyOn(api, "getFactoryControlOverview").mockResolvedValue({
+      ...overview,
+      telemetry_freshness: "STALE",
+    });
+    renderRoute();
+    expect(await screen.findByText(/Factory telemetry is stale/)).toBeVisible();
+    expect(screen.getByText("Telemetry STALE")).toBeVisible();
   });
 });

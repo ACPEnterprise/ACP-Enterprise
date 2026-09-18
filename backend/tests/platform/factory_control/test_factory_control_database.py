@@ -13,14 +13,18 @@ from app.platform.auth.models import AuthenticationSession
 from app.platform.auth.services import access_token_service
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
-from app.platform.factory_control.authority import revoke_platform_authority_assignment
+from app.platform.factory_control.authority import (
+    grant_factory_controller_authority,
+    grant_platform_factory_reader,
+    revoke_platform_authority_assignment,
+)
 from app.platform.factory_control.models import (
     FactoryControlEvent,
     FactoryLaneState,
     PlatformAuthorityAssignment,
 )
 from app.platform.factory_control.router import router as factory_control_router
-from app.platform.factory_control.schemas import FactoryEventIn
+from app.platform.factory_control.schemas import FactoryEventIn, FactoryLiveLaneTarget
 from app.platform.factory_control.service import (
     FactoryEventConflict,
     factory_control_service,
@@ -545,3 +549,91 @@ async def test_existing_controller_sync_connection_projects_authoritative_worker
     assert lane.lifecycle_state == "ELIGIBLE_IDLE"
     assert persisted is not None
     assert persisted.source == "development_factory_controller"
+
+
+@pytest.mark.asyncio
+async def test_governed_activation_grants_exact_human_and_narrow_controller(
+    database,
+) -> None:
+    fixture = await seed_controller(database, label=f"ACTIVATE{uuid4().hex[:6]}")
+    async with database() as session, session.begin():
+        grant, created = await grant_platform_factory_reader(
+            session,
+            user_id=fixture.actor_id,
+            exact_display_name="Factory Controller",
+            granted_by_user_id=fixture.actor_id,
+            reason="Explicit owner-authorized Factory Control activation",
+        )
+        controller = await grant_factory_controller_authority(
+            session,
+            worker_identity_id=fixture.identity_id,
+            granted_by_user_id=fixture.actor_id,
+            reason="Narrow live Factory telemetry controller",
+        )
+    assert created is True
+    assert grant.authority_code == "PLATFORM_ADMIN"
+    assert {item.permission_code for item, _ in controller} == {
+        "PLATFORM_FACTORY_CONTROL_INGEST",
+        "PLATFORM_FACTORY_CONTROL_SNAPSHOT",
+    }
+    async with database() as session, session.begin():
+        replay, replay_created = await grant_platform_factory_reader(
+            session,
+            user_id=fixture.actor_id,
+            exact_display_name="Factory Controller",
+            granted_by_user_id=fixture.actor_id,
+            reason="Exact replay",
+        )
+    assert replay.id == grant.id
+    assert replay_created is False
+
+
+@pytest.mark.asyncio
+async def test_governed_activation_fails_closed_on_nonexact_human(database) -> None:
+    fixture = await seed_controller(database, label=f"EXACT{uuid4().hex[:6]}")
+    async with database() as session:
+        with pytest.raises(ValueError, match="Exact active Factory Control user"):
+            async with session.begin():
+                await grant_platform_factory_reader(
+                    session,
+                    user_id=fixture.actor_id,
+                    exact_display_name="Different Human",
+                    granted_by_user_id=fixture.actor_id,
+                    reason="Must not match fuzzily",
+                )
+
+
+@pytest.mark.asyncio
+async def test_live_sync_projects_canonical_controller_lane_heartbeat(database) -> None:
+    fixture = await seed_controller(database, label=f"LIVE{uuid4().hex[:6]}")
+    observed_at = datetime.now(timezone.utc)
+    target = FactoryLiveLaneTarget(
+        lane_code="OM1E",
+        worker_id=fixture.worker_id,
+        controlling_enterprise="OM1E",
+    )
+    async with database() as session, session.begin():
+        first = await factory_control_service.sync_authoritative_lanes(
+            session,
+            controller_worker_identity_id=fixture.identity_id,
+            controller_tenant_company_id=fixture.company_id,
+            targets=[target],
+            observed_at=observed_at,
+        )
+    async with database() as session, session.begin():
+        replay = await factory_control_service.sync_authoritative_lanes(
+            session,
+            controller_worker_identity_id=fixture.identity_id,
+            controller_tenant_company_id=fixture.company_id,
+            targets=[target],
+            observed_at=observed_at,
+        )
+    assert first[0][1] is False
+    assert replay[0][1] is True
+    async with database() as session:
+        lane = await session.scalar(
+            select(FactoryLaneState).where(FactoryLaneState.lane_code == "OM1E")
+        )
+    assert lane is not None
+    assert lane.controlling_enterprise == "OM1E"
+    assert lane.last_event_at == observed_at
