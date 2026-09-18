@@ -307,6 +307,8 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
     gross_ids = [item.gross_result_id for item in members if item.gross_result_id is not None]
     gross_rows = tuple((await session.scalars(select(PayrollGrossCalculationResultRecord).where(PayrollGrossCalculationResultRecord.company_id == context.company.id, PayrollGrossCalculationResultRecord.id.in_(gross_ids)))).all()) if gross_ids else ()
     policy_refs = [{"policy_id": str(item.policy_id), "policy_digest": item.policy_digest} for item in gross_rows]
+    if not policy_refs:
+        raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": ["CALCULATION_ENGINE_INPUT_ADAPTER_REQUIRED"]})
     if len({(item["policy_id"], item["policy_digest"]) for item in policy_refs}) != 1:
         raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": ["PAYROLL_POLICY_AUTHORITY_MISSING_OR_AMBIGUOUS"]})
     employee_bindings = [{"employee_id": str(item.employee_id), "membership_digest": item.membership_digest, "gross_result_id": str(item.gross_result_id), "gross_result_digest": item.gross_result_digest, "tax_result_id": str(item.tax_result_id), "tax_result_digest": item.tax_result_digest} for item in members]
