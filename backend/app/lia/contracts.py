@@ -6,7 +6,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class LiaSchema(BaseModel):
@@ -104,7 +104,20 @@ class EvidenceReference(LiaSchema):
 
 class NavigationSuggestion(LiaSchema):
     label: str
-    internal_path: str
+    internal_path: str = Field(min_length=1, max_length=500)
+
+    @field_validator("internal_path")
+    @classmethod
+    def internal_path_is_bounded(cls, value: str) -> str:
+        if (
+            not value.startswith("/")
+            or value.startswith("//")
+            or "\\" in value
+            or any(ord(character) < 32 for character in value)
+            or ".." in value.split("?")[0].split("#")[0].split("/")
+        ):
+            raise ValueError("navigation destination must be a bounded internal path")
+        return value
 
 
 def evidence_set_digest(evidence: tuple[EvidenceReference, ...]) -> str:

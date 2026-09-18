@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { VOICE_ACCEPTANCE_CORPUS } from "./voiceAcceptanceCorpus";
-import { classifyVoiceIntent, matchingAuthorizedNavigation } from "./voiceIntent";
+import {
+  classifyVoiceIntent,
+  isSafeInternalNavigationPath,
+  matchingAuthorizedNavigation,
+} from "./voiceIntent";
 
 describe("LIA voice intent safety", () => {
   it("qualifies more than one hundred deterministic transcripts", () => {
@@ -43,5 +47,25 @@ describe("LIA voice intent safety", () => {
     expect(classifyVoiceIntent("How much did we collect last month?")).toEqual({
       kind: "QUESTION",
     });
+  });
+});
+
+describe("safe navigation", () => {
+  it.each([
+    "https://outside.invalid/payroll",
+    "//outside.invalid/payroll",
+    "/jobs/../payroll",
+    "/jobs\\outside",
+  ])("rejects unbounded destination %s", (path) => {
+    expect(isSafeInternalNavigationPath(path)).toBe(false);
+    expect(
+      matchingAuthorizedNavigation("Open payroll", [
+        { label: "Open Payroll", internal_path: path },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("accepts a bounded internal destination", () => {
+    expect(isSafeInternalNavigationPath("/payroll?period=current#review")).toBe(true);
   });
 });

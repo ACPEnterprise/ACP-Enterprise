@@ -35,8 +35,17 @@ export function matchingAuthorizedNavigation(
   if (intent.kind !== "NAVIGATE") return undefined;
   const words = intent.target.toLocaleLowerCase().split(/\s+/).filter(Boolean);
   return navigation.find((item) => {
+    if (!isSafeInternalNavigationPath(item.internal_path)) return false;
     const label = item.label.toLocaleLowerCase();
     const path = item.internal_path.toLocaleLowerCase();
     return words.some((word) => word.length > 2 && (label.includes(word) || path.includes(word)));
   });
+}
+
+export function isSafeInternalNavigationPath(path: string): boolean {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) {
+    return false;
+  }
+  const route = path.split(/[?#]/, 1)[0];
+  return !route.split("/").includes("..");
 }

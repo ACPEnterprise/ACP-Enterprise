@@ -3,7 +3,14 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-from app.lia.contracts import EvidenceReference, evidence_set_digest
+import pytest
+from pydantic import ValidationError
+
+from app.lia.contracts import (
+    EvidenceReference,
+    NavigationSuggestion,
+    evidence_set_digest,
+)
 
 
 def evidence(**overrides: object) -> EvidenceReference:
@@ -61,3 +68,25 @@ def test_digest_binds_domain_identity_scope_period_and_authority() -> None:
 def test_empty_evidence_digest_is_deterministic_but_not_a_source_digest() -> None:
     assert evidence_set_digest(()) == evidence_set_digest(())
     assert evidence_set_digest(()) != "a" * 64
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        "https://outside.invalid/payroll",
+        "//outside.invalid/payroll",
+        "/jobs/../payroll",
+        "/jobs\\outside",
+        "/jobs/1\n/payroll",
+    ),
+)
+def test_navigation_contract_rejects_unbounded_destinations(path: str) -> None:
+    with pytest.raises(ValidationError, match="bounded internal path"):
+        NavigationSuggestion(label="Unsafe", internal_path=path)
+
+
+def test_navigation_contract_accepts_scoped_internal_path() -> None:
+    suggestion = NavigationSuggestion(
+        label="Open Invoice", internal_path="/invoices/123?returnTo=%2Fcustomers#detail"
+    )
+    assert suggestion.internal_path.startswith("/invoices/")
