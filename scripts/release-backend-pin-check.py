@@ -6,7 +6,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENT_FILES = (
     ROOT / "backend" / "requirements.txt",
@@ -25,7 +24,7 @@ def unpinned_requirements(path: Path) -> tuple[str, ...]:
         display_path = path
     for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("-r "):
+        if not line or line.startswith(("#", "-r ")):
             continue
         if not EXACT_REQUIREMENT.fullmatch(line):
             findings.append(f"{display_path}:{number}")
