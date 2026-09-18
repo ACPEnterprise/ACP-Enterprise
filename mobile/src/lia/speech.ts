@@ -1,7 +1,7 @@
 import * as Speech from "expo-speech";
 import type { LiaResponse } from "../api/lia";
 
-export type SpeechOptions = { language?: string; rate?: number; pitch?: number };
+export type SpeechOptions = { language?: string; rate?: number; pitch?: number; onDone?: () => void };
 export interface SpeechAdapter { speak(text: string, options?: SpeechOptions): void; stop(): void; }
 
 const sentenceBudget = { BRIEF: 2, NORMAL: 3, DETAILED: 6, EVIDENCE: 8 } as const;
@@ -95,6 +95,6 @@ export function spokenTextForResponse(response: LiaResponse): string {
 }
 
 export const nativeSpeech: SpeechAdapter = {
-  speak: (text, options) => { if (!text) return; Speech.speak(text, { language: options?.language ?? "en-US", rate: options?.rate ?? 0.94, pitch: options?.pitch ?? 1.0 }); },
+  speak: (text, options) => { if (!text) return; Speech.speak(text, { language: options?.language ?? "en-US", rate: options?.rate ?? 0.94, pitch: options?.pitch ?? 1.0, onDone: options?.onDone, onStopped: options?.onDone }); },
   stop: () => { Speech.stop(); },
 };
