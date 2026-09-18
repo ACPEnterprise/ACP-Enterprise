@@ -1043,6 +1043,31 @@ class PayrollRunRecord(Base):
     )
 
 
+class PayrollRunCloseRecord(Base):
+    """Append-only terminal evidence for an approved Payroll run."""
+    __tablename__ = "payroll_run_close_records"
+    __table_args__ = (
+        UniqueConstraint("company_id", "run_id", name="uq_payroll_run_close_company_run"),
+        UniqueConstraint("company_id", "replay_identity", name="uq_payroll_run_close_replay"),
+        UniqueConstraint("company_id", "close_digest", name="uq_payroll_run_close_digest"),
+        ForeignKeyConstraint(["company_id", "run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        CheckConstraint("close_state = 'closed'", name="ck_payroll_run_close_state"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    prior_run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    close_state: Mapped[str] = mapped_column(String(16), nullable=False, default="closed")
+    close_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    closed_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    close_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    register_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    replay_identity: Mapped[str] = mapped_column(String(160), nullable=False)
+    close_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class PayrollRunMemberRecord(Base):
     __tablename__ = "payroll_run_members"
     __table_args__ = (
