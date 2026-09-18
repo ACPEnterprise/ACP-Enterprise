@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import re
 from dataclasses import asdict
@@ -27,6 +25,7 @@ from .contracts import (
     LiaTemporalContext,
     NavigationSuggestion,
     TruthClassification,
+    evidence_set_digest,
 )
 from .conversation import (
     ActionRisk,
@@ -1004,8 +1003,7 @@ lia_service = LiaService()
 
 
 def _evidence_digest(evidence: tuple[EvidenceReference, ...]) -> str:
-    canonical = [item.evidence_digest for item in evidence]
-    return hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
+    return evidence_set_digest(evidence)
 
 
 def _answer_authority(

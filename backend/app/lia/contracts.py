@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
@@ -103,6 +105,40 @@ class EvidenceReference(LiaSchema):
 class NavigationSuggestion(LiaSchema):
     label: str
     internal_path: str
+
+
+def evidence_set_digest(evidence: tuple[EvidenceReference, ...]) -> str:
+    """Bind continuation identity to exact evidence and its authorization scope."""
+    canonical = [
+        {
+            "domain": item.domain,
+            "entity_id": str(item.entity_id) if item.entity_id is not None else None,
+            "authority": item.authority,
+            "evidence_digest": item.evidence_digest,
+            "source_contract_version": item.source_contract_version,
+            "company_id": str(item.company_id) if item.company_id is not None else None,
+            "branch_ids": sorted(str(branch_id) for branch_id in item.branch_ids),
+            "authorization_version": item.authorization_version,
+            "period_start": item.period_start.isoformat()
+            if item.period_start is not None
+            else None,
+            "period_end": item.period_end.isoformat()
+            if item.period_end is not None
+            else None,
+            "timezone": item.timezone,
+            "accounting_basis": item.accounting_basis,
+        }
+        for item in evidence
+    ]
+    canonical.sort(
+        key=lambda item: (
+            str(item["domain"]),
+            str(item["entity_id"]),
+            str(item["evidence_digest"]),
+        )
+    )
+    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class ActionProposal(LiaSchema):

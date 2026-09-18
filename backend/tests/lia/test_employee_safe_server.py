@@ -249,6 +249,29 @@ async def test_stale_evidence_requires_refresh() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unchanged_employee_evidence_digest_supports_safe_follow_up() -> None:
+    day = AsyncMock()
+    day.day.return_value = projected_day()
+    service = EmployeeSafeLiaService(day_service=day)
+    first = await service.ask(
+        AsyncMock(),
+        context=context(),
+        request=LiaRequest(question="What's my next job?"),
+    )
+    second = await service.ask(
+        AsyncMock(),
+        context=context(),
+        request=LiaRequest(
+            question="What's my next job?",
+            context=LiaContext(evidence_digest=first.evidence_digest),
+        ),
+    )
+
+    assert second.classification is TruthClassification.KNOWN
+    assert second.evidence_digest == first.evidence_digest
+
+
+@pytest.mark.asyncio
 async def test_empty_employee_day_is_truthful_not_inferred_availability() -> None:
     day = AsyncMock()
     day.day.return_value = projected_day(())

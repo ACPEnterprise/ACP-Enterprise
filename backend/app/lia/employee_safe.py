@@ -24,6 +24,7 @@ from .contracts import (
     LiaResponse,
     NavigationSuggestion,
     TruthClassification,
+    evidence_set_digest,
 )
 from .conversation import interpret_conversation
 from .security import EXFILTRATION_PATTERNS, INJECTION_PATTERNS, matches_any
@@ -220,7 +221,7 @@ class EmployeeSafeLiaService:
         if (
             request.context is not None
             and request.context.evidence_digest is not None
-            and request.context.evidence_digest != evidence_digest
+            and request.context.evidence_digest != evidence_set_digest(evidence)
         ):
             return self._response(
                 context=context,
@@ -318,7 +319,7 @@ class EmployeeSafeLiaService:
         )
         if (
             request.context.evidence_digest is not None
-            and request.context.evidence_digest != digest
+            and request.context.evidence_digest != evidence_set_digest(evidence)
         ):
             return self._response(
                 context=context,
@@ -361,11 +362,7 @@ class EmployeeSafeLiaService:
         navigation: tuple[NavigationSuggestion, ...] = (),
     ) -> LiaResponse:
         now = datetime.now(timezone.utc)
-        evidence_digest = (
-            evidence[0].evidence_digest
-            if len(evidence) == 1
-            else hashlib.sha256(b"[]").hexdigest()
-        )
+        evidence_digest = evidence_set_digest(evidence)
         response = LiaResponse(
             request_id=uuid4(),
             conversation_id=request.conversation_id or uuid4(),
