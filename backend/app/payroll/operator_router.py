@@ -68,7 +68,9 @@ from app.platform.employees.models import Employee
 from app.platform.idempotency.models import MutationReceipt
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
-from app.timekeeping.models import PayPeriod
+from app.timekeeping.contracts import seal_payroll_time_input
+from app.timekeeping.models import PayPeriod, PayrollTimeInputRecord
+from app.timekeeping.service import WorkdayTimeService
 
 router = APIRouter(prefix="/api/v1/payroll/operator", tags=["Payroll Operator"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -343,12 +345,18 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
             compensation = await authority.resolve_period_compensation(session, company_id=context.company.id, employee_id=member.employee_id, period_start=period.period_start, period_end=period.period_end)
             if policy is None or compensation is None:
                 raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": [f"MISSING_COMPENSATION_OR_POLICY:{member.employee_id}"]})
+            time_input = None
             if compensation.compensation_type.value == "hourly":
-                raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": [f"APPROVED_TIME_RESOLVER_REQUIRED:{member.employee_id}"]})
-            admission = await authority.evaluate_admission(session, context=context, identity_resolved=True, policy=policy, compensation=compensation, time_input=None, pay_period_schedule_definition_id=period.schedule_definition_id, pay_period_schedule_version=int(period.schedule_version))
+                time_record = await session.scalar(select(PayrollTimeInputRecord).where(PayrollTimeInputRecord.company_id == context.company.id, PayrollTimeInputRecord.employee_id == member.employee_id, PayrollTimeInputRecord.pay_period_id == period.id).order_by(PayrollTimeInputRecord.created_at.desc()))
+                resolver = getattr(WorkdayTimeService(), "resolve_payroll_time_input_facts", None)
+                if time_record is None or resolver is None:
+                    raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": [f"APPROVED_TIME_RESOLVER_REQUIRED:{member.employee_id}"]})
+                facts = await resolver(session, context=context, payroll_input=time_record)
+                time_input = seal_payroll_time_input(company_id=context.company.id, employee_id=member.employee_id, pay_period_id=period.id, period_start=period.period_start, period_end=period.period_end, approved_entries=tuple(facts))
+            admission = await authority.evaluate_admission(session, context=context, identity_resolved=True, policy=policy, compensation=compensation, time_input=time_input, pay_period_schedule_definition_id=period.schedule_definition_id, pay_period_schedule_version=int(period.schedule_version))
             from app.payroll.calculation_adapter import build_gross_inputs
             inputs = build_gross_inputs(company_id=context.company.id, employee_id=member.employee_id, pay_period_id=period.id, period_start=period.period_start, period_end=period.period_end, schedule_definition_id=period.schedule_definition_id, schedule_version=int(period.schedule_version), admission=admission, policy=policy, compensation=compensation)
-            candidate = gross_engine.calculate(actor_permissions=context.permission_codes, company_id=inputs.company_id, employee_id=inputs.employee_id, period=inputs.period, admission=inputs.admission, policy=inputs.policy, compensation=inputs.compensation, time_input=None, currency=run.currency, calculated_at=datetime.now(timezone.utc))
+            candidate = gross_engine.calculate(actor_permissions=context.permission_codes, company_id=inputs.company_id, employee_id=inputs.employee_id, period=inputs.period, admission=inputs.admission, policy=inputs.policy, compensation=inputs.compensation, time_input=time_input, currency=run.currency, calculated_at=datetime.now(timezone.utc))
             persisted_gross = await gross_service.persist_candidate(session, context=context, candidate=candidate)
             # The tax engine consumes an approved gross evidence contract.  Use
             # the existing governed review transition rather than fabricating a
