@@ -50,6 +50,10 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
+from scripts.customer_population_reconciliation import (
+    execute_action as execute_reconciliation_action,
+)
+from scripts.customer_population_reconciliation import parser as reconciliation_parser
 
 HAMMER_PROVIDER_ID = "147405829"
 
@@ -545,6 +549,92 @@ async def test_missing_exact_provider_identity_cannot_be_admitted(database) -> N
                 .where(Customer.company_id == context.company.id)
             )
             == 0
+        )
+
+
+@pytest.mark.asyncio
+async def test_authenticated_operator_command_refreshes_and_admits_exact_provider(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Operator Command Tenant")
+    artifact = await stage_hammer(factory, context)
+    assert context.active_branch is not None
+    common = [
+        "--company-id",
+        str(context.company.id),
+        "--branch-id",
+        str(context.active_branch.id),
+    ]
+    refresh = reconciliation_parser().parse_args([*common, "refresh"])
+    report = await execute_reconciliation_action(
+        refresh, context=context, factory=factory
+    )
+    assert report["classification"] == "CUSTOMER_POPULATION_RECONCILED"
+    assert report["counts"] == {
+        "total": 1,
+        "bound": 0,
+        "held": 0,
+        "ambiguous": 0,
+        "unexplained": 1,
+    }
+
+    admission = reconciliation_parser().parse_args(
+        [
+            *common,
+            "admit",
+            "--provider-customer-id",
+            HAMMER_PROVIDER_ID,
+            "--source-artifact-id",
+            str(artifact.id),
+            "--expected-source-sha256",
+            artifact.source_sha256,
+            "--expected-source-row-sha256",
+            digest(f"authoritative-hcp-row:{HAMMER_PROVIDER_ID}"),
+            "--expected-customers",
+            "1",
+            "--expected-contacts",
+            "1",
+            "--expected-service-locations",
+            "2",
+            "--expected-billing-addresses",
+            "0",
+            "--idempotency-key",
+            "operator-command-hammer-admission",
+            "--reason-code",
+            "owner_accepted_exact_provider_admission",
+        ]
+    )
+    first = await execute_reconciliation_action(
+        admission, context=context, factory=factory
+    )
+    replay = await execute_reconciliation_action(
+        admission, context=context, factory=factory
+    )
+    assert first["classification"] == "CUSTOMER_PROVIDER_ID_ADMITTED"
+    assert first["counts"] == {
+        "customers": 1,
+        "contacts": 1,
+        "service_locations": 2,
+        "billing_addresses": 0,
+    }
+    assert first["replayed"] is False
+    assert replay["customer_id"] == first["customer_id"]
+    assert replay["replayed"] is True
+
+
+def test_operator_command_has_no_name_based_admission_surface() -> None:
+    with pytest.raises(SystemExit):
+        reconciliation_parser().parse_args(
+            [
+                "--company-id",
+                str(uuid4()),
+                "--branch-id",
+                str(uuid4()),
+                "admit",
+                "--customer-name",
+                "Hammer Haag",
+            ]
         )
 
 
