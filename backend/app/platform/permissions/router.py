@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.platform.auth.dependencies import AuthenticatedIdentity
+from app.platform.factory_control.authority import active_user_platform_permissions
 from app.platform.launch_controls import LAUNCH_ROLE_MATRIX
 from app.platform.permissions.authorization import (
     AuthorizationContext,
@@ -31,11 +32,15 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 @router.get("/context", response_model=EffectiveAuthorizationResponse)
 async def effective_authorization(
     context: ResolvedAuthorization,
+    session: DatabaseSession,
 ) -> EffectiveAuthorizationResponse:
+    platform_permissions = await active_user_platform_permissions(
+        session, user_id=context.user.id
+    )
     return EffectiveAuthorizationResponse(
         company_id=context.company.id,
         active_branch_id=context.active_branch.id if context.active_branch else None,
-        permission_codes=sorted(context.permission_codes),
+        permission_codes=sorted(context.permission_codes | platform_permissions),
     )
 
 

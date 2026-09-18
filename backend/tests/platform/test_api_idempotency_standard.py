@@ -44,7 +44,7 @@ DOMAIN_REPLAY_EVIDENCE = {
     "engineering_executions": "tests/engineering_execution/test_engineering_execution.py",
     "estimates": "tests/estimates/test_estimate_conversion.py",
     "field_purchase": "tests/field_service/test_field_purchase_contract.py",
-    "factory_control": "tests/platform/factory_control/test_factory_control.py",
+    "factory_control": "tests/platform/factory_control/test_factory_control_database.py",
     "identity_onboarding": "tests/platform/test_identity_onboarding.py",
     "inventory": "tests/inventory/test_inventory_adjustments.py",
     "invoices": "tests/invoicing/test_invoice_ar.py",
@@ -94,7 +94,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 327
+    assert len(operations) == len(coverage) == 328
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -209,7 +209,11 @@ def test_coverage_is_tenant_explicit_and_bound_into_platform_contract() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
         and not entry.path.startswith(
-            ("/api/v1/engineering/", "/api/v1/worker-transport/")
+            (
+                "/api/v1/engineering/",
+                "/api/v1/worker-transport/",
+                "/api/v1/platform/factory-control/",
+            )
         )
     )
     assert (

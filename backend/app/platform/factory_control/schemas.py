@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal, Optional
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictSchema(BaseModel):
@@ -12,6 +13,7 @@ class StrictSchema(BaseModel):
 
 
 class FactoryEventIn(StrictSchema):
+    tenant_company_id: Optional[UUID] = None
     lane_code: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
     milestone_code: Optional[str] = Field(default=None, min_length=1, max_length=160)
     event_type: Literal[
@@ -29,6 +31,7 @@ class FactoryEventIn(StrictSchema):
         "gate_closed",
         "rework_started",
         "first_pass_complete",
+        "controller_sync",
     ]
     lifecycle_state: Optional[
         Literal[
@@ -44,6 +47,25 @@ class FactoryEventIn(StrictSchema):
         ]
     ] = None
     queue_depth: int = Field(default=0, ge=0, le=10000)
+    machine: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    current_assignment: Optional[str] = Field(
+        default=None, min_length=1, max_length=200
+    )
+    next_queued_item: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    controlling_enterprise: Optional[Literal["OM1E", "OM2E", "LaptopE"]] = None
+    self_refill_health: Optional[
+        Literal[
+            "SELF_REFILL_HEALTHY",
+            "ELIGIBLE_IDLE",
+            "WAITING_INTEGRATION",
+            "HUMAN_GATE",
+            "PROVIDER_GATE",
+            "DEPENDENCY_BLOCKED",
+            "RATE_LIMITED",
+            "UNSAFE_STOP",
+            "UNKNOWN",
+        ]
+    ] = None
     idempotency_key: str = Field(min_length=1, max_length=200)
     occurred_at: datetime
     details: dict[str, Any] = Field(default_factory=dict)
@@ -67,10 +89,46 @@ class FactoryEventIn(StrictSchema):
             raise ValueError("occurred_at must include a timezone")
         return value
 
+    @model_validator(mode="after")
+    def require_actionable_gate_evidence(self) -> FactoryEventIn:
+        if self.event_type != "gate_opened":
+            return self
+        required = {
+            "gate_id",
+            "gate_type",
+            "action",
+            "why_blocked",
+            "workflow",
+            "estimated_owner_minutes",
+            "resume_action",
+            "engineering_prerequisites_resolved",
+        }
+        if not required.issubset(self.details):
+            raise ValueError("gate_opened requires complete actionable gate evidence")
+        if self.details.get("engineering_prerequisites_resolved") is not True:
+            raise ValueError("owner gate cannot open before engineering prerequisites")
+        minutes = self.details.get("estimated_owner_minutes")
+        if not isinstance(minutes, int) or isinstance(minutes, bool) or minutes < 1:
+            raise ValueError("owner gate requires positive expected minutes")
+        return self
+
 
 class FactoryEventResponse(StrictSchema):
     id: str
     duplicate: bool
+
+
+class FactorySnapshotIn(StrictSchema):
+    snapshot_key: str = Field(min_length=1, max_length=200)
+    tenant_company_id: Optional[UUID] = None
+    captured_at: datetime
+
+    @field_validator("captured_at")
+    @classmethod
+    def require_snapshot_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("captured_at must include a timezone")
+        return value
 
 
 class FactoryLaneResponse(StrictSchema):
@@ -78,6 +136,14 @@ class FactoryLaneResponse(StrictSchema):
     milestone_code: Optional[str]
     lifecycle_state: str
     queue_depth: int
+    machine: Optional[str]
+    current_assignment: Optional[str]
+    next_queued_item: Optional[str]
+    controlling_enterprise: Optional[str]
+    self_refill_health: Optional[str]
+    idle_duration_seconds: Optional[float]
+    sla_state: Literal["HEALTHY", "VIOLATED", "NOT_APPLICABLE"]
+    sla_violations: list[str]
     active_since: Optional[datetime]
     last_handoff_at: Optional[datetime]
     last_event_at: datetime

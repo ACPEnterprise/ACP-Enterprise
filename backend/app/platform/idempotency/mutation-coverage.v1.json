@@ -3,22 +3,32 @@
     {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "factory_control",
-      "mechanism": "Company-scoped event idempotency key with exact evidence comparison",
+      "mechanism": "Platform-global event key with canonical immutable request digest and exact replay comparison",
       "method": "POST",
       "operation_id": "ingest_event_api_v1_platform_factory_control_internal_events_post",
       "path": "/api/v1/platform/factory-control/internal/events",
       "reason": "Exact controller evidence replay returns the original event while contradictory reuse fails closed.",
-      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+      "tenant_scope": "PLATFORM_GLOBAL"
     },
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "factory_control",
-      "mechanism": "Company-scoped snapshot key uniqueness with convergent original-result replay",
+      "mechanism": "Platform-global snapshot key with canonical request digest and contradictory replay rejection",
       "method": "POST",
       "operation_id": "capture_snapshot_api_v1_platform_factory_control_internal_snapshots_post",
       "path": "/api/v1/platform/factory-control/internal/snapshots",
-      "reason": "A repeated snapshot key returns the original durable snapshot without creating another row.",
-      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+      "reason": "An exact repeated snapshot request returns the original row; changed facts under the same key fail closed.",
+      "tenant_scope": "PLATFORM_GLOBAL"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "factory_control",
+      "mechanism": "Development Factory worker version and queue state derive a stable event identity",
+      "method": "POST",
+      "operation_id": "sync_controller_api_v1_platform_factory_control_internal_sync_post",
+      "path": "/api/v1/platform/factory-control/internal/sync",
+      "reason": "The controller projects authenticated durable Development Factory evidence; unchanged source state returns the existing event.",
+      "tenant_scope": "PLATFORM_GLOBAL"
     },
     {
       "classification": "NON_MUTATING_READ_ONLY",
@@ -3229,6 +3239,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "26fdd3404aa2d23a201136100d1dc4276887b9975d79c496beef1227d2e64cb4",
+  "fingerprint": "d77d5dda94ed6d645e4dfd442f1e97d739614e985d9e02ea941971df7201465c",
   "schema_version": "1"
 }

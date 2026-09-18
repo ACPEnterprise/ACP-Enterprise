@@ -133,6 +133,22 @@ LAUNCH_PLATFORM_DEFINITIONS = (
         scope=PermissionScope.PLATFORM,
         reserved=False,
     ),
+    PermissionDefinition(
+        code=LaunchPlatformPermission.FACTORY_CONTROL_INGEST,
+        name="Platform Factory Control Ingest",
+        resource="factory_control",
+        action="ingest",
+        scope=PermissionScope.PLATFORM,
+        reserved=False,
+    ),
+    PermissionDefinition(
+        code=LaunchPlatformPermission.FACTORY_CONTROL_SNAPSHOT,
+        name="Platform Factory Control Snapshot",
+        resource="factory_control",
+        action="snapshot",
+        scope=PermissionScope.PLATFORM,
+        reserved=False,
+    ),
 )
 
 CUSTOMER_DEFINITIONS = tuple(
