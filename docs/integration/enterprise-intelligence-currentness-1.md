@@ -37,3 +37,77 @@ brief remains truthful and reports comparison as unavailable.
 - OM1 ENTERPRISE.RELEASE owns final protected integration, migration reline,
   Preview/Production deployment, and owner acceptance authorization.
 
+## Factory 2.0 currentness sweep — 2026-09-17
+
+- Current protected authority: `origin/customer-management-v1` at
+  `1be3de4456afc7b67ed6bb9f54644468318dd6e4`.
+- Current cumulative Intelligence head: `b3a7ff9ee937efa633e478183b8d764c7d9286ed`.
+- Merge-base: `1be3de4456afc7b67ed6bb9f54644468318dd6e4`; relationship `0 behind /
+  1156 ahead`; remote/local divergence `0/0` before this ledger update.
+- Worktree was isolated and clean. Original checkout was not inspected for
+  mutation and was not modified.
+
+### Worker inventory and disposition
+
+- `origin/work/lia-voice-genesis-proprietary-engine-1` at
+  `3bacb78436fa87d5217eaafe862a5db195c08937`: `ALREADY_INTEGRATED /
+  PATCH_EQUIVALENT`. The current head contains the same Twelve Hats speech
+  engine foundation through `17dd21a0`; no provider runtime, credentials,
+  model artifact, or audio output was replayed.
+- `origin/work/lia-voice-genesis-corpus-rights-1` at
+  `ca9df20d50a6c2cadfe837b25dc195b635de0730`: `ALREADY_INTEGRATED /
+  PATCH_EQUIVALENT`. The owned Genesis corpus/rights metadata is present
+  through `6f0c2f7d`; no recording, upload, training, or voice cloning work was
+  replayed.
+- `origin/work/laptop1-phone-twelve-hats-speech-readiness-1` at
+  `59da53a94c91a9d0fb0431a3a1b80012ae58a612`: `STALE_BASE /
+  RECONCILIATION_REQUIRED`, not integrated. Its patch removes the current
+  shared semantic speech renderer and reverts Mobile to speaking the raw
+  server answer, which conflicts with the qualified web/Mobile semantic
+  contract. The current head retains the safer owned-renderer boundary and
+  local fallback. Phone must rebase and republish an additive readiness
+  checkpoint if it has new work.
+- Prior LIA spoken-presence and delivery-profile refs remain
+  `ALREADY_INTEGRATED` or documentation/history-only; no newer Beacon,
+  Luminary, Analytics, or reporting implementation checkpoint was found in the
+  current remote inventory.
+
+### Integration-owned audit and refill queue
+
+- LIA routes remain split correctly: owner `/api/v1/lia/ask`; employee-safe
+  `/api/v1/lia/employee/ask`. The employee route remains permission-gated by
+  `COMPANY_EMPLOYEE_OPERATIONS_OWN_LIA_READ`; Mobile references only the
+  employee route. No route or permission widening was made.
+- Current Intelligence retains Twelve Hats speech sovereignty: browser/device
+  speech and Expo local speech are transitional local fallbacks; the owned
+  engine remains fail-closed until an owned accepted artifact and inference
+  implementation exist. Commercial TTS remains disallowed.
+- Existing actionable cross-domain queues were preserved rather than hidden:
+  Customer identity/completeness reconciliation, Payroll readiness, Revenue
+  Cycle application/settlement/cash/as-of projections, Timekeeping period-hour
+  projection, Analytics currency authority, and exact Luminary/Economics
+  finding identifiers. These are source-domain handoffs, not Intelligence
+  implementations.
+- Refill Laptop-A with a bounded LIA acceptance/contract audit: stale route,
+  evidence/provenance, correction, period, and navigation checks against the
+  latest protected Operations contracts; no new architecture unless a defect
+  is reproduced.
+- Refill Laptop-B with a Beacon/Luminary real-data contract audit focused on
+  evidence freshness, incomplete states, drill-down identity, and currency;
+  do not infer or fabricate missing source authority.
+- Refill Phone with an additive native-speech readiness revision based on the
+  current shared semantic renderer; require employee-route-only behavior,
+  lifecycle cancellation, local fallback, and no deletion of qualified speech
+  semantics.
+
+### Qualification status
+
+- Previously qualified cumulative backend, frontend, and Mobile results remain
+  valid for the unchanged implementation. Current environment checks: Python
+  compilation, JSON/profile validation, diff check, and changed-boundary
+  secret scan pass. Host backend pytest is unavailable (`pytest` module absent)
+  and Docker migration qualification is unavailable because the configured
+  Docker credential helper is missing; neither is claimed as passed.
+- No schema or Alembic change. No Preview/Production deployment. Authenticated
+  All County acceptance remains pending; the deployed Preview SHA and employee
+  environment availability must be rechecked by OM1 after release.
