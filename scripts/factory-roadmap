@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Validate and query the repository-canonical Factory 2.0 roadmap.
+
+The companion ``.yaml`` file deliberately uses the JSON-compatible subset of
+YAML 1.2.  That keeps the controller dependency-free while remaining readable
+by standard YAML tooling.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+ROADMAP = ROOT / "docs" / "factory" / "acp_full_system_roadmap.yaml"
+
+STATUSES = {
+    "NOT_STARTED",
+    "ACTIVE",
+    "ENGINEERING_READY",
+    "INTEGRATED",
+    "DEPLOYED_BETA",
+    "OWNER_ACCEPTANCE_REQUIRED",
+    "HUMAN_GATE",
+    "PROVIDER_GATE",
+    "BLOCKED",
+    "POST_PRODUCTION",
+    "CLOSED",
+}
+FACTORIES = {"OM1", "OM2", "LAPTOP"}
+PRIORITIES = {"P0", "P1", "P2", "P3"}
+REQUIRED_ITEM_FIELDS = {
+    "id",
+    "title",
+    "owning_factory",
+    "owning_domain",
+    "preferred_worker_lane",
+    "priority",
+    "prerequisites",
+    "lifecycle_status",
+    "engineering_status",
+    "protected_integration_status",
+    "beta_deployment_status",
+    "owner_acceptance_status",
+    "human_provider_gates",
+    "closed_criteria",
+    "evidence_references",
+    "known_defects_prerequisites",
+    "next_admissible_action",
+    "successor_supersession",
+    "last_reconciled_protected_sha",
+}
+COMPLETENESS_FIELDS = {
+    "ACQUIRED",
+    "RECONCILED",
+    "NATIVE_BOUND",
+    "PENDING_ADMISSION",
+    "HELD",
+    "AMBIGUOUS",
+    "UNEXPLAINED",
+    "BETA_OPERABLE",
+}
+DEPENDENCY_READY = {
+    "ENGINEERING_READY",
+    "INTEGRATED",
+    "DEPLOYED_BETA",
+    "OWNER_ACCEPTANCE_REQUIRED",
+    "CLOSED",
+}
+PULLABLE = {
+    "NOT_STARTED",
+    "ACTIVE",
+    "ENGINEERING_READY",
+    "INTEGRATED",
+    "DEPLOYED_BETA",
+    "OWNER_ACCEPTANCE_REQUIRED",
+}
+
+
+class RoadmapError(ValueError):
+    pass
+
+
+def load() -> dict[str, Any]:
+    try:
+        data = json.loads(ROADMAP.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RoadmapError(f"cannot load canonical roadmap: {error}") from error
+    if not isinstance(data, dict):
+        raise RoadmapError("canonical roadmap must be an object")
+    return data
+
+
+def validate(data: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    items = data.get("milestones")
+    if not isinstance(items, list):
+        return ["milestones must be a list"]
+    ids = [item.get("id") for item in items if isinstance(item, dict)]
+    if len(ids) != len(items):
+        errors.append("every milestone must be an object with an id")
+    if len(ids) != len(set(ids)):
+        errors.append("milestone ids must be unique")
+    known = set(ids)
+    original_numbers: list[int] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ident = item.get("id", "<unknown>")
+        missing = REQUIRED_ITEM_FIELDS - set(item)
+        if missing:
+            errors.append(f"{ident}: missing fields {sorted(missing)}")
+        if item.get("owning_factory") not in FACTORIES:
+            errors.append(f"{ident}: invalid owning_factory")
+        if item.get("priority") not in PRIORITIES:
+            errors.append(f"{ident}: invalid priority")
+        for field in (
+            "lifecycle_status",
+            "engineering_status",
+            "protected_integration_status",
+            "beta_deployment_status",
+            "owner_acceptance_status",
+        ):
+            if item.get(field) not in STATUSES:
+                errors.append(f"{ident}: invalid {field}")
+        prerequisites = item.get("prerequisites", [])
+        if not isinstance(prerequisites, list):
+            errors.append(f"{ident}: prerequisites must be a list")
+        elif set(prerequisites) - known:
+            errors.append(f"{ident}: unknown prerequisites {sorted(set(prerequisites) - known)}")
+        original = item.get("original_milestone_number")
+        if original is not None:
+            original_numbers.append(original)
+        if item.get("migration_completeness") is not None:
+            keys = set(item["migration_completeness"])
+            if keys != COMPLETENESS_FIELDS:
+                errors.append(f"{ident}: incomplete migration accounting fields")
+    if sorted(original_numbers) != list(range(1, 37)):
+        errors.append("original milestone mapping must contain exactly numbers 1 through 36")
+
+    # Prove the dependency graph is acyclic.
+    graph = {
+        item["id"]: item.get("prerequisites", [])
+        for item in items
+        if isinstance(item, dict) and "id" in item
+    }
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> None:
+        if node in visiting:
+            errors.append(f"dependency cycle includes {node}")
+            return
+        if node in visited:
+            return
+        visiting.add(node)
+        for dependency in graph.get(node, []):
+            visit(dependency)
+        visiting.remove(node)
+        visited.add(node)
+
+    for node in graph:
+        visit(node)
+    return errors
+
+
+def dependency_safe(item: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> bool:
+    return all(by_id[dependency]["lifecycle_status"] in DEPENDENCY_READY for dependency in item["prerequisites"])
+
+
+def eligible(data: dict[str, Any], *, factory: str | None = None) -> list[dict[str, Any]]:
+    items = data["milestones"]
+    by_id = {item["id"]: item for item in items}
+    candidates = [
+        item
+        for item in items
+        if item["lifecycle_status"] in PULLABLE
+        and (factory is None or item["owning_factory"] == factory)
+        and dependency_safe(item, by_id)
+    ]
+    rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+    return sorted(candidates, key=lambda item: (rank[item["priority"]], item["sequence"], item["id"]))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("validate")
+    list_parser = sub.add_parser("list")
+    list_parser.add_argument("--factory", choices=sorted(FACTORIES))
+    list_parser.add_argument("--status", choices=sorted(STATUSES))
+    next_parser = sub.add_parser("next")
+    next_parser.add_argument("--factory", choices=sorted(FACTORIES), required=True)
+    args = parser.parse_args()
+
+    data = load()
+    errors = validate(data)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 1
+    if args.command == "validate":
+        print(f"PASS: {len(data['milestones'])} milestones; dependency graph acyclic")
+        return 0
+    if args.command == "list":
+        items = data["milestones"]
+        for item in items:
+            if args.factory and item["owning_factory"] != args.factory:
+                continue
+            if args.status and item["lifecycle_status"] != args.status:
+                continue
+            print(f"{item['priority']}\t{item['lifecycle_status']}\t{item['id']}\t{item['title']}")
+        return 0
+    candidates = eligible(data, factory=args.factory)
+    if not candidates:
+        print("NO_DEPENDENCY_SAFE_ITEM")
+        return 2
+    item = candidates[0]
+    print(json.dumps({
+        "id": item["id"],
+        "priority": item["priority"],
+        "lane": item["preferred_worker_lane"],
+        "action": item["next_admissible_action"],
+    }, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
