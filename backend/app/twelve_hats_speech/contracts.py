@@ -78,6 +78,72 @@ class AudioFormat(StrEnum):
     AAC = "AAC"
 
 
+class PronunciationEntryStatus(StrEnum):
+    PROPOSED = "PROPOSED"
+    APPROVED = "APPROVED"
+    SUPERSEDED = "SUPERSEDED"
+    REVOKED = "REVOKED"
+
+
+class PronunciationAuthorityStatus(StrEnum):
+    DRAFT = "DRAFT"
+    QUALIFIED = "QUALIFIED"
+    ACCEPTED = "ACCEPTED"
+    SUPERSEDED = "SUPERSEDED"
+    REVOKED = "REVOKED"
+
+
+class SpeechPronunciationEntry(SpeechContract):
+    entry_id: Identifier
+    term: str = Field(min_length=1, max_length=160)
+    spoken_tokens: tuple[str, ...] = Field(min_length=1, max_length=16)
+    language: str = Field(min_length=2, max_length=32)
+    status: PronunciationEntryStatus
+    approved_by: str | None = Field(default=None, max_length=160)
+    approved_at: datetime | None = None
+    supersedes_entry_id: Identifier | None = None
+
+    @model_validator(mode="after")
+    def approval_requires_evidence(self) -> SpeechPronunciationEntry:
+        if self.status is PronunciationEntryStatus.APPROVED and (
+            self.approved_by is None or self.approved_at is None
+        ):
+            raise ValueError("approved pronunciation requires approval evidence")
+        return self
+
+
+class SpeechPronunciationAuthority(SpeechContract):
+    contract_version: Literal["TWELVE_HATS_PRONUNCIATION_AUTHORITY.v1"] = (
+        "TWELVE_HATS_PRONUNCIATION_AUTHORITY.v1"
+    )
+    authority_version: Identifier
+    language: str = Field(min_length=2, max_length=32)
+    status: PronunciationAuthorityStatus
+    entries: tuple[SpeechPronunciationEntry, ...]
+    created_at: datetime
+    accepted_by: str | None = Field(default=None, max_length=160)
+    accepted_at: datetime | None = None
+    manifest_digest: Sha256
+
+    @model_validator(mode="after")
+    def accepted_authority_is_reviewed(self) -> SpeechPronunciationAuthority:
+        if self.status is PronunciationAuthorityStatus.ACCEPTED and (
+            self.accepted_by is None or self.accepted_at is None
+        ):
+            raise ValueError("accepted pronunciation authority requires approval evidence")
+        ids = [entry.entry_id for entry in self.entries]
+        if len(ids) != len(set(ids)):
+            raise ValueError("pronunciation entry IDs must be unique")
+        active_terms = [
+            (entry.language.casefold(), entry.term.casefold())
+            for entry in self.entries
+            if entry.status is PronunciationEntryStatus.APPROVED
+        ]
+        if len(active_terms) != len(set(active_terms)):
+            raise ValueError("approved pronunciation terms must be unique")
+        return self
+
+
 class SpeechDatasetVersion(SpeechContract):
     contract_version: Literal["TWELVE_HATS_SPEECH_DATASET.v1"] = (
         "TWELVE_HATS_SPEECH_DATASET.v1"
@@ -148,6 +214,7 @@ class SpeechModelArtifact(SpeechContract):
     training_run_id: Identifier
     training_config_digest: Sha256
     pronunciation_authority_version: Identifier
+    pronunciation_authority_digest: Sha256
     evaluation_corpus_version: Identifier
     artifact_hashes: dict[str, Sha256] = Field(min_length=1)
     created_at: datetime

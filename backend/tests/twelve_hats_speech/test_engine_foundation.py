@@ -11,12 +11,16 @@ from app.twelve_hats_speech.contracts import (
     DeliveryMetadata,
     InferenceStatus,
     PromotionStatus,
+    PronunciationAuthorityStatus,
+    PronunciationEntryStatus,
     QualificationStatus,
     SpeechAcousticEvaluation,
     SpeechDatasetVersion,
     SpeechEngineState,
     SpeechInferenceRequest,
     SpeechModelArtifact,
+    SpeechPronunciationAuthority,
+    SpeechPronunciationEntry,
     SpeechTrainingRun,
     TrainingRunStatus,
 )
@@ -29,6 +33,35 @@ from app.twelve_hats_speech.governance import (
 NOW = datetime(2026, 9, 17, 12, 0, tzinfo=timezone.utc)
 SHA = "a" * 64
 CODE_REVISION = "b" * 40
+
+
+def pronunciation(
+    *, status: PronunciationAuthorityStatus = PronunciationAuthorityStatus.ACCEPTED
+) -> SpeechPronunciationAuthority:
+    values: dict[str, object] = {
+        "authority_version": "lia-pronunciation.v1",
+        "language": "en-US",
+        "status": status,
+        "entries": (
+            SpeechPronunciationEntry(
+                entry_id="term-acp-v1",
+                term="ACP",
+                spoken_tokens=("A", "C", "P"),
+                language="en-US",
+                status=PronunciationEntryStatus.APPROVED,
+                approved_by="owner-review",
+                approved_at=NOW,
+            ),
+        ),
+        "created_at": NOW,
+        "accepted_by": "owner-review" if status is PronunciationAuthorityStatus.ACCEPTED else None,
+        "accepted_at": NOW if status is PronunciationAuthorityStatus.ACCEPTED else None,
+        "manifest_digest": "0" * 64,
+    }
+    provisional = SpeechPronunciationAuthority.model_validate(values)
+    values = provisional.model_dump(mode="json", exclude={"manifest_digest"})
+    values["manifest_digest"] = canonical_digest(values)
+    return SpeechPronunciationAuthority.model_validate(values)
 
 
 def delivery() -> DeliveryMetadata:
@@ -44,6 +77,7 @@ def delivery() -> DeliveryMetadata:
 
 
 def request(**overrides: object) -> SpeechInferenceRequest:
+    authority = pronunciation()
     values: dict[str, object] = {
         "request_id": "speech-request-1",
         "semantic_text": "The current evidence is incomplete.",
@@ -51,7 +85,7 @@ def request(**overrides: object) -> SpeechInferenceRequest:
         "response_mode": "NORMAL",
         "delivery": delivery(),
         "pronunciation_authority_version": "lia-pronunciation.v1",
-        "pronunciation_digest": SHA,
+        "pronunciation_digest": authority.manifest_digest,
     }
     values.update(overrides)
     return SpeechInferenceRequest.model_validate(values)
@@ -63,6 +97,7 @@ def artifact(
     promotion: PromotionStatus = PromotionStatus.ACCEPTED,
     manifest_digest: str | None = None,
 ) -> SpeechModelArtifact:
+    authority = pronunciation()
     values: dict[str, object] = {
         "model_id": "lia-owned-voice",
         "model_version": "1.0.0",
@@ -72,6 +107,7 @@ def artifact(
         "training_run_id": "training-run-1",
         "training_config_digest": "c" * 64,
         "pronunciation_authority_version": "lia-pronunciation.v1",
+        "pronunciation_authority_digest": authority.manifest_digest,
         "evaluation_corpus_version": "lia-voice-evaluation.v1",
         "artifact_hashes": {"model": "d" * 64},
         "created_at": NOW,
@@ -174,14 +210,68 @@ def test_wrong_manifest_or_artifact_digest_is_rejected() -> None:
 
 def test_even_valid_manifest_refuses_until_owned_inference_exists() -> None:
     current = artifact()
+    authority = pronunciation()
     result = TwelveHatsSpeechEngine(
-        current, artifact_bytes_digests=current.artifact_hashes
+        current,
+        artifact_bytes_digests=current.artifact_hashes,
+        pronunciation_authority=authority,
     ).render(request(requested_model_version=current.model_version))
 
     assert result.status is InferenceStatus.REJECTED
     assert result.failure_code == "INFERENCE_IMPLEMENTATION_NOT_AVAILABLE"
     assert result.model_id is None
     assert result.audio_bytes is None
+
+
+def test_missing_unaccepted_or_mismatched_pronunciation_fails_closed() -> None:
+    current = artifact()
+    verified_hashes = current.artifact_hashes
+
+    missing = TwelveHatsSpeechEngine(
+        current, artifact_bytes_digests=verified_hashes
+    ).render(request())
+    assert missing.failure_code == "MODEL_NOT_APPROVED"
+
+    draft = pronunciation(status=PronunciationAuthorityStatus.DRAFT)
+    unaccepted = TwelveHatsSpeechEngine(
+        current,
+        artifact_bytes_digests=verified_hashes,
+        pronunciation_authority=draft,
+    ).render(request())
+    assert unaccepted.failure_code == "MODEL_NOT_APPROVED"
+
+    authority = pronunciation()
+    wrong_request = TwelveHatsSpeechEngine(
+        current,
+        artifact_bytes_digests=verified_hashes,
+        pronunciation_authority=authority,
+    ).render(request(pronunciation_digest="9" * 64))
+    assert wrong_request.failure_code == "MODEL_NOT_APPROVED"
+
+
+def test_pronunciation_authority_rejects_unreviewed_approval_and_duplicate_terms() -> None:
+    with pytest.raises(ValidationError, match="approval evidence"):
+        SpeechPronunciationEntry(
+            entry_id="term-acp-v1",
+            term="ACP",
+            spoken_tokens=("A", "C", "P"),
+            language="en-US",
+            status=PronunciationEntryStatus.APPROVED,
+        )
+
+    approved = pronunciation().entries[0]
+    with pytest.raises(ValidationError, match="terms must be unique"):
+        SpeechPronunciationAuthority(
+            authority_version="lia-pronunciation.v2",
+            language="en-US",
+            status=PronunciationAuthorityStatus.DRAFT,
+            entries=(
+                approved,
+                approved.model_copy(update={"entry_id": "term-acp-v2"}),
+            ),
+            created_at=NOW,
+            manifest_digest="0" * 64,
+        )
 
 
 def test_training_requires_qualified_rights_and_matching_dataset() -> None:

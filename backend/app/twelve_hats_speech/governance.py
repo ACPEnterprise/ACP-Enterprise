@@ -13,6 +13,7 @@ from .contracts import (
     DatasetRightsStatus,
     SpeechDatasetVersion,
     SpeechModelArtifact,
+    SpeechPronunciationAuthority,
     SpeechTrainingRun,
 )
 
@@ -41,6 +42,14 @@ def verify_model_manifest(artifact: SpeechModelArtifact) -> None:
     manifest = artifact.model_dump(mode="json", exclude={"manifest_digest"})
     if canonical_digest(manifest) != artifact.manifest_digest:
         raise ValueError("speech model artifact manifest digest mismatch")
+
+
+def verify_pronunciation_authority(
+    authority: SpeechPronunciationAuthority,
+) -> None:
+    manifest = authority.model_dump(mode="json", exclude={"manifest_digest"})
+    if canonical_digest(manifest) != authority.manifest_digest:
+        raise ValueError("pronunciation authority manifest digest mismatch")
 
 
 def authorize_training(
