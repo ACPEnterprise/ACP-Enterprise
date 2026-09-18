@@ -26,7 +26,11 @@ class RecognitionMock {
 
 class UtteranceMock {
   text: string;
+  lang = "";
   rate = 1;
+  pitch = 1;
+  volume = 1;
+  voice: SpeechSynthesisVoice | null = null;
   onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
   onerror: (() => void) | null = null;
@@ -36,8 +40,15 @@ class UtteranceMock {
   }
 }
 
+let voicesChanged: (() => void) | undefined;
+let availableVoices: SpeechSynthesisVoice[] = [];
 const speech = {
   cancel: vi.fn(),
+  getVoices: vi.fn(() => availableVoices),
+  addEventListener: vi.fn((event: string, listener: () => void) => {
+    if (event === "voiceschanged") voicesChanged = listener;
+  }),
+  removeEventListener: vi.fn(),
   speak: vi.fn((utterance: UtteranceMock) => {
     utterance.onstart?.();
   }),
@@ -49,6 +60,7 @@ const response = (): LiaResponse => ({
   classification: "KNOWN",
   authority: "ACP_AUTHORITATIVE",
   answer: "Two appointments are scheduled tomorrow.",
+  response_mode: "NORMAL",
   evidence: [],
   limitations: [],
   navigation: [{ label: "Open Scheduling", internal_path: "/scheduling" }],
@@ -74,7 +86,16 @@ const response = (): LiaResponse => ({
 describe("LIA voice panel", () => {
   beforeEach(() => {
     RecognitionMock.latest = undefined;
+    voicesChanged = undefined;
+    availableVoices = [{
+      default: true,
+      lang: "en-US",
+      localService: true,
+      name: "System English",
+      voiceURI: "system-english",
+    } satisfies SpeechSynthesisVoice];
     vi.clearAllMocks();
+    window.localStorage.clear();
     Object.defineProperty(window, "SpeechRecognition", {
       configurable: true,
       value: RecognitionMock,
@@ -147,10 +168,72 @@ describe("LIA voice panel", () => {
       />,
     );
     expect(speech.speak).toHaveBeenCalledOnce();
+    const utterance = speech.speak.mock.calls[0]?.[0];
+    expect(utterance?.rate).toBe(0.94);
+    expect(utterance?.pitch).toBe(1);
+    expect(utterance?.lang).toBe("en-US");
+    expect(utterance?.voice?.name).toBe("System English");
     expect(screen.getByText("SPEAKING")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Interrupt LIA" }));
     expect(speech.cancel).toHaveBeenCalled();
     expect(screen.getByText("LISTENING")).toBeVisible();
+  });
+
+  it("refreshes deterministic inventory when the browser announces voiceschanged", () => {
+    const view = render(
+      <LiaVoicePanel busy={false} onDraft={vi.fn()} onSubmit={vi.fn()} />,
+    );
+    expect(speech.addEventListener).toHaveBeenCalledWith("voiceschanged", expect.any(Function));
+    availableVoices = [{
+      default: true,
+      lang: "en-GB",
+      localService: true,
+      name: "Reviewed Local English",
+      voiceURI: "reviewed-local",
+    } satisfies SpeechSynthesisVoice];
+    act(() => voicesChanged?.());
+    view.rerender(
+      <LiaVoicePanel busy={false} result={response()} onDraft={vi.fn()} onSubmit={vi.fn()} />,
+    );
+    expect(speech.speak.mock.calls.at(-1)?.[0].voice?.voiceURI).toBe("reviewed-local");
+  });
+
+  it("previews a reviewed local voice without changing LIA semantics", () => {
+    availableVoices = [
+      {
+        default: true,
+        lang: "en-US",
+        localService: true,
+        name: "Default English",
+        voiceURI: "default-english",
+      } satisfies SpeechSynthesisVoice,
+      {
+        default: false,
+        lang: "en-US",
+        localService: true,
+        name: "Reviewed Distinct Voice",
+        voiceURI: "reviewed-distinct",
+      } satisfies SpeechSynthesisVoice,
+    ];
+    render(<LiaVoicePanel busy={false} onDraft={vi.fn()} onSubmit={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("English voice available on this device"), {
+      target: { value: "reviewed-distinct" },
+    });
+    fireEvent.change(screen.getByLabelText("Evaluation response"), {
+      target: { value: "missing-evidence" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview LIA style" }));
+
+    const utterance = speech.speak.mock.calls.at(-1)?.[0];
+    expect(utterance).toBeDefined();
+    if (!utterance) throw new Error("Expected a preview utterance");
+    expect(utterance.voice?.voiceURI).toBe("reviewed-distinct");
+    expect(utterance.rate).toBe(0.94);
+    expect(utterance.text).toContain("material cost is unavailable");
+    expect(window.localStorage.getItem("twelve-hats.lia.device-voice.v1")).toBe(
+      "reviewed-distinct",
+    );
   });
 
   it("ends active capture and never exposes a mutation control", () => {
@@ -170,7 +253,7 @@ describe("LIA voice panel", () => {
     result.answer =
       "Direct conclusion. Important implication. Detailed evidence one. Detailed evidence two. Detailed evidence three.";
     expect(spokenAnswer(result)).toBe(
-      "Direct conclusion. Important implication. Next: Open Scheduling.",
+      "Direct conclusion. Important implication. Detailed evidence one. You can open Scheduling next.",
     );
   });
 });
