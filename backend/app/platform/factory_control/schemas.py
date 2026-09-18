@@ -31,12 +31,34 @@ class FactoryEventIn(StrictSchema):
         "first_pass_complete",
     ]
     lifecycle_state: Optional[
-        Literal["idle", "queued", "active", "handoff", "blocked", "complete"]
+        Literal[
+            "ACTIVE",
+            "ASSIGNED",
+            "ELIGIBLE_IDLE",
+            "WAITING_INTEGRATION",
+            "HUMAN_GATE",
+            "PROVIDER_GATE",
+            "DEPENDENCY_BLOCKED",
+            "RATE_LIMITED",
+            "UNSAFE_STOP",
+        ]
     ] = None
     queue_depth: int = Field(default=0, ge=0, le=10000)
     idempotency_key: str = Field(min_length=1, max_length=200)
     occurred_at: datetime
     details: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("lifecycle_state", mode="before")
+    @classmethod
+    def normalize_lifecycle_state(cls, value: object) -> object:
+        aliases = {
+            "active": "ACTIVE",
+            "queued": "ASSIGNED",
+            "idle": "ELIGIBLE_IDLE",
+            "handoff": "WAITING_INTEGRATION",
+            "blocked": "DEPENDENCY_BLOCKED",
+        }
+        return aliases.get(value, value) if isinstance(value, str) else value
 
     @field_validator("occurred_at")
     @classmethod

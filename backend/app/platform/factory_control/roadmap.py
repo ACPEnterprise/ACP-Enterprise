@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.platform.security.safe_output import (
+    sanitize_text,
+    validate_no_sensitive_fields,
+)
+
 
 class RoadmapError(ValueError):
     pass
@@ -86,27 +91,35 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
 
 
 def safe_event_details(details: dict[str, Any]) -> dict[str, Any]:
-    forbidden = {
-        "secret",
-        "token",
-        "password",
-        "credential",
-        "payroll_value",
-        "wage",
-        "amount",
+    allowed = {
+        "count",
+        "defect_id",
+        "digest",
+        "gate_id",
+        "handoff_id",
+        "reason_code",
+        "result",
+        "status",
     }
 
     def contains_forbidden_key(value: Any) -> bool:
         if isinstance(value, dict):
             return any(
-                any(term in str(key).lower() for term in forbidden)
-                or contains_forbidden_key(item)
+                str(key) not in allowed or contains_forbidden_key(item)
                 for key, item in value.items()
             )
         if isinstance(value, list):
             return any(contains_forbidden_key(item) for item in value)
+        if isinstance(value, str):
+            return sanitize_text(value) != value
         return False
 
+    try:
+        validate_no_sensitive_fields(details, boundary="Factory Control event details")
+    except ValueError as error:
+        raise RoadmapError(
+            "factory event details contain prohibited material"
+        ) from error
     if contains_forbidden_key(details):
         raise RoadmapError("factory event details contain prohibited material")
     encoded = json.dumps(details, sort_keys=True, separators=(",", ":"))

@@ -84,6 +84,8 @@ def test_event_details_reject_secrets_payroll_values_and_unbounded_documents():
         {"payroll_value": 12},
         {"wage_rate": 20},
         {"evidence": [{"secret_reference": "x"}]},
+        {"result": "Bearer abc.def.ghi"},
+        {"result": "-----BEGIN PRIVATE KEY-----x-----END PRIVATE KEY-----"},
     ):
         with pytest.raises(RoadmapError, match="prohibited"):
             safe_event_details(prohibited)
