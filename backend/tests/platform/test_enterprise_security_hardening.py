@@ -138,6 +138,10 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" in response.headers
+    assert "script-src 'self'" in response.headers["content-security-policy"]
+    assert "object-src 'none'" in response.headers["content-security-policy"]
+    assert "base-uri 'self'" in response.headers["content-security-policy"]
+    assert "form-action 'self'" in response.headers["content-security-policy"]
     assert response.headers["permissions-policy"] == (
         "camera=(), microphone=(self), geolocation=()"
     )

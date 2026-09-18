@@ -113,6 +113,10 @@ def test_frontend_proxy_emits_one_security_header_policy() -> None:
         "Strict-Transport-Security",
     ):
         assert f"proxy_hide_header {header};" in nginx
+    assert "script-src 'self'" in nginx
+    assert "object-src 'none'" in nginx
+    assert "base-uri 'self'" in nginx
+    assert "form-action 'self'" in nginx
 
 
 def test_frontend_proxies_canonical_liveness_and_readiness_exactly() -> None:
