@@ -10,6 +10,8 @@ from app.field_service.models import (
     FieldWorkNote,
 )
 
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_field_tables_have_closed_idempotency_and_job_contracts() -> None:
     assert {
@@ -25,8 +27,9 @@ def test_field_tables_have_closed_idempotency_and_job_contracts() -> None:
 
 def test_field_migration_descends_from_authoritative_head() -> None:
     tree = ast.parse(
-        Path(
-            "alembic/versions/z1q3l5n7r942_create_technician_field_evidence.py"
+        (
+            BACKEND_ROOT
+            / "alembic/versions/z1q3l5n7r942_create_technician_field_evidence.py"
         ).read_text()
     )
     values = {}
@@ -60,8 +63,9 @@ def test_completion_contract_models_are_durable_and_scoped() -> None:
 
 def test_completion_contract_migration_descends_from_field_head() -> None:
     tree = ast.parse(
-        Path(
-            "alembic/versions/a2r4m6p8s053_close_field_completion_contract.py"
+        (
+            BACKEND_ROOT
+            / "alembic/versions/a2r4m6p8s053_close_field_completion_contract.py"
         ).read_text()
     )
     values = {}
