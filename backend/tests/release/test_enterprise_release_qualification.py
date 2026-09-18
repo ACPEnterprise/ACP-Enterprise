@@ -117,6 +117,44 @@ def test_executed_evidence_is_private_and_digest_bound(tmp_path: Path) -> None:
     assert artifact.stat().st_mode & 0o777 == 0o600
 
 
+def test_migration_head_check_requires_release_ready_canonical_lineage(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    valid_lineage_command = "; ".join(
+        (
+            "import json",
+            "print(json.dumps({'release_ready': True, 'roots': ['r'], "
+            + "'heads': ['h'], 'risks': []}))",
+        )
+    )
+    check = module.Check(
+        "migration_heads",
+        "Exactly one Alembic head",
+        ("local",),
+        (
+            sys.executable,
+            "-c",
+            valid_lineage_command,
+        ),
+        "release ready",
+    )
+
+    passed = module.run_command(check, tmp_path, tmp_path / "pass.log", "a" * 40)
+    assert passed.status == "PASS"
+
+    invalid = module.Check(
+        "migration_heads",
+        "Exactly one Alembic head",
+        ("local",),
+        (sys.executable, "-c", "print('not-json')"),
+        "release ready",
+    )
+    failed = module.run_command(check=invalid, root=tmp_path, artifact=tmp_path / "fail.log", candidate="a" * 40)
+    assert failed.status == "FAIL"
+    assert failed.reason == "canonical migration lineage is not release-ready"
+
+
 def test_existing_evidence_is_never_overwritten(tmp_path: Path) -> None:
     module = _module()
     evidence = tmp_path / "evidence"
