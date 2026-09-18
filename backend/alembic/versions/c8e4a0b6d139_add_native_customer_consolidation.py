@@ -7,9 +7,8 @@ Revises: b7d3f9a5c028
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "c8e4a0b6d139"
 down_revision: str | Sequence[str] | None = "b7d3f9a5c028"

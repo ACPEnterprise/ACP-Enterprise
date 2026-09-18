@@ -162,5 +162,7 @@ def test_service_request_route_is_registered_in_application_contract() -> None:
     operation = app.openapi()["paths"]["/api/v1/operations/service-requests"]["post"]
     assert operation["summary"] == "Accept a launch service request"
     assert operation["responses"]["201"]
-    schedule = app.openapi()["paths"]["/api/v1/operations/jobs/{job_id}/schedule"]["post"]
+    schedule = app.openapi()["paths"]["/api/v1/operations/jobs/{job_id}/schedule"][
+        "post"
+    ]
     assert schedule["summary"] == "Schedule an existing Job"

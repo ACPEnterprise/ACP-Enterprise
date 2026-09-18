@@ -3,14 +3,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.events.models import BusinessEvent
 from app.operational_migration.cutover import (
@@ -31,6 +23,14 @@ from app.operational_migration.cutover_repository import (
 from app.operational_migration.models import OperationalMigrationRun
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from tests.operational_migration.test_operational_migration import (
     NOW,
     seed_context,

@@ -99,7 +99,9 @@ async def test_bridge_preserves_manage_approve_and_execution_contexts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stale_reconciliation_uses_existing_authenticated_lease_lifecycle() -> None:
+async def test_stale_reconciliation_uses_existing_authenticated_lease_lifecycle() -> (
+    None
+):
     transaction = AsyncMock()
     transaction.__aenter__.return_value = None
     transaction.__aexit__.return_value = None
@@ -168,7 +170,10 @@ def test_reviewed_queue_tracks_actual_factory_authority_gates_and_successors() -
     queue = load_approved_factory_queue()
     by_id = {item.milestone_id: item for item in queue.items}
     assert by_id["MOBILE.PREVIEW.IDENTITY.FIXTURE.1"].queue_state == "AUTHORITATIVE"
-    assert by_id["REVENUE.CYCLE.FAILURE.RECOVERY.ACCEPTANCE.1"].queue_state == "AUTHORITATIVE"
+    assert (
+        by_id["REVENUE.CYCLE.FAILURE.RECOVERY.ACCEPTANCE.1"].queue_state
+        == "AUTHORITATIVE"
+    )
     admission = by_id["MIGRATION.HCP.SOURCE4.PREVIEW.ADMISSION.1"]
     assert admission.execution_mode == "preview_gated"
     assert admission.hard_boundary_operations == ("preview_data_admission",)
@@ -178,6 +183,11 @@ def test_reviewed_queue_tracks_actual_factory_authority_gates_and_successors() -
         "e297f36bf4d1e4b176fa9b70aff7c771bfdb65d0"
     )
     assert admission.dependencies == (live_v2.milestone_id,)
-    assert by_id["PRICEBOOK.ALLCOUNTY.MIGRATION.RECONCILIATION.1"].queue_state == "READY"
+    assert (
+        by_id["PRICEBOOK.ALLCOUNTY.MIGRATION.RECONCILIATION.1"].queue_state == "READY"
+    )
     assert by_id["COMMUNICATIONS.OPERATIONAL.MEASUREMENT.1"].queue_state == "READY"
-    assert by_id["PRICEBOOK.OWNER.DECISION.WORKSPACE.1"].queue_state == "BLOCKED_DEPENDENCY"
+    assert (
+        by_id["PRICEBOOK.OWNER.DECISION.WORKSPACE.1"].queue_state
+        == "BLOCKED_DEPENDENCY"
+    )

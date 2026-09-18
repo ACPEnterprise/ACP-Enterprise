@@ -46,7 +46,9 @@ def test_admin_access_token_rejects_group_readable_file(
         admin_access_token()
 
 
-def test_admin_access_token_environment_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_admin_access_token_environment_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("ACP_HEADLESS_ADMIN_ACCESS_TOKEN_FILE", raising=False)
     monkeypatch.setenv("ACP_HEADLESS_ADMIN_ACCESS_TOKEN", "opaque-token")
 

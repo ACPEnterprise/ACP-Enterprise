@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.worker_control.models import EngineeringWorker
 from app.worker_identity.contracts import (
     IssuedCredentialMetadata,
     WorkerAuthenticationCredential,
@@ -11,7 +12,6 @@ from app.worker_identity.contracts import (
     WorkerIdentityState,
 )
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
-from app.worker_control.models import EngineeringWorker
 from app.worker_identity.records import WorkerCredentialRecord, WorkerIdentityRecord
 
 

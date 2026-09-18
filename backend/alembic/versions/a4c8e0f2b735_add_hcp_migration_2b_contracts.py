@@ -84,14 +84,26 @@ def upgrade() -> None:
         sa.Column("evidence_digest", sa.String(64), nullable=False),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
-            ["company_id", "branch_id"], ["branches.company_id", "branches.id"],
-            name="fk_hcp_customer_lineage_branch_scope", ondelete="RESTRICT"
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_hcp_customer_lineage_branch_scope",
+            ondelete="RESTRICT",
         ),
-        sa.ForeignKeyConstraint(["master_run_id"], ["hcp_migration_master_runs.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["customer_source_identity_id"], ["customer_source_identities.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["master_run_id"], ["hcp_migration_master_runs.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["customer_source_identity_id"],
+            ["customer_source_identities.id"],
+            ondelete="RESTRICT",
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("company_id", "native_customer_id", name="uq_hcp_customer_lineage_native"),
-        sa.UniqueConstraint("company_id", "evidence_digest", name="uq_hcp_customer_lineage_replay"),
+        sa.UniqueConstraint(
+            "company_id", "native_customer_id", name="uq_hcp_customer_lineage_native"
+        ),
+        sa.UniqueConstraint(
+            "company_id", "evidence_digest", name="uq_hcp_customer_lineage_replay"
+        ),
     )
     op.create_table(
         "hcp_employee_source_crosswalks",
@@ -109,17 +121,43 @@ def upgrade() -> None:
         sa.Column("evidence_digest", sa.String(64), nullable=False),
         sa.Column("evidence_version", sa.Integer(), nullable=False),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("disposition IN ('CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE','EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS')", name="ck_hcp_employee_crosswalk_disposition"),
-        sa.CheckConstraint("disposition <> 'EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS' OR employee_id IS NULL", name="ck_hcp_employee_crosswalk_excluded_no_target"),
-        sa.ForeignKeyConstraint(["company_id", "branch_id"], ["branches.company_id", "branches.id"], name="fk_hcp_employee_crosswalk_branch_scope", ondelete="RESTRICT"),
+        sa.CheckConstraint(
+            "disposition IN ('CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE','EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS')",
+            name="ck_hcp_employee_crosswalk_disposition",
+        ),
+        sa.CheckConstraint(
+            "disposition <> 'EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS' OR employee_id IS NULL",
+            name="ck_hcp_employee_crosswalk_excluded_no_target",
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_hcp_employee_crosswalk_branch_scope",
+            ondelete="RESTRICT",
+        ),
         sa.ForeignKeyConstraint(["master_run_id"], ["hcp_migration_master_runs.id"]),
-        sa.ForeignKeyConstraint(["prior_evidence_id"], ["hcp_employee_source_crosswalks.id"]),
+        sa.ForeignKeyConstraint(
+            ["prior_evidence_id"], ["hcp_employee_source_crosswalks.id"]
+        ),
         sa.ForeignKeyConstraint(["employee_id"], ["employees.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("company_id", "native_employee_id", "evidence_version", name="uq_hcp_employee_crosswalk_version"),
-        sa.UniqueConstraint("company_id", "evidence_digest", name="uq_hcp_employee_crosswalk_replay"),
+        sa.UniqueConstraint(
+            "company_id",
+            "native_employee_id",
+            "evidence_version",
+            name="uq_hcp_employee_crosswalk_version",
+        ),
+        sa.UniqueConstraint(
+            "company_id", "evidence_digest", name="uq_hcp_employee_crosswalk_replay"
+        ),
     )
-    op.create_index("uq_hcp_employee_crosswalk_target", "hcp_employee_source_crosswalks", ["company_id", "employee_id"], unique=True, postgresql_where=sa.text("employee_id IS NOT NULL"))
+    op.create_index(
+        "uq_hcp_employee_crosswalk_target",
+        "hcp_employee_source_crosswalks",
+        ["company_id", "employee_id"],
+        unique=True,
+        postgresql_where=sa.text("employee_id IS NOT NULL"),
+    )
     op.create_table(
         "hcp_migration_holds",
         sa.Column("id", UUID, nullable=False),
@@ -141,12 +179,26 @@ def upgrade() -> None:
         sa.Column("financial_truth_accepted", sa.Boolean(), nullable=False),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint("state IN ('HELD','RELEASED')", name="ck_hcp_hold_state"),
-        sa.CheckConstraint("operational_effects_enabled = false AND financial_truth_accepted = false", name="ck_hcp_hold_no_effects"),
-        sa.ForeignKeyConstraint(["company_id", "branch_id"], ["branches.company_id", "branches.id"], name="fk_hcp_hold_branch_scope", ondelete="RESTRICT"),
+        sa.CheckConstraint(
+            "operational_effects_enabled = false AND financial_truth_accepted = false",
+            name="ck_hcp_hold_no_effects",
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_hcp_hold_branch_scope",
+            ondelete="RESTRICT",
+        ),
         sa.ForeignKeyConstraint(["master_run_id"], ["hcp_migration_master_runs.id"]),
         sa.ForeignKeyConstraint(["prior_hold_id"], ["hcp_migration_holds.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("company_id", "master_run_id", "entity_kind", "native_id", name="uq_hcp_hold_native_run"),
+        sa.UniqueConstraint(
+            "company_id",
+            "master_run_id",
+            "entity_kind",
+            "native_id",
+            name="uq_hcp_hold_native_run",
+        ),
         sa.UniqueConstraint("company_id", "hold_digest", name="uq_hcp_hold_replay"),
     )
     op.execute(
@@ -181,7 +233,9 @@ def downgrade() -> None:
     ):
         op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_immutable ON {table}")
     op.drop_table("hcp_migration_holds")
-    op.drop_index("uq_hcp_employee_crosswalk_target", table_name="hcp_employee_source_crosswalks")
+    op.drop_index(
+        "uq_hcp_employee_crosswalk_target", table_name="hcp_employee_source_crosswalks"
+    )
     op.drop_table("hcp_employee_source_crosswalks")
     op.drop_table("hcp_customer_source_lineage")
     op.drop_table("hcp_migration_master_runs")

@@ -71,7 +71,9 @@ class PlatformHealthService:
                     row[0]
                     for row in (
                         await connection.execute(
-                            text("SELECT version_num FROM alembic_version ORDER BY version_num")
+                            text(
+                                "SELECT version_num FROM alembic_version ORDER BY version_num"
+                            )
                         )
                     ).all()
                 )
@@ -90,7 +92,10 @@ class PlatformHealthService:
                 required=True,
                 classification="HARD_REQUIRED",
                 reason="Database schema does not match the application migration head.",
-                facts={"expected_head_count": len(expected), "current_head_count": len(actual)},
+                facts={
+                    "expected_head_count": len(expected),
+                    "current_head_count": len(actual),
+                },
             )
         return self._component(
             "schema",
@@ -128,7 +133,10 @@ class PlatformHealthService:
         components = [await self.database(), await self.schema(), await self.redis()]
         required_states = {item.state for item in components if item.required}
         all_states = {item.state for item in components}
-        if HealthState.NOT_READY in required_states or HealthState.BLOCKED in required_states:
+        if (
+            HealthState.NOT_READY in required_states
+            or HealthState.BLOCKED in required_states
+        ):
             state = HealthState.NOT_READY
         elif HealthState.DEGRADED in all_states or HealthState.UNKNOWN in all_states:
             state = HealthState.DEGRADED

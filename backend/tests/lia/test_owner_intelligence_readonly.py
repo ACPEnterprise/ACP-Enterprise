@@ -187,7 +187,9 @@ async def test_employee_name_resolution_is_fail_closed_for_no_or_ambiguous_match
 
 
 @pytest.mark.asyncio
-async def test_employee_name_resolution_scopes_query_before_returning_identity() -> None:
+async def test_employee_name_resolution_scopes_query_before_returning_identity() -> (
+    None
+):
     employee_id = uuid4()
     result = MagicMock()
     result.all.return_value = [employee_id]

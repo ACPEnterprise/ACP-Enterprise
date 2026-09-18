@@ -83,7 +83,9 @@ def test_classifies_source_history_without_promoting_accounting(tmp_path: Path) 
     }
     assert result.payment_records[0]["aggregation_safe"] is False
     assert result.payment_records[0]["exact_qbo_provider_identity"] is None
-    assert result.payment_records[0]["disposition"] == "SOURCE_DISPLAYABLE_NONAGGREGATED"
+    assert (
+        result.payment_records[0]["disposition"] == "SOURCE_DISPLAYABLE_NONAGGREGATED"
+    )
     assert result.payment_records[1]["disposition"] == "UNRESOLVED"
     assert result.refund_counts == {
         "source_acquired": 2,

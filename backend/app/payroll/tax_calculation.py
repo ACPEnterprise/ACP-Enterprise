@@ -273,9 +273,7 @@ class TaxDeductionCalculationResult:
             "gross_pay": str(self.gross_pay),
             "total_employee_taxes": str(self.total_employee_taxes),
             "total_employee_deductions": str(self.total_employee_deductions),
-            "total_employer_contributions": str(
-                self.total_employer_contributions
-            ),
+            "total_employer_contributions": str(self.total_employer_contributions),
             "net_pay_candidate": str(self.net_pay_candidate),
             "money_version": self.money_version,
             "supersedes_result_id": self.supersedes_result_id,
@@ -325,8 +323,7 @@ class TaxDeductionCalculationResult:
             employee_tax != self.total_employee_taxes
             or deductions != self.total_employee_deductions
             or employer != self.total_employer_contributions
-            or self.net_pay_candidate
-            != self.gross_pay - employee_tax - deductions
+            or self.net_pay_candidate != self.gross_pay - employee_tax - deductions
             or self.net_pay_candidate < 0
             or any(item.currency != self.currency for item in self.components)
         ):
@@ -347,9 +344,7 @@ class TaxDeductionCalculationResult:
 
 def _money(value: Decimal, currency: str) -> Decimal:
     if currency != "USD":
-        raise TaxDeductionCalculationError(
-            "unsupported or cross-currency composition"
-        )
+        raise TaxDeductionCalculationError("unsupported or cross-currency composition")
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN)
 
 
@@ -430,15 +425,12 @@ class PayrollTaxDeductionCalculationEngine:
             TaxDeductionAdmissionState.READY,
             TaxDeductionAdmissionState.NOT_APPLICABLE,
         }:
-            raise TaxDeductionCalculationError(
-                "tax/deduction admission is not ready"
-            )
+            raise TaxDeductionCalculationError("tax/deduction admission is not ready")
         if (
             admission.company_id != gross.persisted_company_id
             or admission.employee_id != gross.persisted_employee_id
             or admission.gross_result_id != gross.persisted_result_id
-            or admission.gross_calculation_digest
-            != gross.persisted_calculation_digest
+            or admission.gross_calculation_digest != gross.persisted_calculation_digest
         ):
             raise TaxDeductionCalculationError(
                 "tax/deduction admission gross-pay scope mismatch"

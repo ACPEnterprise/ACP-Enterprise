@@ -1,5 +1,4 @@
 import pytest
-
 from app.operational_migration.hcp_authoritative_acquisition import (
     CollectionSeal,
     CrosswalkState,
@@ -24,9 +23,12 @@ def test_crosswalk_never_promotes_number_only_evidence_to_available() -> None:
         NativeControlEvidence("job_native", "exported-job-number", ()).state
         == CrosswalkState.PARTIAL
     )
-    assert NativeControlEvidence(
-        "job_native", "exported-job-number", ("amount", "scheduled_date")
-    ).state == CrosswalkState.AVAILABLE
+    assert (
+        NativeControlEvidence(
+            "job_native", "exported-job-number", ("amount", "scheduled_date")
+        ).state
+        == CrosswalkState.AVAILABLE
+    )
     assert (
         NativeControlEvidence("job_native", None, ()).state
         == CrosswalkState.CONTROL_EXPORT_MISSING
@@ -42,9 +44,12 @@ def test_missing_relationship_remains_partial_or_absent() -> None:
         classify_relationship(parent_present=False, child_present=False)
         == EvidenceAvailability.ABSENT
     )
-    assert classify_relationship(
-        parent_present=True, child_present=True, values_conflict=True
-    ) == EvidenceAvailability.CONFLICTING
+    assert (
+        classify_relationship(
+            parent_present=True, child_present=True, values_conflict=True
+        )
+        == EvidenceAvailability.CONFLICTING
+    )
 
 
 def test_safe_summary_rejects_source_data() -> None:

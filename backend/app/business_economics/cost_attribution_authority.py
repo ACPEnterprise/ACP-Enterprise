@@ -83,7 +83,9 @@ _DECISIONS = (
         "Selects component-specific allocation drivers for certified employer burden.",
         ("certified_burden_components", "component_effective_dates"),
         True,
-        ("Missing burden components remain missing; one driver is not assumed for all.",),
+        (
+            "Missing burden components remain missing; one driver is not assumed for all.",
+        ),
     ),
     AttributionDecisionDefinition(
         "owner_compensation_treatment",

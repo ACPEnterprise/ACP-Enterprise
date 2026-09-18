@@ -2,8 +2,9 @@ import json
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
+import development_factory.repository as repository_module
 import pytest
-
+from development_factory.engine import DevelopmentFactory
 from development_factory.manifest import ManifestError, load_manifest
 from development_factory.models import (
     CheckDefinition,
@@ -11,7 +12,6 @@ from development_factory.models import (
     ClassifiedFile,
     RepositoryState,
 )
-from development_factory.engine import DevelopmentFactory
 from development_factory.policies import scan_policies
 from development_factory.reports import build_report, redact, render_markdown
 from development_factory.repository import (
@@ -19,7 +19,6 @@ from development_factory.repository import (
     classify_path,
     inspect_repository,
 )
-import development_factory.repository as repository_module
 
 
 def valid_check(**overrides: object) -> dict[str, object]:

@@ -22,7 +22,9 @@ SNAPSHOT = SnapshotIdentity(
 )
 
 
-def _envelope(family: str, native_id: str, payload: dict[str, object]) -> QboSourceEnvelope:
+def _envelope(
+    family: str, native_id: str, payload: dict[str, object]
+) -> QboSourceEnvelope:
     return QboSourceEnvelope.from_native(
         snapshot=SNAPSHOT,
         native_entity_type=family,
@@ -56,17 +58,54 @@ def test_representative_fixture_reconciles_exactly() -> None:
         ((100, 70), (120, 0), (200, 150), (80, 50)), 1
     ):
         add("invoice", f"i{index}", {"TotalAmt": total, "Balance": balance})
-    add("payment", "p1", {"TotalAmt": 120, "Line": [{"Amount": 120, "LinkedTxn": [{"TxnId": "i2"}]}]})
-    add("payment", "p2", {"TotalAmt": 50, "Line": [{"Amount": 50, "LinkedTxn": [{"TxnId": "i3"}]}]})
-    add("payment", "p3", {"TotalAmt": 60, "Line": [{"Amount": 30, "LinkedTxn": [{"TxnId": "i1"}]}, {"Amount": 30, "LinkedTxn": [{"TxnId": "i4"}]}]})
+    add(
+        "payment",
+        "p1",
+        {"TotalAmt": 120, "Line": [{"Amount": 120, "LinkedTxn": [{"TxnId": "i2"}]}]},
+    )
+    add(
+        "payment",
+        "p2",
+        {"TotalAmt": 50, "Line": [{"Amount": 50, "LinkedTxn": [{"TxnId": "i3"}]}]},
+    )
+    add(
+        "payment",
+        "p3",
+        {
+            "TotalAmt": 60,
+            "Line": [
+                {"Amount": 30, "LinkedTxn": [{"TxnId": "i1"}]},
+                {"Amount": 30, "LinkedTxn": [{"TxnId": "i4"}]},
+            ],
+        },
+    )
     add("credit_memo", "cm1", {"TotalAmt": 20, "RemainingCredit": 20})
     add("bill", "b1", {"TotalAmt": 150, "Balance": 150})
     add("bill", "b2", {"TotalAmt": 200, "Balance": 125})
-    add("bill_payment", "bp1", {"TotalAmt": 75, "Line": [{"Amount": 75, "LinkedTxn": [{"TxnId": "b2"}]}]})
+    add(
+        "bill_payment",
+        "bp1",
+        {"TotalAmt": 75, "Line": [{"Amount": 75, "LinkedTxn": [{"TxnId": "b2"}]}]},
+    )
     add("vendor_credit", "vc1", {"TotalAmt": 25, "Balance": 25})
     add("purchase", "pur1", {"TotalAmt": 60})
     for index, amount in enumerate((500, 40), 1):
-        add("journal_entry", f"j{index}", {"Line": [{"Amount": amount, "JournalEntryLineDetail": {"PostingType": "Debit"}}, {"Amount": amount, "JournalEntryLineDetail": {"PostingType": "Credit"}}]})
+        add(
+            "journal_entry",
+            f"j{index}",
+            {
+                "Line": [
+                    {
+                        "Amount": amount,
+                        "JournalEntryLineDetail": {"PostingType": "Debit"},
+                    },
+                    {
+                        "Amount": amount,
+                        "JournalEntryLineDetail": {"PostingType": "Credit"},
+                    },
+                ]
+            },
+        )
     add("transfer", "t1", {"Amount": 100})
     expected = expected_economic_manifest()
     fixture = {

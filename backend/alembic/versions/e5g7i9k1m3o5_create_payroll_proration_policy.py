@@ -3,9 +3,8 @@
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "e5g7i9k1m3o5"
 down_revision: str | Sequence[str] | None = "d4f6h8j0l2n4"

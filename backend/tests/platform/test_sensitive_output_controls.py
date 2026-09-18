@@ -7,10 +7,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from pydantic import BaseModel
-
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
@@ -25,6 +21,9 @@ from app.platform.security.safe_output import (
     sanitize,
     validate_no_sensitive_fields,
 )
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 CANARIES = {
     "password": "CANARY-PASSWORD-PLAT007",

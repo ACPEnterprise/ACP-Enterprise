@@ -111,9 +111,10 @@ def test_executed_evidence_is_private_and_digest_bound(tmp_path: Path) -> None:
     observed = module.run_command(check, tmp_path, artifact, "a" * 40)
 
     assert observed.status == "PASS"
-    assert observed.artifact_sha256 == module.hashlib.sha256(
-        artifact.read_bytes()
-    ).hexdigest()
+    assert (
+        observed.artifact_sha256
+        == module.hashlib.sha256(artifact.read_bytes()).hexdigest()
+    )
     assert artifact.stat().st_mode & 0o777 == 0o600
 
 

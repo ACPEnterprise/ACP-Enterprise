@@ -7,9 +7,8 @@ Revises: d3f5a7c9e162
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "e1b3d5f7a940"
 down_revision: str | None = "d3f5a7c9e162"

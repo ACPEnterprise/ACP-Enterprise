@@ -276,9 +276,7 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
     assert manager_catalog.costs_visible is True
     assert manager_catalog.versions[0].cost_readiness == "COST_COMPLETE"
     assert manager_catalog.versions[0].expected_direct_cost == Decimal("75.75")
-    assert manager_catalog.versions[0].expected_direct_contribution == Decimal(
-        "74.20"
-    )
+    assert manager_catalog.versions[0].expected_direct_contribution == Decimal("74.20")
     async with factory() as session:
         category_search = await service.catalog(
             session,

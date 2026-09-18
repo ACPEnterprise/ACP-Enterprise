@@ -51,8 +51,10 @@ def _sha256(path: Path) -> str:
 
 
 def _is_digest(value: str) -> bool:
-    return len(value) == 64 and value == value.lower() and all(
-        char in "0123456789abcdef" for char in value
+    return (
+        len(value) == 64
+        and value == value.lower()
+        and all(char in "0123456789abcdef" for char in value)
     )
 
 
@@ -145,13 +147,18 @@ class CurrentOverlayExecutionAuthority:
             is not self.expected_classification_admission_allowed
         ):
             raise ValueError("overlay canonical classification result mismatch")
-        if not self.zero_migration_drift or not self.current_operational_admission_allowed:
+        if (
+            not self.zero_migration_drift
+            or not self.current_operational_admission_allowed
+        ):
             raise ValueError("overlay operational or migration-drift gate failed")
         if (
             self.canonical_hold_count != 1389
             or not self.source4_package_identity.strip()
         ):
-            raise ValueError("overlay canonical hold or SOURCE.4 package binding mismatch")
+            raise ValueError(
+                "overlay canonical hold or SOURCE.4 package binding mismatch"
+            )
         expected_idempotency = hashlib.sha256(
             json.dumps(
                 {
@@ -189,7 +196,10 @@ async def execute_current_overlay(
         or os.getenv("PREVIEW_ACCESS_ENABLED", "false") != "true"
     ):
         raise ValueError("overlay requires the sanctioned Preview boundary")
-    if urlparse(settings.database_url).path.removeprefix("/") != authority.expected_database:
+    if (
+        urlparse(settings.database_url).path.removeprefix("/")
+        != authority.expected_database
+    ):
         raise ValueError("overlay Preview database authority mismatch")
     if (
         context.company.id != authority.company_id
@@ -202,7 +212,9 @@ async def execute_current_overlay(
 
     async with factory() as session:
         schemas = tuple(
-            (await session.scalars(text("SELECT version_num FROM alembic_version"))).all()
+            (
+                await session.scalars(text("SELECT version_num FROM alembic_version"))
+            ).all()
         )
         if schemas != (authority.expected_schema_head,):
             raise ValueError("overlay schema is not current at exactly one head")
@@ -252,8 +264,7 @@ async def execute_current_overlay(
                 "branch_id": str(authority.branch_id),
                 "counts_attempted": len(manifest.records),
                 "source_identities": [
-                    f"{record.domain}:{record.source_id}"
-                    for record in manifest.records
+                    f"{record.domain}:{record.source_id}" for record in manifest.records
                 ],
                 "execution_timestamp": manifest.acquired_at,
                 "idempotency_identity": authority.idempotency_identity,
@@ -272,7 +283,9 @@ async def run_authority_file(path: Path) -> OverlayExecutionReceipt:
     authority = CurrentOverlayExecutionAuthority.load(path)
     async with AsyncSessionFactory() as session:
         context = await resolve_rehearsal_context(
-            session, authority, credentialed=True  # type: ignore[arg-type]
+            session,
+            authority,
+            credentialed=True,  # type: ignore[arg-type]
         )
         await session.rollback()
     return await execute_current_overlay(

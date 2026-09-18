@@ -8,7 +8,6 @@ from typing import Any
 
 from development_factory.workflow import ActionPermissions, WorkflowState
 
-
 TASK_CONTRACT_VERSION = "1.0"
 TASK_ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._-]{2,63}$", re.IGNORECASE)
 VALIDATION_AREAS = frozenset(

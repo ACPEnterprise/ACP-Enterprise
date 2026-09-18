@@ -140,7 +140,13 @@ CUSTOMER_DEFINITIONS = tuple(
 )
 
 ASSET_DEFINITIONS = tuple(
-    PermissionDefinition(code=code, name=code.replace("_", " ").title(), resource="operational_asset", action=code.removeprefix("COMPANY_ASSET_").lower(), scope=PermissionScope.COMPANY)
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="operational_asset",
+        action=code.removeprefix("COMPANY_ASSET_").lower(),
+        scope=PermissionScope.COMPANY,
+    )
     for code in sorted(AssetPermission.ALL)
 )
 

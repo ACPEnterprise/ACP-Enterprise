@@ -1,9 +1,7 @@
 import ast
 from pathlib import Path
 
-MIGRATION = Path(
-    "alembic/versions/w8m0i2k4n619_create_invoice_accounts_receivable_.py"
-)
+MIGRATION = Path("alembic/versions/w8m0i2k4n619_create_invoice_accounts_receivable_.py")
 
 
 def test_invoice_migration_remains_on_the_authoritative_accounting_parent() -> None:
@@ -26,8 +24,7 @@ def test_invoice_migration_remains_on_the_authoritative_accounting_parent() -> N
 def test_legacy_number_exception_requires_immutable_source_provenance() -> None:
     migration = MIGRATION.read_text()
     assert (
-        "identity_origin = 'native' AND invoice_number ~ '^INV-[0-9]{6,}$'"
-        in migration
+        "identity_origin = 'native' AND invoice_number ~ '^INV-[0-9]{6,}$'" in migration
     )
     assert "identity_origin = 'grandfathered_legacy'" in migration
     assert "operational_migration_invoice_source_identities" in migration

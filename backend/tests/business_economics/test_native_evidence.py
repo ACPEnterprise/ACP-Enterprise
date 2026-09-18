@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-
 from app.business_economics.native_evidence import NativeEconomicsEvidenceService
 
 

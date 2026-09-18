@@ -1,7 +1,6 @@
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.adapter_import_policy import CustomerAdapterImportPolicy
 from app.customers.schemas import CustomerCreate, CustomerType
 from app.operational_migration.hcp_migration2b import (

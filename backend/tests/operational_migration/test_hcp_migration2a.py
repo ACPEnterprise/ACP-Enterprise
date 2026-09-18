@@ -1,7 +1,6 @@
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_migration2a import (
     Migration2ReleaseGate,
     UnlinkedEstimateEvidenceCommand,
@@ -61,7 +60,9 @@ def test_unlinked_evidence_rejects_unsafe_identity_or_disposition(
 
 
 @pytest.mark.asyncio
-async def test_actor_initializer_rejects_non_rehearsal_target_before_database_use() -> None:
+async def test_actor_initializer_rejects_non_rehearsal_target_before_database_use() -> (
+    None
+):
     target = NonProductionTarget(
         "production",
         "postgresql+asyncpg://user:secret@production/acp_hcp_rehearsal_import",

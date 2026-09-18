@@ -5,7 +5,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.communications.postmark import PostmarkIdentityProvider
 from app.platform.notifications.providers import (
     NotificationMessage,

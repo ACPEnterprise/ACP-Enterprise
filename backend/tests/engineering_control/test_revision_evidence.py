@@ -1,7 +1,6 @@
 import json
 
 import pytest
-
 from app.engineering_control.revision_evidence import (
     compose_revision_instruction,
     revision_evidence,

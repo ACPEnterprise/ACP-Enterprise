@@ -230,7 +230,7 @@ def _journeys(
             for payment in invoice.get("payments", [])
         )
         refund_refs = sorted(
-            str(refund.get("id") or f'{invoice["id"]}:unidentified-refund')
+            str(refund.get("id") or f"{invoice['id']}:unidentified-refund")
             for invoice in invoices
             for refund in invoice.get("refunds", [])
         )
@@ -250,7 +250,9 @@ def _journeys(
             {
                 "customer_source_id": customer_id,
                 "estimate_source_ids": estimate_ids,
-                "invoice_source_ids": sorted(str(invoice["id"]) for invoice in invoices),
+                "invoice_source_ids": sorted(
+                    str(invoice["id"]) for invoice in invoices
+                ),
                 "payment_source_ids": payment_ids,
                 "refund_source_references": refund_refs,
                 "open_invoice_source_ids": sorted(
@@ -267,7 +269,9 @@ def _journeys(
         "FINANCIAL_OVERLAP_HOLD": 1,
         "PARTIAL_SOURCE_HISTORY": 2,
     }
-    candidates.sort(key=lambda item: (rank[str(item["classification"])], item["customer_source_id"]))
+    candidates.sort(
+        key=lambda item: (rank[str(item["classification"])], item["customer_source_id"])
+    )
     if len(candidates) < JOURNEY_COUNT:
         raise ValueError("fewer than 50 exact Customer financial journeys")
     return candidates[:JOURNEY_COUNT]
@@ -283,13 +287,13 @@ def _may_evidence(root: Path) -> dict[str, object]:
         item
         for item in registrations
         if item.get("kind") == "profit_and_loss"
-        and (item.get("safe_report_parameters") or {}).get("start_date")
-        == "2026-05-01"
-        and (item.get("safe_report_parameters") or {}).get("end_date")
-        == "2026-05-31"
+        and (item.get("safe_report_parameters") or {}).get("start_date") == "2026-05-01"
+        and (item.get("safe_report_parameters") or {}).get("end_date") == "2026-05-31"
         and item.get("accounting_basis") == "cash"
     ]
-    general_ledger = [item for item in registrations if item.get("kind") == "general_ledger"]
+    general_ledger = [
+        item for item in registrations if item.get("kind") == "general_ledger"
+    ]
     return {
         "provider_may_profit_and_loss_registered": bool(may_pnl),
         "may_profit_and_loss_control_ids": sorted(

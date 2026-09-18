@@ -2,9 +2,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.dialects import postgresql
-
 from app.operational_migration.repository import OperationalMigrationRepository
+from sqlalchemy.dialects import postgresql
 
 
 @pytest.mark.asyncio

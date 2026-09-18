@@ -7,7 +7,6 @@ Revises: 15e0g45640f4
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "16f1h56751g5"
@@ -206,6 +205,4 @@ def downgrade() -> None:
     op.drop_table("procurement_match_exceptions")
     op.drop_table("procurement_three_way_match_lines")
     op.drop_table("procurement_three_way_matches")
-    op.drop_constraint(
-        "uq_ap_bill_lines_company_id", "ap_bill_lines", type_="unique"
-    )
+    op.drop_constraint("uq_ap_bill_lines_company_id", "ap_bill_lines", type_="unique")

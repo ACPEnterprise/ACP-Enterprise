@@ -119,7 +119,9 @@ class _SnapshotSession:
 
 
 @pytest.mark.asyncio
-async def test_payroll_snapshot_fails_closed_when_current_time_evidence_changes() -> None:
+async def test_payroll_snapshot_fails_closed_when_current_time_evidence_changes() -> (
+    None
+):
     original_id, corrected_id = uuid4(), uuid4()
     snapshot = SimpleNamespace(approved_revision_ids=[str(original_id)])
     with pytest.raises(PayrollConflictError, match="stale"):
@@ -194,7 +196,9 @@ async def test_job_labor_queue_preserves_actual_and_paid_time_distinction() -> N
             return operations
 
     queue = await Queries(None).job_labor_actuals(  # type: ignore[arg-type]
-        None, context=SimpleNamespace(), pay_period_id=operations.pay_period.id  # type: ignore[arg-type]
+        None,
+        context=SimpleNamespace(),
+        pay_period_id=operations.pay_period.id,  # type: ignore[arg-type]
     )
     assert queue.accepted_interval_count == 1
     assert queue.total_accepted_seconds == 7200

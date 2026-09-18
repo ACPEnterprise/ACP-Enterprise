@@ -97,22 +97,26 @@ def test_public_workforce_contract_cannot_expose_payroll_material() -> None:
 
 
 def test_mobile_readiness_uses_effective_permissions_not_role_names() -> None:
-    access, mobile, blockers = EmployeeAdministrationService._access_and_mobile_readiness(
-        employee_status="active",
-        membership_status="active",
-        user_status="active",
-        has_branch_access=True,
-        effective_permission_codes=MOBILE_REQUIRED_PERMISSION_CODES,
+    access, mobile, blockers = (
+        EmployeeAdministrationService._access_and_mobile_readiness(
+            employee_status="active",
+            membership_status="active",
+            user_status="active",
+            has_branch_access=True,
+            effective_permission_codes=MOBILE_REQUIRED_PERMISSION_CODES,
+        )
     )
     assert (access, mobile, blockers) == ("ACTIVE", "READY", ())
 
     missing = MOBILE_REQUIRED_PERMISSION_CODES - {"COMPANY_JOB_EXECUTE"}
-    access, mobile, blockers = EmployeeAdministrationService._access_and_mobile_readiness(
-        employee_status="active",
-        membership_status="active",
-        user_status="active",
-        has_branch_access=True,
-        effective_permission_codes=missing,
+    access, mobile, blockers = (
+        EmployeeAdministrationService._access_and_mobile_readiness(
+            employee_status="active",
+            membership_status="active",
+            user_status="active",
+            has_branch_access=True,
+            effective_permission_codes=missing,
+        )
     )
     assert access == "ACTIVE"
     assert mobile == "BLOCKED"

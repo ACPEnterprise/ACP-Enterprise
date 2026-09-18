@@ -2,7 +2,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.business_economics.capability_readiness import capability_readiness_matrix
 from app.business_economics.router import economics_capabilities
 

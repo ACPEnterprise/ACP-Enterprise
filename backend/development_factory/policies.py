@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from development_factory.models import Finding
-
 
 SOURCE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".sh", ".yml", ".yaml"}
 EXCLUDED_PARTS = {
@@ -279,8 +279,13 @@ def _immutable_record_checks(path: str, text: str) -> list[Finding]:
 def _security_checks(path: str, text: str) -> list[Finding]:
     findings: list[Finding] = []
     if path.startswith(
-        ("backend/tests/", "frontend/src/", "backend/development_factory/")
-    ) or path.startswith("backend/alembic/versions/"):
+        (
+            "backend/tests/",
+            "frontend/src/",
+            "backend/development_factory/",
+            "backend/alembic/versions/",
+        )
+    ):
         return findings
     patterns = (
         (

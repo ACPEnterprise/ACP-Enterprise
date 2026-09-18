@@ -4,10 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.beacon.evaluation import signal_evaluation_service
 from app.beacon.history import (
     BeaconEvaluationConflictError,
@@ -18,6 +14,10 @@ from app.beacon.models import BeaconEvaluationRunModel, BeaconSignalEvaluationMo
 from app.core.config import settings
 from app.customers.models import Customer  # noqa: F401
 from app.platform.company.models import Company
+from sqlalchemy import delete, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.beacon.test_beacon import NOW, snapshot
 
 

@@ -1,6 +1,5 @@
-from fastapi.routing import APIRoute
-
 from app.financial_reporting.router import router
+from fastapi.routing import APIRoute
 
 
 def test_reporting_api_is_read_only_and_bounded() -> None:

@@ -3,11 +3,11 @@ from inspect import signature
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.cutover_rehearsal import (
     CutoverRehearsalEvidence,
     CutoverRehearsalService,
 )
+
 from tests.customer_migration.test_cutover_plan import compile_plan, readiness
 
 CREATED = datetime(2026, 8, 5, 12, tzinfo=timezone.utc)

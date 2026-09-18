@@ -1,7 +1,6 @@
 from collections.abc import Mapping
 
 import pytest
-
 from app.operational_migration.service import JobMigrationRecord
 from app.operational_migration.transformation import (
     OperationalEntity,

@@ -67,15 +67,21 @@ class DirectExpenseAllocation:
         if len(self.source_evidence_digest) != 64:
             raise DirectExpenseAuthorityError("source evidence digest is required")
         if self.source_amount_minor <= 0 or self.allocation_version < 1:
-            raise DirectExpenseAuthorityError("positive source amount and version required")
+            raise DirectExpenseAuthorityError(
+                "positive source amount and version required"
+            )
         if len(self.currency) != 3 or self.currency != self.currency.upper():
             raise DirectExpenseAuthorityError("ISO currency is required")
         if not self.splits or any(item.amount_minor <= 0 for item in self.splits):
             raise DirectExpenseAuthorityError("positive exact Job splits are required")
         if len({item.job_id for item in self.splits}) != len(self.splits):
-            raise DirectExpenseAuthorityError("a Job may appear only once per allocation")
+            raise DirectExpenseAuthorityError(
+                "a Job may appear only once per allocation"
+            )
         if sum(item.amount_minor for item in self.splits) != self.source_amount_minor:
-            raise DirectExpenseAuthorityError("Job splits must reconcile to source amount")
+            raise DirectExpenseAuthorityError(
+                "Job splits must reconcile to source amount"
+            )
         if self.status is AllocationStatus.CERTIFIED and (
             self.certified_by_user_id is None or self.certified_at is None
         ):

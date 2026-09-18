@@ -1,7 +1,6 @@
 from unittest.mock import Mock
 
 import pytest
-
 from app.business_economics.measurement_admission import (
     AdmissionState,
     CalculationAdmissionResult,

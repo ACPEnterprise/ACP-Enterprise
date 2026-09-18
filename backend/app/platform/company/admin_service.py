@@ -123,20 +123,34 @@ class CompanyAdministrationService:
     def _permission_category(code: str) -> str:
         categories = (
             ("CUSTOMER", "Customers, Contacts & Locations"),
-            ("ESTIMATE", "Estimates"), ("SCHEDULING", "Scheduling"),
-            ("JOB", "Jobs"), ("DISPATCH", "Dispatch"),
-            ("INVOICE", "Invoices"), ("PAYMENT", "Payments"),
+            ("ESTIMATE", "Estimates"),
+            ("SCHEDULING", "Scheduling"),
+            ("JOB", "Jobs"),
+            ("DISPATCH", "Dispatch"),
+            ("INVOICE", "Invoices"),
+            ("PAYMENT", "Payments"),
             ("COMMUNICATION", "Communications"),
             ("SERVICE_AGREEMENT", "Service Agreements"),
-            ("ASSET", "Assets & Fleet"), ("PURCHASING", "Purchasing"),
-            ("INVENTORY", "Inventory"), ("WORKFORCE", "Workforce"),
-            ("TIMEKEEPING", "Timekeeping"), ("PAYROLL", "Payroll"),
-            ("ACCOUNTING", "Accounting"), ("ECONOMICS", "Business Economics"),
-            ("LUMINARY", "Luminary"), ("BEACON", "Beacon"), ("LIA", "LIA"),
-            ("REPORT", "Reports"), ("AUDIT", "Audit"),
-            ("MIGRATION", "Migration"), ("OWNER", "Owner Operations"),
+            ("ASSET", "Assets & Fleet"),
+            ("PURCHASING", "Purchasing"),
+            ("INVENTORY", "Inventory"),
+            ("WORKFORCE", "Workforce"),
+            ("TIMEKEEPING", "Timekeeping"),
+            ("PAYROLL", "Payroll"),
+            ("ACCOUNTING", "Accounting"),
+            ("ECONOMICS", "Business Economics"),
+            ("LUMINARY", "Luminary"),
+            ("BEACON", "Beacon"),
+            ("LIA", "LIA"),
+            ("REPORT", "Reports"),
+            ("AUDIT", "Audit"),
+            ("MIGRATION", "Migration"),
+            ("OWNER", "Owner Operations"),
         )
-        return next((label for token, label in categories if f"_{token}_" in code), "Administration")
+        return next(
+            (label for token, label in categories if f"_{token}_" in code),
+            "Administration",
+        )
 
     @staticmethod
     def _permission_nature(action: str) -> str:

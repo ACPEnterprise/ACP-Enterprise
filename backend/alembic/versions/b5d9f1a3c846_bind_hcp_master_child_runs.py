@@ -7,9 +7,8 @@ Revises: a4c8e0f2b735
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-
 from alembic import op
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision: str = "b5d9f1a3c846"
 down_revision: str | Sequence[str] | None = "a4c8e0f2b735"

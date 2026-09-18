@@ -3,7 +3,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
 from app.accounting.posting.contracts import PostingFact
 from app.business_economics.findings import FindingState, SubjectKind
 from app.business_economics.measurement_adapters import (

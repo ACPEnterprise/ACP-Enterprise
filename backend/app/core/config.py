@@ -248,9 +248,10 @@ class Settings(BaseSettings):
                 raise ValueError("QBO sandbox and Production roots must be isolated")
             if not 1 <= self.qbo_production_api_minor_version <= 999:
                 raise ValueError("QBO Production API minor version is invalid")
-        if self.hcp_source4_evidence_root and not Path(
+        if (
             self.hcp_source4_evidence_root
-        ).is_absolute():
+            and not Path(self.hcp_source4_evidence_root).is_absolute()
+        ):
             raise ValueError("HCP SOURCE.4 evidence root must be an absolute path")
         if self.environment in {"preview", "production"}:
             if not self.platform_contract_expected_fingerprint:

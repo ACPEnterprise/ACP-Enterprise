@@ -45,7 +45,11 @@ class ProviderAttemptEvidence:
     provider_reference_digest: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.provider or not self.provider_version or not self.operation_identity:
+        if (
+            not self.provider
+            or not self.provider_version
+            or not self.operation_identity
+        ):
             raise ValueError("provider and operation authority are required")
         if len(self.request_digest) != 64:
             raise ValueError("request digest must be a SHA-256 digest")

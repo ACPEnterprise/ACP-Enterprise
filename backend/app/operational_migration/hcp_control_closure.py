@@ -163,7 +163,10 @@ def intake_csv_control(
         raise ValueError("invalid control extraction timezone")
     if not source_report_identity or not filters:
         raise ValueError("report identity and explicit filters are required")
-    if any(len(digest) != 64 for digest in (exporting_admin_evidence_sha256, company_identity_sha256)):
+    if any(
+        len(digest) != 64
+        for digest in (exporting_admin_evidence_sha256, company_identity_sha256)
+    ):
         raise ValueError("admin and Company evidence must be SHA-256")
     try:
         text = source.decode("utf-8-sig")
@@ -200,7 +203,9 @@ def seal_control_manifest(
     extraction_id: str, entries: Iterable[ControlManifestEntry]
 ) -> ControlManifest:
     ordered = tuple(sorted(entries, key=lambda item: item.control_type.value))
-    if tuple(sorted(item.control_type.value for item in ordered)) != tuple(sorted(REQUIRED_CONTROLS)):
+    if tuple(sorted(item.control_type.value for item in ordered)) != tuple(
+        sorted(REQUIRED_CONTROLS)
+    ):
         raise ValueError("exactly one of each required HCP control is required")
     if len({item.protected_artifact_name for item in ordered}) != len(ordered):
         raise ValueError("control artifact names must be unique")
@@ -216,7 +221,9 @@ def seal_control_manifest(
     )
 
 
-def validate_payment_ranges(ranges: Iterable[PaymentDateRange]) -> tuple[PaymentDateRange, ...]:
+def validate_payment_ranges(
+    ranges: Iterable[PaymentDateRange],
+) -> tuple[PaymentDateRange, ...]:
     ordered = tuple(sorted(ranges, key=lambda item: item.start))
     for previous, current in pairwise(ordered):
         if current.start != previous.end + timedelta(days=1):

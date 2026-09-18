@@ -226,9 +226,7 @@ async def test_legacy_boundary_composes_from_precommand_scheduler_provenance(
 async def test_partial_frozen_boundary_metadata_rejects_legacy_composition() -> None:
     command = SimpleNamespace(
         execution_boundary={"boundary_version": 2},
-        execution_boundary_digest=hashlib.sha256(
-            b'{"boundary_version":2}'
-        ).hexdigest(),
+        execution_boundary_digest=hashlib.sha256(b'{"boundary_version":2}').hexdigest(),
     )
     with pytest.raises(ControlledExecutionPayloadError):
         await ControlledExecutionService._resolve_adoption_boundary(

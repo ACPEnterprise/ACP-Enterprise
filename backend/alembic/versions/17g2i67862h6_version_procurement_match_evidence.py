@@ -7,7 +7,6 @@ Revises: 16f1h56751g5
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "17g2i67862h6"
@@ -23,7 +22,9 @@ def upgrade() -> None:
     )
     op.add_column(
         "procurement_three_way_matches",
-        sa.Column("evaluation_sequence", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column(
+            "evaluation_sequence", sa.Integer(), nullable=False, server_default="1"
+        ),
     )
     op.add_column(
         "procurement_three_way_matches",

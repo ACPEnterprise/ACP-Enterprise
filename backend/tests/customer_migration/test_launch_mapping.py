@@ -3,7 +3,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.launch_mapping import (
     AUTHORITATIVE_ENTERPRISE_ALEMBIC_HEAD,
     AUTHORITATIVE_ENTERPRISE_COMMIT,

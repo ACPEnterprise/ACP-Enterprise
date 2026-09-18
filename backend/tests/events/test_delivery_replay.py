@@ -6,15 +6,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, text, update
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.events import delivery_contracts
 from app.events.delivery import BusinessEventDeliveryService, DeliveryConflict
@@ -28,6 +19,14 @@ from app.events.models import (
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 NOW = datetime(2026, 8, 28, 12, tzinfo=timezone.utc)
 COMPANY_A = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")

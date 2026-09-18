@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import jwt
 import pytest
-
 from app.core.config import Settings
 from app.platform.auth.access_tokens import AccessTokenService
 from app.platform.auth.errors import InvalidTokenError, PasswordPolicyError

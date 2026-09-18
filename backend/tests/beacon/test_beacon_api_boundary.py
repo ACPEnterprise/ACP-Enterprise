@@ -4,8 +4,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from fastapi import FastAPI
-
 from app.beacon.errors import (
     BeaconSignalNotFoundError,
     BeaconSignalStaleError,
@@ -19,6 +17,7 @@ from app.beacon.workflow import beacon_workflow_service
 from app.database.session import get_database_session
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
 
 
 def test_beacon_errors_use_safe_recovery_envelopes_without_reflection() -> None:

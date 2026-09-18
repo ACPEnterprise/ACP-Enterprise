@@ -70,10 +70,7 @@ def project_registered_general_ledger_period(
     selected = max(candidates, key=lambda item: str(item["control_id"]))
     raw_sha256 = str(selected["raw_sha256"])
     workbook_path = (
-        evidence_root.expanduser().resolve()
-        / "controls"
-        / "raw"
-        / f"{raw_sha256}.xlsx"
+        evidence_root.expanduser().resolve() / "controls" / "raw" / f"{raw_sha256}.xlsx"
     )
     metrics = _period_metrics(workbook_path, start_date=start_date, end_date=end_date)
     return {
@@ -99,7 +96,9 @@ def project_registered_general_ledger_period(
     }
 
 
-def _period_metrics(path: Path, *, start_date: date, end_date: date) -> dict[str, object]:
+def _period_metrics(
+    path: Path, *, start_date: date, end_date: date
+) -> dict[str, object]:
     try:
         with ZipFile(path) as workbook:
             rows = _sheet_rows(workbook, _shared_strings(workbook))
@@ -109,7 +108,12 @@ def _period_metrics(path: Path, *, start_date: date, end_date: date) -> dict[str
     if header is None:
         raise EvidenceStoreError("ledger_header_missing")
     columns = {value: column for column, value in header.items()}
-    required = ("Distribution account", "Transaction date", "Transaction type", "Amount")
+    required = (
+        "Distribution account",
+        "Transaction date",
+        "Transaction type",
+        "Amount",
+    )
     if any(name not in columns for name in required):
         raise EvidenceStoreError("ledger_header_missing")
     types: Counter[str] = Counter()

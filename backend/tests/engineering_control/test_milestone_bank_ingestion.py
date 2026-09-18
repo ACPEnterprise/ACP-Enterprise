@@ -5,7 +5,6 @@ from importlib.resources import files
 from pathlib import Path
 
 import pytest
-
 from app.engineering_control.scheduler.bank import (
     MilestoneBankIngestionError,
     bank_fingerprint,
@@ -17,12 +16,10 @@ from app.engineering_control.scheduler.bank import (
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 BANK_PATH = (
-    REPOSITORY
-    / "backend/app/engineering_control/scheduler/milestone-bank.v2.json"
+    REPOSITORY / "backend/app/engineering_control/scheduler/milestone-bank.v2.json"
 )
 MANIFEST_PATH = (
-    REPOSITORY
-    / "backend/app/engineering_control/scheduler/scheduler-manifest.v1.json"
+    REPOSITORY / "backend/app/engineering_control/scheduler/scheduler-manifest.v1.json"
 )
 
 
@@ -44,7 +41,9 @@ def milestones(raw: dict[str, object]) -> list[dict[str, object]]:
 
 
 def milestone(raw: dict[str, object], milestone_id: str) -> dict[str, object]:
-    return next(item for item in milestones(raw) if item["milestone_id"] == milestone_id)
+    return next(
+        item for item in milestones(raw) if item["milestone_id"] == milestone_id
+    )
 
 
 def test_valid_bank_ingestion_and_deterministic_projection() -> None:
@@ -130,7 +129,9 @@ def test_gate_ownership_collision_and_risk_metadata_are_preserved() -> None:
 
     external = by_id["BANK.MIG.001"]
     assert external.external_gate != "none"
-    assert any(reason.startswith("external_gate:") for reason in external.blocked_reasons)
+    assert any(
+        reason.startswith("external_gate:") for reason in external.blocked_reasons
+    )
 
     purchasing = by_id["BANK.PUR.001"]
     assert purchasing.collision_domain == "purchasing_vendor_po"

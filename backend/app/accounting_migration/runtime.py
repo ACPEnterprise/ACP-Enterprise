@@ -155,9 +155,7 @@ class InMemoryCheckpointStore:
 
 
 def _canonical_digest(value: object) -> str:
-    raw = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), default=str
-    ).encode()
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -180,9 +178,10 @@ class OpeningMigrationRuntime:
             or plan.transformation_version != package.transformation_version
         ):
             raise RuntimeValidationError("plan_manifest_identity_mismatch")
-        if plan.target_company_id != package.binding.target_company_id or tuple(
-            sorted(plan.target_branch_ids)
-        ) != package.binding.branch_ids:
+        if (
+            plan.target_company_id != package.binding.target_company_id
+            or tuple(sorted(plan.target_branch_ids)) != package.binding.branch_ids
+        ):
             raise RuntimeValidationError("plan_company_branch_mismatch")
         if not plan.journal_lines:
             raise RuntimeValidationError("opening_journal_missing")
@@ -204,7 +203,11 @@ class OpeningMigrationRuntime:
             line_ids.add(line.line_id)
             cls._validate_money(line.debit)
             cls._validate_money(line.credit)
-            if line.debit < 0 or line.credit < 0 or (line.debit == 0) == (line.credit == 0):
+            if (
+                line.debit < 0
+                or line.credit < 0
+                or (line.debit == 0) == (line.credit == 0)
+            ):
                 raise RuntimeValidationError("invalid_debit_credit_line")
             if line.branch_id not in package.binding.branch_ids:
                 raise RuntimeValidationError("journal_branch_mismatch")
@@ -253,7 +256,10 @@ class OpeningMigrationRuntime:
             if rows.artifact_id in row_ids or rows.artifact_id not in primary:
                 raise RuntimeValidationError("invalid_row_accounting_artifact")
             row_ids.add(rows.artifact_id)
-            if min(rows.source, rows.accepted, rows.rejected, rows.pending_disposition) < 0:
+            if (
+                min(rows.source, rows.accepted, rows.rejected, rows.pending_disposition)
+                < 0
+            ):
                 raise RuntimeValidationError("invalid_row_accounting")
             if rows.source != rows.accepted + rows.rejected + rows.pending_disposition:
                 raise RuntimeValidationError("row_accounting_mismatch")

@@ -102,7 +102,10 @@ class AutomatedPostingService:
         receipt_sink: PostingReceiptSink | None = None,
     ) -> PostingReceipt:
         self._validate_fact(fact)
-        if any(context.company.id != fact.company_id for context in (preparer, approver, poster)):
+        if any(
+            context.company.id != fact.company_id
+            for context in (preparer, approver, poster)
+        ):
             raise AccountingValidation("Posting actors must belong to the fact Company")
         if fact.branch_id is not None and not all(
             context.can_access_branch(fact.branch_id)
@@ -116,8 +119,12 @@ class AutomatedPostingService:
             (approver, AccountingPermission.FINANCE_APPROVE),
             (poster, AccountingPermission.JOURNAL_POST),
         )
-        if any(not context.has_permission(permission) for context, permission in required):
-            raise AccountingValidation("Posting actor lacks the required Accounting permission")
+        if any(
+            not context.has_permission(permission) for context, permission in required
+        ):
+            raise AccountingValidation(
+                "Posting actor lacks the required Accounting permission"
+            )
 
         rule = self.rules.resolve(fact)
         data = self._journal_create(fact, rule, period_id)
@@ -188,7 +195,10 @@ class AutomatedPostingService:
             source_digest=fact.canonical_digest(),
             error_code=error_code,
             correlation_id=correlation_id,
-            details={"event_type": fact.event_type, "schema_version": fact.schema_version},
+            details={
+                "event_type": fact.event_type,
+                "schema_version": fact.schema_version,
+            },
         )
         return PostingReceipt(
             company_id=fact.company_id,

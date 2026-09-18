@@ -1,15 +1,10 @@
+import warnings
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
-import warnings
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, func, insert, select, update
-from sqlalchemy.exc import IntegrityError, SAWarning
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlalchemy.orm import configure_mappers
-
 from app.core.config import settings
 from app.platform.auth.models import (
     AuthenticationSession,
@@ -20,6 +15,10 @@ from app.platform.auth.models import (
 from app.platform.company.membership_models import Membership
 from app.platform.permissions.models import MembershipRole
 from app.platform.users.models import User
+from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy.exc import IntegrityError, SAWarning
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.orm import configure_mappers
 
 
 def utc_now() -> datetime:

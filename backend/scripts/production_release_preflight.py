@@ -318,9 +318,18 @@ def inspect_platform_manifest(path: Path, *, expected_sha: str) -> list[Finding]
         )
     )
     controls = payload.get("authorities", {})
-    required_controls = {"release", "security", "incident", "backup", "restore", "secret_recovery"}
+    required_controls = {
+        "release",
+        "security",
+        "incident",
+        "backup",
+        "restore",
+        "secret_recovery",
+    }
     unresolved = sorted(
-        name for name in required_controls if not controls.get(name, {}).get("principal")
+        name
+        for name in required_controls
+        if not controls.get(name, {}).get("principal")
     )
     findings.append(
         Finding(
@@ -333,7 +342,15 @@ def inspect_platform_manifest(path: Path, *, expected_sha: str) -> list[Finding]
     )
     decisions = payload.get("owner_decisions", {})
     undecided = sorted(
-        name for name in ("rpo", "rto", "retention", "region", "geographic_separation", "alert_destination")
+        name
+        for name in (
+            "rpo",
+            "rto",
+            "retention",
+            "region",
+            "geographic_separation",
+            "alert_destination",
+        )
         if not decisions.get(name)
     )
     findings.append(

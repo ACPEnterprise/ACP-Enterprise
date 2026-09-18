@@ -3,13 +3,9 @@ from dataclasses import FrozenInstanceError, dataclass
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
+import app.platform.permissions.models  # noqa: F401
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-import app.platform.permissions.models  # noqa: F401
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
@@ -31,6 +27,9 @@ from app.workforce.models import (
     WorkRestriction,
 )
 from app.workforce.repository import WorkforceCapabilityRepository
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @dataclass(frozen=True)

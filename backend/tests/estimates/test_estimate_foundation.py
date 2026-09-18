@@ -5,10 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.estimates.contracts import CreateEstimateSpec, EstimateLineSpec
@@ -30,6 +26,9 @@ from app.price_book.models import (
     PriceBookTaxClassification,
 )
 from app.tax_policy.models import OperationalTaxPolicy
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture

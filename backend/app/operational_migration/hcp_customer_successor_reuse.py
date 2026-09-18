@@ -34,20 +34,14 @@ class CustomerSuccessorReuseResolver:
             or getattr(item, "native_id", None)
             for item in manifest.entries
             if item.domain == "customer"
-            and (
-                getattr(item, "target_id", None)
-                or getattr(item, "native_id", None)
-            )
+            and (getattr(item, "target_id", None) or getattr(item, "native_id", None))
         }
         self._locations = {
             item.source_id: getattr(item, "target_id", None)
             or getattr(item, "native_id", None)
             for item in manifest.entries
             if item.domain == "service_location"
-            and (
-                getattr(item, "target_id", None)
-                or getattr(item, "native_id", None)
-            )
+            and (getattr(item, "target_id", None) or getattr(item, "native_id", None))
         }
 
     async def __call__(
