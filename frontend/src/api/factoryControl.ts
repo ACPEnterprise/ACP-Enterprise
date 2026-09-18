@@ -41,6 +41,23 @@ export type FactoryControlOverview = {
 
 export type FactoryControlFilters = { lane?: string };
 
+export type FactoryLaneDrilldown = {
+  lane: FactoryLane;
+  events: Array<{
+    id: string;
+    milestone_code?: string | null;
+    event_type: string;
+    lifecycle_state?: string | null;
+    occurred_at: string;
+    details: Record<string, unknown>;
+  }>;
+};
+
 export async function getFactoryControlOverview(): Promise<FactoryControlOverview> {
   return (await apiClient.get<FactoryControlOverview>(FACTORY_CONTROL_OVERVIEW_PATH)).data;
+}
+
+export async function getFactoryLaneDrilldown(lane: string): Promise<FactoryLaneDrilldown> {
+  const encoded = encodeURIComponent(lane);
+  return (await apiClient.get<FactoryLaneDrilldown>(`/api/v1/platform/factory-control/lanes/${encoded}`)).data;
 }

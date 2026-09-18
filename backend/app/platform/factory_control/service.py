@@ -6,7 +6,7 @@ from pathlib import Path
 from statistics import fmean
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.factory_control.models import (
@@ -113,7 +113,7 @@ def calculate_metrics(
         )
         for days in (1, 3, 7)
     }
-    active = sum(lane.lifecycle_state == "active" for lane in lanes)
+    active = sum(lane.lifecycle_state.upper() == "ACTIVE" for lane in lanes)
     completed = sum("closed" in stages for stages in milestone_stages.values())
     attempts = first_pass + rework
     oldest = min(handoffs.values()) if handoffs else None
@@ -155,6 +155,15 @@ def calculate_metrics(
 
 
 class FactoryControlService:
+    @staticmethod
+    async def _lock_identity(
+        session: AsyncSession, *, company_id: UUID, namespace: str, key: str
+    ) -> None:
+        identity = f"factory-control:{namespace}:{company_id}:{key}"
+        await session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtextextended(identity, 0)))
+        )
+
     def roadmap(self) -> FactoryRoadmap:
         if SOURCE_ROADMAP_PATH.is_file():
             return load_roadmap(SOURCE_ROADMAP_PATH)
@@ -171,6 +180,12 @@ class FactoryControlService:
         data: FactoryEventIn,
     ) -> tuple[FactoryControlEvent, bool]:
         details = safe_event_details(data.details)
+        await self._lock_identity(
+            session,
+            company_id=company_id,
+            namespace="event",
+            key=data.idempotency_key,
+        )
         existing = await session.scalar(
             select(FactoryControlEvent).where(
                 FactoryControlEvent.company_id == company_id,
@@ -220,7 +235,7 @@ class FactoryControlService:
                 lifecycle_state=data.lifecycle_state or "idle",
                 queue_depth=data.queue_depth,
                 active_since=data.occurred_at
-                if data.lifecycle_state == "active"
+                if data.lifecycle_state == "ACTIVE"
                 else None,
                 last_handoff_at=data.occurred_at
                 if data.event_type == "handoff"
@@ -230,13 +245,13 @@ class FactoryControlService:
             )
             session.add(lane)
         elif data.occurred_at >= lane.last_event_at:
-            was_active = lane.lifecycle_state == "active"
+            was_active = lane.lifecycle_state.upper() == "ACTIVE"
             lane.milestone_code = data.milestone_code
             lane.lifecycle_state = data.lifecycle_state or lane.lifecycle_state
             lane.queue_depth = data.queue_depth
             lane.active_since = (
                 data.occurred_at
-                if data.lifecycle_state == "active" and not was_active
+                if data.lifecycle_state == "ACTIVE" and not was_active
                 else lane.active_since
             )
             if data.event_type == "handoff":
@@ -297,6 +312,12 @@ class FactoryControlService:
         snapshot_key: str,
         now: datetime | None = None,
     ) -> tuple[FactoryControlSnapshot, bool]:
+        await self._lock_identity(
+            session,
+            company_id=company_id,
+            namespace="snapshot",
+            key=snapshot_key,
+        )
         existing = await session.scalar(
             select(FactoryControlSnapshot).where(
                 FactoryControlSnapshot.company_id == company_id,

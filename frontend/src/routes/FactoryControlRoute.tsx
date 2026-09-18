@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router";
 
 import type { FactoryLane } from "../api/factoryControl";
 import { useAuth } from "../auth";
-import { useFactoryControlOverview } from "../hooks/useFactoryControl";
+import { useFactoryControlOverview, useFactoryLaneDrilldown } from "../hooks/useFactoryControl";
 import { Alert, Badge, Card, CardContent, CardHeader, CardTitle, Spinner } from "../ui";
 
 const percent = (value: number) => `${Math.max(0, Math.min(100, value)).toFixed(1)}%`;
@@ -30,6 +30,7 @@ export function FactoryControlRoute() {
   const [search] = useSearchParams();
   const selectedLane = search.get("lane") ?? undefined;
   const overview = useFactoryControlOverview({ lane: selectedLane }, authorized);
+  const drilldown = useFactoryLaneDrilldown(selectedLane, authorized);
   if (!authorized) return <Alert variant="danger" title="Factory Control is private">Platform owner or administrator authority is required.</Alert>;
   if (overview.isPending) return <Spinner label="Loading Factory Control" />;
   if (overview.isError || !overview.data) return <Alert variant="danger" title="Factory telemetry unavailable">The authoritative overview could not be loaded. No progress or health values were inferred.</Alert>;
@@ -41,6 +42,7 @@ export function FactoryControlRoute() {
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Metric label="Closed" value={percent(data.metrics.closed_percent)} /><Metric label="Engineering" value={percent(data.metrics.engineering_percent)} /><Metric label="Beta" value={percent(data.metrics.beta_percent)} /><Metric label="Owner" value={percent(data.metrics.owner_percent)} /><Metric label="Weighted delivery" value={percent(data.metrics.weighted_delivery_percent)} /></section>
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Open defects" value={String(data.metrics.open_defects)} /><Metric label="Open gates" value={String(data.metrics.open_gates)} /><Metric label="Queue depth" value={String(data.metrics.queue_depth)} /><Metric label="Utilization" value={percent(data.metrics.utilization_percent)} /></section>
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><Factory size={18}/>Worker lanes</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr><th className="px-3 py-2">Lane</th><th className="px-3 py-2">Milestone</th><th className="px-3 py-2">State</th><th className="px-3 py-2">Queue</th><th className="px-3 py-2">Last event</th></tr></thead><tbody>{lanes.map((lane) => <LaneRow key={lane.lane_code} lane={lane} />)}</tbody></table></CardContent></Card>
+    {selectedLane && <Card><CardHeader><CardTitle>Lane event evidence</CardTitle></CardHeader><CardContent>{drilldown.isPending ? <Spinner label="Loading lane evidence" /> : drilldown.isError ? <Alert variant="danger" title="Lane evidence unavailable">No event history was inferred.</Alert> : <ol className="space-y-3">{drilldown.data?.events.map((event) => <li key={event.id} className="border-l-2 border-border-subtle pl-3"><p className="font-medium">{event.event_type.replaceAll("_", " ")}</p><p className="text-xs text-content-muted">{timestamp(event.occurred_at)} · {event.milestone_code ?? "No milestone"}</p></li>)}</ol>}</CardContent></Card>}
     <section className="grid gap-4 lg:grid-cols-3"><Card><CardHeader><CardTitle className="flex items-center gap-2"><Clock3 size={18}/>Flow</CardTitle></CardHeader><CardContent><p>Pickup latency: {duration(data.metrics.pickup_latency_seconds)}</p><p>Oldest handoff: {duration(data.metrics.oldest_handoff_seconds)}</p></CardContent></Card><Card><CardHeader><CardTitle className="flex items-center gap-2"><ShieldAlert size={18}/>Quality</CardTitle></CardHeader><CardContent><p>First-pass yield: {percent(data.metrics.first_pass_yield_percent)}</p><p>Rework: {percent(data.metrics.rework_rate_percent)}</p></CardContent></Card><Card><CardHeader><CardTitle className="flex items-center gap-2"><Gauge size={18}/>Delivery windows</CardTitle></CardHeader><CardContent><p>1d {percent(data.metrics.delivery_1d_percent)} · 3d {percent(data.metrics.delivery_3d_percent)} · 7d {percent(data.metrics.delivery_7d_percent)}</p><p className="mt-2 flex items-center gap-2 text-content-muted"><Activity size={16}/>Controller evidence only</p></CardContent></Card></section>
   </div>;
 }
