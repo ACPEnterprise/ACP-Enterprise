@@ -18,9 +18,12 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.payroll.contracts import PayrollConflictError, canonical_digest
 from app.payroll.models import (
+    PayrollPaperCheckEvidenceRecord,
+    PayrollPaymentDestinationVersion,
     PayrollRunCloseRecord,
     PayrollRunMemberRecord,
     PayrollRunRecord,
+    PayrollTaxDeductionResultRecord,
 )
 from app.payroll.operations import PayrollOperationsService
 from app.payroll.payment_release import (
@@ -29,8 +32,6 @@ from app.payroll.payment_release import (
     PaymentReleaseReviewDecision,
     PayrollPaymentReleaseService,
 )
-from app.payroll.models import PayrollPaymentDestinationVersion
-from app.payroll.models import PayrollPaperCheckEvidenceRecord, PayrollTaxDeductionResultRecord
 from app.payroll.permissions import PayrollPermission
 from app.payroll.run_finalization import (
     PayrollPopulationEvidence,
@@ -40,8 +41,8 @@ from app.payroll.run_finalization import (
     PayrollRunService,
 )
 from app.platform.audit.service import AuditEntry, AuditService
-from app.platform.idempotency.models import MutationReceipt
 from app.platform.employees.models import Employee
+from app.platform.idempotency.models import MutationReceipt
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
 from app.timekeeping.models import PayPeriod
