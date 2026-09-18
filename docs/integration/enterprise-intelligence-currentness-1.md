@@ -242,3 +242,44 @@ dependency drift or Podfile repair was claimed.
 - Phone: rebase from the resulting cumulative head for TestFlight readiness,
   preserving semantic speech, background cancellation, and employee-safe
   routing.
+
+## Factory 2.0 current-authority reconciliation — device voice and Mobile — 2026-09-17
+
+- Refreshed protected authority: `785511810d9399c33c8d8727cf6fe01420fc1226`.
+- Prior Intelligence head: `d484fcd605d220dc73d5f532881ff64669322042`.
+- Laptop-B `origin/work/lia-delivery-style-device-prototype-1` at
+  `2f9d41efc303e4ebe22e1edc15dd7ae2c8d30a51`: `USEFUL_NOW`, integrated as
+  `1372998d`. The prototype is additive and preserves one semantic speech
+  path, missing-evidence meaning, and material values. Browser-local reviewed
+  voice preference and deterministic fallback are Beta-capable; no provider or
+  identity inference was added.
+- Phone `origin/work/laptop1-phone-twelve-hats-speech-readiness-1` at
+  `cbebae37f68bc62e7180a4feacb681c0f30b4b34`: `PARTIALLY_CONTAINED /
+  PATCH_EQUIVALENT_FOR_SAFE_BEHAVIOR`. Current Intelligence already contains
+  the restored shared semantic renderer, background cancellation, speaking
+  cleanup, and native callback boundary. The remaining branch diff is stale
+  base/lockfile churn and a weaker raw-answer test path; it was intentionally
+  not replayed. No Phone-owned successor commit was needed in this cycle.
+
+### Final classification
+
+- Variant A — improved semantic spoken renderer: `CURRENT`.
+- Variant B — reviewed distinct local/device voice selection: `BETA-CAPABLE`.
+- Variant C — governed cross-device Twelve Hats-owned TTS: justified future
+  work. Commercial TTS remains disallowed and no Lianne cloning or external
+  audio processing occurred.
+- Current limitations: browser and native device voices vary by platform;
+  stable expressive identity, SSML/prosody control, and portable voice style
+  are not guaranteed.
+
+### Qualification and release state
+
+- Web voice/LIA focused qualification: 35/35 passed.
+- Full Mobile qualification: 17 suites / 154 tests passed; Mobile typecheck,
+  ESLint, and config validation passed.
+- Python compilation, `git diff --check`, and prior frontend build/static
+  qualification remain green. Backend pytest and disposable PostgreSQL
+  migration remain unavailable in this environment and are not claimed.
+- No schema/Alembic changes. Preview and Production were not deployed.
+- Authenticated owner/employee Preview acceptance and physical Mobile voice
+  acceptance remain pending until compatible server authority is deployed.
