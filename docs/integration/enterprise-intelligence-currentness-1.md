@@ -283,3 +283,38 @@ dependency drift or Podfile repair was claimed.
 - No schema/Alembic changes. Preview and Production were not deployed.
 - Authenticated owner/employee Preview acceptance and physical Mobile voice
   acceptance remain pending until compatible server authority is deployed.
+
+## Factory 2.0 current reconciliation — combined Web/Mobile voice — 2026-09-17
+
+- Refreshed protected authority: `785511810d9399c33c8d8727cf6fe01420fc1226`.
+- Starting Intelligence SHA: `3bb0e1037f6dc1be08ebf69a3119ae8bc2eda3d2`.
+- Laptop-B `2f9d41efc303e4ebe22e1edc15dd7ae2c8d30a51`: `ALREADY_INTEGRATED /
+  PATCH_EQUIVALENT`; current tree contains its device-voice prototype,
+  reviewed local preference, safe fallback, and evaluation behavior.
+- Phone `cbebae37f68bc62e7180a4feacb681c0f30b4b34`: `ALREADY_INTEGRATED /
+  SAFE_SUBSET_CONTAINED`; current tree retains the shared semantic renderer,
+  local fallback, background cancellation, and callback cleanup. The stale
+  branch diff was not replayed because it would weaken current lifecycle/test
+  semantics and includes unrelated lockfile churn.
+- No new implementation files were required. This checkpoint records the
+  current authority reconciliation and combined qualification.
+
+### Combined qualification
+
+- Web LIA voice, device inventory, semantic preservation, and fallback tests:
+  35/35 passed.
+- Full Mobile suite: 17 suites / 154 tests passed.
+- Mobile typecheck, ESLint, and configuration validation passed.
+- Python compilation and `git diff --check` passed.
+- Backend pytest and disposable PostgreSQL migration remain unavailable and
+  are not claimed as passed.
+
+### Beta voice status
+
+- Variant A semantic spoken renderer remains current and authoritative.
+- Variant B reviewed local/device voice selection is Beta-capable.
+- Variant C Twelve Hats-owned cross-device speech remains future work.
+- Current limitations are device/browser-dependent voice identity and lack of
+  portable expressive, SSML, prosody, and stable cross-device controls.
+- No commercial TTS provider was selected; no voice cloning or external audio
+  upload occurred.
