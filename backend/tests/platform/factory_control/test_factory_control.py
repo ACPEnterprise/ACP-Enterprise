@@ -9,6 +9,7 @@ from app.platform.factory_control.roadmap import (
     load_roadmap,
     safe_event_details,
 )
+from app.platform.factory_control.schemas import FactoryEventIn
 from app.platform.factory_control.service import calculate_metrics
 from scripts.sync_factory_roadmap import sync
 
@@ -91,6 +92,30 @@ def test_event_details_reject_secrets_payroll_values_and_unbounded_documents():
             safe_event_details(prohibited)
     with pytest.raises(RoadmapError, match="bounded size"):
         safe_event_details({"evidence": "x" * 17_000})
+
+
+def test_owner_gate_requires_complete_resolved_engineering_evidence():
+    base = {
+        "lane_code": "OM1-A",
+        "event_type": "gate_opened",
+        "lifecycle_state": "HUMAN_GATE",
+        "idempotency_key": "gate-1",
+        "occurred_at": NOW,
+        "details": {
+            "gate_id": "G1",
+            "gate_type": "HUMAN_GATE",
+            "action": "Approve platform custody.",
+            "why_blocked": "Only the owner can approve custody.",
+            "workflow": "Platform ownership approval",
+            "estimated_owner_minutes": 15,
+            "resume_action": "Provision the approved boundary.",
+            "engineering_prerequisites_resolved": True,
+        },
+    }
+    assert FactoryEventIn.model_validate(base).details["estimated_owner_minutes"] == 15
+    base["details"]["engineering_prerequisites_resolved"] = False
+    with pytest.raises(ValueError, match="engineering prerequisites"):
+        FactoryEventIn.model_validate(base)
 
 
 def test_metrics_cover_delivery_quality_capacity_and_flow(tmp_path):

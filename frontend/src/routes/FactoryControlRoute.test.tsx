@@ -14,10 +14,11 @@ const auth = (permissions: string[]) => ({
 
 const overview: api.FactoryControlOverview = {
   generated_at: "2026-09-17T20:00:00Z", roadmap_digest: "b".repeat(64), roadmap_milestones: 100,
+  p0_backlog: 2, p1_backlog: 4, human_gates: 1, provider_gates: 1, owner_actions: [],
   metrics: { closed_percent: 81, engineering_percent: 76, beta_percent: 63, owner_percent: 54, weighted_delivery_percent: 65, delivery_1d_percent: 5, delivery_3d_percent: 17, delivery_7d_percent: 39, open_defects: 2, open_gates: 1, utilization_percent: 50, pickup_latency_seconds: 3600, queue_depth: 3, oldest_handoff_seconds: 7200, rework_rate_percent: 10, first_pass_yield_percent: 90 },
   lanes: [
-    { lane_code: "OM1-A", milestone_code: "RELEASE.1", lifecycle_state: "idle", queue_depth: 1, last_event_at: "2026-09-17T19:00:00Z" },
-    { lane_code: "OM2-B", milestone_code: "PAYROLL.1", lifecycle_state: "active", queue_depth: 2, last_event_at: "2026-09-17T19:30:00Z" },
+    { lane_code: "OM1-A", milestone_code: "RELEASE.1", lifecycle_state: "ELIGIBLE_IDLE", queue_depth: 1, machine: "om1-host", current_assignment: "RELEASE.1", next_queued_item: "SECURITY.2", controlling_enterprise: "OM1E", self_refill_health: "ELIGIBLE_IDLE", idle_duration_seconds: 300, sla_state: "HEALTHY", sla_violations: [], last_event_at: "2026-09-17T19:00:00Z" },
+    { lane_code: "OM2-B", milestone_code: "PAYROLL.1", lifecycle_state: "ACTIVE", queue_depth: 2, machine: "om2-host", current_assignment: "PAYROLL.1", next_queued_item: null, controlling_enterprise: "OM2E", self_refill_health: "SELF_REFILL_HEALTHY", idle_duration_seconds: null, sla_state: "HEALTHY", sla_violations: [], last_event_at: "2026-09-17T19:30:00Z" },
   ],
 };
 

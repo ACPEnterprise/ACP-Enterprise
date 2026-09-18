@@ -29,6 +29,7 @@ class RoadmapMilestone:
     title: str | None = None
     next_admissible_action: str | None = None
     human_provider_gates: tuple[str, ...] = ()
+    prerequisites: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
                 row.get("title"),
                 row.get("next_admissible_action"),
                 tuple(row.get("human_provider_gates", ())),
+                tuple(row.get("prerequisites", ())),
             )
         )
     canonical = json.dumps(
@@ -106,6 +108,17 @@ def safe_event_details(details: dict[str, Any]) -> dict[str, Any]:
         "reason_code",
         "result",
         "status",
+        "action",
+        "why_blocked",
+        "workflow",
+        "estimated_owner_minutes",
+        "resume_action",
+        "gate_type",
+        "priority",
+        "source_kind",
+        "source_id",
+        "evidence",
+        "engineering_prerequisites_resolved",
     }
 
     def contains_forbidden_key(value: Any) -> bool:

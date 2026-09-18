@@ -7,6 +7,14 @@ export type FactoryLane = {
   milestone_code?: string | null;
   lifecycle_state: string;
   queue_depth: number;
+  machine?: string | null;
+  current_assignment?: string | null;
+  next_queued_item?: string | null;
+  controlling_enterprise?: string | null;
+  self_refill_health?: string | null;
+  idle_duration_seconds?: number | null;
+  sla_state: "HEALTHY" | "VIOLATED" | "NOT_APPLICABLE";
+  sla_violations: string[];
   active_since?: string | null;
   last_handoff_at?: string | null;
   last_event_at: string;

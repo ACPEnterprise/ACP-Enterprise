@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from statistics import fmean
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_execution.controlled.models import ControlledExecutionOfferModel
 from app.platform.factory_control.models import (
     FactoryControlEvent,
     FactoryControlSnapshot,
@@ -20,6 +24,7 @@ from app.platform.factory_control.roadmap import (
     safe_event_details,
 )
 from app.platform.factory_control.schemas import FactoryEventIn
+from app.worker_control.models import EngineeringWorker
 
 SOURCE_ROADMAP_PATH = (
     Path(__file__).resolve().parents[4] / "docs/factory/acp_full_system_roadmap.yaml"
@@ -33,12 +38,23 @@ class FactoryEventConflict(RuntimeError):
     pass
 
 
+class FactoryEvidenceError(RuntimeError):
+    pass
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
 def percent(numerator: float, denominator: float) -> float:
     return round(100 * numerator / denominator, 2) if denominator else 0.0
+
+
+def evidence_digest(value: dict) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), default=str
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def calculate_metrics(
@@ -98,14 +114,12 @@ def calculate_metrics(
         elif event.event_type == "first_pass_complete":
             first_pass += 1
     total = len(roadmap.milestones)
+    closed_event_times: dict[str, list[datetime]] = defaultdict(list)
+    for event in events:
+        if event.event_type == "closed" and event.milestone_code:
+            closed_event_times[event.milestone_code].append(event.occurred_at)
     completed_times = {
-        milestone: max(
-            event.occurred_at
-            for event in events
-            if event.event_type == "closed" and event.milestone_code == milestone
-        )
-        for milestone, stages in milestone_stages.items()
-        if "closed" in stages
+        milestone: max(stamps) for milestone, stamps in closed_event_times.items()
     }.values()
     rates = {
         days: percent(
@@ -157,9 +171,9 @@ def calculate_metrics(
 class FactoryControlService:
     @staticmethod
     async def _lock_identity(
-        session: AsyncSession, *, company_id: UUID, namespace: str, key: str
+        session: AsyncSession, *, namespace: str, key: str
     ) -> None:
-        identity = f"factory-control:{namespace}:{company_id}:{key}"
+        identity = f"factory-control:{namespace}:{key}"
         await session.execute(
             select(func.pg_advisory_xact_lock(func.hashtextextended(identity, 0)))
         )
@@ -175,85 +189,134 @@ class FactoryControlService:
         self,
         session: AsyncSession,
         *,
-        company_id: UUID,
-        actor_user_id: UUID,
+        controller_worker_identity_id: UUID,
+        controller_tenant_company_id: UUID,
         data: FactoryEventIn,
     ) -> tuple[FactoryControlEvent, bool]:
+        if (
+            data.tenant_company_id is not None
+            and data.tenant_company_id != controller_tenant_company_id
+        ):
+            raise FactoryEvidenceError(
+                "controller cannot attribute evidence to another tenant"
+            )
         details = safe_event_details(data.details)
+        request_digest = evidence_digest(
+            {
+                "tenant_company_id": str(data.tenant_company_id)
+                if data.tenant_company_id
+                else None,
+                "lane_code": data.lane_code,
+                "milestone_code": data.milestone_code,
+                "event_type": data.event_type,
+                "lifecycle_state": data.lifecycle_state,
+                "queue_depth": data.queue_depth,
+                "machine": data.machine,
+                "current_assignment": data.current_assignment,
+                "next_queued_item": data.next_queued_item,
+                "controlling_enterprise": data.controlling_enterprise,
+                "self_refill_health": data.self_refill_health,
+                "occurred_at": data.occurred_at.isoformat(),
+                "details": details,
+                "controller_worker_identity_id": str(controller_worker_identity_id),
+            }
+        )
         await self._lock_identity(
             session,
-            company_id=company_id,
             namespace="event",
             key=data.idempotency_key,
         )
         existing = await session.scalar(
             select(FactoryControlEvent).where(
-                FactoryControlEvent.company_id == company_id,
                 FactoryControlEvent.idempotency_key == data.idempotency_key,
             )
         )
         if existing is not None:
-            if (
-                existing.lane_code != data.lane_code
-                or existing.milestone_code != data.milestone_code
-                or existing.event_type != data.event_type
-                or existing.lifecycle_state != data.lifecycle_state
-                or existing.occurred_at != data.occurred_at
-                or existing.details != details
-            ):
+            if existing.request_digest != request_digest:
                 raise FactoryEventConflict(
                     "factory event idempotency key was reused with different facts"
                 )
             return existing, True
+        # Distinct keys for a lane serialize too. This closes the absent-row race
+        # and makes equal timestamps deterministic by idempotency key.
+        await self._lock_identity(session, namespace="lane", key=data.lane_code)
         lane = await session.scalar(
             select(FactoryLaneState)
-            .where(
-                FactoryLaneState.company_id == company_id,
-                FactoryLaneState.lane_code == data.lane_code,
-            )
+            .where(FactoryLaneState.lane_code == data.lane_code)
             .with_for_update()
         )
         event = FactoryControlEvent(
-            company_id=company_id,
+            tenant_company_id=data.tenant_company_id,
             lane_code=data.lane_code,
             milestone_code=data.milestone_code,
             event_type=data.event_type,
             lifecycle_state=data.lifecycle_state,
-            source="controller",
+            queue_depth=data.queue_depth,
+            machine=data.machine,
+            current_assignment=data.current_assignment,
+            next_queued_item=data.next_queued_item,
+            controlling_enterprise=data.controlling_enterprise,
+            self_refill_health=data.self_refill_health,
+            source="development_factory_controller",
             idempotency_key=data.idempotency_key,
+            request_digest=request_digest,
             details=details,
-            actor_user_id=actor_user_id,
+            controller_worker_identity_id=controller_worker_identity_id,
             occurred_at=data.occurred_at,
             received_at=utc_now(),
         )
         session.add(event)
+        await session.flush()
         if lane is None:
             lane = FactoryLaneState(
-                company_id=company_id,
                 lane_code=data.lane_code,
                 milestone_code=data.milestone_code,
-                lifecycle_state=data.lifecycle_state or "idle",
+                lifecycle_state=data.lifecycle_state or "ELIGIBLE_IDLE",
                 queue_depth=data.queue_depth,
+                machine=data.machine,
+                current_assignment=data.current_assignment,
+                next_queued_item=data.next_queued_item,
+                controlling_enterprise=data.controlling_enterprise,
+                self_refill_health=data.self_refill_health,
                 active_since=data.occurred_at
                 if data.lifecycle_state == "ACTIVE"
+                else None,
+                eligible_idle_since=data.occurred_at
+                if data.lifecycle_state == "ELIGIBLE_IDLE"
                 else None,
                 last_handoff_at=data.occurred_at
                 if data.event_type == "handoff"
                 else None,
                 last_event_at=data.occurred_at,
+                last_event_id=event.id,
+                last_event_key=data.idempotency_key,
                 updated_at=utc_now(),
             )
             session.add(lane)
-        elif data.occurred_at >= lane.last_event_at:
+        elif (data.occurred_at, data.idempotency_key) >= (
+            lane.last_event_at,
+            lane.last_event_key,
+        ):
             was_active = lane.lifecycle_state.upper() == "ACTIVE"
+            was_eligible_idle = lane.lifecycle_state.upper() == "ELIGIBLE_IDLE"
             lane.milestone_code = data.milestone_code
             lane.lifecycle_state = data.lifecycle_state or lane.lifecycle_state
             lane.queue_depth = data.queue_depth
+            lane.machine = data.machine
+            lane.current_assignment = data.current_assignment
+            lane.next_queued_item = data.next_queued_item
+            lane.controlling_enterprise = data.controlling_enterprise
+            lane.self_refill_health = data.self_refill_health
             lane.active_since = (
                 data.occurred_at
                 if data.lifecycle_state == "ACTIVE" and not was_active
                 else lane.active_since
             )
+            if data.lifecycle_state == "ELIGIBLE_IDLE":
+                if not was_eligible_idle:
+                    lane.eligible_idle_since = data.occurred_at
+            else:
+                lane.eligible_idle_since = None
             if data.event_type == "handoff":
                 lane.last_handoff_at = data.occurred_at
             lane.last_event_at, lane.updated_at, lane.version = (
@@ -261,11 +324,13 @@ class FactoryControlService:
                 utc_now(),
                 lane.version + 1,
             )
+            lane.last_event_id = event.id
+            lane.last_event_key = data.idempotency_key
         await session.flush()
         return event, False
 
     async def overview(
-        self, session: AsyncSession, *, company_id: UUID, now: datetime | None = None
+        self, session: AsyncSession, *, now: datetime | None = None
     ) -> tuple[
         FactoryRoadmap,
         list[FactoryControlEvent],
@@ -275,21 +340,11 @@ class FactoryControlService:
     ]:
         generated = now or utc_now()
         roadmap = self.roadmap()
-        events = list(
-            (
-                await session.scalars(
-                    select(FactoryControlEvent).where(
-                        FactoryControlEvent.company_id == company_id
-                    )
-                )
-            ).all()
-        )
+        events = list((await session.scalars(select(FactoryControlEvent))).all())
         lanes = list(
             (
                 await session.scalars(
-                    select(FactoryLaneState)
-                    .where(FactoryLaneState.company_id == company_id)
-                    .order_by(FactoryLaneState.lane_code)
+                    select(FactoryLaneState).order_by(FactoryLaneState.lane_code)
                 )
             ).all()
         )
@@ -307,31 +362,52 @@ class FactoryControlService:
         self,
         session: AsyncSession,
         *,
-        company_id: UUID,
-        actor_user_id: UUID,
+        controller_worker_identity_id: UUID,
+        controller_tenant_company_id: UUID,
         snapshot_key: str,
-        now: datetime | None = None,
+        captured_at: datetime,
+        tenant_company_id: UUID | None = None,
     ) -> tuple[FactoryControlSnapshot, bool]:
+        if (
+            tenant_company_id is not None
+            and tenant_company_id != controller_tenant_company_id
+        ):
+            raise FactoryEvidenceError(
+                "controller cannot attribute evidence to another tenant"
+            )
+        request_digest = evidence_digest(
+            {
+                "snapshot_key": snapshot_key,
+                "tenant_company_id": str(tenant_company_id)
+                if tenant_company_id
+                else None,
+                "captured_at": captured_at.isoformat(),
+                "controller_worker_identity_id": str(controller_worker_identity_id),
+            }
+        )
         await self._lock_identity(
             session,
-            company_id=company_id,
             namespace="snapshot",
             key=snapshot_key,
         )
         existing = await session.scalar(
             select(FactoryControlSnapshot).where(
-                FactoryControlSnapshot.company_id == company_id,
                 FactoryControlSnapshot.snapshot_key == snapshot_key,
             )
         )
         if existing is not None:
+            if existing.request_digest != request_digest:
+                raise FactoryEventConflict(
+                    "factory snapshot key was reused with different facts"
+                )
             return existing, True
         roadmap, _, lanes, metrics, captured = await self.overview(
-            session, company_id=company_id, now=now
+            session, now=captured_at
         )
         snapshot = FactoryControlSnapshot(
-            company_id=company_id,
+            tenant_company_id=tenant_company_id,
             snapshot_key=snapshot_key,
+            request_digest=request_digest,
             roadmap_digest=roadmap.digest,
             metrics=metrics,
             lane_states=[
@@ -340,15 +416,161 @@ class FactoryControlService:
                     "milestone_code": lane.milestone_code,
                     "lifecycle_state": lane.lifecycle_state,
                     "queue_depth": lane.queue_depth,
+                    "machine": lane.machine,
+                    "current_assignment": lane.current_assignment,
+                    "next_queued_item": lane.next_queued_item,
+                    "controlling_enterprise": lane.controlling_enterprise,
+                    "self_refill_health": lane.self_refill_health,
                 }
                 for lane in lanes
             ],
             captured_at=captured,
-            created_by_user_id=actor_user_id,
+            created_by_worker_identity_id=controller_worker_identity_id,
         )
         session.add(snapshot)
         await session.flush()
         return snapshot, False
+
+    async def sync_controller_lane(
+        self,
+        session: AsyncSession,
+        *,
+        controller_worker_identity_id: UUID,
+        controller_worker_id: UUID,
+        controller_tenant_company_id: UUID,
+    ) -> tuple[FactoryControlEvent, bool]:
+        """Project existing Development Factory truth; do not accept asserted state."""
+        worker = await session.scalar(
+            select(EngineeringWorker).where(
+                EngineeringWorker.id == controller_worker_id,
+                EngineeringWorker.company_id == controller_tenant_company_id,
+            )
+        )
+        if worker is None:
+            raise FactoryEvidenceError("controller worker evidence is unavailable")
+        queue_depth = int(
+            await session.scalar(
+                select(func.count(ControlledExecutionOfferModel.id)).where(
+                    ControlledExecutionOfferModel.company_id
+                    == controller_tenant_company_id,
+                    ControlledExecutionOfferModel.state == "available",
+                )
+            )
+            or 0
+        )
+        active_offer = await session.scalar(
+            select(ControlledExecutionOfferModel)
+            .where(
+                ControlledExecutionOfferModel.company_id
+                == controller_tenant_company_id,
+                ControlledExecutionOfferModel.worker_id == worker.id,
+                ControlledExecutionOfferModel.state == "acquired",
+            )
+            .order_by(
+                ControlledExecutionOfferModel.acquired_at,
+                ControlledExecutionOfferModel.id,
+            )
+        )
+        next_offer = await session.scalar(
+            select(ControlledExecutionOfferModel)
+            .where(
+                ControlledExecutionOfferModel.company_id
+                == controller_tenant_company_id,
+                ControlledExecutionOfferModel.state == "available",
+            )
+            .order_by(
+                ControlledExecutionOfferModel.created_at,
+                ControlledExecutionOfferModel.id,
+            )
+        )
+        state = cast(
+            Literal[
+                "ACTIVE",
+                "ASSIGNED",
+                "ELIGIBLE_IDLE",
+                "DEPENDENCY_BLOCKED",
+                "UNSAFE_STOP",
+            ],
+            {
+                "registered": "ASSIGNED",
+                "available": "ELIGIBLE_IDLE",
+                "leased": "ACTIVE",
+                "offline": "UNSAFE_STOP",
+                "disabled": "DEPENDENCY_BLOCKED",
+            }[worker.lifecycle_state],
+        )
+        source_digest = evidence_digest(
+            {
+                "worker_id": str(worker.id),
+                "company_id": str(worker.company_id),
+                "name": worker.name,
+                "lifecycle_state": worker.lifecycle_state,
+                "version": worker.version,
+                "updated_at": worker.updated_at.isoformat(),
+                "queue_depth": queue_depth,
+                "current_assignment": str(active_offer.command_id)
+                if active_offer
+                else None,
+                "next_queued_item": str(next_offer.command_id) if next_offer else None,
+            }
+        )
+        controlling_enterprise = cast(
+            Literal["OM1E", "OM2E", "LaptopE"] | None,
+            "OM1E"
+            if worker.name.upper().startswith("OM1")
+            else "OM2E"
+            if worker.name.upper().startswith("OM2")
+            else "LaptopE"
+            if worker.name.upper().startswith(("LAPTOP", "PHONE"))
+            else None,
+        )
+        self_refill_health = cast(
+            Literal[
+                "SELF_REFILL_HEALTHY",
+                "ELIGIBLE_IDLE",
+                "DEPENDENCY_BLOCKED",
+                "UNSAFE_STOP",
+                "UNKNOWN",
+            ],
+            {
+                "registered": "UNKNOWN",
+                "available": "ELIGIBLE_IDLE",
+                "leased": "SELF_REFILL_HEALTHY",
+                "offline": "UNSAFE_STOP",
+                "disabled": "DEPENDENCY_BLOCKED",
+            }[worker.lifecycle_state],
+        )
+        return await self.ingest(
+            session,
+            controller_worker_identity_id=controller_worker_identity_id,
+            controller_tenant_company_id=controller_tenant_company_id,
+            data=FactoryEventIn(
+                tenant_company_id=controller_tenant_company_id,
+                lane_code=worker.name,
+                event_type="controller_sync",
+                lifecycle_state=state,
+                queue_depth=queue_depth,
+                machine=worker.provider_identifier,
+                current_assignment=str(active_offer.command_id)
+                if active_offer
+                else None,
+                next_queued_item=str(next_offer.command_id) if next_offer else None,
+                controlling_enterprise=controlling_enterprise,
+                self_refill_health=self_refill_health,
+                idempotency_key=(
+                    f"development-factory-worker:{worker.id}:version:{worker.version}:"
+                    f"queue:{queue_depth}"
+                ),
+                occurred_at=worker.updated_at,
+                details={
+                    "source_kind": "engineering_worker",
+                    "source_id": str(worker.id),
+                    "digest": source_digest,
+                    "status": worker.lifecycle_state,
+                    "count": queue_depth,
+                },
+            ),
+        )
 
 
 factory_control_service = FactoryControlService()

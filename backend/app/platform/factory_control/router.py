@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from typing import Annotated
+from datetime import datetime, timezone
+from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.factory_control.authority import (
+    FactoryControllerContext,
+    PlatformReader,
+    require_factory_controller_permission,
+)
 from app.platform.factory_control.models import FactoryControlEvent, FactoryLaneState
-from app.platform.factory_control.roadmap import RoadmapError
+from app.platform.factory_control.roadmap import RoadmapError, RoadmapMilestone
 from app.platform.factory_control.schemas import (
     FactoryEventIn,
     FactoryEventResponse,
@@ -16,64 +22,211 @@ from app.platform.factory_control.schemas import (
     FactoryLaneResponse,
     FactoryMetricsResponse,
     FactoryOverviewResponse,
+    FactorySnapshotIn,
 )
 from app.platform.factory_control.service import (
     FactoryEventConflict,
+    FactoryEvidenceError,
     factory_control_service,
 )
-from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import LaunchPlatformPermission
-from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(prefix="/api/v1/platform/factory-control", tags=["Factory Control"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
-CompanyAdministrator = Annotated[
-    AuthorizationContext,
-    Depends(require_permission(LaunchPlatformPermission.FACTORY_CONTROL_READ)),
+EventController = Annotated[
+    FactoryControllerContext,
+    Depends(
+        require_factory_controller_permission(
+            LaunchPlatformPermission.FACTORY_CONTROL_INGEST
+        )
+    ),
 ]
-ALLOWED_ROLES = frozenset({"OWNER", "ADMIN"})
+SnapshotController = Annotated[
+    FactoryControllerContext,
+    Depends(
+        require_factory_controller_permission(
+            LaunchPlatformPermission.FACTORY_CONTROL_SNAPSHOT
+        )
+    ),
+]
 
 
-def require_platform_owner_admin(context: CompanyAdministrator) -> AuthorizationContext:
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="PLATFORM_IDENTITY_HUMAN_GATE",
+def lane_response(
+    lane: FactoryLaneState, *, now: datetime | None = None
+) -> FactoryLaneResponse:
+    observed_at = now or datetime.now(timezone.utc)
+    idle_seconds = (
+        max(0.0, (observed_at - lane.eligible_idle_since).total_seconds())
+        if lane.eligible_idle_since is not None
+        and lane.lifecycle_state == "ELIGIBLE_IDLE"
+        else None
     )
-
-
-OwnerAdmin = Annotated[AuthorizationContext, Depends(require_platform_owner_admin)]
-
-
-def lane_response(lane: FactoryLaneState) -> FactoryLaneResponse:
+    violations: list[str] = []
+    if idle_seconds is not None and idle_seconds > 600:
+        violations.append("ELIGIBLE_IDLE_REFILL_OVER_10_MINUTES")
+    if lane.lifecycle_state == "WAITING_INTEGRATION" and lane.last_handoff_at:
+        wait_seconds = max(0.0, (observed_at - lane.last_handoff_at).total_seconds())
+        limit = 1200 if lane.controlling_enterprise == "OM1E" else 900
+        if wait_seconds > limit:
+            violations.append(
+                "RELEASE_PICKUP_OVER_20_MINUTES"
+                if limit == 1200
+                else "DOMAIN_PICKUP_OVER_15_MINUTES"
+            )
+    sla_state = cast(
+        Literal["HEALTHY", "VIOLATED", "NOT_APPLICABLE"],
+        "VIOLATED"
+        if violations
+        else "HEALTHY"
+        if lane.lifecycle_state
+        in {"ACTIVE", "ASSIGNED", "ELIGIBLE_IDLE", "WAITING_INTEGRATION"}
+        else "NOT_APPLICABLE",
+    )
     return FactoryLaneResponse(
         lane_code=lane.lane_code,
         milestone_code=lane.milestone_code,
         lifecycle_state=lane.lifecycle_state,
         queue_depth=lane.queue_depth,
+        machine=lane.machine,
+        current_assignment=lane.current_assignment,
+        next_queued_item=lane.next_queued_item,
+        controlling_enterprise=lane.controlling_enterprise,
+        self_refill_health=lane.self_refill_health,
+        idle_duration_seconds=idle_seconds,
+        sla_state=sla_state,
+        sla_violations=violations,
         active_since=lane.active_since,
         last_handoff_at=lane.last_handoff_at,
         last_event_at=lane.last_event_at,
     )
 
 
+def _durable_owner_actions(
+    roadmap_actions: list[dict], events: list[FactoryControlEvent]
+) -> list[dict]:
+    queue = {
+        str(item["milestone_code"]): item
+        for item in roadmap_actions
+        if item.get("milestone_code")
+    }
+    for event in sorted(events, key=lambda row: (row.occurred_at, row.id)):
+        gate_id = str(event.details.get("gate_id", ""))
+        if not gate_id:
+            continue
+        if event.event_type == "gate_closed":
+            queue.pop(gate_id, None)
+            continue
+        if event.event_type != "gate_opened":
+            continue
+        gate_type = event.details.get("gate_type")
+        if gate_type not in {
+            "OWNER_ACCEPTANCE_REQUIRED",
+            "HUMAN_GATE",
+            "PROVIDER_GATE",
+        }:
+            continue
+        if event.details.get("engineering_prerequisites_resolved") is not True:
+            continue
+        minutes = event.details.get("estimated_owner_minutes")
+        if not isinstance(minutes, int) or isinstance(minutes, bool) or minutes < 1:
+            continue
+        queue[gate_id] = {
+            "milestone_code": event.milestone_code or gate_id,
+            "priority": event.details.get("priority", "P1"),
+            "action": event.details.get("action", "Human action required."),
+            "why_blocked": event.details.get("why_blocked", gate_type),
+            "workflow": event.details.get("workflow", event.lane_code),
+            "estimated_owner_minutes": minutes,
+            "resume_action": event.details.get("resume_action", "Resume engineering."),
+            "gate_type": gate_type,
+        }
+    return sorted(
+        queue.values(),
+        key=lambda item: (str(item["priority"]), str(item["milestone_code"])),
+    )
+
+
+def _engineering_prerequisites_ready(
+    item: RoadmapMilestone, milestones: dict[str, RoadmapMilestone]
+) -> bool:
+    ready = {"ENGINEERING_READY", "INTEGRATED", "DEPLOYED_BETA", "CLOSED"}
+    if item.engineering_status not in ready:
+        return False
+    return all(
+        dependency in milestones and milestones[dependency].engineering_status in ready
+        for dependency in item.prerequisites
+    )
+
+
+def _roadmap_owner_action(
+    item: RoadmapMilestone, milestones: dict[str, RoadmapMilestone]
+) -> dict | None:
+    gate_type = item.owner_acceptance_status
+    if (
+        gate_type
+        not in {
+            "HUMAN_GATE",
+            "OWNER_ACCEPTANCE_REQUIRED",
+            "PROVIDER_GATE",
+        }
+        or not item.human_provider_gates
+    ):
+        return None
+    if not _engineering_prerequisites_ready(item, milestones):
+        return None
+    if gate_type == "OWNER_ACCEPTANCE_REQUIRED" and item.beta_deployment_status not in {
+        "DEPLOYED_BETA",
+        "CLOSED",
+    }:
+        return None
+    expected_minutes = {
+        "OWNER_ACCEPTANCE_REQUIRED": 10,
+        "HUMAN_GATE": 15,
+        "PROVIDER_GATE": 20,
+    }[gate_type]
+    return {
+        "milestone_code": item.code,
+        "priority": item.launch_class,
+        "action": "; ".join(item.human_provider_gates),
+        "why_blocked": (
+            "Engineering prerequisites are complete; only the named authorized "
+            "human or provider can supply this decision or physical evidence."
+        ),
+        "workflow": item.title,
+        "estimated_owner_minutes": expected_minutes,
+        "resume_action": item.next_admissible_action,
+        "gate_type": gate_type,
+    }
+
+
 @router.get("/overview", response_model=FactoryOverviewResponse)
 async def overview(
-    context: OwnerAdmin, session: DatabaseSession
+    _: PlatformReader, session: DatabaseSession
 ) -> FactoryOverviewResponse:
     try:
-        roadmap, _, lanes, metrics, generated = await factory_control_service.overview(
-            session, company_id=context.company.id
-        )
+        (
+            roadmap,
+            events,
+            lanes,
+            metrics,
+            generated,
+        ) = await factory_control_service.overview(session)
     except RoadmapError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Canonical factory roadmap is unavailable.",
         ) from error
+    milestones = {item.code: item for item in roadmap.milestones}
+    roadmap_actions = [
+        action
+        for item in roadmap.milestones
+        if (action := _roadmap_owner_action(item, milestones)) is not None
+    ]
     return FactoryOverviewResponse(
         roadmap_digest=roadmap.digest,
         roadmap_milestones=len(roadmap.milestones),
         metrics=FactoryMetricsResponse(**metrics),
-        lanes=[lane_response(lane) for lane in lanes],
+        lanes=[lane_response(lane, now=generated) for lane in lanes],
         generated_at=generated,
         p0_backlog=sum(
             item.launch_class == "P0" and item.lifecycle_status != "CLOSED"
@@ -90,37 +243,19 @@ async def overview(
             item.owner_acceptance_status == "PROVIDER_GATE"
             for item in roadmap.milestones
         ),
-        owner_actions=[
-            {
-                "milestone_code": item.code,
-                "priority": item.launch_class,
-                "action": item.next_admissible_action,
-                "why_blocked": item.owner_acceptance_status,
-                "workflow": item.title,
-                "estimated_owner_minutes": None,
-                "resume_action": item.next_admissible_action,
-                "gate_type": item.owner_acceptance_status,
-            }
-            for item in roadmap.milestones
-            if item.owner_acceptance_status
-            in {"HUMAN_GATE", "OWNER_ACCEPTANCE_REQUIRED", "PROVIDER_GATE"}
-            and item.next_admissible_action
-        ],
+        owner_actions=_durable_owner_actions(roadmap_actions, events),
     )
 
 
 @router.get("/lanes/{lane_code}", response_model=FactoryLaneDrilldownResponse)
 async def lane_drilldown(
     lane_code: str,
-    context: OwnerAdmin,
+    _: PlatformReader,
     session: DatabaseSession,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> FactoryLaneDrilldownResponse:
     lane = await session.scalar(
-        select(FactoryLaneState).where(
-            FactoryLaneState.company_id == context.company.id,
-            FactoryLaneState.lane_code == lane_code,
-        )
+        select(FactoryLaneState).where(FactoryLaneState.lane_code == lane_code)
     )
     if lane is None:
         raise HTTPException(status_code=404, detail="Factory lane was not found.")
@@ -128,13 +263,10 @@ async def lane_drilldown(
         (
             await session.scalars(
                 select(FactoryControlEvent)
-                .where(
-                    FactoryControlEvent.company_id == context.company.id,
-                    FactoryControlEvent.lane_code == lane_code,
-                )
+                .where(FactoryControlEvent.lane_code == lane_code)
                 .order_by(
                     FactoryControlEvent.occurred_at.desc(),
-                    FactoryControlEvent.id.desc(),
+                    FactoryControlEvent.idempotency_key.desc(),
                 )
                 .limit(limit)
             )
@@ -158,14 +290,14 @@ async def lane_drilldown(
 
 @router.post("/internal/events", response_model=FactoryEventResponse, status_code=202)
 async def ingest_event(
-    data: FactoryEventIn, context: OwnerAdmin, session: DatabaseSession
+    data: FactoryEventIn, context: EventController, session: DatabaseSession
 ) -> FactoryEventResponse:
     try:
         async with session.begin():
             event, duplicate = await factory_control_service.ingest(
                 session,
-                company_id=context.company.id,
-                actor_user_id=context.user.id,
+                controller_worker_identity_id=context.worker_identity_id,
+                controller_tenant_company_id=context.tenant_company_id,
                 data=data,
             )
     except FactoryEventConflict as error:
@@ -173,23 +305,60 @@ async def ingest_event(
             status_code=status.HTTP_409_CONFLICT,
             detail="Factory event replay conflicts with accepted evidence.",
         ) from error
+    except FactoryEvidenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Factory event evidence is outside controller authority.",
+        ) from error
+    return FactoryEventResponse(id=str(event.id), duplicate=duplicate)
+
+
+@router.post("/internal/sync", response_model=FactoryEventResponse, status_code=202)
+async def sync_controller(
+    context: EventController, session: DatabaseSession
+) -> FactoryEventResponse:
+    try:
+        async with session.begin():
+            event, duplicate = await factory_control_service.sync_controller_lane(
+                session,
+                controller_worker_identity_id=context.worker_identity_id,
+                controller_worker_id=context.worker_id,
+                controller_tenant_company_id=context.tenant_company_id,
+            )
+    except FactoryEvidenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Development Factory evidence is unavailable.",
+        ) from error
     return FactoryEventResponse(id=str(event.id), duplicate=duplicate)
 
 
 @router.post("/internal/snapshots", status_code=201)
 async def capture_snapshot(
-    snapshot_key: Annotated[str, Query(min_length=1, max_length=200)],
-    context: OwnerAdmin,
+    data: FactorySnapshotIn,
+    context: SnapshotController,
     session: DatabaseSession,
 ) -> dict[str, str]:
     try:
         async with session.begin():
             snapshot, duplicate = await factory_control_service.capture_snapshot(
                 session,
-                company_id=context.company.id,
-                actor_user_id=context.user.id,
-                snapshot_key=snapshot_key,
+                controller_worker_identity_id=context.worker_identity_id,
+                controller_tenant_company_id=context.tenant_company_id,
+                snapshot_key=data.snapshot_key,
+                captured_at=data.captured_at,
+                tenant_company_id=data.tenant_company_id,
             )
+    except FactoryEventConflict as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Factory snapshot replay conflicts with accepted evidence.",
+        ) from error
+    except FactoryEvidenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Factory snapshot evidence is outside controller authority.",
+        ) from error
     except RoadmapError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
