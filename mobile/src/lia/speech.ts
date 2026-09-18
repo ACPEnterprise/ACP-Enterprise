@@ -2,7 +2,7 @@ import * as Speech from "expo-speech";
 import type { LiaResponse } from "../api/lia";
 import { z } from "zod";
 
-export type SpeechOptions = { language?: string; rate?: number; pitch?: number };
+export type SpeechOptions = { language?: string; rate?: number; pitch?: number; onDone?: () => void };
 export interface SpeechAdapter { speak(text: string, options?: SpeechOptions): void; stop(): void; }
 export type SpeechRendererKind = "DEVICE_LOCAL_FALLBACK" | "TWELVE_HATS_SPEECH";
 export const ACTIVE_SPEECH_RENDERER: SpeechRendererKind = "DEVICE_LOCAL_FALLBACK";
@@ -107,6 +107,6 @@ export function spokenTextForResponse(response: LiaResponse): string {
 }
 
 export const nativeSpeech: SpeechAdapter = {
-  speak: (text, options) => { if (!text) return; Speech.speak(text, { language: options?.language ?? "en-US", rate: options?.rate ?? 0.94, pitch: options?.pitch ?? 1.0 }); },
+  speak: (text, options) => { if (!text) return; Speech.speak(text, { language: options?.language ?? "en-US", rate: options?.rate ?? 0.94, pitch: options?.pitch ?? 1.0, onDone: options?.onDone, onStopped: options?.onDone }); },
   stop: () => { Speech.stop(); },
 };
