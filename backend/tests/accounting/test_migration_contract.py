@@ -1,7 +1,10 @@
 import ast
 from pathlib import Path
 
-MIGRATION = Path("alembic/versions/w8m0i2e4f619_create_internal_accounting_core.py")
+MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic/versions/w8m0i2e4f619_create_internal_accounting_core.py"
+)
 
 
 def test_migration_is_single_revision_on_authoritative_parent() -> None:

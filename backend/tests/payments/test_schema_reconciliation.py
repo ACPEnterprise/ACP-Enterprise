@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from sqlalchemy import CheckConstraint
-from sqlalchemy.dialects.postgresql import JSONB
-
 from app.core.database import Base
 from app.payments import models as payment_models  # noqa: F401
+from sqlalchemy import CheckConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 
 EXPECTED_CHECKS = {
     "payment_intents": {
@@ -22,7 +21,7 @@ EXPECTED_CHECKS = {
 
 
 def test_payment_models_are_registered_with_alembic_metadata() -> None:
-    env = Path("alembic/env.py").read_text()
+    env = (Path(__file__).resolve().parents[2] / "alembic/env.py").read_text()
     assert "from app.payments import models as payment_models" in env
     assert "payment_webhook_receipts" in Base.metadata.tables
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.main import app
 from app.platform.contracts.manifest import platform_contract_manifest
 from app.platform.idempotency.contracts import (
@@ -31,6 +30,7 @@ IDEMPOTENCY_FIELDS = {
     "request_key",
     "request_id",
 }
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DOMAIN_REPLAY_EVIDENCE = {
     "accounting": "tests/accounting/posting/test_service.py",
     "accounts_payable": "tests/accounts_payable/test_invariants.py",
@@ -133,7 +133,7 @@ def test_required_domains_have_replay_and_conflict_evidence() -> None:
     }
     assert required_domains == DOMAIN_REPLAY_EVIDENCE.keys()
     for evidence_path in DOMAIN_REPLAY_EVIDENCE.values():
-        evidence = Path(evidence_path).read_text(encoding="utf-8").lower()
+        evidence = (BACKEND_ROOT / evidence_path).read_text(encoding="utf-8").lower()
         assert "idempot" in evidence or "replay" in evidence
 
 
@@ -147,7 +147,7 @@ def test_append_only_classification_requires_concrete_replay_evidence() -> None:
     assert all(entry.replay_evidence for entry in append_only)
     for entry in append_only:
         for evidence_path in entry.replay_evidence:
-            evidence = Path(evidence_path).read_text(encoding="utf-8").lower()
+            evidence = (BACKEND_ROOT / evidence_path).read_text(encoding="utf-8").lower()
             assert "replay" in evidence or "duplicate" in evidence
 
     unsupported = replace(append_only[0], replay_evidence=())
@@ -178,12 +178,12 @@ def test_replenishment_decision_has_concrete_company_scoped_replay_evidence() ->
     assert entry.classification is MutationClassification.REQUIRED
     assert entry.tenant_scope == "COMPANY_WITH_BRANCH_CONTEXT"
 
-    evidence = Path("tests/purchasing/test_purchasing_foundation.py").read_text(
+    evidence = (BACKEND_ROOT / "tests/purchasing/test_purchasing_foundation.py").read_text(
         encoding="utf-8"
     )
-    runtime = Path("app/purchasing/service.py").read_text(encoding="utf-8")
-    model = Path("app/purchasing/models.py").read_text(encoding="utf-8")
-    router = Path("app/purchasing/router.py").read_text(encoding="utf-8")
+    runtime = (BACKEND_ROOT / "app/purchasing/service.py").read_text(encoding="utf-8")
+    model = (BACKEND_ROOT / "app/purchasing/models.py").read_text(encoding="utf-8")
+    router = (BACKEND_ROOT / "app/purchasing/router.py").read_text(encoding="utf-8")
     assert "test_replenishment_approval_is_stale_safe_idempotent" in evidence
     assert "Replenishment decision idempotency identity conflicts" in runtime
     assert "STALE_REPLENISHMENT_RECOMMENDATION" in runtime
