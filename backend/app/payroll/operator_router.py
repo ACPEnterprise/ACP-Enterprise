@@ -18,9 +18,14 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.payroll.contracts import PayrollConflictError, canonical_digest
 from app.payroll.models import (
+    PayrollPaperCheckEvidenceRecord,
+    PayrollCalculationInputSnapshotRecord,
+    PayrollGrossCalculationResultRecord,
+    PayrollPaymentDestinationVersion,
     PayrollRunCloseRecord,
     PayrollRunMemberRecord,
     PayrollRunRecord,
+    PayrollTaxDeductionResultRecord,
 )
 from app.payroll.operations import PayrollOperationsService
 from app.payroll.payment_release import (
@@ -29,8 +34,6 @@ from app.payroll.payment_release import (
     PaymentReleaseReviewDecision,
     PayrollPaymentReleaseService,
 )
-from app.payroll.models import PayrollPaymentDestinationVersion
-from app.payroll.models import PayrollPaperCheckEvidenceRecord, PayrollTaxDeductionResultRecord
 from app.payroll.permissions import PayrollPermission
 from app.payroll.run_finalization import (
     PayrollPopulationEvidence,
@@ -81,6 +84,7 @@ class ReviewInput(BaseModel):
 
 class CalculateInput(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=255)
+    expected_run_digest: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class PaperCheckIssueInput(BaseModel):
@@ -281,6 +285,8 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
     run = await session.scalar(select(PayrollRunRecord).where(PayrollRunRecord.company_id == context.company.id, PayrollRunRecord.id == run_id))
     if run is None:
         raise HTTPException(404, "Payroll run was not found")
+    if payload.expected_run_digest is not None and payload.expected_run_digest != run.run_digest:
+        raise HTTPException(409, "Payroll run version is stale")
     if await session.scalar(select(PayrollRunCloseRecord.id).where(PayrollRunCloseRecord.company_id == context.company.id, PayrollRunCloseRecord.run_id == run.id)) is not None:
         raise HTTPException(409, "closed Payroll authority cannot be recalculated")
     request_digest = canonical_digest({"run_id": str(run_id), "operation": "calculate"})
@@ -294,6 +300,19 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
     blockers = _run_blockers(run, members)
     if blockers:
         raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": blockers})
+    gross_ids = [item.gross_result_id for item in members if item.gross_result_id is not None]
+    gross_rows = tuple((await session.scalars(select(PayrollGrossCalculationResultRecord).where(PayrollGrossCalculationResultRecord.company_id == context.company.id, PayrollGrossCalculationResultRecord.id.in_(gross_ids)))).all()) if gross_ids else ()
+    policy_refs = [{"policy_id": str(item.policy_id), "policy_digest": item.policy_digest} for item in gross_rows]
+    if len({(item["policy_id"], item["policy_digest"]) for item in policy_refs}) != 1:
+        raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": ["PAYROLL_POLICY_AUTHORITY_MISSING_OR_AMBIGUOUS"]})
+    employee_bindings = [{"employee_id": str(item.employee_id), "membership_digest": item.membership_digest, "gross_result_id": str(item.gross_result_id), "gross_result_digest": item.gross_result_digest, "tax_result_id": str(item.tax_result_id), "tax_result_digest": item.tax_result_digest} for item in members]
+    authority_refs = [{"employee_id": str(item.employee_id), "tax_result_id": str(item.tax_result_id), "tax_result_digest": item.tax_result_digest} for item in members]
+    snapshot_content = {"run_id": str(run.id), "run_digest": run.run_digest, "pay_period_id": str(run.pay_period_id), "employee_bindings": employee_bindings, "policy_reference": policy_refs[0], "authority_references": authority_refs}
+    snapshot_digest = canonical_digest(snapshot_content)
+    existing_snapshot = await session.scalar(select(PayrollCalculationInputSnapshotRecord).where(PayrollCalculationInputSnapshotRecord.company_id == context.company.id, PayrollCalculationInputSnapshotRecord.input_digest == snapshot_digest))
+    if existing_snapshot is None:
+        latest = await session.scalar(select(PayrollCalculationInputSnapshotRecord.snapshot_version).where(PayrollCalculationInputSnapshotRecord.company_id == context.company.id, PayrollCalculationInputSnapshotRecord.run_id == run.id).order_by(PayrollCalculationInputSnapshotRecord.snapshot_version.desc()).limit(1))
+        session.add(PayrollCalculationInputSnapshotRecord(company_id=context.company.id, run_id=run.id, snapshot_version=(latest or 0) + 1, run_digest=run.run_digest, pay_period_id=run.pay_period_id, employee_bindings=employee_bindings, policy_reference=policy_refs[0], authority_references=authority_refs, input_digest=snapshot_digest, replay_identity=payload.idempotency_key, created_by_user_id=context.user.id))
     session.add(MutationReceipt(company_id=context.company.id, actor_user_id=context.user.id, operation=operation, idempotency_key=payload.idempotency_key, request_digest=request_digest, state="completed", result_type="payroll_run_calculation", result_id=run.id, response_status=200, retention_class="financial_audit", completed_at=datetime.now(timezone.utc)))
     AuditService.stage(session, AuditEntry(action="payroll.run.calculated", resource_type="payroll_run", actor_user_id=context.user.id, company_id=context.company.id, resource_id=run.id, reason_code="operator_calculate", details={"run_digest": run.run_digest, "replay_identity": payload.idempotency_key}))
     await session.commit()
