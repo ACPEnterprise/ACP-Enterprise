@@ -56,6 +56,22 @@ class WorkdayConflictError(WorkdayTimeError):
     pass
 
 
+class PayrollTimeInputResolutionReason(StrEnum):
+    INVALID_REFERENCE = "invalid_reference"
+    SCOPE_MISMATCH = "scope_mismatch"
+    BRANCH_SCOPE_MISMATCH = "branch_scope_mismatch"
+    STALE_OR_INELIGIBLE = "stale_or_ineligible"
+    SNAPSHOT_MISMATCH = "snapshot_mismatch"
+
+
+class PayrollTimeInputResolutionError(WorkdayTimeError):
+    def __init__(
+        self, reason: PayrollTimeInputResolutionReason, message: str
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 class PayrollInputExclusionReason(StrEnum):
     NOT_SUBMITTED = "not_submitted"
     AWAITING_APPROVAL = "awaiting_approval"
