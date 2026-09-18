@@ -7,6 +7,16 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.database.session import get_database_session
@@ -28,6 +38,8 @@ from app.timekeeping.commands import (
 )
 from app.timekeeping.contracts import (
     PayrollInputExclusionReason,
+    PayrollTimeInputResolutionError,
+    PayrollTimeInputResolutionReason,
     PunchKind,
     TimeCorrectionKind,
     TimeEntryProvenance,
@@ -47,15 +59,6 @@ from app.timekeeping.models import (
 from app.timekeeping.permissions import TimekeepingPermission
 from app.timekeeping.schemas import PayPeriodCreateInput
 from app.timekeeping.service import WorkdayTimeService
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=timezone.utc)
 
@@ -602,7 +605,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         )
         assert approved_punch.provenance == TimeEntryProvenance.EMPLOYEE_PUNCH.value
 
-        await service.record_manual_time(
+        unsubmitted = await service.record_manual_time(
             session,
             context=manager_context,  # type: ignore[arg-type]
             command=RecordManualTime(
@@ -666,6 +669,93 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
             TimeEntryProvenance.EMPLOYEE_PUNCH,
             TimeEntryProvenance.AUTHORIZED_MANUAL_ENTRY,
         }
+        stored = await session.scalar(
+            select(PayrollTimeInputRecord).where(
+                PayrollTimeInputRecord.snapshot_digest == first.snapshot_digest
+            )
+        )
+        assert stored is not None
+        resolved = await service.resolve_payroll_time_input_facts(
+            session,
+            context=manager_context,  # type: ignore[arg-type]
+            payroll_input=stored,
+        )
+        resolved_replay = await service.resolve_payroll_time_input_facts(
+            session,
+            context=manager_context,  # type: ignore[arg-type]
+            payroll_input=stored,
+        )
+        assert resolved == first.approved_entries
+        assert resolved_replay == resolved
+
+        def altered_input(**changes: object) -> SimpleNamespace:
+            values: dict[str, object] = {
+                "snapshot_identity": stored.snapshot_identity,
+                "snapshot_version": stored.snapshot_version,
+                "company_id": stored.company_id,
+                "employee_id": stored.employee_id,
+                "pay_period_id": stored.pay_period_id,
+                "approved_revision_ids": list(stored.approved_revision_ids),
+                "total_approved_minutes": stored.total_approved_minutes,
+                "snapshot_digest": stored.snapshot_digest,
+            }
+            values.update(changes)
+            return SimpleNamespace(**values)
+
+        invalid_inputs = (
+            (
+                altered_input(approved_revision_ids=[str(unsubmitted.id)]),
+                PayrollTimeInputResolutionReason.STALE_OR_INELIGIBLE,
+            ),
+            (
+                altered_input(
+                    approved_revision_ids=[
+                        *stored.approved_revision_ids,
+                        stored.approved_revision_ids[0],
+                    ]
+                ),
+                PayrollTimeInputResolutionReason.INVALID_REFERENCE,
+            ),
+            (
+                altered_input(approved_revision_ids=[str(uuid4())]),
+                PayrollTimeInputResolutionReason.INVALID_REFERENCE,
+            ),
+            (
+                altered_input(employee_id=seed.other_employee_id),
+                PayrollTimeInputResolutionReason.SCOPE_MISMATCH,
+            ),
+            (
+                altered_input(company_id=uuid4()),
+                PayrollTimeInputResolutionReason.SCOPE_MISMATCH,
+            ),
+            (
+                altered_input(total_approved_minutes=721),
+                PayrollTimeInputResolutionReason.SNAPSHOT_MISMATCH,
+            ),
+        )
+        for invalid, reason in invalid_inputs:
+            with pytest.raises(PayrollTimeInputResolutionError) as failure:
+                await service.resolve_payroll_time_input_facts(
+                    session,
+                    context=manager_context,  # type: ignore[arg-type]
+                    payroll_input=invalid,  # type: ignore[arg-type]
+                )
+            assert failure.value.reason is reason
+
+        wrong_branch_context = FakeContext(
+            seed, {TimekeepingPermission.APPROVE}, manager=True
+        )
+        wrong_branch_context._branch_ids.clear()
+        with pytest.raises(PayrollTimeInputResolutionError) as branch_failure:
+            await service.resolve_payroll_time_input_facts(
+                session,
+                context=wrong_branch_context,  # type: ignore[arg-type]
+                payroll_input=stored,
+            )
+        assert (
+            branch_failure.value.reason
+            is PayrollTimeInputResolutionReason.BRANCH_SCOPE_MISMATCH
+        )
         overlap_draft = replace(
             first.approved_entries[0],
             entry_id=uuid4(),
@@ -704,6 +794,16 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         assert corrected.correction_kind == "missing_clock_out"
         assert corrected.responsible_user_id == seed.manager_user_id
         assert corrected.supersedes_revision_id == approved_manual.id
+        with pytest.raises(PayrollTimeInputResolutionError) as stale_failure:
+            await service.resolve_payroll_time_input_facts(
+                session,
+                context=manager_context,  # type: ignore[arg-type]
+                payroll_input=stored,
+            )
+        assert (
+            stale_failure.value.reason
+            is PayrollTimeInputResolutionReason.STALE_OR_INELIGIBLE
+        )
         correction_replay = await service.correct(
             session,
             context=manager_context,  # type: ignore[arg-type]

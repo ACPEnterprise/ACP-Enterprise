@@ -331,6 +331,23 @@ class TimekeepingRepository:
             .limit(1)
         )
 
+    async def revisions_by_ids(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        revision_ids: tuple[UUID, ...],
+    ) -> tuple[WorkdayTimeEntryRevision, ...]:
+        if not revision_ids:
+            return ()
+        values = await session.scalars(
+            select(WorkdayTimeEntryRevision).where(
+                WorkdayTimeEntryRevision.company_id == company_id,
+                WorkdayTimeEntryRevision.id.in_(revision_ids),
+            )
+        )
+        return tuple(values.all())
+
     async def correction_by_idempotency_key(
         self,
         session: AsyncSession,
