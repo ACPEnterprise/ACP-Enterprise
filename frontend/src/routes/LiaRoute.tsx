@@ -205,7 +205,7 @@ export function LiaRoute() {
   const pendingNavigation = useRef<string | undefined>(undefined);
   const [conversationId, setConversationId] = useState<string>();
   const [conversationContext, setConversationContext] = useState<{
-    domain: string;
+    domain?: string;
     entity_id?: string;
   }>();
   const [conversationRouteKey, setConversationRouteKey] = useState(routeContextKey);
@@ -219,19 +219,21 @@ export function LiaRoute() {
   const preserveContinuation = (result: LiaResponse) => {
     setConversationId(result.conversation_id);
     setConversationRouteKey(routeContextKey);
-    if (result.subject_domain) {
-      setConversationContext({
+    setConversationContext(
+      result.subject_domain
+        ? {
         domain: result.subject_domain,
         ...(result.subject_id ? { entity_id: result.subject_id } : {}),
-      });
-      setContinuation({
-        authorization_version: result.authorization_version,
-        evidence_digest: result.evidence_digest,
-        as_of: result.as_of,
-        topic_domains: result.source_systems,
-        temporal: result.temporal,
-      });
-    }
+          }
+        : {},
+    );
+    setContinuation({
+      authorization_version: result.authorization_version,
+      evidence_digest: result.evidence_digest,
+      as_of: result.as_of,
+      topic_domains: result.source_systems,
+      temporal: result.temporal,
+    });
   };
   const conversationMatchesRoute = conversationRouteKey === routeContextKey;
   const activeContext =
