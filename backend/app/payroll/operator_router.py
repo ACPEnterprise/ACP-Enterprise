@@ -18,9 +18,9 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.payroll.contracts import PayrollConflictError, canonical_digest
 from app.payroll.models import (
-    PayrollPaperCheckEvidenceRecord,
     PayrollCalculationInputSnapshotRecord,
     PayrollGrossCalculationResultRecord,
+    PayrollPaperCheckEvidenceRecord,
     PayrollPaymentDestinationVersion,
     PayrollRunCloseRecord,
     PayrollRunMemberRecord,
