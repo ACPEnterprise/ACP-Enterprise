@@ -132,6 +132,8 @@ class FactorySnapshotIn(StrictSchema):
     snapshot_key: str = Field(min_length=1, max_length=200)
     tenant_company_id: Optional[UUID] = None
     captured_at: datetime
+    protected_sha: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    beta_sha: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{40}$")
 
     @field_validator("captured_at")
     @classmethod
@@ -139,6 +141,40 @@ class FactorySnapshotIn(StrictSchema):
         if value.tzinfo is None:
             raise ValueError("captured_at must include a timezone")
         return value
+
+
+class FactoryLiveLaneTarget(StrictSchema):
+    lane_code: Literal["OM1E", "OM2E", "LaptopE"]
+    worker_id: UUID
+    controlling_enterprise: Literal["OM1E", "OM2E", "LaptopE"]
+
+    @model_validator(mode="after")
+    def require_canonical_controller_mapping(self) -> FactoryLiveLaneTarget:
+        if self.lane_code != self.controlling_enterprise:
+            raise ValueError("lane must map to its canonical controlling Enterprise")
+        return self
+
+
+class FactoryLiveSyncIn(StrictSchema):
+    observed_at: datetime
+    targets: list[FactoryLiveLaneTarget] = Field(min_length=1, max_length=3)
+
+    @field_validator("observed_at")
+    @classmethod
+    def require_observation_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("observed_at must include a timezone")
+        return value
+
+    @model_validator(mode="after")
+    def require_unique_targets(self) -> FactoryLiveSyncIn:
+        lane_codes = [target.lane_code for target in self.targets]
+        worker_ids = [target.worker_id for target in self.targets]
+        if len(lane_codes) != len(set(lane_codes)) or len(worker_ids) != len(
+            set(worker_ids)
+        ):
+            raise ValueError("live controller targets must be unique")
+        return self
 
 
 class FactoryLaneResponse(StrictSchema):
@@ -214,7 +250,9 @@ class FactoryOverviewResponse(StrictSchema):
     active_p1: list[dict[str, Any]]
     current_bottleneck: Optional[dict[str, Any]]
     recent_movements: list[dict[str, Any]]
-    telemetry_freshness: Literal["LIVE", "NOT_YET_MEASURED"]
+    latest_snapshot_at: Optional[datetime]
+    last_controller_ingestion_at: Optional[datetime]
+    telemetry_freshness: Literal["LIVE", "STALE", "NOT_YET_MEASURED"]
 
 
 class FactoryLaneDrilldownResponse(StrictSchema):

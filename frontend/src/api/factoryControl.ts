@@ -91,7 +91,9 @@ export type FactoryControlOverview = {
     lane_code: string;
     occurred_at: string;
   }>;
-  telemetry_freshness: "LIVE" | "NOT_YET_MEASURED";
+  latest_snapshot_at?: string | null;
+  last_controller_ingestion_at?: string | null;
+  telemetry_freshness: "LIVE" | "STALE" | "NOT_YET_MEASURED";
 };
 
 export type FactoryControlFilters = { lane?: string };

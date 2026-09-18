@@ -23,6 +23,16 @@
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "factory_control",
+      "mechanism": "Authenticated observation timestamp plus canonical lane and Development Factory worker identity",
+      "method": "POST",
+      "operation_id": "live_sync_controllers_api_v1_platform_factory_control_internal_live_sync_post",
+      "path": "/api/v1/platform/factory-control/internal/live-sync",
+      "reason": "Each live observation is durable; exact replay returns the same controller events and conflicting evidence fails closed.",
+      "tenant_scope": "PLATFORM_GLOBAL"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "factory_control",
       "mechanism": "Development Factory worker version and queue state derive a stable event identity",
       "method": "POST",
       "operation_id": "sync_controller_api_v1_platform_factory_control_internal_sync_post",
@@ -3239,6 +3249,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "d77d5dda94ed6d645e4dfd442f1e97d739614e985d9e02ea941971df7201465c",
+  "fingerprint": "8b9729e3f93a49cfa6ab65e2e73341341d85c13599bd0a6d8ca729e46c31415b",
   "schema_version": "1"
 }

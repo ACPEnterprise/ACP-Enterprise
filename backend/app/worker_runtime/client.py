@@ -207,6 +207,28 @@ class WorkerTransportClient:
         )
         self._accepted(response, 200)
 
+    async def factory_control_live_sync(
+        self, *, session_id: UUID, payload: dict[str, object]
+    ) -> tuple[dict[str, object], ...]:
+        response = await self._client.post(
+            "/api/v1/platform/factory-control/internal/live-sync",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json=payload,
+        )
+        self._accepted(response, 202)
+        return tuple(response.json()["events"])
+
+    async def factory_control_snapshot(
+        self, *, session_id: UUID, payload: dict[str, object]
+    ) -> dict[str, object]:
+        response = await self._client.post(
+            "/api/v1/platform/factory-control/internal/snapshots",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json=payload,
+        )
+        self._accepted(response, 201)
+        return dict(response.json())
+
     async def close(self) -> None:
         await self._client.aclose()
 

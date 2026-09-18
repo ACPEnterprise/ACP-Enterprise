@@ -23,7 +23,7 @@ from app.platform.factory_control.roadmap import (
     load_roadmap,
     safe_event_details,
 )
-from app.platform.factory_control.schemas import FactoryEventIn
+from app.platform.factory_control.schemas import FactoryEventIn, FactoryLiveLaneTarget
 from app.worker_control.models import EngineeringWorker
 
 SOURCE_ROADMAP_PATH = (
@@ -106,7 +106,14 @@ def calculate_metrics(
     release_latencies: list[float] = []
     closed_event_times: dict[str, datetime] = {}
     rework = first_pass = 0
-    for event in sorted(events, key=lambda item: (item.occurred_at, str(item.id))):
+    for event in sorted(
+        events,
+        key=lambda item: (
+            item.occurred_at,
+            getattr(item, "received_at", item.occurred_at),
+            getattr(item, "idempotency_key", ""),
+        ),
+    ):
         milestone_code = event.milestone_code
         if milestone_code in represented_codes:
             stages = milestone_stages[milestone_code]
@@ -455,7 +462,17 @@ class FactoryControlService:
     ]:
         generated = now or utc_now()
         roadmap = self.roadmap()
-        events = list((await session.scalars(select(FactoryControlEvent))).all())
+        events = list(
+            (
+                await session.scalars(
+                    select(FactoryControlEvent).order_by(
+                        FactoryControlEvent.occurred_at,
+                        FactoryControlEvent.received_at,
+                        FactoryControlEvent.idempotency_key,
+                    )
+                )
+            ).all()
+        )
         lanes = list(
             (
                 await session.scalars(
@@ -482,6 +499,8 @@ class FactoryControlService:
         snapshot_key: str,
         captured_at: datetime,
         tenant_company_id: UUID | None = None,
+        protected_sha: str | None = None,
+        beta_sha: str | None = None,
     ) -> tuple[FactoryControlSnapshot, bool]:
         if (
             tenant_company_id is not None
@@ -497,6 +516,8 @@ class FactoryControlService:
                 if tenant_company_id
                 else None,
                 "captured_at": captured_at.isoformat(),
+                "protected_sha": protected_sha,
+                "beta_sha": beta_sha,
                 "controller_worker_identity_id": str(controller_worker_identity_id),
             }
         )
@@ -524,7 +545,37 @@ class FactoryControlService:
             snapshot_key=snapshot_key,
             request_digest=request_digest,
             roadmap_digest=roadmap.digest,
-            metrics=metrics,
+            metrics={
+                **metrics,
+                "authority": {
+                    "protected_sha": protected_sha,
+                    "beta_sha": beta_sha,
+                },
+                "roadmap_state": {
+                    "active_p0": [
+                        item.code
+                        for item in roadmap.milestones
+                        if item.launch_class == "P0"
+                        and item.lifecycle_status != "CLOSED"
+                    ],
+                    "human_gates": [
+                        item.code
+                        for item in roadmap.milestones
+                        if item.owner_acceptance_status == "HUMAN_GATE"
+                    ],
+                    "provider_gates": [
+                        item.code
+                        for item in roadmap.milestones
+                        if item.owner_acceptance_status == "PROVIDER_GATE"
+                    ],
+                    "owner_acceptance_required": [
+                        item.code
+                        for item in roadmap.milestones
+                        if item.owner_acceptance_status
+                        == "OWNER_ACCEPTANCE_REQUIRED"
+                    ],
+                },
+            },
             lane_states=[
                 {
                     "lane_code": lane.lane_code,
@@ -553,11 +604,16 @@ class FactoryControlService:
         controller_worker_identity_id: UUID,
         controller_worker_id: UUID,
         controller_tenant_company_id: UUID,
+        target_worker_id: UUID | None = None,
+        lane_code: str | None = None,
+        controlling_enterprise_override: Literal["OM1E", "OM2E", "LaptopE"]
+        | None = None,
+        observed_at: datetime | None = None,
     ) -> tuple[FactoryControlEvent, bool]:
         """Project existing Development Factory truth; do not accept asserted state."""
         worker = await session.scalar(
             select(EngineeringWorker).where(
-                EngineeringWorker.id == controller_worker_id,
+                EngineeringWorker.id == (target_worker_id or controller_worker_id),
                 EngineeringWorker.company_id == controller_tenant_company_id,
             )
         )
@@ -629,7 +685,7 @@ class FactoryControlService:
                 "next_queued_item": str(next_offer.command_id) if next_offer else None,
             }
         )
-        controlling_enterprise = cast(
+        controlling_enterprise = controlling_enterprise_override or cast(
             Literal["OM1E", "OM2E", "LaptopE"] | None,
             "OM1E"
             if worker.name.upper().startswith("OM1")
@@ -661,7 +717,7 @@ class FactoryControlService:
             controller_tenant_company_id=controller_tenant_company_id,
             data=FactoryEventIn(
                 tenant_company_id=controller_tenant_company_id,
-                lane_code=worker.name,
+                lane_code=lane_code or worker.name,
                 event_type="controller_sync",
                 lifecycle_state=state,
                 queue_depth=queue_depth,
@@ -673,10 +729,13 @@ class FactoryControlService:
                 controlling_enterprise=controlling_enterprise,
                 self_refill_health=self_refill_health,
                 idempotency_key=(
-                    f"development-factory-worker:{worker.id}:version:{worker.version}:"
-                    f"queue:{queue_depth}"
+                    f"factory-live:{lane_code}:{worker.id}:"
+                    f"{observed_at.isoformat()}"
+                    if observed_at is not None and lane_code is not None
+                    else f"development-factory-worker:{worker.id}:"
+                    f"version:{worker.version}:queue:{queue_depth}"
                 ),
-                occurred_at=worker.updated_at,
+                occurred_at=observed_at or worker.updated_at,
                 details={
                     "source_kind": "engineering_worker",
                     "source_id": str(worker.id),
@@ -686,6 +745,32 @@ class FactoryControlService:
                 },
             ),
         )
+
+    async def sync_authoritative_lanes(
+        self,
+        session: AsyncSession,
+        *,
+        controller_worker_identity_id: UUID,
+        controller_tenant_company_id: UUID,
+        targets: list[FactoryLiveLaneTarget],
+        observed_at: datetime,
+    ) -> list[tuple[FactoryControlEvent, bool]]:
+        """Project configured Development Factory workers without asserted progress."""
+        results: list[tuple[FactoryControlEvent, bool]] = []
+        for target in targets:
+            results.append(
+                await self.sync_controller_lane(
+                    session,
+                    controller_worker_identity_id=controller_worker_identity_id,
+                    controller_worker_id=target.worker_id,
+                    controller_tenant_company_id=controller_tenant_company_id,
+                    target_worker_id=target.worker_id,
+                    lane_code=target.lane_code,
+                    controlling_enterprise_override=target.controlling_enterprise,
+                    observed_at=observed_at,
+                )
+            )
+        return results
 
 
 factory_control_service = FactoryControlService()

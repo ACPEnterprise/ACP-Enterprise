@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_security_database_session
 from app.platform.auth.dependencies import AuthenticatedIdentity
 from app.platform.auth.services import AuthenticatedContext
+from app.platform.company.membership_models import Membership
 from app.platform.factory_control.models import PlatformAuthorityAssignment
 from app.platform.permissions.codes import LaunchPlatformPermission
 from app.platform.users.models import User
@@ -186,3 +187,134 @@ async def revoke_platform_authority_assignment(
         user.updated_at = revoked_at
     await session.flush()
     return assignment
+
+
+async def grant_platform_factory_reader(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    exact_display_name: str,
+    granted_by_user_id: UUID,
+    reason: str,
+) -> tuple[PlatformAuthorityAssignment, bool]:
+    """Governed custody bootstrap for an exact existing canonical human."""
+    if not reason.strip() or not exact_display_name.strip():
+        raise ValueError("Factory Control grant requires exact identity and reason.")
+    user = await session.scalar(
+        select(User)
+        .where(
+            User.id == user_id,
+            User.display_name == exact_display_name.strip(),
+            User.status == "active",
+            User.archived_at.is_(None),
+        )
+        .with_for_update()
+    )
+    if user is None:
+        raise ValueError("Exact active Factory Control user identity was not found.")
+    membership = await session.scalar(
+        select(Membership).where(
+            Membership.user_id == user.id,
+            Membership.status == "active",
+        )
+    )
+    if membership is None:
+        raise ValueError("Exact active Company membership was not found.")
+    grantor_membership = await session.scalar(
+        select(Membership).where(
+            Membership.user_id == granted_by_user_id,
+            Membership.company_id == membership.company_id,
+            Membership.status == "active",
+        )
+    )
+    if grantor_membership is None:
+        raise ValueError("Exact active Company membership was not found.")
+    existing = await session.scalar(
+        select(PlatformAuthorityAssignment).where(
+            PlatformAuthorityAssignment.principal_type == "USER",
+            PlatformAuthorityAssignment.user_id == user.id,
+            PlatformAuthorityAssignment.permission_code
+            == LaunchPlatformPermission.FACTORY_CONTROL_READ,
+            PlatformAuthorityAssignment.status == "active",
+        )
+    )
+    if existing is not None:
+        return existing, False
+    now = datetime.now(timezone.utc)
+    grant = PlatformAuthorityAssignment(
+        principal_type="USER",
+        user_id=user.id,
+        authority_code="PLATFORM_ADMIN",
+        permission_code=LaunchPlatformPermission.FACTORY_CONTROL_READ,
+        status="active",
+        grant_reason=reason.strip(),
+        granted_by_user_id=granted_by_user_id,
+        granted_at=now,
+        version=1,
+    )
+    session.add(grant)
+    user.authorization_version += 1
+    user.updated_at = now
+    await session.flush()
+    return grant, True
+
+
+async def grant_factory_controller_authority(
+    session: AsyncSession,
+    *,
+    worker_identity_id: UUID,
+    granted_by_user_id: UUID,
+    reason: str,
+) -> list[tuple[PlatformAuthorityAssignment, bool]]:
+    """Grant only the two Factory telemetry permissions to an exact worker identity."""
+    if not reason.strip():
+        raise ValueError("Factory controller grant requires a reason.")
+    identity = await session.scalar(
+        select(WorkerIdentity).where(
+            WorkerIdentity.id == worker_identity_id,
+            WorkerIdentity.state == "active",
+            WorkerIdentity.orchestration_worker_id.is_not(None),
+        )
+    )
+    if identity is None:
+        raise ValueError("Exact active Factory controller identity was not found.")
+    grantor_membership = await session.scalar(
+        select(Membership).where(
+            Membership.user_id == granted_by_user_id,
+            Membership.company_id == identity.company_id,
+            Membership.status == "active",
+        )
+    )
+    if grantor_membership is None:
+        raise ValueError("Grantor lacks an active membership in the controller Company.")
+    results: list[tuple[PlatformAuthorityAssignment, bool]] = []
+    for permission in (
+        LaunchPlatformPermission.FACTORY_CONTROL_INGEST,
+        LaunchPlatformPermission.FACTORY_CONTROL_SNAPSHOT,
+    ):
+        existing = await session.scalar(
+            select(PlatformAuthorityAssignment).where(
+                PlatformAuthorityAssignment.principal_type == "WORKER_IDENTITY",
+                PlatformAuthorityAssignment.worker_identity_id == identity.id,
+                PlatformAuthorityAssignment.permission_code == permission,
+                PlatformAuthorityAssignment.status == "active",
+            )
+        )
+        if existing is not None:
+            results.append((existing, False))
+            continue
+        grant = PlatformAuthorityAssignment(
+            principal_type="WORKER_IDENTITY",
+            worker_identity_id=identity.id,
+            authority_code="FACTORY_CONTROLLER",
+            permission_code=permission,
+            status="active",
+            grant_reason=reason.strip(),
+            granted_by_user_id=granted_by_user_id,
+            granted_at=datetime.now(timezone.utc),
+            version=1,
+        )
+        session.add(grant)
+        results.append((grant, True))
+    await session.flush()
+    return results

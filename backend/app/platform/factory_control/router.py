@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -14,13 +14,18 @@ from app.platform.factory_control.authority import (
     PlatformReader,
     require_factory_controller_permission,
 )
-from app.platform.factory_control.models import FactoryControlEvent, FactoryLaneState
+from app.platform.factory_control.models import (
+    FactoryControlEvent,
+    FactoryControlSnapshot,
+    FactoryLaneState,
+)
 from app.platform.factory_control.roadmap import RoadmapError, RoadmapMilestone
 from app.platform.factory_control.schemas import (
     FactoryEventIn,
     FactoryEventResponse,
     FactoryLaneDrilldownResponse,
     FactoryLaneResponse,
+    FactoryLiveSyncIn,
     FactoryMetricsResponse,
     FactoryOverviewResponse,
     FactorySnapshotIn,
@@ -230,6 +235,22 @@ async def overview(
             detail="Canonical factory roadmap is unavailable.",
         ) from error
     milestones = {item.code: item for item in roadmap.milestones}
+    latest_snapshot_at = await session.scalar(
+        select(func.max(FactoryControlSnapshot.captured_at))
+    )
+    last_controller_ingestion_at = await session.scalar(
+        select(func.max(FactoryControlEvent.received_at)).where(
+            FactoryControlEvent.event_type == "controller_sync"
+        )
+    )
+    freshness = cast(
+        Literal["LIVE", "STALE", "NOT_YET_MEASURED"],
+        "NOT_YET_MEASURED"
+        if last_controller_ingestion_at is None or latest_snapshot_at is None
+        else "LIVE"
+        if generated - last_controller_ingestion_at <= timedelta(minutes=15)
+        else "STALE",
+    )
     active_p0 = [
         _backlog_item(item)
         for item in roadmap.milestones
@@ -300,7 +321,9 @@ async def overview(
                 reverse=True,
             )[:20]
         ],
-        telemetry_freshness="LIVE" if events else "NOT_YET_MEASURED",
+        latest_snapshot_at=latest_snapshot_at,
+        last_controller_ingestion_at=last_controller_ingestion_at,
+        telemetry_freshness=freshness,
     )
 
 
@@ -390,6 +413,32 @@ async def sync_controller(
     return FactoryEventResponse(id=str(event.id), duplicate=duplicate)
 
 
+@router.post("/internal/live-sync", status_code=202)
+async def live_sync_controllers(
+    data: FactoryLiveSyncIn, context: EventController, session: DatabaseSession
+) -> dict[str, list[dict[str, str | bool]]]:
+    try:
+        async with session.begin():
+            results = await factory_control_service.sync_authoritative_lanes(
+                session,
+                controller_worker_identity_id=context.worker_identity_id,
+                controller_tenant_company_id=context.tenant_company_id,
+                targets=data.targets,
+                observed_at=data.observed_at,
+            )
+    except FactoryEvidenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Development Factory evidence is unavailable.",
+        ) from error
+    return {
+        "events": [
+            {"id": str(event.id), "duplicate": duplicate}
+            for event, duplicate in results
+        ]
+    }
+
+
 @router.post("/internal/snapshots", status_code=201)
 async def capture_snapshot(
     data: FactorySnapshotIn,
@@ -405,6 +454,8 @@ async def capture_snapshot(
                 snapshot_key=data.snapshot_key,
                 captured_at=data.captured_at,
                 tenant_company_id=data.tenant_company_id,
+                protected_sha=data.protected_sha,
+                beta_sha=data.beta_sha,
             )
     except FactoryEventConflict as error:
         raise HTTPException(
