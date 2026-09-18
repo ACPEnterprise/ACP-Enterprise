@@ -9,12 +9,19 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.events.schemas import BusinessEventCreate
+from app.events.service import BusinessEventService
+from app.events.types import EventType
 from app.payroll.contracts import PayrollConflictError, canonical_digest
-from app.payroll.models import PayrollRunMemberRecord, PayrollRunRecord
+from app.payroll.models import (
+    PayrollRunCloseRecord,
+    PayrollRunMemberRecord,
+    PayrollRunRecord,
+)
 from app.payroll.operations import PayrollOperationsService
 from app.payroll.payment_release import (
     DraftPaymentDestination,
@@ -30,6 +37,7 @@ from app.payroll.run_finalization import (
     PayrollRunReviewDecision,
     PayrollRunService,
 )
+from app.platform.audit.service import AuditEntry, AuditService
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
@@ -65,6 +73,7 @@ class AssembleInput(BaseModel):
 class ReviewInput(BaseModel):
     reason_code: str = Field(min_length=1, max_length=120)
     safe_note: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(default="", min_length=0, max_length=160)
 
 
 class PaperCheckDestinationInput(BaseModel):
@@ -264,17 +273,34 @@ async def calculate_run(run_id: UUID, context: Calculate, session: Session) -> d
 
 @router.post("/runs/{run_id}/close")
 async def close_run(run_id: UUID, payload: ReviewInput, context: Approve, session: Session) -> dict[str, object]:
-    """Close the existing approved terminal authority without GL posting."""
+    """Persist an append-only close receipt for the approved terminal authority."""
     try:
         handoff = await PayrollRunService().approved_handoff(session, context=context, run_id=run_id, purpose="future_payment_release")
     except PayrollConflictError as error:
         raise HTTPException(409, str(error)) from error
+    if not payload.idempotency_key:
+        raise HTTPException(422, "idempotency_key is required to close Payroll")
+    replay_identity = f"payroll-close:{payload.idempotency_key}"
+    await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": f"payroll-close:{context.company.id}:{run_id}"})
+    existing = await session.scalar(select(PayrollRunCloseRecord).where(PayrollRunCloseRecord.company_id == context.company.id, PayrollRunCloseRecord.replay_identity == replay_identity).with_for_update())
+    if existing is not None:
+        if existing.run_id != run_id or existing.close_reason != payload.reason_code:
+            raise HTTPException(409, "close idempotency identity conflicts with the original request")
+        return {"run_id": existing.run_id, "status": "closed_payroll_authority", "terminal_lifecycle": "approved", "close_receipt": existing.close_digest, "replayed": True, "accounting_posted": False, "payment_execution": "not_performed", "tax_filing": "not_performed"}
+    now = datetime.now(timezone.utc)
+    close_digest = canonical_digest({"run_id": str(run_id), "prior_run_digest": handoff.run_digest, "replay_identity": replay_identity, "reason": payload.reason_code})
+    value = PayrollRunCloseRecord(company_id=context.company.id, run_id=run_id, prior_run_digest=handoff.run_digest, close_state="closed", close_version=1, closed_by_user_id=context.user.id, closed_at=now, close_reason=payload.reason_code, register_digest=handoff.run_digest, replay_identity=replay_identity, close_digest=close_digest)
+    session.add(value)
+    AuditService.stage(session, AuditEntry(action="payroll.run.closed", resource_type="payroll_run_close", actor_user_id=context.user.id, company_id=context.company.id, resource_id=value.id, reason_code=payload.reason_code, details={"run_id": str(run_id), "run_digest": handoff.run_digest, "replay_identity": replay_identity}))
+    BusinessEventService.stage(session, BusinessEventCreate(event_type=EventType.PAYROLL_RUN_CLOSED, entity_type="payroll_run", entity_id=run_id, company_id=context.company.id, user_id=context.user.id, payload={"version": "1", "run_digest": handoff.run_digest, "close_digest": close_digest, "terminal_lifecycle": "approved"}))
+    await session.commit()
     return {
         "run_id": handoff.run_id,
         "status": "closed_payroll_authority",
         "terminal_lifecycle": "approved",
-        "close_receipt": handoff.run_digest,
+        "close_receipt": close_digest,
         "close_reason": payload.reason_code,
+        "replayed": False,
         "accounting_posted": False,
         "payment_execution": "not_performed",
         "tax_filing": "not_performed",
