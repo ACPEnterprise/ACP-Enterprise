@@ -131,7 +131,7 @@ LAUNCH_PLATFORM_DEFINITIONS = (
         resource="factory_control",
         action="read",
         scope=PermissionScope.PLATFORM,
-        reserved=True,
+        reserved=False,
     ),
 )
 

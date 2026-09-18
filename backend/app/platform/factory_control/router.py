@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -36,12 +35,10 @@ ALLOWED_ROLES = frozenset({"OWNER", "ADMIN"})
 
 
 def require_platform_owner_admin(context: CompanyAdministrator) -> AuthorizationContext:
-    if not any(role.code in ALLOWED_ROLES for role in context.effective_roles):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Factory Control requires a platform owner or administrator.",
-        )
-    return context
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="PLATFORM_IDENTITY_HUMAN_GATE",
+    )
 
 
 OwnerAdmin = Annotated[AuthorizationContext, Depends(require_platform_owner_admin)]
@@ -78,6 +75,37 @@ async def overview(
         metrics=FactoryMetricsResponse(**metrics),
         lanes=[lane_response(lane) for lane in lanes],
         generated_at=generated,
+        p0_backlog=sum(
+            item.launch_class == "P0" and item.lifecycle_status != "CLOSED"
+            for item in roadmap.milestones
+        ),
+        p1_backlog=sum(
+            item.launch_class == "P1" and item.lifecycle_status != "CLOSED"
+            for item in roadmap.milestones
+        ),
+        human_gates=sum(
+            item.owner_acceptance_status == "HUMAN_GATE" for item in roadmap.milestones
+        ),
+        provider_gates=sum(
+            item.owner_acceptance_status == "PROVIDER_GATE"
+            for item in roadmap.milestones
+        ),
+        owner_actions=[
+            {
+                "milestone_code": item.code,
+                "priority": item.launch_class,
+                "action": item.next_admissible_action,
+                "why_blocked": item.owner_acceptance_status,
+                "workflow": item.title,
+                "estimated_owner_minutes": None,
+                "resume_action": item.next_admissible_action,
+                "gate_type": item.owner_acceptance_status,
+            }
+            for item in roadmap.milestones
+            if item.owner_acceptance_status
+            in {"HUMAN_GATE", "OWNER_ACCEPTANCE_REQUIRED", "PROVIDER_GATE"}
+            and item.next_admissible_action
+        ],
     )
 
 
@@ -153,7 +181,6 @@ async def capture_snapshot(
     snapshot_key: Annotated[str, Query(min_length=1, max_length=200)],
     context: OwnerAdmin,
     session: DatabaseSession,
-    captured_at: datetime | None = None,
 ) -> dict[str, str]:
     try:
         async with session.begin():
@@ -162,7 +189,6 @@ async def capture_snapshot(
                 company_id=context.company.id,
                 actor_user_id=context.user.id,
                 snapshot_key=snapshot_key,
-                now=captured_at,
             )
     except RoadmapError as error:
         raise HTTPException(

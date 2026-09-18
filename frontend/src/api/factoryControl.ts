@@ -37,6 +37,11 @@ export type FactoryControlOverview = {
   metrics: FactoryMetrics;
   lanes: FactoryLane[];
   generated_at: string;
+  p0_backlog: number;
+  p1_backlog: number;
+  human_gates: number;
+  provider_gates: number;
+  owner_actions: Array<Record<string, unknown>>;
 };
 
 export type FactoryControlFilters = { lane?: string };
