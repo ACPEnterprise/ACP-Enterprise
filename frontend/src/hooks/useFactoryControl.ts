@@ -5,8 +5,8 @@ import { getFactoryControlOverview, type FactoryControlFilters } from "../api/fa
 
 export function useFactoryControlOverview(filters: FactoryControlFilters, enabled: boolean) {
   return useQuery({
-    queryKey: ["factory-control", "overview", filters.lane ?? "all", filters.domain ?? "all"],
-    queryFn: () => getFactoryControlOverview(filters),
+    queryKey: ["factory-control", "overview", filters.lane ?? "all"],
+    queryFn: getFactoryControlOverview,
     enabled,
     retry: shouldRetryApiQuery,
     staleTime: 15_000,

@@ -85,7 +85,19 @@ def safe_event_details(details: dict[str, Any]) -> dict[str, Any]:
         "wage",
         "amount",
     }
-    if any(any(term in str(key).lower() for term in forbidden) for key in details):
+
+    def contains_forbidden_key(value: Any) -> bool:
+        if isinstance(value, dict):
+            return any(
+                any(term in str(key).lower() for term in forbidden)
+                or contains_forbidden_key(item)
+                for key, item in value.items()
+            )
+        if isinstance(value, list):
+            return any(contains_forbidden_key(item) for item in value)
+        return False
+
+    if contains_forbidden_key(details):
         raise RoadmapError("factory event details contain prohibited material")
     encoded = json.dumps(details, sort_keys=True, separators=(",", ":"))
     if len(encoded.encode()) > 16_384:
