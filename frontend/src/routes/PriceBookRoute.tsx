@@ -527,15 +527,14 @@ export function PriceBookRoute() {
   const activeCount = services.filter(
     (service) => service.status === "active",
   ).length;
-  const draftCount = services.filter(
-    (service) => service.status === "draft",
-  ).length;
-  const ownerReviewCount = services.filter((service) =>
-    versions.some(
-      (version) =>
-        version.service_item_id === service.id && version.status === "draft",
-    ),
-  ).length;
+  const ownerReviewCount = new Set([
+    ...services
+      .filter((service) => service.status === "draft")
+      .map((service) => service.id),
+    ...versions
+      .filter((version) => version.status === "draft")
+      .map((version) => version.service_item_id),
+  ]).size;
   const missingPriceCount = services.filter(
     (service) =>
       !versions.some((version) => version.service_item_id === service.id),
@@ -642,25 +641,25 @@ export function PriceBookRoute() {
           >
             <Card>
               <CardHeader>
-                <CardDescription>Services</CardDescription>
-                <CardTitle>{services.length}</CardTitle>
+                <CardDescription>Matching services</CardDescription>
+                <CardTitle>{catalog.data?.total_service_items ?? 0}</CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>Active</CardDescription>
+                <CardDescription>Active on this page</CardDescription>
                 <CardTitle>{activeCount}</CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>Ready for owner review</CardDescription>
-                <CardTitle>{ownerReviewCount + draftCount}</CardTitle>
+                <CardDescription>Ready for review on this page</CardDescription>
+                <CardTitle>{ownerReviewCount}</CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>Missing price evidence</CardDescription>
+                <CardDescription>Missing price evidence on this page</CardDescription>
                 <CardTitle>{missingPriceCount}</CardTitle>
               </CardHeader>
             </Card>
