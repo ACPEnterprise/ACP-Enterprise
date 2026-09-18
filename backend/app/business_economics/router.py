@@ -24,6 +24,7 @@ from app.operational_measurement.productive_hour_readiness import (
 from app.operational_measurement.productive_hour_readiness import (
     downstream_contract as productive_hour_downstream_contract,
 )
+from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AccountingPermission,
@@ -45,6 +46,7 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 from .break_even_readiness import break_even_input_contract
 from .capability_readiness import capability_readiness_matrix
 from .cash_operational_service import CashOperationalEconomicsService
+from .direct_wage_cost_readiness import DirectWageCostReadinessService
 from .operational_sources import OperationalSourceEconomicsService
 from .owner_intelligence import (
     OwnerIntelligenceQuery,
@@ -87,6 +89,15 @@ OperationalSourceReader = Annotated[
             WorkforcePermission.READ,
             CommunicationsPermission.READ,
             AccountingPermission.REPORT_READ,
+        )
+    ),
+]
+CostReadinessReader = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            EconomicsPolicyPermission.MEASUREMENT_READ,
+            PayrollPermission.COMPENSATION_READ,
         )
     ),
 ]
@@ -198,6 +209,30 @@ async def economics_workspace(
         failure = SafeFailure(
             FailureCode.VALIDATION,
             "Business Economics request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error
+
+
+@router.get("/direct-wage-cost-readiness", response_model=dict[str, object])
+async def direct_wage_cost_readiness(
+    session: Session,
+    context: CostReadinessReader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    """Expose bounded wage-cost blockers without exposing compensation values."""
+    try:
+        return await DirectWageCostReadinessService().project(
+            session, context=context, period_start=start, period_end=end
+        )
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Direct wage-cost readiness request requires correction.",
             ClientRecovery.USER_CORRECTION_REQUIRED,
             current_correlation_id(),
         )
