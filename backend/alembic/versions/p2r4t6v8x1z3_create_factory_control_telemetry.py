@@ -4,6 +4,8 @@ Revision ID: p2r4t6v8x1z3
 Revises: p2r4t6v8x0z2
 """
 
+from datetime import datetime, timezone
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -13,8 +15,110 @@ down_revision = "p2r4t6v8x0z2"
 branch_labels = None
 depends_on = None
 
+FACTORY_CONTROL_PERMISSION_ID = "83f50788-21b8-5ca5-8e5e-c1511643a132"
+FACTORY_CONTROL_PERMISSION_CODE = "PLATFORM_FACTORY_CONTROL_READ"
+
+
+def _grant_factory_control_permission() -> None:
+    at = datetime.now(timezone.utc)
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO permissions
+                (id, code, name, description, resource, action, status,
+                 created_at, updated_at, retired_at)
+            VALUES
+                (CAST(:permission_id AS uuid), :permission_code,
+                 'Platform Factory Control Read', NULL, 'factory_control', 'read',
+                 'active', :at, :at, NULL)
+            ON CONFLICT (code) DO NOTHING
+            """
+        ).bindparams(
+            permission_id=FACTORY_CONTROL_PERMISSION_ID,
+            permission_code=FACTORY_CONTROL_PERMISSION_CODE,
+            at=at,
+        )
+    )
+    op.execute(
+        sa.text(
+            """
+            WITH reactivated AS (
+                UPDATE permissions
+                SET status = 'active', retired_at = NULL, updated_at = :at
+                WHERE code = :permission_code
+                  AND (status <> 'active' OR retired_at IS NOT NULL)
+                RETURNING id
+            ), permission_target AS (
+                SELECT p.id
+                FROM permissions p
+                WHERE p.code = :permission_code
+                  AND (SELECT count(*) FROM reactivated) >= 0
+            ), inserted AS (
+                INSERT INTO role_permissions
+                    (id, role_id, permission_id, assigned_at, assigned_by_user_id)
+                SELECT (
+                    substr(md5(r.id::text || p.id::text), 1, 8) || '-' ||
+                    substr(md5(r.id::text || p.id::text), 9, 4) || '-' ||
+                    substr(md5(r.id::text || p.id::text), 13, 4) || '-' ||
+                    substr(md5(r.id::text || p.id::text), 17, 4) || '-' ||
+                    substr(md5(r.id::text || p.id::text), 21, 12)
+                )::uuid, r.id, p.id, :at, NULL
+                FROM roles r
+                CROSS JOIN permission_target p
+                WHERE r.code IN ('OWNER', 'ADMIN')
+                  AND r.is_system IS TRUE
+                  AND r.status = 'active'
+                  AND r.archived_at IS NULL
+                ON CONFLICT (role_id, permission_id) DO NOTHING
+                RETURNING role_id
+            ), changed_roles AS (
+                SELECT role_id FROM inserted
+                UNION
+                SELECT rp.role_id
+                FROM role_permissions rp
+                JOIN reactivated p ON p.id = rp.permission_id
+                JOIN roles r ON r.id = rp.role_id
+                WHERE r.code IN ('OWNER', 'ADMIN')
+                  AND r.is_system IS TRUE
+                  AND r.status = 'active'
+                  AND r.archived_at IS NULL
+            ), affected_users AS (
+                SELECT DISTINCT m.user_id
+                FROM changed_roles i
+                JOIN membership_roles mr
+                  ON mr.role_id = i.role_id AND mr.revoked_at IS NULL
+                JOIN memberships m
+                  ON m.id = mr.membership_id
+                 AND m.company_id = mr.company_id
+                 AND m.status = 'active'
+                JOIN roles r
+                  ON r.id = i.role_id AND r.company_id = m.company_id
+                JOIN users u ON u.id = m.user_id AND u.status = 'active'
+            )
+            UPDATE users u
+            SET authorization_version = u.authorization_version + 1,
+                updated_at = :at
+            FROM affected_users a
+            WHERE u.id = a.user_id
+            """
+        ).bindparams(permission_code=FACTORY_CONTROL_PERMISSION_CODE, at=at)
+    )
+    op.execute(
+        sa.text(
+            """
+            UPDATE permissions
+            SET name = 'Platform Factory Control Read',
+                resource = 'factory_control',
+                action = 'read',
+                updated_at = :at
+            WHERE code = :permission_code
+            """
+        ).bindparams(permission_code=FACTORY_CONTROL_PERMISSION_CODE, at=at)
+    )
+
 
 def upgrade() -> None:
+    _grant_factory_control_permission()
     op.create_table(
         "factory_control_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -120,3 +224,38 @@ def downgrade() -> None:
     op.drop_index("ix_factory_events_lane_time", table_name="factory_control_events")
     op.drop_index("ix_factory_events_company_time", table_name="factory_control_events")
     op.drop_table("factory_control_events")
+    op.execute(
+        sa.text(
+            """
+            DELETE FROM role_permissions rp
+            USING roles r, permissions p
+            WHERE rp.role_id = r.id
+              AND rp.permission_id = p.id
+              AND rp.id = (
+                  substr(md5(r.id::text || p.id::text), 1, 8) || '-' ||
+                  substr(md5(r.id::text || p.id::text), 9, 4) || '-' ||
+                  substr(md5(r.id::text || p.id::text), 13, 4) || '-' ||
+                  substr(md5(r.id::text || p.id::text), 17, 4) || '-' ||
+                  substr(md5(r.id::text || p.id::text), 21, 12)
+              )::uuid
+              AND r.code IN ('OWNER', 'ADMIN')
+              AND r.is_system IS TRUE
+              AND p.code = :permission_code
+            """
+        ).bindparams(permission_code=FACTORY_CONTROL_PERMISSION_CODE)
+    )
+    op.execute(
+        sa.text(
+            """
+            DELETE FROM permissions p
+            WHERE p.id = CAST(:permission_id AS uuid)
+              AND p.code = :permission_code
+              AND NOT EXISTS (
+                  SELECT 1 FROM role_permissions rp WHERE rp.permission_id = p.id
+              )
+            """
+        ).bindparams(
+            permission_id=FACTORY_CONTROL_PERMISSION_ID,
+            permission_code=FACTORY_CONTROL_PERMISSION_CODE,
+        )
+    )
