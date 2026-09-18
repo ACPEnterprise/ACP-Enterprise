@@ -1068,6 +1068,30 @@ class PayrollRunCloseRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class PayrollCalculationInputSnapshotRecord(Base):
+    """Immutable, Company-scoped binding of every authority used by Calculate."""
+    __tablename__ = "payroll_calculation_input_snapshots"
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "run_id", "snapshot_version", name="uq_payroll_calc_snapshot_run_version"),
+        UniqueConstraint("company_id", "input_digest", name="uq_payroll_calc_snapshot_digest"),
+        CheckConstraint("snapshot_version >= 1", name="ck_payroll_calc_snapshot_version"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    pay_period_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_bindings: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    policy_reference: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    authority_references: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    replay_identity: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class PayrollPaperCheckEvidenceRecord(Base):
     """Append-only manual paper-check evidence; never claims bank settlement."""
     __tablename__ = "payroll_paper_check_evidence"
