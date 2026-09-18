@@ -149,6 +149,20 @@ class PriceBookService:
         item_query = select(PriceBookServiceItem).where(
             PriceBookServiceItem.company_id == context.company.id
         )
+
+        def category_tree(seed_ids: set[UUID]) -> set[UUID]:
+            """Return the selected categories and every visible descendant."""
+            expanded = set(seed_ids)
+            while True:
+                descendants = {
+                    category.id
+                    for category in categories
+                    if category.parent_id in expanded
+                }
+                if descendants.issubset(expanded):
+                    return expanded
+                expanded.update(descendants)
+
         if sellable_only:
             item_status = "active"
             version_status = "active"
@@ -176,23 +190,28 @@ class PriceBookService:
             )
         if category_id is not None:
             item_query = item_query.where(
-                PriceBookServiceItem.category_id == category_id
+                PriceBookServiceItem.category_id.in_(category_tree({category_id}))
             )
         if item_status is not None:
             item_query = item_query.where(PriceBookServiceItem.status == item_status)
         if search:
-            term = f"%{search.strip()}%"
-            item_query = item_query.join(
-                PriceBookCategory,
-                PriceBookCategory.id == PriceBookServiceItem.category_id,
+            normalized_search = search.strip()
+            term = f"%{normalized_search}%"
+            category_term = normalized_search.casefold()
+            matching_category_ids = category_tree(
+                {
+                    category.id
+                    for category in categories
+                    if category_term in category.code.casefold()
+                    or category_term in category.name.casefold()
+                }
             )
             item_query = item_query.where(
                 or_(
                     PriceBookServiceItem.code.ilike(term),
                     PriceBookServiceItem.name.ilike(term),
                     PriceBookServiceItem.customer_description.ilike(term),
-                    PriceBookCategory.code.ilike(term),
-                    PriceBookCategory.name.ilike(term),
+                    PriceBookServiceItem.category_id.in_(matching_category_ids),
                 )
             )
         total_items = int(
@@ -211,13 +230,17 @@ class PriceBookService:
                 ).all()
             )
             by_category_id = {category.id: category for category in categories}
-            parent_ids = {
-                by_category_id[category_id].parent_id
-                for category_id in visible_category_ids
-                if category_id in by_category_id
-                and by_category_id[category_id].parent_id is not None
-            }
-            visible_category_ids.update(parent_ids)
+            while True:
+                parent_ids = {
+                    by_category_id[visible_id].parent_id
+                    for visible_id in visible_category_ids
+                    if visible_id in by_category_id
+                    and by_category_id[visible_id].parent_id is not None
+                }
+                new_parent_ids = parent_ids.difference(visible_category_ids)
+                if not new_parent_ids:
+                    break
+                visible_category_ids.update(new_parent_ids)
             categories = tuple(
                 category
                 for category in categories

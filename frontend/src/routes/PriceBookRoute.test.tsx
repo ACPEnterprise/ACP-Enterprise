@@ -388,6 +388,8 @@ describe("PriceBookRoute", () => {
   it("pages through the native service catalog", async () => {
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
 
+    expect(screen.getByText("Matching services").nextElementSibling).toHaveTextContent("75");
+    expect(screen.getByText("Ready for review on this page").nextElementSibling).toHaveTextContent("1");
     expect(screen.getByText("Showing 1–1 of 75 services.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next services" }));
 
