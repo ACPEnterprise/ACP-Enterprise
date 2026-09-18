@@ -68,6 +68,7 @@ from app.platform.contracts.router import (
     engineering_router as engineering_platform_contracts_router,
 )
 from app.platform.contracts.router import router as platform_contracts_router
+from app.platform.factory_control.router import router as factory_control_router
 from app.platform.launch_controls import validate_launch_role_matrix
 from app.platform.onboarding.router import router as identity_onboarding_router
 from app.platform.permissions.catalog import permission_catalog
@@ -185,6 +186,7 @@ app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(platform_audit_router)
 app.include_router(platform_contracts_router)
+app.include_router(factory_control_router)
 app.include_router(engineering_platform_contracts_router)
 app.include_router(company_admin_router)
 app.include_router(identity_self_service_router)

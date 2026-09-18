@@ -39,8 +39,9 @@ class ServiceAgreementPermission:
 
 class LaunchPlatformPermission:
     AUDIT_READ = "COMPANY_AUDIT_READ"
+    FACTORY_CONTROL_READ = "PLATFORM_FACTORY_CONTROL_READ"
 
-    ALL = frozenset({AUDIT_READ})
+    ALL = frozenset({AUDIT_READ, FACTORY_CONTROL_READ})
 
 
 class AnalyticsPermission:

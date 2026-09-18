@@ -1,0 +1,123 @@
+"""create factory control telemetry
+
+Revision ID: p2r4t6v8x1z3
+Revises: o1q9s27h4u0v
+"""
+
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+from alembic import op
+
+revision = "p2r4t6v8x1z3"
+down_revision = "o1q9s27h4u0v"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "factory_control_events",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("lane_code", sa.String(80), nullable=False),
+        sa.Column("milestone_code", sa.String(160)),
+        sa.Column("event_type", sa.String(80), nullable=False),
+        sa.Column("lifecycle_state", sa.String(40)),
+        sa.Column("source", sa.String(40), nullable=False),
+        sa.Column("idempotency_key", sa.String(200), nullable=False),
+        sa.Column("details", postgresql.JSONB(), nullable=False),
+        sa.Column("actor_user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "length(btrim(event_type)) > 0", name="ck_factory_event_type"
+        ),
+        sa.CheckConstraint(
+            "length(btrim(lane_code)) > 0", name="ck_factory_event_lane"
+        ),
+        sa.CheckConstraint(
+            "length(btrim(idempotency_key)) > 0", name="ck_factory_event_idempotency"
+        ),
+        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.UniqueConstraint("company_id", "id", name="uq_factory_events_company_id"),
+        sa.UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_factory_events_idempotency"
+        ),
+    )
+    op.create_index(
+        "ix_factory_events_company_time",
+        "factory_control_events",
+        ["company_id", "occurred_at", "id"],
+    )
+    op.create_index(
+        "ix_factory_events_lane_time",
+        "factory_control_events",
+        ["company_id", "lane_code", "occurred_at", "id"],
+    )
+    op.create_table(
+        "factory_lane_states",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("lane_code", sa.String(80), nullable=False),
+        sa.Column("milestone_code", sa.String(160)),
+        sa.Column("lifecycle_state", sa.String(40), nullable=False),
+        sa.Column("queue_depth", sa.Integer(), nullable=False),
+        sa.Column("active_since", sa.DateTime(timezone=True)),
+        sa.Column("last_handoff_at", sa.DateTime(timezone=True)),
+        sa.Column("last_event_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("version", sa.Integer(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint("version >= 1", name="ck_factory_lane_state_version"),
+        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="RESTRICT"),
+        sa.UniqueConstraint(
+            "company_id", "lane_code", name="uq_factory_lane_state_lane"
+        ),
+        sa.UniqueConstraint(
+            "company_id", "id", name="uq_factory_lane_states_company_id"
+        ),
+    )
+    op.create_index(
+        "ix_factory_lane_state_company_status",
+        "factory_lane_states",
+        ["company_id", "lifecycle_state", "lane_code"],
+    )
+    op.create_table(
+        "factory_control_snapshots",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("snapshot_key", sa.String(200), nullable=False),
+        sa.Column("roadmap_digest", sa.String(64), nullable=False),
+        sa.Column("metrics", postgresql.JSONB(), nullable=False),
+        sa.Column("lane_states", postgresql.JSONB(), nullable=False),
+        sa.Column("captured_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["created_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
+        sa.UniqueConstraint("company_id", "id", name="uq_factory_snapshots_company_id"),
+        sa.UniqueConstraint(
+            "company_id", "snapshot_key", name="uq_factory_snapshots_key"
+        ),
+    )
+    op.create_index(
+        "ix_factory_snapshots_company_time",
+        "factory_control_snapshots",
+        ["company_id", "captured_at", "id"],
+    )
+
+
+def downgrade() -> None:
+    op.drop_index(
+        "ix_factory_snapshots_company_time", table_name="factory_control_snapshots"
+    )
+    op.drop_table("factory_control_snapshots")
+    op.drop_index(
+        "ix_factory_lane_state_company_status", table_name="factory_lane_states"
+    )
+    op.drop_table("factory_lane_states")
+    op.drop_index("ix_factory_events_lane_time", table_name="factory_control_events")
+    op.drop_index("ix_factory_events_company_time", table_name="factory_control_events")
+    op.drop_table("factory_control_events")
