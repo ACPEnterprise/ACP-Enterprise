@@ -5,11 +5,6 @@ from uuid import uuid4
 import httpx
 import jwt
 import pytest
-from fastapi import FastAPI, Response
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
 from app.core.config import Settings
 from app.platform.audit.models import AuditRecord
 from app.platform.audit.service import AuditEntry, AuditService
@@ -33,6 +28,10 @@ from app.platform.security.middleware import (
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
 )
+from fastapi import FastAPI, Response
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 
 def build_settings(**overrides: object) -> Settings:
