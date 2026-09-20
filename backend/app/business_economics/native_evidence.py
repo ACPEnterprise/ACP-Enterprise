@@ -27,6 +27,8 @@ from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
 from app.timekeeping.models import JobWorkedIntervalRevision
 
+from .job_cost_coverage import project_job_cost_coverage
+
 CONTRACT_VERSION: Final = "economics.native-evidence-admission.v1"
 MAX_SOURCE_ROWS: Final = 5000
 _INVOICE_EVIDENCE_STATES: Final = (
@@ -438,6 +440,7 @@ class NativeEconomicsEvidenceService:
         ordered_jobs = sorted(
             jobs.values(), key=lambda item: (item["job_number"], item["job_id"])
         )
+        ordered_jobs, cost_coverage = project_job_cost_coverage(ordered_jobs)
         currencies = {
             str(row["currency"]) for row in ordered_jobs if row["currency"] is not None
         }
@@ -453,6 +456,7 @@ class NativeEconomicsEvidenceService:
             },
             "families": families,
             "admitted_reference_count": len(references),
+            "cost_coverage": cost_coverage,
             "summary": {
                 "job_count": len(ordered_jobs),
                 "invoiced_revenue_minor": (
