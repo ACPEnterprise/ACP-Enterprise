@@ -19,7 +19,10 @@ export interface Invoice {
   invoice_number: string;
   status: InvoiceStatus;
   accounting_status:
-    "pending" | "posted" | "reversed" | "reconciliation_required";
+    | "pending"
+    | "posted"
+    | "reversed"
+    | "reconciliation_required";
   currency: string;
   issue_date: string;
   due_date: string;
@@ -81,7 +84,12 @@ export interface ManualPaymentResult {
   payment: ManualPayment;
 }
 
-export type InvoiceWorkspaceState = "all" | "open" | "overdue" | "needs_attention" | InvoiceStatus;
+export type InvoiceWorkspaceState =
+  | "all"
+  | "open"
+  | "overdue"
+  | "needs_attention"
+  | InvoiceStatus;
 
 export interface InvoiceWorkspaceItem {
   id: string;
@@ -132,6 +140,31 @@ export interface InvoiceWorkspaceFilters {
   branchId?: string;
   limit?: number;
   offset?: number;
+  agingBucket?: ReceivablesAgingBucketKey;
+}
+
+export type ReceivablesAgingBucketKey =
+  | "not_due"
+  | "due_today"
+  | "past_due_1_15"
+  | "past_due_16_30"
+  | "past_due_31_plus";
+export interface ReceivablesAgingBucket {
+  key: ReceivablesAgingBucketKey;
+  label: string;
+  invoice_count: number;
+  amount: string | null;
+}
+export interface ReceivablesSummary {
+  as_of: string;
+  generated_at: string;
+  branch_id: string | null;
+  currency: string | null;
+  evidence_state: "AVAILABLE" | "MEASURED_ZERO" | "CONFLICTING_CURRENCIES";
+  open_invoice_count: number;
+  total_open_amount: string | null;
+  due_today_amount: string | null;
+  buckets: ReceivablesAgingBucket[];
 }
 
 export interface CustomerBalance {
@@ -152,7 +185,13 @@ export interface CustomerBalance {
   evidence_classifications: CustomerEvidenceClassification[];
 }
 
-export type CustomerEvidenceState = "CURRENT_AUTHORITATIVE" | "HISTORICAL_SOURCE_EVIDENCE" | "STALE" | "CONFLICTING" | "PARTIAL" | "UNAVAILABLE";
+export type CustomerEvidenceState =
+  | "CURRENT_AUTHORITATIVE"
+  | "HISTORICAL_SOURCE_EVIDENCE"
+  | "STALE"
+  | "CONFLICTING"
+  | "PARTIAL"
+  | "UNAVAILABLE";
 export interface CustomerEvidenceClassification {
   company_id: string;
   customer_id: string;

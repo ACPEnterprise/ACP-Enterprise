@@ -1,147 +1,297 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
-import {
-  useBeaconLifecycleActions,
-  useBeaconSignals,
-  useBeaconWorkflowActions,
-} from "../hooks/useBeaconSignals";
-import { useJobs } from "../hooks/useJobs";
+import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics";
+import { useDispatchBoard } from "../hooks/useDispatch";
+import { useReceivablesSummary } from "../hooks/useInvoices";
+import { useCompletedJobTrend } from "../hooks/useJobs";
 import { CommandCenterRoute } from "./CommandCenterRoute";
 
-vi.mock("../hooks/useAnalyticsSummary");
-vi.mock("../hooks/useBeaconSignals");
-vi.mock("../hooks/useJobs");
 vi.mock("../auth/useAuth");
 vi.mock("../auth/usePermissions");
+vi.mock("../hooks/useAnalyticsSummary");
+vi.mock("../hooks/useBusinessEconomics");
+vi.mock("../hooks/useDispatch");
+vi.mock("../hooks/useInvoices");
+vi.mock("../hooks/useJobs");
 
-const analyticsHook = vi.mocked(useAnalyticsSummary);
-const beaconHook = vi.mocked(useBeaconSignals);
-const beaconLifecycleHook = vi.mocked(useBeaconLifecycleActions);
-const beaconWorkflowHook = vi.mocked(useBeaconWorkflowActions);
-const jobsHook = vi.mocked(useJobs);
+const permissions = new Set([
+  "COMPANY_INVOICE_READ",
+  "COMPANY_JOB_READ",
+  "COMPANY_DISPATCH_READ",
+  "COMPANY_ANALYTICS_READ",
+  "COMPANY_ECONOMICS_MEASUREMENT_READ",
+]);
+
+function queryResult<T>(data: T) {
+  return { data, isPending: false, isLoading: false, isError: false } as never;
+}
+
+function arrange() {
+  vi.mocked(useAuth).mockReturnValue({
+    activeCompany: {
+      id: "company-1",
+      name: "All County Plumbing & Leak",
+      code: "ACP",
+      membership_id: "membership-1",
+      default_branch_id: "branch-1",
+      has_all_branch_access: true,
+      branches: [
+        { id: "branch-1", name: "Main", code: "MAIN", is_primary: true },
+      ],
+    },
+  } as ReturnType<typeof useAuth>);
+  vi.mocked(useEffectivePermissions).mockReturnValue(permissions);
+  vi.mocked(useReceivablesSummary).mockReturnValue(
+    queryResult({
+      as_of: "2026-09-22",
+      generated_at: "2026-09-22T12:00:00Z",
+      branch_id: null,
+      currency: "USD",
+      evidence_state: "AVAILABLE",
+      open_invoice_count: 4,
+      total_open_amount: "2400.00",
+      due_today_amount: "500.00",
+      buckets: [
+        {
+          key: "not_due",
+          label: "Current / Not Due",
+          invoice_count: 2,
+          amount: "1000.00",
+        },
+        {
+          key: "due_today",
+          label: "Due Today",
+          invoice_count: 1,
+          amount: "500.00",
+        },
+        {
+          key: "past_due_1_15",
+          label: "1–15 Days Past Due",
+          invoice_count: 1,
+          amount: "900.00",
+        },
+        {
+          key: "past_due_16_30",
+          label: "16–30 Days Past Due",
+          invoice_count: 0,
+          amount: "0.00",
+        },
+        {
+          key: "past_due_31_plus",
+          label: "31+ Days Past Due",
+          invoice_count: 0,
+          amount: "0.00",
+        },
+      ],
+    }),
+  );
+  vi.mocked(useCompletedJobTrend).mockReturnValue(
+    queryResult({
+      generated_at: "2026-09-22T12:00:00Z",
+      timezone: "America/New_York",
+      branch_id: null,
+      currency: "USD",
+      granularity: "day",
+      period_start: "2026-09-22",
+      period_end: "2026-09-22",
+      points: [
+        {
+          label: "Sep 22",
+          period_start: "2026-09-22",
+          period_end: "2026-09-22",
+          completed_start_at: "2026-09-22T04:00:00Z",
+          completed_end_at: "2026-09-23T04:00:00Z",
+          job_count: 3,
+          produced_value: "1500.00",
+          known_produced_value: "1500.00",
+          missing_value_count: 0,
+          evidence_state: "AVAILABLE",
+        },
+      ],
+    }),
+  );
+  vi.mocked(useDispatchBoard).mockReturnValue(
+    queryResult({
+      total_count: 1,
+      items: [
+        {
+          appointment_id: "appointment-1",
+          appointment_number: "APT-000001",
+          job_id: "job-1",
+          job_number: "JOB-000001",
+          customer_display_name: "Hammer Haag",
+          service_location_label: "100 Main St",
+          branch_id: "branch-1",
+          status: "confirmed",
+          window_start_at: "2026-09-22T13:00:00Z",
+          window_end_at: "2026-09-22T15:00:00Z",
+          assignment: {
+            primary_employee_id: "employee-1",
+            primary_employee_name: "Mel Santiago",
+          },
+        },
+      ],
+    }),
+  );
+  vi.mocked(useAnalyticsSummary).mockReturnValue(
+    queryResult({
+      period_start: "2026-09-22T04:00:00Z",
+      period_end: "2026-09-23T04:00:00Z",
+      timezone: "America/New_York",
+      cash_collected: { name: "Cash collected", value: "750.00" },
+      booked_revenue: { name: "Booked revenue", value: "0" },
+      new_customers: { name: "New customers", value: 2 },
+      appointments_booked: { name: "Appointments", value: 4 },
+      total_events: { name: "Events", value: 6 },
+      recent_activity: [],
+    }),
+  );
+  vi.mocked(useEconomicsMeasurementFoundation).mockReturnValue(
+    queryResult({
+      contract_version: "1",
+      company_id: "company-1",
+      branch_id: null,
+      canonical_efficiency_kpi: null,
+      break_even_input_readiness: {},
+      mutation_authority: "none",
+    }),
+  );
+}
 
 describe("CommandCenterRoute", () => {
-  it("renders connected metrics without fabricating workforce activity", () => {
-    vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<
-      typeof useAuth
-    >);
-    vi.mocked(useEffectivePermissions).mockReturnValue(new Set([
-      "COMPANY_ANALYTICS_READ", "COMPANY_JOB_READ",
-    ]));
-    beaconWorkflowHook.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useBeaconWorkflowActions>);
-    beaconLifecycleHook.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useBeaconLifecycleActions>);
-    beaconHook.mockReturnValue({
-      data: {
-        items: [],
-        snoozed_items: [],
-        evaluated_at: "2026-07-24T00:00:00Z",
-        expires_at: "2026-07-24T00:15:00Z",
-        lifecycle_commands_available: false,
-      },
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useBeaconSignals>);
-    analyticsHook.mockReturnValue({
-      data: {
-        period_start: "2026-07-24T00:00:00Z",
-        period_end: "2026-07-25T00:00:00Z",
-        timezone: "America/New_York",
-        cash_collected: { name: "Cash collected", value: "950" },
-        booked_revenue: { name: "Booked revenue", value: "1250" },
-        new_customers: { name: "New customers", value: 3 },
-        appointments_booked: { name: "Appointments", value: 5 },
-        total_events: { name: "Events", value: 8 },
-        recent_activity: [],
-      },
-      isLoading: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useAnalyticsSummary>);
-    jobsHook.mockReturnValue({
-      data: { items: [], page: 1, page_size: 1, total_count: 7, total_pages: 7 },
-      isLoading: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useJobs>);
-
-    render(<MemoryRouter><CommandCenterRoute /></MemoryRouter>);
-    expect(screen.getByRole("heading", { name: "Command Center", level: 2 })).toBeInTheDocument();
-    expect(screen.getByText("$1,250")).toBeInTheDocument();
-    expect(screen.getByText("No critical issues requiring attention.")).toBeInTheDocument();
-    expect(screen.getByText("No active Beacon signals")).toBeInTheDocument();
-    expect(screen.getAllByText("Not Connected").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Coming Soon").length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Codex.*live/i)).not.toBeInTheDocument();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrange();
   });
 
-  it("renders honest unavailable states when connected APIs fail", () => {
-    vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<
-      typeof useAuth
-    >);
-    vi.mocked(useEffectivePermissions).mockReturnValue(new Set([
-      "COMPANY_ANALYTICS_READ", "COMPANY_JOB_READ",
-    ]));
-    beaconWorkflowHook.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useBeaconWorkflowActions>);
-    beaconLifecycleHook.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useBeaconLifecycleActions>);
-    beaconHook.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useBeaconSignals>);
-    analyticsHook.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-    } as unknown as ReturnType<typeof useAnalyticsSummary>);
-    jobsHook.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-    } as unknown as ReturnType<typeof useJobs>);
-
-    render(<MemoryRouter><CommandCenterRoute /></MemoryRouter>);
-    expect(screen.getAllByText("No Data Available").length).toBeGreaterThanOrEqual(4);
-    expect(screen.queryByText("$0")).not.toBeInTheDocument();
-    expect(screen.queryByText("0%")).not.toBeInTheDocument();
-    expect(screen.getByText("Beacon signals unavailable")).toBeInTheDocument();
+  it("renders authoritative money and job evidence while keeping unavailable facts distinct from zero", () => {
+    render(
+      <MemoryRouter>
+        <CommandCenterRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Command Center" }),
+    ).toBeInTheDocument();
+    const moneyPanel = screen
+      .getByRole("heading", { name: "Money / Cash Position" })
+      .closest("article");
+    expect(moneyPanel).toHaveClass("border-[#C01529]");
+    expect(screen.getByText("$2,400")).toBeInTheDocument();
+    expect(screen.getByText(/Due-today AR: \$500/)).toBeInTheDocument();
+    expect(screen.getByText("Not connected")).toBeInTheDocument();
+    const economicStatus = screen
+      .getByText("Economic Health unavailable")
+      .closest("[data-economic-status]");
+    expect(economicStatus).toHaveAttribute(
+      "data-economic-status",
+      "UNAVAILABLE",
+    );
+    expect(economicStatus).toHaveClass("border-2", "border-dashed");
+    expect(economicStatus).not.toHaveClass("border-[#C01529]");
+    expect(screen.getByText(/Hammer Haag/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No live card processor is connected. Transaction count, charged amount, and fees are unknown.",
+      ),
+    ).toBeInTheDocument();
+    const bankTile = screen.getByText("Bank cash / available").parentElement;
+    expect(bankTile).not.toBeNull();
+    expect(
+      within(bankTile!).queryByText("$0", { exact: true }),
+    ).not.toBeInTheDocument();
   });
 
-  it("does not request cross-domain evidence without its exact read permission", () => {
-    vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<typeof useAuth>);
+  it("preserves exact AR and graph drill-down filters", () => {
+    render(
+      <MemoryRouter>
+        <CommandCenterRoute />
+      </MemoryRouter>,
+    );
+    const dueToday = screen.getByRole("link", { name: /Due Today/ });
+    expect(dueToday).toHaveAttribute(
+      "href",
+      expect.stringContaining("agingBucket=due_today"),
+    );
+    const point = screen.getAllByRole("link", { name: /Sep 22: \$1,500/ })[0];
+    expect(point).toHaveAttribute(
+      "href",
+      expect.stringContaining("completedStartAt=2026-09-22T04%3A00%3A00Z"),
+    );
+    expect(point).toHaveAttribute(
+      "href",
+      expect.stringContaining("status=completed"),
+    );
+  });
+
+  it("switches date and branch scope without inventing branch analytics", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <CommandCenterRoute />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: "Tomorrow" }));
+    expect(useDispatchBoard).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(String),
+      undefined,
+      true,
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Command Center Branch"),
+      "branch-1",
+    );
+    expect(useReceivablesSummary).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "branch-1",
+      true,
+    );
+    expect(useCompletedJobTrend).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      "branch-1",
+      true,
+    );
+    expect(useAnalyticsSummary).toHaveBeenLastCalledWith(false);
+    expect(
+      screen.getAllByText("Unavailable at Branch scope").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("enforces domain read permissions at every data request", () => {
     vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
-    analyticsHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useAnalyticsSummary>);
-    beaconHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useBeaconSignals>);
-    jobsHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useJobs>);
-    beaconWorkflowHook.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<typeof useBeaconWorkflowActions>);
-    beaconLifecycleHook.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<typeof useBeaconLifecycleActions>);
-
-    render(<MemoryRouter><CommandCenterRoute /></MemoryRouter>);
-
-    expect(analyticsHook).toHaveBeenCalledWith(false);
-    expect(beaconHook).toHaveBeenCalledWith(false);
-    expect(jobsHook).toHaveBeenCalledWith({ page: 1, pageSize: 1 }, false);
-    expect(screen.getByText("Beacon access unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("No active Beacon signals")).not.toBeInTheDocument();
+    render(
+      <MemoryRouter>
+        <CommandCenterRoute />
+      </MemoryRouter>,
+    );
+    expect(useReceivablesSummary).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      false,
+    );
+    expect(useCompletedJobTrend).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      undefined,
+      false,
+    );
+    expect(useDispatchBoard).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      undefined,
+      false,
+    );
+    expect(useAnalyticsSummary).toHaveBeenCalledWith(false);
+    expect(useEconomicsMeasurementFoundation).toHaveBeenCalledWith(false);
   });
 });

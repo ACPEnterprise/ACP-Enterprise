@@ -10,6 +10,7 @@ from app.dispatch.errors import DispatchConflict, DispatchNotFound
 from app.dispatch.models import DispatchAssignment, DispatchAssignmentHistory
 from app.dispatch.service import DispatchService
 from app.events.models import BusinessEvent
+from app.jobs.models import Job, JobAppointmentLink
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -272,6 +273,53 @@ async def test_assignment_is_idempotent_audited_and_releasable(dispatch_fixture)
                 reason="Contradictory technician",
                 idempotency_key="dispatch-assign-001",
             )
+
+
+@pytest.mark.asyncio
+async def test_board_exposes_customer_job_and_location_drilldown_context(
+    dispatch_fixture,
+):
+    factory, context, appointment, _, _ = dispatch_fixture
+    now = datetime.now(timezone.utc)
+    job = Job(
+        company_id=context.company.id,
+        branch_id=appointment.branch_id,
+        job_number=f"JOB-{int(uuid4().hex[:8], 16) % 1000000:06d}",
+        customer_id=appointment.customer_id,
+        service_location_id=appointment.service_location_id,
+        status="ready",
+        priority="normal",
+        concurrency_version=1,
+        activated_at=now,
+        created_by_user_id=context.user.id,
+        updated_by_user_id=context.user.id,
+    )
+    async with factory() as session, session.begin():
+        session.add(job)
+        await session.flush()
+        session.add(
+            JobAppointmentLink(
+                company_id=context.company.id,
+                branch_id=appointment.branch_id,
+                job_id=job.id,
+                appointment_id=appointment.id,
+                visit_sequence=1,
+            )
+        )
+    async with factory() as session:
+        board = await DispatchService().board(
+            session,
+            context=context,
+            start_at=appointment.arrival_window_start_at - timedelta(minutes=1),
+            end_at=appointment.arrival_window_end_at + timedelta(minutes=1),
+            branch_id=appointment.branch_id,
+        )
+    assert board.total_count == 1
+    item = board.items[0]
+    assert item.job_id == job.id
+    assert item.job_number == job.job_number
+    assert item.customer_display_name
+    assert item.service_location_label
 
 
 @pytest.mark.asyncio

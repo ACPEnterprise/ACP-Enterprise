@@ -17,6 +17,7 @@ from app.jobs.query import (
 )
 from app.jobs.query_service import JobsQueryService
 from app.jobs.query_types import JobDetail, JobListItem
+from app.jobs.reporting import JobReportingService
 from app.jobs.repository import JobRepository
 from app.jobs.types import JobPriority, JobStatus
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -127,6 +128,38 @@ async def test_search_filters_counts_appointment_minimum_and_exact_number(
     assert (
         result.items[0].earliest_appointment_start_at == early.arrival_window_start_at
     )
+
+
+@pytest.mark.asyncio
+async def test_completed_trend_fails_closed_when_sold_snapshot_value_is_missing(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+) -> None:
+    _, factory, fixture = jobs_database
+    completed_at = datetime(2026, 9, 22, 16, 0, tzinfo=timezone.utc)
+    async with factory() as session, session.begin():
+        await JobRepository.create_job(
+            session,
+            job=build_job(
+                fixture,
+                status=JobStatus.COMPLETED,
+                now=completed_at,
+            ),
+        )
+    async with factory() as session:
+        result = await JobReportingService().completed_trend(
+            session,
+            context=_context_from_fixture(fixture),
+            period_start=completed_at.date(),
+            period_end=completed_at.date(),
+            granularity="day",
+            branch_id=fixture.branch_id,
+        )
+    point = result["points"][0]
+    assert point["job_count"] == 1
+    assert point["produced_value"] is None
+    assert point["known_produced_value"] == 0
+    assert point["missing_value_count"] == 1
+    assert point["evidence_state"] == "INCOMPLETE_SOLD_SNAPSHOT"
 
 
 @pytest.mark.asyncio

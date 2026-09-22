@@ -53,6 +53,9 @@ export interface DispatchBoardItem {
   appointment_id: string;
   appointment_number: string;
   job_id: string | null;
+  job_number?: string | null;
+  customer_display_name?: string | null;
+  service_location_label?: string | null;
   branch_id: string;
   status: string;
   window_start_at: string;

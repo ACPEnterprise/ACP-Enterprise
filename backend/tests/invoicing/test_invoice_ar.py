@@ -147,6 +147,59 @@ async def test_office_workspace_and_customer_balance_use_native_scoped_evidence(
 
 
 @pytest.mark.asyncio
+async def test_receivables_summary_separates_due_today_and_is_branch_scoped(
+    invoice_fixture,
+):
+    factory, company, branch, actor, _, _, spec = invoice_fixture
+    service = InvoiceService()
+    async with factory() as session:
+        invoice = await service.create_from_estimate(session, spec)
+    issued = await issue(factory, actor, invoice)
+    async with factory() as session:
+        summary = await service.receivables_summary(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            as_of=spec.due_date,
+            branch_id=branch.id,
+        )
+        concealed = await service.receivables_summary(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            as_of=spec.due_date,
+            branch_id=uuid4(),
+        )
+        due_today_rows = await service.workspace(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            as_of=spec.due_date,
+            state="open",
+            aging_bucket_filter="due_today",
+        )
+        not_due_rows = await service.workspace(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            as_of=spec.due_date,
+            state="open",
+            aging_bucket_filter="not_due",
+        )
+    buckets = {item["key"]: item for item in summary["buckets"]}
+    assert summary["evidence_state"] == "AVAILABLE"
+    assert summary["open_invoice_count"] == 1
+    assert summary["total_open_amount"] == issued.open_amount
+    assert buckets["due_today"]["invoice_count"] == 1
+    assert buckets["due_today"]["amount"] == issued.open_amount
+    assert buckets["not_due"]["amount"] == Decimal("0.00")
+    assert [row["id"] for row in due_today_rows] == [issued.id]
+    assert not_due_rows == ()
+    assert concealed["evidence_state"] == "MEASURED_ZERO"
+    assert concealed["open_invoice_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_invoice_candidates_remove_uuid_entry_and_exclude_invoiced_work(
     invoice_fixture,
 ):
