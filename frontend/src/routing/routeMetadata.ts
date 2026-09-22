@@ -48,6 +48,15 @@ export const customersHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const pipelineHandle = {
+  workspace: {
+    pageTitle: "Pipeline",
+    breadcrumbs: [{ label: "Pipeline" }],
+    helpTopic: "pipeline",
+    aiContext: "pipeline",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const serviceAgreementsHandle = { workspace: { pageTitle: "Service Agreements", breadcrumbs: [{ label: "Service Agreements" }], helpTopic: "service-agreements", aiContext: "service-agreements" } } as const satisfies ShellRouteHandle;
 
 export const customerDetailHandle = {

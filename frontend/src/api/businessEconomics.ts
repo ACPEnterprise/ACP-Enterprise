@@ -1,7 +1,11 @@
 import { apiClient } from "./client";
 
 export type QualityState =
-  "complete" | "partial" | "stale" | "conflicting" | "unavailable";
+  | "complete"
+  | "partial"
+  | "stale"
+  | "conflicting"
+  | "unavailable";
 export interface EconomicsTotals {
   revenue: number;
   labor: number;
@@ -266,7 +270,10 @@ export interface EconomicsPolicyFamily {
   title: string;
   decision_id: string;
   state:
-    "CONFIGURED" | "UNCONFIGURED" | "OWNER_DECISION_REQUIRED" | "CONFLICTING";
+    | "CONFIGURED"
+    | "UNCONFIGURED"
+    | "OWNER_DECISION_REQUIRED"
+    | "CONFLICTING";
   current_policy_id: string | null;
   current_version: number | null;
   current_strategy: string | null;
@@ -360,20 +367,66 @@ export interface EconomicsResultLineage {
 }
 export interface OperationalSourceEconomics {
   version: string;
-  sources: Array<{ source: string; state: string; evidence_count: number; explanation: string }>;
+  sources: Array<{
+    source: string;
+    state: string;
+    evidence_count: number;
+    explanation: string;
+  }>;
   asset_equipment: {
     asset_count: number;
-    repeated_service: Array<{ asset_id: string; asset_number: string; service_evidence_count: number }>;
-    attention: Array<{ asset_id: string; asset_number: string; asset_class: string; condition: string; state: string }>;
+    repeated_service: Array<{
+      asset_id: string;
+      asset_number: string;
+      service_evidence_count: number;
+    }>;
+    attention: Array<{
+      asset_id: string;
+      asset_number: string;
+      asset_class: string;
+      condition: string;
+      state: string;
+    }>;
     economic_cost_state: "UNAVAILABLE";
   };
-  workforce: { profile_count: number; labor_attribution: string; employee_scoring: "PROHIBITED" };
+  workforce: {
+    profile_count: number;
+    labor_attribution: string;
+    employee_scoring: "PROHIBITED";
+  };
   communications: { failure_count: number; causality_authority: "none" };
-  accounting: { readiness: string; cash_truth: string; protected_migration_rows_accessed: false };
-  owner_questions: Array<{ key: string; question: string; state: string; count: number | null; limitation: string }>;
+  accounting: {
+    readiness: string;
+    cash_truth: string;
+    protected_migration_rows_accessed: false;
+  };
+  owner_questions: Array<{
+    key: string;
+    question: string;
+    state: string;
+    count: number | null;
+    limitation: string;
+  }>;
   limitations: string[];
   projection_digest: string;
   mutation_authority: "none";
+}
+
+export interface EconomicsMeasurementFoundation {
+  contract_version: string;
+  company_id: string;
+  branch_id: string | null;
+  canonical_efficiency_kpi: null;
+  break_even_input_readiness: Record<string, unknown>;
+  mutation_authority: "none";
+}
+
+export async function getEconomicsMeasurementFoundation() {
+  return (
+    await apiClient.get<EconomicsMeasurementFoundation>(
+      "/api/v1/business-economics/measurement-foundation",
+    )
+  ).data;
 }
 
 export async function getEconomicsWorkspace(start: string, end: string) {
@@ -411,7 +464,10 @@ export async function getCashOperationalEconomics(start: string, end: string) {
     )
   ).data;
 }
-export async function getOperationalSourceEconomics(start: string, end: string) {
+export async function getOperationalSourceEconomics(
+  start: string,
+  end: string,
+) {
   return (
     await apiClient.get<OperationalSourceEconomics>(
       "/api/v1/business-economics/operational-sources",

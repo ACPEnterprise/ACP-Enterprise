@@ -66,6 +66,9 @@ class DispatchBoardItem(DispatchSchema):
     appointment_id: UUID
     appointment_number: str
     job_id: UUID | None
+    job_number: str | None = None
+    customer_display_name: str | None = None
+    service_location_label: str | None = None
     branch_id: UUID
     status: str
     window_start_at: datetime

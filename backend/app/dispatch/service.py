@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.models import Customer, ServiceLocation
 from app.dispatch.errors import DispatchConflict, DispatchNotFound, DispatchValidation
 from app.dispatch.models import (
     DispatchAssignment,
@@ -22,7 +23,7 @@ from app.dispatch.schemas import (
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
-from app.jobs.models import JobAppointmentLink
+from app.jobs.models import Job, JobAppointmentLink
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
@@ -77,19 +78,63 @@ class DispatchService:
             assignment = await self._get_assignment(
                 session, context.company.id, appointment.id
             )
-            job_id = await session.scalar(
-                select(JobAppointmentLink.job_id)
-                .where(
-                    JobAppointmentLink.company_id == context.company.id,
-                    JobAppointmentLink.appointment_id == appointment.id,
+            job_context = (
+                await session.execute(
+                    select(
+                        Job.id,
+                        Job.job_number,
+                        Customer.display_name,
+                        ServiceLocation.nickname,
+                        ServiceLocation.address,
+                        ServiceLocation.city,
+                        ServiceLocation.state,
+                    )
+                    .select_from(JobAppointmentLink)
+                    .join(
+                        Job,
+                        and_(
+                            Job.company_id == JobAppointmentLink.company_id,
+                            Job.branch_id == JobAppointmentLink.branch_id,
+                            Job.id == JobAppointmentLink.job_id,
+                        ),
+                    )
+                    .join(
+                        Customer,
+                        and_(
+                            Customer.company_id == Job.company_id,
+                            Customer.id == Job.customer_id,
+                        ),
+                    )
+                    .join(
+                        ServiceLocation,
+                        and_(
+                            ServiceLocation.customer_id == Customer.id,
+                            ServiceLocation.id == Job.service_location_id,
+                        ),
+                    )
+                    .where(
+                        JobAppointmentLink.company_id == context.company.id,
+                        JobAppointmentLink.appointment_id == appointment.id,
+                    )
+                    .limit(1)
                 )
-                .limit(1)
-            )
+            ).first()
+            job_id = job_context.id if job_context else None
             items.append(
                 DispatchBoardItem(
                     appointment_id=appointment.id,
                     appointment_number=appointment.appointment_number,
                     job_id=job_id,
+                    job_number=job_context.job_number if job_context else None,
+                    customer_display_name=(
+                        job_context.display_name if job_context else None
+                    ),
+                    service_location_label=(
+                        job_context.nickname
+                        or f"{job_context.address}, {job_context.city}, {job_context.state}"
+                        if job_context
+                        else None
+                    ),
                     branch_id=appointment.branch_id,
                     status=appointment.status,
                     window_start_at=appointment.arrival_window_start_at,

@@ -22,6 +22,7 @@ export type NavigationItemId =
   | "mission-control"
   | "factory-control"
   | "customers"
+  | "pipeline"
   | "service-agreements"
   | "scheduling"
   | "dispatch"

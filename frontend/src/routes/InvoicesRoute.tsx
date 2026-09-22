@@ -1,8 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useHasPermission } from "../auth";
-import { useInvoiceCandidates, useInvoiceMutations, useInvoiceWorkspace } from "../hooks/useInvoices";
-import type { InvoiceWorkspaceState } from "../types/invoices";
+import {
+  useInvoiceCandidates,
+  useInvoiceMutations,
+  useInvoiceWorkspace,
+} from "../hooks/useInvoices";
+import type {
+  InvoiceWorkspaceState,
+  ReceivablesAgingBucketKey,
+} from "../types/invoices";
 import {
   Alert,
   Button,
@@ -21,6 +28,13 @@ export function InvoicesRoute() {
   const canRead = useHasPermission("COMPANY_INVOICE_READ");
   const canManage = useHasPermission("COMPANY_INVOICE_MANAGE");
   const today = new Date().toISOString().slice(0, 10);
+  const asOf = searchParams.get("asOf") ?? today;
+  const branchId = searchParams.get("branchId") ?? undefined;
+  const agingBucket = searchParams.get(
+    "agingBucket",
+  ) as ReceivablesAgingBucketKey | null;
+  const initialState =
+    (searchParams.get("state") as InvoiceWorkspaceState | null) ?? "open";
   const mutations = useInvoiceMutations();
   const candidates = useInvoiceCandidates(canRead && canManage);
   const [form, setForm] = useState({
@@ -29,15 +43,28 @@ export function InvoicesRoute() {
     terms: "Net 30",
   });
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<InvoiceWorkspaceState>("open");
-  const invoices = useInvoiceWorkspace({ asOf: today, state: statusFilter, query: query.trim() || undefined, customerId }, canRead);
+  const [statusFilter, setStatusFilter] =
+    useState<InvoiceWorkspaceState>(initialState);
+  const invoices = useInvoiceWorkspace(
+    {
+      asOf,
+      state: statusFilter,
+      query: query.trim() || undefined,
+      customerId,
+      branchId,
+      agingBucket: agingBucket ?? undefined,
+    },
+    canRead,
+  );
   if (!canRead)
     return (
       <Alert variant="danger">You are not authorized to view Invoices.</Alert>
     );
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const candidate = candidates.data?.find((item) => item.job_id === form.candidate);
+    const candidate = candidates.data?.find(
+      (item) => item.job_id === form.candidate,
+    );
     if (!candidate) return;
     await mutations.create.mutateAsync({
       branch_id: candidate.branch_id,
@@ -49,7 +76,10 @@ export function InvoicesRoute() {
     });
   };
   const rows = invoices.data ?? [];
-  const openTotal = rows.reduce((sum, invoice) => sum + Number(invoice.open_amount), 0);
+  const openTotal = rows.reduce(
+    (sum, invoice) => sum + Number(invoice.open_amount),
+    0,
+  );
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
       <header>
@@ -62,7 +92,26 @@ export function InvoicesRoute() {
         <p className="mt-2 text-content-muted">
           Authoritative customer obligations from completed accepted work.
         </p>
-        {customerId && <p className="mt-2 text-sm text-status-information">Filtered to the Customer selected from Customer detail. <Link className="font-semibold underline" to={`/customers/${encodeURIComponent(customerId)}`}>Return to Customer</Link></p>}
+        {customerId && (
+          <p className="mt-2 text-sm text-status-information">
+            Filtered to the Customer selected from Customer detail.{" "}
+            <Link
+              className="font-semibold underline"
+              to={`/customers/${encodeURIComponent(customerId)}`}
+            >
+              Return to Customer
+            </Link>
+          </p>
+        )}
+        {agingBucket && (
+          <p className="mt-2 text-sm text-status-information">
+            Showing the exact receivables aging bucket selected in Command
+            Center as of {asOf}.{" "}
+            <Link className="font-semibold underline" to="/">
+              Return to Command Center
+            </Link>
+          </p>
+        )}
       </header>
       {invoices.isPending ? (
         <Spinner label="Loading Invoices" />
@@ -72,12 +121,46 @@ export function InvoicesRoute() {
         <Card>
           <CardHeader>
             <CardTitle>Open items</CardTitle>
-            <CardDescription>{rows.length} invoices · {openTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} open across the filtered set. Invoice value is not recognized revenue.</CardDescription>
+            <CardDescription>
+              {rows.length} invoices ·{" "}
+              {openTotal.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}{" "}
+              open across the filtered set. Invoice value is not recognized
+              revenue.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <Input aria-label="Search invoices" placeholder="Customer, Invoice, or Job" value={query} onChange={(event) => setQuery(event.target.value)} />
-              <label className="grid gap-1 text-sm"><span>View</span><select aria-label="Invoice status" className="rounded-lg border border-stroke bg-surface px-3 py-2" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as InvoiceWorkspaceState)}><option value="open">Open balance</option><option value="overdue">Overdue</option><option value="needs_attention">Needs attention</option><option value="all">All</option><option value="draft">Draft</option><option value="issued">Issued</option><option value="partially_paid">Partial</option><option value="paid">Paid</option><option value="adjusted">Adjusted</option><option value="voided">Voided</option></select></label>
+              <Input
+                aria-label="Search invoices"
+                placeholder="Customer, Invoice, or Job"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <label className="grid gap-1 text-sm">
+                <span>View</span>
+                <select
+                  aria-label="Invoice status"
+                  className="rounded-lg border border-stroke bg-surface px-3 py-2"
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as InvoiceWorkspaceState)
+                  }
+                >
+                  <option value="open">Open balance</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="needs_attention">Needs attention</option>
+                  <option value="all">All</option>
+                  <option value="draft">Draft</option>
+                  <option value="issued">Issued</option>
+                  <option value="partially_paid">Partial</option>
+                  <option value="paid">Paid</option>
+                  <option value="adjusted">Adjusted</option>
+                  <option value="voided">Voided</option>
+                </select>
+              </label>
             </div>
             <ul className="space-y-2">
               {rows.map((invoice) => (
@@ -86,13 +169,51 @@ export function InvoicesRoute() {
                     className="grid gap-2 rounded-lg border border-stroke p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center"
                     to={`/invoices/${invoice.id}`}
                   >
-                    <span><strong>{invoice.invoice_number}</strong><span className="block truncate text-sm text-content-muted">{invoice.customer_display_name} · {invoice.customer_number}</span></span>
-                    <span className="text-sm"><span className="block">{invoice.job_number}</span><span className="block truncate text-content-muted">{invoice.service_location_label}</span></span>
-                    <span className="text-left sm:text-right"><strong>{Number(invoice.open_amount).toLocaleString(undefined, { style: "currency", currency: invoice.currency })}</strong><span className="block text-xs text-content-muted">{invoice.status.replaceAll("_", " ")} · due {invoice.due_date}{invoice.age_days > 0 ? ` · ${invoice.age_days}d overdue` : ""}</span>{invoice.attention_reasons.length > 0 && <span className="block text-xs font-semibold text-status-warning">{invoice.attention_reasons.map((reason) => reason.replaceAll("_", " ").toLowerCase()).join(" · ")}</span>}</span>
+                    <span>
+                      <strong>{invoice.invoice_number}</strong>
+                      <span className="block truncate text-sm text-content-muted">
+                        {invoice.customer_display_name} ·{" "}
+                        {invoice.customer_number}
+                      </span>
+                    </span>
+                    <span className="text-sm">
+                      <span className="block">{invoice.job_number}</span>
+                      <span className="block truncate text-content-muted">
+                        {invoice.service_location_label}
+                      </span>
+                    </span>
+                    <span className="text-left sm:text-right">
+                      <strong>
+                        {Number(invoice.open_amount).toLocaleString(undefined, {
+                          style: "currency",
+                          currency: invoice.currency,
+                        })}
+                      </strong>
+                      <span className="block text-xs text-content-muted">
+                        {invoice.status.replaceAll("_", " ")} · due{" "}
+                        {invoice.due_date}
+                        {invoice.age_days > 0
+                          ? ` · ${invoice.age_days}d overdue`
+                          : ""}
+                      </span>
+                      {invoice.attention_reasons.length > 0 && (
+                        <span className="block text-xs font-semibold text-status-warning">
+                          {invoice.attention_reasons
+                            .map((reason) =>
+                              reason.replaceAll("_", " ").toLowerCase(),
+                            )
+                            .join(" · ")}
+                        </span>
+                      )}
+                    </span>
                   </Link>
                 </li>
               ))}
-              {rows.length === 0 && <li className="text-sm text-content-muted">No invoices match these filters.</li>}
+              {rows.length === 0 && (
+                <li className="text-sm text-content-muted">
+                  No invoices match these filters.
+                </li>
+              )}
             </ul>
           </CardContent>
         </Card>
@@ -110,8 +231,32 @@ export function InvoicesRoute() {
               className="grid gap-3 sm:grid-cols-2"
               onSubmit={(event) => void submit(event)}
             >
-              <label className="grid gap-1 text-sm sm:col-span-2"><span>Completed accepted work</span><select aria-label="Completed accepted work" required className="rounded-lg border border-stroke bg-surface px-3 py-2" value={form.candidate} onChange={(event) => setForm({ ...form, candidate: event.target.value })}><option value="">Select a completed Job</option>{candidates.data?.map((candidate) => <option key={candidate.job_id} value={candidate.job_id}>{candidate.job_number} · {candidate.customer_display_name} · {candidate.accepted_total} {candidate.currency}</option>)}</select></label>
-              {candidates.isError && <Alert variant="warning">Eligible completed work is unavailable. Refresh before creating an Invoice.</Alert>}
+              <label className="grid gap-1 text-sm sm:col-span-2">
+                <span>Completed accepted work</span>
+                <select
+                  aria-label="Completed accepted work"
+                  required
+                  className="rounded-lg border border-stroke bg-surface px-3 py-2"
+                  value={form.candidate}
+                  onChange={(event) =>
+                    setForm({ ...form, candidate: event.target.value })
+                  }
+                >
+                  <option value="">Select a completed Job</option>
+                  {candidates.data?.map((candidate) => (
+                    <option key={candidate.job_id} value={candidate.job_id}>
+                      {candidate.job_number} · {candidate.customer_display_name}{" "}
+                      · {candidate.accepted_total} {candidate.currency}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {candidates.isError && (
+                <Alert variant="warning">
+                  Eligible completed work is unavailable. Refresh before
+                  creating an Invoice.
+                </Alert>
+              )}
               <Input
                 aria-label="Due date"
                 type="date"
