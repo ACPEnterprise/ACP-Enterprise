@@ -71,6 +71,55 @@ def test_json_compatible_yaml_roadmap_is_canonical_and_rejects_duplicates(tmp_pa
         load_roadmap(path)
 
 
+def test_real_operational_acceptance_requires_owner_evidence_for_pass(tmp_path):
+    base = {
+        "code": "M1",
+        "engineering_status": "ENGINEERING_READY",
+        "protected_integration_status": "INTEGRATED",
+        "beta_deployment_status": "DEPLOYED_BETA",
+        "owner_acceptance_status": "OWNER_ACCEPTANCE_REQUIRED",
+        "lifecycle_status": "OWNER_ACCEPTANCE_REQUIRED",
+    }
+    surface = {
+        "id": "ROA-1",
+        "surface": "Customers",
+        "milestone_id": "M1",
+        "owner_task": "Find a real Customer.",
+        "real_data_required": "Authoritative Customer data.",
+        "current_result": "Not tested.",
+        "blocker": "Owner test required.",
+        "owning_domain": "OM2-A / Customers",
+        "priority": "P0",
+        "status": "NOT_TESTED",
+        "beta_operable": False,
+        "owner_accepted": False,
+        "evidence": [],
+    }
+    path = tmp_path / "acceptance.yaml"
+    path.write_text(
+        json.dumps(
+            {
+                "milestones": [base],
+                "real_operational_acceptance": {"surfaces": [surface]},
+            }
+        )
+    )
+    loaded = load_roadmap(path)
+    assert loaded.operational_acceptance[0].status == "NOT_TESTED"
+
+    surface.update(status="PASS", beta_operable=True, owner_accepted=False)
+    path.write_text(
+        json.dumps(
+            {
+                "milestones": [base],
+                "real_operational_acceptance": {"surfaces": [surface]},
+            }
+        )
+    )
+    with pytest.raises(RoadmapError, match="PASS requires owner proof"):
+        load_roadmap(path)
+
+
 def test_packaged_roadmap_fails_closed_when_digest_is_missing_or_wrong(tmp_path):
     path = tmp_path / "roadmap.json"
     path.write_text(

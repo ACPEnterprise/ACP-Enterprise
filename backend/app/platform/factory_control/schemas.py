@@ -275,6 +275,28 @@ class FactoryMetricsResponse(StrictSchema):
     velocity_history_status: Literal["MEASURED", "NOT_YET_MEASURED"]
 
 
+class OperationalAcceptanceSurfaceResponse(StrictSchema):
+    acceptance_id: str
+    surface: str
+    milestone_code: str
+    owner_task: str
+    real_data_required: str
+    current_result: str
+    blocker: str
+    owning_domain: str
+    priority: Literal["P0", "P1", "P2", "P3"]
+    status: Literal[
+        "NOT_TESTED",
+        "PASS",
+        "DEFECT",
+        "HUMAN_INPUT_REQUIRED",
+        "PROVIDER_GATE",
+    ]
+    beta_operable: bool
+    owner_accepted: bool
+    evidence: list[str]
+
+
 class FactoryOverviewResponse(StrictSchema):
     roadmap_digest: str
     roadmap_milestones: int
@@ -294,6 +316,7 @@ class FactoryOverviewResponse(StrictSchema):
     latest_snapshot_at: Optional[datetime]
     last_controller_ingestion_at: Optional[datetime]
     telemetry_freshness: Literal["LIVE", "STALE", "NOT_YET_MEASURED"]
+    real_operational_acceptance: list[OperationalAcceptanceSurfaceResponse]
 
 
 class FactoryLaneDrilldownResponse(StrictSchema):
