@@ -6,8 +6,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision: str = "pa449c0d1e2f"
-down_revision: Union[str, Sequence[str], None] = "oa7oa8p9q012"
-branch_labels: Union[str, Sequence[str], None] = ("payroll_issue449",)
+down_revision: Union[str, Sequence[str], None] = "pe470p2q2r3s4"
+branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
