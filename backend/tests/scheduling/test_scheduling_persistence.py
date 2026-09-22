@@ -7,19 +7,10 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, select, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
-from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401
+from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.branch.models import Branch
 from app.platform.company import membership_models  # noqa: F401
 from app.platform.company.models import Company
@@ -38,6 +29,14 @@ from app.scheduling.models import (
 )
 from app.scheduling.repository import SchedulingRepository
 from app.scheduling.types import AppointmentStatus
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def utc_now() -> datetime:
@@ -381,7 +380,7 @@ async def test_invalid_lifecycle_and_capacity_quantity_are_rejected(
                 appointment_id=appointment.id,
                 reserved_start_at=start,
                 reserved_end_at=end,
-                capacity_units=Decimal("0"),
+                capacity_units=Decimal(0),
             )
         )
         with pytest.raises(IntegrityError):

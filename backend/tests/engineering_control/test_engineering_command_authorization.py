@@ -5,8 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
@@ -20,6 +18,8 @@ from app.engineering_control.errors import (
 from app.engineering_control.service import EngineeringControlService
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,

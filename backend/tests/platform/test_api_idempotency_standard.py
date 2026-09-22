@@ -31,17 +31,20 @@ IDEMPOTENCY_FIELDS = {
     "request_key",
     "request_id",
 }
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DOMAIN_REPLAY_EVIDENCE = {
     "accounting": "tests/accounting/posting/test_service.py",
     "accounts_payable": "tests/accounts_payable/test_invariants.py",
     "beacon": "tests/beacon/test_native_financial_signals.py",
     "communications": "tests/communications/test_communications_persistence.py",
+    "customers": "tests/customer_migration/test_population_reconciliation.py",
     "dispatch": "tests/dispatch/test_dispatch_api.py",
     "engineering": "tests/engineering_control/repository_operation/test_repository_operation.py",
     "engineering_commands": "tests/engineering_control/test_mobile_engineering_api.py",
     "engineering_executions": "tests/engineering_execution/test_engineering_execution.py",
     "estimates": "tests/estimates/test_estimate_conversion.py",
     "field_purchase": "tests/field_service/test_field_purchase_contract.py",
+    "factory_control": "tests/platform/factory_control/test_factory_control_database.py",
     "identity_onboarding": "tests/platform/test_identity_onboarding.py",
     "inventory": "tests/inventory/test_inventory_adjustments.py",
     "invoices": "tests/invoicing/test_invoice_ar.py",
@@ -91,7 +94,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 344
+    assert len(operations) == len(coverage) == 349
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -133,7 +136,7 @@ def test_required_domains_have_replay_and_conflict_evidence() -> None:
     }
     assert required_domains == DOMAIN_REPLAY_EVIDENCE.keys()
     for evidence_path in DOMAIN_REPLAY_EVIDENCE.values():
-        evidence = Path(evidence_path).read_text(encoding="utf-8").lower()
+        evidence = (BACKEND_ROOT / evidence_path).read_text(encoding="utf-8").lower()
         assert "idempot" in evidence or "replay" in evidence
 
 
@@ -147,7 +150,9 @@ def test_append_only_classification_requires_concrete_replay_evidence() -> None:
     assert all(entry.replay_evidence for entry in append_only)
     for entry in append_only:
         for evidence_path in entry.replay_evidence:
-            evidence = Path(evidence_path).read_text(encoding="utf-8").lower()
+            evidence = (
+                (BACKEND_ROOT / evidence_path).read_text(encoding="utf-8").lower()
+            )
             assert "replay" in evidence or "duplicate" in evidence
 
     unsupported = replace(append_only[0], replay_evidence=())
@@ -178,12 +183,12 @@ def test_replenishment_decision_has_concrete_company_scoped_replay_evidence() ->
     assert entry.classification is MutationClassification.REQUIRED
     assert entry.tenant_scope == "COMPANY_WITH_BRANCH_CONTEXT"
 
-    evidence = Path("tests/purchasing/test_purchasing_foundation.py").read_text(
-        encoding="utf-8"
-    )
-    runtime = Path("app/purchasing/service.py").read_text(encoding="utf-8")
-    model = Path("app/purchasing/models.py").read_text(encoding="utf-8")
-    router = Path("app/purchasing/router.py").read_text(encoding="utf-8")
+    evidence = (
+        BACKEND_ROOT / "tests/purchasing/test_purchasing_foundation.py"
+    ).read_text(encoding="utf-8")
+    runtime = (BACKEND_ROOT / "app/purchasing/service.py").read_text(encoding="utf-8")
+    model = (BACKEND_ROOT / "app/purchasing/models.py").read_text(encoding="utf-8")
+    router = (BACKEND_ROOT / "app/purchasing/router.py").read_text(encoding="utf-8")
     assert "test_replenishment_approval_is_stale_safe_idempotent" in evidence
     assert "Replenishment decision idempotency identity conflicts" in runtime
     assert "STALE_REPLENISHMENT_RECOMMENDATION" in runtime
@@ -204,7 +209,11 @@ def test_coverage_is_tenant_explicit_and_bound_into_platform_contract() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
         and not entry.path.startswith(
-            ("/api/v1/engineering/", "/api/v1/worker-transport/")
+            (
+                "/api/v1/engineering/",
+                "/api/v1/worker-transport/",
+                "/api/v1/platform/factory-control/",
+            )
         )
     )
     assert (

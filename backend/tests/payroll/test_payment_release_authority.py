@@ -3,9 +3,6 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.events.models import BusinessEvent
 from app.payroll.contracts import (
     PayrollAuthorizationError,
@@ -28,6 +25,9 @@ from app.payroll.run_finalization import (
 )
 from app.payroll.tax_authority import ProtectedPayrollInputCipher
 from app.platform.audit.models import AuditRecord
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from tests.payroll.test_gross_pay_finalization import FakeContext
 from tests.payroll.test_gross_pay_finalization import (
     finalization_database as _finalization_database_fixture,
@@ -49,9 +49,7 @@ def payment_service() -> PayrollPaymentReleaseService:
     )
 
 
-async def approved_run(
-    session: AsyncSession, values: dict[str, object]
-):  # type: ignore[no-untyped-def]
+async def approved_run(session: AsyncSession, values: dict[str, object]):  # type: ignore[no-untyped-def]
     tax, _ = await approved_tax_result(session, values)
     company_id, employee_id = values["company_id"], values["employee_id"]
     assemble: Any = FakeContext(
@@ -76,7 +74,9 @@ async def approved_run(
         currency="USD",
         assembled_at=NOW,
     )
-    run = await service.persist_candidate(session, context=assemble, candidate=candidate)
+    run = await service.persist_candidate(
+        session, context=assemble, candidate=candidate
+    )
     await service.initiate_review(
         session, context=review, run_id=run.id, reason_code="synthetic"
     )
@@ -233,8 +233,14 @@ async def test_protected_destination_release_review_handoff_and_safe_events(
             ).all()
         )
         assert events and audits
-        assert all("amount" not in str(item.payload) and "routing" not in str(item.payload) for item in events)
-        assert all("amount" not in str(item.details) and "account" not in str(item.details) for item in audits)
+        assert all(
+            "amount" not in str(item.payload) and "routing" not in str(item.payload)
+            for item in events
+        )
+        assert all(
+            "amount" not in str(item.details) and "account" not in str(item.details)
+            for item in audits
+        )
 
 
 @pytest.mark.asyncio
@@ -246,23 +252,77 @@ async def test_missing_unverified_paper_check_population_and_permissions(
     manage, assemble, _, _ = contexts(values)
     async with factory() as session:
         run, _ = await approved_run(session, values)
-        missing = await service.resolve_destination(session, company_id=values["company_id"], employee_id=values["employee_id"], as_of_date=date(2026, 9, 4))
+        missing = await service.resolve_destination(
+            session,
+            company_id=values["company_id"],
+            employee_id=values["employee_id"],
+            as_of_date=date(2026, 9, 4),
+        )
         assert missing.state is DestinationAdmissionState.MISSING
-        candidate = await service.assemble_candidate(session, context=assemble, payroll_run_id=run.id, destinations={values["employee_id"]: missing}, assembled_at=NOW)
-        assert candidate.aggregate_release_amount == 0 and candidate.instructions[0].disposition.value == "blocked"
+        candidate = await service.assemble_candidate(
+            session,
+            context=assemble,
+            payroll_run_id=run.id,
+            destinations={values["employee_id"]: missing},
+            assembled_at=NOW,
+        )
+        assert (
+            candidate.aggregate_release_amount == 0
+            and candidate.instructions[0].disposition.value == "blocked"
+        )
         with pytest.raises(PayrollConflictError, match="population"):
-            await service.assemble_candidate(session, context=assemble, payroll_run_id=run.id, destinations={}, assembled_at=NOW)
-        draft = await service.create_destination(session, context=manage, draft=DraftPaymentDestination(values["employee_id"], 1, PaymentMethod.PAPER_CHECK, "protected-check-destination", "synthetic paper check", canonical_digest({"paper": True}), date(2026, 1, 1), None, None, "Synthetic paper-check qualification"))
-        unverified = await service.resolve_destination(session, company_id=values["company_id"], employee_id=values["employee_id"], as_of_date=date(2026, 9, 4))
-        assert draft.lifecycle == "draft" and unverified.state is DestinationAdmissionState.UNVERIFIED
-        await service.approve_destination(session, context=manage, destination_id=draft.id)
-        paper = await service.resolve_destination(session, company_id=values["company_id"], employee_id=values["employee_id"], as_of_date=date(2026, 9, 4))
+            await service.assemble_candidate(
+                session,
+                context=assemble,
+                payroll_run_id=run.id,
+                destinations={},
+                assembled_at=NOW,
+            )
+        draft = await service.create_destination(
+            session,
+            context=manage,
+            draft=DraftPaymentDestination(
+                values["employee_id"],
+                1,
+                PaymentMethod.PAPER_CHECK,
+                "protected-check-destination",
+                "synthetic paper check",
+                canonical_digest({"paper": True}),
+                date(2026, 1, 1),
+                None,
+                None,
+                "Synthetic paper-check qualification",
+            ),
+        )
+        unverified = await service.resolve_destination(
+            session,
+            company_id=values["company_id"],
+            employee_id=values["employee_id"],
+            as_of_date=date(2026, 9, 4),
+        )
+        assert (
+            draft.lifecycle == "draft"
+            and unverified.state is DestinationAdmissionState.UNVERIFIED
+        )
+        await service.approve_destination(
+            session, context=manage, destination_id=draft.id
+        )
+        paper = await service.resolve_destination(
+            session,
+            company_id=values["company_id"],
+            employee_id=values["employee_id"],
+            as_of_date=date(2026, 9, 4),
+        )
         assert paper.method is PaymentMethod.PAPER_CHECK
         no_permission = FakeContext(values["company_id"], values["actor_id"], set())
         with pytest.raises(PayrollAuthorizationError):
-            await service.persist_candidate(session, context=no_permission, candidate=candidate)
+            await service.persist_candidate(
+                session, context=no_permission, candidate=candidate
+            )
         with pytest.raises(PayrollAuthorizationError):
-            await service.initiate_review(session, context=assemble, release_id=uuid4(), reason_code="denied")
+            await service.initiate_review(
+                session, context=assemble, release_id=uuid4(), reason_code="denied"
+            )
 
 
 @pytest.mark.asyncio
@@ -274,19 +334,60 @@ async def test_changed_destination_supersession_and_cross_company_fail_closed(
     manage, assemble, _, _ = contexts(values)
     async with factory() as session:
         run, _ = await approved_run(session, values)
-        first_destination = await destination(session, service, manage, values["employee_id"])
-        first_resolution = await service.resolve_destination(session, company_id=values["company_id"], employee_id=values["employee_id"], as_of_date=date(2026, 9, 4))
-        first_candidate = await service.assemble_candidate(session, context=assemble, payroll_run_id=run.id, destinations={values["employee_id"]: first_resolution}, assembled_at=NOW)
-        first = await service.persist_candidate(session, context=assemble, candidate=first_candidate)
+        first_destination = await destination(
+            session, service, manage, values["employee_id"]
+        )
+        first_resolution = await service.resolve_destination(
+            session,
+            company_id=values["company_id"],
+            employee_id=values["employee_id"],
+            as_of_date=date(2026, 9, 4),
+        )
+        first_candidate = await service.assemble_candidate(
+            session,
+            context=assemble,
+            payroll_run_id=run.id,
+            destinations={values["employee_id"]: first_resolution},
+            assembled_at=NOW,
+        )
+        first = await service.persist_candidate(
+            session, context=assemble, candidate=first_candidate
+        )
         first_destination.lifecycle = "revoked"
         await session.commit()
         await destination(session, service, manage, values["employee_id"], version=2)
-        changed = await service.resolve_destination(session, company_id=values["company_id"], employee_id=values["employee_id"], as_of_date=date(2026, 9, 4))
-        second_candidate = await service.assemble_candidate(session, context=assemble, payroll_run_id=run.id, destinations={values["employee_id"]: changed}, assembled_at=NOW, supersedes_package_identity=first.package_identity)
+        changed = await service.resolve_destination(
+            session,
+            company_id=values["company_id"],
+            employee_id=values["employee_id"],
+            as_of_date=date(2026, 9, 4),
+        )
+        second_candidate = await service.assemble_candidate(
+            session,
+            context=assemble,
+            payroll_run_id=run.id,
+            destinations={values["employee_id"]: changed},
+            assembled_at=NOW,
+            supersedes_package_identity=first.package_identity,
+        )
         assert second_candidate.package_digest != first.package_digest
-        second = await service.persist_candidate(session, context=assemble, candidate=second_candidate)
+        second = await service.persist_candidate(
+            session, context=assemble, candidate=second_candidate
+        )
         await session.refresh(first)
-        assert first.lifecycle == "superseded" and second.supersedes_release_id == first.id
-        other = FakeContext(values["other_company_id"], values["actor_id"], {PayrollPermission.PAYMENT_RELEASE_ASSEMBLE})
+        assert (
+            first.lifecycle == "superseded" and second.supersedes_release_id == first.id
+        )
+        other = FakeContext(
+            values["other_company_id"],
+            values["actor_id"],
+            {PayrollPermission.PAYMENT_RELEASE_ASSEMBLE},
+        )
         with pytest.raises(PayrollConflictError, match="approved Payroll run"):
-            await service.assemble_candidate(session, context=other, payroll_run_id=run.id, destinations={values["employee_id"]: changed}, assembled_at=NOW)
+            await service.assemble_candidate(
+                session,
+                context=other,
+                payroll_run_id=run.id,
+                destinations={values["employee_id"]: changed},
+                assembled_at=NOW,
+            )

@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.beacon.catalog import (
     OPERATIONAL_SIGNAL_CATALOG,
     OperationalConflictPolicy,

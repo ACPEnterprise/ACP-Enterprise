@@ -1,6 +1,5 @@
 import httpx
 import pytest
-
 from app.main import app
 
 
@@ -17,14 +16,13 @@ def test_field_service_openapi_is_bounded() -> None:
     assert "/api/v1/technician/history" in paths
     assert "/api/v1/technician/readiness" in paths
 
-def test_mobile_field_contract_never_exposes_sensitive_asset_or_workforce_fields() -> None:
+
+def test_mobile_field_contract_never_exposes_sensitive_asset_or_workforce_fields() -> (
+    None
+):
     schemas = app.openapi()["components"]["schemas"]
     mobile_contract = str(
-        {
-            name: value
-            for name, value in schemas.items()
-            if name.startswith("Field")
-        }
+        {name: value for name, value in schemas.items() if name.startswith("Field")}
     ).lower()
     for forbidden in (
         "serial_reference",

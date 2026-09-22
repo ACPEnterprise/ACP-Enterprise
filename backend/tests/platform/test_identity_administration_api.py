@@ -6,14 +6,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.platform.auth import models as auth_models  # noqa: F401
@@ -33,6 +25,13 @@ from app.platform.users.identity_router import (
     self_service_router,
 )
 from app.platform.users.models import User, UserCredential
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def utc_now() -> datetime:

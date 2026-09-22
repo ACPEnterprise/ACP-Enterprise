@@ -15,7 +15,6 @@ from development_factory.review_conflicts import (
     ValidationSummary,
 )
 
-
 CONSOLIDATION_INPUT_VERSION = "1.0"
 OWNER_REVIEW_VERSION = "1.0"
 OWNER_DECISION_VERSION = "1.0"
@@ -349,13 +348,11 @@ def render_owner_review_markdown(review: ConsolidatedOwnerReview) -> str:
             "## Blockers and conflicts",
             "",
             *bullets(
-                tuple(
-                    (
-                        *review.blockers,
-                        *review.workspace_provenance_findings,
-                        *review.migration_schema_findings,
-                        *review.architecture_security_findings,
-                    )
+                (
+                    *review.blockers,
+                    *review.workspace_provenance_findings,
+                    *review.migration_schema_findings,
+                    *review.architecture_security_findings,
                 )
             ),
             "",

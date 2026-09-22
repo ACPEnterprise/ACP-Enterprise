@@ -6,15 +6,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import Depends, FastAPI
-from sqlalchemy import func, inspect, select, update
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.database.session import get_database_session, get_security_database_session
@@ -48,6 +39,14 @@ from app.platform.permissions.models import (
 from app.platform.permissions.router import router as authorization_router
 from app.platform.users.models import User, UserCredential
 from app.scheduling import models as scheduling_models  # noqa: F401
+from fastapi import Depends, FastAPI
+from sqlalchemy import func, inspect, select, update
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @dataclass(frozen=True)

@@ -23,17 +23,42 @@ from app.operational_migration.hcp_preview_baseline_reconciliation import (
 CONTRACT: Final = "hcp-current-overlay-merge-packet/v4"
 COMPLETION_CONTRACT: Final = "hcp-current-source4-graph-completeness/v1"
 GENERATION_VERSION: Final = "migration.hcp.current.graph.completeness.1"
-EXPECTED_V3_DIGEST: Final = "919d9bed1899516f760f47671222cbb4868aca4fdb5242611a4997822472d356"
-EXPECTED_V3_SHA256: Final = "8d5d0a66915b571608662dc9fd8fef07ee17d0225627ac6e00c1b556ab194764"
-EXPECTED_BASELINE_SHA256: Final = "b0aac4cc4f26964b9fd4ede69d448eaa62e26dd3bb6d6ac8cce286e36873ae89"
-EXPECTED_BASELINE_DIGEST: Final = "0eb7791bf128cb98eda3aa659ed4e53636257b7665a216622a5885f2f4cb1437"
-EXPECTED_FINAL = {"CREATE_NEW": 174, "REUSE_EXISTING": 4, "UPDATE_EXISTING": 5, "HOLD": 339}
-EXPECTED_ORIGINAL_503 = {"CREATE_NEW": 159, "REUSE_EXISTING": 0, "UPDATE_EXISTING": 5, "HOLD": 339}
-EXPECTED_COMPLETION = {"CREATE_NEW": 15, "REUSE_EXISTING": 4, "UPDATE_EXISTING": 0, "HOLD": 0}
+EXPECTED_V3_DIGEST: Final = (
+    "919d9bed1899516f760f47671222cbb4868aca4fdb5242611a4997822472d356"
+)
+EXPECTED_V3_SHA256: Final = (
+    "8d5d0a66915b571608662dc9fd8fef07ee17d0225627ac6e00c1b556ab194764"
+)
+EXPECTED_BASELINE_SHA256: Final = (
+    "b0aac4cc4f26964b9fd4ede69d448eaa62e26dd3bb6d6ac8cce286e36873ae89"
+)
+EXPECTED_BASELINE_DIGEST: Final = (
+    "0eb7791bf128cb98eda3aa659ed4e53636257b7665a216622a5885f2f4cb1437"
+)
+EXPECTED_FINAL = {
+    "CREATE_NEW": 174,
+    "REUSE_EXISTING": 4,
+    "UPDATE_EXISTING": 5,
+    "HOLD": 339,
+}
+EXPECTED_ORIGINAL_503 = {
+    "CREATE_NEW": 159,
+    "REUSE_EXISTING": 0,
+    "UPDATE_EXISTING": 5,
+    "HOLD": 339,
+}
+EXPECTED_COMPLETION = {
+    "CREATE_NEW": 15,
+    "REUSE_EXISTING": 4,
+    "UPDATE_EXISTING": 0,
+    "HOLD": 0,
+}
 
 
 def _digest(value: dict[str, Any]) -> str:
-    return hashlib.sha256(canonical_bytes({k: v for k, v in value.items() if k != "digest"})).hexdigest()
+    return hashlib.sha256(
+        canonical_bytes({k: v for k, v in value.items() if k != "digest"})
+    ).hexdigest()
 
 
 def _pages(root: Path, stem: str, key: str) -> list[dict[str, Any]]:
@@ -43,7 +68,11 @@ def _pages(root: Path, stem: str, key: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _source_index(refresh_root: Path, schedule_root: Path) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[tuple[str, str], list[dict[str, str]]]]:
+def _source_index(
+    refresh_root: Path, schedule_root: Path
+) -> tuple[
+    dict[tuple[str, str], dict[str, Any]], dict[tuple[str, str], list[dict[str, str]]]
+]:
     values: dict[tuple[str, str], dict[str, Any]] = {}
     parents: dict[tuple[str, str], list[dict[str, str]]] = {}
     customers = _pages(refresh_root, "customers", "customers")
@@ -88,7 +117,10 @@ def build_complete_graph(
     refresh_root: Path,
     schedule_root: Path,
 ) -> dict[str, Any]:
-    if sha256(v3_path) != EXPECTED_V3_SHA256 or sha256(baseline_path) != EXPECTED_BASELINE_SHA256:
+    if (
+        sha256(v3_path) != EXPECTED_V3_SHA256
+        or sha256(baseline_path) != EXPECTED_BASELINE_SHA256
+    ):
         raise ValueError("v3 or Preview baseline file digest mismatch")
     v3, delta, baseline = map(_load, (v3_path, delta_path, baseline_path))
     classifier, manifest = map(_load, (classifier_path, successor_manifest_path))
@@ -133,13 +165,27 @@ def build_complete_graph(
         exact_row = exact.get(key)
         target = entry.get("native_id")
         if entry["disposition"] == "reuse_exact_successor":
-            if exact_row is None or exact_row.get("target_id") != target or target not in native[key[0]]:
+            if (
+                exact_row is None
+                or exact_row.get("target_id") != target
+                or target not in native[key[0]]
+            ):
                 raise ValueError(f"omitted exact reuse target is not proven: {key}")
-            successor, reason = "REUSE_EXISTING", "accepted_exact_successor_present_in_preview"
+            successor, reason = (
+                "REUSE_EXISTING",
+                "accepted_exact_successor_present_in_preview",
+            )
         elif entry["disposition"] == "create_new":
-            if exact_row is not None or baseline["record_counts"]["source4_binding_evidence"] != 0:
+            if (
+                exact_row is not None
+                or baseline["record_counts"]["source4_binding_evidence"] != 0
+            ):
                 raise ValueError(f"omitted CREATE_NEW absence proof failed: {key}")
-            successor, reason, target = "CREATE_NEW", "accepted_create_new_with_no_exact_preview_identity", None
+            successor, reason, target = (
+                "CREATE_NEW",
+                "accepted_create_new_with_no_exact_preview_identity",
+                None,
+            )
         else:
             raise ValueError(f"omitted record lacks admissible accepted intent: {key}")
         payload = values[key]
@@ -147,7 +193,8 @@ def build_complete_graph(
             {
                 "domain": key[0],
                 "source_id": key[1],
-                "source_digest": delta_row["after_digest"] or delta_row["before_digest"],
+                "source_digest": delta_row["after_digest"]
+                or delta_row["before_digest"],
                 "acquired_at": delta["as_of"],
                 "payload": payload,
                 "parent_keys": parents.get(key, []),
@@ -155,7 +202,11 @@ def build_complete_graph(
                 "runtime_result": "NOT_APPLICABLE",
                 "baseline_evidence": {
                     "source4_binding_evidence_count": 0,
-                    "exact_legacy_successor_evidence_digest": exact_row.get("evidence_digest") if exact_row else None,
+                    "exact_legacy_successor_evidence_digest": exact_row.get(
+                        "evidence_digest"
+                    )
+                    if exact_row
+                    else None,
                     "target_native_id": target,
                 },
                 "successor_assertion": successor,
@@ -163,7 +214,9 @@ def build_complete_graph(
                 "omission_reason": "v2_excluded_unchanged_sealed_base_record",
                 "company_id": baseline["company_id"],
                 "branch_id": baseline["branch_id"],
-                "lifecycle_status": payload.get("work_status") or payload.get("status") or "source_active",
+                "lifecycle_status": payload.get("work_status")
+                or payload.get("status")
+                or "source_active",
                 "provenance": {
                     "source4_package_digest": v3["base_source4_digest"],
                     "delta_manifest_digest": delta["digest"],
@@ -194,7 +247,9 @@ def build_complete_graph(
                 for parent in row["parent_keys"]
             ):
                 row["successor_assertion"] = "CREATE_NEW"
-                row["reason"] = "parent_graph_resolved_by_complete_current_source4_graph"
+                row["reason"] = (
+                    "parent_graph_resolved_by_complete_current_source4_graph"
+                )
                 released.append(
                     {
                         "domain": row["domain"],
@@ -216,9 +271,15 @@ def build_complete_graph(
             ]["successor_assertion"] == "HOLD":
                 raise ValueError("admitted successor retains unresolved parent")
     current = [by_key[key] for key in sorted(current_keys)]
-    if len(current) != 55 or any(row["successor_assertion"] == "HOLD" for row in current):
+    if len(current) != 55 or any(
+        row["successor_assertion"] == "HOLD" for row in current
+    ):
         raise ValueError("complete current graph is not admissible")
-    original_counts = Counter(row["successor_assertion"] for row in all_records if (row["domain"], row["source_id"]) in original_keys)
+    original_counts = Counter(
+        row["successor_assertion"]
+        for row in all_records
+        if (row["domain"], row["source_id"]) in original_keys
+    )
     completion_counts = Counter(row["successor_assertion"] for row in completion)
     final_counts = Counter(row["successor_assertion"] for row in all_records)
     normalized_original = {key: original_counts[key] for key in EXPECTED_ORIGINAL_503}
@@ -254,7 +315,12 @@ def build_complete_graph(
         "original_503_disposition_counts": EXPECTED_ORIGINAL_503,
         "completion_disposition_counts": EXPECTED_COMPLETION,
         "disposition_counts": EXPECTED_FINAL,
-        "differences_from_v3": {"CREATE_NEW": 28, "REUSE_EXISTING": 4, "UPDATE_EXISTING": 0, "HOLD": -13},
+        "differences_from_v3": {
+            "CREATE_NEW": 28,
+            "REUSE_EXISTING": 4,
+            "UPDATE_EXISTING": 0,
+            "HOLD": -13,
+        },
         "complete_current_graph_digest": current_digest,
         "current_operational_graph_admittable": True,
         "ready_for_guarded_execution": True,
@@ -276,7 +342,9 @@ def build_complete_graph(
             "current_operational_graph_admittable": True,
             "ready_for_guarded_execution": True,
         },
-        "records": sorted(all_records, key=lambda row: (row["domain"], row["source_id"])),
+        "records": sorted(
+            all_records, key=lambda row: (row["domain"], row["source_id"])
+        ),
     }
     result["digest"] = _digest(result)
     return result
@@ -289,5 +357,7 @@ def verify_complete_graph(value: dict[str, Any]) -> None:
         raise ValueError("v4 record coverage mismatch")
     if len({(row["domain"], row["source_id"]) for row in value["records"]}) != 522:
         raise ValueError("v4 duplicate source identity")
-    if not value.get("current_operational_graph_admittable") or not value.get("ready_for_guarded_execution"):
+    if not value.get("current_operational_graph_admittable") or not value.get(
+        "ready_for_guarded_execution"
+    ):
         raise ValueError("v4 completeness gate is not satisfied")

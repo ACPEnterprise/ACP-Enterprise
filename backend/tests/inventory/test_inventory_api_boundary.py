@@ -1,8 +1,6 @@
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-
 from app.inventory.errors import (
     InventoryConflict,
     InventoryNotFound,
@@ -10,6 +8,7 @@ from app.inventory.errors import (
 )
 from app.inventory.router import router, translate
 from app.inventory.service import InventoryService
+from fastapi import FastAPI
 
 app = FastAPI()
 app.include_router(router)

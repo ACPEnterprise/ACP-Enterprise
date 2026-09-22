@@ -1,15 +1,14 @@
 from dataclasses import replace
 
 import pytest
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-
 from app.platform.contracts.manifest import (
     PlatformContractDriftError,
     platform_contract_manifest,
 )
 from app.platform.contracts.router import engineering_router, router
 from app.platform.permissions.codes import PriceBookPermission
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 
 def test_platform_contract_is_deterministic_and_contains_price_book() -> None:

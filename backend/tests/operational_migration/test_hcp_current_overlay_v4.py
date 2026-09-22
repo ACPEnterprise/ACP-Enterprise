@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.operational_migration.hcp_current_overlay import OverlayKey
 from app.operational_migration.hcp_current_overlay_native import (
     HcpCurrentOverlayNativeServices,
@@ -224,8 +223,7 @@ async def test_v4_preflight_accepts_exact_persisted_state_on_replay(
     record = next(
         item
         for item in overlay.manifest.records
-        if item.key not in overlay.qualified_targets
-        and item.assertion.value != "hold"
+        if item.key not in overlay.qualified_targets and item.assertion.value != "hold"
     )
     state = SimpleNamespace(source_digest=record.source_digest)
 
@@ -252,9 +250,7 @@ async def test_qualified_location_uses_owning_customer_for_company_scope() -> No
     services.context = SimpleNamespace(company=SimpleNamespace(id=company_id))
     services.branch = SimpleNamespace(id=uuid4())
 
-    result = await services.qualified_native(
-        session, "service_location", location.id
-    )
+    result = await services.qualified_native(session, "service_location", location.id)
 
     assert result is location
 

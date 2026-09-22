@@ -14,7 +14,6 @@ from development_factory.repository import (
     sensitive_change_flags,
 )
 
-
 SECRET_PATTERN = re.compile(
     r"(?i)(password|token|secret|api[_-]?key|database_url)"
     r"(\s*[:=]\s*)([\"']?)([^\s,\"'}]+)([\"']?)"
@@ -233,6 +232,8 @@ def _owner_review_items(
         f"Changed-file boundary contains {len(state.files)} file(s) and no unrelated work.",
         "Proposed commit boundary is exact.",
         "No prohibited commit, push, merge, deployment, or shared-data action occurred.",
-        f"Review {len(findings)} unsuppressed finding(s) and "
-        f"{sum(result.status == 'unavailable' for result in results)} unavailable check(s).",
+        (
+            f"Review {len(findings)} unsuppressed finding(s) and "
+            f"{sum(result.status == 'unavailable' for result in results)} unavailable check(s)."
+        ),
     ]

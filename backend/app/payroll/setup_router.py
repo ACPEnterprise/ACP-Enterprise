@@ -366,7 +366,8 @@ async def employee_readiness(
     except PayrollAuthorizationError as error:
         raise HTTPException(403, "Payroll readiness authority is required.") from error
     operating_employee = next(
-        (value for value in operating.employees if value.employee_id == employee_id), None
+        (value for value in operating.employees if value.employee_id == employee_id),
+        None,
     )
     compensation_rows = tuple(
         (
@@ -399,8 +400,7 @@ async def employee_readiness(
     compensations = tuple(
         value
         for value in compensation_rows
-        if value.id not in superseded_compensation_ids
-        and value.lifecycle == "approved"
+        if value.id not in superseded_compensation_ids and value.lifecycle == "approved"
     )
     compensation = compensations[0] if len(compensations) == 1 else None
     try:
@@ -412,7 +412,9 @@ async def employee_readiness(
             period_end=period.period_end,
         )
     except (PayrollAuthorityError, PayrollConflictError) as error:
-        raise HTTPException(409, "Payroll readiness evidence is unavailable.") from error
+        raise HTTPException(
+            409, "Payroll readiness evidence is unavailable."
+        ) from error
     time_snapshot = await session.scalar(
         select(PayrollTimeInputRecord)
         .where(
@@ -448,7 +450,9 @@ async def employee_readiness(
             )
         )
     except (PayrollAuthorityError, PayrollConflictError, ValueError) as error:
-        raise HTTPException(409, "Payroll readiness evidence is unavailable.") from error
+        raise HTTPException(
+            409, "Payroll readiness evidence is unavailable."
+        ) from error
     readiness = assembly.readiness.employees[0]
     return EmployeeReadinessProjection(
         contract_version="payroll.real-employee-readiness-runtime.v1",
@@ -460,7 +464,9 @@ async def employee_readiness(
             if readiness.status.value == "PAYROLL_READY"
             else readiness.status.value
         ),
-        calculation_readiness=[value.value for value in readiness.calculation_readiness],
+        calculation_readiness=[
+            value.value for value in readiness.calculation_readiness
+        ],
         exact_blockers=list(readiness.exact_blockers),
         provider_version=assembly.provider_version,
         reconciliation_version=REFERENCE_VERSION,
@@ -522,7 +528,9 @@ async def _readiness_setup_values(
     }
     cipher = _input_cipher() if envelope_ids else None
     if envelope_ids and cipher is None:
-        raise HTTPException(503, "Protected Payroll input configuration is unavailable.")
+        raise HTTPException(
+            503, "Protected Payroll input configuration is unavailable."
+        )
     result: list[SetupValue] = []
     for value in active:
         envelope = (

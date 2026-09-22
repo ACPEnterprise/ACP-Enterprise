@@ -5,9 +5,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database.session import get_database_session
 from app.engineering_execution.composition.contracts import ProviderProgressPhase
 from app.worker_control.contracts import (
@@ -35,6 +32,8 @@ from app.worker_control.transport.http.service import WorkerPollingService
 from app.worker_control.transport.repository import WorkerTransportSessionRepository
 from app.worker_control.transport.service import WorkerTransportService
 from app.worker_identity.authentication import WorkerIdentityAuthenticator
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 NOW = datetime(2026, 7, 24, 12, tzinfo=timezone.utc)
 

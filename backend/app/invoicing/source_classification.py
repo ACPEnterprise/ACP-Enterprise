@@ -56,7 +56,12 @@ def native_evidence(
     partial: bool,
     conflicting: bool,
 ) -> CustomerSourceEvidence:
-    document = {"company_id": company_id, "customer_id": customer_id, "as_of": as_of.isoformat(), **values}
+    document = {
+        "company_id": company_id,
+        "customer_id": customer_id,
+        "as_of": as_of.isoformat(),
+        **values,
+    }
     digest = hashlib.sha256(
         json.dumps(
             document, sort_keys=True, separators=(",", ":"), default=str

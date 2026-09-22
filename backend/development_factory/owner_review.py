@@ -602,12 +602,10 @@ class OwnerReviewManager:
             )
         expected_paths = tuple(
             sorted(
-                set(
-                    (
-                        *worker.exclusive_file_boundaries,
-                        *worker.task.allowed_file_boundaries,
-                    )
-                )
+                {
+                    *worker.exclusive_file_boundaries,
+                    *worker.task.allowed_file_boundaries,
+                }
             )
         )
         if tuple(provenance["declared_allowed_paths"]) != expected_paths:

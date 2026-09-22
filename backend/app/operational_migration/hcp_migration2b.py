@@ -579,9 +579,7 @@ class PlanOutcomeCommand:
 
     @property
     def outcome_digest(self) -> str:
-        return canonical_sha256(
-            {"contract": PLAN_OUTCOME_CONTRACT, **asdict(self)}
-        )
+        return canonical_sha256({"contract": PLAN_OUTCOME_CONTRACT, **asdict(self)})
 
     def validate(self) -> None:
         if self.outcome not in {
@@ -590,7 +588,11 @@ class PlanOutcomeCommand:
             "INTENTIONALLY_NON_APPLICABLE",
         }:
             raise ValueError("unsupported plan outcome")
-        if not self.entity_kind or not self.reason_code or not self.transformation_version:
+        if (
+            not self.entity_kind
+            or not self.reason_code
+            or not self.transformation_version
+        ):
             raise ValueError("plan outcome classification is incomplete")
         for field, value in (
             ("native_identity_sha256", self.native_identity_sha256),

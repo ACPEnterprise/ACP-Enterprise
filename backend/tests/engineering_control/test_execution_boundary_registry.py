@@ -1,7 +1,6 @@
 from copy import deepcopy
 
 import pytest
-
 from app.engineering_control.errors import EngineeringCommandValidationError
 from app.engineering_control.mobile.roadmaps import RoadmapService
 from app.engineering_control.scheduler.manifest import (

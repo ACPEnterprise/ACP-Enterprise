@@ -12,7 +12,7 @@ import sys
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -412,9 +412,7 @@ def _rehearsal_context_is_valid(
 ) -> bool:
     if user is None or company is None or branch is None or membership is None:
         return False
-    branch_is_authorized = (
-        membership.has_all_branch_access or branch_access is not None
-    )
+    branch_is_authorized = membership.has_all_branch_access or branch_access is not None
     return bool(
         branch_is_authorized
         and ((credential is not None) if credentialed else (credential is None))
@@ -428,9 +426,20 @@ def _rehearsal_context_is_valid(
     )
 
 
+class RehearsalScopeAuthority(Protocol):
+    @property
+    def actor_id(self) -> UUID: ...
+
+    @property
+    def company_id(self) -> UUID: ...
+
+    @property
+    def branch_id(self) -> UUID: ...
+
+
 async def resolve_rehearsal_context(
     session: AsyncSession,
-    authority: ProtectedExecutionAuthority,
+    authority: RehearsalScopeAuthority,
     *,
     credentialed: bool = False,
 ) -> AuthorizationContext:

@@ -8,13 +8,12 @@ from typing import Any, Literal
 
 from development_factory.lia_roles import AgentRole
 from development_factory.task_contract import (
+    VALIDATION_AREAS,
     TaskContract,
     TaskContractError,
-    VALIDATION_AREAS,
     parse_task_contract,
 )
 from development_factory.workflow import ActionPermissions, WorkflowState
-
 
 LIA_CONTRACT_VERSION = "1.0"
 LIA_REPORT_FIELDS = frozenset(

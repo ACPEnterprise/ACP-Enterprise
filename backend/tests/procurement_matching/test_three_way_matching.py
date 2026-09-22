@@ -63,15 +63,14 @@ def test_match_line_database_constraints_protect_derived_quantity_truth() -> Non
         if isinstance(constraint, CheckConstraint)
     }
 
-    assert "returned_quantity <= received_quantity" in checks[
-        "ck_procurement_match_line_quantities"
-    ]
+    assert (
+        "returned_quantity <= received_quantity"
+        in checks["ck_procurement_match_line_quantities"]
+    )
     assert checks["ck_procurement_match_line_net_accepted"] == (
         "net_accepted_quantity = received_quantity - returned_quantity"
     )
-    assert "billed_net_amount >= 0" in checks[
-        "ck_procurement_match_line_amounts"
-    ]
+    assert "billed_net_amount >= 0" in checks["ck_procurement_match_line_amounts"]
 
 
 @pytest.mark.asyncio
@@ -808,8 +807,6 @@ async def test_vendor_performance_is_deterministic_evidence_not_a_vendor_score(
 
 def test_vendor_lead_time_uses_exact_decimal_duration_arithmetic() -> None:
     duration = timedelta(days=2, seconds=3_661, microseconds=7)
-    expected = Decimal(2) + (
-        Decimal(3_661_000_007) / Decimal(86_400_000_000)
-    )
+    expected = Decimal(2) + (Decimal(3_661_000_007) / Decimal(86_400_000_000))
 
     assert decimal_days(duration) == expected

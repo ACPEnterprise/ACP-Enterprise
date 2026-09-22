@@ -5,7 +5,6 @@ from typing import Self
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_migration2_plan import (
     HcpMigration2Application,
     HcpMigration2SupersedingRepairAuthority,

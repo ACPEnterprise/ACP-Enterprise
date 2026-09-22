@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.payroll.calculation import (
     ApprovedAdditionalEarning,
     EarningsComponentType,
@@ -286,16 +285,17 @@ def test_changed_time_or_compensation_changes_result() -> None:
     changed_time = time_input(company_id, employee_id, 601)
     changed_time_result = calculate(policy_value, first_authority, changed_time)
     changed_authority = compensation(company_id, employee_id, rate=Decimal(21))
-    changed_authority_result = calculate(
-        policy_value, changed_authority, first_time
+    changed_authority_result = calculate(policy_value, changed_authority, first_time)
+    assert (
+        len(
+            {
+                first.calculation_digest,
+                changed_time_result.calculation_digest,
+                changed_authority_result.calculation_digest,
+            }
+        )
+        == 3
     )
-    assert len(
-        {
-            first.calculation_digest,
-            changed_time_result.calculation_digest,
-            changed_authority_result.calculation_digest,
-        }
-    ) == 3
 
 
 def test_changed_policy_and_superseding_calculation_preserve_identity() -> None:
@@ -453,14 +453,10 @@ def test_mid_period_changes_and_salary_frequency_conversion_fail_closed() -> Non
     company_id, employee_id = uuid4(), uuid4()
     policy_value = policy(company_id)
     snapshot = time_input(company_id, employee_id, 600)
-    partial = compensation(
-        company_id, employee_id, effective_start=date(2026, 9, 1)
-    )
+    partial = compensation(company_id, employee_id, effective_start=date(2026, 9, 1))
     ready_for_partial = admitted(policy_value, partial, snapshot)
     with pytest.raises(GrossPayCalculationError, match="proration policy"):
-        calculate(
-            policy_value, partial, snapshot, admission=ready_for_partial
-        )
+        calculate(policy_value, partial, snapshot, admission=ready_for_partial)
     salary = compensation(
         company_id,
         employee_id,

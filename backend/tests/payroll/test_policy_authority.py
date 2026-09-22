@@ -8,14 +8,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.events.models import BusinessEvent
@@ -48,6 +40,13 @@ from app.timekeeping.contracts import (
 )
 from app.timekeeping.contracts import (
     canonical_digest as time_digest,
+)
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
 
 NOW = datetime(2026, 8, 28, 12, 0, tzinfo=timezone.utc)

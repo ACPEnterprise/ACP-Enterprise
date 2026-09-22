@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.execution_providers.codex import (
     CodexClientAuthenticationError,
     CodexClientUnavailableError,

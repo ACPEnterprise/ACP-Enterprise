@@ -6,9 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customer_migration.models import CustomerMigrationRun, CustomerSourceIdentity
 from app.customers.models import Customer
@@ -40,6 +37,8 @@ from app.operational_migration import (
 )
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tests.estimates.test_estimate_conversion import (
     approved_estimate,
     conversion_spec,

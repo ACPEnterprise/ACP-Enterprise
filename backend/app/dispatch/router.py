@@ -89,18 +89,14 @@ def dispatch_http(error: DispatchError) -> HTTPException:
             ClientRecovery.USER_CORRECTION_REQUIRED,
             current_correlation_id(),
         )
-        return HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail()
-        )
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
     failure = SafeFailure(
         FailureCode.INTERNAL_FAILURE,
         "Dispatch operation could not be completed.",
         ClientRecovery.TERMINAL_FAILURE,
         current_correlation_id(),
     )
-    return HTTPException(
-        status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail()
-    )
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail())
 
 
 @router.get("/board", response_model=DispatchBoardPage)

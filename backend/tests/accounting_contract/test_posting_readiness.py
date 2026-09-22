@@ -16,9 +16,17 @@ def test_runtime_remains_not_startable_with_exact_two_runtime_blockers() -> None
         "separate Owner Start",
     ]
     assert packet["startability"]["actual_account_ids_required_for_start"] is False
-    assert packet["startability"]["inventory_adapter_required_for_initial_runtime"] is False
-    assert packet["startability"]["payroll_adapter_required_for_initial_runtime"] is False
-    assert packet["startability"]["tax_mapping_required_for_invoice_tax_activation"] is True
+    assert (
+        packet["startability"]["inventory_adapter_required_for_initial_runtime"]
+        is False
+    )
+    assert (
+        packet["startability"]["payroll_adapter_required_for_initial_runtime"] is False
+    )
+    assert (
+        packet["startability"]["tax_mapping_required_for_invoice_tax_activation"]
+        is True
+    )
 
 
 def test_readiness_classifies_dependencies_and_preserves_gates() -> None:

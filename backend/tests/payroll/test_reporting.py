@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.payroll.paystatement_experience import DeterministicPayStatementRenderer
 from app.payroll.reporting import (
     FilingConfigurationAuthority,

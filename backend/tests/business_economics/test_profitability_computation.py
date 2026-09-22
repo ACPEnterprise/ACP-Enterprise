@@ -4,7 +4,6 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.business_economics.profitability_computation import (
     ProfitabilityAllocationInput,
     ProfitabilityComputationError,

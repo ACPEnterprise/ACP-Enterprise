@@ -159,7 +159,8 @@ def classify_accounting_catalog(
     result: list[SourceEvidence] = []
     for field in PAYROLL_INPUT_FIELDS:
         partial = (
-            field == "employee_identity_crosswalk" and has_employee
+            field == "employee_identity_crosswalk"
+            and has_employee
             or field in _ACCOUNTING_CATALOG_REVIEW_FIELDS
             and (has_employee or has_time or has_transactions)
         )
@@ -258,7 +259,9 @@ def _reconcile_field(
     source = source or SourceEvidence(
         field, SourceClassification.ABSENT, (), None, None
     )
-    approved = existing is not None and existing.state is ExistingAuthorityState.APPROVED
+    approved = (
+        existing is not None and existing.state is ExistingAuthorityState.APPROVED
+    )
     same_value = bool(
         approved
         and existing
@@ -269,8 +272,7 @@ def _reconcile_field(
     authoritative = bool(
         crosswalk_ready
         and field not in NEVER_INFER_FIELDS
-        and source.classification
-        is SourceClassification.AUTHORITATIVE_SOURCE_AVAILABLE
+        and source.classification is SourceClassification.AUTHORITATIVE_SOURCE_AVAILABLE
         and source.provider_authoritative
         and source.evidence_digest
         and source.value_digest

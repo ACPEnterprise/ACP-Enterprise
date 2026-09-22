@@ -7,8 +7,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.payroll.contracts import CompensationType, PayrollConflictError
 from app.payroll.proration import (
     ApprovedProrationPolicy,
@@ -17,6 +15,8 @@ from app.payroll.proration import (
     allocate_hourly_time,
 )
 from app.timekeeping.contracts import canonical_digest, seal_payroll_time_input
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from tests.payroll.test_period_input_assembly_acceptance import (
     compensation_draft,
     contexts,

@@ -15,7 +15,9 @@ from app.operational_migration.hcp_post_admission_acceptance import (
 )
 
 CONTRACT: Final = "hcp-current-overlay-merge-packet/v3"
-GENERATION_VERSION: Final = "migration.hcp.current.overlay.preview.baseline.reconciliation.1"
+GENERATION_VERSION: Final = (
+    "migration.hcp.current.overlay.preview.baseline.reconciliation.1"
+)
 EXPECTED = {
     "source4": "4a4a9582d7fde37dba73ba9e93db5669d9341768c7f5741f6e8916971fd9ec60",
     "overlay_file": "ce9d4ea1e048a70b7a8a5b85fab33fd1a0568eb5cb1356229187144ab8bc7558",
@@ -56,7 +58,9 @@ def _load(path: Path) -> dict[str, Any]:
     return value
 
 
-def _exact_successors(classifier: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+def _exact_successors(
+    classifier: dict[str, Any],
+) -> dict[tuple[str, str], dict[str, Any]]:
     result: dict[tuple[str, str], dict[str, Any]] = {}
     for row in classifier["records"]:
         successor = row.get("successor_source_id")
@@ -69,7 +73,9 @@ def _exact_successors(classifier: dict[str, Any]) -> dict[tuple[str, str], dict[
     return result
 
 
-def _manifest_entries(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+def _manifest_entries(
+    manifest: dict[str, Any],
+) -> dict[tuple[str, str], dict[str, Any]]:
     result: dict[tuple[str, str], dict[str, Any]] = {}
     for row in manifest["entries"]:
         key = (row["domain"], row["source_id"])
@@ -118,9 +124,10 @@ def build_successor(
         or baseline.get("runtime_inventory_sha256") != EXPECTED["runtime_file"]
     ):
         raise ValueError("immutable predecessor/baseline authority mismatch")
-    if runtime.get("protected_authority") != EXPECTED["authority"] or runtime.get(
-        "schema_head"
-    ) != EXPECTED["schema"]:
+    if (
+        runtime.get("protected_authority") != EXPECTED["authority"]
+        or runtime.get("schema_head") != EXPECTED["schema"]
+    ):
         raise ValueError("runtime inventory authority mismatch")
 
     plan = build_acceptance_plan(
@@ -136,9 +143,7 @@ def build_successor(
     runtime_rows = {
         (row["domain"], row["source_id"]): row for row in runtime["records"]
     }
-    cohort_rows = {
-        (row["domain"], row["source_id"]): row for row in cohort["records"]
-    }
+    cohort_rows = {(row["domain"], row["source_id"]): row for row in cohort["records"]}
     if len(coverage) != 503 or len(coverage) != len(overlay["records"]):
         raise ValueError("Preview baseline does not cover all 503 assertions")
     updates = {
@@ -178,7 +183,9 @@ def build_successor(
             disposition, reason = "HOLD", "accepted_other_held_cohort"
         elif original["assertion"] == "create":
             if baseline_row.get("source_identity_present") or exact_row is not None:
-                raise ValueError(f"CREATE_NEW duplicate-safety proof failed for {record_key}")
+                raise ValueError(
+                    f"CREATE_NEW duplicate-safety proof failed for {record_key}"
+                )
             disposition, reason = (
                 "CREATE_NEW",
                 "accepted_overlay_create_and_exact_source_identity_absent_from_preview",
@@ -192,7 +199,9 @@ def build_successor(
                 or target != exact_row.get("target_id")
                 or target not in native_by_domain[original["domain"]]
             ):
-                raise ValueError(f"exact native successor is not proven for {record_key}")
+                raise ValueError(
+                    f"exact native successor is not proven for {record_key}"
+                )
             disposition = (
                 "UPDATE_EXISTING"
                 if original["assertion"] == "update"
@@ -201,7 +210,9 @@ def build_successor(
             reason = "accepted_exact_legacy_successor_present_in_preview_baseline"
         elif accepted_entry["disposition"] == "create_new":
             if baseline_row.get("source_identity_present") or exact_row is not None:
-                raise ValueError(f"CREATE_NEW duplicate-safety proof failed for {record_key}")
+                raise ValueError(
+                    f"CREATE_NEW duplicate-safety proof failed for {record_key}"
+                )
             disposition, reason = (
                 "CREATE_NEW",
                 "accepted_create_new_and_exact_source_identity_absent_from_preview",
@@ -258,7 +269,12 @@ def build_successor(
                 row["baseline_evidence"]["target_native_id"] = None
                 changed = True
 
-    expected_current = {"customer": 11, "service_location": 11, "job": 15, "appointment": 18}
+    expected_current = {
+        "customer": 11,
+        "service_location": 11,
+        "job": 15,
+        "appointment": 18,
+    }
     current: list[dict[str, Any]] = []
     missing_current: list[str] = []
     for domain, source_ids in plan.current_source_ids.items():
@@ -335,7 +351,9 @@ def build_successor(
 
 
 def verify_successor(value: dict[str, Any]) -> None:
-    if value.get("contract") != CONTRACT or value.get("digest") != semantic_digest(value):
+    if value.get("contract") != CONTRACT or value.get("digest") != semantic_digest(
+        value
+    ):
         raise ValueError("successor overlay contract/digest mismatch")
     records = value.get("records")
     if not isinstance(records, list) or len(records) != 503:

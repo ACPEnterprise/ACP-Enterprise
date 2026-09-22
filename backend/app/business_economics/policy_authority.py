@@ -236,12 +236,8 @@ STRATEGY_REQUIRED_PARAMETERS: Mapping[tuple[str, str], tuple[str, ...]] = (
             ("overtime_premium_allocation", "certified_method_reference"): (
                 "method_ref",
             ),
-            ("salary_job_allocation", "certified_method_reference"): (
-                "method_ref",
-            ),
-            ("non_job_paid_time_treatment", "overhead_pool"): (
-                "overhead_pool_ref",
-            ),
+            ("salary_job_allocation", "certified_method_reference"): ("method_ref",),
+            ("non_job_paid_time_treatment", "overhead_pool"): ("overhead_pool_ref",),
             (
                 "employer_burden_allocation",
                 "component_specific_certified_drivers",

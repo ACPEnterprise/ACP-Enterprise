@@ -669,9 +669,7 @@ class AccountingService:
             return
         for identity in sorted(set(identities)):
             await session.execute(
-                text(
-                    "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
-                ),
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
                 {"identity": identity},
             )
 

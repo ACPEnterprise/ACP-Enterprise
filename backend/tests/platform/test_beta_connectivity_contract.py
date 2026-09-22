@@ -66,6 +66,15 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "Preview and Beta backend health projections differ" in verifier
     assert "https://untrusted.invalid" in verifier
     assert "require_single_header content-security-policy" in verifier
+    for directive in (
+        "script-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+    ):
+        assert (
+            f'require_header_contains content-security-policy "{directive}"' in verifier
+        )
     assert "require_header_value strict-transport-security" in verifier
     assert "require_header_value x-frame-options DENY" in verifier
     assert (
@@ -113,6 +122,10 @@ def test_frontend_proxy_emits_one_security_header_policy() -> None:
         "Strict-Transport-Security",
     ):
         assert f"proxy_hide_header {header};" in nginx
+    assert "script-src 'self'" in nginx
+    assert "object-src 'none'" in nginx
+    assert "base-uri 'self'" in nginx
+    assert "form-action 'self'" in nginx
 
 
 def test_frontend_proxies_canonical_liveness_and_readiness_exactly() -> None:

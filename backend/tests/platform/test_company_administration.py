@@ -493,7 +493,8 @@ async def test_governed_collision_promotion_preserves_assignee_and_removes_exces
     fixture = await seed_admin_fixture(factory, "ROLEPROMOTE")
     await synchronize_permission_catalog(factory)
     definition = next(
-        item for item in CANONICAL_ROLE_DEFINITIONS
+        item
+        for item in CANONICAL_ROLE_DEFINITIONS
         if item.code == "ACP_EMPLOYEE_MOBILE"
     )
     async with factory() as session, session.begin():

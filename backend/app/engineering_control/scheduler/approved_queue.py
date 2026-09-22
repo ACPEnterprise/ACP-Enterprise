@@ -41,7 +41,9 @@ class ApprovedWork(QueueModel):
 class ApprovedFactoryQueue(QueueModel):
     schema_version: Literal["1.0"]
     queue_id: Literal["ACP.72H.2026-09-03"]
-    owner_authorization_reference: Literal["ACP ENTERPRISE — 72-HOUR LAUNCH & OPERATIONS FACTORY"]
+    owner_authorization_reference: Literal[
+        "ACP ENTERPRISE — 72-HOUR LAUNCH & OPERATIONS FACTORY"
+    ]
     authoritative_repository_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     items: tuple[ApprovedWork, ...] = Field(min_length=1)
     fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -64,9 +66,7 @@ def load_approved_factory_queue() -> ApprovedFactoryQueue:
     if fingerprint != queue_fingerprint(raw):
         raise QueueError("approved queue fingerprint mismatch")
     try:
-        queue = ApprovedFactoryQueue.model_validate(
-            {**raw, "fingerprint": fingerprint}
-        )
+        queue = ApprovedFactoryQueue.model_validate({**raw, "fingerprint": fingerprint})
     except ValidationError as error:
         raise QueueError("approved queue is invalid") from error
     ids = [item.milestone_id for item in queue.items]
@@ -87,4 +87,9 @@ def load_approved_factory_queue() -> ApprovedFactoryQueue:
     return queue
 
 
-__all__ = ["ApprovedFactoryQueue", "ApprovedWork", "QueueError", "load_approved_factory_queue"]
+__all__ = [
+    "ApprovedFactoryQueue",
+    "ApprovedWork",
+    "QueueError",
+    "load_approved_factory_queue",
+]

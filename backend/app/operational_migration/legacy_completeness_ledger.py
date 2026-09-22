@@ -73,7 +73,10 @@ class LegacyCompletenessLedger:
     def verify(self) -> None:
         payload = asdict(self)
         observed = payload.pop("digest")
-        if self.contract != CONTRACT or observed != hashlib.sha256(_canonical(payload)).hexdigest():
+        if (
+            self.contract != CONTRACT
+            or observed != hashlib.sha256(_canonical(payload)).hexdigest()
+        ):
             raise ValueError("legacy completeness ledger digest mismatch")
         if tuple(sorted(self.families)) != tuple(sorted(FAMILIES)):
             raise ValueError("legacy completeness ledger family coverage mismatch")
@@ -118,8 +121,12 @@ def build_legacy_completeness_ledger(
         for job in jobs
         if (address := job.get("address") or {}).get("id")
     )
-    payments = [payment for invoice in invoices for payment in invoice.get("payments") or []]
-    refunds = [refund for invoice in invoices for refund in invoice.get("refunds") or []]
+    payments = [
+        payment for invoice in invoices for payment in invoice.get("payments") or []
+    ]
+    refunds = [
+        refund for invoice in invoices for refund in invoice.get("refunds") or []
+    ]
 
     graph = _load(job_appointment_readiness_path)
     estimate_readiness = _load(estimate_readiness_path)
@@ -127,11 +134,17 @@ def build_legacy_completeness_ledger(
     attachment_packet = _load(attachment_packet_path)
     if graph.get("contract") != "hcp-source4-job-appointment-history-readiness/v1":
         raise ValueError("unsupported Job/Appointment readiness")
-    if estimate_readiness.get("contract") != "hcp-source4-estimate-history-readiness/v1":
+    if (
+        estimate_readiness.get("contract")
+        != "hcp-source4-estimate-history-readiness/v1"
+    ):
         raise ValueError("unsupported Estimate readiness")
     if employee_packet.get("contract") != "hcp-employee-owner-certification/v1":
         raise ValueError("unsupported employee packet")
-    if attachment_packet.get("contract") != "hcp-open-work-attachment-export-request/v1":
+    if (
+        attachment_packet.get("contract")
+        != "hcp-open-work-attachment-export-request/v1"
+    ):
         raise ValueError("unsupported attachment packet")
 
     native_counts: dict[str, dict[str, int]] | None = None
@@ -149,7 +162,9 @@ def build_legacy_completeness_ledger(
         if value.get("schema_version") == "qbo-control-registration/v1":
             registrations.append(value)
 
-    payment_methods = Counter(str(item.get("payment_method") or "") for item in payments)
+    payment_methods = Counter(
+        str(item.get("payment_method") or "") for item in payments
+    )
     payment_statuses = Counter(str(item.get("status") or "") for item in payments)
     refund_with_id = sum(bool(item.get("id")) for item in refunds)
     graph_counts = graph["counts"]
@@ -188,12 +203,22 @@ def build_legacy_completeness_ledger(
             counts["operationally_projected"] = values.get("operationally_projected")
         families[name] = {
             "counts": counts,
-            "native_state_evidence": "AVAILABLE" if native_counts else "UNAVAILABLE_NOT_ZERO",
+            "native_state_evidence": "AVAILABLE"
+            if native_counts
+            else "UNAVAILABLE_NOT_ZERO",
             "notes": notes,
         }
 
-    add("customers", acquired=len(customers), notes=("native counts require sanctioned post-admission binding snapshot",))
-    add("locations", acquired=len(location_ids), notes=("identity is provider address ID only; address matching is forbidden",))
+    add(
+        "customers",
+        acquired=len(customers),
+        notes=("native counts require sanctioned post-admission binding snapshot",),
+    )
+    add(
+        "locations",
+        acquired=len(location_ids),
+        notes=("identity is provider address ID only; address matching is forbidden",),
+    )
     add(
         "jobs",
         acquired=len(jobs),
@@ -206,7 +231,9 @@ def build_legacy_completeness_ledger(
         acquired=graph_counts["appointments"]["total"],
         source_backed=graph_counts["appointments"]["SOURCE_GRAPH_READY"],
         held=graph_counts["appointments"]["PARENT_LOCATION_SOURCE_MISSING"],
-        unresolved=graph_counts["appointment_relationships"]["PROVIDER_RELATIONSHIP_ERROR"],
+        unresolved=graph_counts["appointment_relationships"][
+            "PROVIDER_RELATIONSHIP_ERROR"
+        ],
     )
     add(
         "estimates",
@@ -217,16 +244,67 @@ def build_legacy_completeness_ledger(
         unresolved=estimate_counts["SAFE_ADMIT_BINDING_DEPENDENT"],
     )
     job_ids = {str(job["id"]) for job in jobs}
-    missing_job = sum(str(invoice.get("job_id") or "") not in job_ids for invoice in invoices)
-    add("invoices", acquired=len(invoices), source_backed=len(invoices), held=missing_job, missing=missing_job, unresolved=missing_job)
+    missing_job = sum(
+        str(invoice.get("job_id") or "") not in job_ids for invoice in invoices
+    )
+    add(
+        "invoices",
+        acquired=len(invoices),
+        source_backed=len(invoices),
+        held=missing_job,
+        missing=missing_job,
+        unresolved=missing_job,
+    )
     imported = payment_methods["imported_from_quickbooks"]
     failed = payment_statuses["failed"]
-    add("payments", acquired=len(payments), source_backed=len(payments), held=imported, accountant=imported, unresolved=failed)
-    add("refunds", acquired=len(refunds), source_backed=len(refunds), held=len(refunds) - refund_with_id, accountant=len(refunds) - refund_with_id, unresolved=len(refunds) - refund_with_id)
-    add("employees", acquired=employee_packet["record_count"], source_backed=employee_packet["record_count"], held=employee_packet["record_count"], owner=employee_packet["record_count"], unresolved=employee_packet["record_count"], notes=(f"sealed package employees={len(employees)}; current certification packet employees={employee_packet['record_count']}",))
-    add("attachments", acquired=attachment_packet["acquired_attachment_metadata_count"], unsupported=attachment_packet["job_count"], missing=attachment_packet["job_count"], unresolved=attachment_packet["job_count"], notes=("absence is not authoritative; HCP UI/Support export required",))
-    add("qbo_control_reports", acquired=len(registrations), source_backed=len(registrations), unresolved=0, notes=("QBO_SOURCE_BACKED; accepted_as_acp_accounting=false",))
-    add("accounting_source_evidence", acquired=len(registrations), source_backed=len(registrations), notes=("control reports are evidence, not native ledger postings",))
+    add(
+        "payments",
+        acquired=len(payments),
+        source_backed=len(payments),
+        held=imported,
+        accountant=imported,
+        unresolved=failed,
+    )
+    add(
+        "refunds",
+        acquired=len(refunds),
+        source_backed=len(refunds),
+        held=len(refunds) - refund_with_id,
+        accountant=len(refunds) - refund_with_id,
+        unresolved=len(refunds) - refund_with_id,
+    )
+    add(
+        "employees",
+        acquired=employee_packet["record_count"],
+        source_backed=employee_packet["record_count"],
+        held=employee_packet["record_count"],
+        owner=employee_packet["record_count"],
+        unresolved=employee_packet["record_count"],
+        notes=(
+            f"sealed package employees={len(employees)}; current certification packet employees={employee_packet['record_count']}",
+        ),
+    )
+    add(
+        "attachments",
+        acquired=attachment_packet["acquired_attachment_metadata_count"],
+        unsupported=attachment_packet["job_count"],
+        missing=attachment_packet["job_count"],
+        unresolved=attachment_packet["job_count"],
+        notes=("absence is not authoritative; HCP UI/Support export required",),
+    )
+    add(
+        "qbo_control_reports",
+        acquired=len(registrations),
+        source_backed=len(registrations),
+        unresolved=0,
+        notes=("QBO_SOURCE_BACKED; accepted_as_acp_accounting=false",),
+    )
+    add(
+        "accounting_source_evidence",
+        acquired=len(registrations),
+        source_backed=len(registrations),
+        notes=("control reports are evidence, not native ledger postings",),
+    )
 
     evidence = {
         "hcp_source_manifest_sha256": _sha(manifest_path),
@@ -245,7 +323,12 @@ def build_legacy_completeness_ledger(
         "production_mutation_count": 0,
         "unavailable_counts_are_zero": False,
     }
-    payload = {"contract": CONTRACT, "families": families, "evidence": evidence, "invariants": invariants}
+    payload = {
+        "contract": CONTRACT,
+        "families": families,
+        "evidence": evidence,
+        "invariants": invariants,
+    }
     result = LegacyCompletenessLedger(
         contract=CONTRACT,
         families=families,

@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 
 import pytest
-
 from app.operational_migration.hcp_preview_baseline_reconciliation import (
     EXPECTED,
     semantic_digest,

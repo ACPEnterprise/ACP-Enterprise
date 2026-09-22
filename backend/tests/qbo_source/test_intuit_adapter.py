@@ -8,7 +8,6 @@ from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
-
 from app.qbo_source.contracts import AcquisitionRequest, EntityKind, SnapshotIdentity
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,

@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG
 from app.beacon.evidence_evaluation import (
     EVIDENCE_EVALUATION_REGISTRY,
@@ -13,6 +12,7 @@ from app.beacon.evidence_evaluation import (
     EvidenceEvaluationRegistry,
 )
 from app.beacon.router import evidence_evaluation_readiness
+
 from tests.beacon.test_beacon import COMPANY_ID, snapshot
 
 BRANCH_ID = UUID("20000000-0000-0000-0000-000000000001")

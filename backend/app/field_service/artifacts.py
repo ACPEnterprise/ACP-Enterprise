@@ -126,8 +126,7 @@ class FieldArtifactService:
                 existing.content_digest != payload.content_digest
                 or existing.size != payload.size
                 or existing.media_type != payload.media_type
-                or existing.opaque_storage_reference
-                != payload.opaque_storage_reference
+                or existing.opaque_storage_reference != payload.opaque_storage_reference
             ):
                 raise FieldServiceConflict(
                     "Artifact finalization is bound to different evidence."

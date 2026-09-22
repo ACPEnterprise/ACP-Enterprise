@@ -268,10 +268,15 @@ def write_qualified_manifest(path: Path, manifest: QualifiedSuccessorManifest) -
             manifest.private_payload(), sort_keys=True, separators=(",", ":")
         ).encode()
         if path.exists():
-            if stat.S_IMODE(path.stat().st_mode) != 0o600 or path.read_bytes() != payload:
+            if (
+                stat.S_IMODE(path.stat().st_mode) != 0o600
+                or path.read_bytes() != payload
+            ):
                 raise SafeEvidenceError("successor_manifest_output_conflict", "0" * 64)
             return
-        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=parent)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", dir=parent
+        )
         temporary = Path(temporary_name)
         try:
             os.fchmod(descriptor, 0o600)

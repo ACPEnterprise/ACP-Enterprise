@@ -83,7 +83,7 @@ def checks() -> tuple[Check, ...]:
         Check("mobile_types", "Mobile TypeScript", ("local",), ("npm", "run", "typecheck", "--prefix", "mobile"), "No type errors", ("npm",)),
         Check("mobile_tests", "Mobile complete test suite", ("local",), ("npm", "test", "--prefix", "mobile", "--", "--runInBand"), "All tests pass; skips disclosed", ("npm",)),
         Check("mobile_configuration", "Mobile release configuration", ("local",), ("npm", "run", "config:validate", "--prefix", "mobile"), "Beta configuration valid and Production inactive", ("npm",)),
-        Check("migration_heads", "Exactly one Alembic head", ("local", "preview"), (py, "-m", "alembic", "-c", "backend/alembic.ini", "heads"), "Exactly one line marked head", (py,)),
+        Check("migration_heads", "Exactly one Alembic head", ("local", "preview"), ("python3", "scripts/migration-lineage", "--require-single-head"), "Canonical lineage reports one root, one head, and no structural risks", ("python3",)),
         Check("migration_rehearsal", "Fresh PostgreSQL zero-to-head and drift rehearsal", ("database",), ("scripts/qualify-release-database",), "Fresh upgrade reaches the sole head and drift is zero", ("docker",), "disposable_database"),
         Check("api_health", "API health", ("postdeploy",), None, "GET /backend-health reports healthy"),
         Check("authentication_smoke", "Authentication smoke", ("postdeploy",), None, "Anonymous protected request rejected and authorized session accepted"),
@@ -113,6 +113,22 @@ def tool_available(tool: str) -> bool:
 def count_skips(output: str) -> int | None:
     values = [int(value) for value in re.findall(r"(\d+) skipped", output)]
     return sum(values) if values else 0
+
+
+def test_output_warning(check_key: str, output: str) -> str | None:
+    if check_key not in {"frontend_tests", "mobile_tests"}:
+        return None
+    warning_patterns = (
+        (r"(?m)^stderr\s*\|", "test suite emitted stderr"),
+        (r"(?m)^\s*console\.(?:error|warn)\b", "test suite emitted console output"),
+        (r"\bWarning:", "test suite emitted a runtime warning"),
+        (r"not configured to support act\(\.\.\.\)", "React updates escaped act"),
+        (r"HydrateFallback", "router hydration fallback is missing"),
+    )
+    return next(
+        (reason for pattern, reason in warning_patterns if re.search(pattern, output)),
+        None,
+    )
 
 
 def prepare_evidence_directory(path: Path) -> None:
@@ -149,12 +165,26 @@ def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Res
     duration = (datetime.now(timezone.utc) - started).total_seconds()
     write_private_artifact(artifact, completed.stdout)
     status = "PASS" if completed.returncode == 0 else "FAIL"
+    warning_reason = test_output_warning(check.key, completed.stdout)
+    if status == "PASS" and warning_reason is not None:
+        status, reason = "FAIL", warning_reason
     if check.key == "repository_cleanliness" and completed.stdout:
         status, reason = "FAIL", "working tree is not clean"
     if check.key == "repository_provenance" and completed.stdout.strip() != candidate:
         status, reason = "FAIL", "HEAD does not equal candidate SHA"
-    if check.key == "migration_heads" and len([line for line in completed.stdout.splitlines() if line.strip()]) != 1:
-        status, reason = "FAIL", "Alembic does not report exactly one head"
+    if check.key == "migration_heads" and status == "PASS":
+        try:
+            lineage = json.loads(completed.stdout)
+            valid_lineage = (
+                lineage.get("release_ready") is True
+                and len(lineage.get("roots", [])) == 1
+                and len(lineage.get("heads", [])) == 1
+                and lineage.get("risks") == []
+            )
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            valid_lineage = False
+        if not valid_lineage:
+            status, reason = "FAIL", "canonical migration lineage is not release-ready"
     artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
     return Result(check.key, check.title, status, shlex.join(check.command), check.expected, completed.returncode, duration, str(artifact), artifact_sha256, reason, count_skips(completed.stdout))
 

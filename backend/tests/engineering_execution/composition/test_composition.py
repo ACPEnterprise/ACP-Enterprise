@@ -7,10 +7,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_execution.composition.contracts import (
@@ -45,6 +41,10 @@ from app.execution_providers.contracts import ProviderCapability
 from app.execution_providers.registry import ExecutionProviderRegistry
 from app.worker_control.contracts import WorkerCapability
 from app.worker_control.models import EngineeringWorker
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,

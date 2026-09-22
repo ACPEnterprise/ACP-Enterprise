@@ -5,11 +5,6 @@ from uuid import uuid4
 import httpx
 import jwt
 import pytest
-from fastapi import FastAPI, Response
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
 from app.core.config import Settings
 from app.platform.audit.models import AuditRecord
 from app.platform.audit.service import AuditEntry, AuditService
@@ -30,9 +25,15 @@ from app.platform.security.decisions import (
 )
 from app.platform.security.metrics import SecurityMetrics, security_metrics
 from app.platform.security.middleware import (
+    CORS_ALLOWED_HEADERS,
+    CORS_ALLOWED_METHODS,
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
 )
+from fastapi import FastAPI, Response
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 
 def build_settings(**overrides: object) -> Settings:
@@ -43,6 +44,29 @@ def build_settings(**overrides: object) -> Settings:
     }
     values.update(overrides)
     return Settings.model_validate(values)
+
+
+def test_credentialed_cors_surface_is_explicitly_bounded() -> None:
+    assert "*" not in CORS_ALLOWED_METHODS
+    assert "*" not in CORS_ALLOWED_HEADERS
+    assert set(CORS_ALLOWED_METHODS) == {
+        "DELETE",
+        "GET",
+        "OPTIONS",
+        "PATCH",
+        "POST",
+        "PUT",
+    }
+    assert {
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "Last-Event-ID",
+        "X-ACP-Mobile-Version",
+        "X-Branch-ID",
+        "X-Company-ID",
+        "X-Request-ID",
+    } <= set(CORS_ALLOWED_HEADERS)
 
 
 @pytest.mark.asyncio
@@ -138,6 +162,10 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" in response.headers
+    assert "script-src 'self'" in response.headers["content-security-policy"]
+    assert "object-src 'none'" in response.headers["content-security-policy"]
+    assert "base-uri 'self'" in response.headers["content-security-policy"]
+    assert "form-action 'self'" in response.headers["content-security-policy"]
     assert response.headers["permissions-policy"] == (
         "camera=(), microphone=(self), geolocation=()"
     )
@@ -155,9 +183,9 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     assert rejected.status_code == 400
     assert rejected.json()["detail"]["code"] == "validation"
     assert rejected.json()["detail"]["recovery"] == "USER_CORRECTION_REQUIRED"
-    assert rejected.json()["detail"]["correlation_id"] == rejected.headers[
-        "x-request-id"
-    ]
+    assert (
+        rejected.json()["detail"]["correlation_id"] == rejected.headers["x-request-id"]
+    )
     assert "203.0.113.9" not in rejected.text
 
     malformed_transport = httpx.ASGITransport(app=app, client=("10.0.0.8", 443))
@@ -170,9 +198,10 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
         )
     assert malformed.status_code == 400
     assert malformed.json()["detail"]["code"] == "validation"
-    assert malformed.json()["detail"]["correlation_id"] == malformed.headers[
-        "x-request-id"
-    ]
+    assert (
+        malformed.json()["detail"]["correlation_id"]
+        == malformed.headers["x-request-id"]
+    )
     assert "protected-source-canary" not in malformed.text
 
 

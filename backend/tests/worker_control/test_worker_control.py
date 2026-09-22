@@ -5,9 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_execution.service import EngineeringExecutionService
 from app.events.models import BusinessEvent
@@ -47,6 +44,9 @@ from app.worker_control.errors import (
 )
 from app.worker_control.models import WorkerHeartbeat, WorkerLease, WorkerResult
 from app.worker_control.service import RegisterWorkerCommand, WorkerControlService
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,

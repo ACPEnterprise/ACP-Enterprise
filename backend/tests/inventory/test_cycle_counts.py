@@ -3,11 +3,11 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
-
 from app.inventory.contracts import RecordCycleCount, StartCycleCount
 from app.inventory.errors import InventoryConflict, InventoryNotFound
 from app.inventory.models import InventoryAdjustment, StockMovement
+from sqlalchemy import func, select
+
 from tests.inventory.test_inventory_foundation import (
     inventory_fixture,  # noqa: F401
     opening_spec,

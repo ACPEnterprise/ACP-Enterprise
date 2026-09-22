@@ -67,6 +67,8 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
     }
 )
 
+PLATFORM_OWNER_ADMIN_PERMISSIONS = COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
+
 OFFICE_MANAGER_OPERATIONAL_PERMISSIONS = frozenset(
     {
         AdministrationPermission.MEMBERSHIP_READ,
@@ -138,27 +140,36 @@ LAUNCH_ROLE_MATRIX = (
     LaunchRoleDefinition(
         code=LaunchRoleCode.OWNER,
         purpose="Own the Company and administer its access and operating evidence.",
-        permission_codes=COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
+        permission_codes=PLATFORM_OWNER_ADMIN_PERMISSIONS,
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.ADMIN,
         purpose="Administer Company access and inspect operating evidence.",
-        permission_codes=COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
+        permission_codes=PLATFORM_OWNER_ADMIN_PERMISSIONS,
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.MANAGER,
         purpose="Manage branch operations using the canonical office-manager bundle.",
         permission_codes=frozenset(
             {
-                CustomerPermission.READ, CustomerPermission.MANAGE,
-                SchedulingPermission.READ, SchedulingPermission.MANAGE,
-                JobPermission.READ, JobPermission.MANAGE,
-                DispatchPermission.READ, DispatchPermission.MANAGE,
-                PriceBookPermission.READ, PriceBookPermission.MANAGE,
-                AnalyticsPermission.READ, LaunchPlatformPermission.AUDIT_READ,
-                InventoryPermission.READ, InventoryPermission.MANAGE,
-                InventoryPermission.MOVE, InventoryPermission.RESERVE,
-                PurchasingPermission.READ, PurchasingPermission.MANAGE,
+                CustomerPermission.READ,
+                CustomerPermission.MANAGE,
+                SchedulingPermission.READ,
+                SchedulingPermission.MANAGE,
+                JobPermission.READ,
+                JobPermission.MANAGE,
+                DispatchPermission.READ,
+                DispatchPermission.MANAGE,
+                PriceBookPermission.READ,
+                PriceBookPermission.MANAGE,
+                AnalyticsPermission.READ,
+                LaunchPlatformPermission.AUDIT_READ,
+                InventoryPermission.READ,
+                InventoryPermission.MANAGE,
+                InventoryPermission.MOVE,
+                InventoryPermission.RESERVE,
+                PurchasingPermission.READ,
+                PurchasingPermission.MANAGE,
             }
         ),
     ),
@@ -167,10 +178,15 @@ LAUNCH_ROLE_MATRIX = (
         purpose="Serve Customers without financial execution or administrative authority.",
         permission_codes=frozenset(
             {
-                CustomerPermission.READ, CustomerPermission.MANAGE,
-                EstimatePermission.READ, EstimatePermission.MANAGE,
-                SchedulingPermission.READ, JobPermission.READ, DispatchPermission.READ,
-                InvoicePermission.READ, PaymentPermission.READ,
+                CustomerPermission.READ,
+                CustomerPermission.MANAGE,
+                EstimatePermission.READ,
+                EstimatePermission.MANAGE,
+                SchedulingPermission.READ,
+                JobPermission.READ,
+                DispatchPermission.READ,
+                InvoicePermission.READ,
+                PaymentPermission.READ,
                 CommunicationsPermission.READ,
             }
         ),

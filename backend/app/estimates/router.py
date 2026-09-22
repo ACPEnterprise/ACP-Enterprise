@@ -482,9 +482,7 @@ async def _decision(
         raise _error(error) from error
 
 
-@router.post(
-    "/{estimate_id}/convert-to-job", response_model=ConversionItem
-)
+@router.post("/{estimate_id}/convert-to-job", response_model=ConversionItem)
 async def convert_estimate_to_job(
     estimate_id: UUID,
     payload: ConversionInput,
@@ -522,9 +520,7 @@ async def create_tax_policy(
     if payload.branch_id is not None:
         _branch(context, payload.branch_id)
     if payload.expires_at is not None and payload.expires_at <= payload.effective_at:
-        raise _error(
-            EstimateValidationError("Tax policy effective window is invalid.")
-        )
+        raise _error(EstimateValidationError("Tax policy effective window is invalid."))
     policy = OperationalTaxPolicy(
         id=uuid4(),
         company_id=context.company.id,

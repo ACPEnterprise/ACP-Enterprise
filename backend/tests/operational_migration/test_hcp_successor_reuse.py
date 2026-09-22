@@ -64,7 +64,9 @@ def test_manifest_and_preflight_are_deterministic_and_identifier_free() -> None:
         company_id="company-secret", branch_id="branch-secret", entries=entries
     )
     replay = QualifiedSuccessorManifest.build(
-        company_id="company-secret", branch_id="branch-secret", entries=reversed(entries)
+        company_id="company-secret",
+        branch_id="branch-secret",
+        entries=reversed(entries),
     )
     assert first == replay
     result = qualify_successor_admission(first, guards())
@@ -79,7 +81,12 @@ def test_preflight_reports_domain_counts_and_allows_bounded_hold() -> None:
         company_id="company",
         branch_id="branch",
         entries=[
-            entry("customer", "reuse", AdmissionDisposition.REUSE_EXACT_SUCCESSOR, native="n1"),
+            entry(
+                "customer",
+                "reuse",
+                AdmissionDisposition.REUSE_EXACT_SUCCESSOR,
+                native="n1",
+            ),
             entry("customer", "create", AdmissionDisposition.CREATE_NEW),
             entry("customer", "hold", AdmissionDisposition.HOLD_AMBIGUOUS),
         ],
@@ -122,8 +129,18 @@ def test_reused_native_target_collision_fails_closed() -> None:
         company_id="company",
         branch_id="branch",
         entries=[
-            entry("customer", "one", AdmissionDisposition.REUSE_EXACT_SUCCESSOR, native="same"),
-            entry("customer", "two", AdmissionDisposition.REUSE_EXACT_SUCCESSOR, native="same"),
+            entry(
+                "customer",
+                "one",
+                AdmissionDisposition.REUSE_EXACT_SUCCESSOR,
+                native="same",
+            ),
+            entry(
+                "customer",
+                "two",
+                AdmissionDisposition.REUSE_EXACT_SUCCESSOR,
+                native="same",
+            ),
         ],
     )
     result = qualify_successor_admission(manifest, guards())

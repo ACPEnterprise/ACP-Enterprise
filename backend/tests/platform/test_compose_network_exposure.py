@@ -77,9 +77,7 @@ def test_preview_application_runtimes_are_hardened() -> None:
     for service_name in ("mission-control-web", "frontend"):
         service = services[service_name]
         assert service["user"] == "101:101"
-        assert "/var/cache/nginx:size=32m,mode=0755,uid=101,gid=101" in service[
-            "tmpfs"
-        ]
+        assert "/var/cache/nginx:size=32m,mode=0755,uid=101,gid=101" in service["tmpfs"]
         assert "/var/run:size=4m,mode=0755,uid=101,gid=101" in service["tmpfs"]
 
     # These bounded jobs require root only to establish ownership on named volumes.

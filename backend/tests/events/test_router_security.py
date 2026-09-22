@@ -29,7 +29,9 @@ async def event_database() -> AsyncIterator[AsyncEngine]:
 
 
 @pytest.mark.asyncio
-async def test_event_http_boundary_requires_authentication_and_has_no_publish_route() -> None:
+async def test_event_http_boundary_requires_authentication_and_has_no_publish_route() -> (
+    None
+):
     application = FastAPI()
     application.include_router(router)
 

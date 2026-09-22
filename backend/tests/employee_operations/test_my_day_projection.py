@@ -5,8 +5,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy.dialects import postgresql
-
 from app.database.session import get_database_session
 from app.employee_operations.errors import EmployeeIdentityNotReady
 from app.employee_operations.permissions import EmployeeOperationsPermission
@@ -15,6 +13,7 @@ from app.employee_operations.service import EmployeeDayService, employee_day_ser
 from app.main import app
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.dependencies import get_authorization_context
+from sqlalchemy.dialects import postgresql
 
 COMPANY_ID = UUID("10000000-0000-0000-0000-000000000001")
 MEMBERSHIP_ID = UUID("20000000-0000-0000-0000-000000000001")

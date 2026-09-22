@@ -26,8 +26,14 @@ class WorkforceAdministrationConflict(ValueError):
 
 class WorkforceAdministrationService:
     async def prepare_field_readiness(
-        self, session: AsyncSession, *, context: AuthorizationContext,
-        employee_id: UUID, branch_id: UUID, start_at: datetime, end_at: datetime,
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        employee_id: UUID,
+        branch_id: UUID,
+        start_at: datetime,
+        end_at: datetime,
         reason: str,
     ) -> tuple[UUID, UUID, UUID]:
         if end_at <= start_at:
@@ -53,7 +59,10 @@ class WorkforceAdministrationService:
                 session.add(profile)
                 await session.flush()
                 self._audit(
-                    session, context, "workforce.profile_created", profile.id,
+                    session,
+                    context,
+                    "workforce.profile_created",
+                    profile.id,
                     {"employee_id": str(employee.id)},
                 )
             elif profile.status != "active":
@@ -79,7 +88,9 @@ class WorkforceAdministrationService:
                 session.add(category)
                 await session.flush()
                 self._audit(
-                    session, context, "workforce.capability_category_created",
+                    session,
+                    context,
+                    "workforce.capability_category_created",
                     category.id,
                 )
             elif category.status != "active":
@@ -106,7 +117,9 @@ class WorkforceAdministrationService:
                 session.add(capability)
                 await session.flush()
                 self._audit(
-                    session, context, "workforce.capability_definition_created",
+                    session,
+                    context,
+                    "workforce.capability_definition_created",
                     capability.id,
                 )
             elif capability.status != "active" or capability.category_id != category.id:
@@ -133,7 +146,9 @@ class WorkforceAdministrationService:
                 session.add(capability_evidence)
                 await session.flush()
                 self._audit(
-                    session, context, "workforce.capability_recorded",
+                    session,
+                    context,
+                    "workforce.capability_recorded",
                     capability_evidence.id,
                 )
             elif (
@@ -168,7 +183,9 @@ class WorkforceAdministrationService:
                 session.add(availability)
                 await session.flush()
                 self._audit(
-                    session, context, "workforce.availability_recorded",
+                    session,
+                    context,
+                    "workforce.availability_recorded",
                     availability.id,
                     {
                         "employee_id": str(employee.id),
@@ -302,7 +319,11 @@ class WorkforceAdministrationService:
             )
             requested = (status, issued_on, expires_on)
             if existing:
-                if (existing.status, existing.issued_on, existing.expires_on) != requested:
+                if (
+                    existing.status,
+                    existing.issued_on,
+                    existing.expires_on,
+                ) != requested:
                     raise WorkforceAdministrationConflict(
                         "Certification evidence conflicts with current authority."
                     )
@@ -318,7 +339,9 @@ class WorkforceAdministrationService:
             )
             session.add(evidence)
             await session.flush()
-            self._audit(session, context, "workforce.certification_recorded", evidence.id)
+            self._audit(
+                session, context, "workforce.certification_recorded", evidence.id
+            )
         return evidence.id, True
 
     async def add_language(
@@ -417,7 +440,9 @@ class WorkforceAdministrationService:
             )
             session.add(evidence)
             await session.flush()
-            self._audit(session, context, "workforce.availability_recorded", evidence.id)
+            self._audit(
+                session, context, "workforce.availability_recorded", evidence.id
+            )
         return evidence.id, True
 
     @staticmethod

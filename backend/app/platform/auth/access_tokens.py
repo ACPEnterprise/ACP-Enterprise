@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
 import jwt
@@ -21,7 +21,17 @@ class AccessTokenClaims:
 
 
 class AccessTokenService:
-    required_claims = ["iss", "aud", "sub", "sid", "iat", "exp", "jti", "cv", "av"]
+    required_claims: ClassVar[list[str]] = [
+        "iss",
+        "aud",
+        "sub",
+        "sid",
+        "iat",
+        "exp",
+        "jti",
+        "cv",
+        "av",
+    ]
 
     def __init__(self, configuration: Settings = settings) -> None:
         self.configuration = configuration

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import fnmatch
+import hashlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
-
 
 PROVENANCE_VERSION = "1.0"
 

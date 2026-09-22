@@ -1,8 +1,6 @@
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from app.field_service.notifications import (
     SafeEmployeeNotification,
     UnconfiguredPushProvider,
@@ -13,6 +11,7 @@ from app.field_service.schemas import (
     FieldContact,
     FieldInvoice,
 )
+from pydantic import ValidationError
 
 
 def test_field_source_routes_are_assignment_scoped() -> None:
@@ -24,7 +23,9 @@ def test_field_source_routes_are_assignment_scoped() -> None:
     assert "/api/v1/technician/jobs/{job_id}/estimate" in paths
     assert "/api/v1/technician/jobs/{job_id}/artifacts/intents" in paths
     assert "/api/v1/technician/readiness" in paths
-    assert not any("customers/search" in path or "assets/search" in path for path in paths)
+    assert not any(
+        "customers/search" in path or "assets/search" in path for path in paths
+    )
 
 
 def test_field_contact_rejects_protected_or_unbounded_payload() -> None:
@@ -48,7 +49,9 @@ def test_artifact_intent_rejects_mime_and_size_attacks() -> None:
     }
     with pytest.raises(ValidationError):
         FieldArtifactIntentInput(
-            **common, media_type="text/html", expected_size=100  # type: ignore[arg-type]
+            **common,
+            media_type="text/html",
+            expected_size=100,  # type: ignore[arg-type]
         )
     with pytest.raises(ValidationError):
         FieldArtifactIntentInput(

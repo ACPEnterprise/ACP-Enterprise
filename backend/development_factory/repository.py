@@ -51,9 +51,7 @@ def classify_path(path: str) -> str:
         return "backend_tests"
     if path.startswith("backend/app/"):
         return "backend_runtime"
-    if path.startswith("frontend/src/") and (
-        path.endswith(".test.ts") or path.endswith(".test.tsx")
-    ):
+    if path.startswith("frontend/src/") and (path.endswith((".test.ts", ".test.tsx"))):
         return "frontend_tests"
     if path.startswith("frontend/"):
         return "frontend_runtime"

@@ -311,8 +311,7 @@ async def test_permanent_capacity_rebind_preserves_and_supersedes_history(
                 await session.scalars(
                     select(EngineeringCapacityBinding)
                     .where(
-                        EngineeringCapacityBinding.permanent_capacity_id
-                        == permanent.id
+                        EngineeringCapacityBinding.permanent_capacity_id == permanent.id
                     )
                     .order_by(EngineeringCapacityBinding.created_at)
                 )

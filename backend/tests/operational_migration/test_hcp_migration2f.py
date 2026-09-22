@@ -3,8 +3,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import Table
-
 from app.customer_migration.adapter_import import ReviewedCustomerAggregate
 from app.customer_migration.models import (
     CustomerMigrationSourceArtifact,
@@ -18,6 +16,7 @@ from app.operational_migration.hcp_migration2_runner import (
     SafeEvidenceError,
     _safe_json,
 )
+from sqlalchemy import Table
 
 
 def _check_constraints(table: Table) -> dict[str, str]:

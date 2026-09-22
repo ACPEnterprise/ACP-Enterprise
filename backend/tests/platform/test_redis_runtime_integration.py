@@ -72,9 +72,7 @@ async def test_rate_limit_is_atomic_expiring_isolated_and_reconnectable() -> Non
         assert await client.ttl(f"auth-rate:login:{first}") > 0
         assert await client.get(f"auth-rate:login:{second}") == "1"
     finally:
-        await client.delete(
-            f"auth-rate:login:{first}", f"auth-rate:login:{second}"
-        )
+        await client.delete(f"auth-rate:login:{first}", f"auth-rate:login:{second}")
         await client.aclose()
 
     # Each enforcement owns and closes its client; a later call reconnects cleanly.
@@ -109,7 +107,8 @@ async def test_required_redis_fails_closed_then_live_runtime_recovers() -> None:
     )
 
     readiness = await PlatformHealthService(
-        configuration=live_configuration, engine=None  # type: ignore[arg-type]
+        configuration=live_configuration,
+        engine=None,  # type: ignore[arg-type]
     ).redis()
     assert readiness.state is HealthState.HEALTHY
     assert readiness.required is True

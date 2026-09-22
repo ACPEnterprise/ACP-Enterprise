@@ -10,7 +10,7 @@ controller can validate and query it with the standard Python runtime.
 This roadmap reconciles the original Version 1 planning architecture, the
 Master Milestone Queue, the protected product history, the Owner Acceptance
 ledger, and successor discoveries through protected SHA
-`b3a1a57e7aa2496f09a441957493ea6a2736c075`. Repository evidence supersedes
+`ba7b7473ba51f8499273d2eb42fbb6cd04e7a95b`. Repository evidence supersedes
 stale planning text; it does not turn deployment into acceptance.
 
 For user-facing work:
@@ -177,6 +177,9 @@ scripts/factory-roadmap next --factory LAPTOP
 items, and requires every prerequisite to be at least engineering-ready and
 protected/deployed/accepted as represented by the lifecycle state. The output
 contains the stable item, preferred lane, priority, and exact next action.
+`OWNER_ACCEPTANCE_REQUIRED` items remain in the durable owner-action queue and
+are never returned as engineering assignments; an idle lane continues to the
+next dependency-safe engineering-owned item.
 
 - OM1E reads the full graph and owns canonical Alembic, protected integration,
   Release, schema/security/platform gates, and cross-factory arbitration.

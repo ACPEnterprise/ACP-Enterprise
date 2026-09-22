@@ -8,10 +8,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.repository_authorization.contracts import (
@@ -56,6 +52,10 @@ from app.platform.permissions.codes import (
     EngineeringRepositoryOperationPermission,
 )
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.repository_authorization.test_repository_authorization import (
     BOUNDARY,
     accepted_review,
@@ -141,9 +141,7 @@ def test_historical_publication_accepts_descendant_tip_without_moving_branch(
 
     adapter = ProductionBoundedGitAdapter(working)
     assert (
-        adapter.verify_historical_publication(
-            "customer-management-v1", result_commit
-        )
+        adapter.verify_historical_publication("customer-management-v1", result_commit)
         == current_head
     )
     assert git(working, "rev-parse", "HEAD") == current_head
@@ -167,9 +165,7 @@ def test_historical_publication_rejects_diverged_or_unrelated_object(
 
     adapter = ProductionBoundedGitAdapter(working)
     with pytest.raises(RepositoryOperationGitError) as error:
-        adapter.verify_historical_publication(
-            "customer-management-v1", result_commit
-        )
+        adapter.verify_historical_publication("customer-management-v1", result_commit)
     assert error.value.classification == "publication_not_in_authoritative_lineage"
 
 

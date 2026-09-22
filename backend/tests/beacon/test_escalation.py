@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.beacon.escalation import (
     ESCALATION_REGISTRY,
     EscalationEligibility,
@@ -16,6 +15,7 @@ from app.beacon.evaluation import SignalEvaluationService
 from app.beacon.evidence_evaluation import EvaluationReadiness
 from app.beacon.router import escalation_readiness
 from app.beacon.workflow import _state
+
 from tests.beacon.test_beacon import COMPANY_ID, snapshot
 
 NOW = datetime(2026, 7, 28, 16, 0, tzinfo=timezone.utc)

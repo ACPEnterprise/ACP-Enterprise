@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.payroll.contracts import PayrollConflictError, canonical_digest
 from app.payroll.real_employee_readiness_wiring import (
     REFERENCE_VERSION,

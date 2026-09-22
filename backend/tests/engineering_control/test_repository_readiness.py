@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.engineering_control.repository_readiness import (
     RepositoryReadinessService,
     RepositoryReadinessTarget,

@@ -34,9 +34,7 @@ def test_complete_source4_plan_is_deterministic_and_reconciled(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     builder = _builder()
-    first, first_summary = builder.build(
-        baseline_counts={"business": 0, "masters": 0}
-    )
+    first, first_summary = builder.build(baseline_counts={"business": 0, "masters": 0})
     second, second_summary = builder.build(
         baseline_counts={"masters": 0, "business": 0}
     )
@@ -70,10 +68,13 @@ def test_complete_source4_plan_is_deterministic_and_reconciled(
         "unlinked_estimate": 24,
     }
     assert len(first.employees) == 7
-    assert sum(
-        item.disposition == "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE"
-        for item in first.employees
-    ) == 6
+    assert (
+        sum(
+            item.disposition == "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE"
+            for item in first.employees
+        )
+        == 6
+    )
     assert len(first.unlinked_estimates) == 24
     assert len(first.holds) == 594
     assert len(first.plan_outcomes) == 4905

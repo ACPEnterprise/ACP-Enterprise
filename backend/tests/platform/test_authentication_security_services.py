@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import jwt
 import pytest
-
 from app.core.config import Settings
 from app.platform.auth.access_tokens import AccessTokenService
 from app.platform.auth.errors import InvalidTokenError, PasswordPolicyError
@@ -98,9 +97,10 @@ def test_access_token_validation_rejects_invalid_security_properties() -> None:
         AccessTokenService(build_test_settings(access_token_audience="wrong-audience")),
         AccessTokenService(
             build_test_settings(
-                access_token_signing_key=(
-                    "different-test-signing-key-with-32-characters"
-                )
+                access_token_keys={
+                    "test": "different-test-signing-key-with-32-characters"
+                },
+                access_token_active_kid="test",
             )
         ),
     ):

@@ -221,14 +221,16 @@ def plan_question(
             "jobs": {"jobs", "dispatch", "invoicing", "payments", "scheduling"},
             "workforce": {"workforce", "payroll", "timekeeping", "dispatch"},
         }.get(context_domain, {context_domain})
-        explicit_switch = bool(question_domains - related_followups) and not conversation.pronouns
+        explicit_switch = (
+            bool(question_domains - related_followups) and not conversation.pronouns
+        )
         domains = (
             question_domains
             if explicit_switch
             else frozenset(
                 {
                     context_domain,
-                    *( () if corrected_context_subject else topic_domains),
+                    *(() if corrected_context_subject else topic_domains),
                     *question_domains,
                 }
                 if context_domain == "workforce"

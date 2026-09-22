@@ -332,7 +332,9 @@ class PriceBookService:
         if sellable_only:
             option_group_query = option_group_query.where(
                 PriceBookOptionGroup.status == "active",
-                PriceBookOptionGroup.id.in_([option.option_group_id for option in options]),
+                PriceBookOptionGroup.id.in_(
+                    [option.option_group_id for option in options]
+                ),
             )
         option_groups = tuple(
             (

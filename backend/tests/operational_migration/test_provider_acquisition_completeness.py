@@ -4,7 +4,6 @@ import hashlib
 import json
 
 import pytest
-
 from app.operational_migration.provider_acquisition_completeness import (
     CONTRACT,
     ProviderCompletenessManifest,

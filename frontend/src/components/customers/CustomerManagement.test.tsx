@@ -19,6 +19,13 @@ const mutation = {
   isPending: false,
   error: null,
 };
+const populationRefresh = {
+  mutate: vi.fn(),
+  isPending: false,
+  isError: false,
+  error: null,
+  data: undefined,
+};
 
 describe("CustomerManagement", () => {
   beforeEach(() => {
@@ -30,6 +37,9 @@ describe("CustomerManagement", () => {
       create: mutation,
       duplicateCheck: mutation,
     } as never);
+    vi.mocked(customerHooks.useCustomerPopulationRefresh).mockReturnValue(
+      populationRefresh as never,
+    );
   });
 
   it("renders phone-safe customer links to durable detail routes", () => {
@@ -148,6 +158,40 @@ describe("CustomerManagement", () => {
 
     expect(screen.getByRole("link", { name: /Alex Rivera/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New customer" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh source classification" })).not.toBeInTheDocument();
+  });
+
+  it("offers a non-admitting source-population refresh to Customer managers", async () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Refresh source classification" }));
+
+    expect(populationRefresh.mutate).toHaveBeenCalledWith();
+    expect(screen.getByText(/does not create Customers, bind identities, or admit source records/i)).toBeInTheDocument();
+  });
+
+  it("renders bounded refresh counts without claiming Customer admission", () => {
+    vi.mocked(customerHooks.useCustomerPopulationRefresh).mockReturnValue({
+      ...populationRefresh,
+      data: {
+        counts: { total: 1540, bound: 2, held: 3, ambiguous: 4, unexplained: 1531 },
+      },
+    } as never);
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(screen.getByText(/1,540 accepted source Customers/)).toBeInTheDocument();
+    expect(screen.getByText(/No Customer admission was performed/)).toBeInTheDocument();
   });
 
   it("does not claim an empty upstream source when no native records are admitted", () => {

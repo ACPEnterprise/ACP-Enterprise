@@ -90,7 +90,9 @@ class PreviewSyntheticTenantFixtureService:
             company = await session.get(Company, FIXTURE_COMPANY_ID)
             branch = await session.get(Branch, FIXTURE_BRANCH_ID)
             if company is None and branch is not None:
-                raise OnboardingConflictError("Synthetic tenant fixture is inconsistent.")
+                raise OnboardingConflictError(
+                    "Synthetic tenant fixture is inconsistent."
+                )
             action = "reused"
             if company is None:
                 company = Company(
@@ -170,7 +172,9 @@ class PreviewSyntheticTenantFixtureService:
             company = await session.get(Company, FIXTURE_COMPANY_ID)
             branch = await session.get(Branch, FIXTURE_BRANCH_ID)
             if company is None or branch is None:
-                raise OnboardingConflictError("Synthetic tenant fixture does not exist.")
+                raise OnboardingConflictError(
+                    "Synthetic tenant fixture does not exist."
+                )
             self._validate_existing(company, branch)
             audit = self.auditing.stage(
                 session,

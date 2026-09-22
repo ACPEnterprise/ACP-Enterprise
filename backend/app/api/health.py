@@ -22,7 +22,9 @@ async def liveness_check() -> dict[str, str]:
 
 @router.get("/health/ready", response_model=SystemReadiness)
 async def readiness_check(response: Response) -> SystemReadiness:
-    result = await PlatformHealthService(configuration=settings, engine=engine).inspect()
+    result = await PlatformHealthService(
+        configuration=settings, engine=engine
+    ).inspect()
     if result.state is not HealthState.HEALTHY:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return result
@@ -31,7 +33,9 @@ async def readiness_check(response: Response) -> SystemReadiness:
 @router.get("/health")
 async def health_check(response: Response) -> dict[str, Any]:
     """Preserve the accepted compact health contract for existing consumers."""
-    result = await PlatformHealthService(configuration=settings, engine=engine).inspect()
+    result = await PlatformHealthService(
+        configuration=settings, engine=engine
+    ).inspect()
     by_name = {component.component: component for component in result.components}
     if result.state is not HealthState.HEALTHY:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

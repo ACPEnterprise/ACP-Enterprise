@@ -4,9 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.employee_operations.permissions import EmployeeOperationsPermission
@@ -54,6 +51,8 @@ from app.platform.permissions.codes import (
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.timekeeping.permissions import TimekeepingPermission
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -116,7 +115,9 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
 
 def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> None:
     role = next(
-        value for value in LAUNCH_ROLE_MATRIX if value.code is LaunchRoleCode.SERVICE_CSR
+        value
+        for value in LAUNCH_ROLE_MATRIX
+        if value.code is LaunchRoleCode.SERVICE_CSR
     )
     assert role.branch_access_required is True
     assert role.permission_codes == frozenset(
@@ -160,7 +161,8 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
 
 def test_office_manager_has_normal_operations_without_owner_hard_gates() -> None:
     role = next(
-        value for value in LAUNCH_ROLE_MATRIX
+        value
+        for value in LAUNCH_ROLE_MATRIX
         if value.code is LaunchRoleCode.OFFICE_MANAGER
     )
     assert role.permission_codes == OFFICE_MANAGER_OPERATIONAL_PERMISSIONS

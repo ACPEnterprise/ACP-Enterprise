@@ -11,9 +11,14 @@ def test_ledger_metrics_distinguish_transfer_activity_from_opening(
 ) -> None:
     workbook = tmp_path / "ledger.xlsx"
     shared = (
-        "General Ledger", "July 7, 2021-December 31, 2022",
-        "Transaction date", "Transaction type", "01/01/2022", "Transfer",
-        "01/03/2022", "Deposit",
+        "General Ledger",
+        "July 7, 2021-December 31, 2022",
+        "Transaction date",
+        "Transaction type",
+        "01/01/2022",
+        "Transfer",
+        "01/03/2022",
+        "Deposit",
     )
     strings = "".join(f"<si><t>{value}</t></si>" for value in shared)
     rows = (

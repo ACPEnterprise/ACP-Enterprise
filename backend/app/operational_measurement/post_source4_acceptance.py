@@ -101,8 +101,18 @@ def _digest(value: object) -> str:
     ).hexdigest()
 
 
-def _scope_conditions(company_id: UUID, branch_id: UUID, *, expected_company_id: UUID, expected_branch_id: UUID) -> list[str]:
-    return [] if (company_id, branch_id) == (expected_company_id, expected_branch_id) else ["COMPANY_OR_BRANCH_SCOPE_CONFLICT"]
+def _scope_conditions(
+    company_id: UUID,
+    branch_id: UUID,
+    *,
+    expected_company_id: UUID,
+    expected_branch_id: UUID,
+) -> list[str]:
+    return (
+        []
+        if (company_id, branch_id) == (expected_company_id, expected_branch_id)
+        else ["COMPANY_OR_BRANCH_SCOPE_CONFLICT"]
+    )
 
 
 def _estimate_findings(
@@ -118,15 +128,27 @@ def _estimate_findings(
     findings: list[CommercialAcceptanceFinding] = []
     for source_id in sorted(grouped):
         rows = grouped[source_id]
-        row = min(rows, key=lambda item: (item.source_digest, item.native_evidence_digest or ""))
-        conditions = _scope_conditions(row.company_id, row.branch_id, expected_company_id=company_id, expected_branch_id=branch_id)
+        row = min(
+            rows,
+            key=lambda item: (item.source_digest, item.native_evidence_digest or ""),
+        )
+        conditions = _scope_conditions(
+            row.company_id,
+            row.branch_id,
+            expected_company_id=company_id,
+            expected_branch_id=branch_id,
+        )
         classification = AcceptanceClassification.MATCHED
         if len(rows) > 1:
             conditions.append("DUPLICATE_NATIVE_SOURCE_IDENTITY")
             classification = AcceptanceClassification.CONFLICTING
         elif conditions:
             classification = AcceptanceClassification.CONFLICTING
-        elif row.native_id is None or row.native_job_id is None or row.native_evidence_digest is None:
+        elif (
+            row.native_id is None
+            or row.native_job_id is None
+            or row.native_evidence_digest is None
+        ):
             conditions.append("NATIVE_ESTIMATE_OR_JOB_IDENTITY_MISSING")
             classification = AcceptanceClassification.MISSING_NATIVE
         elif row.source_job_id not in operational_job_sources:
@@ -138,7 +160,16 @@ def _estimate_findings(
         elif row.status is None or row.accepted_snapshot_digest is None:
             conditions.append("COMMERCIAL_SOURCE_EVIDENCE_PARTIAL")
             classification = AcceptanceClassification.PARTIAL
-        findings.append(CommercialAcceptanceFinding(CommercialDomain.ESTIMATE, source_id, classification, tuple(sorted(set(conditions))), row.source_digest, row.native_evidence_digest))
+        findings.append(
+            CommercialAcceptanceFinding(
+                CommercialDomain.ESTIMATE,
+                source_id,
+                classification,
+                tuple(sorted(set(conditions))),
+                row.source_digest,
+                row.native_evidence_digest,
+            )
+        )
     return tuple(findings)
 
 
@@ -157,15 +188,27 @@ def _invoice_findings(
     findings: list[CommercialAcceptanceFinding] = []
     for source_id in sorted(grouped):
         rows = grouped[source_id]
-        row = min(rows, key=lambda item: (item.source_digest, item.native_evidence_digest or ""))
-        conditions = _scope_conditions(row.company_id, row.branch_id, expected_company_id=company_id, expected_branch_id=branch_id)
+        row = min(
+            rows,
+            key=lambda item: (item.source_digest, item.native_evidence_digest or ""),
+        )
+        conditions = _scope_conditions(
+            row.company_id,
+            row.branch_id,
+            expected_company_id=company_id,
+            expected_branch_id=branch_id,
+        )
         classification = AcceptanceClassification.MATCHED
         if len(rows) > 1:
             conditions.append("DUPLICATE_NATIVE_SOURCE_IDENTITY")
             classification = AcceptanceClassification.CONFLICTING
         elif conditions:
             classification = AcceptanceClassification.CONFLICTING
-        elif row.native_id is None or row.native_job_id is None or row.native_evidence_digest is None:
+        elif (
+            row.native_id is None
+            or row.native_job_id is None
+            or row.native_evidence_digest is None
+        ):
             conditions.append("NATIVE_INVOICE_OR_JOB_IDENTITY_MISSING")
             classification = AcceptanceClassification.MISSING_NATIVE
         elif row.source_job_id not in operational_job_sources:
@@ -182,7 +225,10 @@ def _invoice_findings(
             elif row.native_estimate_id != estimate.native_id:
                 conditions.append("ESTIMATE_RELATIONSHIP_CONFLICT")
                 classification = AcceptanceClassification.CONFLICTING
-            elif row.source_job_id != estimate.source_job_id or row.native_job_id != estimate.native_job_id:
+            elif (
+                row.source_job_id != estimate.source_job_id
+                or row.native_job_id != estimate.native_job_id
+            ):
                 conditions.append("JOB_RELATIONSHIP_CONFLICT")
                 classification = AcceptanceClassification.CONFLICTING
         if (row.total_amount is not None and row.total_amount < 0) or (
@@ -190,15 +236,32 @@ def _invoice_findings(
         ):
             conditions.append("INVALID_AR_AMOUNT")
             classification = AcceptanceClassification.CONFLICTING
-        elif row.total_amount is not None and row.open_amount is not None and row.open_amount > row.total_amount:
+        elif (
+            row.total_amount is not None
+            and row.open_amount is not None
+            and row.open_amount > row.total_amount
+        ):
             conditions.append("OPEN_BALANCE_EXCEEDS_INVOICE")
             classification = AcceptanceClassification.CONFLICTING
         elif classification is AcceptanceClassification.MATCHED and (
-            row.currency is None or row.total_amount is None or row.open_amount is None or row.status is None or not row.line_evidence_complete
+            row.currency is None
+            or row.total_amount is None
+            or row.open_amount is None
+            or row.status is None
+            or not row.line_evidence_complete
         ):
             conditions.append("INVOICE_AR_SOURCE_EVIDENCE_PARTIAL")
             classification = AcceptanceClassification.PARTIAL
-        findings.append(CommercialAcceptanceFinding(CommercialDomain.INVOICE_AR, source_id, classification, tuple(sorted(set(conditions))), row.source_digest, row.native_evidence_digest))
+        findings.append(
+            CommercialAcceptanceFinding(
+                CommercialDomain.INVOICE_AR,
+                source_id,
+                classification,
+                tuple(sorted(set(conditions))),
+                row.source_digest,
+                row.native_evidence_digest,
+            )
+        )
     return tuple(findings)
 
 
@@ -210,14 +273,58 @@ def verify_cross_domain_chain(
     company_id: UUID,
     branch_id: UUID,
 ) -> CrossDomainAcceptanceReport:
-    if len(estimates) > MAX_COMMERCIAL_RECORDS or len(invoices) > MAX_COMMERCIAL_RECORDS:
+    if (
+        len(estimates) > MAX_COMMERCIAL_RECORDS
+        or len(invoices) > MAX_COMMERCIAL_RECORDS
+    ):
         raise ValueError("commercial acceptance input exceeds its bound")
-    if operational_report.company_id != company_id or operational_report.branch_id != branch_id:
+    if (
+        operational_report.company_id != company_id
+        or operational_report.branch_id != branch_id
+    ):
         raise ValueError("operational acceptance scope does not match commercial scope")
     operational_job_sources = frozenset(
-        item.source_id for item in operational_report.findings if item.stage == "LINEAGE" and item.domain == "JOB"
+        item.source_id
+        for item in operational_report.findings
+        if item.stage == "LINEAGE" and item.domain == "JOB"
     )
-    findings = tuple(sorted((*_estimate_findings(estimates, company_id=company_id, branch_id=branch_id, operational_job_sources=operational_job_sources), *_invoice_findings(invoices, estimates, company_id=company_id, branch_id=branch_id, operational_job_sources=operational_job_sources)), key=lambda item: (item.domain.value, item.source_id)))
-    counts = dict(sorted(Counter(item.classification.value for item in findings).items()))
-    digest = _digest({"contract": CONTRACT_VERSION, "operational_report_digest": operational_report.evidence_digest, "findings": [asdict(item) for item in findings]})
-    return CrossDomainAcceptanceReport(CONTRACT_VERSION, company_id, branch_id, operational_report.evidence_digest, operational_report.counts, findings, counts, digest)
+    findings = tuple(
+        sorted(
+            (
+                *_estimate_findings(
+                    estimates,
+                    company_id=company_id,
+                    branch_id=branch_id,
+                    operational_job_sources=operational_job_sources,
+                ),
+                *_invoice_findings(
+                    invoices,
+                    estimates,
+                    company_id=company_id,
+                    branch_id=branch_id,
+                    operational_job_sources=operational_job_sources,
+                ),
+            ),
+            key=lambda item: (item.domain.value, item.source_id),
+        )
+    )
+    counts = dict(
+        sorted(Counter(item.classification.value for item in findings).items())
+    )
+    digest = _digest(
+        {
+            "contract": CONTRACT_VERSION,
+            "operational_report_digest": operational_report.evidence_digest,
+            "findings": [asdict(item) for item in findings],
+        }
+    )
+    return CrossDomainAcceptanceReport(
+        CONTRACT_VERSION,
+        company_id,
+        branch_id,
+        operational_report.evidence_digest,
+        operational_report.counts,
+        findings,
+        counts,
+        digest,
+    )

@@ -3,8 +3,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
@@ -12,6 +10,7 @@ from app.platform.employees.models import Employee
 from app.platform.users.models import User
 from app.workforce.real_roster import REAL_ALL_COUNTY_ROSTER, RealRosterRole
 from app.workforce.real_roster_service import RealRosterService
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture

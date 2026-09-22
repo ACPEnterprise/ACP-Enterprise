@@ -4,6 +4,8 @@ from decimal import Decimal
 import httpx
 import pytest
 import pytest_asyncio
+from app.analytics.service import AnalyticsService
+from app.core.config import settings
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -11,8 +13,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.analytics.service import AnalyticsService
-from app.core.config import settings
 from tests.analytics.test_analytics import (
     build_app,
     seed_analytics_fixture,

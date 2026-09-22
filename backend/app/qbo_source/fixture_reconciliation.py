@@ -55,9 +55,7 @@ def reconcile_fixture(
         "invoice_gross": _sum(selected, "invoice", "TotalAmt"),
         "customer_payments": _sum(selected, "payment", "TotalAmt"),
         "customer_credit": _sum_credit(selected, "credit_memo"),
-        "ar_outstanding_before_unapplied_credit": _sum(
-            selected, "invoice", "Balance"
-        ),
+        "ar_outstanding_before_unapplied_credit": _sum(selected, "invoice", "Balance"),
         "bill_gross": _sum(selected, "bill", "TotalAmt"),
         "bill_payments": _sum(selected, "bill_payment", "TotalAmt"),
         "vendor_credit": _sum_credit(selected, "vendor_credit"),
@@ -83,9 +81,7 @@ def reconcile_fixture(
         "journal_balanced": values["journal_debits"] == values["journal_credits"],
         "payment_applications_exact": _linked_total(selected, "payment")
         == values["customer_payments"],
-        "bill_payment_applications_exact": _linked_total(
-            selected, "bill_payment"
-        )
+        "bill_payment_applications_exact": _linked_total(selected, "bill_payment")
         == values["bill_payments"],
         "transfer_neutral": values["transfer_net_income_effect"] == 0,
         "all_expected_values_match": all(value == 0 for value in deltas.values()),
@@ -116,7 +112,10 @@ def _sum(
     selected: Mapping[str, list[QboSourceEnvelope]], family: str, field: str
 ) -> Decimal:
     return sum(
-        (Decimal(str(item.raw_payload.get(field, 0))) for item in selected.get(family, [])),
+        (
+            Decimal(str(item.raw_payload.get(field, 0)))
+            for item in selected.get(family, [])
+        ),
         Decimal(0),
     )
 
@@ -129,7 +128,10 @@ def _sum_credit(
             Decimal(
                 str(
                     item.raw_payload.get(
-                        "RemainingCredit", item.raw_payload.get("Balance", item.raw_payload.get("TotalAmt", 0))
+                        "RemainingCredit",
+                        item.raw_payload.get(
+                            "Balance", item.raw_payload.get("TotalAmt", 0)
+                        ),
                     )
                 )
             )
@@ -151,7 +153,10 @@ def _journal_total(
             if not isinstance(line, Mapping):
                 continue
             detail = line.get("JournalEntryLineDetail")
-            if isinstance(detail, Mapping) and detail.get("PostingType") == posting_type:
+            if (
+                isinstance(detail, Mapping)
+                and detail.get("PostingType") == posting_type
+            ):
                 total += Decimal(str(line.get("Amount", 0)))
     return total
 

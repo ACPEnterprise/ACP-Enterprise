@@ -53,8 +53,8 @@ def digest(value: object) -> str:
 
 def decimal_days(value: timedelta) -> Decimal:
     microseconds = (
-        (value.days * 86_400 + value.seconds) * 1_000_000 + value.microseconds
-    )
+        value.days * 86_400 + value.seconds
+    ) * 1_000_000 + value.microseconds
     return Decimal(microseconds) / Decimal(86_400_000_000)
 
 
@@ -219,9 +219,7 @@ class ProcurementMatchingService:
                     or not context.can_access_branch(replay_order.branch_id)
                     or not context.can_access_branch(replay_bill.branch_id)
                 ):
-                    raise ProcurementMatchingNotFound(
-                        "PO or Vendor Bill was not found"
-                    )
+                    raise ProcurementMatchingNotFound("PO or Vendor Bill was not found")
                 if (
                     replay.purchase_order_id != payload.purchase_order_id
                     or replay.vendor_bill_id != payload.vendor_bill_id
@@ -244,8 +242,7 @@ class ProcurementMatchingService:
             )
             if (
                 existing_bill_match is not None
-                and existing_bill_match.purchase_order_id
-                != payload.purchase_order_id
+                and existing_bill_match.purchase_order_id != payload.purchase_order_id
             ):
                 raise ProcurementMatchingConflict(
                     "Vendor Bill already has contradictory matching authority"
@@ -1239,10 +1236,12 @@ async def _current_source_digest(
     lock_order: bool = False,
 ) -> str | None:
     order_query = select(PurchaseOrder).where(
-            PurchaseOrder.company_id == match.company_id,
-            PurchaseOrder.id == match.purchase_order_id,
-        )
-    order = await session.scalar(order_query.with_for_update() if lock_order else order_query)
+        PurchaseOrder.company_id == match.company_id,
+        PurchaseOrder.id == match.purchase_order_id,
+    )
+    order = await session.scalar(
+        order_query.with_for_update() if lock_order else order_query
+    )
     revision = await session.scalar(
         select(BillRevision).where(
             BillRevision.company_id == match.company_id,

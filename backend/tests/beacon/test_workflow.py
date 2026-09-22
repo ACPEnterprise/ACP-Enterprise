@@ -308,7 +308,9 @@ async def test_contradictory_replay_version_fails_closed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_assign_requires_unowned_state_and_transfer_requires_owned_state() -> None:
+async def test_assign_requires_unowned_state_and_transfer_requires_owned_state() -> (
+    None
+):
     service = BeaconWorkflowService()
 
     async def accept_owner(*_args):

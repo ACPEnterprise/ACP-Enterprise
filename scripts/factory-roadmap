@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ROADMAP = ROOT / "docs" / "factory" / "acp_full_system_roadmap.yaml"
 
@@ -76,7 +75,6 @@ PULLABLE = {
     "ENGINEERING_READY",
     "INTEGRATED",
     "DEPLOYED_BETA",
-    "OWNER_ACCEPTANCE_REQUIRED",
 }
 
 
@@ -189,6 +187,7 @@ def eligible(data: dict[str, Any], *, factory: str | None = None) -> list[dict[s
         item
         for item in items
         if item["lifecycle_status"] in PULLABLE
+        and item["owner_acceptance_status"] != "OWNER_ACCEPTANCE_REQUIRED"
         and (factory is None or item["owning_factory"] == factory)
         and dependency_safe(item, by_id)
         and not has_actionable_direct_successor(item)

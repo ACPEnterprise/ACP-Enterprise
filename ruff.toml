@@ -1,0 +1,8 @@
+extend-exclude = ["backend/alembic/versions"]
+
+[lint.per-file-ignores]
+"backend/app/platform/bootstrap/__main__.py" = ["BLE001"]
+"backend/app/platform/permissions/sync_catalog.py" = ["BLE001"]
+"backend/development_factory/owner_review.py" = ["BLE001"]
+"backend/tests/jobs/test_jobs_query.py" = ["DTZ001"]
+"backend/tests/platform/test_authorization_service.py" = ["B008"]
