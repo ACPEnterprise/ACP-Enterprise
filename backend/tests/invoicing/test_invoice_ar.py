@@ -6,6 +6,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customer_migration.models import CustomerMigrationRun, CustomerSourceIdentity
 from app.customers.models import Customer
@@ -35,10 +38,9 @@ from app.jobs.models import Job
 from app.operational_migration import (
     models as operational_migration_models,  # noqa: F401
 )
+from app.payments.money_authority import MoneyAuthorityService
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tests.estimates.test_estimate_conversion import (
     approved_estimate,
     conversion_spec,
@@ -99,6 +101,33 @@ async def issue(factory, actor, invoice):
     )
     async with factory() as session:
         return await InvoiceService().issue(session, spec)
+
+
+@pytest.mark.asyncio
+async def test_money_projection_due_today_uses_exact_remaining_invoice_balance(
+    invoice_fixture,
+):
+    factory, company, branch, actor, customer, _, spec = invoice_fixture
+    async with factory() as session:
+        invoice = await InvoiceService().create_from_estimate(session, spec)
+    invoice = await issue(factory, actor, invoice)
+    async with factory() as session:
+        result = await MoneyAuthorityService().projection(
+            session,
+            company_id=company.id,
+            authorized_branch_ids=frozenset({branch.id}),
+            period_start=spec.due_date,
+            period_end=spec.due_date,
+            as_of=spec.due_date,
+            branch_id=branch.id,
+        )
+    due = result["accounts_receivable_due_today"]
+    assert due["invoice_count"] == 1
+    assert due["amount"] == invoice.open_amount
+    assert due["items"][0]["invoice_id"] == invoice.id
+    assert due["items"][0]["customer_id"] == customer.id
+    assert result["expected_collections_today"]["amount"] is None
+    assert result["expected_collections_today"]["evidence_state"] == "INCOMPLETE"
 
 
 @pytest.mark.asyncio
