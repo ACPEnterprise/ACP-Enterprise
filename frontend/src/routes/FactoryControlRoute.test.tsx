@@ -20,6 +20,7 @@ const overview: api.FactoryControlOverview = {
   active_p0: [{ milestone_code: "PAYROLL.1", title: "Payroll", priority: "P0", lifecycle_status: "ACTIVE", engineering_status: "ACTIVE", owner_acceptance_status: "BLOCKED", next_admissible_action: "Finish Payroll." }],
   active_p1: [], current_bottleneck: { milestone_code: "PAYROLL.1", title: "Payroll", priority: "P0", lifecycle_status: "ACTIVE", engineering_status: "ACTIVE", owner_acceptance_status: "BLOCKED", next_admissible_action: "Finish Payroll." },
   recent_movements: [{ id: "event-1", event_type: "engineering_complete", milestone_code: "RELEASE.1", lane_code: "OM1-A", occurred_at: "2026-09-17T19:45:00Z" }],
+  real_operational_acceptance: [{ acceptance_id: "ROA-001", surface: "Customers", milestone_code: "CUSTOMERS.1", owner_task: "Refresh source reconciliation.", real_data_required: "Authoritative provider Customers.", current_result: "SERVICE UNREACHABLE.", blocker: "Repair the source reconciliation path.", owning_domain: "OM2-A / Customers", priority: "P0", status: "DEFECT", beta_operable: false, owner_accepted: false, evidence: ["Issue #432"] }],
   metrics: { represented_milestones: 100, superseded_milestones: 0, closed_count: 81, engineering_count: 76, beta_count: 63, owner_count: 54, closed_percent: 81, engineering_percent: 76, beta_percent: 63, owner_percent: 54, engineering_remaining_weight: 24, human_gated_remaining_weight: 10, provider_gated_remaining_weight: 2, weighted_delivery_percent: 65, delivery_1d_percent: 5, delivery_3d_percent: 17, delivery_7d_percent: 39, open_defects: 2, defects_discovered: 4, defects_closed: 2, defects_reopened: 1, open_gates: 1, utilization_percent: 50, effective_utilization_percent: 50, eligible_idle_seconds: 300, pickup_latency_seconds: 3600, domain_pickup_latency_seconds: 1800, release_pickup_latency_seconds: 3600, release_latency_seconds: 900, queue_depth: 3, oldest_handoff_seconds: 7200, rework_rate_percent: 10, first_pass_yield_percent: 90, event_history_status: "MEASURED", lane_history_status: "MEASURED", velocity_history_status: "MEASURED" },
   lanes: [
     { lane_code: "OM1-A", milestone_code: "RELEASE.1", lifecycle_state: "ELIGIBLE_IDLE", queue_depth: 1, machine: "om1-host", current_assignment: "RELEASE.1", next_queued_item: "SECURITY.2", controlling_enterprise: "OM1E", self_refill_health: "ELIGIBLE_IDLE", idle_duration_seconds: 300, sla_state: "HEALTHY", sla_violations: [], last_event_at: "2026-09-17T19:00:00Z" },
@@ -41,6 +42,8 @@ describe("FactoryControlRoute", () => {
     expect(screen.getByText("RELEASE.1")).toBeVisible();
     expect(screen.getByText(/Reopened: 1/)).toBeVisible();
     expect(screen.getByText(/1d 5.0%/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Real Operational Acceptance" })).toBeVisible();
+    expect(screen.getByText("SERVICE UNREACHABLE.")).toBeVisible();
     expect(screen.queryByRole("button", { name: /dispatch|start|retry|deploy/i })).not.toBeInTheDocument();
   });
 

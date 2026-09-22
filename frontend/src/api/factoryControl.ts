@@ -69,6 +69,22 @@ export type FactoryBacklogItem = {
   next_admissible_action?: string | null;
 };
 
+export type RealOperationalAcceptanceSurface = {
+  acceptance_id: string;
+  surface: string;
+  milestone_code: string;
+  owner_task: string;
+  real_data_required: string;
+  current_result: string;
+  blocker: string;
+  owning_domain: string;
+  priority: "P0" | "P1" | "P2" | "P3";
+  status: "NOT_TESTED" | "PASS" | "DEFECT" | "HUMAN_INPUT_REQUIRED" | "PROVIDER_GATE";
+  beta_operable: boolean;
+  owner_accepted: boolean;
+  evidence: string[];
+};
+
 export type FactoryControlOverview = {
   roadmap_digest: string;
   roadmap_milestones: number;
@@ -94,6 +110,7 @@ export type FactoryControlOverview = {
   latest_snapshot_at?: string | null;
   last_controller_ingestion_at?: string | null;
   telemetry_freshness: "LIVE" | "STALE" | "NOT_YET_MEASURED";
+  real_operational_acceptance: RealOperationalAcceptanceSurface[];
 };
 
 export type FactoryControlFilters = { lane?: string };

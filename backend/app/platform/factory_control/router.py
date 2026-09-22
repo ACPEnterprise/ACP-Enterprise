@@ -29,6 +29,7 @@ from app.platform.factory_control.schemas import (
     FactoryMetricsResponse,
     FactoryOverviewResponse,
     FactorySnapshotIn,
+    OperationalAcceptanceSurfaceResponse,
 )
 from app.platform.factory_control.service import (
     FactoryEventConflict,
@@ -269,9 +270,29 @@ async def overview(
         and item["lifecycle_status"]
         not in {"HUMAN_GATE", "PROVIDER_GATE", "OWNER_ACCEPTANCE_REQUIRED"}
     ]
-    current_bottleneck: dict[str, object] | None = next(
-        iter(bottlenecks or active_p0 or active_p1), None
+    priority_rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+    acceptance_defects = sorted(
+        (
+            item
+            for item in roadmap.operational_acceptance
+            if item.status == "DEFECT"
+        ),
+        key=lambda item: (priority_rank[item.priority], item.acceptance_id),
     )
+    current_bottleneck: dict[str, object] | None
+    if acceptance_defects:
+        physical = acceptance_defects[0]
+        current_bottleneck = {
+            "milestone_code": physical.milestone_code,
+            "title": f"Real operational acceptance: {physical.surface}",
+            "priority": physical.priority,
+            "lifecycle_status": physical.status,
+            "engineering_status": "ACTIVE",
+            "owner_acceptance_status": "BLOCKED",
+            "next_admissible_action": physical.blocker,
+        }
+    else:
+        current_bottleneck = next(iter(bottlenecks or active_p0 or active_p1), None)
     roadmap_actions = [
         action
         for item in roadmap.milestones
@@ -324,6 +345,24 @@ async def overview(
         latest_snapshot_at=latest_snapshot_at,
         last_controller_ingestion_at=last_controller_ingestion_at,
         telemetry_freshness=freshness,
+        real_operational_acceptance=[
+            OperationalAcceptanceSurfaceResponse(
+                acceptance_id=item.acceptance_id,
+                surface=item.surface,
+                milestone_code=item.milestone_code,
+                owner_task=item.owner_task,
+                real_data_required=item.real_data_required,
+                current_result=item.current_result,
+                blocker=item.blocker,
+                owning_domain=item.owning_domain,
+                priority=item.priority,
+                status=item.status,
+                beta_operable=item.beta_operable,
+                owner_accepted=item.owner_accepted,
+                evidence=list(item.evidence),
+            )
+            for item in roadmap.operational_acceptance
+        ],
     )
 
 

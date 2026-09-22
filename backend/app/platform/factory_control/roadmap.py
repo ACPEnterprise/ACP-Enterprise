@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from app.platform.security.safe_output import (
     sanitize_text,
@@ -36,7 +36,31 @@ class RoadmapMilestone:
 @dataclass(frozen=True)
 class FactoryRoadmap:
     milestones: tuple[RoadmapMilestone, ...]
+    operational_acceptance: tuple[OperationalAcceptanceSurface, ...]
     digest: str
+
+
+@dataclass(frozen=True)
+class OperationalAcceptanceSurface:
+    acceptance_id: str
+    surface: str
+    milestone_code: str
+    owner_task: str
+    real_data_required: str
+    current_result: str
+    blocker: str
+    owning_domain: str
+    priority: Literal["P0", "P1", "P2", "P3"]
+    status: Literal[
+        "NOT_TESTED",
+        "PASS",
+        "DEFECT",
+        "HUMAN_INPUT_REQUIRED",
+        "PROVIDER_GATE",
+    ]
+    beta_operable: bool
+    owner_accepted: bool
+    evidence: tuple[str, ...]
 
 
 def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadmap:
@@ -136,6 +160,90 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
 
     for code in graph:
         visit(code)
+
+    acceptance_document = document.get("real_operational_acceptance", {})
+    if acceptance_document is None:
+        acceptance_document = {}
+    if not isinstance(acceptance_document, dict):
+        raise RoadmapError("real operational acceptance must be an object")
+    acceptance_rows = acceptance_document.get("surfaces", [])
+    if not isinstance(acceptance_rows, list):
+        raise RoadmapError("real operational acceptance surfaces must be a list")
+    acceptance: list[OperationalAcceptanceSurface] = []
+    seen_acceptance_ids: set[str] = set()
+    seen_surfaces: set[str] = set()
+    accepted_statuses = {
+        "NOT_TESTED",
+        "PASS",
+        "DEFECT",
+        "HUMAN_INPUT_REQUIRED",
+        "PROVIDER_GATE",
+    }
+    for row in acceptance_rows:
+        if not isinstance(row, dict):
+            raise RoadmapError("operational acceptance surface must be an object")
+        required_strings = (
+            "id",
+            "surface",
+            "milestone_id",
+            "owner_task",
+            "real_data_required",
+            "current_result",
+            "blocker",
+            "owning_domain",
+            "priority",
+            "status",
+        )
+        if any(
+            not isinstance(row.get(field), str) or not row[field].strip()
+            for field in required_strings
+        ):
+            raise RoadmapError(
+                "operational acceptance surface is missing a required field"
+            )
+        if row["id"] in seen_acceptance_ids or row["surface"] in seen_surfaces:
+            raise RoadmapError("operational acceptance identity is duplicated")
+        if row["milestone_id"] not in codes:
+            raise RoadmapError("operational acceptance milestone is unknown")
+        if row["status"] not in accepted_statuses:
+            raise RoadmapError("operational acceptance status is invalid")
+        if row["priority"] not in {"P0", "P1", "P2", "P3"}:
+            raise RoadmapError("operational acceptance priority is invalid")
+        if not isinstance(row.get("beta_operable"), bool) or not isinstance(
+            row.get("owner_accepted"), bool
+        ):
+            raise RoadmapError("operational acceptance truth flags are required")
+        if row["status"] == "PASS":
+            if not row["beta_operable"] or not row["owner_accepted"]:
+                raise RoadmapError("operational acceptance PASS requires owner proof")
+        elif row["beta_operable"] or row["owner_accepted"]:
+            raise RoadmapError(
+                "non-PASS operational acceptance cannot claim completion"
+            )
+        evidence = row.get("evidence", [])
+        if not isinstance(evidence, list) or any(
+            not isinstance(item, str) or not item.strip() for item in evidence
+        ):
+            raise RoadmapError("operational acceptance evidence is invalid")
+        seen_acceptance_ids.add(row["id"])
+        seen_surfaces.add(row["surface"])
+        acceptance.append(
+            OperationalAcceptanceSurface(
+                acceptance_id=row["id"],
+                surface=row["surface"],
+                milestone_code=row["milestone_id"],
+                owner_task=row["owner_task"],
+                real_data_required=row["real_data_required"],
+                current_result=row["current_result"],
+                blocker=row["blocker"],
+                owning_domain=row["owning_domain"],
+                priority=row["priority"],
+                status=row["status"],
+                beta_operable=row["beta_operable"],
+                owner_accepted=row["owner_accepted"],
+                evidence=tuple(evidence),
+            )
+        )
     canonical = json.dumps(
         document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     ).encode()
@@ -149,7 +257,7 @@ def load_roadmap(path: Path, *, digest_path: Path | None = None) -> FactoryRoadm
             ) from error
         if expected_digest != digest:
             raise RoadmapError("packaged factory roadmap digest does not match")
-    return FactoryRoadmap(tuple(milestones), digest)
+    return FactoryRoadmap(tuple(milestones), tuple(acceptance), digest)
 
 
 def safe_event_details(details: dict[str, Any]) -> dict[str, Any]:

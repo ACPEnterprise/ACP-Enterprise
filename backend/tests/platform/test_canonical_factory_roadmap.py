@@ -121,3 +121,41 @@ def test_closed_is_not_inferred_from_deployment() -> None:
     assert pricebook["owner_acceptance_status"] == "OWNER_ACCEPTANCE_REQUIRED"
     assert pricebook["lifecycle_status"] != "CLOSED"
     assert by_id["BETA.DOMAIN.ACTIVATION"]["lifecycle_status"] == "CLOSED"
+
+
+def test_real_operational_acceptance_is_truthful_and_complete() -> None:
+    data = roadmap()
+    surfaces = data["real_operational_acceptance"]["surfaces"]
+    required = {
+        "Customers",
+        "Customer Search",
+        "Customer Detail",
+        "Locations",
+        "Service Agreements",
+        "My Day",
+        "My Time Clock",
+        "Scheduling",
+        "Jobs",
+        "Dispatch",
+        "Estimates",
+        "Price Book",
+        "Invoices",
+        "Payments",
+        "Payroll",
+        "Revenue Cycle",
+        "Accounts Payable",
+        "Financial Reports",
+        "Inventory",
+        "Purchasing",
+        "Administration",
+        "Factory Control",
+    }
+    assert {item["surface"] for item in surfaces} == required
+    assert all(
+        (item["status"] == "PASS")
+        == (item["beta_operable"] and item["owner_accepted"])
+        for item in surfaces
+    )
+    assert {
+        item["surface"] for item in surfaces if item["status"] == "DEFECT"
+    } == {"Customers", "Customer Search", "Service Agreements", "My Day", "Scheduling", "Payroll"}
