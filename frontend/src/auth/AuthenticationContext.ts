@@ -11,6 +11,7 @@ export interface AuthenticationContextValue {
   signIn: (credentials: LoginCredentials) => Promise<void>;
   signOut: () => Promise<void>;
   signOutAll: () => Promise<void>;
+  refreshAuthorization: () => Promise<void>;
   requireReauthentication: () => void;
 }
 

@@ -20,6 +20,8 @@ export interface CompanyMembership {
   display_name: string | null;
   email: string | null;
   branch_name: string | null;
+  role_ids: string[];
+  role_codes: string[];
 }
 
 export interface RoleCreateInput {
@@ -306,6 +308,13 @@ export async function assignMembershipRole(
   roleId: string,
 ): Promise<void> {
   await apiClient.put(`${ADMIN_PATH}/memberships/${membershipId}/roles/${roleId}`);
+}
+
+export async function revokeMembershipRole(
+  membershipId: string,
+  roleId: string,
+): Promise<void> {
+  await apiClient.delete(`${ADMIN_PATH}/memberships/${membershipId}/roles/${roleId}`);
 }
 
 export async function getCanonicalRoleSyncPlan(): Promise<CanonicalRoleSyncPlan> {

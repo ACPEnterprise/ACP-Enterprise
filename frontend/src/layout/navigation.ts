@@ -277,10 +277,10 @@ export const navigationCatalog = [
   {
     id: "factory-control",
     label: "Factory Control",
-    path: "/admin/factory-control",
+    path: "/administration/factory-control",
     icon: Factory,
     availability: "available",
-    requiredPermission: "COMPANY_ADMINISTER",
+    requiredPermission: "PLATFORM_FACTORY_CONTROL_READ",
   },
   {
     id: "settings",

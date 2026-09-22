@@ -15,6 +15,7 @@ function renderLogin(signIn: AuthenticationContextValue["signIn"]) {
     signIn,
     signOut: vi.fn(),
     signOutAll: vi.fn(),
+    refreshAuthorization: vi.fn(),
     requireReauthentication: vi.fn(),
   };
   const router = createMemoryRouter([{ path: "/login", Component: LoginRoute }, { path: "/mission-control", element: <p>Mission Control loaded</p> }], { initialEntries: ["/login"] });
@@ -24,7 +25,7 @@ function renderLogin(signIn: AuthenticationContextValue["signIn"]) {
 function renderAuthorizationRefresh(signIn: AuthenticationContextValue["signIn"]) {
   const context: AuthenticationContextValue = {
     status: "unauthenticated", activeCompany: null, user: null, signIn,
-    signOut: vi.fn(), signOutAll: vi.fn(), requireReauthentication: vi.fn(),
+    signOut: vi.fn(), signOutAll: vi.fn(), refreshAuthorization: vi.fn(), requireReauthentication: vi.fn(),
   };
   const router = createMemoryRouter([{ path: "/login", Component: LoginRoute }, { path: "/administration", element: <p>Administration loaded</p> }], { initialEntries: [{ pathname: "/login", state: { from: "/administration", authorizationChanged: true } }] });
   render(<ThemeProvider preference="dark"><AuthenticationContext.Provider value={context}><RouterProvider router={router} /></AuthenticationContext.Provider></ThemeProvider>);

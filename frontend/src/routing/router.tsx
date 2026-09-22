@@ -328,6 +328,13 @@ export const appRoutes: RouteObject[] = [
             }),
           },
           {
+            path: "administration/factory-control",
+            handle: factoryControlHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/FactoryControlRoute")).FactoryControlRoute,
+            }),
+          },
+          {
             path: "admin/factory-control",
             handle: factoryControlHandle,
             lazy: async () => ({

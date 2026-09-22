@@ -2,7 +2,7 @@ import axios from "axios";
 import { Search, ShieldCheck, Unplug } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 
 import { useAuth } from "../../auth";
 import {
@@ -32,6 +32,7 @@ import {
   useCreateRole,
   useMemberships,
   usePermissionMutation,
+  useRevokeMembershipRole,
   useRolePermissions,
   useRoles,
 } from "./hooks";
@@ -47,9 +48,8 @@ function errorStatus(error: unknown): number | undefined {
 }
 
 export function AdministrationRoute() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { permissionCodes = [], requireReauthentication } = useAuth();
+  const { permissionCodes = [], refreshAuthorization } = useAuth();
   const canAdminister = permissionCodes.includes("COMPANY_ADMINISTER");
   const canReadRoles = permissionCodes.includes("COMPANY_ROLE_READ");
   const canManagePermissions = permissionCodes.includes("COMPANY_PERMISSION_MANAGE");
@@ -63,6 +63,7 @@ export function AdministrationRoute() {
   const memberships = useMemberships(canUseRoleWorkflow);
   const createRole = useCreateRole();
   const assignMembershipRole = useAssignMembershipRole();
+  const revokeMembershipRole = useRevokeMembershipRole();
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole =
     roles.data?.find((role) => role.id === selectedRoleId) ??
@@ -76,6 +77,7 @@ export function AdministrationRoute() {
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [membershipId, setMembershipId] = useState("");
+  const [desiredRoleIds, setDesiredRoleIds] = useState<Set<string>>(new Set());
   const [qboPending, setQboPending] = useState(false);
   const [qboError, setQboError] = useState(false);
   const [qboProductionPending, setQboProductionPending] = useState(false);
@@ -88,6 +90,12 @@ export function AdministrationRoute() {
   const mutation = usePermissionMutation(pending?.action ?? "grant");
   const activeMemberships = (memberships.data ?? []).filter(
     (membership) => membership.status === "active",
+  );
+  const selectedMembership = activeMemberships.find(
+    (membership) => membership.id === membershipId,
+  );
+  const assignableRoles = (roles.data ?? []).filter(
+    (role) => role.status === "active" && role.code !== "OWNER",
   );
 
   const submitRole = async (event: FormEvent<HTMLFormElement>) => {
@@ -109,31 +117,36 @@ export function AdministrationRoute() {
     }
   };
 
-  const submitMembershipRole = async (event: FormEvent<HTMLFormElement>) => {
+  const submitMembershipRoles = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedRole || !activeMemberships.some((item) => item.id === membershipId))
-      return;
+    if (!selectedMembership) return;
     setMutationError(null);
     try {
-      await assignMembershipRole.mutateAsync({ membershipId, roleId: selectedRole.id });
-      requireReauthentication();
-      await navigate("/login", {
-        replace: true,
-        state: { from: "/administration", authorizationChanged: true },
-      });
+      const current = new Set(selectedMembership.role_ids);
+      const additions = [...desiredRoleIds].filter((roleId) => !current.has(roleId));
+      const removals = [...current].filter(
+        (roleId) =>
+          !desiredRoleIds.has(roleId) &&
+          assignableRoles.some((role) => role.id === roleId),
+      );
+      for (const roleId of additions) {
+        await assignMembershipRole.mutateAsync({ membershipId, roleId });
+      }
+      for (const roleId of removals) {
+        await revokeMembershipRole.mutateAsync({ membershipId, roleId });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["administration", "memberships"] });
+      await refreshAuthorization();
     } catch {
-      setMutationError("The role assignment was not accepted. Company and Branch access were unchanged.");
+      setMutationError("The access change was not accepted. Refresh and review current authority before retrying.");
     }
   };
 
   const applyCanonicalRoles = async () => {
     if (!canonicalRoles.data?.safe_to_apply) return;
     await canonicalRoleSync.mutateAsync(canonicalRoles.data.plan_digest);
-    requireReauthentication();
-    await navigate("/login", {
-      replace: true,
-      state: { from: "/administration", authorizationChanged: true },
-    });
+    await refreshAuthorization();
+    await queryClient.invalidateQueries({ queryKey: ["administration"] });
   };
 
   useEffect(() => {
@@ -191,11 +204,8 @@ export function AdministrationRoute() {
         permissionId: pending.permission.id,
       });
       setPending(null);
-      requireReauthentication();
-      await navigate("/login", {
-        replace: true,
-        state: { from: "/administration", authorizationChanged: true },
-      });
+      await refreshAuthorization();
+      await queryClient.invalidateQueries({ queryKey: ["administration"] });
     } catch {
       setMutationError(
         "The permission change was not accepted. Your role was not changed.",
@@ -257,6 +267,24 @@ export function AdministrationRoute() {
         <Alert variant="danger" announcement="assertive">
           {mutationError}
         </Alert>
+      )}
+      {permissionCodes.includes("PLATFORM_FACTORY_CONTROL_READ") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Factory Control</CardTitle>
+            <CardDescription>
+              View the private Twelve Hats roadmap, scorecard, gates, and live Factory state.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-action-primary px-ui-4 text-body-s font-semibold text-content-inverse"
+              to="/administration/factory-control"
+            >
+              Open Factory Control
+            </Link>
+          </CardContent>
+        </Card>
       )}
       {permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && (
         <Card>
@@ -580,7 +608,7 @@ export function AdministrationRoute() {
                           {permission.description || permission.name}
                         </p>
                       </div>
-                      {canManagePermissions && <Button
+                      {canManagePermissions && selectedRole.code !== "OWNER" && <Button
                         className="shrink-0 sm:min-w-28"
                         variant={permission.assigned ? "outline" : "primary"}
                         disabled={!permission.assignable}
@@ -601,28 +629,34 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
-      {canUseRoleWorkflow && selectedRole && (
+      {canUseRoleWorkflow && (
         <Card>
           <CardHeader>
-            <CardTitle>Assign role to active Membership</CardTitle>
+            <CardTitle>Users / Employees / Access</CardTitle>
             <CardDescription>
-              Assign {selectedRole.name} within the current Company. This action does
-              not add or change Company or Branch access. Each option identifies the
-              person receiving the role.
+              Choose a person, select normal job roles, and save once. Canonical Owner
+              authority is protected by its separate high-risk workflow.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {memberships.isError ? (
               <Alert variant="danger">Visible Memberships could not be loaded.</Alert>
             ) : (
-              <form className="grid gap-ui-3" onSubmit={(event) => void submitMembershipRole(event)}>
+              <form className="grid gap-ui-4" onSubmit={(event) => void submitMembershipRoles(event)}>
                 <label>
                   <span className="text-body-s font-semibold">Active Membership</span>
                   <select
                     aria-label="Active Membership"
                     className="mt-ui-2 min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3"
                     value={membershipId}
-                    onChange={(event) => setMembershipId(event.target.value)}
+                    onChange={(event) => {
+                      const nextMembershipId = event.target.value;
+                      setMembershipId(nextMembershipId);
+                      const nextMembership = activeMemberships.find(
+                        (membership) => membership.id === nextMembershipId,
+                      );
+                      setDesiredRoleIds(new Set(nextMembership?.role_ids ?? []));
+                    }}
                   >
                     <option value="">Select active Membership</option>
                     {activeMemberships.map((membership) => (
@@ -635,8 +669,37 @@ export function AdministrationRoute() {
                     ))}
                   </select>
                 </label>
-                <Button type="submit" disabled={!membershipId} loading={assignMembershipRole.isPending} loadingLabel="Assigning role">
-                  Assign selected role
+                {selectedMembership && (
+                  <fieldset className="grid gap-ui-2 rounded-lg border border-stroke p-ui-4">
+                    <legend className="px-ui-2 text-body-s font-semibold">Roles &amp; Permissions</legend>
+                    {assignableRoles.map((role) => (
+                      <label key={role.id} className="flex min-h-11 items-start gap-ui-3 rounded-md p-ui-2 hover:bg-surface-subtle">
+                        <input
+                          type="checkbox"
+                          className="mt-1 size-4"
+                          checked={desiredRoleIds.has(role.id)}
+                          onChange={(event) => {
+                            const next = new Set(desiredRoleIds);
+                            if (event.target.checked) next.add(role.id);
+                            else next.delete(role.id);
+                            setDesiredRoleIds(next);
+                          }}
+                        />
+                        <span>
+                          <span className="block text-body-s font-semibold">{role.name}</span>
+                          <span className="block text-body-xs text-content-muted">{role.description ?? role.code}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                <Button
+                  type="submit"
+                  disabled={!selectedMembership}
+                  loading={assignMembershipRole.isPending || revokeMembershipRole.isPending}
+                  loadingLabel="Saving access"
+                >
+                  Save access
                 </Button>
               </form>
             )}
@@ -646,7 +709,7 @@ export function AdministrationRoute() {
       {canManagePermissions && pending && selectedRole && (
         <ConfirmationDialog
           title={`${pending.action === "grant" ? "Grant" : "Remove"} permission?`}
-          description={`${pending.permission.code} ${pending.action === "grant" ? "will be granted to" : "will be removed from"} ${selectedRole.name}. You will sign in again after this change.`}
+          description={`${pending.permission.code} ${pending.action === "grant" ? "will be granted to" : "will be removed from"} ${selectedRole.name}. Current authorization will refresh after this one change.`}
           confirmLabel={
             pending.action === "grant"
               ? "Grant permission"

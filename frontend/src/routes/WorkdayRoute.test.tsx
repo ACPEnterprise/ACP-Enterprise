@@ -78,6 +78,7 @@ const auth = (permissions = ["COMPANY_TIMEKEEPING_OWN_READ", "COMPANY_TIMEKEEPIN
   signIn: vi.fn(),
   signOut: vi.fn(),
   signOutAll: vi.fn(),
+  refreshAuthorization: vi.fn(),
   requireReauthentication: vi.fn(),
 });
 

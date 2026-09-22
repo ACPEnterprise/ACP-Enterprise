@@ -83,6 +83,7 @@ const permissions = [
 ];
 
 const requireReauthentication = vi.fn();
+const refreshAuthorization = vi.fn().mockResolvedValue(undefined);
 const context: AuthenticationContextValue = {
   status: "authenticated",
   activeCompany: null,
@@ -98,6 +99,7 @@ const context: AuthenticationContextValue = {
   signIn: vi.fn(),
   signOut: vi.fn(),
   signOutAll: vi.fn(),
+  refreshAuthorization,
   requireReauthentication,
 };
 
@@ -130,14 +132,15 @@ describe("AdministrationRoute", () => {
     context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE", "COMPANY_MEMBERSHIP_READ"];
     vi.mocked(api.listRoles).mockResolvedValue([role]);
     vi.mocked(api.listMemberships).mockResolvedValue([
-      { id: "membership-active", user_id: "owner", company_id: "company-1", status: "active", default_branch_id: "branch-1", has_all_branch_access: false, display_name: "Lianne Hernandez", email: "lianne@example.com", branch_name: "Main Branch" },
-      { id: "membership-same-name", user_id: "other-user", company_id: "company-1", status: "active", default_branch_id: "branch-2", has_all_branch_access: false, display_name: "Lianne Hernandez", email: "other@example.com", branch_name: "North Branch" },
-      { id: "membership-inactive", user_id: "former-user", company_id: "company-1", status: "suspended", default_branch_id: "branch-2", has_all_branch_access: true, display_name: "Former User", email: "former@example.com", branch_name: "North Branch" },
+      { id: "membership-active", user_id: "owner", company_id: "company-1", status: "active", default_branch_id: "branch-1", has_all_branch_access: false, display_name: "Lianne Hernandez", email: "lianne@example.com", branch_name: "Main Branch", role_ids: [], role_codes: [] },
+      { id: "membership-same-name", user_id: "other-user", company_id: "company-1", status: "active", default_branch_id: "branch-2", has_all_branch_access: false, display_name: "Lianne Hernandez", email: "other@example.com", branch_name: "North Branch", role_ids: [], role_codes: [] },
+      { id: "membership-inactive", user_id: "former-user", company_id: "company-1", status: "suspended", default_branch_id: "branch-2", has_all_branch_access: true, display_name: "Former User", email: "former@example.com", branch_name: "North Branch", role_ids: [], role_codes: [] },
     ]);
     vi.mocked(api.createRole).mockResolvedValue({
       id: "role-source4", company_id: "company-1", code: "SOURCE4_PREVIEW_ADMISSION", name: "SOURCE.4 Preview Admission", description: null, status: "active", is_system: false,
     });
     vi.mocked(api.assignMembershipRole).mockResolvedValue(undefined);
+    vi.mocked(api.revokeMembershipRole).mockResolvedValue(undefined);
     vi.mocked(api.listPermissions).mockResolvedValue(permissions);
     vi.mocked(api.grantPermission).mockResolvedValue(undefined);
     vi.mocked(api.removePermission).mockResolvedValue(undefined);
@@ -226,8 +229,9 @@ describe("AdministrationRoute", () => {
     expect(vi.mocked(api.applyCanonicalRoleSync).mock.calls[0]?.[0]).toBe(
       "a".repeat(64),
     );
-    expect(requireReauthentication).toHaveBeenCalled();
-    expect(router.state.location.pathname).toBe("/login");
+    expect(refreshAuthorization).toHaveBeenCalledOnce();
+    expect(requireReauthentication).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/administration");
   });
 
   it("renders assigned and unassigned permissions in a phone-safe single column", async () => {
@@ -353,7 +357,7 @@ describe("AdministrationRoute", () => {
     ).toBeInTheDocument();
   });
 
-  it("confirms a grant then requires fresh authorization and preserves destination", async () => {
+  it("confirms a grant once, refreshes authorization, and stays in Administration", async () => {
     const router = renderPage();
     await userEvent.click(
       (await screen.findAllByRole("button", { name: "Grant" }))[0],
@@ -364,18 +368,14 @@ describe("AdministrationRoute", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Grant permission" }),
     );
-    expect(
-      await screen.findByText("Reauthentication required"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Role Administration")).toBeInTheDocument();
     expect(api.grantPermission).toHaveBeenCalledWith(
       "role-1",
       "permission-read",
     );
-    expect(requireReauthentication).toHaveBeenCalledOnce();
-    expect(router.state.location.state).toEqual({
-      from: "/administration",
-      authorizationChanged: true,
-    });
+    expect(refreshAuthorization).toHaveBeenCalledOnce();
+    expect(requireReauthentication).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/administration");
   });
 
   it("confirms removal and clearly reports a rejected mutation", async () => {
@@ -392,7 +392,7 @@ describe("AdministrationRoute", () => {
         "The permission change was not accepted. Your role was not changed.",
       ),
     ).toBeInTheDocument();
-    expect(requireReauthentication).not.toHaveBeenCalled();
+    expect(refreshAuthorization).not.toHaveBeenCalled();
   });
 
   it("keeps role evidence read-only without permission-manage authority", async () => {
@@ -417,7 +417,7 @@ describe("AdministrationRoute", () => {
     });
   });
 
-  it("assigns the selected role only to a visible active Membership", async () => {
+  it("saves one selected role once for a visible active Membership without login redirect", async () => {
     const router = renderPage();
     const membership = await screen.findByRole("combobox", { name: "Active Membership" });
     expect(
@@ -436,13 +436,58 @@ describe("AdministrationRoute", () => {
       }),
     ).toHaveValue("membership-same-name");
     await userEvent.selectOptions(membership, "membership-active");
-    await userEvent.click(screen.getByRole("button", { name: "Assign selected role" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Company Administrator/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save access" }));
     expect(vi.mocked(api.assignMembershipRole).mock.calls[0]?.slice(0, 2)).toEqual([
       "membership-active",
       "role-1",
     ]);
-    expect(requireReauthentication).toHaveBeenCalledOnce();
-    expect(router.state.location.pathname).toBe("/login");
+    expect(api.assignMembershipRole).toHaveBeenCalledTimes(1);
+    expect(refreshAuthorization).toHaveBeenCalledOnce();
+    expect(requireReauthentication).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/administration");
+  });
+
+  it("revokes one selected role with one save and refreshes in place", async () => {
+    vi.mocked(api.listMemberships).mockResolvedValue([
+      {
+        id: "membership-active",
+        user_id: "user-2",
+        company_id: "company-1",
+        status: "active",
+        default_branch_id: "branch-1",
+        has_all_branch_access: false,
+        display_name: "Authorized User",
+        email: "authorized@example.com",
+        branch_name: "Main Branch",
+        role_ids: ["role-1"],
+        role_codes: ["COMPANY_ADMINISTRATOR"],
+      },
+    ]);
+    const router = renderPage();
+    await userEvent.selectOptions(
+      await screen.findByRole("combobox", { name: "Active Membership" }),
+      "membership-active",
+    );
+    await userEvent.click(screen.getByRole("checkbox", { name: /Company Administrator/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save access" }));
+    expect(api.revokeMembershipRole).toHaveBeenCalledWith(
+      "membership-active",
+      "role-1",
+    );
+    expect(api.revokeMembershipRole).toHaveBeenCalledTimes(1);
+    expect(refreshAuthorization).toHaveBeenCalledOnce();
+    expect(router.state.location.pathname).toBe("/administration");
+  });
+
+  it("places authorized Factory Control in the canonical Administration experience", async () => {
+    context.permissionCodes = [
+      ...(context.permissionCodes ?? []),
+      "PLATFORM_FACTORY_CONTROL_READ",
+    ];
+    renderPage();
+    const link = await screen.findByRole("link", { name: "Open Factory Control" });
+    expect(link).toHaveAttribute("href", "/administration/factory-control");
   });
 
   it.each([
@@ -457,7 +502,7 @@ describe("AdministrationRoute", () => {
     renderPage();
     await screen.findByText(/Role Administration|not authorized to administer Company roles/);
     expect(screen.queryByRole("button", { name: "Create role" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Assign selected role" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save access" })).not.toBeInTheDocument();
   });
 
   it("renders Company-admin subworkspaces without requesting unauthorized role evidence", async () => {

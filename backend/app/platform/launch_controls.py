@@ -9,6 +9,7 @@ from app.platform.permissions.codes import (
     AccountsPayablePermission,
     AdministrationPermission,
     AnalyticsPermission,
+    AssetPermission,
     BeaconPermission,
     CommunicationsPermission,
     CustomerPermission,
@@ -24,6 +25,7 @@ from app.platform.permissions.codes import (
     PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
+    ServiceAgreementPermission,
     WorkforcePermission,
 )
 from app.timekeeping.permissions import TimekeepingPermission
@@ -67,7 +69,72 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
     }
 )
 
-PLATFORM_OWNER_ADMIN_PERMISSIONS = COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
+# Canonical Company OWNER authority is role-based, not a collection of
+# person-specific grants.  This set deliberately contains normal operating and
+# administrative authority while excluding the explicit execution boundaries
+# that move money, post journals, execute Payroll payments, or remit taxes.
+# New normal administrative capabilities are added here and inherited by every
+# canonical OWNER; hard boundaries stay explicit and step-up governed.
+PLATFORM_OWNER_ADMIN_PERMISSIONS = frozenset().union(
+    AdministrationPermission.ALL,
+    {
+        LaunchPlatformPermission.AUDIT_READ,
+        AnalyticsPermission.READ,
+    },
+    CustomerPermission.ALL,
+    ServiceAgreementPermission.ALL,
+    SchedulingPermission.ALL,
+    JobPermission.ALL,
+    DispatchPermission.ALL,
+    WorkforcePermission.ALL,
+    InventoryPermission.ALL,
+    AssetPermission.ALL,
+    PurchasingPermission.ALL,
+    EconomicsPolicyPermission.ALL,
+    PriceBookPermission.ALL,
+    CommunicationsPermission.ALL,
+    EstimatePermission.ALL,
+    {
+        InvoicePermission.READ,
+        InvoicePermission.MANAGE,
+        InvoicePermission.ISSUE,
+        InvoicePermission.ADJUST,
+        PaymentPermission.READ,
+        AccountsPayablePermission.READ,
+        AccountsPayablePermission.VENDOR_MANAGE,
+        AccountsPayablePermission.BILL_PREPARE,
+        AccountsPayablePermission.BILL_APPROVE,
+        AccountsPayablePermission.CREDIT_MANAGE,
+        AccountsPayablePermission.REPORT_READ,
+        AccountsPayablePermission.MATCH_REVIEW,
+        AccountingPermission.READ,
+        AccountingPermission.JOURNAL_PREPARE,
+        AccountingPermission.PERIOD_MANAGE,
+        AccountingPermission.RECONCILE,
+        AccountingPermission.FINANCE_APPROVE,
+        AccountingPermission.OPENING_STATE_APPROVE,
+        AccountingPermission.REPORT_READ,
+        LuminaryPermission.READ,
+        LuminaryPermission.ANALYZE,
+        BeaconPermission.REVIEW,
+        BeaconPermission.OWN,
+        BeaconPermission.ASSIGN,
+    },
+    TimekeepingPermission.ALL,
+    set(PayrollPermission.ALL)
+    - {
+        PayrollPermission.PAYMENT_EXECUTION_AUTHORIZE,
+        PayrollPermission.REMITTANCE_EXECUTE,
+    },
+)
+
+PLATFORM_ADMIN_NORMAL_PERMISSIONS = PLATFORM_OWNER_ADMIN_PERMISSIONS - {
+    PayrollPermission.CUTOVER_OWNER_CERTIFY,
+    PayrollPermission.CUTOVER_APPROVE,
+    PriceBookPermission.ACTIVATE,
+    AccountingPermission.FINANCE_APPROVE,
+    AccountingPermission.OPENING_STATE_APPROVE,
+}
 
 OFFICE_MANAGER_OPERATIONAL_PERMISSIONS = frozenset(
     {
@@ -144,8 +211,11 @@ LAUNCH_ROLE_MATRIX = (
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.ADMIN,
-        purpose="Administer Company access and inspect operating evidence.",
-        permission_codes=PLATFORM_OWNER_ADMIN_PERMISSIONS,
+        purpose=(
+            "Administer normal Company access and operations without canonical-owner "
+            "decisions, money movement, journal posting, or Payroll payment execution."
+        ),
+        permission_codes=PLATFORM_ADMIN_NORMAL_PERMISSIONS,
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.MANAGER,

@@ -29,6 +29,11 @@ from app.platform.factory_control.service import (
     FactoryEventConflict,
     factory_control_service,
 )
+from app.platform.owner_authority import (
+    reconcile_canonical_platform_administrator,
+    reconcile_canonical_platform_owner,
+)
+from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User, UserCredential
 from app.worker_control.contracts import AuthenticatedWorkerContext
 from app.worker_control.models import EngineeringWorker
@@ -534,9 +539,7 @@ async def test_existing_controller_sync_connection_projects_authoritative_worker
     assert replay.json()["duplicate"] is True
     async with database() as session:
         lane = await session.scalar(
-            select(FactoryLaneState).where(
-                FactoryLaneState.lane_code.like("HTTPSYNC%")
-            )
+            select(FactoryLaneState).where(FactoryLaneState.lane_code.like("HTTPSYNC%"))
         )
         persisted = await session.scalar(
             select(FactoryControlEvent).where(
@@ -680,3 +683,203 @@ async def test_live_sync_preserves_original_integration_handoff_time(database) -
     assert lane is not None
     assert lane.lifecycle_state == "WAITING_INTEGRATION"
     assert lane.last_handoff_at == handoff_at
+
+
+@pytest.mark.asyncio
+async def test_reconcile_existing_authenticated_owner_is_exact_and_idempotent(
+    database,
+) -> None:
+    now = datetime.now(timezone.utc)
+    company = Company(
+        id=uuid4(),
+        name="Owner Company",
+        code=f"OWN{uuid4().hex[:6].upper()}",
+        timezone="UTC",
+    )
+    user = User(
+        id=uuid4(),
+        normalized_email=f"owner-{uuid4()}@example.test",
+        first_name="Preview",
+        last_name="Administrator",
+        display_name="Preview Administrator",
+        status="active",
+        authorization_version=1,
+    )
+    membership = Membership(
+        id=uuid4(),
+        user_id=user.id,
+        company_id=company.id,
+        status="active",
+        has_all_branch_access=True,
+    )
+    credential = UserCredential(
+        id=uuid4(),
+        user_id=user.id,
+        password_hash="$argon2id$test-only-encoded-hash",
+        password_changed_at=now,
+        credential_version=1,
+    )
+    authentication_session = AuthenticationSession(
+        id=uuid4(),
+        user_id=user.id,
+        status="active",
+        created_at=now,
+        last_seen_at=now,
+        absolute_expires_at=now + timedelta(days=1),
+        idle_expires_at=now + timedelta(hours=12),
+        authentication_method="password",
+        credential_version=1,
+        authorization_version=1,
+    )
+    owner_role = Role(
+        id=uuid4(),
+        company_id=company.id,
+        code="OWNER",
+        name="Owner",
+        description="Canonical owner",
+        status="active",
+        is_system=True,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    async with database() as session, session.begin():
+        session.add_all([company, user])
+        await session.flush()
+        session.add_all([membership, credential, authentication_session, owner_role])
+
+    arguments = {
+        "user_id": user.id,
+        "membership_id": membership.id,
+        "company_id": company.id,
+        "expected_existing_display_name": "Preview Administrator",
+        "canonical_first_name": "Michael",
+        "canonical_last_name": "Fouse",
+        "reason": "Owner-confirmed existing authentication principal",
+    }
+    async with database() as session, session.begin():
+        first = await reconcile_canonical_platform_owner(session, **arguments)
+    assert first.identity_reconciled is True
+    assert first.owner_role_created is True
+    assert first.platform_owner_created is True
+    assert first.authorization_version == 2
+
+    async with database() as session, session.begin():
+        replay = await reconcile_canonical_platform_owner(session, **arguments)
+        persisted = await session.get(User, user.id)
+        owner_roles = list(
+            (
+                await session.scalars(
+                    select(MembershipRole).where(
+                        MembershipRole.membership_id == membership.id,
+                        MembershipRole.role_id == owner_role.id,
+                        MembershipRole.revoked_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+        platform_grants = list(
+            (
+                await session.scalars(
+                    select(PlatformAuthorityAssignment).where(
+                        PlatformAuthorityAssignment.user_id == user.id,
+                        PlatformAuthorityAssignment.status == "active",
+                    )
+                )
+            ).all()
+        )
+    assert replay.identity_reconciled is False
+    assert replay.owner_role_created is False
+    assert replay.platform_owner_created is False
+    assert persisted is not None
+    assert persisted.display_name == "Michael Fouse"
+    assert persisted.authorization_version == 2
+    assert len(owner_roles) == 1
+    assert len(platform_grants) == 1
+    assert platform_grants[0].authority_code == "PLATFORM_OWNER"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_existing_platform_admin_to_normal_admin_role(database) -> None:
+    now = datetime.now(timezone.utc)
+    company = Company(
+        id=uuid4(),
+        name="Admin Company",
+        code=f"ADM{uuid4().hex[:6].upper()}",
+        timezone="UTC",
+    )
+    owner = User(
+        id=uuid4(),
+        normalized_email=f"grantor-{uuid4()}@example.test",
+        first_name="Michael",
+        last_name="Fouse",
+        display_name="Michael Fouse",
+        status="active",
+        authorization_version=1,
+    )
+    admin = User(
+        id=uuid4(),
+        normalized_email=f"admin-{uuid4()}@example.test",
+        first_name="Lianne",
+        last_name="Hernandez",
+        display_name="Lianne Hernandez",
+        status="active",
+        authorization_version=1,
+    )
+    owner_membership = Membership(
+        id=uuid4(),
+        user_id=owner.id,
+        company_id=company.id,
+        status="active",
+        has_all_branch_access=True,
+    )
+    admin_membership = Membership(
+        id=uuid4(),
+        user_id=admin.id,
+        company_id=company.id,
+        status="active",
+        has_all_branch_access=True,
+    )
+    admin_role = Role(
+        id=uuid4(),
+        company_id=company.id,
+        code="ADMIN",
+        name="Admin",
+        description="Canonical administrator",
+        status="active",
+        is_system=True,
+        created_by_user_id=owner.id,
+        updated_by_user_id=owner.id,
+    )
+    platform_grant = PlatformAuthorityAssignment(
+        principal_type="USER",
+        user_id=admin.id,
+        authority_code="PLATFORM_ADMIN",
+        permission_code="PLATFORM_FACTORY_CONTROL_READ",
+        status="active",
+        grant_reason="Owner authorized normal administration",
+        granted_by_user_id=owner.id,
+        granted_at=now,
+        version=1,
+    )
+    async with database() as session, session.begin():
+        session.add_all([company, owner, admin])
+        await session.flush()
+        session.add_all(
+            [owner_membership, admin_membership, admin_role, platform_grant]
+        )
+    arguments = {
+        "user_id": admin.id,
+        "membership_id": admin_membership.id,
+        "company_id": company.id,
+        "exact_display_name": "Lianne Hernandez",
+        "granted_by_user_id": owner.id,
+        "reason": "Owner-authorized equivalent normal operational administration",
+    }
+    async with database() as session, session.begin():
+        first = await reconcile_canonical_platform_administrator(session, **arguments)
+    async with database() as session, session.begin():
+        replay = await reconcile_canonical_platform_administrator(session, **arguments)
+    assert first.admin_role_created is True
+    assert first.authorization_version == 2
+    assert replay.admin_role_created is False
+    assert replay.authorization_version == 2
