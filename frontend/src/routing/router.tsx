@@ -29,6 +29,7 @@ import {
   invoicesHandle,
   paymentsHandle,
   payrollHandle,
+  pipelineHandle,
   revenueCycleHandle,
   jobsHandle,
   liaHandle,
@@ -115,6 +116,13 @@ export const appRoutes: RouteObject[] = [
             lazy: async () => ({
               Component: (await import("../routes/CustomerDetailRoute"))
                 .CustomerDetailRoute,
+            }),
+          },
+          {
+            path: "pipeline",
+            handle: pipelineHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/PipelineRoute")).PipelineRoute,
             }),
           },
           { path: "service-agreements", handle: serviceAgreementsHandle, lazy: async () => ({ Component: (await import("../routes/ServiceAgreementsRoute")).ServiceAgreementsRoute }) },

@@ -62,6 +62,14 @@ export const navigationCatalog = [
     icon: Users,
     availability: "available",
   },
+  {
+    id: "pipeline",
+    label: "Pipeline",
+    path: "/pipeline",
+    icon: Workflow,
+    availability: "available",
+    requiredPermission: "COMPANY_CUSTOMER_READ",
+  },
   { id: "service-agreements", label: "Service Agreements", path: "/service-agreements", icon: BadgeCheck, availability: "available", requiredPermission: "COMPANY_SERVICE_AGREEMENT_READ" },
   {
     id: "workday",
@@ -333,6 +341,7 @@ export const navigationGroups = [
     label: "Operations",
     items: [
       item("customers"),
+      item("pipeline"),
       item("service-agreements"),
       item("technician"),
       item("workday"),
