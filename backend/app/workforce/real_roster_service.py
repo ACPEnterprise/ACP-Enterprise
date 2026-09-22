@@ -270,6 +270,7 @@ class RealRosterService:
                     field_tech=person.field_tech,
                     employee_id=employee.id,
                     employee_display_name=employee.display_name,
+                    employment_status=employee.status,
                     user_state="USER_READY"
                     if user_ready
                     else "USER_MISSING_OR_INACTIVE",
@@ -442,6 +443,7 @@ class RealRosterService:
             field_tech=person.field_tech,
             employee_id=None,
             employee_display_name=None,
+            employment_status=None,
             user_state="AUTHENTICATED_VERIFICATION_REQUIRED",
             employee_state="AUTHENTICATED_VERIFICATION_REQUIRED",
             membership_state="AUTHENTICATED_VERIFICATION_REQUIRED",
