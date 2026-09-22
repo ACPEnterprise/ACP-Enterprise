@@ -29,6 +29,8 @@ from .contracts import (
     PayrollInputEvidence,
     PayrollInputExclusionReason,
     PayrollInputProjection,
+    PayrollTimeInputResolutionError,
+    PayrollTimeInputResolutionReason,
     PunchKind,
     TimeEntryProvenance,
     TimeEntryState,
@@ -933,6 +935,131 @@ class WorkdayTimeService:
         )
         return projection
 
+    async def resolve_payroll_time_input_facts(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payroll_input: PayrollTimeInputRecord,
+    ) -> tuple[ApprovedWorkdayTimeFact, ...]:
+        """Verify and reconstruct the approved facts sealed by a persisted input."""
+
+        if payroll_input.company_id != context.company.id:
+            raise PayrollTimeInputResolutionError(
+                PayrollTimeInputResolutionReason.SCOPE_MISMATCH,
+                "Payroll Time Input Company scope mismatch",
+            )
+        try:
+            revision_ids = tuple(
+                UUID(value) for value in payroll_input.approved_revision_ids
+            )
+        except (TypeError, ValueError, AttributeError) as error:
+            raise PayrollTimeInputResolutionError(
+                PayrollTimeInputResolutionReason.INVALID_REFERENCE,
+                "Payroll Time Input contains an invalid revision reference",
+            ) from error
+        if not revision_ids or len(revision_ids) != len(set(revision_ids)):
+            raise PayrollTimeInputResolutionError(
+                PayrollTimeInputResolutionReason.INVALID_REFERENCE,
+                "Payroll Time Input revision references must be non-empty and unique",
+            )
+
+        pay_period = await self._repository.pay_period_by_id(
+            session,
+            company_id=payroll_input.company_id,
+            pay_period_id=payroll_input.pay_period_id,
+        )
+        if pay_period is None:
+            raise PayrollTimeInputResolutionError(
+                PayrollTimeInputResolutionReason.INVALID_REFERENCE,
+                "Payroll Time Input pay period is missing or outside Company scope",
+            )
+
+        revisions = await self._repository.revisions_by_ids(
+            session,
+            company_id=payroll_input.company_id,
+            revision_ids=revision_ids,
+        )
+        by_id = {revision.id: revision for revision in revisions}
+        if set(revision_ids) != set(by_id):
+            raise PayrollTimeInputResolutionError(
+                PayrollTimeInputResolutionReason.INVALID_REFERENCE,
+                "Payroll Time Input revision is missing or outside Company scope",
+            )
+        exact_facts: list[ApprovedWorkdayTimeFact] = []
+        for revision_id in revision_ids:
+            revision = by_id[revision_id]
+            if revision.company_id != payroll_input.company_id or (
+                revision.employee_id != payroll_input.employee_id
+            ):
+                raise PayrollTimeInputResolutionError(
+                    PayrollTimeInputResolutionReason.SCOPE_MISMATCH,
+                    "Payroll Time Input revision Company or Employee scope mismatch",
+                )
+            try:
+                self._require_branch(context, revision.branch_id)
+            except WorkdayAuthorizationError as error:
+                raise PayrollTimeInputResolutionError(
+                    PayrollTimeInputResolutionReason.BRANCH_SCOPE_MISMATCH,
+                    "Payroll Time Input revision Branch scope mismatch",
+                ) from error
+            latest = await self._repository.latest_revision(
+                session,
+                company_id=payroll_input.company_id,
+                revision_id=revision_id,
+            )
+            if (
+                latest is None
+                or latest.id != revision_id
+                or revision.state != TimeEntryState.APPROVED.value
+            ):
+                raise PayrollTimeInputResolutionError(
+                    PayrollTimeInputResolutionReason.STALE_OR_INELIGIBLE,
+                    "Payroll Time Input revision is superseded or is not approved",
+                )
+            exact_facts.append(self.approved_fact(revision))
+
+        _, current_facts = await self._payroll_input_projection(
+            session,
+            context=context,
+            employee_id=payroll_input.employee_id,
+            pay_period=pay_period,
+        )
+        current_by_id = {fact.revision_id: fact for fact in current_facts}
+        if set(revision_ids) != set(current_by_id) or any(
+            current_by_id[fact.revision_id] != fact for fact in exact_facts
+        ):
+            raise PayrollTimeInputResolutionError(
+                PayrollTimeInputResolutionReason.STALE_OR_INELIGIBLE,
+                "Payroll Time Input references missing, superseded, or ineligible evidence",
+            )
+        ordered = tuple(
+            sorted(
+                exact_facts,
+                key=lambda fact: (fact.work_date, str(fact.entry_id)),
+            )
+        )
+        reconstructed = seal_payroll_time_input(
+            company_id=payroll_input.company_id,
+            employee_id=payroll_input.employee_id,
+            pay_period_id=payroll_input.pay_period_id,
+            period_start=pay_period.period_start,
+            period_end=pay_period.period_end,
+            approved_entries=ordered,
+        )
+        if (
+            payroll_input.snapshot_identity != reconstructed.snapshot_id
+            or payroll_input.snapshot_version != reconstructed.version
+            or payroll_input.total_approved_minutes
+            != reconstructed.total_approved_minutes
+            or payroll_input.snapshot_digest != reconstructed.snapshot_digest
+        ):
+            raise PayrollTimeInputResolutionError(
+                PayrollTimeInputResolutionReason.SNAPSHOT_MISMATCH,
+                "Payroll Time Input immutable snapshot evidence does not match",
+            )
+        return ordered
+
     async def _payroll_input_projection(
         self,
         session: AsyncSession,
@@ -949,7 +1076,7 @@ class WorkdayTimeService:
             end_date=pay_period.period_end,
         )
         approved = [
-            (value, self._approved_fact(value))
+            (value, self.approved_fact(value))
             for value in revisions
             if value.state == TimeEntryState.APPROVED.value
         ]
@@ -1249,7 +1376,8 @@ class WorkdayTimeService:
         return revision
 
     @staticmethod
-    def _approved_fact(revision: WorkdayTimeEntryRevision) -> ApprovedWorkdayTimeFact:
+    def approved_fact(revision: WorkdayTimeEntryRevision) -> ApprovedWorkdayTimeFact:
+        """Build the canonical immutable fact for an approved revision."""
         if (
             revision.approval_id is None
             or revision.approved_by_user_id is None
