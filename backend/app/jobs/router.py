@@ -1,5 +1,6 @@
 from collections.abc import Awaitable, Callable
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
@@ -40,6 +41,7 @@ from app.jobs.query import (
     SortDirection,
 )
 from app.jobs.query_service import jobs_query_service
+from app.jobs.reporting import job_reporting_service
 from app.jobs.schemas import (
     JobCancelRequest,
     JobCreateFromAppointmentRequest,
@@ -49,6 +51,7 @@ from app.jobs.schemas import (
     JobMutationResponse,
     JobPauseRequest,
     JobReopenRequest,
+    JobTrendResponse,
     JobVersionRequest,
     PaginatedJobsResponse,
 )
@@ -212,6 +215,29 @@ async def search_jobs(
         total_count=result.total_count,
         total_pages=result.total_pages,
     )
+
+
+@router.get("/reporting/completed-trend", response_model=JobTrendResponse)
+async def completed_job_trend(
+    context: JobsReadContext,
+    session: DatabaseSession,
+    start: date,
+    end: date,
+    granularity: Literal["day", "week", "month", "year"] = "day",
+    branch_id: UUID | None = None,
+) -> JobTrendResponse:
+    try:
+        result = await job_reporting_service.completed_trend(
+            session,
+            context=context,
+            period_start=start,
+            period_end=end,
+            granularity=granularity,
+            branch_id=branch_id,
+        )
+    except JobError as error:
+        raise translate_job_error(error) from error
+    return JobTrendResponse.model_validate(result)
 
 
 @router.get("/{job_id}", response_model=JobDetailResponse, summary="Get a Job")

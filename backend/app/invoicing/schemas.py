@@ -122,6 +122,25 @@ class InvoiceWorkspaceItem(InvoiceSchema):
     version: int
 
 
+class ReceivablesAgingBucket(InvoiceSchema):
+    key: Literal["not_due", "due_today", "past_due_1_15", "past_due_16_30", "past_due_31_plus"]
+    label: str
+    invoice_count: int = Field(ge=0)
+    amount: Decimal | None
+
+
+class ReceivablesSummary(InvoiceSchema):
+    as_of: date
+    generated_at: datetime
+    branch_id: UUID | None
+    currency: str | None
+    evidence_state: Literal["AVAILABLE", "MEASURED_ZERO", "CONFLICTING_CURRENCIES"]
+    open_invoice_count: int = Field(ge=0)
+    total_open_amount: Decimal | None
+    due_today_amount: Decimal | None
+    buckets: tuple[ReceivablesAgingBucket, ...]
+
+
 class InvoiceCandidateItem(InvoiceSchema):
     branch_id: UUID
     estimate_id: UUID

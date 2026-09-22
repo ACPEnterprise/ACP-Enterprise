@@ -26,6 +26,7 @@ from app.invoicing.schemas import (
     ManualPaymentResult,
     MutationInput,
     PaymentApplicationInput,
+    ReceivablesSummary,
 )
 from app.invoicing.service import invoice_service
 from app.platform.permissions.authorization import AuthorizationContext
@@ -120,6 +121,9 @@ async def invoice_workspace(
     query: Annotated[str | None, Query(max_length=160)] = None,
     customer_id: UUID | None = None,
     branch_id: UUID | None = None,
+    aging_bucket: Literal[
+        "not_due", "due_today", "past_due_1_15", "past_due_16_30", "past_due_31_plus"
+    ] | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[InvoiceWorkspaceItem]:
@@ -132,10 +136,30 @@ async def invoice_workspace(
         query=query,
         customer_id=customer_id,
         branch_id=branch_id,
+        aging_bucket_filter=aging_bucket,
         limit=limit,
         offset=offset,
     )
     return [InvoiceWorkspaceItem.model_validate(row) for row in rows]
+
+
+@router.get("/receivables-summary", response_model=ReceivablesSummary)
+async def receivables_summary(
+    context: Read,
+    session: Session,
+    as_of: date,
+    branch_id: UUID | None = None,
+) -> ReceivablesSummary:
+    if branch_id is not None:
+        _branch(context, branch_id)
+    result = await invoice_service.receivables_summary(
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        as_of=as_of,
+        branch_id=branch_id,
+    )
+    return ReceivablesSummary.model_validate(result)
 
 
 @router.get("/candidates", response_model=tuple[InvoiceCandidateItem, ...])

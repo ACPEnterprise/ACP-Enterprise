@@ -1,7 +1,7 @@
 import hashlib
 import json
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -68,6 +68,19 @@ def aging_bucket(due_date: date, as_of: date, open_amount: Decimal) -> tuple[int
     return days, "91_plus"
 
 
+def command_center_aging_bucket(due_date: date, as_of: date) -> str:
+    if due_date > as_of:
+        return "not_due"
+    if due_date == as_of:
+        return "due_today"
+    days = (as_of - due_date).days
+    if days <= 15:
+        return "past_due_1_15"
+    if days <= 30:
+        return "past_due_16_30"
+    return "past_due_31_plus"
+
+
 def _digest(value: object) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
@@ -75,6 +88,80 @@ def _digest(value: object) -> str:
 
 
 class InvoiceService:
+    async def receivables_summary(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branches: frozenset[UUID],
+        *,
+        as_of: date,
+        branch_id: UUID | None = None,
+    ) -> dict[str, object]:
+        scoped_branches = branches
+        if branch_id is not None:
+            scoped_branches = (
+                frozenset({branch_id}) if branch_id in branches else frozenset()
+            )
+        rows = tuple(
+            (
+                await session.execute(
+                    select(
+                        Invoice.due_date,
+                        Invoice.open_amount,
+                        Invoice.currency,
+                    ).where(
+                        Invoice.company_id == company_id,
+                        Invoice.branch_id.in_(scoped_branches),
+                        Invoice.status.in_(("draft", "issued", "partially_paid", "adjusted")),
+                        Invoice.open_amount > 0,
+                    )
+                )
+            ).all()
+        )
+        keys = (
+            ("not_due", "Current / Not Due"),
+            ("due_today", "Due Today"),
+            ("past_due_1_15", "1–15 Days Past Due"),
+            ("past_due_16_30", "16–30 Days Past Due"),
+            ("past_due_31_plus", "31+ Days Past Due"),
+        )
+        counts = {key: 0 for key, _ in keys}
+        amounts = {key: Decimal("0.00") for key, _ in keys}
+        currencies: set[str] = set()
+        for due_date, open_amount, currency in rows:
+            key = command_center_aging_bucket(due_date, as_of)
+            counts[key] += 1
+            amounts[key] += open_amount
+            currencies.add(currency)
+        conflicting = len(currencies) > 1
+        currency = next(iter(currencies)) if len(currencies) == 1 else None
+        evidence_state = (
+            "CONFLICTING_CURRENCIES"
+            if conflicting
+            else "MEASURED_ZERO"
+            if not rows
+            else "AVAILABLE"
+        )
+        return {
+            "as_of": as_of,
+            "generated_at": datetime.now(timezone.utc),
+            "branch_id": branch_id,
+            "currency": currency,
+            "evidence_state": evidence_state,
+            "open_invoice_count": len(rows),
+            "total_open_amount": None if conflicting else sum(amounts.values(), Decimal("0.00")),
+            "due_today_amount": None if conflicting else amounts["due_today"],
+            "buckets": tuple(
+                {
+                    "key": key,
+                    "label": label,
+                    "invoice_count": counts[key],
+                    "amount": None if conflicting else amounts[key],
+                }
+                for key, label in keys
+            ),
+        }
+
     async def candidates(
         self,
         session: AsyncSession,
@@ -848,6 +935,7 @@ class InvoiceService:
         customer_id: UUID | None = None,
         invoice_id: UUID | None = None,
         branch_id: UUID | None = None,
+        aging_bucket_filter: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> tuple[dict[str, object], ...]:
@@ -955,6 +1043,22 @@ class InvoiceService:
             )
         elif state and state != "all":
             statement = statement.where(Invoice.status == state)
+        if aging_bucket_filter == "not_due":
+            statement = statement.where(Invoice.due_date > as_of)
+        elif aging_bucket_filter == "due_today":
+            statement = statement.where(Invoice.due_date == as_of)
+        elif aging_bucket_filter == "past_due_1_15":
+            statement = statement.where(
+                Invoice.due_date < as_of,
+                Invoice.due_date >= as_of - timedelta(days=15),
+            )
+        elif aging_bucket_filter == "past_due_16_30":
+            statement = statement.where(
+                Invoice.due_date < as_of - timedelta(days=15),
+                Invoice.due_date >= as_of - timedelta(days=30),
+            )
+        elif aging_bucket_filter == "past_due_31_plus":
+            statement = statement.where(Invoice.due_date < as_of - timedelta(days=30))
         rows = (
             await session.execute(
                 statement.order_by(

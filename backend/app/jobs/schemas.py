@@ -1,3 +1,6 @@
+from datetime import date
+from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -138,3 +141,29 @@ class PaginatedJobsResponse(JobsApiSchema):
     page_size: int = Field(ge=1, le=200)
     total_count: int = Field(ge=0)
     total_pages: int = Field(ge=0)
+
+
+class JobTrendPoint(JobsApiSchema):
+    label: str
+    period_start: date
+    period_end: date
+    completed_start_at: AwareDatetime
+    completed_end_at: AwareDatetime
+    job_count: int = Field(ge=0)
+    produced_value: Decimal | None
+    known_produced_value: Decimal
+    missing_value_count: int = Field(ge=0)
+    evidence_state: Literal[
+        "AVAILABLE", "MEASURED_ZERO", "INCOMPLETE_SOLD_SNAPSHOT", "CONFLICTING_CURRENCIES"
+    ]
+
+
+class JobTrendResponse(JobsApiSchema):
+    generated_at: AwareDatetime
+    timezone: str
+    branch_id: UUID | None
+    currency: str | None
+    granularity: Literal["day", "week", "month", "year"]
+    period_start: date
+    period_end: date
+    points: tuple[JobTrendPoint, ...]

@@ -7,8 +7,17 @@ import {
   getEconomicsWorkspace,
   getOwnerIntelligence,
   getOperationalSourceEconomics,
+  getEconomicsMeasurementFoundation,
   type OwnerQuestion,
 } from "../api/businessEconomics";
+
+export function useEconomicsMeasurementFoundation(enabled = true) {
+  return useQuery({
+    queryKey: ["business-economics", "measurement-foundation"],
+    queryFn: getEconomicsMeasurementFoundation,
+    enabled,
+  });
+}
 
 export function useEconomicsWorkspace(
   start: string,
@@ -21,7 +30,11 @@ export function useEconomicsWorkspace(
     enabled,
   });
 }
-export function useOperationalSourceEconomics(start: string, end: string, enabled = true) {
+export function useOperationalSourceEconomics(
+  start: string,
+  end: string,
+  enabled = true,
+) {
   return useQuery({
     queryKey: ["business-economics", "operational-sources", start, end],
     queryFn: () => getOperationalSourceEconomics(start, end),
