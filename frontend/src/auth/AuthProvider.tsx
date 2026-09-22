@@ -120,9 +120,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [clearAuthentication]);
 
+  const refreshAuthorization = useCallback(async () => {
+    const accessToken = await refresh();
+    if (!accessToken) throw new Error("The authenticated session could not be refreshed.");
+    await resolveCompanyAccess();
+  }, [refresh, resolveCompanyAccess]);
+
   const value = useMemo(
-    () => ({ status, user, activeCompany, permissionCodes, signIn, signOut, signOutAll, requireReauthentication: clearAuthentication }),
-    [activeCompany, clearAuthentication, permissionCodes, signIn, signOut, signOutAll, status, user],
+    () => ({ status, user, activeCompany, permissionCodes, signIn, signOut, signOutAll, refreshAuthorization, requireReauthentication: clearAuthentication }),
+    [activeCompany, clearAuthentication, permissionCodes, refreshAuthorization, signIn, signOut, signOutAll, status, user],
   );
   return <AuthenticationContext.Provider value={value}>{children}</AuthenticationContext.Provider>;
 }

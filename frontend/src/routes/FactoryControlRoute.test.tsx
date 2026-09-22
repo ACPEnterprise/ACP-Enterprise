@@ -27,7 +27,7 @@ const overview: api.FactoryControlOverview = {
   ],
 };
 
-function renderRoute(permissions = ["PLATFORM_FACTORY_CONTROL_READ"], entry = "/admin/factory-control") {
+function renderRoute(permissions = ["PLATFORM_FACTORY_CONTROL_READ"], entry = "/administration/factory-control") {
   return render(<AuthenticationContext.Provider value={auth(permissions)}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[entry]}><FactoryControlRoute /></MemoryRouter></QueryClientProvider></AuthenticationContext.Provider>);
 }
 
@@ -46,7 +46,7 @@ describe("FactoryControlRoute", () => {
 
   it("passes a lane drilldown and denies tenant Company administrators", async () => {
     const request = vi.spyOn(api, "getFactoryControlOverview").mockResolvedValue(overview);
-    const { unmount } = renderRoute(["PLATFORM_FACTORY_CONTROL_READ"], "/admin/factory-control?lane=OM1-A");
+    const { unmount } = renderRoute(["PLATFORM_FACTORY_CONTROL_READ"], "/administration/factory-control?lane=OM1-A");
     expect(await screen.findByText(/Showing lane OM1-A/)).toBeVisible();
     const authorizedRequestCount = request.mock.calls.length;
     expect(authorizedRequestCount).toBeGreaterThan(0);

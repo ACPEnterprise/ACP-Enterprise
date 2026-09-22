@@ -46,13 +46,15 @@ const result: AuthenticationResult = {
 };
 
 function Harness() {
-  const { signIn, signOut, status, user } = useAuth();
+  const { signIn, signOut, refreshAuthorization, status, user, permissionCodes } = useAuth();
   return (
     <div>
       <span>{status}</span>
       <span>{user?.display_name}</span>
+      <span>{permissionCodes?.join(",")}</span>
       <button type="button" onClick={() => void signIn({ email: "admin@example.com", password: "password" })}>Sign in</button>
       <button type="button" onClick={() => void signOut()}>Sign out</button>
+      <button type="button" onClick={() => void refreshAuthorization()}>Refresh authorization</button>
     </div>
   );
 }
@@ -106,5 +108,23 @@ describe("AuthProvider", () => {
     render(<AuthProvider><Harness /></AuthProvider>);
     expect(await screen.findByText("unauthenticated")).toBeInTheDocument();
     expect(window.sessionStorage.getItem("acp.auth.refresh-token")).toBeNull();
+  });
+
+  it("refreshes changed authorization in place without clearing the session", async () => {
+    window.sessionStorage.setItem("acp.auth.refresh-token", "stored-refresh-token");
+    vi.mocked(authenticationApi.refreshSession).mockResolvedValue(result);
+    vi.mocked(authorizationApi.getEffectiveAuthorization)
+      .mockResolvedValueOnce({ permission_codes: ["COMPANY_ROLE_READ"] })
+      .mockResolvedValueOnce({
+        permission_codes: ["COMPANY_ROLE_READ", "PLATFORM_FACTORY_CONTROL_READ"],
+      });
+    render(<AuthProvider><Harness /></AuthProvider>);
+    expect(await screen.findByText("COMPANY_ROLE_READ")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh authorization" }));
+    expect(
+      await screen.findByText("COMPANY_ROLE_READ,PLATFORM_FACTORY_CONTROL_READ"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("authenticated")).toBeInTheDocument();
+    expect(authenticationApi.refreshSession).toHaveBeenCalledTimes(2);
   });
 });

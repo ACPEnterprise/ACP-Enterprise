@@ -18,6 +18,8 @@ from app.platform.company.models import Company
 from app.platform.launch_controls import (
     COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
     LAUNCH_ROLE_MATRIX,
+    PLATFORM_ADMIN_NORMAL_PERMISSIONS,
+    PLATFORM_OWNER_ADMIN_PERMISSIONS,
     OFFICE_MANAGER_OPERATIONAL_PERMISSIONS,
     LaunchRoleCode,
     validate_launch_role_matrix,
@@ -111,6 +113,19 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     assert LuminaryPermission.ANALYZE not in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_EXECUTE not in administrator
     assert PayrollPermission.REPORTING_MANAGE not in administrator
+
+    owner = roles[LaunchRoleCode.OWNER].permission_codes
+    platform_admin = roles[LaunchRoleCode.ADMIN].permission_codes
+    assert owner == PLATFORM_OWNER_ADMIN_PERMISSIONS
+    assert platform_admin == PLATFORM_ADMIN_NORMAL_PERMISSIONS
+    assert AdministrationPermission.PERMISSION_MANAGE in owner
+    assert CustomerPermission.MANAGE in owner
+    assert PayrollPermission.CALCULATION_EXECUTE in owner
+    assert PayrollPermission.PAYMENT_EXECUTION_AUTHORIZE not in owner
+    assert PayrollPermission.REMITTANCE_EXECUTE not in owner
+    assert AccountingPermission.JOURNAL_POST not in owner
+    assert PaymentPermission.COLLECT not in owner
+    assert PayrollPermission.CUTOVER_OWNER_CERTIFY not in platform_admin
 
 
 def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> None:

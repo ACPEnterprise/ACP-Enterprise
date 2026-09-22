@@ -14,7 +14,6 @@ from app.platform.auth.errors import (
     PasswordChangeRequiredError,
     RateLimitExceededError,
     RefreshTokenReuseError,
-    SessionInvalidError,
 )
 from app.platform.auth.models import (
     AuthenticationSecurityEvent,
@@ -392,10 +391,18 @@ async def test_refresh_rotation_reuse_versions_and_concurrency(
             update(User).where(User.id == version_id).values(authorization_version=2)
         )
     async with factory() as session:
-        with pytest.raises(SessionInvalidError):
-            await auth_service.rotate_refresh_token(
-                session, plaintext_token=version_login.refresh_token
-            )
+        refreshed = await auth_service.rotate_refresh_token(
+            session, plaintext_token=version_login.refresh_token
+        )
+        claims = auth_service.access_token_service.decode(refreshed.access_token)
+        assert claims.authorization_version == 2
+
+    async with factory() as session:
+        stored_session = await session.get(
+            AuthenticationSession, version_login.session_id
+        )
+        assert stored_session is not None
+        assert stored_session.authorization_version == 2
 
 
 @pytest.mark.asyncio

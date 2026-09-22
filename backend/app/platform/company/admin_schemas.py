@@ -49,6 +49,8 @@ class MembershipResponse(StrictAdminSchema):
     display_name: str | None = None
     email: str | None = None
     branch_name: str | None = None
+    role_ids: tuple[UUID, ...] = ()
+    role_codes: tuple[str, ...] = ()
 
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 

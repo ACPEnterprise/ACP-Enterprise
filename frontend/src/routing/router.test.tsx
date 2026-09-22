@@ -41,6 +41,7 @@ const authenticatedContext: AuthenticationContextValue = {
   signIn: vi.fn(),
   signOut: vi.fn(),
   signOutAll: vi.fn(),
+  refreshAuthorization: vi.fn(),
   requireReauthentication: vi.fn(),
 };
 
