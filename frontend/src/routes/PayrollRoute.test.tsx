@@ -103,7 +103,7 @@ describe("PayrollRoute authorization", () => {
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("heading", { name: "Payroll Administration" }),
+      screen.getByRole("heading", { name: "Payroll" }),
     ).toBeVisible();
     expect(usePayrollOperationsSummary).toHaveBeenCalledWith(true);
     expect(usePayrollReports).toHaveBeenCalledWith(true);

@@ -55,6 +55,8 @@ export function PayrollRoute() {
     );
   const value = operations.data;
   const approvedRunCount = value.run_counts.approved ?? 0;
+  const calculatedRunCount = value.run_counts.calculated ?? 0;
+  const nativeReady = calculatedRunCount > 0 || approvedRunCount > 0 || (value.run_counts.closed ?? 0) > 0;
   const selectPayPeriod = (payPeriodId: string) => {
     setSelectedPayPeriodId(payPeriodId);
     const next = new URLSearchParams(searchParams);
@@ -84,10 +86,13 @@ export function PayrollRoute() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
       <header>
-        <p className="text-sm font-semibold text-action-primary">Financial Operations</p>
-        <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll Administration</h1>
-        <p className="mt-2 text-content-muted">Prepare, calculate, review, approve, and document Payroll. Paper-check issuance is recorded here; provider execution, ACH, and tax filing remain disabled.</p>
+        <p className="text-sm font-semibold text-action-primary">Office</p>
+        <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll</h1>
+        <p className="mt-2 text-content-muted">Review the current pay period, resolve employee blockers, and record approved payroll evidence. Payment execution and tax filing remain disabled.</p>
       </header>
+      <Alert variant={nativeReady ? "success" : "warning"} title={nativeReady ? "Native Payroll evidence available" : "NATIVE CALCULATION NOT READY"}>
+        {nativeReady ? "Native Payroll results are available for the reported run state." : "Complete the approved policy, employee, time, compensation, and tax evidence before native calculation can proceed."} {canReadCutover && <><Link className="ml-1 font-semibold underline" to="#manual-bridge-payroll">Record reviewed manual payroll</Link> is available for an owner-reviewed external calculation.</>}
+      </Alert>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
       {canReadCutover && <PayrollCutoverReview />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>

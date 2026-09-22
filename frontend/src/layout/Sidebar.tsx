@@ -27,16 +27,17 @@ export function Sidebar({
 }: SidebarProps) {
   const administrationAccess = useAdministrationAccess();
   const permissions = useEffectivePermissions();
-  const visibleGroups = navigationGroups.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => {
-      if (item.id === "administration" && !administrationAccess.isSuccess) return false;
-      const requiredPermission = "requiredPermission" in item
-        ? item.requiredPermission
-        : undefined;
-      return !requiredPermission || permissions.has(requiredPermission);
-    }),
-  }));
+  const visibleGroups = navigationGroups
+    .filter((group) => group.id !== "administration" || administrationAccess.isSuccess)
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        const requiredPermission = "requiredPermission" in item
+          ? item.requiredPermission
+          : undefined;
+        return !requiredPermission || permissions.has(requiredPermission);
+      }),
+    }));
   return (
     <aside
       aria-label={mobile ? "Mobile application navigation" : "Application navigation"}

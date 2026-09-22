@@ -1136,11 +1136,14 @@ function DispatchTimeline({
                       }}
                     >
                       <strong className="block truncate text-sm">
-                        {job?.job_number ?? item.appointment_number}
+                        {job?.customer_display_name ?? "Customer"}
                       </strong>
                       <span className="block truncate text-xs">
-                        {time(item.arrival_window_start_at)} ·{" "}
+                        {job?.job_type_code ?? job?.job_number ?? item.appointment_number} · {time(item.arrival_window_start_at)} ·{" "}
                         {appointmentState(item, dispatch, job)}
+                      </span>
+                      <span className="block truncate text-[11px] text-content-muted">
+                        {job?.job_number ?? item.appointment_number} · {duration} min
                       </span>
                     </button>
                   );
