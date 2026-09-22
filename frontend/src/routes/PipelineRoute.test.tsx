@@ -32,6 +32,8 @@ describe("PipelineRoute", () => {
     expect(screen.getByRole("heading", { name: "Pipeline" })).toBeVisible();
     expect(screen.getByText("Smith Family")).toBeVisible();
     expect(screen.getByText("New — contact needed")).toBeVisible();
+    expect(screen.getByText("Unassigned")).toBeVisible();
+    expect(screen.getByText("No action yet")).toBeVisible();
     expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute("href", "/customers/customer-1");
   });
 

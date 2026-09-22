@@ -42,6 +42,9 @@ function LeadCard({ lead }: { readonly lead: Lead }) {
       </div>
       <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div><dt className="text-content-muted">Source</dt><dd>{lead.lead_source}</dd></div>
+        <div><dt className="text-content-muted">Service</dt><dd>{lead.service_category ?? "Not classified"}</dd></div>
+        <div><dt className="text-content-muted">Assigned CSR</dt><dd>{lead.assigned_user_id ? "Assigned" : "Unassigned"}</dd></div>
+        <div><dt className="text-content-muted">Last action</dt><dd>{lead.last_action_at ? new Date(lead.last_action_at).toLocaleString() : "No action yet"}</dd></div>
         <div><dt className="text-content-muted">Next action</dt><dd>{lead.next_action_type ?? "Not set"}</dd></div>
         <div><dt className="text-content-muted">Due</dt><dd>{lead.next_action_due_at ? new Date(lead.next_action_due_at).toLocaleString() : "Not set"}</dd></div>
         <div><dt className="text-content-muted">Attempts</dt><dd>{lead.contact_attempt_count}</dd></div>
@@ -53,6 +56,7 @@ function LeadCard({ lead }: { readonly lead: Lead }) {
         {lead.customer_id && <Link className="text-link" to={`/customers/${lead.customer_id}`}>Open Customer</Link>}
         {lead.job_id && <Link className="text-link" to={`/jobs/${lead.job_id}`}>Open Job</Link>}
         {lead.appointment_id && <Link className="text-link" to={`/appointments/${lead.appointment_id}`}>Open Appointment</Link>}
+        {lead.estimate_id && <Link className="text-link" to="/estimates">Open linked Estimate</Link>}
       </div>
     </article>
   );
