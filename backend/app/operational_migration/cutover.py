@@ -431,9 +431,8 @@ class CutoverMigrationService:
         if existing is not None:
             if source_system == SOURCE4_SYSTEM and (
                 existing.parent_id != parent_id
-                or existing.external_metadata != self._json(
-                    record.external_metadata, "metadata"
-                )
+                or existing.external_metadata
+                != self._json(record.external_metadata, "metadata")
             ):
                 raise CutoverMigrationError("history_source_identity_conflict")
             return "duplicate", "source_identity_exists"

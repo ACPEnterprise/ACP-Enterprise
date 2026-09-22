@@ -8,7 +8,9 @@ def _load(relative: str) -> dict[str, object]:
     return json.loads((ROOT / relative).read_text(encoding="utf-8"))
 
 
-def test_preview_acceptance_contract_is_closed_and_requires_reproducible_bindings() -> None:
+def test_preview_acceptance_contract_is_closed_and_requires_reproducible_bindings() -> (
+    None
+):
     value = _load("docs/quality/crosscutting-preview-acceptance.v1.json")
     assert value["execution_environment"] == "PREVIEW_ONLY"
     assert value["classifications"] == ["PASS", "FAIL", "BLOCKED"]

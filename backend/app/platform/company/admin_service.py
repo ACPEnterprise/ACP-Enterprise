@@ -23,6 +23,8 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User
 
+PROTECTED_OWNER_ROLE_CODE = "OWNER"
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -123,20 +125,34 @@ class CompanyAdministrationService:
     def _permission_category(code: str) -> str:
         categories = (
             ("CUSTOMER", "Customers, Contacts & Locations"),
-            ("ESTIMATE", "Estimates"), ("SCHEDULING", "Scheduling"),
-            ("JOB", "Jobs"), ("DISPATCH", "Dispatch"),
-            ("INVOICE", "Invoices"), ("PAYMENT", "Payments"),
+            ("ESTIMATE", "Estimates"),
+            ("SCHEDULING", "Scheduling"),
+            ("JOB", "Jobs"),
+            ("DISPATCH", "Dispatch"),
+            ("INVOICE", "Invoices"),
+            ("PAYMENT", "Payments"),
             ("COMMUNICATION", "Communications"),
             ("SERVICE_AGREEMENT", "Service Agreements"),
-            ("ASSET", "Assets & Fleet"), ("PURCHASING", "Purchasing"),
-            ("INVENTORY", "Inventory"), ("WORKFORCE", "Workforce"),
-            ("TIMEKEEPING", "Timekeeping"), ("PAYROLL", "Payroll"),
-            ("ACCOUNTING", "Accounting"), ("ECONOMICS", "Business Economics"),
-            ("LUMINARY", "Luminary"), ("BEACON", "Beacon"), ("LIA", "LIA"),
-            ("REPORT", "Reports"), ("AUDIT", "Audit"),
-            ("MIGRATION", "Migration"), ("OWNER", "Owner Operations"),
+            ("ASSET", "Assets & Fleet"),
+            ("PURCHASING", "Purchasing"),
+            ("INVENTORY", "Inventory"),
+            ("WORKFORCE", "Workforce"),
+            ("TIMEKEEPING", "Timekeeping"),
+            ("PAYROLL", "Payroll"),
+            ("ACCOUNTING", "Accounting"),
+            ("ECONOMICS", "Business Economics"),
+            ("LUMINARY", "Luminary"),
+            ("BEACON", "Beacon"),
+            ("LIA", "LIA"),
+            ("REPORT", "Reports"),
+            ("AUDIT", "Audit"),
+            ("MIGRATION", "Migration"),
+            ("OWNER", "Owner Operations"),
         )
-        return next((label for token, label in categories if f"_{token}_" in code), "Administration")
+        return next(
+            (label for token, label in categories if f"_{token}_" in code),
+            "Administration",
+        )
 
     @staticmethod
     def _permission_nature(action: str) -> str:
@@ -187,6 +203,9 @@ class CompanyAdministrationService:
                     .options(
                         selectinload(Membership.user),
                         selectinload(Membership.default_branch),
+                        selectinload(Membership.role_assignments).selectinload(
+                            MembershipRole.role
+                        ),
                     )
                     .where(Membership.company_id == context.company.id)
                     .order_by(Membership.created_at, Membership.id)
@@ -486,6 +505,10 @@ class CompanyAdministrationService:
         async with session.begin():
             await self._lock_company(session, context)
             role = await self._role_for_update(session, context.company.id, role_id)
+            if role.code == PROTECTED_OWNER_ROLE_CODE:
+                raise AccessPolicyConflictError(
+                    "Canonical owner authority requires the protected owner workflow."
+                )
             if role.status == status:
                 return role
             if role.status == "active" and status != "active":
@@ -526,6 +549,10 @@ class CompanyAdministrationService:
             if membership.status != "active":
                 raise AccessPolicyConflictError("Membership is not active.")
             role = await self._role_for_update(session, context.company.id, role_id)
+            if role.code == PROTECTED_OWNER_ROLE_CODE:
+                raise AccessPolicyConflictError(
+                    "Canonical owner authority requires the protected owner workflow."
+                )
             if role.status != "active" or role.archived_at is not None:
                 raise AccessPolicyConflictError("Role is not active.")
             existing = await session.scalar(
@@ -569,6 +596,10 @@ class CompanyAdministrationService:
                 session, context.company.id, membership_id
             )
             role = await self._role_for_update(session, context.company.id, role_id)
+            if role.code == PROTECTED_OWNER_ROLE_CODE:
+                raise AccessPolicyConflictError(
+                    "Canonical owner authority requires the protected owner workflow."
+                )
             assignment = await session.scalar(
                 select(MembershipRole)
                 .where(
@@ -604,6 +635,10 @@ class CompanyAdministrationService:
         async with session.begin():
             await self._lock_company(session, context)
             role = await self._role_for_update(session, context.company.id, role_id)
+            if role.code == PROTECTED_OWNER_ROLE_CODE:
+                raise AccessPolicyConflictError(
+                    "Canonical owner permissions are reconciled from protected policy."
+                )
             if role.status != "active" or role.archived_at is not None:
                 raise AccessPolicyConflictError("Role is not active.")
             permission = await session.scalar(
@@ -652,6 +687,10 @@ class CompanyAdministrationService:
         async with session.begin():
             await self._lock_company(session, context)
             role = await self._role_for_update(session, context.company.id, role_id)
+            if role.code == PROTECTED_OWNER_ROLE_CODE:
+                raise AccessPolicyConflictError(
+                    "Canonical owner permissions are reconciled from protected policy."
+                )
             assignment = await session.scalar(
                 select(RolePermission)
                 .where(

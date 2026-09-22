@@ -69,7 +69,9 @@ class RealRosterService:
                 )
             )
             if competing is not None:
-                raise RealRosterConflict("Employee is already bound to another roster identity.")
+                raise RealRosterConflict(
+                    "Employee is already bound to another roster identity."
+                )
             if existing is None:
                 binding = RealWorkforceRosterBinding(
                     company_id=context.company.id,
@@ -229,9 +231,13 @@ class RealRosterService:
                 )
                 and employee.home_branch_id == main_branch.id
             )
-            user_ready = bool(user and user.status == "active" and user.archived_at is None)
+            user_ready = bool(
+                user and user.status == "active" and user.archived_at is None
+            )
             membership_ready = bool(membership and membership.status == "active")
-            employee_ready = employee.status == "active" and employee.archived_at is None
+            employee_ready = (
+                employee.status == "active" and employee.archived_at is None
+            )
             roles_ready = person.required_role_codes.issubset(role_codes)
             profile_ready = bool(profile and profile.status == "active")
             technician_ready = not person.field_tech or "technician" in capability_codes
@@ -251,9 +257,11 @@ class RealRosterService:
                     blockers.append(code)
             if credential is None:
                 blockers.append("PASSWORD_NOT_ESTABLISHED")
-            dispatch_ready = all(
-                (employee_ready, branch_ready, profile_ready, technician_ready)
-            ) if person.field_tech else False
+            dispatch_ready = (
+                all((employee_ready, branch_ready, profile_ready, technician_ready))
+                if person.field_tech
+                else False
+            )
             items.append(
                 RealRosterReadinessItem(
                     roster_key=person.key,
@@ -262,22 +270,50 @@ class RealRosterService:
                     field_tech=person.field_tech,
                     employee_id=employee.id,
                     employee_display_name=employee.display_name,
-                    user_state="USER_READY" if user_ready else "USER_MISSING_OR_INACTIVE",
-                    employee_state="EMPLOYEE_READY" if employee_ready else "EMPLOYEE_MISSING_OR_INACTIVE",
-                    membership_state="MEMBERSHIP_READY" if membership_ready else "MEMBERSHIP_MISSING_OR_INACTIVE",
-                    branch_state="MAIN_BRANCH_READY" if branch_ready else "BRANCH_MISSING",
+                    user_state="USER_READY"
+                    if user_ready
+                    else "USER_MISSING_OR_INACTIVE",
+                    employee_state="EMPLOYEE_READY"
+                    if employee_ready
+                    else "EMPLOYEE_MISSING_OR_INACTIVE",
+                    membership_state="MEMBERSHIP_READY"
+                    if membership_ready
+                    else "MEMBERSHIP_MISSING_OR_INACTIVE",
+                    branch_state="MAIN_BRANCH_READY"
+                    if branch_ready
+                    else "BRANCH_MISSING",
                     role_state="ROLE_READY" if roles_ready else "ROLE_MISSING",
-                    workforce_profile_state="WORKFORCE_PROFILE_READY" if profile_ready else "WORKFORCE_PROFILE_MISSING",
-                    technician_capability_state=("TECHNICIAN_CAPABILITY_READY" if technician_ready else "TECHNICIAN_CAPABILITY_MISSING"),
+                    workforce_profile_state="WORKFORCE_PROFILE_READY"
+                    if profile_ready
+                    else "WORKFORCE_PROFILE_MISSING",
+                    technician_capability_state=(
+                        "TECHNICIAN_CAPABILITY_READY"
+                        if technician_ready
+                        else "TECHNICIAN_CAPABILITY_MISSING"
+                    ),
                     mobile_state="MOBILE_READY" if mobile_ready else "MOBILE_MISSING",
-                    credential_state="ACP_LOGIN_READY" if credential else "BLOCKED_ACCOUNT_ACTIVATION",
-                    availability_state="BOUNDED_EVIDENCE_PRESENT" if availability else "EXPLICIT_WINDOW_REQUIRED",
-                    dispatch_state="READY_FOR_WINDOW_EVALUATION" if dispatch_ready else "NOT_DISPATCHABLE",
-                    timekeeping_state="LINKED" if employee_ready and user_ready and membership_ready else "IDENTITY_LINKAGE_REQUIRED",
-                    payroll_linkage_state="LINKED_INPUTS_NOT_EVALUATED" if employee_ready else "EMPLOYEE_BINDING_REQUIRED",
+                    credential_state="ACP_LOGIN_READY"
+                    if credential
+                    else "BLOCKED_ACCOUNT_ACTIVATION",
+                    availability_state="BOUNDED_EVIDENCE_PRESENT"
+                    if availability
+                    else "EXPLICIT_WINDOW_REQUIRED",
+                    dispatch_state="READY_FOR_WINDOW_EVALUATION"
+                    if dispatch_ready
+                    else "NOT_DISPATCHABLE",
+                    timekeeping_state="LINKED"
+                    if employee_ready and user_ready and membership_ready
+                    else "IDENTITY_LINKAGE_REQUIRED",
+                    payroll_linkage_state="LINKED_INPUTS_NOT_EVALUATED"
+                    if employee_ready
+                    else "EMPLOYEE_BINDING_REQUIRED",
                     identity_confirmed_at=binding.created_at,
-                    readiness_window_start_at=availability.start_at if availability else None,
-                    readiness_window_end_at=availability.end_at if availability else None,
+                    readiness_window_start_at=availability.start_at
+                    if availability
+                    else None,
+                    readiness_window_end_at=availability.end_at
+                    if availability
+                    else None,
                     readiness_source=availability.source if availability else None,
                     blockers=tuple(blockers),
                 )
@@ -396,7 +432,9 @@ class RealRosterService:
         return "OWNER_CERTIFICATION_REQUIRED"
 
     @staticmethod
-    def _unbound(person, blocker: str = "OWNER_EMPLOYEE_BINDING_REQUIRED") -> RealRosterReadinessItem:
+    def _unbound(
+        person, blocker: str = "OWNER_EMPLOYEE_BINDING_REQUIRED"
+    ) -> RealRosterReadinessItem:
         return RealRosterReadinessItem(
             roster_key=person.key,
             display_name=person.display_name,

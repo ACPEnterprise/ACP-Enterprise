@@ -5,8 +5,7 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 BANK_PATH = (
-    REPOSITORY
-    / "backend/app/engineering_control/scheduler/milestone-bank.v2.json"
+    REPOSITORY / "backend/app/engineering_control/scheduler/milestone-bank.v2.json"
 )
 SCHEMA_PATH = REPOSITORY / "docs/project/schemas/milestone-bank-v2.schema.json"
 STARTING_SHA = "1f012258cba67300c3481953aa18a62e12e5b634"
@@ -71,7 +70,11 @@ def test_readiness_is_fail_closed_and_current_ownership_is_not_ready() -> None:
         "BLOCKED_EXTERNAL": 1,
         "READY": 2,
     }
-    ready = {item["milestone_id"] for item in milestones if item["readiness_state"] == "READY"}
+    ready = {
+        item["milestone_id"]
+        for item in milestones
+        if item["readiness_state"] == "READY"
+    }
     assert ready == {"BANK.PUR.001", "BANK.BEA.001"}
     for item in milestones:
         if item["readiness_state"] == "READY":

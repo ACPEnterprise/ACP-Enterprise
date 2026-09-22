@@ -199,7 +199,9 @@ class PayrollGrossResultService:
             time_snapshot_digest=candidate.time_snapshot_digest,
             admission_id=candidate.admission_id,
             admission_digest=candidate.admission_digest,
-            earning_components=[item.canonical_content() for item in candidate.components],
+            earning_components=[
+                item.canonical_content() for item in candidate.components
+            ],
             gross_pay_total=candidate.gross_pay_total,
             calculation_digest=candidate.calculation_digest,
             calculated_at=candidate.calculated_at,
@@ -395,7 +397,9 @@ class PayrollGrossResultService:
                     admission.admission_digest,
                 )
             )
-        return tuple(sorted((*persisted, *blocked), key=lambda item: str(item.employee_id)))
+        return tuple(
+            sorted((*persisted, *blocked), key=lambda item: str(item.employee_id))
+        )
 
     async def history(
         self,
@@ -502,7 +506,11 @@ class PayrollGrossResultService:
     ) -> PayrollGrossCalculationReviewRecord:
         reason = reason_code.strip()
         note = safe_note.strip() if safe_note else None
-        if not reason or len(reason) > 80 or (note and (len(note) > 500 or "$" in note)):
+        if (
+            not reason
+            or len(reason) > 80
+            or (note and (len(note) > 500 or "$" in note))
+        ):
             raise PayrollConflictError("gross-pay review evidence is unsafe")
         sequence = (
             await session.scalar(

@@ -81,6 +81,14 @@ export function useAssignMembershipRole() {
   });
 }
 
+export function useRevokeMembershipRole() {
+  return useMutation({
+    mutationFn: ({ membershipId, roleId }: { membershipId: string; roleId: string }) =>
+      api.revokeMembershipRole(membershipId, roleId),
+    retry: false,
+  });
+}
+
 export function useRolePermissions(roleId: string | null, enabled = true) {
   return useQuery({
     queryKey: administrationKeys.permissions(roleId ?? "none"),

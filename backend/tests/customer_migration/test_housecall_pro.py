@@ -1,5 +1,4 @@
 import pytest
-
 from app.customer_migration.children import parse_contact, parse_service_location
 from app.customer_migration.housecall_pro import (
     UnresolvedRowError,

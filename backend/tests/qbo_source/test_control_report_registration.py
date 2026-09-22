@@ -5,7 +5,6 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-
 from app.qbo_source.control_report_registration import (
     RegisterControlReport,
     register_control_report,

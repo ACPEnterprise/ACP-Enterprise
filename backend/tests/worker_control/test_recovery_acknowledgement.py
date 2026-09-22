@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-
 from app.worker_control.recovery_acknowledgement import (
     RecoveryAcknowledgementError,
     RecoveryAcknowledgementRequest,
@@ -153,7 +152,9 @@ async def test_identical_replay_is_idempotent_and_conflict_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_local_application_is_idempotent_and_digest_conflict_fails_closed() -> None:
+async def test_local_application_is_idempotent_and_digest_conflict_fails_closed() -> (
+    None
+):
     acknowledgement_id = uuid4()
     company_id = uuid4()
     worker_id = uuid4()

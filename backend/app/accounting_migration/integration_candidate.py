@@ -180,12 +180,21 @@ class AccountingIntegrationCandidateService:
             raise AccountingValidation("Candidate version and lineage conflict")
         if created_at.tzinfo is None or as_of.tzinfo is None or as_of < created_at:
             raise AccountingValidation("Candidate timestamps are invalid")
-        if evidence.reconciliation_package_digest != reconciliation.reconciliation_digest:
-            raise AccountingConflict("Candidate reconciliation evidence is contradictory")
+        if (
+            evidence.reconciliation_package_digest
+            != reconciliation.reconciliation_digest
+        ):
+            raise AccountingConflict(
+                "Candidate reconciliation evidence is contradictory"
+            )
         if evidence.source_package_identity != reconciliation.package_id:
-            raise AccountingConflict("Candidate source package identity is contradictory")
+            raise AccountingConflict(
+                "Candidate source package identity is contradictory"
+            )
         if evidence.source_evidence_digest != reconciliation.canonical_package_digest:
-            raise AccountingConflict("Candidate source evidence digest is contradictory")
+            raise AccountingConflict(
+                "Candidate source evidence digest is contradictory"
+            )
         if policies.cutover_date != reconciliation.cutover_date.isoformat():
             raise AccountingConflict("Candidate cutover policy is contradictory")
         if policies.accounting_period != str(reconciliation.period_id):
@@ -241,7 +250,12 @@ class AccountingIntegrationCandidateService:
             owner_accepted_by_user_id=None,
             canonical_package_digest="",
         )
-        return replace(candidate, canonical_package_digest=_digest(_candidate_payload(candidate, include_digest=False)))
+        return replace(
+            candidate,
+            canonical_package_digest=_digest(
+                _candidate_payload(candidate, include_digest=False)
+            ),
+        )
 
     @staticmethod
     def finance_approve(
@@ -253,7 +267,9 @@ class AccountingIntegrationCandidateService:
             candidate.prepared_by_user_id,
             candidate.reconciliation_approved_by_user_id,
         }:
-            raise AccountingConflict("Candidate Finance review violates separation of duties")
+            raise AccountingConflict(
+                "Candidate Finance review violates separation of duties"
+            )
         return _redigest(
             replace(
                 candidate,
@@ -274,7 +290,9 @@ class AccountingIntegrationCandidateService:
             candidate.reconciliation_approved_by_user_id,
             candidate.finance_approved_by_user_id,
         }:
-            raise AccountingConflict("Candidate owner review violates separation of duties")
+            raise AccountingConflict(
+                "Candidate owner review violates separation of duties"
+            )
         return _redigest(
             replace(
                 candidate,
@@ -310,7 +328,9 @@ class AccountingIntegrationCandidateService:
             candidate.policies, candidate.mappings, candidate.evidence
         )
         if candidate.state is not CandidateState.ACCEPTED_FOR_REHEARSAL:
-            limitations = tuple(sorted((*limitations, f"state:{candidate.state.value}")))
+            limitations = tuple(
+                sorted((*limitations, f"state:{candidate.state.value}"))
+            )
         return RehearsalReadiness(
             eligible=not limitations,
             state=candidate.state,
@@ -340,7 +360,9 @@ def _redigest(
 ) -> AccountingIntegrationCandidate:
     return replace(
         changed,
-        canonical_package_digest=_digest(_candidate_payload(changed, include_digest=False)),
+        canonical_package_digest=_digest(
+            _candidate_payload(changed, include_digest=False)
+        ),
     )
 
 
@@ -360,7 +382,9 @@ class InMemoryCandidateRegistry:
         existing = self._items.get(candidate.candidate_id)
         if existing is not None:
             if existing.canonical_package_digest != candidate.canonical_package_digest:
-                raise AccountingConflict("Candidate identity has contradictory evidence")
+                raise AccountingConflict(
+                    "Candidate identity has contradictory evidence"
+                )
             return existing
         self._items[candidate.candidate_id] = candidate
         return candidate
@@ -373,8 +397,13 @@ class InMemoryCandidateRegistry:
         prior = self._items.get(prior_id)
         if prior is None or successor.supersedes_candidate_id != prior_id:
             raise AccountingConflict("Candidate supersession lineage is invalid")
-        if successor.company_id != prior.company_id or successor.version != prior.version + 1:
-            raise AccountingConflict("Candidate supersession scope or version is invalid")
+        if (
+            successor.company_id != prior.company_id
+            or successor.version != prior.version + 1
+        ):
+            raise AccountingConflict(
+                "Candidate supersession scope or version is invalid"
+            )
         superseded = _redigest(
             replace(
                 prior,

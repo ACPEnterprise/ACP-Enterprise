@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-
 from app.business_economics.profitability_persistence import (
     EconomicsProfitabilityPersistenceService,
     ProfitabilityPersistenceError,

@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ROADMAP = ROOT / "docs" / "factory" / "acp_full_system_roadmap.yaml"
 
@@ -32,6 +31,13 @@ STATUSES = {
 }
 FACTORIES = {"OM1", "OM2", "LAPTOP"}
 PRIORITIES = {"P0", "P1", "P2", "P3"}
+ACCEPTANCE_STATUSES = {
+    "NOT_TESTED",
+    "PASS",
+    "DEFECT",
+    "HUMAN_INPUT_REQUIRED",
+    "PROVIDER_GATE",
+}
 REQUIRED_ITEM_FIELDS = {
     "id",
     "title",
@@ -76,7 +82,6 @@ PULLABLE = {
     "ENGINEERING_READY",
     "INTEGRATED",
     "DEPLOYED_BETA",
-    "OWNER_ACCEPTANCE_REQUIRED",
 }
 
 
@@ -141,6 +146,39 @@ def validate(data: dict[str, Any]) -> list[str]:
     if sorted(original_numbers) != list(range(1, 37)):
         errors.append("original milestone mapping must contain exactly numbers 1 through 36")
 
+    acceptance = data.get("real_operational_acceptance", {})
+    surfaces = acceptance.get("surfaces", []) if isinstance(acceptance, dict) else []
+    if not isinstance(surfaces, list):
+        errors.append("real operational acceptance surfaces must be a list")
+        surfaces = []
+    acceptance_ids: list[object] = []
+    surface_names: list[object] = []
+    for surface in surfaces:
+        if not isinstance(surface, dict):
+            errors.append("real operational acceptance surface must be an object")
+            continue
+        acceptance_ids.append(surface.get("id"))
+        surface_names.append(surface.get("surface"))
+        if surface.get("milestone_id") not in known:
+            errors.append(f"{surface.get('id')}: unknown acceptance milestone")
+        if surface.get("status") not in ACCEPTANCE_STATUSES:
+            errors.append(f"{surface.get('id')}: invalid acceptance status")
+        if surface.get("priority") not in PRIORITIES:
+            errors.append(f"{surface.get('id')}: invalid acceptance priority")
+        if not isinstance(surface.get("beta_operable"), bool) or not isinstance(
+            surface.get("owner_accepted"), bool
+        ):
+            errors.append(f"{surface.get('id')}: missing acceptance truth flags")
+        if surface.get("status") == "PASS":
+            if not surface.get("beta_operable") or not surface.get("owner_accepted"):
+                errors.append(f"{surface.get('id')}: PASS lacks owner proof")
+        elif surface.get("beta_operable") or surface.get("owner_accepted"):
+            errors.append(f"{surface.get('id')}: non-PASS claims completion")
+    if len(acceptance_ids) != len(set(acceptance_ids)):
+        errors.append("operational acceptance ids must be unique")
+    if len(surface_names) != len(set(surface_names)):
+        errors.append("operational acceptance surfaces must be unique")
+
     # Prove the dependency graph is acyclic.
     graph = {
         item["id"]: item.get("prerequisites", [])
@@ -189,12 +227,28 @@ def eligible(data: dict[str, Any], *, factory: str | None = None) -> list[dict[s
         item
         for item in items
         if item["lifecycle_status"] in PULLABLE
+        and item["owner_acceptance_status"] != "OWNER_ACCEPTANCE_REQUIRED"
         and (factory is None or item["owning_factory"] == factory)
         and dependency_safe(item, by_id)
         and not has_actionable_direct_successor(item)
     ]
     rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-    return sorted(candidates, key=lambda item: (rank[item["priority"]], item["sequence"], item["id"]))
+    physical_defects = {
+        surface["milestone_id"]
+        for surface in data.get("real_operational_acceptance", {}).get("surfaces", [])
+        if surface.get("status") == "DEFECT"
+    }
+    # Physical real-Beta failures outrank generic work at the same launch class.
+    # Dependency and owner/provider-gate checks above remain authoritative.
+    return sorted(
+        candidates,
+        key=lambda item: (
+            rank[item["priority"]],
+            0 if item["id"] in physical_defects else 1,
+            item["sequence"],
+            item["id"],
+        ),
+    )
 
 
 def main() -> int:

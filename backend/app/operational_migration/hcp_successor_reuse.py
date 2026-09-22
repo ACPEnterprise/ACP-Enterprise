@@ -130,9 +130,7 @@ class QualifiedSuccessorManifest:
             self.entries,
             self.canonical_reconciliation_digest,
             self.canonical_reconciliation_admission_allowed,
-        ) | {
-            "digest": self.digest
-        }
+        ) | {"digest": self.digest}
 
     @classmethod
     def load(cls, path: Path) -> QualifiedSuccessorManifest:
@@ -187,14 +185,14 @@ def build_successor_manifest(
         by_key[(binding.domain, binding.source_system, binding.source_id)].append(
             binding.target_id
         )
-        target_owners[
-            (binding.domain, binding.source_system, binding.target_id)
-        ].add(binding.source_id)
-    entries: list[SuccessorManifestEntry] = []
-    for sealed in sorted(sealed_source4, key=lambda item: (item.domain, item.source_id)):
-        legacy = by_key.get(
-            (sealed.domain, LEGACY_SOURCE_SYSTEM, sealed.source_id), []
+        target_owners[(binding.domain, binding.source_system, binding.target_id)].add(
+            binding.source_id
         )
+    entries: list[SuccessorManifestEntry] = []
+    for sealed in sorted(
+        sealed_source4, key=lambda item: (item.domain, item.source_id)
+    ):
+        legacy = by_key.get((sealed.domain, LEGACY_SOURCE_SYSTEM, sealed.source_id), [])
         source4 = by_key.get(
             (sealed.domain, SOURCE4_SOURCE_SYSTEM, sealed.source_id), []
         )
@@ -378,7 +376,9 @@ def qualify_successor_admission(
         "unresolved_owner_decision_count": holds + conflicts,
         "guard_failures": failures,
     }
-    allowed = not failures and not conflicts and not duplicate_count and not orphan_count
+    allowed = (
+        not failures and not conflicts and not duplicate_count and not orphan_count
+    )
     return SuccessorAdmissionPreflight(
         contract=PREFLIGHT_CONTRACT,
         manifest_digest=manifest.digest,
@@ -395,9 +395,7 @@ def qualify_successor_admission(
         digest=_digest(
             {
                 **public,
-                "domain_counts": {
-                    key: asdict(value) for key, value in counts.items()
-                },
+                "domain_counts": {key: asdict(value) for key, value in counts.items()},
                 "admission_allowed": allowed,
             }
         ),
@@ -455,11 +453,15 @@ async def qualify_reuse_graph(
     aggregate_by_source = {
         item.source_identity: item for item in plan.customers.reviewed.aggregates
     }
-    contact_ids = [row.primary_contact_id for row in customers.values() if row.primary_contact_id]
+    contact_ids = [
+        row.primary_contact_id for row in customers.values() if row.primary_contact_id
+    ]
     contacts = {
         str(row.id): row
         for row in (
-            await session.scalars(select(CustomerContact).where(CustomerContact.id.in_(contact_ids)))
+            await session.scalars(
+                select(CustomerContact).where(CustomerContact.id.in_(contact_ids))
+            )
         ).all()
     }
     for source_id, aggregate in aggregate_by_source.items():
@@ -621,7 +623,9 @@ def _validate_entries(entries: tuple[SuccessorManifestEntry, ...]) -> None:
     for item in entries:
         key = SourceKey(item.domain, item.source_id)
         if not item.domain or not item.source_id or key in keys:
-            raise ValueError("successor manifest contains missing or duplicate identity")
+            raise ValueError(
+                "successor manifest contains missing or duplicate identity"
+            )
         keys.add(key)
         if len(item.evidence_digest) != 64:
             raise ValueError("successor manifest evidence digest is invalid")
@@ -629,9 +633,9 @@ def _validate_entries(entries: tuple[SuccessorManifestEntry, ...]) -> None:
             int(item.evidence_digest, 16)
         except ValueError as error:
             raise ValueError("successor manifest evidence digest is invalid") from error
-        if (
-            item.disposition is AdmissionDisposition.REUSE_EXACT_SUCCESSOR
-        ) != bool(item.native_id):
+        if (item.disposition is AdmissionDisposition.REUSE_EXACT_SUCCESSOR) != bool(
+            item.native_id
+        ):
             raise ValueError("only exact reuse entries must bind a native identity")
 
 
@@ -658,8 +662,7 @@ def _guard_failures(guards: AdmissionGuardEvidence) -> tuple[str, ...]:
     checks = {
         "hybrid_authority": guards.hybrid_digest == AUTHORITATIVE_HYBRID_DIGEST,
         "customer_control": (
-            guards.customer_control_digest
-            == AUTHORITATIVE_CUSTOMER_CONTROL_DIGEST
+            guards.customer_control_digest == AUTHORITATIVE_CUSTOMER_CONTROL_DIGEST
         ),
         "protected_authority": (
             guards.protected_authority == guards.expected_protected_authority

@@ -5,14 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import Settings, settings
 from app.platform.auth.access_tokens import AccessTokenService
 from app.platform.auth.errors import (
@@ -20,9 +12,8 @@ from app.platform.auth.errors import (
     InvalidCredentialsError,
     InvalidTokenError,
     PasswordChangeRequiredError,
-    RefreshTokenReuseError,
-    SessionInvalidError,
     RateLimitExceededError,
+    RefreshTokenReuseError,
 )
 from app.platform.auth.models import (
     AuthenticationSecurityEvent,
@@ -46,7 +37,13 @@ from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.models import MembershipRole, Permission, Role
 from app.platform.users.models import User, UserCredential
-
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 MODEL_REGISTRY = (Branch, Company)
 
@@ -394,10 +391,18 @@ async def test_refresh_rotation_reuse_versions_and_concurrency(
             update(User).where(User.id == version_id).values(authorization_version=2)
         )
     async with factory() as session:
-        with pytest.raises(SessionInvalidError):
-            await auth_service.rotate_refresh_token(
-                session, plaintext_token=version_login.refresh_token
-            )
+        refreshed = await auth_service.rotate_refresh_token(
+            session, plaintext_token=version_login.refresh_token
+        )
+        claims = auth_service.access_token_service.decode(refreshed.access_token)
+        assert claims.authorization_version == 2
+
+    async with factory() as session:
+        stored_session = await session.get(
+            AuthenticationSession, version_login.session_id
+        )
+        assert stored_session is not None
+        assert stored_session.authorization_version == 2
 
 
 @pytest.mark.asyncio

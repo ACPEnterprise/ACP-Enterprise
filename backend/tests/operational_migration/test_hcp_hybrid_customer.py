@@ -1,7 +1,6 @@
 from copy import deepcopy
 
 import pytest
-
 from app.operational_migration.hcp_hybrid_customer import (
     AdmissionOutcome,
     AssertionKind,

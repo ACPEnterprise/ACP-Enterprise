@@ -153,6 +153,20 @@ async def list_memberships(
                     if record.default_branch is not None
                     else None
                 ),
+                "role_ids": tuple(
+                    assignment.role_id
+                    for assignment in record.role_assignments
+                    if assignment.revoked_at is None
+                    and assignment.role.status == "active"
+                    and assignment.role.archived_at is None
+                ),
+                "role_codes": tuple(
+                    assignment.role.code
+                    for assignment in record.role_assignments
+                    if assignment.revoked_at is None
+                    and assignment.role.status == "active"
+                    and assignment.role.archived_at is None
+                ),
             }
         )
         for record in records

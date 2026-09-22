@@ -11,7 +11,6 @@ from development_factory.lia_contract import (
     WorkerAssignment,
 )
 
-
 Eligibility = Literal[
     "parallel_safe", "sequential_required", "blocked", "owner_review_required"
 ]
@@ -207,8 +206,10 @@ def build_integration_plan(
                 fnmatch.fnmatchcase(path, pattern) for pattern in approved_patterns
             ):
                 blockers += (
-                    f"worker output outside approved boundary: "
-                    f"{outcome.task_id}: {path}",
+                    (
+                        f"worker output outside approved boundary: "
+                        f"{outcome.task_id}: {path}"
+                    ),
                 )
             previous = changed_owners.get(path)
             if previous is not None and previous != outcome.task_id:

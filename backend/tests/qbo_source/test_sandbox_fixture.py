@@ -5,7 +5,6 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-
 from app.qbo_source.intuit import HttpResponse
 from app.qbo_source.sandbox_fixture import (
     FIXTURE_TAG,
@@ -35,7 +34,9 @@ class FixtureTransport:
         }
         self.posts = 0
 
-    async def request(self, *, method: str, url: str, headers: object, body: bytes | None) -> HttpResponse:
+    async def request(
+        self, *, method: str, url: str, headers: object, body: bytes | None
+    ) -> HttpResponse:
         del headers
         if method == "GET":
             query = parse_qs(urlparse(url).query).get("query", [""])[0]

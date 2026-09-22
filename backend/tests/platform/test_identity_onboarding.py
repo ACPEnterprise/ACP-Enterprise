@@ -669,8 +669,7 @@ async def test_owner_can_schedule_one_definitive_invitation_rejection_retry(
         assert recovery.error_code == "owner_authorized_definitive_rejection_retry"
         audit = await session.scalar(
             select(AuditRecord).where(
-                AuditRecord.action
-                == "identity.onboarding_delivery_retry_scheduled",
+                AuditRecord.action == "identity.onboarding_delivery_retry_scheduled",
                 AuditRecord.resource_id == request_id,
             )
         )

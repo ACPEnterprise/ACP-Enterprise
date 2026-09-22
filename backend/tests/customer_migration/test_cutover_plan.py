@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.cutover_plan import (
     CUTOVER_PLAN_VERSION,
     CutoverCheckpoint,

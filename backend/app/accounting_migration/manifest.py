@@ -269,11 +269,15 @@ class OpeningPackageValidator:
     def _safe_path(package_root: Path, value: str, artifact_id: str) -> Path:
         relative = PurePosixPath(value)
         if relative.is_absolute() or ".." in relative.parts:
-            raise ManifestValidationError("unsafe_artifact_path", artifact_id=artifact_id)
+            raise ManifestValidationError(
+                "unsafe_artifact_path", artifact_id=artifact_id
+            )
         resolved_root = package_root.resolve()
         resolved = (resolved_root / Path(*relative.parts)).resolve()
         if resolved != resolved_root and resolved_root not in resolved.parents:
-            raise ManifestValidationError("unsafe_artifact_path", artifact_id=artifact_id)
+            raise ManifestValidationError(
+                "unsafe_artifact_path", artifact_id=artifact_id
+            )
         return resolved
 
     @staticmethod
@@ -300,9 +304,10 @@ class OpeningPackageValidator:
             raise ManifestValidationError("invalid_manifest_json") from error
         document = self._object(document, "manifest_must_be_object")
         self._closed_keys(document, _TOP_LEVEL_KEYS, "unknown_manifest_property")
-        if document.get("schema_version") != "1.0.0" or document.get(
-            "contract_version"
-        ) != "ACC.DATA.1":
+        if (
+            document.get("schema_version") != "1.0.0"
+            or document.get("contract_version") != "ACC.DATA.1"
+        ):
             raise ManifestValidationError("unsupported_manifest_contract")
         if document.get("synthetic") is not True:
             raise ManifestValidationError("type_c_real_input_prohibited")
@@ -321,12 +326,14 @@ class OpeningPackageValidator:
         if transformation_version != self.expected_transformation_version:
             raise ManifestValidationError("transformation_version_mismatch")
 
-        source = self._object(
-            document.get("source_company"), "missing_source_company"
-        )
+        source = self._object(document.get("source_company"), "missing_source_company")
         target = self._object(document.get("target_binding"), "missing_target_binding")
-        self._closed_keys(source, _SOURCE_COMPANY_KEYS, "unknown_source_company_property")
-        self._closed_keys(target, _TARGET_BINDING_KEYS, "unknown_target_binding_property")
+        self._closed_keys(
+            source, _SOURCE_COMPANY_KEYS, "unknown_source_company_property"
+        )
+        self._closed_keys(
+            target, _TARGET_BINDING_KEYS, "unknown_target_binding_property"
+        )
         if source.get("product") != "QuickBooks":
             raise ManifestValidationError("unsupported_source_product")
         self._string(source, "edition", "missing_source_edition")
@@ -341,15 +348,18 @@ class OpeningPackageValidator:
             raise ManifestValidationError("invalid_accounting_basis")
         target_company_id = self._string(target, "company_id", "missing_company_id")
         raw_branches = target.get("branch_ids")
-        if not isinstance(raw_branches, list) or not raw_branches or not all(
-            isinstance(value, str) and value for value in raw_branches
+        if (
+            not isinstance(raw_branches, list)
+            or not raw_branches
+            or not all(isinstance(value, str) and value for value in raw_branches)
         ):
             raise ManifestValidationError("invalid_branch_binding")
         if len(set(raw_branches)) != len(raw_branches):
             raise ManifestValidationError("invalid_branch_binding")
-        if target_company_id != self.expected_company_id or tuple(
-            sorted(raw_branches)
-        ) != self.expected_branch_ids:
+        if (
+            target_company_id != self.expected_company_id
+            or tuple(sorted(raw_branches)) != self.expected_branch_ids
+        ):
             raise ManifestValidationError("company_branch_mismatch")
 
         binding = CompanyBinding(
@@ -390,14 +400,20 @@ class OpeningPackageValidator:
             self._closed_keys(value, _ARTIFACT_KEYS, "unknown_artifact_property")
             artifact_id = self._string(value, "artifact_id", "missing_artifact_id")
             if artifact_id in ids:
-                raise ManifestValidationError("duplicate_artifact_id", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "duplicate_artifact_id", artifact_id=artifact_id
+                )
             ids.add(artifact_id)
             kind = self._string(value, "kind", "missing_artifact_kind")
             if kind not in ARTIFACT_KINDS:
-                raise ManifestValidationError("unknown_artifact_kind", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "unknown_artifact_kind", artifact_id=artifact_id
+                )
             role = self._string(value, "role", "missing_artifact_role")
             if role not in {"primary_source", "control_report", "archive_evidence"}:
-                raise ManifestValidationError("unknown_artifact_role", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "unknown_artifact_role", artifact_id=artifact_id
+                )
             state = self._string(value, "state", "missing_artifact_state")
             requirement = self._string(
                 value, "requirement", "missing_artifact_requirement"
@@ -408,7 +424,9 @@ class OpeningPackageValidator:
                 "not_applicable",
                 "finance_disposition_required",
             }:
-                raise ManifestValidationError("unknown_artifact_state", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "unknown_artifact_state", artifact_id=artifact_id
+                )
             if requirement not in {"required", "conditional"}:
                 raise ManifestValidationError(
                     "unknown_artifact_requirement", artifact_id=artifact_id
@@ -425,22 +443,34 @@ class OpeningPackageValidator:
             self._timestamp(exported_at, "invalid_exported_at")
             path_value = self._string(value, "path", "missing_artifact_path")
             if path_value in paths:
-                raise ManifestValidationError("duplicate_artifact_path", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "duplicate_artifact_path", artifact_id=artifact_id
+                )
             paths.add(path_value)
             path = self._safe_path(package_root, path_value, artifact_id)
             size = value.get("byte_size")
             digest = self._string(value, "sha256", "invalid_artifact_checksum")
             if not isinstance(size, int) or isinstance(size, bool) or size < 0:
-                raise ManifestValidationError("invalid_artifact_size", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "invalid_artifact_size", artifact_id=artifact_id
+                )
             if not _SHA256.fullmatch(digest):
-                raise ManifestValidationError("invalid_artifact_checksum", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "invalid_artifact_checksum", artifact_id=artifact_id
+                )
             if not path.is_file():
-                raise ManifestValidationError("artifact_missing", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "artifact_missing", artifact_id=artifact_id
+                )
             raw_bytes = path.read_bytes()
             if len(raw_bytes) != size:
-                raise ManifestValidationError("artifact_size_mismatch", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "artifact_size_mismatch", artifact_id=artifact_id
+                )
             if hashlib.sha256(raw_bytes).hexdigest() != digest:
-                raise ManifestValidationError("artifact_checksum_mismatch", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "artifact_checksum_mismatch", artifact_id=artifact_id
+                )
             source_rows = self._count(value, "source_row_count", artifact_id)
             accepted_rows = self._count(value, "accepted_row_count", artifact_id)
             rejected_rows = self._count(value, "rejected_row_count", artifact_id)
@@ -448,7 +478,9 @@ class OpeningPackageValidator:
                 value, "pending_disposition_row_count", artifact_id
             )
             if source_rows != accepted_rows + rejected_rows + pending_rows:
-                raise ManifestValidationError("row_accounting_mismatch", artifact_id=artifact_id)
+                raise ManifestValidationError(
+                    "row_accounting_mismatch", artifact_id=artifact_id
+                )
             raw_disposition_id = value.get("finance_disposition_id")
             finance_disposition_id = (
                 raw_disposition_id if isinstance(raw_disposition_id, str) else None
@@ -489,7 +521,9 @@ class OpeningPackageValidator:
                 raise ManifestValidationError(
                     "artifact_requirement_mismatch", artifact_id=artifact.artifact_id
                 )
-            allowed_states = {"accepted", "not_applicable"} if conditional else {"accepted"}
+            allowed_states = (
+                {"accepted", "not_applicable"} if conditional else {"accepted"}
+            )
             if artifact.state not in allowed_states:
                 raise ManifestValidationError(
                     "artifact_not_ready", artifact_id=artifact.artifact_id

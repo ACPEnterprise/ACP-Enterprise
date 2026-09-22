@@ -4,8 +4,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from sqlalchemy import select
-
 from app.events.models import BusinessEvent
 from app.payroll.contracts import PayrollAuthorizationError, PayrollConflictError
 from app.payroll.finalization import PayrollGrossResultService
@@ -24,6 +22,8 @@ from app.payroll.tax_authority import (
     TaxDeductionAdmissionState,
 )
 from app.platform.audit.models import AuditRecord
+from sqlalchemy import select
+
 from tests.payroll.test_gross_pay_finalization import (
     FakeContext,
     candidate,
@@ -115,9 +115,7 @@ async def test_protected_tax_authority_resolves_and_binds_gross_result(
         with pytest.raises(PayrollAuthorizationError):
             await service.read(
                 session,
-                context=FakeContext(
-                    values["company_id"], values["actor_id"], set()
-                ),
+                context=FakeContext(values["company_id"], values["actor_id"], set()),
                 authority_id=draft.id,
             )
         with pytest.raises(PayrollConflictError, match="contradicts"):
@@ -214,9 +212,7 @@ async def test_missing_expired_unapproved_and_not_applicable_admission(
                 end=date(2026, 2, 1),
             ),
         )
-        await service.approve(
-            session, context=reviewer, authority_id=expired_draft.id
-        )
+        await service.approve(session, context=reviewer, authority_id=expired_draft.id)
         expired = await service.evaluate_admission(
             session,
             context=context,
@@ -247,9 +243,7 @@ async def test_missing_expired_unapproved_and_not_applicable_admission(
             context=context,
             command=command(employee_id, key="fica_employee"),
         )
-        await service.approve(
-            session, context=reviewer, authority_id=conflict_first.id
-        )
+        await service.approve(session, context=reviewer, authority_id=conflict_first.id)
         conflict_second = await service.draft(
             session,
             context=context,
@@ -348,9 +342,7 @@ async def test_sod_permissions_company_isolation_and_supersession(
         with pytest.raises(PayrollAuthorizationError, match="self-approve"):
             await service.approve(session, context=manage, authority_id=first.id)
         with pytest.raises(PayrollConflictError, match="outside Company"):
-            await service.approve(
-                session, context=wrong_company, authority_id=first.id
-            )
+            await service.approve(session, context=wrong_company, authority_id=first.id)
         await service.approve(session, context=approve, authority_id=first.id)
         first_id = first.id
         overlapping = await service.draft(
@@ -364,9 +356,7 @@ async def test_sod_permissions_company_isolation_and_supersession(
             ),
         )
         with pytest.raises(PayrollConflictError, match="overlap"):
-            await service.approve(
-                session, context=approve, authority_id=overlapping.id
-            )
+            await service.approve(session, context=approve, authority_id=overlapping.id)
         await session.rollback()
         second = await service.draft(
             session,

@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from app.qbo_source.credentials import (
     DevelopmentCredentialProvisioningError,
     provision_development_credentials,

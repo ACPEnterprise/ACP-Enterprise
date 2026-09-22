@@ -6,9 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.accounting.errors import AccountingConflict
 from app.accounting.models import (
     Account,
@@ -29,6 +26,8 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling import models as scheduling_models  # noqa: F401
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -255,9 +254,7 @@ async def test_concurrent_journal_create_post_and_reversal_have_one_authority(
     async with factory() as session:
         assert (
             await session.scalar(
-                select(func.count(Journal.id)).where(
-                    Journal.reversal_of_id == first.id
-                )
+                select(func.count(Journal.id)).where(Journal.reversal_of_id == first.id)
             )
             == 1
         )

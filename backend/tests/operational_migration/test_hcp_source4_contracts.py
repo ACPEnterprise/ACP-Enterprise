@@ -2,7 +2,6 @@ import hashlib
 import json
 
 import pytest
-
 from app.operational_migration.hcp_source4_contracts import (
     ADDRESS_KEYS,
     APPOINTMENT_COLUMNS,

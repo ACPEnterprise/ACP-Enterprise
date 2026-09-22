@@ -34,9 +34,12 @@ def test_native_evidence_classifies_current_partial_and_conflicting() -> None:
         current.evidence_digest
         == native_evidence(**common, partial=False, conflicting=False).evidence_digest
     )
-    assert current.evidence_digest != native_evidence(
-        **{**common, "company_id": "company-2"}, partial=False, conflicting=False
-    ).evidence_digest
+    assert (
+        current.evidence_digest
+        != native_evidence(
+            **{**common, "company_id": "company-2"}, partial=False, conflicting=False
+        ).evidence_digest
+    )
 
 
 def test_source_evidence_preserves_historical_stale_partial_and_conflicting_truth() -> (

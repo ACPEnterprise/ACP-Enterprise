@@ -284,9 +284,7 @@ def test_source4_schedule_comparison_exposes_unmapped_and_conflicting_truth() ->
         (appointment(), unmapped),
         (
             native_projection(status="completed"),
-            native_projection(
-                source_appointment_id="appt_unmapped", employee_ids=()
-            ),
+            native_projection(source_appointment_id="appt_unmapped", employee_ids=()),
         ),
         crosswalks=(crosswalk(),),
     )
@@ -307,9 +305,7 @@ def test_source4_schedule_comparison_rejects_duplicate_native_lineage() -> None:
 
 
 def test_source4_schedule_comparison_is_input_order_independent() -> None:
-    second_source = appointment(
-        source_id="appt_synthetic_2", source_digest="d" * 64
-    )
+    second_source = appointment(source_id="appt_synthetic_2", source_digest="d" * 64)
     second_native = native_projection(
         source_appointment_id="appt_synthetic_2", evidence_digest="e" * 64
     )

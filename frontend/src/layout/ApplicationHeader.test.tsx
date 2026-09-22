@@ -31,6 +31,7 @@ const authentication: AuthenticationContextValue = {
   signIn: async () => undefined,
   signOut: async () => undefined,
   signOutAll: async () => undefined,
+  refreshAuthorization: async () => undefined,
   requireReauthentication: () => undefined,
 };
 

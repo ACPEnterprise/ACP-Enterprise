@@ -23,9 +23,13 @@ class IsolationScenario:
 
 
 class IsolationAdapter(Protocol):
-    def read(self, principal: IsolationIdentity, resource: IsolationIdentity) -> bool: ...
+    def read(
+        self, principal: IsolationIdentity, resource: IsolationIdentity
+    ) -> bool: ...
 
-    def mutate(self, principal: IsolationIdentity, resource: IsolationIdentity) -> bool: ...
+    def mutate(
+        self, principal: IsolationIdentity, resource: IsolationIdentity
+    ) -> bool: ...
 
     def link(
         self,
@@ -61,8 +65,12 @@ def deterministic_scenarios(count: int = 16) -> tuple[IsolationScenario, ...]:
             IsolationScenario(
                 principal=IsolationIdentity(company_a, branch_a1, shared_business_id),
                 same_scope=IsolationIdentity(company_a, branch_a1, shared_business_id),
-                wrong_branch=IsolationIdentity(company_a, branch_a2, shared_business_id),
-                wrong_company=IsolationIdentity(company_b, branch_b1, shared_business_id),
+                wrong_branch=IsolationIdentity(
+                    company_a, branch_a2, shared_business_id
+                ),
+                wrong_company=IsolationIdentity(
+                    company_b, branch_b1, shared_business_id
+                ),
                 unknown_resource_id=uuid5(NAMESPACE, f"unknown:{index}"),
             )
         )
@@ -83,9 +91,7 @@ def assert_company_and_branch_isolation(
         assert not adapter.link(
             scenario.principal, scenario.same_scope, scenario.wrong_company
         )
-        assert not adapter.event_visible(
-            scenario.principal, scenario.wrong_company
-        )
+        assert not adapter.event_visible(scenario.principal, scenario.wrong_company)
         assert adapter.list_visible(
             scenario.principal,
             (scenario.same_scope, scenario.wrong_branch, scenario.wrong_company),

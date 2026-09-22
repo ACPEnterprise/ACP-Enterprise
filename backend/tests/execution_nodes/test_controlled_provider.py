@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.engineering_control.revision_evidence import compose_revision_instruction
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
@@ -629,7 +628,10 @@ def test_read_only_provider_validates_without_implementation_or_publication(
     assert result.files_changed == ()
     assert result.evidence["repository_mutated"] is False
     assert result.evidence["phases"] == [
-        "composed", "workspace_ready", "validating", "completed"
+        "composed",
+        "workspace_ready",
+        "validating",
+        "completed",
     ]
     assert git(root, "ls-remote", "origin", "refs/heads/main").split()[0] == before
 

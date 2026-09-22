@@ -111,7 +111,9 @@ class OperationsService:
                 JobStatus.IN_PROGRESS.value,
                 JobStatus.PAUSED.value,
             }:
-                raise JobInvalidTransitionError("Job cannot be scheduled in this state.")
+                raise JobInvalidTransitionError(
+                    "Job cannot be scheduled in this state."
+                )
             if (
                 existing_job.branch_id != appointment.branch_id
                 or existing_job.customer_id != appointment.customer_id

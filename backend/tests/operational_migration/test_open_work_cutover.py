@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.open_work_cutover import (
     DAY_ONE_INCLUDED_ENTITIES,
     HISTORICAL_EXCLUSIONS_REMAIN,

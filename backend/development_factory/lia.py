@@ -44,7 +44,7 @@ class LiaSupervisor:
             for worker in contract.workers
             for flag in worker.escalation_flags
         )
-        blockers = tuple((*repository_issues, *escalations))
+        blockers = (*repository_issues, *escalations)
         planned_by_task = {worker.task_id: worker for worker in plan.workers}
         report = LiaSupervisoryReport(
             schema_version=LIA_REPORT_VERSION,

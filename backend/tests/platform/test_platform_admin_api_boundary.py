@@ -1,11 +1,11 @@
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-from starlette.requests import Request
-
 from app.platform.auth.errors import PasswordPolicyError
 from app.platform.auth.router import (
+    MAX_RETAINED_USER_AGENT_LENGTH,
+    bounded_user_agent,
+    client_metadata,
     confirm_password_reset,
     recovery_service,
 )
@@ -16,6 +16,8 @@ from app.platform.company.admin_service import (
     AccessPolicyConflictError,
     AccessPolicyNotFoundError,
 )
+from fastapi import HTTPException
+from starlette.requests import Request
 
 
 def test_company_admin_errors_do_not_reflect_identity_details() -> None:
@@ -41,6 +43,27 @@ def test_company_admin_errors_do_not_reflect_identity_details() -> None:
         assert response.detail["code"] == code
         assert response.detail["recovery"] == recovery
         assert protected not in str(response.detail)
+
+
+def test_authentication_metadata_is_bounded_and_control_free() -> None:
+    canary = "browser\x00\x1f\x7f  agent " + "x" * 1000
+    request = Request(
+        {
+            "type": "http",
+            "client": ("203.0.113.20", 1234),
+            "headers": [(b"user-agent", canary.encode())],
+        }
+    )
+
+    ip_address, user_agent = client_metadata(request)
+
+    assert ip_address == "203.0.113.20"
+    assert user_agent is not None
+    assert len(user_agent) == MAX_RETAINED_USER_AGENT_LENGTH
+    assert not any(
+        ord(character) < 32 or ord(character) == 127 for character in user_agent
+    )
+    assert bounded_user_agent(" \x00\x7f ") is None
 
 
 @pytest.mark.asyncio

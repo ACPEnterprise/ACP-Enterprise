@@ -2,8 +2,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from fastapi import HTTPException
-
 from app.dispatch.errors import (
     DispatchConflict,
     DispatchError,
@@ -16,6 +14,7 @@ from app.main import app
 from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import DispatchPermission, JobPermission
+from fastapi import HTTPException
 
 
 @pytest.mark.parametrize(
@@ -126,9 +125,7 @@ def test_dispatch_openapi_contract_exposes_bounded_operations() -> None:
         "/api/v1/dispatch/appointments/{appointment_id}/eligible-technicians" in paths
     )
     assert "/api/v1/dispatch/appointments/{appointment_id}/assignment" in paths
-    assert (
-        "/api/v1/dispatch/appointments/{appointment_id}/assignment/history" in paths
-    )
+    assert "/api/v1/dispatch/appointments/{appointment_id}/assignment/history" in paths
     assert "/api/v1/dispatch/appointments/{appointment_id}/assignment/crew" in paths
     assert (
         "/api/v1/dispatch/appointments/{appointment_id}/assignment/reconcile" in paths

@@ -17,8 +17,16 @@ from app.operational_migration.hcp_preview_baseline_reconciliation import (
 def main() -> int:
     parser = argparse.ArgumentParser()
     for argument in (
-        "overlay", "hold", "cohort", "runtime", "baseline", "classifier",
-        "successor-manifest", "refresh-root", "schedule-root", "output",
+        "overlay",
+        "hold",
+        "cohort",
+        "runtime",
+        "baseline",
+        "classifier",
+        "successor-manifest",
+        "refresh-root",
+        "schedule-root",
+        "output",
     ):
         parser.add_argument(f"--{argument}", required=True, type=Path)
     parser.add_argument("--verify", action="store_true")

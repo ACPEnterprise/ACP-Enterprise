@@ -76,7 +76,10 @@ def _evidence(tmp_path: Path) -> tuple[Path, Path]:
         "report_end_date": "2026-08-31",
         "accounting_basis": "accrual",
         "generated_at": None,
-        "safe_report_parameters": {"start_date": "2022-01-01", "end_date": "2026-08-31"},
+        "safe_report_parameters": {
+            "start_date": "2022-01-01",
+            "end_date": "2026-08-31",
+        },
     }
     (root / "controls" / "ledger-v1.json").write_text(json.dumps(registration))
     return root, raw

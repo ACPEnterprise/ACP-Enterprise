@@ -1,6 +1,6 @@
-from collections.abc import Mapping
 import os
 import re
+from collections.abc import Mapping
 
 from pydantic import (
     BaseModel,

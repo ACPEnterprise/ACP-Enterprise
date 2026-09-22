@@ -7,7 +7,9 @@ from app.service_agreements.service import add_months, digest
 
 
 def test_agreement_evidence_digest_is_deterministic_and_order_independent():
-    assert digest({"agreement": "a", "sequence": 1}) == digest({"sequence": 1, "agreement": "a"})
+    assert digest({"agreement": "a", "sequence": 1}) == digest(
+        {"sequence": 1, "agreement": "a"}
+    )
 
 
 def test_calendar_entitlement_windows_do_not_drift():

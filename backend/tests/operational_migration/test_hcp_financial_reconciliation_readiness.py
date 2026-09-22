@@ -42,7 +42,9 @@ def _evidence(tmp_path: Path) -> tuple[Path, Path]:
             "payments": [
                 {
                     "id": f"payment-{index:02d}",
-                    "payment_method": "imported_from_quickbooks" if index == 1 else "cash",
+                    "payment_method": "imported_from_quickbooks"
+                    if index == 1
+                    else "cash",
                 }
             ],
             "refunds": [{"id": None}] if index == 2 else [],
@@ -94,7 +96,9 @@ def _evidence(tmp_path: Path) -> tuple[Path, Path]:
     return source, controls
 
 
-def test_builds_exact_source_journeys_and_fail_closed_ar_readiness(tmp_path: Path) -> None:
+def test_builds_exact_source_journeys_and_fail_closed_ar_readiness(
+    tmp_path: Path,
+) -> None:
     source, controls = _evidence(tmp_path)
     result = build_financial_reconciliation_readiness(
         source_root=source, qbo_controls_root=controls
@@ -109,7 +113,9 @@ def test_builds_exact_source_journeys_and_fail_closed_ar_readiness(tmp_path: Pat
     assert result.ar_readiness["gross_open_ready"] is True
     assert result.ar_readiness["gross_open_hcp_assertion_balance"] == "12.50"
     assert result.ar_readiness["net_ar_ready"] is False
-    assert result.may_report_evidence["provider_may_profit_and_loss_registered"] is False
+    assert (
+        result.may_report_evidence["provider_may_profit_and_loss_registered"] is False
+    )
     assert result.authority["accepted_as_acp_accounting"] is False
 
 

@@ -4,7 +4,6 @@ import json
 import subprocess
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[3]
 ROADMAP = ROOT / "docs" / "factory" / "acp_full_system_roadmap.yaml"
 COMMAND = ROOT / "scripts" / "factory-roadmap"
@@ -35,7 +34,9 @@ def test_roadmap_maps_all_original_families_and_assigns_every_item() -> None:
 def test_migration_children_have_complete_truth_accounting() -> None:
     data = roadmap()
     children = [
-        item for item in data["milestones"] if item["id"].startswith("MIG.COMPLETENESS.")
+        item
+        for item in data["milestones"]
+        if item["id"].startswith("MIG.COMPLETENESS.")
     ]
     assert len(children) == 9
     required = {
@@ -51,7 +52,10 @@ def test_migration_children_have_complete_truth_accounting() -> None:
     assert all(set(item["migration_completeness"]) == required for item in children)
     customer = next(item for item in children if item["id"].endswith("CUSTOMERS"))
     assert customer["migration_completeness"]["NATIVE_BOUND"] == "2069"
-    assert customer["migration_completeness"]["PENDING_ADMISSION"] == "2241_ACCEPTED_UNBOUND"
+    assert (
+        customer["migration_completeness"]["PENDING_ADMISSION"]
+        == "2241_ACCEPTED_UNBOUND"
+    )
     assert customer["migration_completeness"]["BETA_OPERABLE"] == "FAIL"
 
 
@@ -83,9 +87,30 @@ def test_controller_validator_and_pull_are_deterministic() -> None:
     assert first.returncode == second.returncode == 0
     assert first.stdout == second.stdout
     selected = json.loads(first.stdout)
-    assert selected["id"] == "PRICEBOOK.REALWORLD.COMPLETION"
+    assert selected["id"] == "MIG.COMPLETENESS.CUSTOMERS"
     assert selected["priority"] == "P0"
     assert selected["lane"] == "OM2-A"
+
+
+def test_owner_acceptance_work_is_not_dispatched_to_engineering_workers() -> None:
+    data = roadmap()
+    owner_acceptance_ids = {
+        item["id"]
+        for item in data["milestones"]
+        if item["lifecycle_status"] == "OWNER_ACCEPTANCE_REQUIRED"
+    }
+    assert "PRICEBOOK.REALWORLD.COMPLETION" in owner_acceptance_ids
+
+    for factory in ("OM1", "OM2", "LAPTOP"):
+        selected = subprocess.run(
+            [str(COMMAND), "next", "--factory", factory],
+            cwd=ROOT,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if selected.returncode == 0:
+            assert json.loads(selected.stdout)["id"] not in owner_acceptance_ids
 
 
 def test_closed_is_not_inferred_from_deployment() -> None:
@@ -96,3 +121,41 @@ def test_closed_is_not_inferred_from_deployment() -> None:
     assert pricebook["owner_acceptance_status"] == "OWNER_ACCEPTANCE_REQUIRED"
     assert pricebook["lifecycle_status"] != "CLOSED"
     assert by_id["BETA.DOMAIN.ACTIVATION"]["lifecycle_status"] == "CLOSED"
+
+
+def test_real_operational_acceptance_is_truthful_and_complete() -> None:
+    data = roadmap()
+    surfaces = data["real_operational_acceptance"]["surfaces"]
+    required = {
+        "Customers",
+        "Customer Search",
+        "Customer Detail",
+        "Locations",
+        "Service Agreements",
+        "My Day",
+        "My Time Clock",
+        "Scheduling",
+        "Jobs",
+        "Dispatch",
+        "Estimates",
+        "Price Book",
+        "Invoices",
+        "Payments",
+        "Payroll",
+        "Revenue Cycle",
+        "Accounts Payable",
+        "Financial Reports",
+        "Inventory",
+        "Purchasing",
+        "Administration",
+        "Factory Control",
+    }
+    assert {item["surface"] for item in surfaces} == required
+    assert all(
+        (item["status"] == "PASS")
+        == (item["beta_operable"] and item["owner_accepted"])
+        for item in surfaces
+    )
+    assert {
+        item["surface"] for item in surfaces if item["status"] == "DEFECT"
+    } == {"Customers", "Customer Search", "Service Agreements", "My Day", "Scheduling", "Payroll"}

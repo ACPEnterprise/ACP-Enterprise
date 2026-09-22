@@ -1,6 +1,46 @@
 {
   "entries": [
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "factory_control",
+      "mechanism": "Platform-global event key with canonical immutable request digest and exact replay comparison",
+      "method": "POST",
+      "operation_id": "ingest_event_api_v1_platform_factory_control_internal_events_post",
+      "path": "/api/v1/platform/factory-control/internal/events",
+      "reason": "Exact controller evidence replay returns the original event while contradictory reuse fails closed.",
+      "tenant_scope": "PLATFORM_GLOBAL"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "factory_control",
+      "mechanism": "Platform-global snapshot key with canonical request digest and contradictory replay rejection",
+      "method": "POST",
+      "operation_id": "capture_snapshot_api_v1_platform_factory_control_internal_snapshots_post",
+      "path": "/api/v1/platform/factory-control/internal/snapshots",
+      "reason": "An exact repeated snapshot request returns the original row; changed facts under the same key fail closed.",
+      "tenant_scope": "PLATFORM_GLOBAL"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "factory_control",
+      "mechanism": "Authenticated observation timestamp plus canonical lane and Development Factory worker identity",
+      "method": "POST",
+      "operation_id": "live_sync_controllers_api_v1_platform_factory_control_internal_live_sync_post",
+      "path": "/api/v1/platform/factory-control/internal/live-sync",
+      "reason": "Each live observation is durable; exact replay returns the same controller events and conflicting evidence fails closed.",
+      "tenant_scope": "PLATFORM_GLOBAL"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "factory_control",
+      "mechanism": "Development Factory worker version and queue state derive a stable event identity",
+      "method": "POST",
+      "operation_id": "sync_controller_api_v1_platform_factory_control_internal_sync_post",
+      "path": "/api/v1/platform/factory-control/internal/sync",
+      "reason": "The controller projects authenticated durable Development Factory evidence; unchanged source state returns the existing event.",
+      "tenant_scope": "PLATFORM_GLOBAL"
+    },
+    {
       "classification": "NON_MUTATING_READ_ONLY",
       "domain": "identity_onboarding",
       "mechanism": "read-only tenant-scoped preflight projection with no persistence side effects",
@@ -815,6 +855,16 @@
       "operation_id": "create_role_api_v1_company_admin_roles_post",
       "path": "/api/v1/company-admin/roles",
       "reason": "Existing public mutation lacks a proven cross-network replay receipt; PLAT.008 documents rather than breaking or redesigning this domain.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "customers",
+      "mechanism": "Company-scoped Platform mutation receipt, canonical Branch/source digest, advisory-locked exact-source dispositions, immutable refresh-run ledger, and transactional audit",
+      "method": "POST",
+      "operation_id": "refresh_customer_population_api_v1_customer_migration_population_refresh_post",
+      "path": "/api/v1/customer-migration/population/refresh",
+      "reason": "A protected refresh records one bounded exact-provider classification result without Customer admission; exact replay returns the original ledger and conflicting scoped reuse fails closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -3199,6 +3249,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2562b1975992f1deac86d4c6842d3e21cb4a09b5b057e8dfaf0c06ec459a6335",
+  "fingerprint": "8b9729e3f93a49cfa6ab65e2e73341341d85c13599bd0a6d8ca729e46c31415b",
   "schema_version": "1"
 }

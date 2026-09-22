@@ -6,7 +6,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-
 from app.payroll.contracts import canonical_digest
 from app.payroll.federal_tax_rules_2026 import (
     FLORIDA_SOURCE,

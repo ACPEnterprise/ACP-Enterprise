@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
-
 from scripts.production_release_preflight import inspect_platform_manifest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -78,10 +77,18 @@ def test_production_runtime_has_bounded_processes_and_no_reload_server() -> None
         assert service["stop_grace_period"]
     assert frontend["read_only"] is True
     assert frontend["user"] == "101:101"
-    assert "/var/cache/nginx:size=32m,mode=0755,uid=101,gid=101" in frontend[
-        "tmpfs"
-    ]
+    assert "/var/cache/nginx:size=32m,mode=0755,uid=101,gid=101" in frontend["tmpfs"]
     assert "/var/run:size=4m,mode=0755,uid=101,gid=101" in frontend["tmpfs"]
+
+
+def test_production_backend_image_runs_as_a_dedicated_non_root_user() -> None:
+    dockerfile = (REPOSITORY_ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
+
+    assert "adduser --system --ingroup acp --home /app acp" in dockerfile
+    assert "COPY --chown=acp:acp . ." in dockerfile
+    assert "\nUSER acp\n" in dockerfile
+    assert "--no-proxy-headers" in dockerfile
+    assert "--no-access-log" in dockerfile
 
 
 def test_monitoring_contract_covers_launch_critical_dependencies() -> None:

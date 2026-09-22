@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,13 +46,15 @@ const result: AuthenticationResult = {
 };
 
 function Harness() {
-  const { signIn, signOut, status, user } = useAuth();
+  const { signIn, signOut, refreshAuthorization, status, user, permissionCodes } = useAuth();
   return (
     <div>
       <span>{status}</span>
       <span>{user?.display_name}</span>
+      <span>{permissionCodes?.join(",")}</span>
       <button type="button" onClick={() => void signIn({ email: "admin@example.com", password: "password" })}>Sign in</button>
       <button type="button" onClick={() => void signOut()}>Sign out</button>
+      <button type="button" onClick={() => void refreshAuthorization()}>Refresh authorization</button>
     </div>
   );
 }
@@ -89,12 +91,13 @@ describe("AuthProvider", () => {
   });
 
   it("clears authentication after logout", async () => {
+    const user = userEvent.setup();
     window.sessionStorage.setItem("acp.auth.refresh-token", "stored-refresh-token");
     vi.mocked(authenticationApi.refreshSession).mockResolvedValue(result);
     vi.mocked(authenticationApi.logout).mockResolvedValue();
     render(<AuthProvider><Harness /></AuthProvider>);
     await screen.findByText("Preview Administrator");
-    await act(async () => userEvent.click(screen.getByRole("button", { name: "Sign out" })));
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(screen.getByText("unauthenticated")).toBeInTheDocument());
     expect(window.sessionStorage.getItem("acp.auth.refresh-token")).toBeNull();
   });
@@ -105,5 +108,23 @@ describe("AuthProvider", () => {
     render(<AuthProvider><Harness /></AuthProvider>);
     expect(await screen.findByText("unauthenticated")).toBeInTheDocument();
     expect(window.sessionStorage.getItem("acp.auth.refresh-token")).toBeNull();
+  });
+
+  it("refreshes changed authorization in place without clearing the session", async () => {
+    window.sessionStorage.setItem("acp.auth.refresh-token", "stored-refresh-token");
+    vi.mocked(authenticationApi.refreshSession).mockResolvedValue(result);
+    vi.mocked(authorizationApi.getEffectiveAuthorization)
+      .mockResolvedValueOnce({ permission_codes: ["COMPANY_ROLE_READ"] })
+      .mockResolvedValueOnce({
+        permission_codes: ["COMPANY_ROLE_READ", "PLATFORM_FACTORY_CONTROL_READ"],
+      });
+    render(<AuthProvider><Harness /></AuthProvider>);
+    expect(await screen.findByText("COMPANY_ROLE_READ")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh authorization" }));
+    expect(
+      await screen.findByText("COMPANY_ROLE_READ,PLATFORM_FACTORY_CONTROL_READ"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("authenticated")).toBeInTheDocument();
+    expect(authenticationApi.refreshSession).toHaveBeenCalledTimes(2);
   });
 });

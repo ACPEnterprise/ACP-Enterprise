@@ -493,7 +493,8 @@ async def test_governed_collision_promotion_preserves_assignee_and_removes_exces
     fixture = await seed_admin_fixture(factory, "ROLEPROMOTE")
     await synchronize_permission_catalog(factory)
     definition = next(
-        item for item in CANONICAL_ROLE_DEFINITIONS
+        item
+        for item in CANONICAL_ROLE_DEFINITIONS
         if item.code == "ACP_EMPLOYEE_MOBILE"
     )
     async with factory() as session, session.begin():
@@ -1062,6 +1063,54 @@ async def test_role_permission_mutations_invalidate_all_affected_users(
             membership_id=fixture.target_membership_id,
             role_id=fixture.company_role_id,
         )
+
+
+@pytest.mark.asyncio
+async def test_canonical_owner_authority_is_not_mutable_through_ordinary_role_api(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "OWNPROTECT")
+    service = CompanyAdministrationService()
+    async with factory() as session, session.begin():
+        owner_role = Role(
+            company_id=fixture.context.company.id,
+            code="OWNER",
+            name="Owner",
+            description="Protected canonical owner",
+            status="active",
+            is_system=True,
+            created_by_user_id=fixture.context.user.id,
+            updated_by_user_id=fixture.context.user.id,
+        )
+        session.add(owner_role)
+        await session.flush()
+        owner_role_id = owner_role.id
+
+    async with factory() as session:
+        with pytest.raises(AccessPolicyConflictError):
+            await service.assign_role(
+                session,
+                context=fixture.context,
+                membership_id=fixture.target_membership_id,
+                role_id=owner_role_id,
+            )
+    async with factory() as session:
+        with pytest.raises(AccessPolicyConflictError):
+            await service.set_role_status(
+                session,
+                context=fixture.context,
+                role_id=owner_role_id,
+                status="inactive",
+            )
+    async with factory() as session:
+        with pytest.raises(AccessPolicyConflictError):
+            await service.assign_permission(
+                session,
+                context=fixture.context,
+                role_id=owner_role_id,
+                permission_id=fixture.platform_permission_id,
+            )
 
 
 @pytest.mark.asyncio

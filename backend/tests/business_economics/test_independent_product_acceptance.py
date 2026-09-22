@@ -3,12 +3,12 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.business_economics.profitability_computation import (
     ProfitabilityComputationError,
 )
 from app.business_economics.profitability_domain import EconomicCategory
 from app.business_economics.workspace import EconomicsWorkspaceService, JobIdentity
+
 from tests.business_economics.test_profitability_computation import (
     compute,
     inputs,

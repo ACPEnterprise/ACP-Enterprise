@@ -520,9 +520,7 @@ def test_pur_005_acceptance_changes_only_itself_and_direct_successor() -> None:
     assert pur_005["authoritative_commit_sha"] == (
         "76f58871db4961e944907ddaa09eda53a1cc5056"
     )
-    assert "43e95bc6e394d2deb2e73aaea9155fc4596a035f" in pur_005[
-        "evidence_reference"
-    ]
+    assert "43e95bc6e394d2deb2e73aaea9155fc4596a035f" in pur_005["evidence_reference"]
     assert "t1k3g5i7l942" in pur_005["evidence_reference"]
     assert (
         "aa04e2b347a70d46a00f13a6b71ac97fcda47bf6878fdc86ed8c5c507f54df0c"
@@ -618,8 +616,9 @@ def test_pur_008_acceptance_changes_only_itself_and_direct_successor() -> None:
     assert pur_008["authoritative_commit_sha"] == (
         "a6af6ed6a9fbee0f12c13e3489012787275bd09d"
     )
-    assert "6877c9af1896931abd9472815357df4966f6ff52c6120057830c96074cfe4af4" in (
-        pur_008["evidence_reference"]
+    assert (
+        "6877c9af1896931abd9472815357df4966f6ff52c6120057830c96074cfe4af4"
+        in (pur_008["evidence_reference"])
     )
     raw["completion_evidence"] = [
         item for item in evidence if item["bank_milestone_id"] != "BANK.PUR.008"
@@ -677,9 +676,10 @@ def test_current_authority_ownership_blocks_duplicate_selection() -> None:
     authority = ingest_authority_snapshot(_resign(raw), bank)
     milestone = _by_id(evaluate_readiness(bank, authority))["BANK.CRM.001"]
     assert milestone.current_state == "ACTIVE_OWNED"
-    assert milestone.milestone_id not in evaluate_readiness(
-        bank, authority
-    ).executable_milestone_ids
+    assert (
+        milestone.milestone_id
+        not in evaluate_readiness(bank, authority).executable_milestone_ids
+    )
 
 
 def test_packaged_ambiguous_historical_identities_fail_closed_per_record() -> None:

@@ -8,16 +8,31 @@ def test_catalog_is_versioned_unique_and_prohibits_automatic_correction() -> Non
     assert all(rule.automated_correction_prohibited for rule in QUALITY_CATALOG)
     assert len(CATALOG_DIGEST) == 64
     assert {rule.domain for rule in QUALITY_CATALOG} >= {
-        "CUSTOMERS", "LOCATIONS", "JOBS", "EMPLOYEES", "ESTIMATES",
-        "INVOICES", "PAYMENTS", "INVENTORY", "SERVICE_AGREEMENTS",
-        "ASSETS", "FLEET", "CUSTODY", "TIMEKEEPING", "MIGRATION_IDENTITIES",
+        "CUSTOMERS",
+        "LOCATIONS",
+        "JOBS",
+        "EMPLOYEES",
+        "ESTIMATES",
+        "INVOICES",
+        "PAYMENTS",
+        "INVENTORY",
+        "SERVICE_AGREEMENTS",
+        "ASSETS",
+        "FLEET",
+        "CUSTODY",
+        "TIMEKEEPING",
+        "MIGRATION_IDENTITIES",
     }
 
 
 def test_issue_digest_is_stable_and_new_work_distinct_from_history() -> None:
     service = DataQualityService()
-    customer = next(rule for rule in QUALITY_CATALOG if rule.rule_id == "DQ-CUSTOMER-001")
-    migration = next(rule for rule in QUALITY_CATALOG if rule.rule_id == "DQ-MIGRATION-001")
+    customer = next(
+        rule for rule in QUALITY_CATALOG if rule.rule_id == "DQ-CUSTOMER-001"
+    )
+    migration = next(
+        rule for rule in QUALITY_CATALOG if rule.rule_id == "DQ-MIGRATION-001"
+    )
     first = service._issue(customer, "safe-1", ("display identity",), "company-1")
     replay = service._issue(customer, "safe-1", ("display identity",), "company-1")
     historical = service._issue(migration, "safe-2", ("crosswalk",), "company-1")

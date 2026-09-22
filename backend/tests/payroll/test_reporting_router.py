@@ -1,7 +1,6 @@
 import pytest
-from fastapi import FastAPI, HTTPException
-
 from app.payroll.router import _compliance, _experience, _not_found, router
+from fastapi import FastAPI, HTTPException
 
 app = FastAPI()
 app.include_router(router)
@@ -25,8 +24,7 @@ def test_reporting_lists_publish_bounded_pagination_contract() -> None:
         "/api/v1/payroll/reporting/{report_id}/filing-packages",
     ):
         parameters = {
-            item["name"]: item
-            for item in document["paths"][path]["get"]["parameters"]
+            item["name"]: item for item in document["paths"][path]["get"]["parameters"]
         }
         assert parameters["limit"]["schema"]["default"] == 100
         assert parameters["limit"]["schema"]["maximum"] == 200
@@ -45,9 +43,7 @@ def test_protected_storage_and_report_absence_use_safe_recovery_contracts(
             factory()
         assert captured.value.status_code == 503
         assert captured.value.detail["code"] == "dependency_unavailable"
-        assert (
-            captured.value.detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
-        )
+        assert captured.value.detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
         assert "configured" not in captured.value.detail["message"].lower()
 
     missing = _not_found()

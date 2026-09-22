@@ -3,8 +3,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from pydantic import SecretStr
-
 from app.payroll.company_policy_configurations.all_county_v1 import (
     build_all_county_payroll_policy_v1,
 )
@@ -19,6 +17,7 @@ from app.payroll.identity_provisioning.all_county_v1 import (
     build_all_county_identity_provisioning_v1,
 )
 from app.timekeeping.permissions import TimekeepingPermission
+from pydantic import SecretStr
 
 
 def manifest():
@@ -44,8 +43,14 @@ def test_manifest_is_deterministic_safe_and_represents_all_eight() -> None:
     assert len(first.employees) == 8
     assert first.manifest_digest == replay.manifest_digest
     assert {employee.display_name for employee in first.employees} == {
-        "Michael Fouse", "Lianne Hernandez", "Alex Donahue", "Melvin Santiago",
-        "Adam Mari", "Dareis Montgomery", "Dakota Wilcox", "Jason Calci",
+        "Michael Fouse",
+        "Lianne Hernandez",
+        "Alex Donahue",
+        "Melvin Santiago",
+        "Adam Mari",
+        "Dareis Montgomery",
+        "Dakota Wilcox",
+        "Jason Calci",
     }
     serialized = json.dumps(
         [employee.canonical_content() for employee in first.employees], sort_keys=True
@@ -59,10 +64,13 @@ def test_michael_reuses_existing_user_and_seven_require_protected_input() -> Non
     value = manifest()
     michael = value.employee("michael-fouse")
     assert michael.login_authority is LoginAuthority.EXISTING_VERIFIED_USER
-    assert sum(
-        employee.login_authority is LoginAuthority.PROTECTED_LOGIN_INPUT_REQUIRED
-        for employee in value.employees
-    ) == 7
+    assert (
+        sum(
+            employee.login_authority is LoginAuthority.PROTECTED_LOGIN_INPUT_REQUIRED
+            for employee in value.employees
+        )
+        == 7
+    )
     role_id = uuid4()
     command = value.prepare_onboarding_command(
         employee_key="michael-fouse",
@@ -109,18 +117,25 @@ def test_protected_login_and_role_composition_fail_closed() -> None:
 
 def test_timekeeping_roles_are_narrow_and_alex_alone_gets_supervisor_profile() -> None:
     assert set(BASE_TIMEKEEPING.permission_codes) == {
-        TimekeepingPermission.OWN_PUNCH, TimekeepingPermission.OWN_READ,
+        TimekeepingPermission.OWN_PUNCH,
+        TimekeepingPermission.OWN_READ,
     }
     assert set(SUPERVISOR_TIMEKEEPING_ADDITIONAL.permission_codes) == {
-        TimekeepingPermission.MANUAL_ENTRY, TimekeepingPermission.CORRECT,
-        TimekeepingPermission.APPROVE, TimekeepingPermission.ADMIN_READ,
+        TimekeepingPermission.MANUAL_ENTRY,
+        TimekeepingPermission.CORRECT,
+        TimekeepingPermission.APPROVE,
+        TimekeepingPermission.ADMIN_READ,
     }
     assert all(
         code.startswith("COMPANY_TIMEKEEPING_")
-        for code in (*BASE_TIMEKEEPING.permission_codes, *SUPERVISOR_TIMEKEEPING_ADDITIONAL.permission_codes)
+        for code in (
+            *BASE_TIMEKEEPING.permission_codes,
+            *SUPERVISOR_TIMEKEEPING_ADDITIONAL.permission_codes,
+        )
     )
     elevated = [
-        employee.employee_key for employee in EMPLOYEES
+        employee.employee_key
+        for employee in EMPLOYEES
         if SUPERVISOR_TIMEKEEPING_ADDITIONAL.profile_id in employee.role_profile_ids
     ]
     assert elevated == ["alex-donahue"]

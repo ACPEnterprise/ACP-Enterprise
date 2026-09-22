@@ -48,11 +48,10 @@ class BeaconMorningBrief:
 
 
 def attention_window(signal: BeaconSignal) -> OwnerAttentionWindow:
-    if (
-        signal.severity is BeaconSeverity.CRITICAL
-        or signal.priority.band
-        in {BeaconPriorityBand.CRITICAL, BeaconPriorityBand.IMMEDIATE}
-    ):
+    if signal.severity is BeaconSeverity.CRITICAL or signal.priority.band in {
+        BeaconPriorityBand.CRITICAL,
+        BeaconPriorityBand.IMMEDIATE,
+    }:
         return OwnerAttentionWindow.NOW
     if (
         signal.severity is BeaconSeverity.IMPORTANT

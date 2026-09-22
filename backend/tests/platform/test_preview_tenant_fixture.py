@@ -4,9 +4,6 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.audit.models import AuditRecord
 from app.platform.branch.models import Branch
@@ -22,6 +19,8 @@ from app.platform.onboarding.preview_tenant_fixture import (
 )
 from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.codes import AdministrationPermission
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class Transaction:
@@ -210,16 +209,31 @@ async def test_fixture_postgresql_concurrent_create_reuses_one_tenant():
     first, second = await asyncio.gather(invoke(), invoke())
     assert {first.action, second.action} == {"created", "reused"}
     async with factory() as session:
-        assert await session.scalar(
-            select(func.count()).select_from(Company).where(Company.id == FIXTURE_COMPANY_ID)
-        ) == 1
-        assert await session.scalar(
-            select(func.count()).select_from(Branch).where(Branch.id == FIXTURE_BRANCH_ID)
-        ) == 1
-        assert await session.scalar(
-            select(func.count()).select_from(AuditRecord).where(
-                AuditRecord.action == "preview.acceptance_tenant_fixture",
-                AuditRecord.company_id == FIXTURE_COMPANY_ID,
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Company)
+                .where(Company.id == FIXTURE_COMPANY_ID)
             )
-        ) == 2
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Branch)
+                .where(Branch.id == FIXTURE_BRANCH_ID)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(AuditRecord)
+                .where(
+                    AuditRecord.action == "preview.acceptance_tenant_fixture",
+                    AuditRecord.company_id == FIXTURE_COMPANY_ID,
+                )
+            )
+            == 2
+        )
     await engine.dispose()

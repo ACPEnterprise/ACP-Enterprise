@@ -7,10 +7,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, update
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.inventory.contracts import (
@@ -38,6 +34,9 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling import models as scheduling_models  # noqa: F401
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -123,10 +122,14 @@ async def seed_foundation(factory, company, branch, actor):
 
 
 @pytest.mark.asyncio
-async def test_item_master_creation_is_exact_code_replay_safe(inventory_fixture) -> None:
+async def test_item_master_creation_is_exact_code_replay_safe(
+    inventory_fixture,
+) -> None:
     factory, company, _, _, actor = inventory_fixture
     context = SimpleNamespace(company=company, user=actor)
-    payload = ItemCreate(name="Tankless isolation valve", stocking_unit="each", allow_fractional=False)
+    payload = ItemCreate(
+        name="Tankless isolation valve", stocking_unit="each", allow_fractional=False
+    )
     async with factory() as session:
         first = await InventoryService().create_item(
             session, context=context, code="valve-isolation", data=payload

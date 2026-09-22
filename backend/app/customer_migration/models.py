@@ -1067,6 +1067,249 @@ class CustomerMigrationSourceRow(Base):
     )
 
 
+class CustomerPopulationReconciliationDisposition(Base):
+    """Append-only outcome for one exact provider Customer identity."""
+
+    __tablename__ = "customer_population_reconciliation_dispositions"
+    __table_args__ = (
+        CheckConstraint(
+            "disposition IN ('BOUND','HELD','AMBIGUOUS','UNEXPLAINED')",
+            name="ck_customer_population_disposition_state",
+        ),
+        CheckConstraint(
+            "version >= 1", name="ck_customer_population_disposition_version"
+        ),
+        CheckConstraint(
+            "(disposition = 'BOUND') = "
+            "(customer_source_identity_id IS NOT NULL AND customer_id IS NOT NULL)",
+            name="ck_customer_population_disposition_bound_target",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_population_disposition_branch_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "customer_source_identity_id",
+                "company_id",
+                "branch_id",
+                "customer_id",
+            ],
+            [
+                "customer_source_identities.id",
+                "customer_source_identities.company_id",
+                "customer_source_identities.branch_id",
+                "customer_source_identities.customer_id",
+            ],
+            name="fk_customer_population_disposition_target_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_customer_id",
+            "version",
+            name="uq_customer_population_disposition_version",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            name="uq_customer_population_disposition_scope",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_customer_id",
+            "evidence_digest",
+            name="uq_customer_population_disposition_evidence",
+        ),
+        Index(
+            "ix_customer_population_disposition_current",
+            "company_id",
+            "branch_id",
+            "source_system",
+            "source_customer_id",
+            "version",
+        ),
+        Index(
+            "ix_customer_population_disposition_queue",
+            "company_id",
+            "branch_id",
+            "source_system",
+            "disposition",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_artifact_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("customer_migration_source_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_row_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("customer_migration_source_rows.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    customer_source_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_customer_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    source_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_row_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    decided_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CustomerPopulationRefreshRun(Base):
+    """Bounded result ledger for an operator-initiated population refresh."""
+
+    __tablename__ = "customer_population_refresh_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "total_count >= 0 AND bound_count >= 0 AND held_count >= 0 "
+            "AND ambiguous_count >= 0 AND unexplained_count >= 0",
+            name="ck_customer_population_refresh_counts_nonnegative",
+        ),
+        CheckConstraint(
+            "total_count = bound_count + held_count + ambiguous_count "
+            "+ unexplained_count",
+            name="ck_customer_population_refresh_counts_reconcile",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_population_refresh_branch_company",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_customer_population_refresh_scope",
+            "company_id",
+            "branch_id",
+            "completed_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    total_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    bound_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    held_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    ambiguous_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unexplained_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    initiated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CustomerPopulationReconciliationCommand(Base):
+    """Durable replay receipt for one exact-provider reconciliation command."""
+
+    __tablename__ = "customer_population_reconciliation_commands"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','completed','failed')",
+            name="ck_customer_population_command_status",
+        ),
+        CheckConstraint(
+            "(status = 'completed') = "
+            "(result_disposition_id IS NOT NULL AND customer_id IS NOT NULL "
+            "AND result_counts IS NOT NULL)",
+            name="ck_customer_population_command_completed_result",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_population_command_branch_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["result_disposition_id", "company_id"],
+            [
+                "customer_population_reconciliation_dispositions.id",
+                "customer_population_reconciliation_dispositions.company_id",
+            ],
+            name="fk_customer_population_command_result_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "idempotency_key",
+            name="uq_customer_population_command_idempotency",
+        ),
+        Index(
+            "ix_customer_population_command_provider",
+            "company_id",
+            "source_system",
+            "source_customer_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_customer_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    result_disposition_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    result_counts: Mapped[dict[str, int] | None] = mapped_column(JSONB)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    initiated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class CustomerMigrationCandidate(Base):
     __tablename__ = "customer_migration_candidates"
     __table_args__ = (

@@ -5,7 +5,6 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
-
 from development_factory.automation import TaskRunner
 from development_factory.run_records import (
     RUN_RECORD_VERSION,

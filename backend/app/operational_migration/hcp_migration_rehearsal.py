@@ -154,7 +154,9 @@ def build_rehearsal_result(
         candidate_counts=dict(sorted(candidate_counts.items())),
         disposition_counts=dict(sorted(dispositions.items())),
         exception_counts=dict(sorted(exceptions.items())),
-        decision_patterns=tuple(sorted(decision_patterns, key=lambda item: item.priority)),
+        decision_patterns=tuple(
+            sorted(decision_patterns, key=lambda item: item.priority)
+        ),
         candidate_digest=digest,
         replay_digest=seal_candidates(tuple(reversed(candidates))),
     )

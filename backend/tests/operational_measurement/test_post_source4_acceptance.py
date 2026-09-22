@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-
 from app.operational_measurement.post_source4_acceptance import (
     MAX_COMMERCIAL_RECORDS,
     EstimateAcceptanceProjection,
@@ -13,6 +12,7 @@ from app.operational_measurement.post_source4_acceptance import (
 )
 from app.operational_measurement.realdata_acceptance import AcceptanceClassification
 from scripts.crossdomain_post_source4_acceptance import main, run
+
 from tests.operational_measurement.test_realdata_acceptance import (
     BRANCH,
     COMPANY,
@@ -116,8 +116,14 @@ def test_partial_source_evidence_and_unmapped_technician_are_not_fabricated() ->
 @pytest.mark.parametrize(
     "changed,condition",
     [
-        ({"company_id": UUID("10000000-0000-0000-0000-000000000099")}, "COMPANY_OR_BRANCH_SCOPE_CONFLICT"),
-        ({"native_job_id": UUID("50000000-0000-0000-0000-000000000099")}, "JOB_RELATIONSHIP_CONFLICT"),
+        (
+            {"company_id": UUID("10000000-0000-0000-0000-000000000099")},
+            "COMPANY_OR_BRANCH_SCOPE_CONFLICT",
+        ),
+        (
+            {"native_job_id": UUID("50000000-0000-0000-0000-000000000099")},
+            "JOB_RELATIONSHIP_CONFLICT",
+        ),
         ({"open_amount": Decimal("851.00")}, "OPEN_BALANCE_EXCEEDS_INVOICE"),
     ],
 )
@@ -131,42 +137,64 @@ def test_scope_relationship_and_ar_conflicts_fail_closed(changed, condition) -> 
 def test_stale_duplicate_and_missing_lineage_fail_closed() -> None:
     duplicate = replace(invoice(), source_digest="b" * 64)
     result = verify(invoices=(invoice(), duplicate))
-    assert result.commercial_findings[1].conditions == ("DUPLICATE_NATIVE_SOURCE_IDENTITY",)
+    assert result.commercial_findings[1].conditions == (
+        "DUPLICATE_NATIVE_SOURCE_IDENTITY",
+    )
     orphan = verify(estimates=(estimate(source_job_id="missing_job"),), invoices=())
-    assert orphan.commercial_findings[0].classification is AcceptanceClassification.ORPHANED
+    assert (
+        orphan.commercial_findings[0].classification
+        is AcceptanceClassification.ORPHANED
+    )
 
 
 def test_commercial_input_is_bounded() -> None:
     with pytest.raises(ValueError, match="exceeds its bound"):
-        verify(estimates=tuple(estimate() for _ in range(MAX_COMMERCIAL_RECORDS + 1)), invoices=())
+        verify(
+            estimates=tuple(estimate() for _ in range(MAX_COMMERCIAL_RECORDS + 1)),
+            invoices=(),
+        )
 
 
 def test_cli_requires_both_admission_and_preview_clearance(tmp_path) -> None:
     input_path = tmp_path / "admitted.json"
     output_path = tmp_path / "report.json"
     payload = {
-        "company_id": str(COMPANY), "branch_id": str(BRANCH),
+        "company_id": str(COMPANY),
+        "branch_id": str(BRANCH),
         "lineage": [asdict(item) for item in lineage()],
-        "appointments": [asdict(source_appointment())], "schedules": [asdict(schedule())],
-        "dispatches": [asdict(dispatch())], "crosswalks": [asdict(crosswalk())],
-        "estimates": [asdict(estimate())], "invoices": [asdict(invoice())],
+        "appointments": [asdict(source_appointment())],
+        "schedules": [asdict(schedule())],
+        "dispatches": [asdict(dispatch())],
+        "crosswalks": [asdict(crosswalk())],
+        "estimates": [asdict(estimate())],
+        "invoices": [asdict(invoice())],
     }
     input_path.write_text(json.dumps(payload, default=str), encoding="utf-8")
     assert run(input_path, output_path) == 3
     assert not output_path.exists()
-    payload["source4_admission"] = {"source_system": "housecall_pro_source4", "state": "PLAN_CONFORMING", "package_digest": "c" * 64, "completion_evidence_digest": "d" * 64}
+    payload["source4_admission"] = {
+        "source_system": "housecall_pro_source4",
+        "state": "PLAN_CONFORMING",
+        "package_digest": "c" * 64,
+        "completion_evidence_digest": "d" * 64,
+    }
     payload["preview_clearance"] = {"state": "CLEARED", "authority_sha256": "e" * 64}
     input_path.write_text(json.dumps(payload, default=str), encoding="utf-8")
     assert run(input_path, output_path) == 0
     assert json.loads(output_path.read_text())["commercial_counts"] == {"MATCHED": 2}
 
 
-def test_cli_projects_malformed_input_as_a_safe_fixed_error(tmp_path, monkeypatch, capsys) -> None:
+def test_cli_projects_malformed_input_as_a_safe_fixed_error(
+    tmp_path, monkeypatch, capsys
+) -> None:
     input_path = tmp_path / "invalid.json"
     output_path = tmp_path / "report.json"
     canary = "protected-customer-canary"
     input_path.write_text(f'{{"secret":"{canary}"', encoding="utf-8")
-    monkeypatch.setattr("sys.argv", ["acceptance", "--input", str(input_path), "--output", str(output_path)])
+    monkeypatch.setattr(
+        "sys.argv",
+        ["acceptance", "--input", str(input_path), "--output", str(output_path)],
+    )
     assert main() == 2
     captured = capsys.readouterr()
     assert captured.err.strip() == "Cross-domain acceptance input is invalid."

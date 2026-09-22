@@ -112,7 +112,9 @@ def test_arbitrary_command_type_is_rejected(tmp_path: Path) -> None:
 
 
 def test_runtime_module_exposes_no_shell_or_repository_authority() -> None:
-    source = Path("app/worker_runtime/execution.py").read_text()
+    source = (
+        Path(__file__).resolve().parents[3] / "app/worker_runtime/execution.py"
+    ).read_text()
 
     assert "subprocess" not in source
     assert "shell=True" not in source

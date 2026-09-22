@@ -2,7 +2,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from app.customer_migration.adapter_import_policy import (
     customer_adapter_import_policy,
 )
@@ -43,19 +42,20 @@ def test_event_population_separates_admission_from_domain_events() -> None:
     assert population.aggregate_domain_events == 7
     assert population.audit_events_in_boundary == 0
     assert population.lineage_events_in_boundary == 0
-    assert customer_adapter_import_policy.event_population(
-        tuple(reversed(selected))
-    ) == population
+    assert (
+        customer_adapter_import_policy.event_population(tuple(reversed(selected)))
+        == population
+    )
 
 
-def test_event_population_rejects_duplicate_identity_and_changes_with_children() -> None:
+def test_event_population_rejects_duplicate_identity_and_changes_with_children() -> (
+    None
+):
     with pytest.raises(ValueError, match="duplicate Customer admission"):
         customer_adapter_import_policy.event_population(
             (aggregate("a" * 64), aggregate("a" * 64))
         )
-    original = customer_adapter_import_policy.event_population(
-        (aggregate("a" * 64),)
-    )
+    original = customer_adapter_import_policy.event_population((aggregate("a" * 64),))
     changed = customer_adapter_import_policy.event_population(
         (aggregate("a" * 64, contact=True),)
     )
@@ -66,10 +66,22 @@ def test_event_population_rejects_duplicate_identity_and_changes_with_children()
     ("masters", "expected"),
     (
         ((), RehearsalAdmissionState.NO_MASTER),
-        ((SimpleNamespace(status="running"),), RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER),
-        ((SimpleNamespace(status="interrupted"),), RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER),
-        ((SimpleNamespace(status="completed"),), RehearsalAdmissionState.COMPLETED_MASTER),
-        ((SimpleNamespace(status="failed"),), RehearsalAdmissionState.CONTRADICTORY_MASTER),
+        (
+            (SimpleNamespace(status="running"),),
+            RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER,
+        ),
+        (
+            (SimpleNamespace(status="interrupted"),),
+            RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER,
+        ),
+        (
+            (SimpleNamespace(status="completed"),),
+            RehearsalAdmissionState.COMPLETED_MASTER,
+        ),
+        (
+            (SimpleNamespace(status="failed"),),
+            RehearsalAdmissionState.CONTRADICTORY_MASTER,
+        ),
         (
             (SimpleNamespace(status="running"), SimpleNamespace(status="running")),
             RehearsalAdmissionState.MULTIPLE_UNEXPECTED_MASTERS,

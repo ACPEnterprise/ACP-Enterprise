@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-
 from app.operational_migration.phase1 import (
     JOB_HEADERS,
     OperationalPhase1Manifest,

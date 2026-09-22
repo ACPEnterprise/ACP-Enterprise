@@ -39,8 +39,18 @@ class ServiceAgreementPermission:
 
 class LaunchPlatformPermission:
     AUDIT_READ = "COMPANY_AUDIT_READ"
+    FACTORY_CONTROL_READ = "PLATFORM_FACTORY_CONTROL_READ"
+    FACTORY_CONTROL_INGEST = "PLATFORM_FACTORY_CONTROL_INGEST"
+    FACTORY_CONTROL_SNAPSHOT = "PLATFORM_FACTORY_CONTROL_SNAPSHOT"
 
-    ALL = frozenset({AUDIT_READ})
+    ALL = frozenset(
+        {
+            AUDIT_READ,
+            FACTORY_CONTROL_READ,
+            FACTORY_CONTROL_INGEST,
+            FACTORY_CONTROL_SNAPSHOT,
+        }
+    )
 
 
 class AnalyticsPermission:
@@ -131,7 +141,9 @@ class AssetPermission:
     MAINTAIN = "COMPANY_ASSET_MAINTAIN"
     CUSTODY = "COMPANY_ASSET_CUSTODY"
     POLICY_MANAGE = "COMPANY_ASSET_POLICY_MANAGE"
-    ALL = frozenset({READ, MANAGE, FLEET_MANAGE, INSPECT, MAINTAIN, CUSTODY, POLICY_MANAGE})
+    ALL = frozenset(
+        {READ, MANAGE, FLEET_MANAGE, INSPECT, MAINTAIN, CUSTODY, POLICY_MANAGE}
+    )
 
 
 class PurchasingPermission:

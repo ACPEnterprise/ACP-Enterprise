@@ -3,9 +3,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-
 from app.estimates.contracts import (
     CreateEstimateRevisionSpec,
     EstimateDecisionSpec,
@@ -20,6 +17,8 @@ from app.estimates.models import EstimateCustomerDecision, EstimateLifecycleHist
 from app.estimates.repository import EstimateRepository
 from app.estimates.service import EstimateService
 from app.events.models import BusinessEvent
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
 from tests.estimates.test_estimate_foundation import make_spec
 
 pytest_plugins = ("tests.estimates.test_estimate_foundation",)

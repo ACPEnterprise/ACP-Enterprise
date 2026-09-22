@@ -1,6 +1,5 @@
 import httpx
 import pytest
-
 from app.main import app
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import PriceBookPermission

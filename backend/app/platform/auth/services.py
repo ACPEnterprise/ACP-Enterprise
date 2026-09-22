@@ -510,6 +510,7 @@ class AuthenticationService:
                     authentication_session=authentication_session,
                     now=now,
                     lock=True,
+                    allow_authorization_refresh=True,
                 )
                 plaintext_refresh = self.token_service.generate_token()
                 refresh_expiration = min(
@@ -739,6 +740,7 @@ class AuthenticationService:
         authentication_session: AuthenticationSession,
         now: datetime,
         lock: bool,
+        allow_authorization_refresh: bool = False,
     ) -> tuple[User, UserCredential]:
         if (
             authentication_session.status != "active"
@@ -765,10 +767,16 @@ class AuthenticationService:
             or user.archived_at is not None
             or authentication_session.credential_version
             != credential.credential_version
-            or authentication_session.authorization_version
-            != user.authorization_version
         ):
             raise SessionInvalidError("Session is invalid.")
+        if authentication_session.authorization_version != user.authorization_version:
+            if not allow_authorization_refresh:
+                raise SessionInvalidError("Session is invalid.")
+            # An ordinary access-policy mutation invalidates issued access tokens,
+            # but it must not turn an otherwise valid authenticated session into a
+            # second-login requirement. Refresh rotation is the one governed path
+            # that advances the session to the current authorization authority.
+            authentication_session.authorization_version = user.authorization_version
         return user, credential
 
 

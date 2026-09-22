@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
-
 from app.platform.idempotency.errors import reliability_http_error
 from app.platform.idempotency.reliability import (
     IdempotencyConflict,
@@ -13,6 +10,8 @@ from app.platform.idempotency.reliability import (
 )
 from app.platform.reliability.correlation import CorrelationMiddleware
 from app.platform.reliability.failures import ClientRecovery
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 
 def _app() -> FastAPI:
@@ -28,9 +27,13 @@ def _app() -> FastAPI:
 
 def test_request_correlation_is_safe_stable_uuid() -> None:
     supplied = "23a4fbe5-b785-4a42-99d6-692fddef4992"
-    response = TestClient(_app()).get("/correlation", headers={"X-Request-ID": supplied})
+    response = TestClient(_app()).get(
+        "/correlation", headers={"X-Request-ID": supplied}
+    )
     assert response.headers["X-Request-ID"] == supplied
-    generated = TestClient(_app()).get("/correlation", headers={"X-Request-ID": "protected payload"})
+    generated = TestClient(_app()).get(
+        "/correlation", headers={"X-Request-ID": "protected payload"}
+    )
     UUID(generated.headers["X-Request-ID"])
     assert generated.headers["X-Request-ID"] != "protected payload"
 

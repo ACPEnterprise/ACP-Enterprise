@@ -58,12 +58,8 @@ def test_bank_pur_009_qualification_artifact_is_canonical() -> None:
     fingerprint = payload.pop("qualification_fingerprint")
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
-    assert payload["implementation_sha"] == (
-        "559536c7bec0b6ffa18de3f2bdf72e3c7f35a3d5"
-    )
-    assert payload["integration_sha"] == (
-        "f65548968f94e9f5e57610c9aae2863d4d4446cd"
-    )
+    assert payload["implementation_sha"] == ("559536c7bec0b6ffa18de3f2bdf72e3c7f35a3d5")
+    assert payload["integration_sha"] == ("f65548968f94e9f5e57610c9aae2863d4d4446cd")
     assert payload["state"] == "QUALIFIED_AWAITING_OWNER_ACCEPTANCE"
     assert payload["successor_gate"]["state"] == (
         "BLOCKED_PENDING_BANK_PUR_009_OWNER_ACCEPTANCE"
@@ -77,9 +73,7 @@ async def test_policy_revision_evidence_is_database_immutable(
 ) -> None:
     factory, company, _, branch, _, preparer, _ = purchasing_fixture
     service = PurchasingService()
-    item = await _item(
-        factory, company_id=company.id, actor_id=preparer.user.id
-    )
+    item = await _item(factory, company_id=company.id, actor_id=preparer.user.id)
     async with factory() as session:
         policy = await service.configure_branch_policy(
             session,

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from development_factory.owner_review import (
     ConsolidationState,
     OwnerReviewError,
@@ -24,7 +23,6 @@ from development_factory.review_records import (
 )
 from development_factory.worker_execution import WorkerExecutor
 from development_factory.workspaces import WorkspaceManager
-
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None,

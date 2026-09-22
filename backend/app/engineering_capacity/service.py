@@ -102,8 +102,7 @@ class EngineeringCapacityService:
                 replay_binding = (
                     await session.scalar(
                         select(EngineeringCapacityBinding).where(
-                            EngineeringCapacityBinding.company_id
-                            == context.company.id,
+                            EngineeringCapacityBinding.company_id == context.company.id,
                             EngineeringCapacityBinding.worker_capacity_id
                             == replay_capacity.id,
                             EngineeringCapacityBinding.state == "active",
@@ -138,7 +137,9 @@ class EngineeringCapacityService:
                 active.permanent_capacity_id != permanent.id
                 or active.version != data.expected_binding_version
             ):
-                raise CapacityConflictError("Permanent capacity binding version is stale.")
+                raise CapacityConflictError(
+                    "Permanent capacity binding version is stale."
+                )
             old_capacity = await session.scalar(
                 select(EngineeringWorkerCapacity)
                 .where(
@@ -150,7 +151,9 @@ class EngineeringCapacityService:
             if old_capacity is None:
                 raise CapacityNotFoundError("Bound worker capacity was not found.")
             if old_capacity.allocated_capacity or old_capacity.reserved_capacity:
-                raise CapacityConflictError("Active capacity use must be reconciled first.")
+                raise CapacityConflictError(
+                    "Active capacity use must be reconciled first."
+                )
 
             worker = await session.scalar(
                 select(EngineeringWorker)
@@ -158,7 +161,9 @@ class EngineeringCapacityService:
                     WorkerIdentity,
                     WorkerIdentity.orchestration_worker_id == EngineeringWorker.id,
                 )
-                .join(WorkerCredential, WorkerCredential.identity_id == WorkerIdentity.id)
+                .join(
+                    WorkerCredential, WorkerCredential.identity_id == WorkerIdentity.id
+                )
                 .where(
                     EngineeringWorker.company_id == context.company.id,
                     EngineeringWorker.id == data.worker_id,
@@ -189,7 +194,8 @@ class EngineeringCapacityService:
                     select(EngineeringCapacityMachine)
                     .where(
                         EngineeringCapacityMachine.company_id == context.company.id,
-                        EngineeringCapacityMachine.machine_label == " ".join(data.machine_label.split()),
+                        EngineeringCapacityMachine.machine_label
+                        == " ".join(data.machine_label.split()),
                     )
                     .with_for_update()
                 )
@@ -224,8 +230,13 @@ class EngineeringCapacityService:
                 )
                 session.add(target)
                 await session.flush()
-            elif target.health_state != "healthy" or target.operational_state != "available":
-                raise CapacityUnavailableError("Target worker capacity is not healthy and available.")
+            elif (
+                target.health_state != "healthy"
+                or target.operational_state != "available"
+            ):
+                raise CapacityUnavailableError(
+                    "Target worker capacity is not healthy and available."
+                )
 
             conflicting = await session.scalar(
                 select(EngineeringCapacityBinding).where(
@@ -235,7 +246,9 @@ class EngineeringCapacityService:
                 )
             )
             if conflicting is not None:
-                raise CapacityConflictError("Target worker is already permanently bound.")
+                raise CapacityConflictError(
+                    "Target worker is already permanently bound."
+                )
             active.state = "superseded"
             active.evidence = {
                 **dict(active.evidence),
@@ -325,7 +338,9 @@ class EngineeringCapacityService:
                 .with_for_update()
             )
             if permanent is None or worker_capacity is None:
-                raise CapacityNotFoundError("Permanent or worker capacity was not found.")
+                raise CapacityNotFoundError(
+                    "Permanent or worker capacity was not found."
+                )
             if (
                 worker_capacity.configured_limit != 1
                 or worker_capacity.health_state != "healthy"

@@ -8,6 +8,26 @@ from app.core.config import Settings, settings
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+CORS_ALLOWED_METHODS = ("DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT")
+CORS_ALLOWED_HEADERS = (
+    "Accept",
+    "Authorization",
+    "Content-Type",
+    "Idempotency-Key",
+    "Last-Event-ID",
+    "X-ACP-Mobile-Version",
+    "X-ACP-Provider-Signature",
+    "X-ACP-QBO-Code",
+    "X-ACP-QBO-Error",
+    "X-ACP-QBO-Realm",
+    "X-ACP-QBO-State",
+    "X-Branch-ID",
+    "X-Company-ID",
+    "X-Request-ID",
+    "X-Worker-ID",
+    "X-Worker-Session-ID",
+)
+
 
 def _forwarding_failure(message: str) -> JSONResponse:
     failure = SafeFailure(

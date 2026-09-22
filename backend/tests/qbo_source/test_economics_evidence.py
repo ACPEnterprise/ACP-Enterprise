@@ -4,7 +4,6 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
-
 from app.qbo_source.contracts import QboSourceEnvelope, SnapshotIdentity
 from app.qbo_source.economics_evidence import (
     EconomicsEvidenceCategory,

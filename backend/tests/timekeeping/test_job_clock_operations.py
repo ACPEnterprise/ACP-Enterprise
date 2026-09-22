@@ -229,7 +229,10 @@ async def test_clock_start_stop_visibility_precision_and_lost_response_replay() 
     assert recovered is not None and recovered.id == completed.id
 
     inactive = await WorkdayTimeQueryService(repository).active_job_clock(
-        session, context=ctx, employee_id=employee_id, observed_at=NOW + timedelta(minutes=3)
+        session,
+        context=ctx,
+        employee_id=employee_id,
+        observed_at=NOW + timedelta(minutes=3),
     )
     assert inactive.active is False
     assert inactive.latest_action is JobClockKind.STOP
@@ -453,9 +456,7 @@ async def test_job_clock_scope_requires_current_primary_or_crew_assignment(
             )
         )
         await session.flush()
-        assert await repository.job_scope_exists(
-            session, employee_id=crew.id, **scope
-        )
+        assert await repository.job_scope_exists(session, employee_id=crew.id, **scope)
 
         assignment.status = "released"
         await session.flush()

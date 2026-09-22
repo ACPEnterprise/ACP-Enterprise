@@ -135,9 +135,7 @@ def build_productive_hour_readiness(
         ):
             raise ValueError("supplemental Job evidence lacks labor relationship")
 
-    by_job: dict[
-        tuple[UUID, UUID, UUID, UUID | None], list[SupplementalTimeFact]
-    ] = (
+    by_job: dict[tuple[UUID, UUID, UUID, UUID | None], list[SupplementalTimeFact]] = (
         defaultdict(list)
     )
     by_employee: dict[UUID, list[SupplementalTimeFact]] = defaultdict(list)

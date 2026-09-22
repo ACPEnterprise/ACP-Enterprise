@@ -50,7 +50,9 @@ def _report(*, start: str = "2026-05-01", basis: str = "Cash") -> dict[str, obje
 
 
 @pytest.mark.asyncio
-async def test_acquires_and_registers_exact_source_backed_report(tmp_path: Path) -> None:
+async def test_acquires_and_registers_exact_source_backed_report(
+    tmp_path: Path,
+) -> None:
     settings = _settings(tmp_path)
 
     async def reader(request, configuration):
@@ -79,23 +81,29 @@ async def test_acquires_and_registers_exact_source_backed_report(tmp_path: Path)
     assert result["state"] == "QBO_SOURCE_BACKED_REPORT_REGISTERED"
     assert result["accepted_as_acp_accounting"] is False
     assert result["mutation_authority"] == "none"
-    assert result["report_totals"] == [
-        {"label": "Total Income", "value": "100.00"}
-    ]
+    assert result["report_totals"] == [{"label": "Total Income", "value": "100.00"}]
     assert result["provider_pagination_applicable"] is False
     raw_path = Path(str(result["raw_path"]))
     assert raw_path.is_file()
     registration = json.loads(
-        (Path(settings.qbo_production_evidence_root) / "controls" / "qbo-may-2026-profit-loss-cash-v1.json").read_bytes()
+        (
+            Path(settings.qbo_production_evidence_root)
+            / "controls"
+            / "qbo-may-2026-profit-loss-cash-v1.json"
+        ).read_bytes()
     )
     assert registration["schema_version"] == "qbo-control-registration/v1"
     assert registration["raw_sha256"] == result["raw_sha256"]
     assert registration["safe_report_parameters"]["start_date"] == "2026-05-01"
-    assert registration["safe_report_parameters"]["provider_environment"] == "production"
+    assert (
+        registration["safe_report_parameters"]["provider_environment"] == "production"
+    )
 
 
 @pytest.mark.asyncio
-async def test_rejects_provider_scope_mismatch_before_custody_write(tmp_path: Path) -> None:
+async def test_rejects_provider_scope_mismatch_before_custody_write(
+    tmp_path: Path,
+) -> None:
     settings = _settings(tmp_path)
 
     async def reader(request, configuration):

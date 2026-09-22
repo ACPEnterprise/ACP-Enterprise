@@ -15,9 +15,8 @@ from development_factory.lia_contract import (
     load_lia_contract,
 )
 from development_factory.lia_roles import load_agent_roles
-from development_factory.repository import inspect_repository
 from development_factory.reports import redact
-
+from development_factory.repository import inspect_repository
 
 WORKSPACE_METADATA_VERSION = "1.0"
 WorkspaceClassification = Literal[
@@ -300,14 +299,18 @@ class WorkspaceManager:
             classification: WorkspaceClassification = "stale"
         elif branch != identity.workspace_branch:
             issues = (
-                f"workspace branch mismatch: expected {identity.workspace_branch}, "
-                f"found {branch}",
+                (
+                    f"workspace branch mismatch: expected {identity.workspace_branch}, "
+                    f"found {branch}"
+                ),
             )
             classification = "stale"
         elif head != identity.approved_starting_sha:
             issues = (
-                f"workspace HEAD drift: expected {identity.approved_starting_sha}, "
-                f"found {head}",
+                (
+                    f"workspace HEAD drift: expected {identity.approved_starting_sha}, "
+                    f"found {head}"
+                ),
             )
             classification = "stale"
         elif staged:

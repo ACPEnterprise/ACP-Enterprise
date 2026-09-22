@@ -170,7 +170,12 @@ def aggregate_measured_durations(
     else:
         state = DurationState.MEASURED_HISTORY_AVAILABLE
     values = sorted(row.active_minutes for row in accepted)
-    refs = tuple(sorted({ref for row in accepted for ref in row.evidence}, key=lambda r: (r.authority, r.identity, r.digest)))
+    refs = tuple(
+        sorted(
+            {ref for row in accepted for ref in row.evidence},
+            key=lambda r: (r.authority, r.identity, r.digest),
+        )
+    )
     limitations = (
         "Historical measured duration is descriptive evidence, not a prediction.",
         f"Engineering safety minimum is {minimum_samples} accepted samples; owner scheduling policy is not implied.",
@@ -185,7 +190,9 @@ def aggregate_measured_durations(
         "values": values,
         "evidence": [(r.authority, r.identity, r.digest) for r in refs],
     }
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
     return DurationAggregate(
         DURATION_CONTRACT_VERSION,
         company_id,
@@ -219,9 +226,7 @@ def derive_candidate_windows(
     ):
         raise DispatchValidation("Scheduled duration does not fit the Customer window.")
     starts = (promised_window.start_at, promised_window.end_at - duration)
-    return tuple(
-        TimeWindow(start, start + duration) for start in dict.fromkeys(starts)
-    )
+    return tuple(TimeWindow(start, start + duration) for start in dict.fromkeys(starts))
 
 
 class AcpDispatchRuntimeAdapter:
@@ -245,7 +250,14 @@ class AcpDispatchRuntimeAdapter:
             raise DispatchNotFound("Job was not found.") from error
         if not context.can_access_branch(detail.branch_id):
             raise DispatchNotFound("Job was not found.")
-        appointment = next((item for item in detail.appointments if item.arrival_window_start_at and item.arrival_window_end_at), None)
+        appointment = next(
+            (
+                item
+                for item in detail.appointments
+                if item.arrival_window_start_at and item.arrival_window_end_at
+            ),
+            None,
+        )
         if appointment is None:
             raise DispatchValidation("Job has no authoritative Customer window.")
         promised_start = appointment.arrival_window_start_at
@@ -264,8 +276,13 @@ class AcpDispatchRuntimeAdapter:
             for window in proposed_windows
         ):
             raise DispatchValidation("Candidate window is outside the bounded horizon.")
-        if any(window.start_at < promised.start_at or window.end_at > promised.end_at for window in proposed_windows):
-            raise DispatchValidation("Candidate window violates the authoritative Customer window.")
+        if any(
+            window.start_at < promised.start_at or window.end_at > promised.end_at
+            for window in proposed_windows
+        ):
+            raise DispatchValidation(
+                "Candidate window violates the authoritative Customer window."
+            )
         appointment_record = await scheduling_query_service.get_appointment(
             session,
             context=context,
@@ -276,8 +293,18 @@ class AcpDispatchRuntimeAdapter:
             ),
         )
         evidence = (
-            _ref("jobs.job-detail", detail.id, detail.concurrency_version, detail.updated_at),
-            _ref("scheduling.appointment", appointment_record.id, appointment_record.concurrency_version, appointment_record.updated_at),
+            _ref(
+                "jobs.job-detail",
+                detail.id,
+                detail.concurrency_version,
+                detail.updated_at,
+            ),
+            _ref(
+                "scheduling.appointment",
+                appointment_record.id,
+                appointment_record.concurrency_version,
+                appointment_record.updated_at,
+            ),
         )
         job = JobDemand(
             company_id=detail.company_id,
@@ -287,7 +314,9 @@ class AcpDispatchRuntimeAdapter:
             priority=detail.priority.value,
             promised_window=promised,
             expected_duration_minutes=appointment.expected_duration_minutes,
-            duration_state=EvidenceState.KNOWN if appointment.expected_duration_minutes else EvidenceState.UNKNOWN,
+            duration_state=EvidenceState.KNOWN
+            if appointment.expected_duration_minutes
+            else EvidenceState.UNKNOWN,
             required_capabilities=frozenset(),
             required_certifications=frozenset(),
             evidence=evidence,
@@ -297,7 +326,8 @@ class AcpDispatchRuntimeAdapter:
             session,
             context=context,
             start_at=min(window.start_at for window in proposed_windows),
-            end_at=max(window.end_at for window in proposed_windows) + timedelta(days=1),
+            end_at=max(window.end_at for window in proposed_windows)
+            + timedelta(days=1),
             branch_id=detail.branch_id,
         )
         candidates: list[CandidatePlacement] = []
@@ -332,16 +362,29 @@ class AcpDispatchRuntimeAdapter:
                         capabilities=frozenset(employee.capability_codes),
                         certifications=frozenset(),
                         availability=(window,) if employee.eligible else (),
-                        availability_state=_availability_state(employee.availability_confidence),
+                        availability_state=_availability_state(
+                            employee.availability_confidence
+                        ),
                         proposed_window=window,
                         commitments=commitments,
-                        downstream_customer_windows=tuple(item for item in commitments if item.start_at >= window.end_at),
+                        downstream_customer_windows=tuple(
+                            item
+                            for item in commitments
+                            if item.start_at >= window.end_at
+                        ),
                         fleet_state=EvidenceState.UNKNOWN,
                         fleet_ready=None,
                         travel_state=EvidenceState.EXTERNAL_GATE,
                         travel_minutes=None,
                         live_field_state=_live_state(board.items, employee.employee_id),
-                        evidence=(_ref("workforce.eligibility", employee.employee_id, employee.decision, employee.availability_confidence),),
+                        evidence=(
+                            _ref(
+                                "workforce.eligibility",
+                                employee.employee_id,
+                                employee.decision,
+                                employee.availability_confidence,
+                            ),
+                        ),
                     )
                 )
         if len(candidates) > MAX_CANDIDATES:
@@ -368,12 +411,18 @@ class DispatchRecommendationService:
 
 
 def _ref(authority: str, identity: object, *version: object) -> EvidenceRef:
-    digest = hashlib.sha256("|".join(str(item) for item in (authority, identity, *version)).encode()).hexdigest()
+    digest = hashlib.sha256(
+        "|".join(str(item) for item in (authority, identity, *version)).encode()
+    ).hexdigest()
     return EvidenceRef(authority, str(identity), digest)
 
 
 def _availability_state(value: str) -> EvidenceState:
-    return EvidenceState.KNOWN if value.lower() in {"known", "authoritative", "high"} else EvidenceState.UNKNOWN
+    return (
+        EvidenceState.KNOWN
+        if value.lower() in {"known", "authoritative", "high"}
+        else EvidenceState.UNKNOWN
+    )
 
 
 def _live_state(items: tuple[object, ...], employee_id: UUID) -> str | None:

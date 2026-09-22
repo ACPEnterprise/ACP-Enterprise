@@ -10,7 +10,7 @@ controller can validate and query it with the standard Python runtime.
 This roadmap reconciles the original Version 1 planning architecture, the
 Master Milestone Queue, the protected product history, the Owner Acceptance
 ledger, and successor discoveries through protected SHA
-`b3a1a57e7aa2496f09a441957493ea6a2736c075`. Repository evidence supersedes
+`fa2bdcb6504664a9a41df906bc35ad413c68ae09`. Repository evidence supersedes
 stale planning text; it does not turn deployment into acceptance.
 
 For user-facing work:
@@ -177,6 +177,9 @@ scripts/factory-roadmap next --factory LAPTOP
 items, and requires every prerequisite to be at least engineering-ready and
 protected/deployed/accepted as represented by the lifecycle state. The output
 contains the stable item, preferred lane, priority, and exact next action.
+`OWNER_ACCEPTANCE_REQUIRED` items remain in the durable owner-action queue and
+are never returned as engineering assignments; an idle lane continues to the
+next dependency-safe engineering-owned item.
 
 - OM1E reads the full graph and owns canonical Alembic, protected integration,
   Release, schema/security/platform gates, and cross-factory arbitration.
@@ -202,6 +205,19 @@ Customers, Employee timeline/readiness, and Estimate context/policy friction.
 The queue feeds `UX.PRODUCT.EXPERIENCE.REIMAGINATION.1`; it does not authorize
 the broad redesign. A bounded P0/P1 defect remains owned and repairable in its
 current domain.
+
+## Real operational acceptance
+
+The machine companion carries one authoritative acceptance matrix for the core
+owner/operator surfaces, and Factory Control renders it directly. Its states
+are `NOT_TESTED`, `PASS`, `DEFECT`, `HUMAN_INPUT_REQUIRED`, and
+`PROVIDER_GATE`; only `PASS` may claim Beta-operable and owner-accepted.
+
+The 2026-09-22 physical review established P0 defects for Customers (#432),
+Service Agreements (#479), My Day (#480), Scheduling (#439), and Payroll
+(#449). These findings outrank generic work at the same priority. See
+[REAL_OPERATIONAL_ACCEPTANCE.md](REAL_OPERATIONAL_ACCEPTANCE.md) for the
+strict evidence rule and the unfilled real All County golden-path slots.
 
 ## Current gates and priorities
 

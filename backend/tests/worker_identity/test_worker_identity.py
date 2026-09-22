@@ -1,11 +1,9 @@
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError, replace
 from datetime import timedelta
+
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.events.models import BusinessEvent
 from app.platform.audit.models import AuditRecord
@@ -24,6 +22,9 @@ from app.worker_identity.errors import (
 )
 from app.worker_identity.models import WorkerCredential
 from app.worker_identity.service import WorkerIdentityService
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,

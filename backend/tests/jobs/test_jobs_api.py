@@ -6,9 +6,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-
 from app.database.session import get_database_session
 from app.jobs.errors import (
     JobError,
@@ -24,6 +21,9 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
 from tests.jobs.test_jobs_persistence import JobsFixture, build_appointment
 from tests.jobs.test_jobs_query import _context_from_fixture
 
@@ -216,7 +216,10 @@ async def test_job_create_concurrent_replay_and_contradiction(
     )
     assert {first.status_code, replay.status_code} == {201}
     assert first.json()["id"] == replay.json()["id"]
-    assert {first.headers["Idempotency-Status"], replay.headers["Idempotency-Status"]} == {
+    assert {
+        first.headers["Idempotency-Status"],
+        replay.headers["Idempotency-Status"],
+    } == {
         "executed",
         "replayed",
     }

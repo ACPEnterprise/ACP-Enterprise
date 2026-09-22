@@ -6,8 +6,6 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.customers.models import Customer  # noqa: F401
 from app.payroll.adjustment_calculation import (
     AdjustmentCalculationError,
@@ -28,6 +26,8 @@ from app.payroll.adjustments import (
 from app.payroll.contracts import PayrollAuthorizationError, canonical_digest
 from app.payroll.permissions import PayrollPermission
 from app.scheduling.models import Appointment  # noqa: F401
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from tests.payroll.test_adjustment_authority import draft
 from tests.payroll.test_gross_pay_finalization import FakeContext
 from tests.payroll.test_gross_pay_finalization import finalization_database as _database
@@ -47,10 +47,14 @@ async def approved_adjustment(
         values["company_id"], values["actor_id"], {PayrollPermission.ADJUSTMENT_MANAGE}
     )
     review: Any = FakeContext(
-        values["company_id"], values["reviewer_id"], {PayrollPermission.ADJUSTMENT_REVIEW}
+        values["company_id"],
+        values["reviewer_id"],
+        {PayrollPermission.ADJUSTMENT_REVIEW},
     )
     approve: Any = FakeContext(
-        values["company_id"], values["reviewer_id"], {PayrollPermission.ADJUSTMENT_APPROVE}
+        values["company_id"],
+        values["reviewer_id"],
+        {PayrollPermission.ADJUSTMENT_APPROVE},
     )
     service = PayrollAdjustmentService()
     value = await service.create(session, context=manage, draft=command)
@@ -71,7 +75,9 @@ async def approved_adjustment(
     return value
 
 
-def calculation_context(values: dict[str, object], company_id: object | None = None) -> Any:
+def calculation_context(
+    values: dict[str, object], company_id: object | None = None
+) -> Any:
     return FakeContext(
         company_id or values["company_id"],
         values["actor_id"],
@@ -114,7 +120,9 @@ async def test_retroactive_and_off_cycle_are_deterministic_and_preserve_run(
             session,
             context=calculation_context(values),
             adjustment_id=authority.id,
-            provider=AuthorizedDeltaRuleProvider(provider_version="authorized-delta.v2"),
+            provider=AuthorizedDeltaRuleProvider(
+                provider_version="authorized-delta.v2"
+            ),
         )
         assert changed_rule.calculation_digest != first.calculation_digest
         await session.refresh(run)
@@ -169,7 +177,10 @@ async def test_tax_and_deduction_corrections_bind_original_results_and_test_prov
             provider=SyntheticTaxAdjustmentProvider(),
         )
         assert result.source_id == tax.id
-        assert result.components[0].recognition_effect is RecognitionEffect.TAX_LIABILITY_DELTA
+        assert (
+            result.components[0].recognition_effect
+            is RecognitionEffect.TAX_LIABILITY_DELTA
+        )
         assert result.consequences == (
             AdjustmentConsequenceType.TAX_SUCCESSOR_REQUIRED,
         )
@@ -199,7 +210,10 @@ async def test_tax_and_deduction_corrections_bind_original_results_and_test_prov
             provider=AuthorizedDeltaRuleProvider(),
         )
         assert deduction_result.source_id == tax.id
-        assert deduction_result.components[0].recognition_effect is RecognitionEffect.DEDUCTION_LIABILITY_DELTA
+        assert (
+            deduction_result.components[0].recognition_effect
+            is RecognitionEffect.DEDUCTION_LIABILITY_DELTA
+        )
 
 
 @pytest.mark.asyncio
@@ -369,9 +383,12 @@ def test_posted_and_unposted_accounting_consequences_are_non_mutating() -> None:
         AdjustmentConsequenceType.SUCCESSOR_PAYROLL_REQUIRED,
         AdjustmentConsequenceType.ACCOUNTING_ADJUSTMENT_REQUIRED,
     )
-    assert PayrollAdjustmentCalculationService._recognition(
-        posted, PayrollCorrectionType.RETROACTIVE_EARNINGS, "gross_wages"
-    ) is RecognitionEffect.ACCOUNTING_ADJUSTMENT
+    assert (
+        PayrollAdjustmentCalculationService._recognition(
+            posted, PayrollCorrectionType.RETROACTIVE_EARNINGS, "gross_wages"
+        )
+        is RecognitionEffect.ACCOUNTING_ADJUSTMENT
+    )
 
     unposted: Any = SimpleNamespace(source_type="payroll_posting_fact_candidate")
     assert PayrollAdjustmentCalculationService._consequences(

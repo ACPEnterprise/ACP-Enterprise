@@ -528,6 +528,7 @@ async def test_start_control_is_delivered_only_to_permanently_assigned_worker(
         assert acknowledged.worker_id == assigned.id
         assert acknowledged.worker_id != other.id
 
+
 @pytest.mark.asyncio
 async def test_durable_provider_progress_advances_phone_runtime_monotonically(
     worker_database_fixture,

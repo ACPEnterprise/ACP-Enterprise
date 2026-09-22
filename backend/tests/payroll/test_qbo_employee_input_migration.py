@@ -66,14 +66,20 @@ def test_accounting_catalog_is_partial_or_absent_never_authoritative() -> None:
         in {SourceClassification.PARTIAL_SOURCE_EVIDENCE, SourceClassification.ABSENT}
         for item in result
     )
-    assert next(item for item in result if item.field == "w4_step_2").classification is SourceClassification.ABSENT
+    assert (
+        next(item for item in result if item.field == "w4_step_2").classification
+        is SourceClassification.ABSENT
+    )
 
 
 def test_exact_approved_crosswalk_is_required() -> None:
     missing = packet(crosswalks=())
     assert missing.crosswalk_disposition is ReconciliationDisposition.SOURCE_MISSING
     ambiguous = packet(crosswalks=(crosswalk(), crosswalk("employee-2")))
-    assert ambiguous.crosswalk_disposition is ReconciliationDisposition.HOLD_FOR_OWNER_REVIEW
+    assert (
+        ambiguous.crosswalk_disposition
+        is ReconciliationDisposition.HOLD_FOR_OWNER_REVIEW
+    )
 
 
 def test_authoritative_provider_value_can_only_become_draft_instruction() -> None:
@@ -94,7 +100,10 @@ def test_partial_history_is_review_only_and_missing_is_not_zero() -> None:
             ),
         )
     )
-    assert field(result, "deduction_history").disposition is ReconciliationDisposition.REVIEW_REQUIRED
+    assert (
+        field(result, "deduction_history").disposition
+        is ReconciliationDisposition.REVIEW_REQUIRED
+    )
     missing = field(result, "medicare_wages_ytd")
     assert missing.source_classification is SourceClassification.ABSENT
     assert missing.disposition is ReconciliationDisposition.SOURCE_MISSING
@@ -150,4 +159,7 @@ def test_explicit_zero_still_requires_provider_authority() -> None:
         value_digest="0" * 64,
         explicit_zero=True,
     )
-    assert field(packet(sources=(partial_zero,)), "medicare_tax_ytd").importable_as_draft is False
+    assert (
+        field(packet(sources=(partial_zero,)), "medicare_tax_ytd").importable_as_draft
+        is False
+    )

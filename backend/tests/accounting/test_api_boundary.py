@@ -2,8 +2,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-
 from app.accounting.errors import (
     AccountingConflict,
     AccountingNotFound,
@@ -12,6 +10,7 @@ from app.accounting.errors import (
 )
 from app.accounting.router import approve_reopen, close_period, router, translate
 from app.platform.permissions.codes import AccountingPermission
+from fastapi import HTTPException
 
 
 class PermissionContext:

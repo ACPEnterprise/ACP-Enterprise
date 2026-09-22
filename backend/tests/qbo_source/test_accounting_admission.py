@@ -82,17 +82,23 @@ def test_admission_rejects_malformed_bounded_entity_collection(tmp_path: Path) -
 
 
 def test_coa_packet_is_safe_conservative_and_complete() -> None:
-    packet = build_coa_mapping_packet((
-        {
-            "Id": "1", "AccountType": "Accounts Receivable",
-            "Active": True, "CurrentBalance": "12.34",
-        },
-        {
-            "Id": "2", "AccountType": "Expense",
-            "AccountSubType": "LegalProfessionalFees", "Active": True,
-        },
-        {"Id": "3", "AccountType": "Income", "Active": False},
-    ))
+    packet = build_coa_mapping_packet(
+        (
+            {
+                "Id": "1",
+                "AccountType": "Accounts Receivable",
+                "Active": True,
+                "CurrentBalance": "12.34",
+            },
+            {
+                "Id": "2",
+                "AccountType": "Expense",
+                "AccountSubType": "LegalProfessionalFees",
+                "Active": True,
+            },
+            {"Id": "3", "AccountType": "Income", "Active": False},
+        )
+    )
     assert packet["account_count"] == 3
     assert packet["classification_counts"] == {
         "DIRECT_SAFE_MAPPING": 1,
@@ -133,8 +139,12 @@ def test_cash_basis_successor_preserves_prior_packets(tmp_path: Path) -> None:
     result = provision_cash_basis_successor_packet(
         registry=registry,
         authority=HistoryDecisionAuthority(
-            "owner-safe-id", datetime(2026, 9, 1, tzinfo=timezone.utc),
-            "a" * 64, "master-id", "b" * 64, "2026-08-31",
+            "owner-safe-id",
+            datetime(2026, 9, 1, tzinfo=timezone.utc),
+            "a" * 64,
+            "master-id",
+            "b" * 64,
+            "2026-08-31",
         ),
     )
     assert result["state"] == "CASH_BASIS_SUCCESSOR_CONTROL_PACKET_READY"

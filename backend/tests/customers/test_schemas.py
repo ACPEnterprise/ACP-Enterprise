@@ -1,12 +1,11 @@
 import pytest
-from pydantic import ValidationError
-
 from app.customers.schemas import (
     ContactCreate,
     CustomerCreate,
     CustomerType,
     ServiceLocationCreate,
 )
+from pydantic import ValidationError
 
 
 def test_customer_taxonomy_and_unknown_fields_are_strict() -> None:

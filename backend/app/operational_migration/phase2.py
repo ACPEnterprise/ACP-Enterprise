@@ -455,9 +455,7 @@ def select_stage(
         "generated_at": generated_at,
     }
     payload["manifest_sha256"] = "0" * 64
-    provisional = OperationalPhase2Manifest.model_construct(
-        _fields_set=None, **payload
-    )
+    provisional = OperationalPhase2Manifest.model_construct(_fields_set=None, **payload)
     payload["manifest_sha256"] = _sha256(
         _canonical(provisional.model_dump(exclude={"manifest_sha256"}, mode="json"))
     )

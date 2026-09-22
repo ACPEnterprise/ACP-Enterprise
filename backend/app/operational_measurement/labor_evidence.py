@@ -149,10 +149,8 @@ def compose_labor_evidence(
     link_keys = {(x.employee_id, x.job_id, x.appointment_id) for x in links}
 
     paid_by_employee: dict[UUID, list[LaborInterval]] = defaultdict(list)
-    job_intervals: dict[
-        tuple[UUID, UUID, UUID | None], list[LaborInterval]
-    ] = defaultdict(
-        list
+    job_intervals: dict[tuple[UUID, UUID, UUID | None], list[LaborInterval]] = (
+        defaultdict(list)
     )
     for interval in intervals:
         if interval.kind is IntervalKind.PAID:
@@ -367,9 +365,7 @@ def _employee_evidence(
         conflicts.append("job_paid_overlap_exceeds_paid_time")
     unclassified = (
         paid_minutes - attributed_overlap
-        if paid_minutes is not None
-        and attributed_overlap is not None
-        and not conflicts
+        if paid_minutes is not None and attributed_overlap is not None and not conflicts
         else None
     )
     missing = tuple(
@@ -443,9 +439,7 @@ def _minutes(intervals: list[LaborInterval]) -> int | None:
     )
 
 
-def _complete_job_sum(
-    jobs: tuple[JobLaborEvidence, ...], attribute: str
-) -> int | None:
+def _complete_job_sum(jobs: tuple[JobLaborEvidence, ...], attribute: str) -> int | None:
     """Return a total only when every attributed Job supplies the measurement."""
     if not jobs:
         return None

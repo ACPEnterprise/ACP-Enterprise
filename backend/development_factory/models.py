@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-
 CheckStatus = Literal[
     "passed", "failed", "skipped", "unavailable", "blocked", "not_applicable"
 ]

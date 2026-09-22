@@ -56,9 +56,7 @@ def test_unexplained_delta_blocks_rehearsal() -> None:
 def test_historical_truncation_requires_opening_evidence() -> None:
     result = qualify_cutover(
         authority(
-            historical_window=HistoricalWindow(
-                "2024-01-01", "2026-08-30", DIGEST, None
-            )
+            historical_window=HistoricalWindow("2024-01-01", "2026-08-30", DIGEST, None)
         )
     )
     assert "historical_opening_evidence_required" in result.blocker_codes
@@ -73,6 +71,7 @@ def test_final_delta_and_freeze_are_required_after_phase_transition() -> None:
 
 
 def test_identical_authority_is_deterministic() -> None:
-    assert qualify_cutover(authority()).authority_digest == qualify_cutover(
-        authority()
-    ).authority_digest
+    assert (
+        qualify_cutover(authority()).authority_digest
+        == qualify_cutover(authority()).authority_digest
+    )

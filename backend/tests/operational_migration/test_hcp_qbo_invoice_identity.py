@@ -24,7 +24,9 @@ def _workbook(path: Path, rows: list[list[str]]) -> None:
         cells = []
         for column, _value in enumerate(row, start=1):
             letter = chr(64 + column)
-            cells.append(f'<c r="{letter}{row_number}" t="s"><v>{next(indexes)}</v></c>')
+            cells.append(
+                f'<c r="{letter}{row_number}" t="s"><v>{next(indexes)}</v></c>'
+            )
         sheet_rows.append(f'<row r="{row_number}">{"".join(cells)}</row>')
     shared = "".join(f"<si><t>{value}</t></si>" for value in strings)
     with ZipFile(path, "w", ZIP_DEFLATED) as workbook:
@@ -44,24 +46,71 @@ def _inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     hcp = tmp_path / "hcp"
     hcp.mkdir()
     (hcp / "acquisition-package-manifest.json").write_text(
-        json.dumps({"contract": "hcp-source-4-acquisition-package/v1", "request_methods": ["GET"]})
+        json.dumps(
+            {
+                "contract": "hcp-source-4-acquisition-package/v1",
+                "request_methods": ["GET"],
+            }
+        )
     )
-    _page(hcp, "jobs", [{"id": "job-1", "customer": {"id": "customer-1"}, "address": {"id": "address-1"}}])
+    _page(
+        hcp,
+        "jobs",
+        [
+            {
+                "id": "job-1",
+                "customer": {"id": "customer-1"},
+                "address": {"id": "address-1"},
+            }
+        ],
+    )
     _page(
         hcp,
         "invoices",
         [
-            {"id": "invoice_11111111111111111111111111111111", "job_id": "job-1", "invoice_number": "10"},
-            {"id": "invoice_22222222222222222222222222222222", "job_id": "missing", "invoice_number": "20"},
+            {
+                "id": "invoice_11111111111111111111111111111111",
+                "job_id": "job-1",
+                "invoice_number": "10",
+            },
+            {
+                "id": "invoice_22222222222222222222222222222222",
+                "job_id": "missing",
+                "invoice_number": "20",
+            },
         ],
     )
     raw = tmp_path / "qbo.xlsx"
     _workbook(
         raw,
         [
-            ["Distribution account", "Transaction date", "Transaction type", "Num", "Name", "Description", "Amount"],
-            ["Income", "2026-05-01", "Invoice", "10", "Same Name", "invoice_11111111111111111111111111111111", "100.00"],
-            ["Income", "2026-05-01", "Invoice", "20", "Same Name", "same date and amount are insufficient", "100.00"],
+            [
+                "Distribution account",
+                "Transaction date",
+                "Transaction type",
+                "Num",
+                "Name",
+                "Description",
+                "Amount",
+            ],
+            [
+                "Income",
+                "2026-05-01",
+                "Invoice",
+                "10",
+                "Same Name",
+                "invoice_11111111111111111111111111111111",
+                "100.00",
+            ],
+            [
+                "Income",
+                "2026-05-01",
+                "Invoice",
+                "20",
+                "Same Name",
+                "same date and amount are insufficient",
+                "100.00",
+            ],
             ["Bank", "2026-05-01", "Payment", "30", "Same Name", "ignored", "100.00"],
         ],
     )

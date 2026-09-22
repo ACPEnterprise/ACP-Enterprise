@@ -4,7 +4,6 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
-
 from app.business_economics.allocation_engine import (
     AllocationPolicyInput,
     AllocationStrategyKind,

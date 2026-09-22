@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.accounting.errors import AccountingConflict
 from app.accounting_migration import (
     AccountingIntegrationCandidateService,
@@ -28,7 +27,9 @@ APPROVER_ID = UUID("00000000-0000-4000-8000-000000000106")
 CREATED_AT = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
 
 
-def _line(*, debit: Decimal = Decimal(0), credit: Decimal = Decimal(0)) -> OpeningReconciliationLine:
+def _line(
+    *, debit: Decimal = Decimal(0), credit: Decimal = Decimal(0)
+) -> OpeningReconciliationLine:
     return OpeningReconciliationLine(
         source_identity="synthetic-account",
         source_authority_classification="SYNTHETIC ACCEPTED EVIDENCE",
@@ -112,7 +113,12 @@ def _mappings() -> CandidateMappingReferences:
     )
 
 
-def _candidate(*, candidate_id: UUID | None = None, version: int = 1, supersedes: UUID | None = None):
+def _candidate(
+    *,
+    candidate_id: UUID | None = None,
+    version: int = 1,
+    supersedes: UUID | None = None,
+):
     reconciliation = _reconciliation()
     return AccountingIntegrationCandidateService.create(
         candidate_id=candidate_id or uuid4(),
@@ -135,7 +141,9 @@ def test_serialization_and_digest_are_deterministic_and_materially_bound() -> No
     assert first.canonical_bytes() == second.canonical_bytes()
     assert first.canonical_package_digest == second.canonical_package_digest
 
-    changed = replace(first, mappings=replace(first.mappings, accounts="mapping:accounts:2"))
+    changed = replace(
+        first, mappings=replace(first.mappings, accounts="mapping:accounts:2")
+    )
     rebuilt = AccountingIntegrationCandidateService.create(
         candidate_id=changed.candidate_id,
         version=1,
@@ -153,23 +161,33 @@ def test_serialization_and_digest_are_deterministic_and_materially_bound() -> No
 def test_incomplete_and_reconciliation_gates_never_imply_acceptance() -> None:
     reconciliation = _reconciliation()
     incomplete = AccountingIntegrationCandidateService.create(
-        candidate_id=uuid4(), version=1, supersedes_candidate_id=None,
-        reconciliation=reconciliation, evidence=_evidence(reconciliation),
-        policies=replace(_policies(), materiality=""), mappings=_mappings(),
-        created_at=CREATED_AT, as_of=CREATED_AT,
+        candidate_id=uuid4(),
+        version=1,
+        supersedes_candidate_id=None,
+        reconciliation=reconciliation,
+        evidence=_evidence(reconciliation),
+        policies=replace(_policies(), materiality=""),
+        mappings=_mappings(),
+        created_at=CREATED_AT,
+        as_of=CREATED_AT,
     )
     assert incomplete.state is CandidateState.INCOMPLETE
     assert not AccountingIntegrationCandidateService.readiness(incomplete).eligible
 
     required = AccountingIntegrationCandidateService.create(
-        candidate_id=uuid4(), version=1, supersedes_candidate_id=None,
+        candidate_id=uuid4(),
+        version=1,
+        supersedes_candidate_id=None,
         reconciliation=replace(
             reconciliation,
             state=ReconciliationState.PARTIALLY_RECONCILED,
             eligible_for_posting=False,
         ),
-        evidence=_evidence(reconciliation), policies=_policies(), mappings=_mappings(),
-        created_at=CREATED_AT, as_of=CREATED_AT,
+        evidence=_evidence(reconciliation),
+        policies=_policies(),
+        mappings=_mappings(),
+        created_at=CREATED_AT,
+        as_of=CREATED_AT,
     )
     assert required.state is CandidateState.RECONCILIATION_REQUIRED
 
@@ -205,9 +223,7 @@ def test_rejection_is_terminal_and_digest_bound() -> None:
     assert rejected.state is CandidateState.REJECTED
     assert rejected.canonical_package_digest != candidate.canonical_package_digest
     with pytest.raises(AccountingConflict, match="Terminal"):
-        AccountingIntegrationCandidateService.reject(
-            rejected, actor_user_id=uuid4()
-        )
+        AccountingIntegrationCandidateService.reject(rejected, actor_user_id=uuid4())
 
 
 def test_registry_is_idempotent_contradiction_safe_and_preserves_lineage() -> None:
@@ -223,15 +239,24 @@ def test_registry_is_idempotent_contradiction_safe_and_preserves_lineage() -> No
     superseded, recorded = registry.supersede(prior.candidate_id, successor)
     assert superseded.state is CandidateState.SUPERSEDED
     assert recorded.supersedes_candidate_id == prior.candidate_id
-    assert registry.items[prior.candidate_id].canonical_package_digest == superseded.canonical_package_digest
+    assert (
+        registry.items[prior.candidate_id].canonical_package_digest
+        == superseded.canonical_package_digest
+    )
 
 
 def test_custody_scope_and_acc_mig_compatibility_are_preserved() -> None:
     reconciliation = _reconciliation()
     candidate = AccountingIntegrationCandidateService.create(
-        candidate_id=uuid4(), version=1, supersedes_candidate_id=None,
-        reconciliation=reconciliation, evidence=_evidence(reconciliation),
-        policies=_policies(), mappings=_mappings(), created_at=CREATED_AT, as_of=CREATED_AT,
+        candidate_id=uuid4(),
+        version=1,
+        supersedes_candidate_id=None,
+        reconciliation=reconciliation,
+        evidence=_evidence(reconciliation),
+        policies=_policies(),
+        mappings=_mappings(),
+        created_at=CREATED_AT,
+        as_of=CREATED_AT,
     )
     assert candidate.evidence.custody_references == ("custody:synthetic-package:1",)
     AccountingIntegrationCandidateService.validate_acc_mig_compatibility(
@@ -243,12 +268,21 @@ def test_custody_scope_and_acc_mig_compatibility_are_preserved() -> None:
         )
 
 
-def test_contradictory_source_evidence_fails_closed_without_journal_side_effect() -> None:
+def test_contradictory_source_evidence_fails_closed_without_journal_side_effect() -> (
+    None
+):
     reconciliation = _reconciliation()
     with pytest.raises(AccountingConflict, match="evidence"):
         AccountingIntegrationCandidateService.create(
-            candidate_id=uuid4(), version=1, supersedes_candidate_id=None,
+            candidate_id=uuid4(),
+            version=1,
+            supersedes_candidate_id=None,
             reconciliation=reconciliation,
-            evidence=replace(_evidence(reconciliation), reconciliation_package_digest="0" * 64),
-            policies=_policies(), mappings=_mappings(), created_at=CREATED_AT, as_of=CREATED_AT,
+            evidence=replace(
+                _evidence(reconciliation), reconciliation_package_digest="0" * 64
+            ),
+            policies=_policies(),
+            mappings=_mappings(),
+            created_at=CREATED_AT,
+            as_of=CREATED_AT,
         )

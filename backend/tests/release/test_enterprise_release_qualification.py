@@ -111,10 +111,51 @@ def test_executed_evidence_is_private_and_digest_bound(tmp_path: Path) -> None:
     observed = module.run_command(check, tmp_path, artifact, "a" * 40)
 
     assert observed.status == "PASS"
-    assert observed.artifact_sha256 == module.hashlib.sha256(
-        artifact.read_bytes()
-    ).hexdigest()
+    assert (
+        observed.artifact_sha256
+        == module.hashlib.sha256(artifact.read_bytes()).hexdigest()
+    )
     assert artifact.stat().st_mode & 0o777 == 0o600
+
+
+def test_migration_head_check_requires_release_ready_canonical_lineage(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    valid_lineage_command = "; ".join(
+        (
+            "import json",
+            "print(json.dumps({'release_ready': True, 'roots': ['r'], "
+            + "'heads': ['h'], 'risks': []}))",
+        )
+    )
+    check = module.Check(
+        "migration_heads",
+        "Exactly one Alembic head",
+        ("local",),
+        (
+            sys.executable,
+            "-c",
+            valid_lineage_command,
+        ),
+        "release ready",
+    )
+
+    passed = module.run_command(check, tmp_path, tmp_path / "pass.log", "a" * 40)
+    assert passed.status == "PASS"
+
+    invalid = module.Check(
+        "migration_heads",
+        "Exactly one Alembic head",
+        ("local",),
+        (sys.executable, "-c", "print('not-json')"),
+        "release ready",
+    )
+    failed = module.run_command(
+        check=invalid, root=tmp_path, artifact=tmp_path / "fail.log", candidate="a" * 40
+    )
+    assert failed.status == "FAIL"
+    assert failed.reason == "canonical migration lineage is not release-ready"
 
 
 def test_existing_evidence_is_never_overwritten(tmp_path: Path) -> None:
@@ -144,6 +185,32 @@ def test_evidence_directory_and_artifacts_are_private_and_exclusive(
     with pytest.raises(FileExistsError):
         module.write_private_artifact(artifact, "replacement\n")
     assert artifact.read_text(encoding="utf-8") == "first\n"
+
+
+@pytest.mark.parametrize(
+    ("check_key", "output", "reason"),
+    (
+        ("frontend_tests", "stderr | route test\n", "test suite emitted stderr"),
+        (
+            "mobile_tests",
+            "The current testing environment is not configured to support act(...)\n",
+            "React updates escaped act",
+        ),
+        ("frontend_tests", "Warning: unsafe update\n", "runtime warning"),
+        ("mobile_tests", "  console.warn unexpected\n", "console output"),
+    ),
+)
+def test_ui_test_warnings_fail_closed(check_key: str, output: str, reason: str) -> None:
+    module = _module()
+
+    assert reason in module.test_output_warning(check_key, output)
+
+
+def test_clean_ui_and_backend_output_is_not_misclassified() -> None:
+    module = _module()
+
+    assert module.test_output_warning("frontend_tests", "550 passed\n") is None
+    assert module.test_output_warning("backend_tests", "Warning: recorded\n") is None
 
 
 @pytest.mark.parametrize("status", ["FAIL", "BLOCKED"])
