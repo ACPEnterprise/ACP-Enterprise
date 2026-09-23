@@ -100,6 +100,37 @@ describe("SchedulingRoute", () => {
     );
   });
 
+  it("shows current time on today's Schedule and Dispatch timelines", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 13, 10, 30));
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    try {
+      const day = render(
+        <MemoryRouter>
+          <SchedulingRoute />
+        </MemoryRouter>,
+      );
+      expect(screen.getByLabelText("Current time")).toBeVisible();
+      day.unmount();
+      render(
+        <MemoryRouter
+          initialEntries={[
+            "/scheduling?date=2026-08-13&perspective=dispatch&view=day",
+          ]}
+        >
+          <SchedulingRoute />
+        </MemoryRouter>,
+      );
+      expect(screen.getByLabelText("Current time")).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("offers bounded recovery when schedule or Job context projections fail", async () => {
     const appointmentRefetch = vi.fn();
     const dispatchRefetch = vi.fn();

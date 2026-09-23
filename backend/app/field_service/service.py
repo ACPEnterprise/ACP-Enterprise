@@ -62,7 +62,12 @@ class FieldService:
         service_date: date,
     ) -> Itinerary:
         employee = await self._employee(session, context)
-        start, end = self._service_day_bounds(service_date, context.company.timezone)
+        timezone_name = (
+            context.active_branch.timezone
+            if context.active_branch is not None
+            else context.company.timezone
+        )
+        start, end = self._service_day_bounds(service_date, timezone_name)
         crew_assignment_ids = select(DispatchCrewMember.assignment_id).where(
             DispatchCrewMember.company_id == context.company.id,
             DispatchCrewMember.employee_id == employee.id,
@@ -132,6 +137,7 @@ class FieldService:
                     appointment_number=appointment.appointment_number,
                     job_id=job.id if job else None,
                     job_number=job.job_number if job else None,
+                    job_type_code=job.job_type_code if job else None,
                     job_status=job.status if job else None,
                     job_version=job.concurrency_version if job else None,
                     customer_display_name=customer.display_name
