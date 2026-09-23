@@ -5,6 +5,8 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -12,7 +14,6 @@ from app.platform.employees.models import Employee
 from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User
 from app.workforce.employee_timeline import EmployeeTimelineService
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class Rows:
@@ -63,7 +64,7 @@ async def test_timeline_composes_native_authority_without_payroll_details():
         scalar=AsyncMock(side_effect=[employee, None, membership, None]),
         execute=AsyncMock(side_effect=[Rows([(role_assignment, role)])]),
         scalars=AsyncMock(
-            side_effect=[Rows([]), Rows([]), Rows([clock]), Rows([actor])]
+            side_effect=[Rows([]), Rows([]), Rows([]), Rows([clock]), Rows([actor])]
         ),
     )
 

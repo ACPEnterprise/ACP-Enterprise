@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -128,6 +128,11 @@ describe("WorkforceRoute", () => {
       data: undefined,
     } as never);
     vi.mocked(workforceHooks.useEmployeeAccessMutation).mockReturnValue({
+      isPending: false,
+      isError: false,
+      mutate: vi.fn(),
+    } as never);
+    vi.mocked(workforceHooks.useEmployeeAccessLock).mockReturnValue({
       isPending: false,
       isError: false,
       mutate: vi.fn(),
@@ -337,6 +342,13 @@ describe("WorkforceRoute", () => {
               login_email: "employee@example.test",
               masked_login: "e***@example.test",
               access_status: "ACTIVE",
+              access_locked_at: null,
+              access_locked_by_user_id: null,
+              access_locked_by_display_name: null,
+              access_lock_reason: null,
+              active_assignment_count: 0,
+              today_future_assignment_count: 2,
+              future_assignment_count: 1,
               mobile_readiness: "READY",
               mobile_readiness_blockers: [],
               permissions: [],
@@ -367,6 +379,55 @@ describe("WorkforceRoute", () => {
     expect(screen.getByText("Provider accepted")).toBeVisible();
     expect(screen.getByText("activated")).toBeVisible();
     expect(screen.getAllByText("READY")).not.toHaveLength(0);
+  });
+
+  it("offers one confirmed emergency lock with assignment warning", async () => {
+    authState.permissionCodes = [
+      "COMPANY_WORKFORCE_MANAGE",
+      "COMPANY_MEMBERSHIP_READ",
+      "COMPANY_ROLE_READ",
+      "COMPANY_ADMINISTER",
+    ];
+    mockEligibility();
+    const mutate = vi.fn();
+    vi.mocked(workforceHooks.useEmployeeAccessLock).mockReturnValue({
+      isPending: false,
+      isError: false,
+      mutate,
+    } as never);
+    vi.mocked(workforceHooks.useEmployeePasswordReset).mockReturnValue({
+      query: { data: { state: "RESET_NOT_REQUESTED" } },
+      mutation: { isPending: false, isError: false, mutate: vi.fn() },
+    } as never);
+    vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({ data: [summary] } as never);
+    vi.mocked(workforceHooks.useWorkforceEmployee).mockReturnValue({
+      data: { ...summary, capabilities: [], certifications: [], languages: [], branches: [], work_restrictions: [], equipment_capabilities: [], availability: [] },
+    } as never);
+    vi.mocked(workforceHooks.useEmployeeAdministration).mockReturnValue({
+      data: {
+        ...summary,
+        user_id: "user-1", membership_id: "membership-1", membership_status: "active",
+        user_status: "active", authorization_version: 7, branch_ids: ["branch-1"], role_codes: [],
+        onboarding_status: "activated", invitation_status: "consumed", delivery_status: "accepted",
+        login_email: "employee@example.test", masked_login: null, access_status: "ACTIVE",
+        access_locked_at: null, access_locked_by_user_id: null, access_locked_by_display_name: null,
+        access_lock_reason: null, active_assignment_count: 1, today_future_assignment_count: 2,
+        future_assignment_count: 1, mobile_readiness: "READY", mobile_readiness_blockers: [],
+        permissions: [], workforce: { ...summary, capabilities: [], certifications: [], languages: [], branches: [], work_restrictions: [], equipment_capabilities: [], availability: [] },
+      },
+    } as never);
+
+    render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
+    expect(screen.getByText("ACCESS ACTIVE")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Lock Access" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("4 scheduled assignments");
+    await userEvent.type(screen.getByLabelText("Reason"), "Lost mobile device");
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Lock Access" }));
+    expect(mutate).toHaveBeenCalledWith(
+      { locked: true, reason: "Lost mobile device", expected_authorization_version: 7 },
+      expect.any(Object),
+    );
   });
 
   it("filters by explicit capability evidence", async () => {

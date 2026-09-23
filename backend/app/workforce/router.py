@@ -10,6 +10,10 @@ from app.platform.permissions.codes import AdministrationPermission, WorkforcePe
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+from app.workforce.access_lock import (
+    EmployeeAccessLockConflict,
+    employee_access_lock_service,
+)
 from app.workforce.administration_commands import (
     WorkforceAdministrationConflict,
     workforce_administration_service,
@@ -22,6 +26,7 @@ from app.workforce.schemas import (
     AvailabilityEvidenceRequest,
     CapabilityEvidenceRequest,
     CertificationEvidenceRequest,
+    EmployeeAccessLockRequest,
     EmployeeAdministrationDetail,
     EmployeeNotificationTarget,
     EmployeeTimeline,
@@ -206,6 +211,41 @@ async def administration_detail(
     session: Session,
 ) -> EmployeeAdministrationDetail:
     _require_employee_administration(context)
+    result = await employee_administration_service.detail(
+        session, context=context, employee_id=employee_id
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
+    return result
+
+
+@router.put(
+    "/administration/employees/{employee_id}/access-lock",
+    response_model=EmployeeAdministrationDetail,
+)
+async def set_employee_access_lock(
+    employee_id: UUID,
+    data: EmployeeAccessLockRequest,
+    context: ManageContext,
+    session: Session,
+) -> EmployeeAdministrationDetail:
+    _require_employee_administration(context)
+    if AdministrationPermission.COMPANY_ADMINISTER not in context.permission_codes:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Company administrator authority is required to change an access lock.",
+        )
+    try:
+        await employee_access_lock_service.set_locked(
+            session,
+            context=context,
+            employee_id=employee_id,
+            locked=data.locked,
+            reason=data.reason,
+            expected_authorization_version=data.expected_authorization_version,
+        )
+    except EmployeeAccessLockConflict as error:
+        raise _workforce_conflict(error) from error
     result = await employee_administration_service.detail(
         session, context=context, employee_id=employee_id
     )

@@ -1516,6 +1516,16 @@
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "workforce",
+      "mechanism": "Company-scoped Employee/User row lock, expected authorization version, convergent target state, credential version rotation, and complete session revocation",
+      "method": "PUT",
+      "operation_id": "set_employee_access_lock_api_v1_workforce_administration_employees__employee_id__access_lock_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/access-lock",
+      "reason": "Exact lock or unlock replay converges on the requested access state while stale contradictory changes fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
       "mechanism": "Unique profile/capability evidence and contradictory-replay rejection",
       "method": "PUT",
       "operation_id": "record_capability_api_v1_workforce_administration_employees__employee_id__capabilities_put",
@@ -3295,6 +3305,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "0cde8af52910cfb0480cde098cb177fc77b4a2411b40e3a9313c8e5efd568119",
+  "fingerprint": "dae38b959b69502196bbfba12a82dbad96d3e3c84ca6a006508610d955b6b075",
   "schema_version": "1"
 }
