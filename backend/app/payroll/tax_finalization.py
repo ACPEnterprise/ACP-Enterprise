@@ -72,6 +72,7 @@ class PayrollTaxDeductionResultService:
         context: AuthorizationContext,
         candidate: TaxDeductionCalculationResult,
         admission: TaxDeductionAdmissionResult,
+        commit: bool = True,
     ) -> PayrollTaxDeductionResultRecord:
         self._require(context, PayrollPermission.TAX_CALCULATION_EXECUTE)
         candidate.verify()
@@ -196,7 +197,8 @@ class PayrollTaxDeductionResultService:
             EventType.PAYROLL_TAX_RESULT_PERSISTED,
             "payroll.tax_result.persisted",
         )
-        await session.commit()
+        if commit:
+            await session.commit()
         return value
 
     async def initiate_review(

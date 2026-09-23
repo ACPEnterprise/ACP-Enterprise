@@ -76,6 +76,7 @@ class PayrollGrossResultService:
         *,
         context: AuthorizationContext,
         candidate: GrossPayCalculationResult,
+        commit: bool = True,
     ) -> PayrollGrossCalculationResultRecord:
         self._require(context, PayrollPermission.CALCULATION_EXECUTE)
         candidate.verify()
@@ -235,7 +236,8 @@ class PayrollGrossResultService:
                 "lifecycle": value.lifecycle,
             },
         )
-        await session.commit()
+        if commit:
+            await session.commit()
         return value
 
     async def initiate_review(
@@ -247,6 +249,7 @@ class PayrollGrossResultService:
         reason_code: str,
         safe_note: str | None = None,
         reviewed_at: datetime | None = None,
+        commit: bool = True,
     ) -> PayrollGrossCalculationReviewRecord:
         self._require(context, PayrollPermission.CALCULATION_REVIEW)
         value = await self._locked_result(session, context, result_id)
@@ -275,7 +278,8 @@ class PayrollGrossResultService:
             action="payroll.gross_review.initiated",
             details={"calculation_digest": value.calculation_digest},
         )
-        await session.commit()
+        if commit:
+            await session.commit()
         return record
 
     async def decide_review(
@@ -288,6 +292,7 @@ class PayrollGrossResultService:
         reason_code: str,
         safe_note: str | None = None,
         reviewed_at: datetime | None = None,
+        commit: bool = True,
     ) -> PayrollGrossCalculationReviewRecord:
         self._require(context, PayrollPermission.CALCULATION_REVIEW)
         if decision not in {GrossReviewDecision.ACCEPTED, GrossReviewDecision.REJECTED}:
@@ -327,7 +332,8 @@ class PayrollGrossResultService:
                 "decision": decision.value,
             },
         )
-        await session.commit()
+        if commit:
+            await session.commit()
         return record
 
     async def result(
