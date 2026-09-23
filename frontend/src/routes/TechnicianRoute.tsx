@@ -1,6 +1,7 @@
 import { CalendarDays, RotateCw } from "lucide-react";
 import { useState } from "react";
 
+import { getOperatorApiError } from "../api/errors";
 import { TechnicianItineraryCard } from "../features/technician/TechnicianItineraryCard";
 import { useTechnicianItinerary } from "../hooks/useTechnicianItinerary";
 import { Alert, Button, EmptyState, Field, Input, Spinner } from "../ui";
@@ -13,6 +14,9 @@ function localDate(date: Date) {
 export function TechnicianRoute() {
   const [serviceDate, setServiceDate] = useState(() => localDate(new Date()));
   const itinerary = useTechnicianItinerary(serviceDate);
+  const itineraryError = itinerary.error
+    ? getOperatorApiError(itinerary.error, "My day")
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-ui-6 pb-ui-8">
@@ -39,7 +43,7 @@ export function TechnicianRoute() {
       {itinerary.isError && (
         <Alert
           variant="danger"
-          title="Your itinerary is unavailable"
+          title="My day could not load"
           action={
             <Button
               variant="outline"
@@ -50,7 +54,8 @@ export function TechnicianRoute() {
             </Button>
           }
         >
-          Check your connection and try again. No assignment changes were made.
+          {itineraryError?.message ??
+            "Check your connection and try again. No assignment changes were made."}
         </Alert>
       )}
       {itinerary.isSuccess && itinerary.data.items.length === 0 && (

@@ -15,6 +15,7 @@ class ItineraryItem(FieldSchema):
     appointment_number: str
     job_id: UUID | None
     job_number: str | None
+    job_type_code: str | None
     job_status: str | None
     job_version: int | None
     customer_display_name: str

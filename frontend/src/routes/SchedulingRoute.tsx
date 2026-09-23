@@ -757,6 +757,7 @@ export function SchedulingRoute({
           />
         ) : view === "day" && perspective === "schedule" ? (
           <DayCalendar
+            date={date}
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
@@ -764,6 +765,7 @@ export function SchedulingRoute({
           />
         ) : view === "day" ? (
           <DispatchTimeline
+            date={date}
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
@@ -852,16 +854,23 @@ export function SchedulingRoute({
 }
 
 function DayCalendar({
+  date,
   items,
   dispatchByAppointment,
   jobsById,
   onSelect,
 }: {
+  readonly date: string;
   readonly items: readonly AppointmentDetail[];
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
 }) {
+  const now = new Date();
+  const currentMinute =
+    localDateValue(now) === date
+      ? now.getHours() * 60 + now.getMinutes() - START_HOUR * 60
+      : null;
   const lanes = useMemo(() => {
     const names = Array.from(
       new Set(
@@ -969,6 +978,19 @@ function DayCalendar({
               Open space means unbooked time, not verified technician
               availability.
             </div>
+            {currentMinute !== null &&
+              currentMinute >= 0 &&
+              currentMinute <= MINUTES_VISIBLE && (
+                <div
+                  aria-label="Current time"
+                  className="pointer-events-none absolute right-0 z-10 border-t-2 border-status-danger"
+                  style={{ left: "5rem", top: `${currentMinute}px` }}
+                >
+                  <span className="absolute -left-20 -translate-y-1/2 bg-status-danger px-1 text-[10px] font-semibold text-content-inverse">
+                    Now
+                  </span>
+                </div>
+              )}
             {items.map((item) => {
               const dispatch = dispatchByAppointment.get(item.id);
               const lane = Math.max(
@@ -1029,16 +1051,23 @@ function DayCalendar({
 }
 
 function DispatchTimeline({
+  date,
   items,
   dispatchByAppointment,
   jobsById,
   onSelect,
 }: {
+  readonly date: string;
   readonly items: readonly AppointmentDetail[];
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
 }) {
+  const now = new Date();
+  const currentMinute =
+    localDateValue(now) === date
+      ? now.getHours() * 60 + now.getMinutes() - START_HOUR * 60
+      : null;
   const lanes = useMemo(() => {
     const names = Array.from(
       new Set(
@@ -1100,6 +1129,15 @@ function DispatchTimeline({
               {lane}
             </div>
             <div className="relative bg-[linear-gradient(to_right,var(--color-stroke)_1px,transparent_1px)] bg-[size:calc(100%/12)_100%]">
+              {currentMinute !== null &&
+                currentMinute >= 0 &&
+                currentMinute <= MINUTES_VISIBLE && (
+                  <div
+                    aria-label="Current time"
+                    className="pointer-events-none absolute inset-y-0 z-10 border-l-2 border-status-danger"
+                    style={{ left: `${(currentMinute / MINUTES_VISIBLE) * 100}%` }}
+                  />
+                )}
               {items
                 .filter(
                   (item) =>

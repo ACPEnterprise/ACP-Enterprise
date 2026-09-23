@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timezone
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from app.dispatch.models import DispatchAssignment
@@ -27,6 +28,64 @@ def test_business_day_bounds_use_configured_timezone_and_fail_closed() -> None:
     assert end.isoformat() == "2026-08-28T03:59:59.999999+00:00"
     with pytest.raises(FieldServiceValidation, match="timezone is invalid"):
         FieldService._service_day_bounds(date(2026, 8, 27), "Invalid/Timezone")
+
+
+@pytest.mark.asyncio
+async def test_real_assignment_projects_to_my_day_with_service_context(
+    dispatch_fixture,
+) -> None:
+    factory, context, appointment, technician, _ = dispatch_fixture
+    now = datetime.now(timezone.utc)
+    async with factory() as session, session.begin():
+        job = Job(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id,
+            job_number=f"JOB-{int(uuid4().hex[:8], 16):010d}",
+            customer_id=appointment.customer_id,
+            service_location_id=appointment.service_location_id,
+            job_type_code="service_call",
+            status="ready",
+            concurrency_version=1,
+            activated_at=now,
+            created_by_user_id=context.user.id,
+            updated_by_user_id=context.user.id,
+        )
+        session.add(job)
+        await session.flush()
+        session.add(
+            DispatchAssignment(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id,
+                appointment_id=appointment.id,
+                job_id=job.id,
+                primary_employee_id=technician.id,
+                status="assigned",
+                assignment_reason="My Day projection test",
+                assigned_by_user_id=context.user.id,
+                window_start_at=appointment.arrival_window_start_at,
+                window_end_at=appointment.arrival_window_end_at,
+                effective_at=now,
+                version=1,
+            )
+        )
+
+    service_date = appointment.arrival_window_start_at.astimezone(
+        ZoneInfo(context.active_branch.timezone)
+    ).date()
+    async with factory() as session:
+        itinerary = await FieldService().itinerary(
+            session,
+            context=context,
+            service_date=service_date,
+        )
+
+    assert len(itinerary.items) == 1
+    item = itinerary.items[0]
+    assert item.appointment_id == appointment.id
+    assert item.job_id == job.id
+    assert item.job_type_code == "service_call"
+    assert item.customer_display_name == "Dispatch Customer"
+    assert item.service_location_label
 
 
 @pytest.mark.asyncio
