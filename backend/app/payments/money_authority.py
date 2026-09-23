@@ -7,13 +7,21 @@ from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.estimates.models import EstimateJobConversion, EstimateRevision
 from app.invoicing.models import Invoice, ManualPaymentReceipt
-from app.payments.models import PaymentIntent, PaymentReceipt, Settlement
+from app.jobs.models import Job, JobAppointmentLink
+from app.payments.models import (
+    PaymentIntent,
+    PaymentReceipt,
+    PaymentTermPolicy,
+    Settlement,
+)
 from app.platform.branch.models import Branch
+from app.scheduling.models import Appointment
 
 EvidenceState = Literal[
     "AVAILABLE", "MEASURED_ZERO", "INCOMPLETE", "CONFLICTING", "UNAVAILABLE"
@@ -100,6 +108,18 @@ def _utc_bounds(start: date, end: date) -> tuple[datetime, datetime]:
 
 
 class MoneyAuthorityService:
+    @staticmethod
+    def _resolve_term(
+        policies: tuple[PaymentTermPolicy, ...], customer_id: UUID
+    ) -> PaymentTermPolicy | None:
+        customer = tuple(row for row in policies if row.customer_id == customer_id)
+        candidates = customer or tuple(
+            row for row in policies if row.customer_id is None
+        )
+        return max(
+            candidates, key=lambda row: (row.effective_from, row.version), default=None
+        )
+
     async def projection(
         self,
         session: AsyncSession,
@@ -183,6 +203,148 @@ class MoneyAuthorityService:
                 )
             ).all()
         )
+
+        scheduled_rows = tuple(
+            (
+                await session.execute(
+                    select(
+                        Job,
+                        Appointment,
+                        EstimateJobConversion,
+                        EstimateRevision,
+                    )
+                    .join(
+                        JobAppointmentLink,
+                        (JobAppointmentLink.company_id == Job.company_id)
+                        & (JobAppointmentLink.branch_id == Job.branch_id)
+                        & (JobAppointmentLink.job_id == Job.id),
+                    )
+                    .join(
+                        Appointment,
+                        (Appointment.company_id == JobAppointmentLink.company_id)
+                        & (Appointment.branch_id == JobAppointmentLink.branch_id)
+                        & (Appointment.id == JobAppointmentLink.appointment_id),
+                    )
+                    .outerjoin(
+                        EstimateJobConversion,
+                        (EstimateJobConversion.company_id == Job.company_id)
+                        & (EstimateJobConversion.branch_id == Job.branch_id)
+                        & (EstimateJobConversion.job_id == Job.id),
+                    )
+                    .outerjoin(
+                        EstimateRevision,
+                        (
+                            EstimateRevision.company_id
+                            == EstimateJobConversion.company_id
+                        )
+                        & (
+                            EstimateRevision.id
+                            == EstimateJobConversion.estimate_revision_id
+                        ),
+                    )
+                    .where(
+                        Job.company_id == company_id,
+                        Job.branch_id.in_(branches),
+                        Job.status != "cancelled",
+                        Appointment.status.in_(("scheduled", "confirmed", "completed")),
+                        Appointment.arrival_window_start_at
+                        >= _utc_bounds(as_of, as_of)[0],
+                        Appointment.arrival_window_start_at
+                        <= _utc_bounds(as_of, as_of)[1],
+                        ~exists(
+                            select(Invoice.id).where(
+                                Invoice.company_id == Job.company_id,
+                                Invoice.job_id == Job.id,
+                                Invoice.status.not_in(("cancelled", "voided")),
+                            )
+                        ),
+                    )
+                    .order_by(Appointment.arrival_window_start_at, Job.id)
+                )
+            ).all()
+        )
+        scheduled_by_job: dict[
+            UUID,
+            tuple[
+                Job, Appointment, EstimateJobConversion | None, EstimateRevision | None
+            ],
+        ] = {}
+        for job, appointment, conversion, revision in scheduled_rows:
+            scheduled_by_job.setdefault(
+                job.id, (job, appointment, conversion, revision)
+            )
+        customer_ids = {job.customer_id for job, _, _, _ in scheduled_by_job.values()}
+        policies: tuple[PaymentTermPolicy, ...] = ()
+        if customer_ids:
+            policies = tuple(
+                (
+                    await session.scalars(
+                        select(PaymentTermPolicy).where(
+                            PaymentTermPolicy.company_id == company_id,
+                            PaymentTermPolicy.approved.is_(True),
+                            PaymentTermPolicy.effective_from <= as_of,
+                            or_(
+                                PaymentTermPolicy.effective_through.is_(None),
+                                PaymentTermPolicy.effective_through >= as_of,
+                            ),
+                            or_(
+                                PaymentTermPolicy.customer_id.is_(None),
+                                PaymentTermPolicy.customer_id.in_(customer_ids),
+                            ),
+                        )
+                    )
+                ).all()
+            )
+
+        cod_items: list[dict[str, object]] = []
+        cod_values: list[tuple[Decimal, str]] = []
+        cod_incomplete = False
+        for job, appointment, conversion, revision in scheduled_by_job.values():
+            policy = self._resolve_term(policies, job.customer_id)
+            if policy is None:
+                cod_incomplete = True
+                state = "INCOMPLETE"
+                limitation = "No approved Company or Customer payment-term authority."
+            elif policy.term_code not in ("COD", "DUE_ON_COMPLETION"):
+                state = "NOT_DUE_TODAY"
+                limitation = (
+                    "Contractual terms do not require collection at completion."
+                )
+            elif conversion is None or revision is None:
+                cod_incomplete = True
+                state = "INCOMPLETE"
+                limitation = "No accepted Estimate revision proves scheduled Job value."
+            else:
+                state = "QUALIFYING"
+                limitation = None
+                cod_values.append((revision.total_amount, revision.currency))
+            cod_items.append(
+                {
+                    "job_id": job.id,
+                    "job_number": job.job_number,
+                    "appointment_id": appointment.id,
+                    "appointment_number": appointment.appointment_number,
+                    "branch_id": job.branch_id,
+                    "customer_id": job.customer_id,
+                    "scheduled_at": appointment.arrival_window_start_at,
+                    "expected_amount": revision.total_amount if revision else None,
+                    "currency": revision.currency if revision else None,
+                    "evidence_basis": (
+                        "ACCEPTED_ESTIMATE_REVISION" if revision else "UNAVAILABLE"
+                    ),
+                    "estimate_revision_id": revision.id if revision else None,
+                    "payment_term_code": policy.term_code if policy else None,
+                    "payment_term_net_days": policy.net_days if policy else None,
+                    "payment_term_policy_id": policy.id if policy else None,
+                    "payment_term_version": policy.version if policy else None,
+                    "payment_term_source": policy.source_system if policy else None,
+                    "payment_term_evidence_digest": (
+                        policy.evidence_digest if policy else None
+                    ),
+                    "state": state,
+                    "limitation": limitation,
+                }
+            )
 
         # Settlements currently have Company/provider scope but no Branch allocation.
         # Never attribute their fees or net amount to a selected Branch.
@@ -270,12 +432,14 @@ class MoneyAuthorityService:
         ):
             fee_rate = (fees.amount / settled_gross.amount).quantize(Decimal("0.0001"))
 
-        cod = MoneyAmount(
-            None,
-            None,
-            "UNAVAILABLE",
-            "Scheduled COD value and payment terms are not authoritative structured evidence.",
-        )
+        cod = _summarize_amounts(tuple(cod_values))
+        if cod_incomplete:
+            cod = MoneyAmount(
+                None,
+                cod.currency,
+                "INCOMPLETE",
+                "One or more scheduled Jobs lack authoritative terms or value evidence.",
+            )
         expected_total = compose_expected_collections(
             cod=ExpectedCollectionEvidence(
                 cod.amount, cod.currency, cod.evidence_state, "SCHEDULED_COD"
@@ -324,7 +488,7 @@ class MoneyAuthorityService:
                 ),
                 "drilldown_path": f"/invoices?agingBucket=due_today&asOf={as_of.isoformat()}",
             },
-            "cod_expected_today": {**asdict(cod), "items": ()},
+            "cod_expected_today": {**asdict(cod), "items": tuple(cod_items)},
             "expected_collections_today": asdict(expected_total),
             "card_processing": {
                 "transaction_count": len(receipt_rows),

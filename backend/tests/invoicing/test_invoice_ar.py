@@ -6,9 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customer_migration.models import CustomerMigrationRun, CustomerSourceIdentity
 from app.customers.models import Customer
@@ -34,13 +31,17 @@ from app.invoicing.models import (
     PaymentReceiptEvidence,
 )
 from app.invoicing.service import InvoiceService
-from app.jobs.models import Job
+from app.jobs.models import Job, JobAppointmentLink
 from app.operational_migration import (
     models as operational_migration_models,  # noqa: F401
 )
+from app.payments.models import PaymentTermPolicy
 from app.payments.money_authority import MoneyAuthorityService
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
+from app.scheduling.models import Appointment
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tests.estimates.test_estimate_conversion import (
     approved_estimate,
     conversion_spec,
@@ -103,6 +104,98 @@ async def issue(factory, actor, invoice):
         return await InvoiceService().issue(session, spec)
 
 
+@pytest.mark.parametrize(
+    ("term_code", "net_days", "customer_specific", "expected_state"),
+    [
+        ("COD", None, False, "QUALIFYING"),
+        ("DUE_ON_COMPLETION", None, True, "QUALIFYING"),
+        ("DUE_ON_RECEIPT", None, True, "NOT_DUE_TODAY"),
+        ("NET", 15, True, "NOT_DUE_TODAY"),
+        ("NET", 30, True, "NOT_DUE_TODAY"),
+        (None, None, False, "INCOMPLETE"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_scheduled_cod_uses_exact_terms_and_accepted_estimate_value(
+    invoice_fixture, term_code, net_days, customer_specific, expected_state
+):
+    factory, company, branch, actor, customer, estimate, spec = invoice_fixture
+    local_today = datetime.now().astimezone().date()
+    start = datetime.combine(
+        local_today, datetime.min.time(), tzinfo=timezone.utc
+    ) + timedelta(hours=16)
+    appointment = Appointment(
+        company_id=company.id,
+        branch_id=branch.id,
+        appointment_number=f"APT-{uuid4().int % 1000000:06d}",
+        customer_id=customer.id,
+        service_location_id=estimate.service_location_id,
+        status="scheduled",
+        arrival_window_start_at=start,
+        arrival_window_end_at=start + timedelta(hours=2),
+        expected_duration_minutes=120,
+        scheduling_timezone="America/New_York",
+        created_by_user_id=actor.id,
+        updated_by_user_id=actor.id,
+    )
+    async with factory() as session, session.begin():
+        session.add(appointment)
+        await session.flush()
+        session.add(
+            JobAppointmentLink(
+                company_id=company.id,
+                branch_id=branch.id,
+                job_id=spec.job_id,
+                appointment_id=appointment.id,
+                visit_sequence=1,
+                linked_by_user_id=actor.id,
+            )
+        )
+        if term_code is not None:
+            session.add(
+                PaymentTermPolicy(
+                    company_id=company.id,
+                    customer_id=customer.id if customer_specific else None,
+                    term_code=term_code,
+                    net_days=net_days,
+                    effective_from=local_today,
+                    version=1,
+                    source_system="acp_native",
+                    source_record_id=None,
+                    evidence_digest="a" * 64,
+                    idempotency_key=f"term-{uuid4()}",
+                    request_digest="b" * 64,
+                    approved=True,
+                    approved_by_user_id=actor.id,
+                    created_by_user_id=actor.id,
+                )
+            )
+    async with factory() as session:
+        result = await MoneyAuthorityService().projection(
+            session,
+            company_id=company.id,
+            authorized_branch_ids=frozenset({branch.id}),
+            period_start=local_today,
+            period_end=local_today,
+            as_of=local_today,
+            branch_id=branch.id,
+        )
+    cod = result["cod_expected_today"]
+    assert len(cod["items"]) == 1
+    assert cod["items"][0]["state"] == expected_state
+    if expected_state == "QUALIFYING":
+        assert cod["amount"] == Decimal("250.00")
+        assert (
+            cod["items"][0]["estimate_revision_id"] == estimate.current_revision.id
+        )
+        assert result["expected_collections_today"]["amount"] == Decimal("250.00")
+    elif expected_state == "NOT_DUE_TODAY":
+        assert cod["amount"] == Decimal("0.00")
+    else:
+        assert cod["amount"] is None
+        assert result["expected_collections_today"]["evidence_state"] == "INCOMPLETE"
+
+
 @pytest.mark.asyncio
 async def test_money_projection_due_today_uses_exact_remaining_invoice_balance(
     invoice_fixture,
@@ -111,6 +204,20 @@ async def test_money_projection_due_today_uses_exact_remaining_invoice_balance(
     async with factory() as session:
         invoice = await InvoiceService().create_from_estimate(session, spec)
     invoice = await issue(factory, actor, invoice)
+    payment = RecordManualPayment(
+        company_id=company.id,
+        branch_id=branch.id,
+        invoice_id=invoice.id,
+        expected_version=invoice.version,
+        actor_user_id=actor.id,
+        idempotency_key="money-projection-partial-payment-1",
+        occurred_at=datetime.now(timezone.utc),
+        amount=Decimal("25.00"),
+        payment_method="check",
+        reference="CHECK 1001",
+    )
+    async with factory() as session:
+        invoice, _ = await InvoiceService().record_manual_payment(session, payment)
     async with factory() as session:
         result = await MoneyAuthorityService().projection(
             session,
@@ -124,10 +231,11 @@ async def test_money_projection_due_today_uses_exact_remaining_invoice_balance(
     due = result["accounts_receivable_due_today"]
     assert due["invoice_count"] == 1
     assert due["amount"] == invoice.open_amount
+    assert due["amount"] == invoice.total_amount - Decimal("25.00")
     assert due["items"][0]["invoice_id"] == invoice.id
     assert due["items"][0]["customer_id"] == customer.id
-    assert result["expected_collections_today"]["amount"] is None
-    assert result["expected_collections_today"]["evidence_state"] == "INCOMPLETE"
+    assert result["expected_collections_today"]["amount"] == invoice.open_amount
+    assert result["expected_collections_today"]["evidence_state"] == "AVAILABLE"
 
 
 @pytest.mark.asyncio

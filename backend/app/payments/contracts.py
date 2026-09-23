@@ -145,3 +145,37 @@ class RecordDispute:
     idempotency_key: str
     actor_user_id: UUID
     expected_version: int
+
+
+@dataclass(frozen=True, slots=True)
+class StoredPaymentMethodReference:
+    """Provider-neutral, non-sensitive reference; raw PAN/CVV are never accepted."""
+
+    company_id: UUID
+    customer_id: UUID
+    provider: str
+    processor_customer_id: str
+    payment_method_token: str
+    brand: str | None
+    last4: str | None
+    expiry_month: int | None
+    expiry_year: int | None
+    usage: Literal["ONE_TIME", "RECURRING", "SERVICE_AGREEMENT"]
+    authorization_reference: str | None
+    evidence_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class CardTransactionEvidence:
+    company_id: UUID
+    branch_id: UUID
+    customer_id: UUID
+    payment_method_reference: UUID | None
+    provider_transaction_id: str
+    interaction: Literal["CARD_PRESENT", "CARD_NOT_PRESENT"]
+    amount: Decimal
+    currency: str
+    charged_at: datetime
+    settlement_reference: str | None
+    deposit_reference: str | None
+    evidence_digest: str

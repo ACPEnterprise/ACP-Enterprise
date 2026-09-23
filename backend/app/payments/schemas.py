@@ -125,8 +125,32 @@ class DueTodayItem(MoneyAmountItem):
     drilldown_path: str
 
 
+class CodExpectedWorkItem(BaseModel):
+    job_id: UUID
+    job_number: str
+    appointment_id: UUID
+    appointment_number: str
+    branch_id: UUID
+    customer_id: UUID
+    scheduled_at: datetime
+    expected_amount: Decimal | None
+    currency: str | None
+    evidence_basis: Literal["ACCEPTED_ESTIMATE_REVISION", "UNAVAILABLE"]
+    estimate_revision_id: UUID | None
+    payment_term_code: (
+        Literal["COD", "DUE_ON_COMPLETION", "DUE_ON_RECEIPT", "NET"] | None
+    )
+    payment_term_net_days: int | None
+    payment_term_policy_id: UUID | None
+    payment_term_version: int | None
+    payment_term_source: str | None
+    payment_term_evidence_digest: str | None
+    state: Literal["QUALIFYING", "NOT_DUE_TODAY", "INCOMPLETE"]
+    limitation: str | None
+
+
 class CodExpectedItem(MoneyAmountItem):
-    items: tuple[dict[str, object], ...]
+    items: tuple[CodExpectedWorkItem, ...]
 
 
 class CardTransactionItem(BaseModel):

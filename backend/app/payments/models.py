@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -416,3 +418,89 @@ class PaymentPostingReceipt(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
     posted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PaymentTermPolicy(Base):
+    __tablename__ = "payment_term_policies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_payment_term_policies_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "term_code IN ('COD','DUE_ON_COMPLETION','DUE_ON_RECEIPT','NET')",
+            name="ck_payment_term_policies_code",
+        ),
+        CheckConstraint(
+            "(term_code = 'NET' AND net_days IS NOT NULL AND net_days > 0) OR "
+            "(term_code <> 'NET' AND net_days IS NULL)",
+            name="ck_payment_term_policies_net_days",
+        ),
+        CheckConstraint("version >= 1", name="ck_payment_term_policies_version"),
+        CheckConstraint(
+            "effective_through IS NULL OR effective_through >= effective_from",
+            name="ck_payment_term_policies_effective_window",
+        ),
+        CheckConstraint(
+            "evidence_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_payment_term_policies_digest",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "customer_id",
+            "version",
+            name="uq_payment_term_policies_scope_version",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_payment_term_policies_command"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_payment_term_policies_company"),
+        Index(
+            "ix_payment_term_policies_resolution",
+            "company_id",
+            "customer_id",
+            "effective_from",
+            "version",
+        ),
+        Index(
+            "uq_payment_term_policies_company_default_version",
+            "company_id",
+            "version",
+            unique=True,
+            postgresql_where=text("customer_id IS NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    term_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    net_days: Mapped[int | None] = mapped_column(Integer)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_through: Mapped[date | None] = mapped_column(Date)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_system: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_record_id: Mapped[str | None] = mapped_column(String(255))
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
