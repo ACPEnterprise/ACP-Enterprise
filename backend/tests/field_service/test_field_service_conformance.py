@@ -5,8 +5,6 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
-from sqlalchemy import select
-
 from app.dispatch.models import DispatchAssignment
 from app.events.models import BusinessEvent
 from app.field_service.errors import FieldServiceConflict, FieldServiceValidation
@@ -19,6 +17,8 @@ from app.field_service.service import FieldService
 from app.jobs.commands import CompleteJob
 from app.jobs.models import Job
 from app.jobs.service import job_service
+from sqlalchemy import select
+
 from tests.dispatch.test_dispatch_service import dispatch_fixture
 
 
