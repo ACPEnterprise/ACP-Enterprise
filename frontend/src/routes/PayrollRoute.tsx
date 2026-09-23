@@ -36,6 +36,9 @@ export function PayrollRoute() {
   const schemas = useComplianceSchemas(canRead);
   const canReadTime = useHasPermission("COMPANY_TIMEKEEPING_ADMIN_READ");
   const canManagePayPeriods = useHasPermission("COMPANY_PAYROLL_POLICY_MANAGE");
+  const canReviewRuns = useHasPermission("COMPANY_PAYROLL_RUN_REVIEW");
+  const canApproveRuns = useHasPermission("COMPANY_PAYROLL_RUN_APPROVE");
+  const canCloseRuns = useHasPermission("COMPANY_PAYROLL_RUN_APPROVE");
   const createPeriod = useCreatePayPeriod();
   const [periodMessage, setPeriodMessage] = useState("");
   const canReadPayPeriods = canRead && (canReadTime || canManagePayPeriods);
@@ -56,6 +59,9 @@ export function PayrollRoute() {
     );
   const value = operations.data;
   const approvedRunCount = value.run_counts.approved ?? 0;
+  const calculatedRunCount = value.run_counts.calculated ?? 0;
+  const nativeReady = calculatedRunCount > 0 || approvedRunCount > 0 || (value.run_counts.closed ?? 0) > 0;
+  const workflowStatus = (value.run_counts.closed ?? 0) > 0 ? "CLOSED" : approvedRunCount > 0 ? "APPROVED" : calculatedRunCount > 0 ? "CALCULATED" : value.blocker_count ? "SETUP REQUIRED" : "READY TO ASSEMBLE";
   const selectPayPeriod = (payPeriodId: string) => {
     setSelectedPayPeriodId(payPeriodId);
     const next = new URLSearchParams(searchParams);
@@ -89,6 +95,15 @@ export function PayrollRoute() {
         <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll Administration</h1>
         <p className="mt-2 text-content-muted">Readiness, reconciliation, reporting, payment, remittance, statements, and correction evidence. Provider execution and filing remain disabled.</p>
       </header>
+      <Alert variant={nativeReady ? "success" : "warning"} title={nativeReady ? "Native Payroll evidence available" : "NATIVE CALCULATION NOT READY"}>
+        {nativeReady ? "Native Payroll results are available for the reported run state." : "Complete the approved policy, employee, time, compensation, and tax evidence before native calculation can proceed."} {canReadCutover && <><Link className="ml-1 font-semibold underline" to="#manual-bridge-payroll">Record reviewed manual payroll</Link> is available for an owner-reviewed external calculation.</>}
+      </Alert>
+      <section aria-label="Payroll status" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card><CardHeader><CardTitle>Status</CardTitle><CardDescription>Current governed Payroll state</CardDescription></CardHeader><CardContent className="text-xl font-bold">{workflowStatus}</CardContent></Card>
+        <Card><CardHeader><CardTitle>Employees</CardTitle><CardDescription>Included and requiring attention</CardDescription></CardHeader><CardContent className="text-xl font-bold">{Object.values(value.member_dispositions).reduce((sum, count) => sum + count, 0)} <span className="text-sm font-normal text-content-muted">({value.blocker_count} attention)</span></CardContent></Card>
+        <Card><CardHeader><CardTitle>Payroll totals</CardTitle><CardDescription>Gross · taxes/deductions · net</CardDescription></CardHeader><CardContent>{approvedRunCount ? `${value.aggregate_approved_gross} · ${value.aggregate_approved_net}` : "Not calculated"}</CardContent></Card>
+        <Card><CardHeader><CardTitle>Checks to write</CardTitle><CardDescription>Paper-check evidence only</CardDescription></CardHeader><CardContent className="text-xl font-bold">{value.payment_counts.issued ?? 0}</CardContent></Card>
+      </section>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
       {canReadCutover && <PayrollCutoverReview />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
@@ -343,7 +358,7 @@ export function PayrollRoute() {
                   <section key={register.run_id} className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">
                       {register.period_start} – {register.period_end} · {label(register.lifecycle)} / {label(register.review_state)}
-                    </h3><div className="flex gap-2"><Button size="small" variant="outline" disabled={runActions.calculate.isPending || register.lifecycle === "approved"} onClick={() => void runActions.calculate.mutateAsync({ runId: register.run_id, idempotencyKey: crypto.randomUUID() })}>Calculate</Button><Button size="small" disabled={runActions.close.isPending || register.lifecycle !== "approved"} onClick={() => void runActions.close.mutateAsync({ runId: register.run_id, reason: "Operator confirmed Payroll register review", idempotencyKey: crypto.randomUUID() })}>Close Payroll</Button></div></div>
+                    </h3><div className="flex flex-wrap gap-2"><Button size="small" variant="outline" disabled={runActions.calculate.isPending || register.lifecycle === "approved" || register.lifecycle === "closed"} onClick={() => void runActions.calculate.mutateAsync({ runId: register.run_id, idempotencyKey: crypto.randomUUID() })}>Calculate</Button>{canReviewRuns && <Button size="small" variant="outline" disabled={runActions.review.isPending || register.lifecycle !== "calculated"} onClick={() => void runActions.review.mutateAsync({ runId: register.run_id, reason: "Operator reviewed Payroll register" })}>Review Payroll</Button>}{canApproveRuns && <Button size="small" disabled={runActions.approve.isPending || register.review_state !== "accepted"} onClick={() => void runActions.approve.mutateAsync({ runId: register.run_id, reason: "Owner approved Payroll register" })}>Approve Payroll</Button>}{canCloseRuns && <Button size="small" disabled={runActions.close.isPending || register.lifecycle !== "approved"} onClick={() => void runActions.close.mutateAsync({ runId: register.run_id, reason: "Operator confirmed Payroll register review", idempotencyKey: crypto.randomUUID() })}>Close Payroll</Button>}</div></div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
