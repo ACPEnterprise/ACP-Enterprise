@@ -9,7 +9,7 @@ import {
   getPayrollEmployeeReadiness, getPayrollEmployeeSetup, draftPayrollCompensation,
   approvePayrollCompensation, approvePayrollInput,
   type CompensationDraft,
-  calculatePayrollRun, closePayrollRun, reviewPayrollRun, approvePayrollRun, assemblePayrollRun, issuePayrollPaperCheck, voidPayrollPaperCheck, reissuePayrollPaperCheck,
+  calculatePayrollRun, closePayrollRun, reviewPayrollRun, decidePayrollRunReview, approvePayrollRun, assemblePayrollRun, issuePayrollPaperCheck, voidPayrollPaperCheck, reissuePayrollPaperCheck,
 } from "../api/payroll";
 
 export const usePayrollOperationsSummary = (enabled = true) =>
@@ -37,6 +37,7 @@ export function usePayrollRunActions() {
     assemble: useMutation({ mutationFn: assemblePayrollRun, onSuccess: refresh }),
     calculate: useMutation({ mutationFn: ({ runId, idempotencyKey }: { runId: string; idempotencyKey: string }) => calculatePayrollRun(runId, idempotencyKey), onSuccess: refresh }),
     review: useMutation({ mutationFn: ({ runId, reason }: { runId: string; reason: string }) => reviewPayrollRun(runId, reason), onSuccess: refresh }),
+    acceptReview: useMutation({ mutationFn: ({ runId, reason }: { runId: string; reason: string }) => decidePayrollRunReview(runId, reason), onSuccess: refresh }),
     approve: useMutation({ mutationFn: ({ runId, reason }: { runId: string; reason: string }) => approvePayrollRun(runId, reason), onSuccess: refresh }),
     close: useMutation({ mutationFn: ({ runId, reason, idempotencyKey }: { runId: string; reason: string; idempotencyKey: string }) => closePayrollRun(runId, reason, idempotencyKey), onSuccess: refresh }),
     issuePaperCheck: useMutation({ mutationFn: ({ runId, body }: { runId: string; body: { employee_id: string; check_number: string; issue_date: string; idempotency_key: string } }) => issuePayrollPaperCheck(runId, body), onSuccess: refresh }),

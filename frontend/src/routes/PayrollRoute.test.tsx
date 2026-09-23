@@ -28,6 +28,7 @@ vi.mock("../hooks/usePayroll", () => ({
     assemble: { isPending: false, mutateAsync: vi.fn() },
     calculate: { isPending: false, mutateAsync: vi.fn() },
     review: { isPending: false, mutateAsync: vi.fn() },
+    acceptReview: { isPending: false, mutateAsync: vi.fn() },
     approve: { isPending: false, mutateAsync: vi.fn() },
     close: { isPending: false, mutateAsync: vi.fn() },
     issuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
@@ -337,12 +338,57 @@ describe("PayrollRoute authorization", () => {
     );
   });
 
+  it("assembles eligible Employees into the native pending-calculation state", async () => {
+    permissionState.values = new Set([
+      "COMPANY_PAYROLL_REPORTING_READ",
+      "COMPANY_TIMEKEEPING_ADMIN_READ",
+      "COMPANY_PAYROLL_RUN_ASSEMBLE",
+    ]);
+    const assemble = vi.fn().mockResolvedValue({ id: "run-1" });
+    vi.mocked(usePayrollRunActions).mockReturnValue({
+      assemble: { isPending: false, mutateAsync: assemble }, calculate: { isPending: false, mutateAsync: vi.fn() },
+      review: { isPending: false, mutateAsync: vi.fn() }, acceptReview: { isPending: false, mutateAsync: vi.fn() }, approve: { isPending: false, mutateAsync: vi.fn() },
+      close: { isPending: false, mutateAsync: vi.fn() }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+      voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+    } as never);
+    vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: false, aggregate_approved_gross: "0.00", aggregate_approved_net: "0.00", reconciliation_state: "attention_required", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: {}, member_dispositions: {}, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
+    vi.mocked(usePayPeriods).mockReturnValue(query([{ id: "period-1", period_start: "2026-09-06", period_end: "2026-09-12", processing_date: "2026-09-14", payday: "2026-09-18", schedule_definition_id: "office.weekly.v1" }]) as never);
+    vi.mocked(usePayrollPeriodOperations).mockReturnValue(query({
+      period_start: "2026-09-06",
+      period_end: "2026-09-12",
+      policy_readiness: "READY",
+      employees: [{
+        employee_id: "employee-1",
+        employee_number: "EMP-1",
+        display_name: "Real Employee",
+        accepted_minutes: 2400,
+        regular_candidate_minutes: 2400,
+        overtime_candidate_minutes: 0,
+        compensation_readiness: "READY",
+        withholding_readiness: "READY",
+        gross_pay_readiness: "NOT_CALCULATED",
+        payroll_review_status: "NOT_STARTED",
+        exception_codes: [],
+      }],
+    }) as never);
+
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Assemble Payroll" }));
+
+    await waitFor(() => expect(assemble).toHaveBeenCalledWith({
+      pay_period_id: "period-1",
+      employee_ids: ["employee-1"],
+      members: [{ employee_id: "employee-1", disposition: "pending_calculation" }],
+      currency: "USD",
+    }));
+  });
+
   it("renders and invokes Review for a calculated run", async () => {
     permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_REVIEW"]);
     const review = vi.fn().mockResolvedValue({ lifecycle: "reviewed" });
     vi.mocked(usePayrollRunActions).mockReturnValue({
       assemble: { isPending: false, mutateAsync: vi.fn() }, calculate: { isPending: false, mutateAsync: vi.fn() },
-      review: { isPending: false, mutateAsync: review }, approve: { isPending: false, mutateAsync: vi.fn() },
+      review: { isPending: false, mutateAsync: review }, acceptReview: { isPending: false, mutateAsync: vi.fn() }, approve: { isPending: false, mutateAsync: vi.fn() },
       close: { isPending: false, mutateAsync: vi.fn() }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
       voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
     } as never);
@@ -355,15 +401,34 @@ describe("PayrollRoute authorization", () => {
     await waitFor(() => expect(review).toHaveBeenCalledWith({ runId: "run-1", reason: "Operator reviewed Payroll register" }));
   });
 
+  it("renders and invokes the explicit review acceptance transition", async () => {
+    permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_REVIEW"]);
+    const acceptReview = vi.fn().mockResolvedValue({ lifecycle: "reviewed", review_state: "accepted" });
+    vi.mocked(usePayrollRunActions).mockReturnValue({
+      assemble: { isPending: false, mutateAsync: vi.fn() }, calculate: { isPending: false, mutateAsync: vi.fn() },
+      review: { isPending: false, mutateAsync: vi.fn() }, acceptReview: { isPending: false, mutateAsync: acceptReview }, approve: { isPending: false, mutateAsync: vi.fn() },
+      close: { isPending: false, mutateAsync: vi.fn() }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+      voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+    } as never);
+    vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: true, aggregate_approved_gross: "100.00", aggregate_approved_net: "80.00", reconciliation_state: "reconciled", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: { under_review: 1 }, member_dispositions: { ready: 1 }, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
+    vi.mocked(usePayrollOperatingRegisters).mockReturnValue(query([{ run_id: "run-1", period_start: "2026-09-01", period_end: "2026-09-07", processing_date: "2026-09-08", payday: "2026-09-09", lifecycle: "under_review", review_state: "under_review", currency: "USD", members: [], liability_totals: {}, manual_tax_filing_payment_required: true, run_digest: "run" }]) as never);
+
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Accept Review" }));
+
+    await waitFor(() => expect(acceptReview).toHaveBeenCalledWith({ runId: "run-1", reason: "Operator accepted reviewed Payroll register" }));
+  });
+
   it("renders and invokes Approve Payroll for reviewed accepted state", async () => {
     permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_APPROVE"]);
     const approve = vi.fn();
-    vi.mocked(usePayrollRunActions).mockReturnValue({ assemble: { isPending: false, mutateAsync: vi.fn() }, calculate: { isPending: false, mutateAsync: vi.fn() }, review: { isPending: false, mutateAsync: vi.fn() }, approve: { isPending: false, mutateAsync: approve }, close: { isPending: false, mutateAsync: vi.fn() }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() }, voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() } } as never);
+    vi.mocked(usePayrollRunActions).mockReturnValue({ assemble: { isPending: false, mutateAsync: vi.fn() }, calculate: { isPending: false, mutateAsync: vi.fn() }, review: { isPending: false, mutateAsync: vi.fn() }, acceptReview: { isPending: false, mutateAsync: vi.fn() }, approve: { isPending: false, mutateAsync: approve }, close: { isPending: false, mutateAsync: vi.fn() }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() }, voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() } } as never);
     vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: true, aggregate_approved_gross: "100.00", aggregate_approved_net: "80.00", reconciliation_state: "reconciled", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: { reviewed: 1 }, member_dispositions: { ready: 1 }, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
     vi.mocked(usePayrollOperatingRegisters).mockReturnValue(query([{ run_id: "run-2", period_start: "2026-09-01", period_end: "2026-09-07", processing_date: "2026-09-08", payday: "2026-09-09", lifecycle: "reviewed", review_state: "accepted", currency: "USD", members: [], liability_totals: {}, manual_tax_filing_payment_required: true, run_digest: "run" }]) as never);
     render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
     const approveButton = screen.getByRole("button", { name: "Approve Payroll" });
     expect(approveButton).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Calculate" })).not.toBeInTheDocument();
     fireEvent.click(approveButton);
     await waitFor(() => expect(approve).toHaveBeenCalledWith({ runId: "run-2", reason: "Owner approved Payroll register" }));
   });

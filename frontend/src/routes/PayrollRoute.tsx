@@ -36,9 +36,12 @@ export function PayrollRoute() {
   const schemas = useComplianceSchemas(canRead);
   const canReadTime = useHasPermission("COMPANY_TIMEKEEPING_ADMIN_READ");
   const canManagePayPeriods = useHasPermission("COMPANY_PAYROLL_POLICY_MANAGE");
+  const canAssembleRuns = useHasPermission("COMPANY_PAYROLL_RUN_ASSEMBLE");
+  const canCalculateRuns = useHasPermission("COMPANY_PAYROLL_CALCULATION_EXECUTE");
   const canReviewRuns = useHasPermission("COMPANY_PAYROLL_RUN_REVIEW");
   const canApproveRuns = useHasPermission("COMPANY_PAYROLL_RUN_APPROVE");
   const canCloseRuns = useHasPermission("COMPANY_PAYROLL_RUN_APPROVE");
+  const canManagePaperChecks = useHasPermission("COMPANY_PAYROLL_PAYMENT_INSTRUCTION_MANAGE");
   const createPeriod = useCreatePayPeriod();
   const [periodMessage, setPeriodMessage] = useState("");
   const [paperChecks, setPaperChecks] = useState<Record<string, { checkId: string; employeeId: string; lifecycle: string }>>({});
@@ -184,7 +187,7 @@ export function PayrollRoute() {
                 <span className="text-sm">
                   Payroll policy: <strong>{label(periodOperations.data.policy_readiness)}</strong>
                 </span>
-                <Button size="small" variant="outline" disabled={runActions.assemble.isPending || !effectivePayPeriodId || periodOperations.data.employees.length === 0 || periodOperations.data.employees.some((employee) => employee.exception_codes.length > 0)} onClick={() => { void runActions.assemble.mutateAsync({ pay_period_id: effectivePayPeriodId!, employee_ids: periodOperations.data!.employees.map((employee) => employee.employee_id), members: periodOperations.data!.employees.map((employee) => ({ employee_id: employee.employee_id, disposition: "blocked" as const })), currency: "USD" }); }}>Assemble Payroll</Button>
+                {canAssembleRuns && <Button size="small" variant="outline" disabled={runActions.assemble.isPending || !effectivePayPeriodId || periodOperations.data.employees.length === 0 || periodOperations.data.employees.some((employee) => employee.exception_codes.length > 0)} onClick={() => { void runActions.assemble.mutateAsync({ pay_period_id: effectivePayPeriodId!, employee_ids: periodOperations.data!.employees.map((employee) => employee.employee_id), members: periodOperations.data!.employees.map((employee) => ({ employee_id: employee.employee_id, disposition: "pending_calculation" as const })), currency: "USD" }); }}>Assemble Payroll</Button>}
               </div>
               {periodOperations.data.employees.some((employee) => employee.exception_codes.length > 0) && <p className="text-sm text-content-muted">Assembly is unavailable until every Employee blocker above is resolved. No incomplete Payroll run will be created.</p>}
               <div className="overflow-x-auto">
@@ -361,7 +364,7 @@ export function PayrollRoute() {
                   <section key={register.run_id} className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">
                       {register.period_start} – {register.period_end} · {label(register.lifecycle)} / {label(register.review_state)}
-                    </h3><div className="flex flex-wrap gap-2"><Button size="small" variant="outline" disabled={runActions.calculate.isPending || register.lifecycle === "approved" || register.lifecycle === "closed"} onClick={() => void runActions.calculate.mutateAsync({ runId: register.run_id, idempotencyKey: crypto.randomUUID() })}>Calculate</Button>{canReviewRuns && <Button size="small" variant="outline" disabled={runActions.review.isPending || !(register.lifecycle === "assembled" && hasCalculatedMember)} onClick={() => void runActions.review.mutateAsync({ runId: register.run_id, reason: "Operator reviewed Payroll register" })}>Review Payroll</Button>}{canApproveRuns && <Button size="small" disabled={runActions.approve.isPending || register.lifecycle !== "reviewed" || register.review_state !== "accepted"} onClick={() => void runActions.approve.mutateAsync({ runId: register.run_id, reason: "Owner approved Payroll register" })}>Approve Payroll</Button>}{canCloseRuns && <Button size="small" disabled={runActions.close.isPending || register.lifecycle !== "approved"} onClick={() => void runActions.close.mutateAsync({ runId: register.run_id, reason: "Operator confirmed Payroll register review", idempotencyKey: crypto.randomUUID() })}>Close Payroll</Button>}</div></div>
+                    </h3><div className="flex flex-wrap gap-2">{canCalculateRuns && <Button size="small" variant="outline" disabled={runActions.calculate.isPending || register.lifecycle === "approved" || register.lifecycle === "closed"} onClick={() => void runActions.calculate.mutateAsync({ runId: register.run_id, idempotencyKey: crypto.randomUUID() })}>Calculate</Button>}{canReviewRuns && <Button size="small" variant="outline" disabled={runActions.review.isPending || !(register.lifecycle === "assembled" && hasCalculatedMember)} onClick={() => void runActions.review.mutateAsync({ runId: register.run_id, reason: "Operator reviewed Payroll register" })}>Review Payroll</Button>}{canReviewRuns && register.lifecycle === "under_review" && <Button size="small" variant="outline" disabled={runActions.acceptReview.isPending} onClick={() => void runActions.acceptReview.mutateAsync({ runId: register.run_id, reason: "Operator accepted reviewed Payroll register" })}>Accept Review</Button>}{canApproveRuns && <Button size="small" disabled={runActions.approve.isPending || register.lifecycle !== "reviewed" || register.review_state !== "accepted"} onClick={() => void runActions.approve.mutateAsync({ runId: register.run_id, reason: "Owner approved Payroll register" })}>Approve Payroll</Button>}{canCloseRuns && <Button size="small" disabled={runActions.close.isPending || register.lifecycle !== "approved"} onClick={() => void runActions.close.mutateAsync({ runId: register.run_id, reason: "Operator confirmed Payroll register review", idempotencyKey: crypto.randomUUID() })}>Close Payroll</Button>}</div></div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
@@ -401,7 +404,7 @@ export function PayrollRoute() {
                                     ))}
                                   </ul>
                                 ) : null}
-                                {register.lifecycle === "approved" || register.lifecycle === "closed" ? (
+                                {canManagePaperChecks && (register.lifecycle === "approved" || register.lifecycle === "closed") ? (
                                   <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void runActions.issuePaperCheck.mutateAsync({ runId: register.run_id, body: { employee_id: member.employee_id, check_number: String(data.get("check_number")), issue_date: String(data.get("issue_date")), idempotency_key: crypto.randomUUID() } }).then((result) => { const checkId = typeof result.check_id === "string" ? result.check_id : null; if (checkId) setPaperChecks((current) => ({ ...current, [checkId]: { checkId, employeeId: member.employee_id, lifecycle: "issued" } })); }); }}>
                                     <label className="text-xs">Check number<input className="block w-28" name="check_number" required /></label>
                                     <label className="text-xs">Issue date<input className="block" name="issue_date" type="date" required /></label>

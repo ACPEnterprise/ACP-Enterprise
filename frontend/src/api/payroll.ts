@@ -188,7 +188,7 @@ export async function decidePayrollRunReview(runId: string, reason: string): Pro
 export async function approvePayrollRun(runId: string, reason: string): Promise<Record<string, unknown>> {
   return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/approve`, { reason_code: reason })).data;
 }
-export async function assemblePayrollRun(body: { pay_period_id: string; employee_ids: string[]; members: Array<{ employee_id: string; disposition: "ready" | "blocked"; tax_result_id?: string | null }>; currency: string }): Promise<Record<string, unknown>> {
+export async function assemblePayrollRun(body: { pay_period_id: string; employee_ids: string[]; members: Array<{ employee_id: string; disposition: "pending_calculation" | "ready" | "blocked"; tax_result_id?: string | null }>; currency: string }): Promise<Record<string, unknown>> {
   return (await apiClient.post("/api/v1/payroll/operator/runs/assemble", body)).data;
 }
 export async function issuePayrollPaperCheck(runId: string, body: { employee_id: string; check_number: string; issue_date: string; idempotency_key: string }): Promise<Record<string, unknown>> {
