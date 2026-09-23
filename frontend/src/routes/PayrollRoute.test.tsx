@@ -316,7 +316,7 @@ describe("PayrollRoute authorization", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Marisol Rivera")).toBeVisible();
-    expect(screen.getAllByText("Not calculated")).toHaveLength(2);
+    expect(screen.getAllByText("Not calculated")).toHaveLength(3);
     expect(
       screen.getAllByText(/Missing configuration/i).length,
     ).toBeGreaterThan(0);
