@@ -36,6 +36,7 @@ PAYROLL_RUN_HANDOFF_VERSION = "payroll.run-approved-handoff.v1"
 
 
 class PayrollRunDisposition(StrEnum):
+    PENDING_CALCULATION = "pending_calculation"
     READY = "ready"
     BLOCKED = "blocked"
     EXCLUDED = "excluded"
@@ -668,6 +669,20 @@ class PayrollRunService:
                 tax.employee_deduction_total,
                 tax.net_pay_candidate,
                 tax.employer_contribution_total,
+            )
+        elif value.disposition is PayrollRunDisposition.PENDING_CALCULATION:
+            fields = (
+                None,
+                None,
+                None,
+                None,
+                None,
+                canonical_digest({"pending_calculation": str(value.employee_id)}),
+                zero,
+                zero,
+                zero,
+                zero,
+                zero,
             )
         elif value.disposition is PayrollRunDisposition.BLOCKED:
             admission = value.blocked_admission

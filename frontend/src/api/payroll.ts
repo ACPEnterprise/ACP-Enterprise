@@ -173,6 +173,12 @@ export async function getPayrollPeriodOperations(payPeriodId: string): Promise<P
 export async function listPayrollOperatingRegisters(): Promise<PayrollOperatingRegister[]> {
   return (await apiClient.get<PayrollOperatingRegister[]>("/api/v1/payroll/operations/registers")).data;
 }
+export async function calculatePayrollRun(runId: string, idempotencyKey: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/calculate`, { idempotency_key: idempotencyKey })).data;
+}
+export async function closePayrollRun(runId: string, reason: string, idempotencyKey: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/close`, { reason_code: reason, idempotency_key: idempotencyKey })).data;
+}
 
 export async function getPayrollEmployeeSetup(employeeId: string): Promise<PayrollEmployeeSetup> {
   return (await apiClient.get<PayrollEmployeeSetup>(`/api/v1/payroll/setup/employees/${employeeId}`)).data;
