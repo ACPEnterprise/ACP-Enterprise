@@ -8,15 +8,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customer_migration.models import (
     CustomerMigrationCandidate,
@@ -32,7 +23,12 @@ from app.customer_migration.population_reconciliation import (
     CustomerPopulationReconciliationService,
     ExactCustomerAdmissionCommand,
 )
-from app.customer_migration.population_router import router as population_router
+from app.customer_migration.population_router import (
+    get_population_session_factory,
+)
+from app.customer_migration.population_router import (
+    router as population_router,
+)
 from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.customers.repository import CustomerRepository
 from app.customers.schemas import (
@@ -60,10 +56,18 @@ from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
+from fastapi import FastAPI
 from scripts.customer_population_reconciliation import (
     execute_action as execute_reconciliation_action,
 )
 from scripts.customer_population_reconciliation import parser as reconciliation_parser
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 HAMMER_PROVIDER_ID = "147405829"
 
@@ -162,6 +166,7 @@ def population_app(
             yield session
 
     app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_population_session_factory] = lambda: factory
     if context is not None:
 
         async def context_override() -> AuthorizationContext:
@@ -402,6 +407,43 @@ async def test_http_population_refresh_is_authorized_replay_safe_and_non_admitti
         )
     assert denied.status_code == 403
     assert denied.json()["detail"] == "Permission denied."
+
+
+@pytest.mark.asyncio
+async def test_http_clean_majority_admits_exact_rows_and_is_replay_safe(database) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Clean Majority API")
+    await stage_hammer(factory, context)
+    app = population_app(factory, context)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post(
+            "/api/v1/customer-migration/population/admit-clean-majority",
+            json={"source_system": "housecall_pro", "limit": 5000},
+        )
+        replay = await client.post(
+            "/api/v1/customer-migration/population/admit-clean-majority",
+            json={"source_system": "housecall_pro", "limit": 5000},
+        )
+
+    assert first.status_code == replay.status_code == 200
+    assert first.json()["selected"] == first.json()["admitted"] == 1
+    assert first.json()["quarantined"] == 0
+    assert first.json()["remaining_unexplained"] == 0
+    assert first.json()["customer_admission_performed"] is True
+    assert first.headers["Cache-Control"] == "private, no-store"
+    assert replay.json()["selected"] == replay.json()["admitted"] == 0
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Customer)
+                .where(Customer.company_id == context.company.id)
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio

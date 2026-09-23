@@ -13,8 +13,6 @@ import sys
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 # Standalone commands must register the complete SQLAlchemy model graph before
 # authorization resolution or migration-owned persistence is used.
 from app import main as application_model_registry  # noqa: F401
@@ -33,6 +31,7 @@ from app.platform.permissions.authorization import (
     AuthorizationError,
     authorization_service,
 )
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 async def authorized_context(
@@ -99,7 +98,7 @@ async def execute_action(
             "evidence_digest": disposition.evidence_digest,
         }
     if args.action == "admit-clean-majority":
-        result = await service.admit_clean_majority(
+        clean_result = await service.admit_clean_majority(
             factory,
             context=context,
             source_system=args.source_system,
@@ -107,17 +106,17 @@ async def execute_action(
         )
         return {
             "classification": "CUSTOMER_CLEAN_MAJORITY_ADMISSION_COMPLETE",
-            "source_system": result.source_system,
-            "selected": result.selected,
-            "admitted": result.admitted,
-            "replayed": result.replayed,
-            "quarantined": result.quarantined,
-            "remaining_unexplained": result.remaining_unexplained,
-            "before_digest": result.before_digest,
-            "after_digest": result.after_digest,
+            "source_system": clean_result.source_system,
+            "selected": clean_result.selected,
+            "admitted": clean_result.admitted,
+            "replayed": clean_result.replayed,
+            "quarantined": clean_result.quarantined,
+            "remaining_unexplained": clean_result.remaining_unexplained,
+            "before_digest": clean_result.before_digest,
+            "after_digest": clean_result.after_digest,
         }
     if args.action == "admit":
-        result = await service.admit_exact(
+        admission_result = await service.admit_exact(
             factory,
             context=context,
             command=ExactCustomerAdmissionCommand(
@@ -136,16 +135,18 @@ async def execute_action(
         )
         return {
             "classification": "CUSTOMER_PROVIDER_ID_ADMITTED",
-            "customer_id": str(result.customer_id),
-            "customer_source_identity_id": str(result.customer_source_identity_id),
-            "disposition_id": str(result.disposition_id),
+            "customer_id": str(admission_result.customer_id),
+            "customer_source_identity_id": str(
+                admission_result.customer_source_identity_id
+            ),
+            "disposition_id": str(admission_result.disposition_id),
             "counts": {
-                "customers": result.customers,
-                "contacts": result.contacts,
-                "service_locations": result.service_locations,
-                "billing_addresses": result.billing_addresses,
+                "customers": admission_result.customers,
+                "contacts": admission_result.contacts,
+                "service_locations": admission_result.service_locations,
+                "billing_addresses": admission_result.billing_addresses,
             },
-            "replayed": result.replayed,
+            "replayed": admission_result.replayed,
         }
     raise ValueError("unsupported Customer population action")
 

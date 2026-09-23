@@ -43,6 +43,19 @@ export interface CustomerPopulationRefreshResult {
   customer_admission_performed: false;
 }
 
+export interface CustomerCleanMajorityAdmissionResult {
+  classification: "CUSTOMER_CLEAN_MAJORITY_ADMITTED";
+  source_system: "housecall_pro";
+  selected: number;
+  admitted: number;
+  replayed: number;
+  quarantined: number;
+  remaining_unexplained: number;
+  before_evidence_digest: string;
+  after_evidence_digest: string;
+  customer_admission_performed: true;
+}
+
 function stringValue(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -198,6 +211,18 @@ export async function refreshCustomerPopulation(
           "X-Branch-ID": branchId,
         },
       },
+    )
+  ).data;
+}
+
+export async function admitCustomerCleanMajority(
+  branchId: string,
+): Promise<CustomerCleanMajorityAdmissionResult> {
+  return (
+    await apiClient.post<CustomerCleanMajorityAdmissionResult>(
+      "/api/v1/customer-migration/population/admit-clean-majority",
+      { source_system: "housecall_pro", limit: 5000 },
+      { headers: { "X-Branch-ID": branchId } },
     )
   ).data;
 }
