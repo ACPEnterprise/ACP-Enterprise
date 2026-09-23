@@ -41,6 +41,7 @@ export function PayrollRoute() {
   const canCloseRuns = useHasPermission("COMPANY_PAYROLL_RUN_APPROVE");
   const createPeriod = useCreatePayPeriod();
   const [periodMessage, setPeriodMessage] = useState("");
+  const [paperChecks, setPaperChecks] = useState<Record<string, { checkId: string; employeeId: string; lifecycle: string }>>({});
   const canReadPayPeriods = canRead && (canReadTime || canManagePayPeriods);
   const currentPeriod = useCurrentPayPeriod(canReadPayPeriods);
   const payPeriods = usePayPeriods(canReadPayPeriods);
@@ -183,7 +184,9 @@ export function PayrollRoute() {
                 <span className="text-sm">
                   Payroll policy: <strong>{label(periodOperations.data.policy_readiness)}</strong>
                 </span>
+                <Button size="small" variant="outline" disabled={runActions.assemble.isPending || !effectivePayPeriodId || periodOperations.data.employees.length === 0 || periodOperations.data.employees.some((employee) => employee.exception_codes.length > 0)} onClick={() => { void runActions.assemble.mutateAsync({ pay_period_id: effectivePayPeriodId!, employee_ids: periodOperations.data!.employees.map((employee) => employee.employee_id), members: periodOperations.data!.employees.map((employee) => ({ employee_id: employee.employee_id, disposition: "blocked" as const })), currency: "USD" }); }}>Assemble Payroll</Button>
               </div>
+              {periodOperations.data.employees.some((employee) => employee.exception_codes.length > 0) && <p className="text-sm text-content-muted">Assembly is unavailable until every Employee blocker above is resolved. No incomplete Payroll run will be created.</p>}
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[1050px] text-left text-sm">
                   <thead>
@@ -419,6 +422,20 @@ export function PayrollRoute() {
                                     ))}
                                   </ul>
                                 ) : null}
+                                {register.lifecycle === "approved" || register.lifecycle === "closed" ? (
+                                  <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void runActions.issuePaperCheck.mutateAsync({ runId: register.run_id, body: { employee_id: member.employee_id, check_number: String(data.get("check_number")), issue_date: String(data.get("issue_date")), idempotency_key: crypto.randomUUID() } }).then((result) => { const checkId = typeof result.check_id === "string" ? result.check_id : null; if (checkId) setPaperChecks((current) => ({ ...current, [checkId]: { checkId, employeeId: member.employee_id, lifecycle: "issued" } })); }); }}>
+                                    <label className="text-xs">Check number<input className="block w-28" name="check_number" required /></label>
+                                    <label className="text-xs">Issue date<input className="block" name="issue_date" type="date" required /></label>
+                                    <Button size="small" type="submit" disabled={runActions.issuePaperCheck.isPending}>Issue Paper Check</Button>
+                                  </form>
+                                ) : null}
+                                {Object.values(paperChecks).filter((check) => check.employeeId === member.employee_id).map((check) => (
+                                  <div className="mt-2 flex flex-wrap gap-2" key={check.checkId}>
+                                    <span className="text-xs text-content-muted">Paper check · {check.lifecycle}</span>
+                                    {check.lifecycle === "issued" && <Button size="small" variant="outline" onClick={() => void runActions.voidPaperCheck.mutateAsync({ checkId: check.checkId, reason: "Operator voided paper check", idempotencyKey: crypto.randomUUID() }).then(() => setPaperChecks((current) => ({ ...current, [check.checkId]: { ...check, lifecycle: "voided" } })))}>Void Paper Check</Button>}
+                                    {check.lifecycle === "voided" && <Button size="small" variant="outline" onClick={() => { const number = window.prompt("Replacement check number"); if (!number) return; const date = window.prompt("Replacement issue date (YYYY-MM-DD)"); if (!date) return; void runActions.reissuePaperCheck.mutateAsync({ runId: register.run_id, body: { original_check_id: check.checkId, employee_id: check.employeeId, check_number: number, issue_date: date, idempotency_key: crypto.randomUUID() } }).then((result) => { const checkId = typeof result.check_id === "string" ? result.check_id : null; if (checkId) setPaperChecks((current) => ({ ...current, [checkId]: { checkId, employeeId: check.employeeId, lifecycle: "reissued" } })); }); }}>Reissue Paper Check</Button>}
+                                  </div>
+                                ))}
                               </td>
                             </tr>
                           ))}
