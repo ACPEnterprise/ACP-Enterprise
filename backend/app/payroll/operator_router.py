@@ -312,7 +312,16 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
         raise HTTPException(409, "Payroll run version is stale")
     if await session.scalar(select(PayrollRunCloseRecord.id).where(PayrollRunCloseRecord.company_id == context.company.id, PayrollRunCloseRecord.run_id == run.id)) is not None:
         raise HTTPException(409, "closed Payroll authority cannot be recalculated")
-    request_digest = canonical_digest({"run_id": str(run_id), "operation": "calculate"})
+    # Include the optimistic version in the mutation fingerprint.  Reusing an
+    # idempotency key with a different expected version is a contradictory
+    # replay, not a valid replay of the original calculation request.
+    request_digest = canonical_digest(
+        {
+            "run_id": str(run_id),
+            "operation": "calculate",
+            "expected_run_digest": payload.expected_run_digest,
+        }
+    )
     operation = "payroll.run.calculate"
     replay = await session.scalar(select(MutationReceipt).where(MutationReceipt.company_id == context.company.id, MutationReceipt.operation == operation, MutationReceipt.idempotency_key == payload.idempotency_key))
     if replay is not None:
@@ -353,7 +362,17 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
                     raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": [f"APPROVED_TIME_RESOLVER_REQUIRED:{member.employee_id}"]})
                 facts = await resolver(session, context=context, payroll_input=time_record)
                 time_input = seal_payroll_time_input(company_id=context.company.id, employee_id=member.employee_id, pay_period_id=period.id, period_start=period.period_start, period_end=period.period_end, approved_entries=tuple(facts))
-            admission = await authority.evaluate_admission(session, context=context, identity_resolved=True, policy=policy, compensation=compensation, time_input=time_input, pay_period_schedule_definition_id=period.schedule_definition_id, pay_period_schedule_version=int(period.schedule_version))
+            admission = await authority.evaluate_admission(
+                session,
+                context=context,
+                identity_resolved=True,
+                policy=policy,
+                compensation=compensation,
+                time_input=time_input,
+                pay_period_schedule_definition_id=period.schedule_definition_id,
+                pay_period_schedule_version=int(period.schedule_version),
+                pay_period_id=period.id,
+            )
             from app.payroll.calculation_adapter import build_gross_inputs
             inputs = build_gross_inputs(company_id=context.company.id, employee_id=member.employee_id, pay_period_id=period.id, period_start=period.period_start, period_end=period.period_end, schedule_definition_id=period.schedule_definition_id, schedule_version=int(period.schedule_version), admission=admission, policy=policy, compensation=compensation)
             candidate = gross_engine.calculate(actor_permissions=context.permission_codes, company_id=inputs.company_id, employee_id=inputs.employee_id, period=inputs.period, admission=inputs.admission, policy=inputs.policy, compensation=inputs.compensation, time_input=time_input, currency=run.currency, calculated_at=datetime.now(timezone.utc))
