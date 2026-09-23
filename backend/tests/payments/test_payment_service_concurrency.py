@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -399,7 +400,7 @@ async def test_money_projection_keeps_charge_settlement_fee_and_deposit_distinct
     factory, company, branch, actor, customer = payment_fixture
     provider = CountingFakeProvider()
     service = PaymentService(provider, "synthetic-merchant")
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(ZoneInfo(settings.business_timezone)).date()
     async with factory() as session:
         await service.collect(
             session,
