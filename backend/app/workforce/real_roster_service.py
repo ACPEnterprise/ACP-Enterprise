@@ -505,6 +505,7 @@ class RealRosterService:
             field_tech=person.field_tech,
             employee_id=None,
             employee_display_name=None,
+            employment_status=None,
             user_state="AUTHENTICATED_VERIFICATION_REQUIRED",
             employee_state="AUTHENTICATED_VERIFICATION_REQUIRED",
             membership_state="AUTHENTICATED_VERIFICATION_REQUIRED",

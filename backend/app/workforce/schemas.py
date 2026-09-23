@@ -120,6 +120,7 @@ class RealRosterReadinessItem(WorkforceSchema):
     field_tech: bool
     employee_id: UUID | None
     employee_display_name: str | None
+    employment_status: Literal["active", "inactive", "leave", "terminated"] | None
     user_state: str
     employee_state: str
     membership_state: str

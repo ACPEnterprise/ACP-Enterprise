@@ -128,6 +128,7 @@ def test_roster_role_contracts_compose_existing_canonical_roles() -> None:
 def test_unbound_roster_identity_remains_unknown_not_missing() -> None:
     item = RealRosterService._unbound(REAL_ALL_COUNTY_ROSTER[3])
     assert item.employee_id is None
+    assert item.employment_status is None
     assert item.user_state == "AUTHENTICATED_VERIFICATION_REQUIRED"
     assert item.employee_state == "AUTHENTICATED_VERIFICATION_REQUIRED"
     assert item.dispatch_state == "AUTHENTICATED_VERIFICATION_REQUIRED"
@@ -190,6 +191,7 @@ async def test_exact_employee_binding_is_durable_and_does_not_name_match(
         )
         assert melvin.employee_id == employee_id
         assert melvin.employee_display_name == "Exact Employee"
+        assert melvin.employment_status == "active"
         assert melvin.user_state == "USER_MISSING_OR_INACTIVE"
         assert "USER_NOT_READY" in melvin.blockers
         assert result.login_ready_total == 0
