@@ -75,7 +75,8 @@ function Metric({
 }) {
   return (
     <Card
-      className={`min-h-28 p-ui-4 ${tone === "attention" ? "border-amber-400/50" : tone === "success" ? "border-emerald-400/40" : ""}`}
+      className="min-h-28 p-ui-4"
+      tone={tone === "attention" ? "warning" : tone === "success" ? "success" : "normal"}
     >
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-content-muted">
         {label}

@@ -3,8 +3,10 @@ import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { classNames } from "../utilities/classNames";
 
 export type CardElevation = "none" | "low" | "medium";
+export type CardTone = "normal" | "neutral" | "success" | "warning" | "danger";
 export interface CardProps extends ComponentPropsWithoutRef<"article"> {
   elevation?: CardElevation;
+  tone?: CardTone;
 }
 
 const elevationClasses: Record<CardElevation, string> = {
@@ -14,17 +16,18 @@ const elevationClasses: Record<CardElevation, string> = {
 };
 
 export const Card = forwardRef<HTMLElement, CardProps>(function Card(
-  { className, elevation = "low", ...props },
+  { className, elevation = "low", tone = "normal", ...props },
   ref,
 ) {
   return (
     <article
       ref={ref}
       className={classNames(
-        "min-w-0 rounded-xl border border-stroke bg-surface text-content",
+        "twelve-hats-panel-outline min-w-0 rounded-xl border bg-surface text-content",
         elevationClasses[elevation],
         className,
       )}
+      data-panel-tone={tone}
       {...props}
     />
   );
@@ -38,7 +41,7 @@ export const CardHeader = forwardRef<HTMLElement, ComponentPropsWithoutRef<"head
 
 export const CardTitle = forwardRef<HTMLHeadingElement, ComponentPropsWithoutRef<"h3">>(
   function CardTitle({ className, ...props }, ref) {
-    return <h3 ref={ref} className={classNames("text-heading-s text-content", className)} {...props} />;
+    return <h3 ref={ref} className={classNames("text-heading-s text-action-primary", className)} {...props} />;
   },
 );
 

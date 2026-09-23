@@ -324,7 +324,7 @@ export function AdministrationRoute() {
         </Card>
       )}
       {canAdminister && (
-        <Card className="border-warning/50">
+        <Card tone="warning">
           <CardHeader>
             <CardTitle>QuickBooks REAL company — read-only migration source</CardTitle>
             <CardDescription>
