@@ -13,6 +13,8 @@ import sys
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 # Standalone commands must register the complete SQLAlchemy model graph before
 # authorization resolution or migration-owned persistence is used.
 from app import main as application_model_registry  # noqa: F401
@@ -31,7 +33,6 @@ from app.platform.permissions.authorization import (
     AuthorizationError,
     authorization_service,
 )
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 async def authorized_context(
