@@ -15,6 +15,10 @@ INTENTIONAL_NON_BEARER_BOUNDARIES = {
     ("POST", "/api/v1/auth/password-reset/request"),
     ("POST", "/api/v1/auth/refresh"),
     ("POST", "/api/v1/identity-onboarding/activate/complete"),
+    ("POST", "/api/v1/platform/factory-control/internal/events"),
+    ("POST", "/api/v1/platform/factory-control/internal/live-sync"),
+    ("POST", "/api/v1/platform/factory-control/internal/snapshots"),
+    ("POST", "/api/v1/platform/factory-control/internal/sync"),
     ("GET", "/api/v1/worker-transport/sessions/{session_id}/offers"),
     (
         "GET",

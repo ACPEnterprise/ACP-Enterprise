@@ -192,7 +192,8 @@ async def dispatch_fixture() -> AsyncIterator[
     try:
         yield factory, context, appointment, employees[0], employees[1]
     finally:
-        await transaction.rollback()
+        if transaction.is_active:
+            await transaction.rollback()
         await connection.close()
         await engine.dispose()
 

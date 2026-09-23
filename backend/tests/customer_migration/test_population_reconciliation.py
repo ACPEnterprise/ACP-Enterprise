@@ -8,15 +8,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customer_migration.models import (
     CustomerMigrationCandidate,
@@ -60,10 +51,18 @@ from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
+from fastapi import FastAPI
 from scripts.customer_population_reconciliation import (
     execute_action as execute_reconciliation_action,
 )
 from scripts.customer_population_reconciliation import parser as reconciliation_parser
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 HAMMER_PROVIDER_ID = "147405829"
 

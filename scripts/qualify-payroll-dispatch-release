@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repository_root"
+
+python_bin="${PYTHON_BIN:-python}"
+profile="${1:---all}"
+
+case "$profile" in
+  --all|--backend|--frontend|--mobile|--static|--plan) ;;
+  *)
+    echo "usage: scripts/qualify-payroll-dispatch-release [--all|--backend|--frontend|--mobile|--static|--plan]" >&2
+    exit 2
+    ;;
+esac
+
+backend_tests=(
+  backend/tests/payroll
+  backend/tests/dispatch
+  backend/tests/scheduling
+  backend/tests/employee_operations
+  backend/tests/platform/test_api_idempotency_standard.py
+  backend/tests/platform/test_authentication_response_security.py
+  backend/tests/platform/test_authentication_security_services.py
+  backend/tests/platform/test_authorization_matrix_verification.py
+  backend/tests/platform/test_authorization_service.py
+  backend/tests/platform/test_enterprise_security_hardening.py
+  backend/tests/platform/test_http_authentication_boundaries.py
+  backend/tests/platform/factory_control/test_factory_control_permissions.py
+  backend/tests/platform/factory_control/test_factory_control_database.py
+)
+
+frontend_tests=(
+  src/routes/PayrollRoute.test.tsx
+  src/routes/DispatchRoute.test.tsx
+  src/routes/SchedulingRoute.test.tsx
+  src/components/payroll/PayrollEmployeeSetup.test.tsx
+  src/components/dispatch
+  src/components/scheduling
+  src/api/dispatch.test.ts
+  src/api/scheduling.test.ts
+)
+
+print_plan() {
+  cat <<'EOF'
+STATIC
+  scripts/migration-lineage --require-single-head
+  scripts/release-secret-custody-check.py --env-example .env.preview.example
+  scripts/release-backend-pin-check.py
+  PYTHON_BIN -m pip check
+  PYTHON_BIN -m pip_audit -r backend/requirements.txt --progress-spinner off
+  PYTHON_BIN -m ruff check backend
+  PYTHONPATH=backend PYTHON_BIN -m mypy backend/app backend/scripts
+  PYTHON_BIN -m compileall -q backend/app backend/scripts
+  git diff --check
+BACKEND (requires a disposable, migrated PostgreSQL DATABASE_URL)
+  PYTHONPATH=backend PYTHON_BIN -m pytest -ra <Payroll + Dispatch + Scheduling + My Day + auth/idempotency suites>
+FRONTEND
+  npm ci --prefix frontend --ignore-scripts
+  npm audit --prefix frontend --audit-level=low
+  npm run lint --prefix frontend
+  frontend/node_modules/.bin/tsc -b frontend/tsconfig.json --pretty false
+  npm run test:run --prefix frontend -- <Payroll + Dispatch + Scheduling tests>
+  npm run build --prefix frontend
+MOBILE
+  npm ci --prefix mobile --ignore-scripts
+  scripts/release-mobile-audit-check.py
+  npm run lint --prefix mobile
+  npm run typecheck --prefix mobile
+  npm test --prefix mobile -- --runInBand __tests__/myDay.test.tsx
+EOF
+}
+
+run_static() {
+  "$python_bin" -c 'import sys; assert sys.version_info >= (3, 12), sys.version'
+  lineage_report="$(mktemp -t payroll-dispatch-lineage.XXXXXX)"
+  trap 'rm -f "$lineage_report"' RETURN
+  scripts/migration-lineage --require-single-head --output "$lineage_report"
+  "$python_bin" - "$lineage_report" <<'PY'
+import json
+import sys
+
+report = json.load(open(sys.argv[1], encoding="utf-8"))
+print(
+    "Migration lineage:",
+    f"revisions={report['revision_count']}",
+    f"roots={','.join(report['roots'])}",
+    f"heads={','.join(report['heads'])}",
+    f"digest={report['lineage_digest']}",
+)
+PY
+  python3 scripts/release-secret-custody-check.py --env-example .env.preview.example
+  python3 scripts/release-backend-pin-check.py
+  "$python_bin" -m pip check
+  "$python_bin" -m pip_audit -r backend/requirements.txt --progress-spinner off
+  "$python_bin" -m ruff check backend
+  PYTHONPATH=backend "$python_bin" -m mypy backend/app backend/scripts
+  "$python_bin" -m compileall -q backend/app backend/scripts
+  git diff --check
+}
+
+run_backend() {
+  if [[ -z "${DATABASE_URL:-}" ]]; then
+    echo "DATABASE_URL must identify a disposable, migrated PostgreSQL database" >&2
+    exit 2
+  fi
+  PYTHONPATH=backend "$python_bin" -m pytest -ra \
+    -W error::sqlalchemy.exc.SAWarning "${backend_tests[@]}"
+}
+
+run_frontend() {
+  npm ci --prefix frontend --ignore-scripts
+  npm audit --prefix frontend --audit-level=low
+  npm run lint --prefix frontend
+  frontend/node_modules/.bin/tsc -b frontend/tsconfig.json --pretty false
+  npm run test:run --prefix frontend -- "${frontend_tests[@]}"
+  npm run build --prefix frontend
+}
+
+run_mobile() {
+  npm ci --prefix mobile --ignore-scripts
+  python3 scripts/release-mobile-audit-check.py
+  npm run lint --prefix mobile
+  npm run typecheck --prefix mobile
+  npm test --prefix mobile -- --runInBand __tests__/myDay.test.tsx
+}
+
+case "$profile" in
+  --plan) print_plan ;;
+  --static) run_static ;;
+  --backend) run_backend ;;
+  --frontend) run_frontend ;;
+  --mobile) run_mobile ;;
+  --all)
+    run_static
+    run_backend
+    run_frontend
+    run_mobile
+    ;;
+esac
