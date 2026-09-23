@@ -355,13 +355,16 @@ describe("PayrollRoute authorization", () => {
     await waitFor(() => expect(review).toHaveBeenCalledWith({ runId: "run-1", reason: "Operator reviewed Payroll register" }));
   });
 
-  it("renders Approve Payroll only for reviewed accepted state", () => {
+  it("renders and invokes Approve Payroll for reviewed accepted state", async () => {
     permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_APPROVE"]);
     const approve = vi.fn();
     vi.mocked(usePayrollRunActions).mockReturnValue({ assemble: { isPending: false, mutateAsync: vi.fn() }, calculate: { isPending: false, mutateAsync: vi.fn() }, review: { isPending: false, mutateAsync: vi.fn() }, approve: { isPending: false, mutateAsync: approve }, close: { isPending: false, mutateAsync: vi.fn() }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() }, voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() } } as never);
     vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: true, aggregate_approved_gross: "100.00", aggregate_approved_net: "80.00", reconciliation_state: "reconciled", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: { reviewed: 1 }, member_dispositions: { ready: 1 }, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
     vi.mocked(usePayrollOperatingRegisters).mockReturnValue(query([{ run_id: "run-2", period_start: "2026-09-01", period_end: "2026-09-07", processing_date: "2026-09-08", payday: "2026-09-09", lifecycle: "reviewed", review_state: "accepted", currency: "USD", members: [], liability_totals: {}, manual_tax_filing_payment_required: true, run_digest: "run" }]) as never);
     render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
-    expect(screen.getByRole("button", { name: "Approve Payroll" })).toBeEnabled();
+    const approveButton = screen.getByRole("button", { name: "Approve Payroll" });
+    expect(approveButton).toBeEnabled();
+    fireEvent.click(approveButton);
+    await waitFor(() => expect(approve).toHaveBeenCalledWith({ runId: "run-2", reason: "Owner approved Payroll register" }));
   });
 });
