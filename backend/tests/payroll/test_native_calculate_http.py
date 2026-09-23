@@ -10,11 +10,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -44,6 +39,11 @@ from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
 from app.timekeeping.models import PayPeriod
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.payroll.test_gross_pay_calculation import (
     compensation as fixture_compensation,
 )
