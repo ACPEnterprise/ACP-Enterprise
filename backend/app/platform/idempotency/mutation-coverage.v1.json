@@ -936,6 +936,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "customers",
+      "mechanism": "Company-scoped exact provider identity, disposition row locks, deterministic admission digest, and replay-safe Customer/source lineage",
+      "method": "POST",
+      "operation_id": "admit_customer_clean_majority_api_v1_customer_migration_population_admit_clean_majority_post",
+      "path": "/api/v1/customer-migration/population/admit-clean-majority",
+      "reason": "Clean-majority admission admits only exact provider identities, quarantines conflicts, and identical replay creates no duplicate Customer authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "customers",
       "mechanism": "optional Platform transactional receipt; headerless legacy compatibility remains",
@@ -1553,6 +1563,16 @@
       "operation_id": "authorize_activation_api_v1_price_book_versions__version_id__review_activation_authorization_post",
       "path": "/api/v1/price-book/versions/{version_id}/review/activation-authorization",
       "reason": "Owner activation authorization is durable authority for later activation and exact replay cannot replace actor, timestamp, rationale, or audit evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Company-scoped Employee/User row lock, expected authorization version, convergent target state, credential version rotation, and complete session revocation",
+      "method": "PUT",
+      "operation_id": "set_employee_access_lock_api_v1_workforce_administration_employees__employee_id__access_lock_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/access-lock",
+      "reason": "Exact lock or unlock replay converges on the requested access state while stale contradictory changes fail closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -3317,6 +3337,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "e93e9691f25fde2f8520ec08cab3f625af61a415f72488ae288cb31a044b1f1c",
+  "fingerprint": "d7f17e014728084a0925e1fe9a8cee2b08f81b1c33e16054722bcd1bd494eb34",
   "schema_version": "1"
 }
