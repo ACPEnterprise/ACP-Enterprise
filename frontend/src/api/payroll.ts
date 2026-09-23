@@ -179,6 +179,12 @@ export async function calculatePayrollRun(runId: string, idempotencyKey: string)
 export async function closePayrollRun(runId: string, reason: string, idempotencyKey: string): Promise<Record<string, unknown>> {
   return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/close`, { reason_code: reason, idempotency_key: idempotencyKey })).data;
 }
+export async function reviewPayrollRun(runId: string, reason: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/review`, { reason_code: reason })).data;
+}
+export async function approvePayrollRun(runId: string, reason: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/approve`, { reason_code: reason })).data;
+}
 
 export async function getPayrollEmployeeSetup(employeeId: string): Promise<PayrollEmployeeSetup> {
   return (await apiClient.get<PayrollEmployeeSetup>(`/api/v1/payroll/setup/employees/${employeeId}`)).data;
