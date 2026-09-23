@@ -420,6 +420,22 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
         session.add(PayrollCalculationInputSnapshotRecord(company_id=context.company.id, run_id=run.id, snapshot_version=(latest or 0) + 1, run_digest=run.run_digest, pay_period_id=run.pay_period_id, employee_bindings=employee_bindings, policy_reference=policy_refs[0], authority_references=authority_refs, input_digest=snapshot_digest, replay_identity=payload.idempotency_key, created_by_user_id=context.user.id))
     session.add(MutationReceipt(company_id=context.company.id, actor_user_id=context.user.id, operation=operation, idempotency_key=payload.idempotency_key, request_digest=request_digest, state="completed", result_type="payroll_run_calculation", result_id=run.id, response_status=200, retention_class="financial_audit", completed_at=datetime.now(timezone.utc)))
     AuditService.stage(session, AuditEntry(action="payroll.run.calculated", resource_type="payroll_run", actor_user_id=context.user.id, company_id=context.company.id, resource_id=run.id, reason_code="operator_calculate", details={"run_digest": run.run_digest, "replay_identity": payload.idempotency_key}))
+    BusinessEventService.stage(
+        session,
+        BusinessEventCreate(
+            event_type=EventType.PAYROLL_RUN_CALCULATED,
+            entity_type="payroll_run",
+            entity_id=run.id,
+            company_id=context.company.id,
+            user_id=context.user.id,
+            payload={
+                "version": "1",
+                "run_digest": run.run_digest,
+                "replay_identity": payload.idempotency_key,
+                "member_count": len(members),
+            },
+        ),
+    )
     await session.commit()
     return {
         "run_id": run.id,
