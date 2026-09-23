@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.auth.errors import PasswordPolicyError
 from app.platform.notifications.models import NotificationOutbox
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
@@ -55,6 +56,16 @@ def _safe_error(error: Exception) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+
+
+def _safe_password_policy_error() -> HTTPException:
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "The new password does not satisfy the configured password policy.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
 @router.post("/plan", response_model=OnboardingPlanResponse)
@@ -120,6 +131,8 @@ async def activate(data: OnboardingActivateRequest, session: Session) -> Onboard
         record = await identity_onboarding_service.activate(
             session, token=data.token, password=data.password
         )
+    except PasswordPolicyError as error:
+        raise _safe_password_policy_error() from error
     except OnboardingConflictError as error:
         raise _safe_error(error) from error
     return OnboardingView.model_validate(record)

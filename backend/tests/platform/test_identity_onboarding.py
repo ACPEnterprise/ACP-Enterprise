@@ -13,9 +13,10 @@ import pytest_asyncio
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
+from app.platform.auth.errors import PasswordPolicyError
 from app.platform.auth.models import EmailVerificationToken  # noqa: F401
 from app.platform.auth.passwords import PasswordService
-from app.platform.auth.services import CredentialService
+from app.platform.auth.services import CredentialService, authentication_service
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -31,7 +32,7 @@ from app.platform.onboarding.models import (
     IdentityOnboardingRequest,
     ProtectedInvitationDeliveryEnvelope,
 )
-from app.platform.onboarding.router import _safe_error
+from app.platform.onboarding.router import _safe_error, _safe_password_policy_error
 from app.platform.onboarding.service import (
     IdentityOnboardingService,
     OnboardingAuthorizationError,
@@ -48,7 +49,7 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User, UserCredential
 from app.timekeeping.repository import timekeeping_repository
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -107,6 +108,14 @@ def test_onboarding_errors_use_safe_recovery_contract(
     assert translated.detail["recovery"] == recovery
     assert translated.detail["correlation_id"] is None
     assert str(error) not in str(translated.detail)
+
+
+def test_activation_password_policy_uses_retryable_validation_contract() -> None:
+    translated = _safe_password_policy_error()
+    assert translated.status_code == 422
+    assert translated.detail["code"] == "validation"
+    assert translated.detail["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert "password policy" in translated.detail["message"]
 
 
 @pytest_asyncio.fixture
@@ -379,6 +388,7 @@ async def test_invitation_activation_is_single_use_and_secret_safe(
         )
         assert activated.status == "activated"
         activated_user_id = activated.user_id
+        activated_membership_id = activated.membership_id
         employee = await timekeeping_repository.employee_for_membership(
             session,
             company_id=context.company.id,
@@ -395,6 +405,18 @@ async def test_invitation_activation_is_single_use_and_secret_safe(
         assert await session.scalar(
             select(UserCredential.id).where(UserCredential.user_id == activated_user_id)
         )
+        await session.rollback()
+        authentication = await authentication_service.authenticate(
+            session,
+            email=email,
+            password="A-secure-test-passphrase-42!",
+        )
+        assert authentication.user.id == activated_user_id
+        active_membership = await session.get(Membership, activated_membership_id)
+        assert active_membership is not None
+        assert active_membership.status == "active"
+        assert active_membership.company_id == context.company.id
+        assert active_membership.default_branch_id == context.active_branch.id
         admission = evaluate_payroll_admission(
             company_id=context.company.id,
             identity_resolved=True,
@@ -403,6 +425,103 @@ async def test_invitation_activation_is_single_use_and_secret_safe(
             time_input=None,
         )
         assert admission.state is PayrollAdmissionState.BLOCKED_POLICY
+
+
+@pytest.mark.asyncio
+async def test_password_policy_failure_does_not_consume_invitation(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(context, email=f"password-retry-{uuid4()}@example.test"),
+        )
+        invitation = await session.scalar(
+            select(IdentityOnboardingInvitation).where(
+                IdentityOnboardingInvitation.onboarding_request_id == record.id
+            )
+        )
+        assert invitation is not None
+        invitation_id = invitation.id
+        user_id = record.user_id
+        await session.rollback()
+        delivery = await service.claim_protected_delivery(
+            session, invitation_id=invitation_id
+        )
+
+        with pytest.raises(PasswordPolicyError):
+            await service.activate(session, token=delivery.secret, password="short")
+
+        await session.rollback()
+        invitation = await session.get(IdentityOnboardingInvitation, invitation_id)
+        assert invitation is not None and invitation.status == "pending"
+        assert invitation.consumed_at is None
+        assert (
+            await session.scalar(
+                select(UserCredential.id).where(UserCredential.user_id == user_id)
+            )
+            is None
+        )
+        await session.rollback()
+
+        activated = await service.activate(
+            session,
+            token=delivery.secret,
+            password="A-secure-retry-passphrase-42!",
+        )
+        assert activated.status == "activated"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_invitation_redemption_has_one_winner(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as setup:
+        record = await service.initiate(
+            setup,
+            context=context,
+            command=command(context, email=f"activation-race-{uuid4()}@example.test"),
+        )
+        invitation = await setup.scalar(
+            select(IdentityOnboardingInvitation).where(
+                IdentityOnboardingInvitation.onboarding_request_id == record.id
+            )
+        )
+        assert invitation is not None
+        invitation_id = invitation.id
+        await setup.rollback()
+        delivery = await service.claim_protected_delivery(
+            setup, invitation_id=invitation_id
+        )
+
+    async def redeem() -> IdentityOnboardingRequest:
+        async with factory() as session:
+            return await service.activate(
+                session,
+                token=delivery.secret,
+                password="A-secure-concurrent-passphrase-42!",
+            )
+
+    outcomes = await asyncio.gather(redeem(), redeem(), return_exceptions=True)
+    assert sum(isinstance(value, IdentityOnboardingRequest) for value in outcomes) == 1
+    assert sum(isinstance(value, OnboardingConflictError) for value in outcomes) == 1
+
+    async with factory() as verification:
+        assert (
+            await verification.scalar(
+                select(func.count(UserCredential.id)).where(
+                    UserCredential.user_id == record.user_id
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio
@@ -962,6 +1081,62 @@ async def test_reissue_supersedes_and_revoke_destroys_envelopes(
             ).all()
         )
         assert all(value.ciphertext == b"" for value in envelopes)
+
+
+@pytest.mark.asyncio
+async def test_reissue_only_latest_invitation_can_activate(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(context, email=f"latest-invite-{uuid4()}@example.test"),
+        )
+        first = await session.scalar(
+            select(IdentityOnboardingInvitation).where(
+                IdentityOnboardingInvitation.onboarding_request_id == record.id
+            )
+        )
+        assert first is not None
+        first_id = first.id
+        record_id = record.id
+        await session.rollback()
+        first_delivery = await service.claim_protected_delivery(
+            session, invitation_id=first_id
+        )
+        await session.rollback()
+
+        await service.reissue(session, context=context, request_id=record_id)
+        replacement = await session.scalar(
+            select(IdentityOnboardingInvitation).where(
+                IdentityOnboardingInvitation.onboarding_request_id == record_id,
+                IdentityOnboardingInvitation.status == "pending",
+            )
+        )
+        assert replacement is not None and replacement.id != first_id
+        replacement_id = replacement.id
+        await session.rollback()
+        latest_delivery = await service.claim_protected_delivery(
+            session, invitation_id=replacement_id
+        )
+
+        with pytest.raises(OnboardingConflictError):
+            await service.activate(
+                session,
+                token=first_delivery.secret,
+                password="A-secure-superseded-passphrase-42!",
+            )
+        await session.rollback()
+        activated = await service.activate(
+            session,
+            token=latest_delivery.secret,
+            password="A-secure-latest-passphrase-42!",
+        )
+        assert activated.status == "activated"
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import axios from "axios";
 
 import { apiClient } from "../api/client";
 import { brandConfig } from "../branding/brandConfig";
@@ -36,8 +37,14 @@ export function ActivationRoute() {
       setComplete(true);
       setPassword("");
       setConfirmation("");
-    } catch {
-      setError("This activation link is expired, already used, or unavailable. Ask your ACP administrator for a current invitation.");
+    } catch (failure) {
+      if (axios.isAxiosError(failure) && failure.response?.status === 422) {
+        setError("Choose a password with at least 12 characters, then try again. Your activation link is still available.");
+      } else if (axios.isAxiosError(failure) && failure.response?.status === 409) {
+        setError("This activation link is expired, already used, or unavailable. Ask your ACP administrator for a current invitation.");
+      } else {
+        setError("Activation could not be completed right now. Your link was not marked as used; try again.");
+      }
     } finally {
       setSubmitting(false);
     }
