@@ -170,6 +170,22 @@ class ExactCustomerAdmissionResult:
     replayed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class CleanMajorityAdmissionResult:
+    source_system: str
+    selected: int
+    admitted: int
+    replayed: int
+    quarantined: int
+    remaining_unexplained: int
+    before_digest: str
+    after_digest: str
+
+    def __post_init__(self) -> None:
+        if self.selected != self.admitted + self.replayed + self.quarantined:
+            raise ValueError("clean-majority Customer outcomes do not reconcile")
+
+
 class CustomerPopulationReconciliationService:
     def __init__(
         self,
@@ -403,6 +419,176 @@ class CustomerPopulationReconciliationService:
             return await self._current_counts_in_session(
                 session, context=context, source_system=source_system
             )
+
+    async def admit_clean_majority(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        source_system: str = HCP_SOURCE_SYSTEM,
+        limit: int = 5000,
+    ) -> CleanMajorityAdmissionResult:
+        """Admit exact safe rows independently and quarantine only failed rows."""
+        self._authorize(context)
+        if limit < 1 or limit > 5000:
+            raise CustomerPopulationReconciliationError(
+                "clean-majority admission limit must be between 1 and 5000"
+            )
+        before = await self.refresh_population(
+            factory, context=context, source_system=source_system
+        )
+        assert context.active_branch is not None
+        latest = (
+            select(
+                CustomerPopulationReconciliationDisposition.source_customer_id,
+                func.max(CustomerPopulationReconciliationDisposition.version).label(
+                    "version"
+                ),
+            )
+            .where(
+                CustomerPopulationReconciliationDisposition.company_id
+                == context.company.id,
+                CustomerPopulationReconciliationDisposition.branch_id
+                == context.active_branch.id,
+                CustomerPopulationReconciliationDisposition.source_system
+                == source_system,
+            )
+            .group_by(CustomerPopulationReconciliationDisposition.source_customer_id)
+            .subquery()
+        )
+        async with factory() as session:
+            candidates = tuple(
+                (
+                    await session.scalars(
+                        select(CustomerPopulationReconciliationDisposition)
+                        .join(
+                            latest,
+                            (
+                                latest.c.source_customer_id
+                                == CustomerPopulationReconciliationDisposition.source_customer_id
+                            )
+                            & (
+                                latest.c.version
+                                == CustomerPopulationReconciliationDisposition.version
+                            ),
+                        )
+                        .where(
+                            CustomerPopulationReconciliationDisposition.company_id
+                            == context.company.id,
+                            CustomerPopulationReconciliationDisposition.branch_id
+                            == context.active_branch.id,
+                            CustomerPopulationReconciliationDisposition.source_system
+                            == source_system,
+                            CustomerPopulationReconciliationDisposition.disposition
+                            == "UNEXPLAINED",
+                        )
+                        .order_by(
+                            CustomerPopulationReconciliationDisposition.source_customer_id
+                        )
+                        .limit(limit)
+                    )
+                ).all()
+            )
+
+        admitted = replayed = quarantined = 0
+        reviewed_artifacts: dict[UUID, ReviewedCustomerAdapterOutput] = {}
+        for candidate in candidates:
+            async with factory() as session:
+                artifact = await session.get(
+                    CustomerMigrationSourceArtifact, candidate.source_artifact_id
+                )
+                source_row = await session.get(
+                    CustomerMigrationSourceRow, candidate.source_row_id
+                )
+                if artifact is None or source_row is None:
+                    raise CustomerPopulationReconciliationError(
+                        "population disposition source evidence is unavailable"
+                    )
+                try:
+                    aggregate = self._aggregate(
+                        source_row,
+                        tuple(
+                            (
+                                await session.scalars(
+                                    select(CustomerMigrationCandidate).where(
+                                        CustomerMigrationCandidate.source_row_id
+                                        == source_row.id
+                                    )
+                                )
+                            ).all()
+                        ),
+                    )
+                    expected = customer_adapter_import_policy.expected_counts(
+                        (aggregate,)
+                    )
+                    command = ExactCustomerAdmissionCommand(
+                        source_system=source_system,
+                        source_customer_id=candidate.source_customer_id,
+                        source_artifact_id=artifact.id,
+                        expected_source_sha256=artifact.source_sha256,
+                        expected_source_row_sha256=source_row.source_row_sha256,
+                        expected_customers=expected.customers,
+                        expected_contacts=expected.contacts,
+                        expected_service_locations=expected.service_locations,
+                        expected_billing_addresses=expected.billing_addresses,
+                        idempotency_key=(
+                            f"clean-majority:{source_system}:"
+                            f"{candidate.source_identity_sha256[:32]}:"
+                            f"{candidate.source_row_sha256[:16]}"
+                        ),
+                        reason_code="deterministic_exact_provider_admission",
+                    )
+                    reviewed = reviewed_artifacts.get(artifact.id)
+                    if reviewed is None:
+                        reviewed = await self._reviewed_artifact(
+                            session, artifact=artifact
+                        )
+                        reviewed_artifacts[artifact.id] = reviewed
+                except (CustomerPopulationReconciliationError, ValueError):
+                    await self.hold_exact(
+                        factory,
+                        context=context,
+                        source_system=source_system,
+                        source_customer_id=candidate.source_customer_id,
+                        reason_code="source_aggregate_validation_required",
+                    )
+                    quarantined += 1
+                    continue
+            try:
+                result = await self.admit_exact(
+                    factory,
+                    context=context,
+                    command=command,
+                    _reviewed=reviewed,
+                )
+            except CustomerPopulationReconciliationError:
+                await self.hold_exact(
+                    factory,
+                    context=context,
+                    source_system=source_system,
+                    source_customer_id=candidate.source_customer_id,
+                    reason_code="deterministic_admission_review_required",
+                )
+                quarantined += 1
+                continue
+            if result.replayed:
+                replayed += 1
+            else:
+                admitted += 1
+
+        after = await self.refresh_population(
+            factory, context=context, source_system=source_system
+        )
+        return CleanMajorityAdmissionResult(
+            source_system=source_system,
+            selected=len(candidates),
+            admitted=admitted,
+            replayed=replayed,
+            quarantined=quarantined,
+            remaining_unexplained=after.counts.unexplained,
+            before_digest=before.evidence_digest,
+            after_digest=after.evidence_digest,
+        )
 
     async def _current_counts_in_session(
         self,
@@ -831,6 +1017,7 @@ class CustomerPopulationReconciliationService:
         *,
         context: AuthorizationContext,
         command: ExactCustomerAdmissionCommand,
+        _reviewed: ReviewedCustomerAdapterOutput | None = None,
     ) -> ExactCustomerAdmissionResult:
         self._authorize(context)
         assert context.active_branch is not None
@@ -883,7 +1070,16 @@ class CustomerPopulationReconciliationService:
                     raise CustomerPopulationReconciliationError(
                         "provider Customer is held for human review"
                     )
-                reviewed = await self._reviewed_artifact(session, artifact=artifact)
+                reviewed = _reviewed or await self._reviewed_artifact(
+                    session, artifact=artifact
+                )
+                if (
+                    reviewed.source_system != artifact.source_system
+                    or reviewed.source_sha256 != artifact.source_sha256
+                ):
+                    raise CustomerPopulationReconciliationError(
+                        "reviewed source evidence does not match the exact artifact"
+                    )
             aggregate = next(
                 (
                     item
