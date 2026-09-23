@@ -236,7 +236,14 @@ class EmployeeAdministrationSummary(WorkforceEmployeeSummary):
     delivery_status: str | None
     login_email: str | None
     masked_login: str | None
-    access_status: Literal["ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"]
+    access_status: Literal["ACTIVE", "LOCKED", "DISABLED", "INVITED", "NOT_LINKED"]
+    access_locked_at: datetime | None
+    access_locked_by_user_id: UUID | None
+    access_locked_by_display_name: str | None
+    access_lock_reason: str | None
+    active_assignment_count: int = Field(ge=0)
+    today_future_assignment_count: int = Field(ge=0)
+    future_assignment_count: int = Field(ge=0)
     mobile_readiness: Literal["READY", "BLOCKED", "NOT_LINKED"]
     mobile_readiness_blockers: tuple[str, ...]
 
@@ -253,6 +260,12 @@ class EmployeePermissionExplanation(WorkforceSchema):
 class EmployeeAdministrationDetail(EmployeeAdministrationSummary):
     permissions: tuple[EmployeePermissionExplanation, ...]
     workforce: WorkforceEmployeeDetail
+
+
+class EmployeeAccessLockRequest(WorkforceSchema):
+    locked: bool
+    reason: str = Field(min_length=3, max_length=500)
+    expected_authorization_version: int = Field(ge=1)
 
 
 class WorkforceProfileResponse(WorkforceSchema):

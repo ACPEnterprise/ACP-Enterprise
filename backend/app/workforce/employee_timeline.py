@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dispatch.models import DispatchAssignmentHistory
+from app.platform.audit.models import AuditRecord
 from app.platform.company.membership_models import Membership
 from app.platform.employees.models import Employee
 from app.platform.onboarding.models import IdentityOnboardingRequest
@@ -142,6 +143,38 @@ class EmployeeTimelineService:
                             None,
                         )
                     )
+
+        access_events = (
+            await session.scalars(
+                select(AuditRecord)
+                .where(
+                    AuditRecord.company_id == context.company.id,
+                    AuditRecord.resource_type == "employee",
+                    AuditRecord.resource_id == employee_id,
+                    AuditRecord.action.in_(
+                        (
+                            "workforce.employee_access_locked",
+                            "workforce.employee_access_unlocked",
+                        )
+                    ),
+                )
+                .order_by(AuditRecord.occurred_at, AuditRecord.id)
+            )
+        ).all()
+        for event in access_events:
+            if event.actor_user_id:
+                actor_ids.add(event.actor_user_id)
+            locked = event.action.endswith("_locked")
+            items.append(
+                self._item(
+                    "ACCESS_LOCKED" if locked else "ACCESS_UNLOCKED",
+                    event.occurred_at,
+                    "security_audit",
+                    f"Employee access {'locked' if locked else 'unlocked'}; employment and operating history were unchanged.",
+                    employee_id,
+                    event.actor_user_id,
+                )
+            )
 
         profile = await session.scalar(
             select(WorkforceCapabilityProfile).where(

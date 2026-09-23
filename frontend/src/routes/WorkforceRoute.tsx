@@ -9,7 +9,7 @@ import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
@@ -55,6 +55,9 @@ export function WorkforceRoute() {
     canAdministerIdentity && administration.data?.access_status === "ACTIVE",
   );
   const [confirmPasswordReset, setConfirmPasswordReset] = useState(false);
+  const [confirmAccessLock, setConfirmAccessLock] = useState(false);
+  const [accessLockReason, setAccessLockReason] = useState("");
+  const accessLock = useEmployeeAccessLock(selected);
   const accessMutation = useEmployeeAccessMutation(selected);
   const canManageMembership = permissionCodes.includes("COMPANY_MEMBERSHIP_MANAGE");
   const canManageBranches = permissionCodes.includes("COMPANY_BRANCH_ACCESS_MANAGE");
@@ -749,7 +752,9 @@ export function WorkforceRoute() {
                   </div>
                   <div>
                     <dt className="text-content-muted">Employee access</dt>
-                    <dd className="font-medium">{administration.data.access_status.replaceAll("_", " ")}</dd>
+                    <dd className={`font-semibold ${administration.data.access_status === "LOCKED" ? "text-status-danger" : ""}`}>
+                      ACCESS {administration.data.access_status === "ACTIVE" ? "ACTIVE" : administration.data.access_status}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-content-muted">Invite status</dt>
@@ -768,6 +773,22 @@ export function WorkforceRoute() {
                     <dd className="font-medium">{administration.data.employee_status === "active" ? "Active" : "Disabled"}</dd>
                   </div>
                 </dl>
+                {administration.data.access_status === "LOCKED" && (
+                  <Alert className="mt-4" variant="danger" title="Access locked">
+                    Locked {administration.data.access_locked_at ? new Date(administration.data.access_locked_at).toLocaleString() : "at an unavailable time"}
+                    {administration.data.access_locked_by_display_name ? ` by ${administration.data.access_locked_by_display_name}` : ""}. Reason: {administration.data.access_lock_reason ?? "Recorded in audit history"}. Old sessions remain revoked after unlock.
+                  </Alert>
+                )}
+                {canAdministerIdentity && administration.data.user_id && ["ACTIVE", "LOCKED"].includes(administration.data.access_status) && (
+                  <div className="mt-4 rounded-lg border border-stroke bg-surface-subtle p-3">
+                    <h5 className="text-sm font-semibold">Emergency access control</h5>
+                    <p className="mt-1 text-sm text-content-muted">Locking access is separate from employment status and preserves Employee and operating history.</p>
+                    <Button className="mt-3" variant={administration.data.access_status === "ACTIVE" ? "destructive" : "secondary"} onClick={() => { setAccessLockReason(""); setConfirmAccessLock(true); }}>
+                      {administration.data.access_status === "ACTIVE" ? "Lock Access" : "Unlock Access"}
+                    </Button>
+                    {accessLock.isError && <Alert className="mt-3" variant="danger">The access state was not changed. Refresh current authority and try again.</Alert>}
+                  </div>
+                )}
                 {canAdministerIdentity && administration.data.user_id && administration.data.access_status === "ACTIVE" && (
                   <div className="mt-4 rounded-lg bg-surface-subtle p-3">
                     <h5 className="text-sm font-semibold">Account Access</h5>
@@ -1033,6 +1054,33 @@ export function WorkforceRoute() {
           onCancel={() => setConfirmPasswordReset(false)}
           onConfirm={() => passwordReset.mutation.mutate(undefined, { onSuccess: () => setConfirmPasswordReset(false) })}
         />
+      )}
+      {confirmAccessLock && administration.data?.user_id && administration.data.authorization_version && (
+        <ConfirmationDialog
+          title={administration.data.access_status === "LOCKED" ? "Unlock employee access?" : "Lock employee access immediately?"}
+          description={administration.data.access_status === "LOCKED" ? "Future authentication will be restored, but every old web and Mobile session stays invalid. The employee must sign in again." : "This immediately blocks new authentication and revokes every active web, refresh, and Mobile session. Employment status and business history are unchanged."}
+          confirmLabel={administration.data.access_status === "LOCKED" ? "Unlock Access" : "Lock Access"}
+          destructive={administration.data.access_status !== "LOCKED"}
+          pending={accessLock.isPending}
+          onCancel={() => setConfirmAccessLock(false)}
+          onConfirm={() => {
+            if (accessLockReason.trim().length < 3) return;
+            accessLock.mutate({
+              locked: administration.data.access_status !== "LOCKED",
+              reason: accessLockReason.trim(),
+              expected_authorization_version: administration.data.authorization_version!,
+            }, { onSuccess: () => setConfirmAccessLock(false) });
+          }}
+        >
+          {administration.data.access_status !== "LOCKED" && (
+            <Alert variant={administration.data.active_assignment_count + administration.data.today_future_assignment_count + administration.data.future_assignment_count > 0 ? "warning" : "information"} title="Assignment check">
+              This employee currently has {administration.data.active_assignment_count + administration.data.today_future_assignment_count + administration.data.future_assignment_count} scheduled assignments ({administration.data.active_assignment_count} active now, {administration.data.today_future_assignment_count} later today, {administration.data.future_assignment_count} future). Assignments will not be canceled or reassigned. <Link className="font-semibold underline" to="/dispatch">Open Dispatch</Link> or <Link className="font-semibold underline" to="/scheduling">Scheduling</Link> to reassign work.
+            </Alert>
+          )}
+          <label className="block font-medium" htmlFor="employee-access-lock-reason">Reason</label>
+          <Input id="employee-access-lock-reason" value={accessLockReason} onChange={(event) => setAccessLockReason(event.target.value)} minLength={3} maxLength={500} required placeholder={administration.data.access_status === "LOCKED" ? "Reason access may be restored" : "Emergency security reason"} />
+          {accessLockReason.trim().length > 0 && accessLockReason.trim().length < 3 && <p className="text-status-danger">Enter at least 3 characters.</p>}
+        </ConfirmationDialog>
       )}
       </div>
     </div>
