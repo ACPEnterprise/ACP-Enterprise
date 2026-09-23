@@ -141,3 +141,14 @@ def test_employee_access_status_distinguishes_invited_and_disabled() -> None:
     )
     assert disabled[0] == "DISABLED"
     assert "employee_inactive" in disabled[2]
+
+    locked = EmployeeAdministrationService._access_and_mobile_readiness(
+        employee_status="active",
+        membership_status="active",
+        user_status="locked",
+        has_branch_access=True,
+        effective_permission_codes=MOBILE_REQUIRED_PERMISSION_CODES,
+    )
+    assert locked[0] == "LOCKED"
+    assert locked[1] == "BLOCKED"
+    assert "user_inactive" in locked[2]
