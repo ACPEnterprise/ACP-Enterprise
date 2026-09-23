@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -29,6 +30,7 @@ from app.payments.models import (
     ReconciliationException,
     Refund,
 )
+from app.payments.money_authority import MoneyAuthorityService
 from app.payments.provider import DeterministicFakeProvider
 from app.payments.router import _error
 from app.payments.service import PaymentService
@@ -388,6 +390,97 @@ async def test_provider_response_loss_persists_uncertainty_without_leak_or_resub
     assert exception is not None
     assert exception.reason_code == "ambiguous_processor_outcome"
     assert "secret provider" not in str(attempt.evidence_digest)
+
+
+@pytest.mark.asyncio
+async def test_money_projection_keeps_charge_settlement_fee_and_deposit_distinct(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    provider = CountingFakeProvider()
+    service = PaymentService(provider, "synthetic-merchant")
+    today = datetime.now(ZoneInfo(settings.business_timezone)).date()
+    async with factory() as session:
+        await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("100.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_money_projection",
+                idempotency_key=f"money-projection-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        before_settlement = await MoneyAuthorityService().projection(
+            session,
+            company_id=company.id,
+            authorized_branch_ids=frozenset({branch.id}),
+            period_start=today,
+            period_end=today,
+            as_of=today,
+            branch_id=None,
+        )
+    card = before_settlement["card_processing"]
+    assert card["transaction_count"] == 1
+    assert card["amount_charged"]["amount"] == Decimal("100.00")
+    assert card["fees_paid"]["evidence_state"] == "UNAVAILABLE"
+    assert before_settlement["collection_state"]["deposited"]["amount"] is None
+
+    async with factory() as session:
+        await service.record_settlement(
+            session,
+            RecordSettlement(
+                company_id=company.id,
+                provider=provider.name,
+                merchant_account="synthetic-merchant",
+                provider_payout_id=f"payout-{uuid4()}",
+                currency="USD",
+                settlement_date=today,
+                gross_amount=Decimal("100.00"),
+                refund_amount=Decimal("0.00"),
+                dispute_amount=Decimal("0.00"),
+                fee_amount=Decimal("3.00"),
+                adjustment_amount=Decimal("0.00"),
+                net_amount=Decimal("97.00"),
+                evidence_digest="a" * 64,
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        projection = await MoneyAuthorityService().projection(
+            session,
+            company_id=company.id,
+            authorized_branch_ids=frozenset({branch.id}),
+            period_start=today,
+            period_end=today,
+            as_of=today,
+            branch_id=None,
+        )
+        branch_projection = await MoneyAuthorityService().projection(
+            session,
+            company_id=company.id,
+            authorized_branch_ids=frozenset({branch.id}),
+            period_start=today,
+            period_end=today,
+            as_of=today,
+            branch_id=branch.id,
+        )
+    assert projection["card_processing"]["fees_paid"]["amount"] == Decimal("3.00")
+    assert projection["card_processing"]["effective_fee_rate"] == Decimal("0.0300")
+    assert projection["collection_state"]["settled_net"]["amount"] == Decimal("97.00")
+    assert (
+        projection["collection_state"]["deposited"]["evidence_state"] == "UNAVAILABLE"
+    )
+    assert branch_projection["card_processing"]["transaction_count"] == 1
+    assert branch_projection["card_processing"]["fees_paid"]["amount"] is None
+    assert (
+        branch_projection["card_processing"]["fees_paid"]["evidence_state"]
+        == "UNAVAILABLE"
+    )
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
 import { useCompletedJobTrend } from "../hooks/useJobs";
+import { useMoneyPosition } from "../hooks/usePayments";
 import { CommandCenterRoute } from "./CommandCenterRoute";
 
 vi.mock("../auth/useAuth");
@@ -19,6 +20,7 @@ vi.mock("../hooks/useBusinessEconomics");
 vi.mock("../hooks/useDispatch");
 vi.mock("../hooks/useInvoices");
 vi.mock("../hooks/useJobs");
+vi.mock("../hooks/usePayments");
 
 const permissions = new Set([
   "COMPANY_INVOICE_READ",
@@ -26,6 +28,7 @@ const permissions = new Set([
   "COMPANY_DISPATCH_READ",
   "COMPANY_ANALYTICS_READ",
   "COMPANY_ECONOMICS_MEASUREMENT_READ",
+  "COMPANY_PAYMENT_READ",
 ]);
 
 function queryResult<T>(data: T) {
@@ -162,6 +165,100 @@ function arrange() {
       mutation_authority: "none",
     }),
   );
+  vi.mocked(useMoneyPosition).mockReturnValue(
+    queryResult({
+      company_id: "company-1",
+      branch_id: null,
+      period_start: "2026-09-22",
+      period_end: "2026-09-22",
+      as_of: "2026-09-22",
+      generated_at: "2026-09-22T12:00:00Z",
+      bank_balance: {
+        amount: null,
+        currency: null,
+        evidence_state: "UNAVAILABLE",
+        limitation: "No sanctioned authoritative bank-balance source is connected.",
+        connection_state: "NOT_CONNECTED",
+        provider_as_of: null,
+        last_sync_at: null,
+      },
+      accounts_receivable_due_today: {
+        amount: "500.00",
+        currency: "USD",
+        evidence_state: "AVAILABLE",
+        limitation: null,
+        invoice_count: 1,
+        drilldown_path: "/invoices?agingBucket=due_today&asOf=2026-09-22",
+      },
+      cod_expected_today: {
+        amount: null,
+        currency: null,
+        evidence_state: "UNAVAILABLE",
+        limitation: "Scheduled COD value is not authoritative.",
+      },
+      expected_collections_today: {
+        amount: null,
+        currency: null,
+        evidence_state: "INCOMPLETE",
+        limitation: "COD evidence is incomplete.",
+      },
+      card_processing: {
+        transaction_count: 2,
+        amount_charged: {
+          amount: "640.00",
+          currency: "USD",
+          evidence_state: "AVAILABLE",
+          limitation: null,
+        },
+        refund_amount: {
+          amount: "0.00",
+          currency: "USD",
+          evidence_state: "AVAILABLE",
+          limitation: null,
+        },
+        chargeback_amount: {
+          amount: "0.00",
+          currency: "USD",
+          evidence_state: "AVAILABLE",
+          limitation: null,
+        },
+        fees_paid: {
+          amount: null,
+          currency: null,
+          evidence_state: "UNAVAILABLE",
+          limitation: "No provider settlement evidence is available.",
+        },
+        effective_fee_rate: null,
+        limitation: "Settlement fees are not allocated to charges.",
+      },
+      collection_state: {
+        collected: {
+          amount: "750.00",
+          currency: "USD",
+          evidence_state: "AVAILABLE",
+          limitation: null,
+        },
+        settled_gross: {
+          amount: null,
+          currency: null,
+          evidence_state: "UNAVAILABLE",
+          limitation: "No provider settlement evidence is available.",
+        },
+        settled_net: {
+          amount: null,
+          currency: null,
+          evidence_state: "UNAVAILABLE",
+          limitation: "No provider settlement evidence is available.",
+        },
+        deposited: {
+          amount: null,
+          currency: null,
+          evidence_state: "UNAVAILABLE",
+          limitation: "No bank-confirmed deposit evidence is available.",
+        },
+      },
+    }),
+  );
 }
 
 describe("CommandCenterRoute", () => {
@@ -197,11 +294,8 @@ describe("CommandCenterRoute", () => {
     expect(economicStatus).toHaveClass("border-2", "border-dashed");
     expect(economicStatus).not.toHaveClass("twelve-hats-panel-outline");
     expect(screen.getByText(/Hammer Haag/)).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "No live card processor is connected. Transaction count, charged amount, and fees are unknown.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("$640")).toBeInTheDocument();
+    expect(screen.getByText("No provider settlement evidence is available.")).toBeInTheDocument();
     const bankTile = screen.getByText("Bank cash / available").parentElement;
     expect(bankTile).not.toBeNull();
     expect(
@@ -262,9 +356,13 @@ describe("CommandCenterRoute", () => {
       true,
     );
     expect(useAnalyticsSummary).toHaveBeenLastCalledWith(false);
-    expect(
-      screen.getAllByText("Unavailable at Branch scope").length,
-    ).toBeGreaterThan(0);
+    expect(useMoneyPosition).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      "branch-1",
+      true,
+    );
   });
 
   it("enforces domain read permissions at every data request", () => {
@@ -294,5 +392,12 @@ describe("CommandCenterRoute", () => {
     );
     expect(useAnalyticsSummary).toHaveBeenCalledWith(false);
     expect(useEconomicsMeasurementFoundation).toHaveBeenCalledWith(false);
+    expect(useMoneyPosition).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      undefined,
+      false,
+    );
   });
 });

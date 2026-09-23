@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -7,10 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_database_session
 from app.payments.contracts import ApplyReceipt, CreateIntent, RequestRefund
 from app.payments.errors import PaymentConflict, PaymentError, PaymentNotFound
+from app.payments.money_authority import money_authority_service
 from app.payments.schemas import (
     ApplyInput,
     CollectInput,
     IntentItem,
+    MoneyPositionItem,
     ReceiptItem,
     RefundInput,
     RefundItem,
@@ -71,6 +74,37 @@ def _not_found() -> HTTPException:
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
     if not context.can_access_branch(branch_id):
         raise _not_found()
+
+
+@router.get("/money-position", response_model=MoneyPositionItem)
+async def money_position(
+    context: Read,
+    session: Session,
+    period_start: date,
+    period_end: date,
+    as_of: date,
+    branch_id: UUID | None = None,
+) -> MoneyPositionItem:
+    if period_end < period_start:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Money period end must not precede its start.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+    if branch_id is not None:
+        _branch(context, branch_id)
+    result = await money_authority_service.projection(
+        session,
+        company_id=context.company.id,
+        authorized_branch_ids=context.authorized_branch_ids,
+        period_start=period_start,
+        period_end=period_end,
+        as_of=as_of,
+        branch_id=branch_id,
+    )
+    return MoneyPositionItem.model_validate(result)
 
 
 @router.post("/intents", response_model=IntentItem, status_code=status.HTTP_201_CREATED)
