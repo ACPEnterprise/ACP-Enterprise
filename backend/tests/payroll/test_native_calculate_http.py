@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
-from app.payroll.contracts import CompensationType, canonical_digest
 from app.payroll.calculation import GrossPayCalculationError
+from app.payroll.contracts import CompensationType, canonical_digest
 from app.payroll.models import (
     CompanyPayrollPolicyVersion,
     EmployeeCompensationAuthorityVersion,
@@ -444,7 +444,7 @@ async def test_first_calculation_http_persists_new_authority(
 async def test_calculate_wrong_company_is_denied_without_mutation(
     native_calculate_database: async_sessionmaker[AsyncSession],
 ) -> None:
-    company_id, run_id, run_digest = await _seed_case(native_calculate_database)
+    _, run_id, run_digest = await _seed_case(native_calculate_database)
     other_company_id, _, _ = await _seed_case(native_calculate_database)
     context = await _context_for(native_calculate_database, other_company_id)
     app = _app_for(native_calculate_database, context)
