@@ -182,6 +182,9 @@ export async function closePayrollRun(runId: string, reason: string, idempotency
 export async function reviewPayrollRun(runId: string, reason: string): Promise<Record<string, unknown>> {
   return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/review`, { reason_code: reason })).data;
 }
+export async function decidePayrollRunReview(runId: string, reason: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/review/decision`, { decision: "accepted", reason_code: reason })).data;
+}
 export async function approvePayrollRun(runId: string, reason: string): Promise<Record<string, unknown>> {
   return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/approve`, { reason_code: reason })).data;
 }
