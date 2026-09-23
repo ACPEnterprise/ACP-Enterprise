@@ -4,13 +4,10 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
@@ -43,6 +40,9 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling.models import Appointment  # noqa: F401
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class CountingFakeProvider(DeterministicFakeProvider):
@@ -399,7 +399,7 @@ async def test_money_projection_keeps_charge_settlement_fee_and_deposit_distinct
     factory, company, branch, actor, customer = payment_fixture
     provider = CountingFakeProvider()
     service = PaymentService(provider, "synthetic-merchant")
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(ZoneInfo(settings.business_timezone)).date()
     async with factory() as session:
         await service.collect(
             session,

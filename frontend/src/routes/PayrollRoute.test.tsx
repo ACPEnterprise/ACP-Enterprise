@@ -23,6 +23,10 @@ vi.mock("../hooks/usePayroll", () => ({
   usePayrollReports: vi.fn(),
   useComplianceSchemas: vi.fn(),
   usePayrollPeriodOperations: vi.fn(),
+  usePayrollRunActions: vi.fn(() => ({
+    calculate: { isPending: false, mutateAsync: vi.fn() },
+    close: { isPending: false, mutateAsync: vi.fn() },
+  })),
 }));
 vi.mock("../hooks/useWorkdayTime", () => ({
   useCreatePayPeriod: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),

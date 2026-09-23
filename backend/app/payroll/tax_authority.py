@@ -457,6 +457,7 @@ class PayrollInputAuthorityService:
         gross_result_id: UUID,
         as_of_date: date,
         requirements: tuple[AuthorityRequirement, ...],
+        commit: bool = True,
     ) -> TaxDeductionAdmissionResult:
         self._require(context, PayrollPermission.CALCULATION_READ)
         gross = await session.scalar(
@@ -534,7 +535,8 @@ class PayrollInputAuthorityService:
             }
         )
         self._stage_admission(session, context=context, result=result)
-        await session.commit()
+        if commit:
+            await session.commit()
         return result
 
     async def _resolve(

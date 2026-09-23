@@ -61,7 +61,7 @@ function FindingCard({ finding }: { finding: LuminaryFinding }) {
     "policy_required",
   ].includes(finding.finding_class);
   return (
-    <Card className={warning ? "border-status-warning" : undefined}>
+    <Card tone={warning ? "warning" : "normal"}>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-content-muted">

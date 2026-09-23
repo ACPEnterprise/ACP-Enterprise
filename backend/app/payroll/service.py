@@ -550,7 +550,9 @@ class PayrollAuthorityService:
         time_input: PayrollTimeInputSnapshot | None,
         pay_period_schedule_definition_id: str | None = None,
         pay_period_schedule_version: int | None = None,
+        pay_period_id: UUID | None = None,
         resolution_conflict: bool = False,
+        commit: bool = True,
     ) -> PayrollAdmissionResult:
         self._require(context, PayrollPermission.ADMISSION_REVIEW)
         result = evaluate_payroll_admission(
@@ -561,6 +563,7 @@ class PayrollAuthorityService:
             time_input=time_input,
             pay_period_schedule_definition_id=pay_period_schedule_definition_id,
             pay_period_schedule_version=pay_period_schedule_version,
+            pay_period_id=pay_period_id,
             resolution_conflict=resolution_conflict,
         )
         event_id = uuid4()
@@ -581,7 +584,8 @@ class PayrollAuthorityService:
                 ),
             },
         )
-        await session.commit()
+        if commit:
+            await session.commit()
         return result
 
     @staticmethod

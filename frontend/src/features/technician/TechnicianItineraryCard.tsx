@@ -39,6 +39,11 @@ export function TechnicianItineraryCard({ item }: { readonly item: TechnicianIti
             {time.format(new Date(item.window_start_at))}–{time.format(new Date(item.window_end_at))}
           </span>
         </p>
+        <p className="text-body-s text-content-secondary">
+          <span className="font-semibold">Service:</span>{" "}
+          {item.job_type_code?.replaceAll("_", " ") ?? "Service type unavailable"}
+          {item.job_status ? ` · ${item.job_status.replaceAll("_", " ")}` : ""}
+        </p>
         <p className="flex gap-ui-2 text-body-s text-content-secondary">
           <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>{item.service_location_label}</span>

@@ -12,6 +12,7 @@ export interface TechnicianItineraryItem {
   readonly appointment_number: string;
   readonly job_id: string | null;
   readonly job_number: string | null;
+  readonly job_type_code: string | null;
   readonly job_status: "ready" | "in_progress" | "paused" | "completed" | string | null;
   readonly job_version: number | null;
   readonly customer_display_name: string;

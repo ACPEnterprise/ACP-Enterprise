@@ -5,7 +5,7 @@ import { JobPriorityBadge, JobStatusBadge } from "./JobBadges";
 export function JobsTable({ jobs }: { readonly jobs: readonly JobListItem[] }) {
   return <>
     <div className="grid gap-ui-3 p-ui-3 md:hidden" data-testid="jobs-mobile-cards">
-      {jobs.map((job) => <article key={job.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-ui-4">
+      {jobs.map((job) => <article key={job.id} className="twelve-hats-panel-outline min-w-0 rounded-xl border bg-surface p-ui-4">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <Link className="break-all font-semibold text-action-primary hover:underline" to={`/jobs/${job.id}`}>{job.job_number}</Link>

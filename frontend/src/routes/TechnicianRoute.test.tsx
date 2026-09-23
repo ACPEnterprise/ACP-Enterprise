@@ -22,6 +22,8 @@ describe("TechnicianRoute", () => {
             appointment_number: "APT-1001",
             job_id: "job-1",
             job_number: "JOB-1001",
+            job_type_code: "service_call",
+            job_status: "ready",
             customer_display_name: "Taylor Home",
             service_location_label: "10 Main Street, Springfield",
             window_start_at: "2026-08-26T13:00:00Z",
@@ -42,6 +44,7 @@ describe("TechnicianRoute", () => {
     expect(screen.getByLabelText("Service date")).toBeInTheDocument();
     expect(screen.getByText("Taylor Home")).toBeInTheDocument();
     expect(screen.getByText("En route")).toBeInTheDocument();
+    expect(screen.getByText(/service call · ready/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open JOB-1001" })).toHaveAttribute("href", "/jobs/job-1");
   });
 

@@ -32,6 +32,9 @@
   --acp-heritage-red-900: oklch(0.29 0.105 26);
   --acp-heritage-red-950: oklch(0.19 0.07 25);
 
+  /* Canonical Twelve Hats normal card/panel outline. Keep exact for brand custody. */
+  --twelve-hats-panel-red: #c01529;
+
   --acp-white: oklch(1 0 0);
   --acp-slate-50: oklch(0.98 0.004 255);
   --acp-slate-100: oklch(0.95 0.008 255);

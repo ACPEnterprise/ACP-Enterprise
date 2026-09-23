@@ -60,6 +60,7 @@ from app.operational_migration.product_router import router as migration_product
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
 from app.payroll.cutover_router import router as payroll_cutover_router
+from app.payroll.operator_router import router as payroll_operator_router
 from app.payroll.router import router as payroll_router
 from app.payroll.setup_router import router as payroll_setup_router
 from app.pipeline.router import router as pipeline_router
@@ -219,6 +220,7 @@ app.include_router(invoicing_router)
 app.include_router(payments_router)
 app.include_router(payroll_router)
 app.include_router(payroll_setup_router)
+app.include_router(payroll_operator_router)
 app.include_router(payroll_cutover_router)
 app.include_router(accounts_payable_router)
 app.include_router(communications_router)
