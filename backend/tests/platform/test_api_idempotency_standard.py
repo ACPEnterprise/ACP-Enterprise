@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.main import app
 from app.platform.contracts.manifest import platform_contract_manifest
 from app.platform.idempotency.contracts import (
@@ -48,6 +49,7 @@ DOMAIN_REPLAY_EVIDENCE = {
     "inventory": "tests/inventory/test_inventory_adjustments.py",
     "invoices": "tests/invoicing/test_invoice_ar.py",
     "operations": "tests/operations/test_operations_service.py",
+    "payroll": "tests/payroll/test_native_calculate_http.py",
     "payroll_cutover": "tests/payroll/test_cutover_replay_safety.py",
     "operational_assets": "tests/operational_assets/test_operational_assets.py",
     "payments": "tests/payments/test_provider_boundary.py",
