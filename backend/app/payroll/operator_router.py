@@ -312,6 +312,13 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
         raise HTTPException(409, "Payroll run version is stale")
     if await session.scalar(select(PayrollRunCloseRecord.id).where(PayrollRunCloseRecord.company_id == context.company.id, PayrollRunCloseRecord.run_id == run.id)) is not None:
         raise HTTPException(409, "closed Payroll authority cannot be recalculated")
+    # Serialize calculation attempts for one Company/run.  The lock spans the
+    # replay lookup and the result/receipt transaction, so concurrent callers
+    # cannot both observe an uncalculated run and create duplicate authority.
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"payroll-calculate:{context.company.id}:{run.id}"},
+    )
     # Include the optimistic version in the mutation fingerprint.  Reusing an
     # idempotency key with a different expected version is a contradictory
     # replay, not a valid replay of the original calculation request.
@@ -372,18 +379,19 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
                 pay_period_schedule_definition_id=period.schedule_definition_id,
                 pay_period_schedule_version=int(period.schedule_version),
                 pay_period_id=period.id,
+                commit=False,
             )
             from app.payroll.calculation_adapter import build_gross_inputs
             inputs = build_gross_inputs(company_id=context.company.id, employee_id=member.employee_id, pay_period_id=period.id, period_start=period.period_start, period_end=period.period_end, schedule_definition_id=period.schedule_definition_id, schedule_version=int(period.schedule_version), admission=admission, policy=policy, compensation=compensation)
             candidate = gross_engine.calculate(actor_permissions=context.permission_codes, company_id=inputs.company_id, employee_id=inputs.employee_id, period=inputs.period, admission=inputs.admission, policy=inputs.policy, compensation=inputs.compensation, time_input=time_input, currency=run.currency, calculated_at=datetime.now(timezone.utc))
-            persisted_gross = await gross_service.persist_candidate(session, context=context, candidate=candidate)
+            persisted_gross = await gross_service.persist_candidate(session, context=context, candidate=candidate, commit=False)
             # The tax engine consumes an approved gross evidence contract.  Use
             # the existing governed review transition rather than fabricating a
             # second gross result authority.
-            await gross_service.initiate_review(session, context=context, result_id=persisted_gross.id, reason_code="operator_calculate")
-            await gross_service.decide_review(session, context=context, result_id=persisted_gross.id, decision=GrossReviewDecision.ACCEPTED, reason_code="operator_calculate")
+            await gross_service.initiate_review(session, context=context, result_id=persisted_gross.id, reason_code="operator_calculate", commit=False)
+            await gross_service.decide_review(session, context=context, result_id=persisted_gross.id, decision=GrossReviewDecision.ACCEPTED, reason_code="operator_calculate", commit=False)
             requirements = (AuthorityRequirement(PayrollInputDomain.TAX, "federal_income_tax", member.employee_id), AuthorityRequirement(PayrollInputDomain.TAX, "social_security_employee", member.employee_id), AuthorityRequirement(PayrollInputDomain.TAX, "medicare_employee", member.employee_id))
-            tax_admission = await PayrollInputAuthorityService(cipher=configured_input_cipher()).evaluate_admission(session, context=context, gross_result_id=persisted_gross.id, as_of_date=period.period_start, requirements=requirements)
+            tax_admission = await PayrollInputAuthorityService(cipher=configured_input_cipher()).evaluate_admission(session, context=context, gross_result_id=persisted_gross.id, as_of_date=period.period_start, requirements=requirements, commit=False)
             if tax_admission.state.value not in {"ready", "not_applicable"}:
                 raise HTTPException(409, {"code": "PAYROLL_CALCULATION_BLOCKED", "blockers": list(tax_admission.blockers)})
             resolutions = tuple(item for item in tax_admission.resolutions if item.authority_id is not None)
@@ -394,13 +402,12 @@ async def calculate_run(run_id: UUID, payload: CalculateInput, context: Calculat
             federal = build_federal_authority_inputs(company_id=context.company.id, employee_id=member.employee_id, effective_on=period.period_start, pay_frequency=str(policy.definition.pay_frequency), authorities=authority_rows, envelopes=envelopes, cipher=configured_input_cipher())
             evidence = ApprovedGrossPayEvidence(persisted_result_id=persisted_gross.id, persisted_lifecycle="approved", persisted_company_id=persisted_gross.company_id, persisted_employee_id=persisted_gross.employee_id, persisted_pay_period_id=persisted_gross.pay_period_id, persisted_calculation_digest=persisted_gross.calculation_digest, persisted_currency=persisted_gross.currency, persisted_gross_pay_total=persisted_gross.gross_pay_total, candidate=candidate)
             tax_candidate = tax_engine.calculate(actor_permissions=context.permission_codes, gross=evidence, admission=tax_admission, tax_instructions=federal.tax_instructions, deduction_instructions=federal.deduction_instructions, calculated_at=datetime.now(timezone.utc))
-            persisted_tax = await tax_service.persist_candidate(session, context=context, candidate=tax_candidate, admission=tax_admission)
+            persisted_tax = await tax_service.persist_candidate(session, context=context, candidate=tax_candidate, admission=tax_admission, commit=False)
             member.gross_result_id = persisted_gross.id
             member.gross_result_digest = persisted_gross.calculation_digest
             member.tax_result_id = persisted_tax.id
             member.tax_result_digest = persisted_tax.calculation_digest
             member.disposition = "ready"
-            await session.commit()
         members = tuple((await session.scalars(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.company_id == context.company.id, PayrollRunMemberRecord.run_id == run.id))).all())
 
     gross_ids = [item.gross_result_id for item in members if item.gross_result_id is not None]
