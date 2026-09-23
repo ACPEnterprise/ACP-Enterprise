@@ -58,6 +58,7 @@ class EventType(str, Enum):
     PAYROLL_TAX_RESULT_SUPERSEDED = "payroll.tax_result_superseded"
     PAYROLL_TAX_RESULT_VOIDED = "payroll.tax_result_voided"
     PAYROLL_RUN_ASSEMBLED = "payroll.run_assembled"
+    PAYROLL_RUN_CALCULATED = "payroll.run_calculated"
     PAYROLL_RUN_REVIEW_INITIATED = "payroll.run_review_initiated"
     PAYROLL_RUN_REVIEW_ACCEPTED = "payroll.run_review_accepted"
     PAYROLL_RUN_REVIEW_REJECTED = "payroll.run_review_rejected"
