@@ -7,7 +7,7 @@ ACH, payment, Accounting posting, Customer communication, or Production change.
 ## Current authority
 
 - Protected branch: `origin/customer-management-v1`
-- Protected SHA at preparation: `5e17284374b2cb30778ee2d714a79b3d43b0b1c4`
+- Protected SHA at final qualification: `77ff508bdfac8607744c59e127fe01c24701d5f9`
 - Canonical Alembic head: `p2r4t6v8x1z3`
 - Lineage: 181 revisions, one root, one head, no structural risks
 - Lineage digest: `fe185aef52cc4ff999efe871fef72454d970bbdcbb8a176278ea1a5f53200d92`
@@ -114,3 +114,20 @@ before protected integration. Passing tests make the security gate eligible for
 review; they do not substitute for first-calculation proof, real assignment
 acceptance, deployed revision evidence, backup/rollback qualification, or owner
 approval.
+
+## Local qualification result
+
+Against protected authority `77ff508bdfac8607744c59e127fe01c24701d5f9`:
+
+- Python 3.12 static gate: PASS — Ruff, MyPy (835 files), compile, dependency
+  pins, pip check, pip-audit, secret custody, lineage, and diff checks.
+- PostgreSQL-backed gate: PASS — 350 Payroll, Dispatch, Scheduling, My Day,
+  authentication, authorization, idempotency, and Factory Control tests.
+- Dispatch SQLAlchemy warnings: repaired; 9/9 service tests pass with
+  `SAWarning` promoted to errors.
+- Frontend: PASS — 0 vulnerabilities, ESLint, TypeScript, 17 files/79 tests,
+  and Production build.
+- Mobile My Day: PASS — lint, TypeScript, and 17/17 tests. Dependency audit
+  remains the explicitly disclosed build-only moderate disposition above.
+- Deployed Beta validation: NOT YET EXECUTED; OM1E/Release owns deployment and
+  the sanctioned real-user acceptance boundary.
