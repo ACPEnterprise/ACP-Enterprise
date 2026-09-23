@@ -8,6 +8,7 @@ import {
   usePayrollPeriodOperations,
   usePayrollOperatingRegisters,
   usePayrollReports,
+  usePayrollRunActions,
 } from "../hooks/usePayroll";
 import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
 import { PayrollRoute } from "./PayrollRoute";
@@ -330,5 +331,23 @@ describe("PayrollRoute authorization", () => {
     expect(screen.getByTestId("payroll-employee-setup")).toHaveTextContent(
       "Payroll setup for employee-1",
     );
+  });
+
+  it("renders and invokes Review for a calculated run", async () => {
+    permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_REVIEW"]);
+    const review = vi.fn().mockResolvedValue({ lifecycle: "reviewed" });
+    vi.mocked(usePayrollRunActions).mockReturnValue({
+      assemble: { isPending: false, mutateAsync: vi.fn() }, calculate: { isPending: false, mutateAsync: vi.fn() },
+      review: { isPending: false, mutateAsync: review }, approve: { isPending: false, mutateAsync: vi.fn() },
+      close: { isPending: false, mutateAsync: vi.fn() }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+      voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+    } as never);
+    vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: true, aggregate_approved_gross: "100.00", aggregate_approved_net: "80.00", reconciliation_state: "reconciled", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: { assembled: 1 }, member_dispositions: { ready: 1 }, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
+    vi.mocked(usePayrollOperatingRegisters).mockReturnValue(query([{ run_id: "run-1", period_start: "2026-09-01", period_end: "2026-09-07", processing_date: "2026-09-08", payday: "2026-09-09", lifecycle: "assembled", review_state: "not_started", currency: "USD", members: [{ employee_id: "employee-1", employee_number: "E-1", employee_name: "Real Employee", status: "READY", blockers: [], accepted_minutes: 2400, regular_minutes: 2400, overtime_minutes: 0, compensation_authority_id: "comp-1", earnings: [], withholdings_deductions_liabilities: [], gross: "100.00", employee_taxes: "20.00", deductions: "0.00", net_pay: "80.00", employer_liabilities: "0.00", tax_rule_version: "2026", money_version: "1", calculation_digest: "digest" }], liability_totals: { employee_taxes: "20.00", employee_deductions: "0.00", employer_liabilities: "0.00" }, manual_tax_filing_payment_required: true, run_digest: "run" }]) as never);
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
+    const reviewButton = screen.getByRole("button", { name: "Review Payroll" });
+    expect(reviewButton).toBeEnabled();
+    fireEvent.click(reviewButton);
+    await waitFor(() => expect(review).toHaveBeenCalledWith({ runId: "run-1", reason: "Operator reviewed Payroll register" }));
   });
 });
