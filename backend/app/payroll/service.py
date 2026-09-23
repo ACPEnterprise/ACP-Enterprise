@@ -552,6 +552,7 @@ class PayrollAuthorityService:
         pay_period_schedule_version: int | None = None,
         pay_period_id: UUID | None = None,
         resolution_conflict: bool = False,
+        commit: bool = True,
     ) -> PayrollAdmissionResult:
         self._require(context, PayrollPermission.ADMISSION_REVIEW)
         result = evaluate_payroll_admission(
@@ -583,7 +584,8 @@ class PayrollAuthorityService:
                 ),
             },
         )
-        await session.commit()
+        if commit:
+            await session.commit()
         return result
 
     @staticmethod
