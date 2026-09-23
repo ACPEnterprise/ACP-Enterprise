@@ -13,6 +13,8 @@ import sys
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 # Standalone commands must register the complete SQLAlchemy model graph before
 # authorization resolution or migration-owned persistence is used.
 from app import main as application_model_registry  # noqa: F401
@@ -31,7 +33,6 @@ from app.platform.permissions.authorization import (
     AuthorizationError,
     authorization_service,
 )
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 async def authorized_context(
@@ -97,6 +98,24 @@ async def execute_action(
             "version": disposition.version,
             "evidence_digest": disposition.evidence_digest,
         }
+    if args.action == "admit-clean-majority":
+        result = await service.admit_clean_majority(
+            factory,
+            context=context,
+            source_system=args.source_system,
+            limit=args.limit,
+        )
+        return {
+            "classification": "CUSTOMER_CLEAN_MAJORITY_ADMISSION_COMPLETE",
+            "source_system": result.source_system,
+            "selected": result.selected,
+            "admitted": result.admitted,
+            "replayed": result.replayed,
+            "quarantined": result.quarantined,
+            "remaining_unexplained": result.remaining_unexplained,
+            "before_digest": result.before_digest,
+            "after_digest": result.after_digest,
+        }
     if args.action == "admit":
         result = await service.admit_exact(
             factory,
@@ -146,6 +165,10 @@ def parser() -> argparse.ArgumentParser:
     hold.add_argument("--source-system", default=HCP_SOURCE_SYSTEM)
     hold.add_argument("--provider-customer-id", required=True)
     hold.add_argument("--reason-code", required=True)
+
+    clean_majority = actions.add_parser("admit-clean-majority")
+    clean_majority.add_argument("--source-system", default=HCP_SOURCE_SYSTEM)
+    clean_majority.add_argument("--limit", type=int, default=5000)
 
     admit = actions.add_parser("admit")
     admit.add_argument("--source-system", default=HCP_SOURCE_SYSTEM)

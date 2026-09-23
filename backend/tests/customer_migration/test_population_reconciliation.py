@@ -9,7 +9,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -215,7 +215,9 @@ async def stage_hammer(
 ) -> CustomerMigrationSourceArtifact:
     assert context.active_branch is not None
     customer, contact, locations = hammer_aggregate()
-    source_sha256 = digest(f"authoritative-hcp-artifact:{context.company.id}")
+    source_sha256 = digest(
+        f"authoritative-hcp-artifact:{context.company.id}:{provider_id}"
+    )
     source_row_sha256 = digest(f"authoritative-hcp-row:{provider_id}")
     async with factory() as session, session.begin():
         artifact = CustomerMigrationSourceArtifact(
@@ -723,6 +725,73 @@ async def test_hammer_exact_admission_is_searchable_and_replay_safe(database) ->
     refreshed = await service.refresh_population(factory, context=context)
     assert refreshed.counts.bound == 1
     assert refreshed.counts.unexplained == 0
+
+
+@pytest.mark.asyncio
+async def test_clean_majority_admits_safe_customer_and_quarantines_only_conflict(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Clean Majority Company")
+    safe_provider_id = "safe-provider-100"
+    conflict_provider_id = "conflict-provider-200"
+    await stage_hammer(factory, context, provider_id=safe_provider_id)
+    conflict_artifact = await stage_hammer(
+        factory, context, provider_id=conflict_provider_id
+    )
+    async with factory() as session, session.begin():
+        conflict_row = await session.scalar(
+            select(CustomerMigrationSourceRow).where(
+                CustomerMigrationSourceRow.artifact_id == conflict_artifact.id,
+                CustomerMigrationSourceRow.source_identity == conflict_provider_id,
+            )
+        )
+        assert conflict_row is not None
+        await session.execute(
+            delete(CustomerMigrationCandidate).where(
+                CustomerMigrationCandidate.source_row_id == conflict_row.id,
+                CustomerMigrationCandidate.entity_type == "customer",
+            )
+        )
+
+    service = CustomerPopulationReconciliationService()
+    result = await service.admit_clean_majority(factory, context=context)
+    assert result.selected == 2
+    assert result.admitted == 1
+    assert result.replayed == 0
+    assert result.quarantined == 1
+    assert result.remaining_unexplained == 0
+    assert result.before_digest != result.after_digest
+
+    async with factory() as session:
+        binding = await session.scalar(
+            select(CustomerSourceIdentity).where(
+                CustomerSourceIdentity.company_id == context.company.id,
+                CustomerSourceIdentity.source_customer_id == safe_provider_id,
+            )
+        )
+        assert binding is not None
+        latest_conflict = await session.scalar(
+            select(CustomerPopulationReconciliationDisposition)
+            .where(
+                CustomerPopulationReconciliationDisposition.company_id
+                == context.company.id,
+                CustomerPopulationReconciliationDisposition.source_customer_id
+                == conflict_provider_id,
+            )
+            .order_by(CustomerPopulationReconciliationDisposition.version.desc())
+            .limit(1)
+        )
+        assert latest_conflict is not None
+        assert latest_conflict.disposition == "HELD"
+        assert (
+            latest_conflict.reason_code == "source_aggregate_validation_required"
+        )
+
+    replay = await service.admit_clean_majority(factory, context=context)
+    assert replay.selected == 0
+    assert replay.admitted == replay.replayed == replay.quarantined == 0
+    assert replay.remaining_unexplained == 0
 
 
 @pytest.mark.asyncio
