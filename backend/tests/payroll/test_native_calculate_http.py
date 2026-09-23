@@ -31,6 +31,7 @@ from app.payroll.models import (
 )
 from app.payroll.operator_router import router
 from app.payroll.permissions import PayrollPermission
+from app.payroll.tax_authority import PayrollInputAuthorityService
 from app.platform.audit.models import AuditRecord
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -63,7 +64,7 @@ async def native_calculate_database() -> AsyncIterator[async_sessionmaker[AsyncS
 
 def _protected_payload() -> dict[str, object]:
     return {
-        "filing_status": "single",
+        "filing_status": "single_or_married_filing_separately",
         "step_2_checked": False,
         "step_3_credits": "0",
         "step_4a_other_income": "0",
@@ -132,7 +133,7 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
             processing_date=date(2026, 9, 14),
             payday=date(2026, 9, 15),
             timezone="America/New_York",
-            schedule_definition_id="weekly",
+            schedule_definition_id="all-county.weekly-saturday-friday.v1",
             schedule_version=1,
             created_by_user_id=actor_id,
         )
@@ -217,9 +218,9 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
             )
         )
         await session.flush()
+        authorities: list[PayrollInputAuthorityVersion] = []
         for key in ("federal_income_tax", "social_security_employee", "medicare_employee"):
-            session.add(
-                PayrollInputAuthorityVersion(
+            authority = PayrollInputAuthorityVersion(
                     company_id=company_id,
                     employee_id=employee_id,
                     authority_domain="tax",
@@ -234,20 +235,28 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
                     priority=None,
                     public_parameters={},
                     evidence_digest="e" * 64,
-                    authority_digest=canonical_digest({"key": key, "version": 1}),
+                    authority_digest="0" * 64,
                     protected_envelope_id=envelope_id,
                     drafted_by_user_id=actor_id,
                     approved_by_user_id=actor_id,
                     approved_at=now,
                     audit_reason="isolated first-calculation fixture",
                 )
-            )
+            session.add(authority)
+            authorities.append(authority)
         await session.flush()
+        protected_digest = canonical_digest(payload)
+        for authority in authorities:
+            authority.authority_digest = canonical_digest(
+                PayrollInputAuthorityService._record_content(
+                    authority, protected_digest=protected_digest
+                )
+            )
         run_digest = canonical_digest({"company_id": str(company_id), "period": str(period_id), "employee": str(employee_id)})
         run = PayrollRunRecord(
             company_id=company_id,
             pay_period_id=period_id,
-            schedule_definition_id="weekly",
+            schedule_definition_id="all-county.weekly-saturday-friday.v1",
             schedule_version="1",
             assembly_version="payroll.run.v1",
             population_identity="native-http-fixture",
@@ -285,7 +294,7 @@ async def test_first_calculation_http_persists_new_authority(
 ) -> None:
     company_id, run_id, run_digest = await _seed_case(native_calculate_database)
     monkeypatch.setattr(settings, "payroll_input_active_kid", "native-test")
-    monkeypatch.setattr(settings, "payroll_input_encryption_keys", {"native-test": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm4="})
+    monkeypatch.setattr(settings, "payroll_input_encryption_keys", {"native-test": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm4="})
 
     async with native_calculate_database() as session:
         member = await session.scalar(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.run_id == run_id))
