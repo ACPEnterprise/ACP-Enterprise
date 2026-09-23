@@ -4,11 +4,16 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as customerApi from "../api/customers";
-import { useCustomerMutations, useCustomerPopulationRefresh } from "./useCustomers";
+import {
+  useCustomerCleanMajorityAdmission,
+  useCustomerMutations,
+  useCustomerPopulationRefresh,
+} from "./useCustomers";
 
 vi.mock("../api/customers", async (original) => ({
   ...await original<typeof import("../api/customers")>(),
   addCustomerNote: vi.fn().mockResolvedValue({ id: "note-1" }),
+  admitCustomerCleanMajority: vi.fn(),
   recordCustomerConsent: vi.fn().mockResolvedValue({ id: "consent-1" }),
   refreshCustomerPopulation: vi.fn(),
 }));
@@ -23,6 +28,41 @@ vi.mock("../auth", () => ({
 }));
 
 describe("useCustomerMutations activity consistency", () => {
+  it("admits the deterministic HCP majority and refreshes native rosters", async () => {
+    const admit = vi.mocked(customerApi.admitCustomerCleanMajority);
+    admit.mockResolvedValue({
+      classification: "CUSTOMER_CLEAN_MAJORITY_ADMITTED",
+      source_system: "housecall_pro",
+      selected: 2,
+      admitted: 1,
+      replayed: 0,
+      quarantined: 1,
+      remaining_unexplained: 0,
+      before_evidence_digest: "a".repeat(64),
+      after_evidence_digest: "b".repeat(64),
+      customer_admission_performed: true,
+    });
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+    });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useCustomerCleanMajorityAdmission(), {
+      wrapper,
+    });
+
+    act(() => result.current.mutate());
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(admit).toHaveBeenCalledWith("branch-1");
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["customers"] });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["administration", "migration-readiness"],
+    });
+  });
+
   it("reuses one command identity when the operator retries an uncertain refresh", async () => {
     const refresh = vi.mocked(customerApi.refreshCustomerPopulation);
     refresh

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
 
 import {
+  admitCustomerCleanMajority,
   addCustomerContact,
   addCustomerNote,
   addCustomerProperty,
@@ -63,6 +64,29 @@ export function useCustomerPopulationRefresh() {
     },
     onSuccess: async () => {
       idempotencyKey.current = null;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["administration", "migration-readiness"],
+        }),
+      ]);
+    },
+  });
+}
+
+export function useCustomerCleanMajorityAdmission() {
+  const queryClient = useQueryClient();
+  const { activeCompany } = useAuth();
+  const branchId =
+    activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? null;
+  return useMutation({
+    mutationFn: () => {
+      if (!branchId) {
+        throw new Error("An active Branch is required to admit source Customers.");
+      }
+      return admitCustomerCleanMajority(branchId);
+    },
+    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["customers"] }),
         queryClient.invalidateQueries({
