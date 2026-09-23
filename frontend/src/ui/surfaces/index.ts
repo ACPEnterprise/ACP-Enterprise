@@ -7,4 +7,4 @@ export {
   CardHeader,
   CardTitle,
 } from "./Card";
-export type { CardElevation, CardProps } from "./Card";
+export type { CardElevation, CardProps, CardTone } from "./Card";

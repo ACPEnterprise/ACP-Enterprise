@@ -23,6 +23,34 @@ body {
   line-height: 1.5;
 }
 
+/*
+ * Normal Twelve Hats cards and panels share one restrained brand outline.
+ * This rule intentionally follows Tailwind utilities so border-stroke cannot
+ * silently win by generated stylesheet order. Semantic tones are explicit
+ * exceptions and remain visually stronger than the decorative outline.
+ */
+.twelve-hats-panel-outline {
+  border-color: var(--semantic-panel-outline);
+}
+
+.twelve-hats-panel-outline[data-panel-tone="neutral"] {
+  border-color: var(--semantic-border);
+}
+
+.twelve-hats-panel-outline[data-panel-tone="success"] {
+  border-color: var(--semantic-success);
+}
+
+.twelve-hats-panel-outline[data-panel-tone="warning"] {
+  border-color: var(--semantic-warning);
+  border-width: 2px;
+}
+
+.twelve-hats-panel-outline[data-panel-tone="danger"] {
+  border-color: var(--semantic-danger);
+  border-width: 2px;
+}
+
 .safe-area-header {
   padding:
     max(var(--space-3), var(--safe-area-top))

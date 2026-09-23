@@ -37,7 +37,7 @@ type RangeKey = "day" | "week" | "month" | "12m" | "3y" | "5y" | "custom";
 type JobMetric = "produced_value" | "job_count";
 type BookedRange = "day" | "week" | "month";
 
-const panelClass = "border-[#C01529] bg-surface";
+const panelClass = "bg-surface";
 const commandCenterObservedAt = new Date();
 const commandCenterToday = new Date(
   commandCenterObservedAt.getFullYear(),

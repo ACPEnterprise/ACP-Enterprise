@@ -55,7 +55,7 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   };
   const submit = (event: FormEvent) => { event.preventDefault(); book(); };
   const error = schedule.error ? schedulingMutationRecovery(schedule.error, "Job scheduling") : null;
-  return <section className="rounded-xl border border-stroke bg-surface p-4 sm:p-6" aria-labelledby="schedule-job-heading">
+  return <section className="twelve-hats-panel-outline rounded-xl border bg-surface p-4 sm:p-6" aria-labelledby="schedule-job-heading">
     <h3 id="schedule-job-heading" className="text-xl font-semibold">Schedule Job</h3>
     <p className="mt-1 text-sm text-content-muted">Book an authoritative Appointment for this Job. Technician assignment is optional and remains human-confirmed.</p>
     {job.status === "in_progress" || job.status === "paused" ? <Alert className="mt-4" variant="warning" title="Unscheduled field work already began">ACP supports emergency work before scheduling. Add the service window now so office, Dispatch, and My Day share the same operating record.</Alert> : null}

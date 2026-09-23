@@ -21,7 +21,7 @@ export function CreateJobPanel({ onCancel, initialCustomerId = "", initialLocati
     create.mutate({ branch_id: branchId, customer_id: customerId, service_location_id: locationId, job_type_code: jobType.trim() || null, priority, customer_reported_problem: problem.trim() || null, internal_description: description.trim() || null }, { onSuccess: (job) => void navigate(`/jobs/${job.id}`) });
   };
   const error = create.error ? getOperatorApiError(create.error) : null;
-  return <section className="rounded-xl border border-stroke bg-surface p-ui-6" aria-labelledby="create-job-heading">
+  return <section className="twelve-hats-panel-outline rounded-xl border bg-surface p-ui-6" aria-labelledby="create-job-heading">
     <div className="flex items-start justify-between"><div><h3 id="create-job-heading" className="text-xl font-semibold">Create Job</h3><p className="mt-1 text-sm text-content-muted">Create a draft Job from an existing Customer and Service Location.</p></div><Button variant="ghost" onClick={onCancel}>Close</Button></div>
     {error && <Alert className="mt-4" variant="danger" title={error.title}>{error.message}</Alert>}
     <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={submit}>

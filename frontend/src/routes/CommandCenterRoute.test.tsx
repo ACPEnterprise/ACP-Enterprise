@@ -182,7 +182,8 @@ describe("CommandCenterRoute", () => {
     const moneyPanel = screen
       .getByRole("heading", { name: "Money / Cash Position" })
       .closest("article");
-    expect(moneyPanel).toHaveClass("border-[#C01529]");
+    expect(moneyPanel).toHaveClass("twelve-hats-panel-outline");
+    expect(moneyPanel).toHaveAttribute("data-panel-tone", "normal");
     expect(screen.getByText("$2,400")).toBeInTheDocument();
     expect(screen.getByText(/Due-today AR: \$500/)).toBeInTheDocument();
     expect(screen.getByText("Not connected")).toBeInTheDocument();
@@ -194,7 +195,7 @@ describe("CommandCenterRoute", () => {
       "UNAVAILABLE",
     );
     expect(economicStatus).toHaveClass("border-2", "border-dashed");
-    expect(economicStatus).not.toHaveClass("border-[#C01529]");
+    expect(economicStatus).not.toHaveClass("twelve-hats-panel-outline");
     expect(screen.getByText(/Hammer Haag/)).toBeInTheDocument();
     expect(
       screen.getByText(
