@@ -15,6 +15,8 @@ export interface WorkforceEmployeeSummary {
   language_codes: string[];
   readiness_state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE";
   readiness_blockers: string[];
+  synthetic_identity: boolean;
+  assignment_candidate: boolean;
   updated_at: string;
 }
 

@@ -29,9 +29,10 @@ describe("ScheduleJobPanel", () => {
     vi.clearAllMocks();
     vi.mocked(useScheduleExistingJob).mockReturnValue({ mutate, isPending: false, isSuccess: false, error: null } as never);
     vi.mocked(useWorkforceDirectory).mockReturnValue({ isLoading: false, data: [
-      { employee_id: "employee-beta", employee_number: "SYN-BETA", display_name: "Synthetic Beta Employee", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-main" },
-      { employee_id: "employee-blocked", employee_number: "BLOCKED", display_name: "Blocked Technician", employee_status: "active", technician: true, readiness_state: "BLOCKED", home_branch_id: "branch-main" },
-      { employee_id: "employee-other", employee_number: "OTHER", display_name: "Other Branch", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-other" },
+      { employee_id: "employee-beta", employee_number: "SYN-BETA", display_name: "Synthetic Beta Employee", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-main", assignment_candidate: false },
+      { employee_id: "employee-michael", employee_number: "ACP-0002", display_name: "Michael Brian", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-main", assignment_candidate: true },
+      { employee_id: "employee-blocked", employee_number: "BLOCKED", display_name: "Blocked Technician", employee_status: "active", technician: true, readiness_state: "BLOCKED", home_branch_id: "branch-main", assignment_candidate: false },
+      { employee_id: "employee-other", employee_number: "OTHER", display_name: "Other Branch", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-other", assignment_candidate: true },
     ] } as never);
   });
 
@@ -39,7 +40,8 @@ describe("ScheduleJobPanel", () => {
     renderPanel();
     expect(screen.getByRole("heading", { name: "Schedule Job" })).toBeVisible();
     expect(screen.getByRole("option", { name: "Unassigned / Needs Scheduling" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "Synthetic Beta Employee — SYN-BETA" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /Synthetic Beta Employee/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Michael Brian — ACP-0002" })).toBeVisible();
     expect(screen.queryByRole("option", { name: /Blocked Technician/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Other Branch/ })).not.toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText(/^Arrival window starts/));
@@ -48,7 +50,7 @@ describe("ScheduleJobPanel", () => {
     await userEvent.type(screen.getByLabelText(/^Arrival window ends/), "2026-09-14T12:00");
     await userEvent.clear(screen.getByLabelText(/^Expected duration \(minutes\)/));
     await userEvent.type(screen.getByLabelText(/^Expected duration \(minutes\)/), "90");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Technician" }), "employee-beta");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Technician" }), "employee-michael");
     await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       expected_job_version: 3,
@@ -58,7 +60,7 @@ describe("ScheduleJobPanel", () => {
       arrival_window_start_at: new Date("2026-09-14T09:00").toISOString(),
       arrival_window_end_at: new Date("2026-09-14T12:00").toISOString(),
       expected_duration_minutes: 90,
-      employee_id: "employee-beta",
+      employee_id: "employee-michael",
       reserve_capacity: true,
     }), expect.any(Object));
   });

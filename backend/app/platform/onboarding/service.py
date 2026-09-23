@@ -34,6 +34,7 @@ from app.platform.permissions.models import (
     RolePermission,
 )
 from app.platform.users.models import User, UserCredential
+from app.workforce.administration_commands import workforce_administration_service
 
 from .models import (
     EmployeeNumberPolicy,
@@ -502,6 +503,7 @@ class IdentityOnboardingService:
                 )
                 session.add(employee)
                 await session.flush()
+                role_codes: set[str] = set()
                 for role_id in sorted(set(command.role_ids), key=str):
                     role = await session.scalar(
                         select(Role).where(
@@ -515,6 +517,7 @@ class IdentityOnboardingService:
                         raise OnboardingConflictError(
                             "Approved Company role was not found."
                         )
+                    role_codes.add(role.code)
                     existing_assignment = await session.scalar(
                         select(MembershipRole.id).where(
                             MembershipRole.membership_id == membership.id,
@@ -531,6 +534,12 @@ class IdentityOnboardingService:
                                 assigned_by_user_id=context.user.id,
                             )
                         )
+                if "TECHNICIAN" in role_codes:
+                    await workforce_administration_service.stage_technician_baseline(
+                        session,
+                        context=context,
+                        employee=employee,
+                    )
                 if command.additional_permission_ids:
                     permission_ids = tuple(
                         sorted(set(command.additional_permission_ids), key=str)

@@ -12,6 +12,7 @@ export type DispatchReadiness =
   | "TECHNICIAN_NOT_READY"
   | "CAPABILITY_NOT_READY"
   | "AVAILABILITY_NOT_READY"
+  | "SYNTHETIC_NOT_ASSIGNABLE"
   | "INACTIVE";
 
 export function dispatchReadiness(
@@ -19,6 +20,8 @@ export function dispatchReadiness(
 ): DispatchReadiness {
   if (technician.eligible) return "ELIGIBLE";
   const reasons = new Set(technician.reasons);
+  if (reasons.has("synthetic_identity_not_assignable"))
+    return "SYNTHETIC_NOT_ASSIGNABLE";
   if (reasons.has("inactive")) return "INACTIVE";
   if (reasons.has("missing_workforce_profile")) return "TECHNICIAN_NOT_READY";
   if (reasons.has("wrong_branch")) return "BRANCH_NOT_READY";

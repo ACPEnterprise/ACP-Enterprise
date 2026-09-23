@@ -54,6 +54,8 @@ const summary = {
   language_codes: ["en", "es"],
   readiness_state: "READY" as const,
   readiness_blockers: [],
+  synthetic_identity: false,
+  assignment_candidate: true,
   updated_at: "2026-08-30T12:00:00Z",
 };
 
@@ -120,6 +122,11 @@ describe("WorkforceRoute", () => {
       isPending: false,
       isError: false,
       data: undefined,
+      mutate: vi.fn(),
+    } as never);
+    vi.mocked(workforceHooks.useEmployeeFieldReadiness).mockReturnValue({
+      isPending: false,
+      isError: false,
       mutate: vi.fn(),
     } as never);
     vi.mocked(workforceHooks.useEmployeeAdministration).mockReturnValue({

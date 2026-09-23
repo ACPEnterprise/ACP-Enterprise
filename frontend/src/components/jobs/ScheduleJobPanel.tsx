@@ -27,7 +27,7 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   const [lastAttempt, setLastAttempt] = useState<{ fingerprint: string; requestId: string } | null>(null);
   const technicians = useMemo(
     () => (workforce.data ?? []).filter((employee) =>
-      employee.technician && employee.employee_status === "active" &&
+      employee.assignment_candidate && employee.technician && employee.employee_status === "active" &&
       employee.readiness_state === "READY" &&
       (!employee.home_branch_id || employee.home_branch_id === job.branch_id)),
     [job.branch_id, workforce.data],

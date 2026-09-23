@@ -4,6 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.dispatch.errors import DispatchConflict, DispatchNotFound
@@ -25,8 +28,6 @@ from app.workforce.models import (
     WorkforceCapabilityProfile,
     WorkforceWorkingAvailability,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -343,6 +344,24 @@ async def test_missing_availability_is_reported_unknown(dispatch_fixture):
             if item.employee_id == technician.id
         )
         assert option.decision == "availability_unknown" and not option.eligible
+
+
+@pytest.mark.asyncio
+async def test_synthetic_employee_is_never_assignable_to_real_work(dispatch_fixture):
+    factory, context, appointment, technician, _ = dispatch_fixture
+    async with factory() as session, session.begin():
+        employee = await session.get(Employee, technician.id)
+        employee.employee_number = "SYN-BETA-0002"
+    async with factory() as session:
+        option = next(
+            item
+            for item in await DispatchService().eligible(
+                session, context=context, appointment_id=appointment.id
+            )
+            if item.employee_id == technician.id
+        )
+        assert option.decision == "synthetic_identity_not_assignable"
+        assert not option.eligible
 
 
 @pytest.mark.asyncio

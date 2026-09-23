@@ -107,6 +107,31 @@ export function useWorkforceEmployee(employeeId: string | null) {
   });
 }
 
+export function useEmployeeFieldReadiness(employeeId: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      branchId: string;
+      windowStartAt: string;
+      windowEndAt: string;
+      reason: string;
+    }) =>
+      prepareEmployeeFieldReadiness(
+        employeeId as string,
+        input.branchId,
+        input.windowStartAt,
+        input.windowEndAt,
+        input.reason,
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["workforce-employee", employeeId] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+      ]);
+    },
+  });
+}
+
 export function useEmployeeTimeline(employeeId: string | null) {
   return useQuery({
     queryKey: ["employee-timeline", employeeId],

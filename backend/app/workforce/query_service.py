@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dispatch.models import DispatchAssignment, DispatchCrewMember
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.workforce.employee_identity_classification import employee_is_synthetic
 from app.workforce.models import (
     Capability,
     Language,
@@ -178,6 +179,8 @@ class WorkforceEligibilityService:
                 .limit(1)
             )
             reasons: list[str] = []
+            if await employee_is_synthetic(session, employee=employee):
+                reasons.append("synthetic_identity_not_assignable")
             if employee.status != "active" or (
                 profile is not None and profile.status != "active"
             ):
