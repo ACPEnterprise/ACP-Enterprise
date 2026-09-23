@@ -184,7 +184,14 @@ export interface EmployeeAdministrationSummary extends WorkforceEmployeeSummary 
   delivery_status: string | null;
   login_email: string | null;
   masked_login: string | null;
-  access_status: "ACTIVE" | "DISABLED" | "INVITED" | "NOT_LINKED";
+  access_status: "ACTIVE" | "LOCKED" | "DISABLED" | "INVITED" | "NOT_LINKED";
+  access_locked_at: string | null;
+  access_locked_by_user_id: string | null;
+  access_locked_by_display_name: string | null;
+  access_lock_reason: string | null;
+  active_assignment_count: number;
+  today_future_assignment_count: number;
+  future_assignment_count: number;
   mobile_readiness: "READY" | "BLOCKED" | "NOT_LINKED";
   mobile_readiness_blockers: string[];
 }
@@ -287,6 +294,18 @@ export async function getEmployeeAdministration(
   return (
     await apiClient.get<EmployeeAdministrationDetail>(
       `/api/v1/workforce/administration/employees/${employeeId}`,
+    )
+  ).data;
+}
+
+export async function setEmployeeAccessLock(
+  employeeId: string,
+  input: { locked: boolean; reason: string; expected_authorization_version: number },
+): Promise<EmployeeAdministrationDetail> {
+  return (
+    await apiClient.put<EmployeeAdministrationDetail>(
+      `/api/v1/workforce/administration/employees/${employeeId}/access-lock`,
+      input,
     )
   ).data;
 }

@@ -16,6 +16,7 @@ import {
   setEmployeeMembershipStatus,
   setEmployeeRole,
   sendEmployeePasswordReset,
+  setEmployeeAccessLock,
 } from "../api/workforce";
 
 export function useWorkforceDirectory() {
@@ -148,6 +149,24 @@ export function useEmployeeAccessMutation(employeeId: string | null) {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
         client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+      ]);
+    },
+  });
+}
+
+export function useEmployeeAccessLock(employeeId: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      locked: boolean;
+      reason: string;
+      expected_authorization_version: number;
+    }) => setEmployeeAccessLock(employeeId as string, input),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+        client.invalidateQueries({ queryKey: ["employee-timeline", employeeId] }),
       ]);
     },
   });

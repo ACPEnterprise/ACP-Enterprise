@@ -694,6 +694,7 @@ class AuthenticationService:
         user_id: UUID,
         reason: str,
         now: datetime,
+        revoked_by_user_id: UUID | None = None,
     ) -> None:
         records = list(
             (
@@ -711,6 +712,7 @@ class AuthenticationService:
             record.status = "revoked"
             record.revoked_at = now
             record.revocation_reason = reason
+            record.revoked_by_user_id = revoked_by_user_id
             await AuthenticationService._revoke_session_tokens(
                 session, session_id=record.id, reason=reason, now=now
             )
