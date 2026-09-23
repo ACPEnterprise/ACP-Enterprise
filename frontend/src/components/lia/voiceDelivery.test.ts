@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   applyApprovedPronunciationHints,
   applyBrowserDeliveryStyle,
+  applyBrowserThoughtGroup,
+  createDeliveryPlan,
+  deliveryPlanPreservesSemantics,
+  inferDeliveryIntent,
   liaDeliveryStyle,
   normalizeVoiceInventory,
   selectPreferredVoice,
@@ -61,5 +65,33 @@ describe("LIA provider-neutral delivery controls", () => {
       { term: "LIA", spokenForm: "Lee ah", status: "PROPOSED", version: 1 },
     ];
     expect(applyApprovedPronunciationHints("ACP asked LIA.", hints)).toBe("A C P asked LIA.");
+  });
+
+  it("segments semantic thought groups without changing meaning", () => {
+    const text = "Revenue is $12,450.00, but material cost is missing. Contribution is unavailable.";
+    const plan = createDeliveryPlan(text, liaDeliveryStyle("NORMAL", "LIMITED"));
+    expect(plan.groups.length).toBeGreaterThan(1);
+    expect(deliveryPlanPreservesSemantics(plan)).toBe(true);
+    expect(plan.semanticText).toBe(text);
+    expect(plan.groups.some((group) => group.emphasis === "SELECTIVE")).toBe(true);
+  });
+
+  it("uses restrained intent-specific pacing and question contour", () => {
+    const style = liaDeliveryStyle("BRIEF", "UNCERTAIN");
+    const plan = createDeliveryPlan("Which Smith customer do you mean?", style);
+    expect(plan.intent).toBe("CLARIFICATION");
+    expect(plan.groups[0].pitch).toBeGreaterThan(1);
+    expect(plan.groups[0].relativeRate).toBeGreaterThanOrEqual(0.86);
+    expect(plan.groups[0].relativeRate).toBeLessThanOrEqual(1);
+  });
+
+  it("maps each group without changing its text", () => {
+    const style = liaDeliveryStyle("NORMAL", "BLOCKER");
+    const group = createDeliveryPlan("Warning: accepted time is missing.", style).groups[0];
+    const utterance = { text: group.text, lang: "", rate: 1, pitch: 1, volume: 1, voice: null } as SpeechSynthesisUtterance;
+    applyBrowserThoughtGroup(utterance, style, group, null);
+    expect(utterance.text).toBe("Warning:");
+    expect(utterance.rate).toBe(group.relativeRate);
+    expect(inferDeliveryIntent("Warning: accepted time is missing.", style)).toBe("WARNING");
   });
 });

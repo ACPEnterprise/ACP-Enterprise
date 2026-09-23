@@ -169,8 +169,10 @@ describe("LIA voice panel", () => {
     );
     expect(speech.speak).toHaveBeenCalledOnce();
     const utterance = speech.speak.mock.calls[0]?.[0];
-    expect(utterance?.rate).toBe(0.94);
-    expect(utterance?.pitch).toBe(1);
+    expect(utterance?.rate).toBeGreaterThanOrEqual(0.86);
+    expect(utterance?.rate).toBeLessThanOrEqual(1);
+    expect(utterance?.pitch).toBeGreaterThanOrEqual(0.98);
+    expect(utterance?.pitch).toBeLessThanOrEqual(1.04);
     expect(utterance?.lang).toBe("en-US");
     expect(utterance?.voice?.name).toBe("System English");
     expect(screen.getByText("SPEAKING")).toBeVisible();
@@ -229,7 +231,8 @@ describe("LIA voice panel", () => {
     expect(utterance).toBeDefined();
     if (!utterance) throw new Error("Expected a preview utterance");
     expect(utterance.voice?.voiceURI).toBe("reviewed-distinct");
-    expect(utterance.rate).toBe(0.94);
+    expect(utterance.rate).toBeGreaterThanOrEqual(0.86);
+    expect(utterance.rate).toBeLessThanOrEqual(1);
     expect(utterance.text).toContain("material cost is unavailable");
     expect(window.localStorage.getItem("twelve-hats.lia.device-voice.v1")).toBe(
       "reviewed-distinct",

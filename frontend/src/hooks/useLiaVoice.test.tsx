@@ -36,11 +36,13 @@ class UtteranceMock {
 
 describe("useLiaVoice", () => {
   let spoken: UtteranceMock | undefined;
+  let utterances: UtteranceMock[];
 
   beforeEach(() => {
     vi.useFakeTimers();
     RecognitionMock.latest = undefined;
     spoken = undefined;
+    utterances = [];
     Object.defineProperty(window, "SpeechRecognition", {
       configurable: true,
       value: RecognitionMock,
@@ -51,6 +53,7 @@ describe("useLiaVoice", () => {
         cancel: vi.fn(),
         speak: vi.fn((utterance: UtteranceMock) => {
           spoken = utterance;
+          utterances.push(utterance);
           utterance.onstart?.();
         }),
       },
@@ -81,5 +84,33 @@ describe("useLiaVoice", () => {
     expect(activeRecognition?.abort).toHaveBeenCalled();
     expect(result.current.conversationMode).toBe(false);
     expect(result.current.state).toBe("IDLE");
+  });
+
+  it("speaks thought groups sequentially with bounded variable delivery", () => {
+    const { result } = renderHook(() =>
+      useLiaVoice({ onTranscript: vi.fn(), onConversationTranscript: vi.fn() }),
+    );
+    act(() => result.current.speak("Six appointments are scheduled. Two still need attention."));
+    expect(utterances).toHaveLength(1);
+    expect(utterances[0].text).toBe("Six appointments are scheduled.");
+    act(() => utterances[0].onend?.());
+    act(() => vi.runOnlyPendingTimers());
+    expect(utterances).toHaveLength(2);
+    expect(utterances[1].text).toBe("Two still need attention.");
+    expect(utterances[0].rate).not.toBe(0.94);
+    act(() => utterances[1].onend?.());
+    expect(result.current.state).toBe("IDLE");
+  });
+
+  it("cancels the remaining delivery plan when interrupted", () => {
+    const { result } = renderHook(() =>
+      useLiaVoice({ onTranscript: vi.fn(), onConversationTranscript: vi.fn() }),
+    );
+    act(() => result.current.speak("First answer. Second answer."));
+    act(() => result.current.stopSpeaking());
+    act(() => utterances[0].onend?.());
+    act(() => vi.runOnlyPendingTimers());
+    expect(utterances).toHaveLength(1);
+    expect(result.current.state).toBe("INTERRUPTED");
   });
 });
