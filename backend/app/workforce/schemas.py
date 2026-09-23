@@ -140,6 +140,14 @@ class RealRosterReadinessItem(WorkforceSchema):
     blockers: tuple[str, ...]
 
 
+class RealRosterBindingCandidate(WorkforceSchema):
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    employment_status: Literal["active", "inactive", "leave", "terminated"]
+    home_branch_id: UUID | None
+
+
 class RealRosterSourceEvidence(WorkforceSchema):
     source_system: Literal["HCP"]
     source_employee_id: str
@@ -160,6 +168,8 @@ class RealRosterSourceEvidence(WorkforceSchema):
 class RealRosterReadiness(WorkforceSchema):
     items: tuple[RealRosterReadinessItem, ...]
     source_evidence: tuple[RealRosterSourceEvidence, ...]
+    binding_candidates: tuple[RealRosterBindingCandidate, ...]
+    binding_candidate_count: int
     total: int
     bound: int
     field_tech_total: int

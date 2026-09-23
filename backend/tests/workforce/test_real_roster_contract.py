@@ -3,14 +3,15 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.users.models import User
 from app.workforce.real_roster import REAL_ALL_COUNTY_ROSTER, RealRosterRole
-from app.workforce.real_roster_service import RealRosterService
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from app.workforce.real_roster_service import RealRosterConflict, RealRosterService
 
 
 @pytest_asyncio.fixture
@@ -18,8 +19,18 @@ async def real_roster_database():
     engine = create_async_engine(settings.database_url)
     connection = await engine.connect()
     transaction = await connection.begin()
-    factory = async_sessionmaker(connection, expire_on_commit=False)
-    company_id, branch_id, employee_id, actor_id = (uuid4(), uuid4(), uuid4(), uuid4())
+    factory = async_sessionmaker(
+        connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+    company_id, branch_id, employee_id, synthetic_id, actor_id = (
+        uuid4(),
+        uuid4(),
+        uuid4(),
+        uuid4(),
+        uuid4(),
+    )
     async with factory() as session, session.begin():
         session.add(
             Company(
@@ -62,6 +73,17 @@ async def real_roster_database():
                     employee_type="employee",
                     status="active",
                 ),
+                Employee(
+                    id=synthetic_id,
+                    company_id=company_id,
+                    home_branch_id=branch_id,
+                    employee_number="SYN-BETA-0001",
+                    first_name="Synthetic",
+                    last_name="Beta Employee",
+                    display_name="Synthetic Beta Employee",
+                    employee_type="employee",
+                    status="active",
+                ),
             ]
         )
     context = SimpleNamespace(
@@ -69,7 +91,7 @@ async def real_roster_database():
         user=SimpleNamespace(id=actor_id),
     )
     try:
-        yield factory, context, employee_id
+        yield factory, context, employee_id, synthetic_id
     finally:
         await transaction.rollback()
         await connection.close()
@@ -155,7 +177,7 @@ def test_excluded_source_identity_is_not_reported_as_employee() -> None:
 async def test_exact_employee_binding_is_durable_and_does_not_name_match(
     real_roster_database,
 ) -> None:
-    factory, context, employee_id = real_roster_database
+    factory, context, employee_id, _ = real_roster_database
     async with factory() as session:
         result = await RealRosterService().bind(
             session,
@@ -177,3 +199,39 @@ async def test_exact_employee_binding_is_durable_and_does_not_name_match(
         assert result.dispatch_ready_total == 0
         assert result.timekeeping_ready_total == 0
         assert result.payroll_identity_ready_total == 1
+        assert result.binding_candidates == ()
+        assert result.binding_candidate_count == 0
+
+
+@pytest.mark.asyncio
+async def test_real_binding_candidates_exclude_synthetic_acceptance_employee(
+    real_roster_database,
+) -> None:
+    factory, context, employee_id, synthetic_id = real_roster_database
+    async with factory() as session:
+        result = await RealRosterService().readiness(session, context=context)
+        assert [candidate.employee_id for candidate in result.binding_candidates] == [
+            employee_id
+        ]
+        assert result.binding_candidate_count == 1
+        assert synthetic_id not in {
+            candidate.employee_id for candidate in result.binding_candidates
+        }
+
+
+@pytest.mark.asyncio
+async def test_synthetic_employee_binding_fails_closed_at_mutation_boundary(
+    real_roster_database,
+) -> None:
+    factory, context, _, synthetic_id = real_roster_database
+    async with factory() as session:
+        with pytest.raises(
+            RealRosterConflict,
+            match="Synthetic acceptance Employees cannot represent real roster identities",
+        ):
+            await RealRosterService().bind(
+                session,
+                context=context,
+                roster_key="alex-donahue",
+                employee_id=synthetic_id,
+            )

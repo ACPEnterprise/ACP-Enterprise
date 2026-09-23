@@ -106,9 +106,19 @@ export interface RealRosterSourceEvidence {
   recorded_at: string;
 }
 
+export interface RealRosterBindingCandidate {
+  employee_id: string;
+  employee_number: string;
+  display_name: string;
+  employment_status: "active" | "inactive" | "leave" | "terminated";
+  home_branch_id: string | null;
+}
+
 export interface RealRosterReadiness {
   items: RealRosterReadinessItem[];
   source_evidence: RealRosterSourceEvidence[];
+  binding_candidates: RealRosterBindingCandidate[];
+  binding_candidate_count: number;
   total: number;
   bound: number;
   field_tech_total: number;

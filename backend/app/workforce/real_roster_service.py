@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -13,6 +13,7 @@ from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User, UserCredential
+from app.workforce.employee_identity_classification import employee_is_synthetic
 from app.workforce.models import (
     Capability,
     RealWorkforceRosterBinding,
@@ -25,6 +26,7 @@ from app.workforce.real_roster import (
     REAL_ALL_COUNTY_ROSTER_BY_KEY,
 )
 from app.workforce.schemas import (
+    RealRosterBindingCandidate,
     RealRosterReadiness,
     RealRosterReadinessItem,
     RealRosterSourceEvidence,
@@ -55,6 +57,26 @@ class RealRosterService:
             )
             if employee is None:
                 raise RealRosterConflict("Employee is not in the authorized Company.")
+            main_branch = await session.scalar(
+                select(Branch).where(
+                    Branch.company_id == context.company.id,
+                    Branch.code == "MAIN",
+                    Branch.status == "active",
+                )
+            )
+            if (
+                employee.status != "active"
+                or employee.archived_at is not None
+                or main_branch is None
+                or employee.home_branch_id != main_branch.id
+            ):
+                raise RealRosterConflict(
+                    "Employee must be active and assigned to the authorized MAIN Branch."
+                )
+            if await employee_is_synthetic(session, employee=employee):
+                raise RealRosterConflict(
+                    "Synthetic acceptance Employees cannot represent real roster identities."
+                )
             existing = await session.scalar(
                 select(RealWorkforceRosterBinding).where(
                     RealWorkforceRosterBinding.company_id == context.company.id,
@@ -270,6 +292,10 @@ class RealRosterService:
                     field_tech=person.field_tech,
                     employee_id=employee.id,
                     employee_display_name=employee.display_name,
+                    employment_status=cast(
+                        Literal["active", "inactive", "leave", "terminated"],
+                        employee.status,
+                    ),
                     user_state="USER_READY"
                     if user_ready
                     else "USER_MISSING_OR_INACTIVE",
@@ -319,6 +345,41 @@ class RealRosterService:
                 )
             )
         source_evidence = await self._source_evidence(session, context, bindings)
+        bound_employee_ids = {binding.employee_id for binding in bindings.values()}
+        candidates: list[RealRosterBindingCandidate] = []
+        candidate_employees: tuple[Employee, ...] = ()
+        if main_branch is not None:
+            candidate_employees = tuple(
+                await session.scalars(
+                    select(Employee)
+                    .where(
+                        Employee.company_id == context.company.id,
+                        Employee.status == "active",
+                        Employee.archived_at.is_(None),
+                        Employee.home_branch_id == main_branch.id,
+                    )
+                    .order_by(
+                        Employee.display_name, Employee.employee_number, Employee.id
+                    )
+                )
+            )
+        for employee in candidate_employees:
+            if employee.id in bound_employee_ids or await employee_is_synthetic(
+                session, employee=employee
+            ):
+                continue
+            candidates.append(
+                RealRosterBindingCandidate(
+                    employee_id=employee.id,
+                    employee_number=employee.employee_number,
+                    display_name=employee.display_name,
+                    employment_status=cast(
+                        Literal["active", "inactive", "leave", "terminated"],
+                        employee.status,
+                    ),
+                    home_branch_id=employee.home_branch_id,
+                )
+            )
         source_only_total = sum(
             item.certification_state == "SOURCE_ONLY" for item in source_evidence
         )
@@ -329,6 +390,8 @@ class RealRosterService:
         return RealRosterReadiness(
             items=tuple(items),
             source_evidence=source_evidence,
+            binding_candidates=tuple(candidates),
+            binding_candidate_count=len(candidates),
             total=len(items),
             bound=sum(item.employee_id is not None for item in items),
             field_tech_total=sum(item.field_tech for item in items),
