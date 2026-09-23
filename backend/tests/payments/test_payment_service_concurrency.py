@@ -8,10 +8,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
@@ -44,6 +40,9 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling.models import Appointment  # noqa: F401
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class CountingFakeProvider(DeterministicFakeProvider):

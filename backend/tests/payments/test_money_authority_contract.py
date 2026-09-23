@@ -1,13 +1,12 @@
 from decimal import Decimal
 
-from fastapi import FastAPI
-
 from app.payments.money_authority import (
     ExpectedCollectionEvidence,
     _summarize_amounts,
     compose_expected_collections,
 )
 from app.payments.router import router
+from fastapi import FastAPI
 
 
 def evidence(
