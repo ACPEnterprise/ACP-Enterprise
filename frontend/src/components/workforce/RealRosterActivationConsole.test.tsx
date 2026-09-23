@@ -17,7 +17,6 @@ vi.mock("../../auth", () => ({
 describe("RealRosterActivationConsole", () => {
   it("requires a reason and records readiness for the exact bound technician", async () => {
     const mutate = vi.fn();
-    vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({ data: [] } as never);
     vi.mocked(workforceHooks.useRealRosterReadiness).mockReturnValue({
       canBind: true,
       bind: { isPending: false, mutate: vi.fn() },
@@ -49,5 +48,34 @@ describe("RealRosterActivationConsole", () => {
     await user.type(screen.getByPlaceholderText("Confirmed operating window"), "Owner confirmed field shift");
     await user.click(action);
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ employeeId: "employee-melvin", branchId: "branch-main", reason: "Owner confirmed field shift" }));
+  });
+
+  it("offers only server-authorized real candidates and links deterministic onboarding", () => {
+    vi.mocked(workforceHooks.useRealRosterReadiness).mockReturnValue({
+      canBind: true,
+      bind: { isPending: false, mutate: vi.fn() },
+      prepareFieldReadiness: { isPending: false, mutate: vi.fn() },
+      query: { isLoading: false, isError: false, data: {
+        total: 8, bound: 0, field_tech_total: 5, field_tech_capability_ready: 0,
+        binding_candidate_count: 1,
+        binding_candidates: [{ employee_id: "employee-alex", employee_number: "ACP-0002", display_name: "Alex Donahue", employment_status: "active", home_branch_id: "branch-main" }],
+        source_evidence: [], items: [{
+          roster_key: "alex-donahue", display_name: "Alex Donahue", operating_role: "OFFICE_STAFF", field_tech: false,
+          employee_id: null, employee_display_name: null, employment_status: null, user_state: "AUTHENTICATED_VERIFICATION_REQUIRED", employee_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+          membership_state: "AUTHENTICATED_VERIFICATION_REQUIRED", branch_state: "AUTHENTICATED_VERIFICATION_REQUIRED", role_state: "AUTHENTICATED_VERIFICATION_REQUIRED", workforce_profile_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+          technician_capability_state: "NOT_APPLICABLE", mobile_state: "AUTHENTICATED_VERIFICATION_REQUIRED", credential_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+          availability_state: "AUTHENTICATED_VERIFICATION_REQUIRED", dispatch_state: "AUTHENTICATED_VERIFICATION_REQUIRED", timekeeping_state: "AUTHENTICATED_VERIFICATION_REQUIRED",
+          payroll_linkage_state: "AUTHENTICATED_VERIFICATION_REQUIRED", identity_confirmed_at: null, readiness_window_start_at: null,
+          readiness_window_end_at: null, readiness_source: null, blockers: ["OWNER_EMPLOYEE_BINDING_REQUIRED"],
+        }],
+      } },
+    } as never);
+    render(<MemoryRouter><RealRosterActivationConsole /></MemoryRouter>);
+    expect(screen.getByRole("option", { name: "Alex Donahue · ACP-0002" })).toBeVisible();
+    expect(screen.queryByText(/Synthetic Beta Employee/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create real Employee" })).toHaveAttribute(
+      "href",
+      "/administration/identity-onboarding?name=Alex%20Donahue&profile=OFFICE_STAFF&branch=MAIN",
+    );
   });
 });
