@@ -26,6 +26,13 @@ const populationRefresh = {
   error: null,
   data: undefined,
 };
+const cleanMajorityAdmission = {
+  mutate: vi.fn(),
+  isPending: false,
+  isError: false,
+  error: null,
+  data: undefined,
+};
 
 describe("CustomerManagement", () => {
   beforeEach(() => {
@@ -39,6 +46,9 @@ describe("CustomerManagement", () => {
     } as never);
     vi.mocked(customerHooks.useCustomerPopulationRefresh).mockReturnValue(
       populationRefresh as never,
+    );
+    vi.mocked(customerHooks.useCustomerCleanMajorityAdmission).mockReturnValue(
+      cleanMajorityAdmission as never,
     );
   });
 
@@ -172,7 +182,47 @@ describe("CustomerManagement", () => {
     await userEvent.click(screen.getByRole("button", { name: "Refresh source classification" }));
 
     expect(populationRefresh.mutate).toHaveBeenCalledWith();
-    expect(screen.getByText(/does not create Customers, bind identities, or admit source records/i)).toBeInTheDocument();
+    expect(screen.getByText(/exact provider identity and validated source evidence/i)).toBeInTheDocument();
+  });
+
+  it("offers deterministic admission without fuzzy merging", async () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Admit deterministic Customers" }),
+    );
+
+    expect(cleanMajorityAdmission.mutate).toHaveBeenCalledWith();
+    expect(screen.getByText(/never performs a fuzzy merge/i)).toBeInTheDocument();
+  });
+
+  it("reports admitted and quarantined records independently", () => {
+    vi.mocked(customerHooks.useCustomerCleanMajorityAdmission).mockReturnValue({
+      ...cleanMajorityAdmission,
+      data: {
+        selected: 20,
+        admitted: 18,
+        replayed: 0,
+        quarantined: 2,
+        remaining_unexplained: 0,
+      },
+    } as never);
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(screen.getByText(/18 admitted/)).toBeInTheDocument();
+    expect(screen.getByText(/2 held for review/)).toBeInTheDocument();
+    expect(screen.getByText(/0 remaining unexplained/)).toBeInTheDocument();
   });
 
   it("renders bounded refresh counts without claiming Customer admission", () => {
