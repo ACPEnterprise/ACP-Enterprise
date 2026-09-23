@@ -4,17 +4,27 @@ import { Link, useSearchParams } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
 import type { AdminEmployeeTimecard } from "../api/timekeeping";
-import type { EmployeePermissionExplanation } from "../api/workforce";
+import type { EmployeePermissionExplanation, WorkforceEmployeeDetail } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFieldReadiness, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
   return <Badge variant={state === "READY" ? "success" : state === "BLOCKED" ? "danger" : "neutral"}>{state.replaceAll("_", " ")}</Badge>;
+}
+
+function dispatchState(employee: WorkforceEmployeeDetail) {
+  if (employee.synthetic_identity)
+    return { ready: false, reason: "Synthetic testing identity — not assignable to real work" };
+  if (!employee.technician)
+    return { ready: false, reason: employee.profile_id ? "Field capability missing" : "Workforce profile and field capability missing" };
+  if (employee.availability.length === 0)
+    return { ready: false, reason: "Working availability not configured" };
+  return { ready: true, reason: "Eligible when a recorded working window covers the Appointment" };
 }
 
 function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {
@@ -47,6 +57,7 @@ export function WorkforceRoute() {
   const [statusFilter, setStatusFilter] = useState("");
   const [readinessFilter, setReadinessFilter] = useState("");
   const detail = useWorkforceEmployee(selected);
+  const fieldReadiness = useEmployeeFieldReadiness(selected);
   const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
   const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
@@ -62,9 +73,13 @@ export function WorkforceRoute() {
   const canManageMembership = permissionCodes.includes("COMPANY_MEMBERSHIP_MANAGE");
   const canManageBranches = permissionCodes.includes("COMPANY_BRANCH_ACCESS_MANAGE");
   const canManageRoles = permissionCodes.includes("COMPANY_ROLE_MANAGE");
+  const canManageFieldReadiness = permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE") && permissionCodes.includes("COMPANY_WORKFORCE_AVAILABILITY_MANAGE");
   const roles = useRoles(canManageRoles);
   const [selectedBranchGrant, setSelectedBranchGrant] = useState("");
   const [selectedRoleGrant, setSelectedRoleGrant] = useState("");
+  const [readinessStart, setReadinessStart] = useState("");
+  const [readinessEnd, setReadinessEnd] = useState("");
+  const [readinessReason, setReadinessReason] = useState("");
   const eligibility = useWorkforceEligibility();
   const canReviewTime = permissionCodes.includes("COMPANY_TIMEKEEPING_ADMIN_READ");
   const timeReview = useAdminTimecardReview(canReviewTime);
@@ -937,6 +952,24 @@ export function WorkforceRoute() {
                 </div>
               </section>
             )}
+            <section className="mt-6 rounded-xl border border-stroke p-4" aria-label="Dispatch readiness">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="font-semibold">Dispatch readiness</h4>
+                  <p className="mt-1 text-sm text-content-muted">{dispatchState(detail.data).reason}</p>
+                </div>
+                <Badge variant={dispatchState(detail.data).ready ? "success" : "danger"}>{dispatchState(detail.data).ready ? "DISPATCH READY" : "NOT DISPATCH READY"}</Badge>
+              </div>
+              {canManageFieldReadiness && !detail.data.synthetic_identity && (
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <label className="text-sm"><span className="font-medium">Working window starts</span><Input className="mt-1" type="datetime-local" value={readinessStart} onChange={(event) => setReadinessStart(event.target.value)} /></label>
+                  <label className="text-sm"><span className="font-medium">Working window ends</span><Input className="mt-1" type="datetime-local" value={readinessEnd} onChange={(event) => setReadinessEnd(event.target.value)} /></label>
+                  <label className="text-sm"><span className="font-medium">Owner reason</span><Input className="mt-1" value={readinessReason} onChange={(event) => setReadinessReason(event.target.value)} placeholder="Confirmed working availability" /></label>
+                  <div className="flex items-end"><Button disabled={!detail.data.home_branch_id || !readinessStart || !readinessEnd || new Date(readinessEnd) <= new Date(readinessStart) || readinessReason.trim().length < 3 || fieldReadiness.isPending} onClick={() => fieldReadiness.mutate({ branchId: detail.data.home_branch_id!, windowStartAt: new Date(readinessStart).toISOString(), windowEndAt: new Date(readinessEnd).toISOString(), reason: readinessReason.trim() })}>Prepare field readiness</Button></div>
+                </div>
+              )}
+              {fieldReadiness.isError && <Alert className="mt-3" variant="danger">Field readiness was not changed. Review Branch authority and current Workforce evidence.</Alert>}
+            </section>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <section className="rounded-xl border border-stroke p-4">
                 <h4 className="flex items-center gap-2 font-semibold">

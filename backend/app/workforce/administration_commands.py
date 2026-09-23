@@ -42,122 +42,9 @@ class WorkforceAdministrationService:
             raise WorkforceAdministrationConflict("Branch is not authorized.")
         async with session.begin():
             employee = await self._employee(session, context, employee_id)
-            profile = await session.scalar(
-                select(WorkforceCapabilityProfile)
-                .where(
-                    WorkforceCapabilityProfile.company_id == context.company.id,
-                    WorkforceCapabilityProfile.employee_id == employee.id,
-                )
-                .with_for_update()
+            profile, capability_evidence = await self.stage_technician_baseline(
+                session, context=context, employee=employee
             )
-            if profile is None:
-                profile = WorkforceCapabilityProfile(
-                    company_id=context.company.id,
-                    employee_id=employee.id,
-                    status="active",
-                )
-                session.add(profile)
-                await session.flush()
-                self._audit(
-                    session,
-                    context,
-                    "workforce.profile_created",
-                    profile.id,
-                    {"employee_id": str(employee.id)},
-                )
-            elif profile.status != "active":
-                raise WorkforceAdministrationConflict(
-                    "Workforce profile conflicts with current authority."
-                )
-
-            category = await session.scalar(
-                select(CapabilityCategory)
-                .where(
-                    CapabilityCategory.company_id == context.company.id,
-                    CapabilityCategory.code == "field_service",
-                )
-                .with_for_update()
-            )
-            if category is None:
-                category = CapabilityCategory(
-                    company_id=context.company.id,
-                    code="field_service",
-                    display_name="Field Service",
-                    description="Canonical field-service capabilities.",
-                )
-                session.add(category)
-                await session.flush()
-                self._audit(
-                    session,
-                    context,
-                    "workforce.capability_category_created",
-                    category.id,
-                )
-            elif category.status != "active":
-                raise WorkforceAdministrationConflict(
-                    "Field-service capability category conflicts with current authority."
-                )
-
-            capability = await session.scalar(
-                select(Capability)
-                .where(
-                    Capability.company_id == context.company.id,
-                    Capability.code == "technician",
-                )
-                .with_for_update()
-            )
-            if capability is None:
-                capability = Capability(
-                    company_id=context.company.id,
-                    category_id=category.id,
-                    code="technician",
-                    display_name="Technician",
-                    description="Canonical technician assignment capability.",
-                )
-                session.add(capability)
-                await session.flush()
-                self._audit(
-                    session,
-                    context,
-                    "workforce.capability_definition_created",
-                    capability.id,
-                )
-            elif capability.status != "active" or capability.category_id != category.id:
-                raise WorkforceAdministrationConflict(
-                    "Technician capability conflicts with current authority."
-                )
-
-            capability_evidence = await session.scalar(
-                select(WorkforceCapability)
-                .where(
-                    WorkforceCapability.company_id == context.company.id,
-                    WorkforceCapability.profile_id == profile.id,
-                    WorkforceCapability.capability_id == capability.id,
-                )
-                .with_for_update()
-            )
-            if capability_evidence is None:
-                capability_evidence = WorkforceCapability(
-                    company_id=context.company.id,
-                    profile_id=profile.id,
-                    capability_id=capability.id,
-                    proficiency="qualified",
-                )
-                session.add(capability_evidence)
-                await session.flush()
-                self._audit(
-                    session,
-                    context,
-                    "workforce.capability_recorded",
-                    capability_evidence.id,
-                )
-            elif (
-                capability_evidence.proficiency != "qualified"
-                or capability_evidence.status != "active"
-            ):
-                raise WorkforceAdministrationConflict(
-                    "Capability evidence conflicts with current authority."
-                )
 
             availability = await session.scalar(
                 select(WorkforceWorkingAvailability)
@@ -203,6 +90,129 @@ class WorkforceAdministrationService:
                     "Availability evidence conflicts with current authority."
                 )
         return profile.id, capability_evidence.id, availability.id
+
+    async def stage_technician_baseline(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        employee: Employee,
+    ) -> tuple[WorkforceCapabilityProfile, WorkforceCapability]:
+        """Stage canonical FIELD_TECH evidence inside the caller's transaction."""
+        profile = await session.scalar(
+            select(WorkforceCapabilityProfile)
+            .where(
+                WorkforceCapabilityProfile.company_id == context.company.id,
+                WorkforceCapabilityProfile.employee_id == employee.id,
+            )
+            .with_for_update()
+        )
+        if profile is None:
+            profile = WorkforceCapabilityProfile(
+                company_id=context.company.id,
+                employee_id=employee.id,
+                status="active",
+            )
+            session.add(profile)
+            await session.flush()
+            self._audit(
+                session,
+                context,
+                "workforce.profile_created",
+                profile.id,
+                {"employee_id": str(employee.id)},
+            )
+        elif profile.status != "active":
+            raise WorkforceAdministrationConflict(
+                "Workforce profile conflicts with current authority."
+            )
+
+        category = await session.scalar(
+            select(CapabilityCategory)
+            .where(
+                CapabilityCategory.company_id == context.company.id,
+                CapabilityCategory.code == "field_service",
+            )
+            .with_for_update()
+        )
+        if category is None:
+            category = CapabilityCategory(
+                company_id=context.company.id,
+                code="field_service",
+                display_name="Field Service",
+                description="Canonical field-service capabilities.",
+            )
+            session.add(category)
+            await session.flush()
+            self._audit(
+                session,
+                context,
+                "workforce.capability_category_created",
+                category.id,
+            )
+        elif category.status != "active":
+            raise WorkforceAdministrationConflict(
+                "Field-service capability category conflicts with current authority."
+            )
+
+        capability = await session.scalar(
+            select(Capability)
+            .where(
+                Capability.company_id == context.company.id,
+                Capability.code == "technician",
+            )
+            .with_for_update()
+        )
+        if capability is None:
+            capability = Capability(
+                company_id=context.company.id,
+                category_id=category.id,
+                code="technician",
+                display_name="Technician",
+                description="Canonical technician assignment capability.",
+            )
+            session.add(capability)
+            await session.flush()
+            self._audit(
+                session,
+                context,
+                "workforce.capability_definition_created",
+                capability.id,
+            )
+        elif capability.status != "active" or capability.category_id != category.id:
+            raise WorkforceAdministrationConflict(
+                "Technician capability conflicts with current authority."
+            )
+
+        evidence = await session.scalar(
+            select(WorkforceCapability)
+            .where(
+                WorkforceCapability.company_id == context.company.id,
+                WorkforceCapability.profile_id == profile.id,
+                WorkforceCapability.capability_id == capability.id,
+            )
+            .with_for_update()
+        )
+        if evidence is None:
+            evidence = WorkforceCapability(
+                company_id=context.company.id,
+                profile_id=profile.id,
+                capability_id=capability.id,
+                proficiency="qualified",
+            )
+            session.add(evidence)
+            await session.flush()
+            self._audit(
+                session,
+                context,
+                "workforce.capability_recorded",
+                evidence.id,
+            )
+        elif evidence.proficiency != "qualified" or evidence.status != "active":
+            raise WorkforceAdministrationConflict(
+                "Capability evidence conflicts with current authority."
+            )
+        return profile, evidence
 
     async def ensure_profile(
         self,

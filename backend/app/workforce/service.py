@@ -9,6 +9,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import WorkforcePermission
+from app.workforce.employee_identity_classification import employee_is_synthetic
 from app.workforce.models import (
     WorkforceCapabilityProfile,
     WorkforceWorkingAvailability,
@@ -103,7 +104,11 @@ class WorkforceOperationsService:
 
     @classmethod
     def _summary(
-        cls, employee: Employee, profile: WorkforceCapabilityProfileRecord | None
+        cls,
+        employee: Employee,
+        profile: WorkforceCapabilityProfileRecord | None,
+        *,
+        synthetic_identity: bool,
     ) -> WorkforceEmployeeSummary:
         readiness, blockers = cls._readiness(employee, profile)
         capabilities = (
@@ -131,6 +136,10 @@ class WorkforceOperationsService:
             language_codes=languages,
             readiness_state=readiness,
             readiness_blockers=blockers,
+            synthetic_identity=synthetic_identity,
+            assignment_candidate=(
+                not synthetic_identity and readiness == "READY" and "technician" in capabilities
+            ),
             updated_at=max(employee.updated_at, profile.updated_at)
             if profile
             else employee.updated_at,
@@ -165,7 +174,15 @@ class WorkforceOperationsService:
             if employee.home_branch_id is None or context.can_access_branch(
                 employee.home_branch_id
             ):
-                items.append(self._summary(employee, profile))
+                items.append(
+                    self._summary(
+                        employee,
+                        profile,
+                        synthetic_identity=await employee_is_synthetic(
+                            session, employee=employee
+                        ),
+                    )
+                )
         return WorkforceDirectory(items=tuple(items), total=len(items))
 
     async def detail(
@@ -188,7 +205,13 @@ class WorkforceOperationsService:
             )
         )
         if profile_id is None:
-            summary = self._summary(employee, None)
+            summary = self._summary(
+                employee,
+                None,
+                synthetic_identity=await employee_is_synthetic(
+                    session, employee=employee
+                ),
+            )
             return WorkforceEmployeeDetail(
                 **summary.model_dump(),
                 capabilities=(),
@@ -204,7 +227,11 @@ class WorkforceOperationsService:
         )
         if complete is None:
             return None
-        summary = self._summary(employee, complete)
+        summary = self._summary(
+            employee,
+            complete,
+            synthetic_identity=await employee_is_synthetic(session, employee=employee),
+        )
         availability = tuple(
             WorkforceAvailabilityItem(
                 branch_id=item.branch_id,

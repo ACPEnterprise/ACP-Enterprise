@@ -10,6 +10,10 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
@@ -48,9 +52,11 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User, UserCredential
 from app.timekeeping.repository import timekeeping_repository
-from sqlalchemy import select, text, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from app.workforce.models import (
+    Capability,
+    WorkforceCapability,
+    WorkforceCapabilityProfile,
+)
 
 
 class Context:
@@ -188,6 +194,55 @@ def command(
         login_email=email,
         existing_user_id=existing_user_id,
     )
+
+
+@pytest.mark.asyncio
+async def test_field_technician_onboarding_stages_canonical_workforce_baseline(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    technician_role = Role(
+        company_id=context.company.id,
+        code="TECHNICIAN",
+        name="Technician",
+        status="active",
+        is_system=True,
+    )
+    async with factory() as setup, setup.begin():
+        setup.add(technician_role)
+    async with factory() as session:
+        created = await service.initiate(
+            session,
+            context=context,
+            command=command(
+                context,
+                request_key=f"field-tech-{uuid4()}",
+                email=f"field-tech-{uuid4()}@example.test",
+                role_ids=(technician_role.id,),
+            ),
+        )
+        profile = await session.scalar(
+            select(WorkforceCapabilityProfile).where(
+                WorkforceCapabilityProfile.employee_id == created.employee_id
+            )
+        )
+        capability = await session.scalar(
+            select(Capability).where(
+                Capability.company_id == context.company.id,
+                Capability.code == "technician",
+            )
+        )
+        evidence = await session.scalar(
+            select(WorkforceCapability).where(
+                WorkforceCapability.profile_id == profile.id,
+                WorkforceCapability.capability_id == capability.id,
+            )
+        )
+        assert profile.status == "active"
+        assert evidence.status == "active"
+        assert evidence.proficiency == "qualified"
 
 
 @pytest.mark.asyncio

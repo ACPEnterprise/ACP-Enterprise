@@ -65,6 +65,8 @@ class WorkforceEmployeeSummary(WorkforceSchema):
     language_codes: tuple[str, ...]
     readiness_state: Literal["READY", "BLOCKED", "INSUFFICIENT_EVIDENCE"]
     readiness_blockers: tuple[str, ...]
+    synthetic_identity: bool
+    assignment_candidate: bool
     updated_at: datetime
 
 

@@ -42,5 +42,11 @@ describe("Dispatch technician selection", () => {
     expect(dispatchReadiness({ ...technician, reasons: ["inactive"] })).toBe(
       "INACTIVE",
     );
+    expect(
+      dispatchReadiness({
+        ...technician,
+        reasons: ["synthetic_identity_not_assignable"],
+      }),
+    ).toBe("SYNTHETIC_NOT_ASSIGNABLE");
   });
 });

@@ -112,7 +112,10 @@ async def test_field_readiness_atomically_creates_canonical_evidence(
             )
         )
         capability = await session.scalar(
-            select(Capability).where(Capability.code == "technician")
+            select(Capability).where(
+                Capability.company_id == context.company.id,
+                Capability.code == "technician",
+            )
         )
         evidence = await session.scalar(
             select(WorkforceCapability).where(
