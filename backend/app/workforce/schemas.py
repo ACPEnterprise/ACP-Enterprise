@@ -120,6 +120,7 @@ class RealRosterReadinessItem(WorkforceSchema):
     field_tech: bool
     employee_id: UUID | None
     employee_display_name: str | None
+    employment_status: Literal["active", "inactive", "leave", "terminated"] | None
     user_state: str
     employee_state: str
     membership_state: str
@@ -138,6 +139,14 @@ class RealRosterReadinessItem(WorkforceSchema):
     readiness_window_end_at: datetime | None
     readiness_source: str | None
     blockers: tuple[str, ...]
+
+
+class RealRosterBindingCandidate(WorkforceSchema):
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    employment_status: Literal["active", "inactive", "leave", "terminated"]
+    home_branch_id: UUID | None
 
 
 class RealRosterSourceEvidence(WorkforceSchema):
@@ -160,6 +169,8 @@ class RealRosterSourceEvidence(WorkforceSchema):
 class RealRosterReadiness(WorkforceSchema):
     items: tuple[RealRosterReadinessItem, ...]
     source_evidence: tuple[RealRosterSourceEvidence, ...]
+    binding_candidates: tuple[RealRosterBindingCandidate, ...]
+    binding_candidate_count: int
     total: int
     bound: int
     field_tech_total: int
