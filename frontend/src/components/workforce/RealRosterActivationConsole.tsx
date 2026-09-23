@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import { useAuth } from "../../auth";
-import { useRealRosterReadiness, useWorkforceDirectory } from "../../hooks/useWorkforce";
+import { useRealRosterReadiness } from "../../hooks/useWorkforce";
 import { employeeDetailPath } from "../../routing/paths";
 import { Alert, Badge, Button, Card, Input, Spinner } from "../../ui";
 import { ReadinessBlockers } from "./ReadinessBlockers";
@@ -22,7 +22,6 @@ export function RealRosterActivationConsole() {
   const hasManagePermission = permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE");
   const roster = useRealRosterReadiness(hasManagePermission);
   const canManage = hasManagePermission || roster.canBind;
-  const directory = useWorkforceDirectory();
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [sourceSelections, setSourceSelections] = useState<Record<string, string>>({});
   const [deferred, setDeferred] = useState<Set<string>>(new Set());
@@ -58,7 +57,6 @@ export function RealRosterActivationConsole() {
       <div className="mt-3 grid gap-2 sm:grid-cols-3"><label className="text-sm">Start<Input className="mt-1" type="datetime-local" value={fieldWindowStart} onChange={(event) => setFieldWindowStart(event.target.value)} /></label><label className="text-sm">End<Input className="mt-1" type="datetime-local" value={fieldWindowEnd} onChange={(event) => setFieldWindowEnd(event.target.value)} /></label><label className="text-sm">Owner reason<Input className="mt-1" value={readinessReason} onChange={(event) => setReadinessReason(event.target.value)} placeholder="Confirmed operating window" /></label></div>
     </section>}
     <div className="mt-4 space-y-3">{items.map((person) => {
-      const boundIds = new Set(roster.query.data?.items.flatMap((item) => item.employee_id ? [item.employee_id] : []) ?? []);
       const onboardingProfile = person.operating_role === "FIELD_TECH" ? "FIELD_TECH" : person.operating_role;
       return <article key={person.roster_key} className="rounded-xl border border-stroke p-4">
         <div className="flex flex-wrap items-start justify-between gap-2"><div><h4 className="font-semibold">{person.display_name}</h4><p className="text-sm text-content-muted">Source: owner-confirmed roster · {label(person.operating_role)}</p></div><Badge variant={person.blockers.length === 0 ? "success" : "neutral"}>{person.blockers.length === 0 ? "Identity and access ready" : `${person.blockers.length} identity/access actions`}</Badge></div>
@@ -72,8 +70,9 @@ export function RealRosterActivationConsole() {
           <div className="mt-3 flex flex-wrap gap-2"><Link className="text-sm font-semibold text-action-primary" to={employeeDetailPath(person.employee_id)}>Open access, capabilities and history</Link><Link className="text-sm font-semibold text-action-primary" to="/payroll">Review Payroll blockers</Link></div>
         </> : <div className="mt-3 rounded-lg border border-stroke p-3">
           <p className="text-sm font-semibold">Exact identity certification</p><p className="mt-1 text-xs text-content-muted">Select only an Employee whose authoritative identity the owner has independently verified. The list is not a match recommendation.</p>
-          {deferred.has(person.roster_key) ? <Alert variant="warning">Deferred in this browser review only. No identity decision was persisted.</Alert> : canManage && <div className="mt-2 flex flex-wrap gap-2"><select aria-label={`Exact ACP Employee for ${person.display_name}`} className="min-h-11 min-w-64 rounded-md border border-stroke bg-surface px-3" value={selections[person.roster_key] ?? ""} onChange={(event) => setSelections((current) => ({...current, [person.roster_key]: event.target.value}))}><option value="">Select exact verified Employee</option>{(directory.data ?? []).filter((employee) => !boundIds.has(employee.employee_id)).map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} · {employee.employee_number}</option>)}</select><Button disabled={!selections[person.roster_key] || roster.bind.isPending} onClick={() => roster.bind.mutate({rosterKey: person.roster_key, employeeId: selections[person.roster_key]})}>Confirm exact identity</Button><Button variant="outline" onClick={() => setSelections((current) => ({...current, [person.roster_key]: ""}))}>Not same person</Button><Button variant="outline" onClick={() => setDeferred((current) => new Set(current).add(person.roster_key))}>Defer</Button></div>}
-          <Link className="mt-3 inline-block text-sm font-semibold text-action-primary" to={`/administration/identity-onboarding?name=${encodeURIComponent(person.display_name)}&profile=${onboardingProfile}&branch=MAIN`}>Create/onboard ACP Employee</Link>
+          {deferred.has(person.roster_key) ? <Alert variant="warning">Deferred in this browser review only. No identity decision was persisted.</Alert> : canManage && <div className="mt-2 flex flex-wrap gap-2"><select aria-label={`Exact ACP Employee for ${person.display_name}`} className="min-h-11 min-w-64 rounded-md border border-stroke bg-surface px-3" value={selections[person.roster_key] ?? ""} onChange={(event) => setSelections((current) => ({...current, [person.roster_key]: event.target.value}))}><option value="">Select exact verified Employee</option>{(roster.query.data?.binding_candidates ?? []).map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} · {employee.employee_number}</option>)}</select><Button disabled={!selections[person.roster_key] || roster.bind.isPending} onClick={() => roster.bind.mutate({rosterKey: person.roster_key, employeeId: selections[person.roster_key]})}>Confirm exact identity</Button><Button variant="outline" onClick={() => setSelections((current) => ({...current, [person.roster_key]: ""}))}>Not same person</Button><Button variant="outline" onClick={() => setDeferred((current) => new Set(current).add(person.roster_key))}>Defer</Button></div>}
+          {(roster.query.data?.binding_candidates?.length ?? 0) === 0 && <Alert variant="warning">No eligible real MAIN Branch Employee is available to bind. Create the canonical Employee, then return here to confirm the exact identity.</Alert>}
+          <Link className="mt-3 inline-block text-sm font-semibold text-action-primary" to={`/administration/identity-onboarding?name=${encodeURIComponent(person.display_name)}&profile=${onboardingProfile}&branch=MAIN`}>Create real Employee</Link>
         </div>}
         {person.blockers.length > 0 && <ReadinessBlockers blockers={person.blockers} />}
       </article>;
