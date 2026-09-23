@@ -20,6 +20,7 @@ import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
 import { useCompletedJobTrend } from "../hooks/useJobs";
+import { useMoneyPosition } from "../hooks/usePayments";
 import type { DispatchBoardItem } from "../types/dispatch";
 import type { JobTrendGranularity } from "../types/jobs";
 import {
@@ -118,6 +119,16 @@ function currency(
     currency: code,
     maximumFractionDigits: 0,
   }).format(Number(value));
+}
+
+function moneyEvidence(
+  amount: string | null | undefined,
+  code: string | null | undefined,
+  state: string | undefined,
+): string {
+  if (state === "MEASURED_ZERO") return code ? currency("0", code) : "Measured zero";
+  if (state !== "AVAILABLE") return state === "INCOMPLETE" ? "Incomplete evidence" : "Unavailable";
+  return currency(amount, code);
 }
 
 function Panel({
@@ -237,6 +248,7 @@ export function CommandCenterRoute() {
   const canReadInvoices = permissions.has("COMPANY_INVOICE_READ");
   const canReadJobs = permissions.has("COMPANY_JOB_READ");
   const canReadDispatch = permissions.has("COMPANY_DISPATCH_READ");
+  const canReadPayments = permissions.has("COMPANY_PAYMENT_READ");
   const canReadAnalytics = permissions.has("COMPANY_ANALYTICS_READ");
   const canReadEconomics = permissions.has(
     "COMPANY_ECONOMICS_MEASUREMENT_READ",
@@ -269,6 +281,13 @@ export function CommandCenterRoute() {
   );
   const analytics = useAnalyticsSummary(canReadAnalytics && !branchId);
   const economics = useEconomicsMeasurementFoundation(canReadEconomics);
+  const money = useMoneyPosition(
+    today,
+    today,
+    today,
+    branchId || undefined,
+    canReadPayments,
+  );
   const buckets = ar.data?.buckets ?? [];
   const groupedEmployees = useMemo(
     () => groupEmployeeItems(dispatch.data?.items ?? []),
@@ -325,9 +344,17 @@ export function CommandCenterRoute() {
         <div className="grid gap-3 sm:grid-cols-3">
           <MoneyValue
             label="Bank cash / available"
-            value="Not connected"
-            detail="No authoritative bank balance integration is available."
-            unavailable
+            value={
+              money.data?.bank_balance.connection_state === "NOT_CONNECTED"
+                ? "Not connected"
+                : moneyEvidence(
+                    money.data?.bank_balance.amount,
+                    money.data?.bank_balance.currency,
+                    money.data?.bank_balance.evidence_state,
+                  )
+            }
+            detail={money.data?.bank_balance.limitation ?? "No authoritative bank balance evidence is available."}
+            unavailable={money.data?.bank_balance.evidence_state !== "AVAILABLE"}
           />
           <MoneyValue
             label="Total open receivables"
@@ -345,9 +372,21 @@ export function CommandCenterRoute() {
           />
           <MoneyValue
             label="Expected cash today"
-            value="Incomplete evidence"
-            detail={`Due-today AR: ${currency(ar.data?.due_today_amount, ar.data?.currency)}. COD expectation is not yet authoritative.`}
-            unavailable
+            value={moneyEvidence(
+              money.data?.expected_collections_today.amount,
+              money.data?.expected_collections_today.currency,
+              money.data?.expected_collections_today.evidence_state,
+            )}
+            detail={
+              money.data
+                ? `Due-today AR: ${moneyEvidence(
+                    money.data.accounts_receivable_due_today.amount,
+                    money.data.accounts_receivable_due_today.currency,
+                    money.data.accounts_receivable_due_today.evidence_state,
+                  )}. ${money.data.expected_collections_today.limitation ?? "COD and due-today evidence are complete."}`
+                : "Payment authority did not provide current collection evidence."
+            }
+            unavailable={money.data?.expected_collections_today.evidence_state !== "AVAILABLE" && money.data?.expected_collections_today.evidence_state !== "MEASURED_ZERO"}
           />
         </div>
       </Panel>
@@ -673,21 +712,23 @@ export function CommandCenterRoute() {
             />
             <MoneyValue
               label="Collected"
-              value={
-                branchId || !analytics.data
-                  ? branchId
-                    ? "Unavailable at Branch scope"
-                    : "Unavailable"
-                  : `${analytics.data.cash_collected.value} · currency unspecified`
-              }
-              detail="Payment receipt events; currency and bank settlement are not asserted by this projection"
-              unavailable={!analytics.data || Boolean(branchId)}
+              value={moneyEvidence(
+                money.data?.collection_state.collected.amount,
+                money.data?.collection_state.collected.currency,
+                money.data?.collection_state.collected.evidence_state,
+              )}
+              detail="Captured provider receipts plus separately evidenced manual collections; settlement is not implied."
+              unavailable={money.data?.collection_state.collected.evidence_state !== "AVAILABLE" && money.data?.collection_state.collected.evidence_state !== "MEASURED_ZERO"}
             />
             <MoneyValue
               label="Deposited"
-              value="Unavailable"
-              detail="No authoritative bank settlement/deposit contract"
-              unavailable
+              value={moneyEvidence(
+                money.data?.collection_state.deposited.amount,
+                money.data?.collection_state.deposited.currency,
+                money.data?.collection_state.deposited.evidence_state,
+              )}
+              detail={money.data?.collection_state.deposited.limitation ?? "No authoritative bank-confirmed deposit evidence."}
+              unavailable={money.data?.collection_state.deposited.evidence_state !== "AVAILABLE" && money.data?.collection_state.deposited.evidence_state !== "MEASURED_ZERO"}
             />
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -748,16 +789,43 @@ export function CommandCenterRoute() {
         </Panel>
         <Panel
           title="Card Processing"
-          description="Transactions, charged volume, and fees require authoritative processor evidence."
+          description={`Authoritative captured and provider-settlement evidence for ${today}.`}
           icon={CreditCard}
         >
-          <Unavailable>
-            No live card processor is connected. Transaction count, charged
-            amount, and fees are unknown.
-          </Unavailable>
+          {money.isError || !canReadPayments || !money.data ? (
+            <Unavailable>Payment authority did not provide current card evidence.</Unavailable>
+          ) : (
+            <div className="grid gap-3">
+              <MoneyValue
+                label="Transactions"
+                value={String(money.data.card_processing.transaction_count)}
+                detail="Captured provider receipts"
+              />
+              <MoneyValue
+                label="Charged"
+                value={moneyEvidence(
+                  money.data.card_processing.amount_charged.amount,
+                  money.data.card_processing.amount_charged.currency,
+                  money.data.card_processing.amount_charged.evidence_state,
+                )}
+                detail="Captured amount; refunds and chargebacks remain separate evidence."
+                unavailable={money.data.card_processing.amount_charged.evidence_state !== "AVAILABLE" && money.data.card_processing.amount_charged.evidence_state !== "MEASURED_ZERO"}
+              />
+              <MoneyValue
+                label="Fees"
+                value={moneyEvidence(
+                  money.data.card_processing.fees_paid.amount,
+                  money.data.card_processing.fees_paid.currency,
+                  money.data.card_processing.fees_paid.evidence_state,
+                )}
+                detail={money.data.card_processing.fees_paid.limitation ?? money.data.card_processing.limitation}
+                unavailable={money.data.card_processing.fees_paid.evidence_state !== "AVAILABLE" && money.data.card_processing.fees_paid.evidence_state !== "MEASURED_ZERO"}
+              />
+            </div>
+          )}
           <Link
             className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline"
-            to="/payments"
+            to={`/payments?periodStart=${today}&periodEnd=${today}`}
           >
             Open Payments
           </Link>
