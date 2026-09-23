@@ -348,7 +348,15 @@ async def test_first_calculation_http_persists_new_authority(
     payload = {"idempotency_key": "native-first-calculate", "expected_run_digest": run_digest}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload)
+        replay_response = await client.post(f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload)
+        contradictory_response = await client.post(
+            f"/api/v1/payroll/operator/runs/{run_id}/calculate",
+            json={"idempotency_key": payload["idempotency_key"], "expected_run_digest": "0" * 64},
+        )
     assert response.status_code == 200, response.text
+    assert replay_response.status_code == 200, replay_response.text
+    assert replay_response.json()["replayed"] is True
+    assert contradictory_response.status_code == 409
     body = response.json()
     assert body["status"] == "calculated"
     async with native_calculate_database() as session:
