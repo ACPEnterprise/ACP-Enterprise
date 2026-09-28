@@ -36,6 +36,7 @@ import {
   useRoles,
 } from "./hooks";
 import { MigrationWorkspace } from "./MigrationWorkspace";
+import { BranchSchedulingSetup } from "../../components/scheduling/BranchSchedulingSetup";
 
 type PendingChange = {
   action: "grant" | "remove";
@@ -258,6 +259,7 @@ export function AdministrationRoute() {
           {mutationError}
         </Alert>
       )}
+      {canAdminister && <BranchSchedulingSetup />}
       {permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && (
         <Card>
           <CardHeader>

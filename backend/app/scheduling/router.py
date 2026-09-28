@@ -7,10 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import SchedulingPermission
+from app.platform.permissions.codes import (
+    AdministrationPermission,
+    SchedulingPermission,
+)
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+from app.scheduling.calendar_admin import branch_scheduling_administration
 from app.scheduling.errors import (
     SchedulingCapacityError,
     SchedulingCapacityFailure,
@@ -30,6 +34,8 @@ from app.scheduling.schemas import (
     AppointmentRescheduleRequest,
     AppointmentResponse,
     AppointmentSummary,
+    BranchSchedulingPolicyResponse,
+    BranchSchedulingPolicyWrite,
     CalendarQueryResult,
 )
 from app.scheduling.service import (
@@ -49,6 +55,10 @@ SchedulingManageContext = Annotated[
 SchedulingReadContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(SchedulingPermission.READ)),
+]
+SchedulingAdministrationContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AdministrationPermission.COMPANY_ADMINISTER)),
 ]
 AppointmentResponseType = TypeVar(
     "AppointmentResponseType", AppointmentDetail, AppointmentSummary
@@ -208,6 +218,43 @@ def query_appointment_response(
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
+
+
+@router.get(
+    "/branches/{branch_id}/policy",
+    response_model=BranchSchedulingPolicyResponse,
+    summary="Read Branch Scheduling setup",
+)
+async def read_branch_scheduling_policy(
+    branch_id: UUID,
+    context: SchedulingAdministrationContext,
+    session: DatabaseSession,
+) -> BranchSchedulingPolicyResponse:
+    try:
+        return await branch_scheduling_administration.read(
+            session, context=context, branch_id=branch_id
+        )
+    except SchedulingError as error:
+        raise translate_scheduling_error(error) from error
+
+
+@router.put(
+    "/branches/{branch_id}/policy",
+    response_model=BranchSchedulingPolicyResponse,
+    summary="Configure Branch Scheduling setup",
+)
+async def configure_branch_scheduling_policy(
+    branch_id: UUID,
+    data: BranchSchedulingPolicyWrite,
+    context: SchedulingAdministrationContext,
+    session: DatabaseSession,
+) -> BranchSchedulingPolicyResponse:
+    try:
+        return await branch_scheduling_administration.configure(
+            session, context=context, branch_id=branch_id, policy=data
+        )
+    except SchedulingError as error:
+        raise translate_scheduling_error(error) from error
 
 
 @router.get(
