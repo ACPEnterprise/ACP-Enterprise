@@ -4,6 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.employee_operations.permissions import EmployeeOperationsPermission
@@ -33,6 +36,7 @@ from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import (
     AccountingPermission,
     AdministrationPermission,
+    AnalyticsPermission,
     BeaconPermission,
     CommunicationsPermission,
     CustomerPermission,
@@ -53,8 +57,6 @@ from app.platform.permissions.codes import (
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.timekeeping.permissions import TimekeepingPermission
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -252,6 +254,19 @@ def test_acp_employee_mobile_role_has_only_approved_field_authority() -> None:
     assert role.permission_codes.isdisjoint(AdministrationPermission.ALL)
     assert role.permission_codes.isdisjoint(AccountingPermission.ALL)
     assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
+
+
+@pytest.mark.parametrize(
+    "role_code",
+    [LaunchRoleCode.TECHNICIAN, LaunchRoleCode.ACP_EMPLOYEE_MOBILE],
+)
+def test_field_roles_exclude_owner_command_center_authority(role_code) -> None:
+    role = next(value for value in LAUNCH_ROLE_MATRIX if value.code is role_code)
+    assert AnalyticsPermission.READ not in role.permission_codes
+    assert role.permission_codes.isdisjoint(AccountingPermission.ALL)
+    assert role.permission_codes.isdisjoint(EconomicsPolicyPermission.ALL)
+    assert role.permission_codes.isdisjoint(LuminaryPermission.ALL)
+    assert role.permission_codes.isdisjoint(LaunchPlatformPermission.ALL)
 
 
 def test_audit_permission_fails_closed_without_explicit_grant() -> None:
