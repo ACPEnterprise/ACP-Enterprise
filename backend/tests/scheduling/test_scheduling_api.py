@@ -32,6 +32,7 @@ from app.platform.permissions.models import (
 from app.platform.users.models import User, UserCredential
 from app.scheduling.errors import (
     SchedulingCapacityError,
+    SchedulingCapacityFailure,
     SchedulingError,
     SchedulingValidationError,
     SchedulingVersionConflictError,
@@ -887,10 +888,10 @@ async def test_create_conceals_tenant_and_branch_references(
             "RETRY_AFTER_REFRESH",
         ),
         (
-            SchedulingCapacityError("capacity"),
+            SchedulingCapacityError(SchedulingCapacityFailure.CAPACITY_EXHAUSTED),
             409,
-            "concurrency_conflict",
-            "RETRY_AFTER_REFRESH",
+            "scheduling_capacity_exhausted",
+            "USER_CORRECTION_REQUIRED",
         ),
         (
             SchedulingValidationError("invalid"),
@@ -915,6 +916,44 @@ def test_scheduling_failures_use_safe_recovery_contract(
     assert detail["code"] == code
     assert detail["recovery"] == recovery
     assert detail["correlation_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("failure", "code", "recovery"),
+    [
+        (
+            "calendar_missing",
+            "scheduling_calendar_missing",
+            "OWNER_ADMIN_ACTION_REQUIRED",
+        ),
+        (
+            "calendar_unavailable",
+            "scheduling_calendar_unavailable",
+            "RECONCILIATION_REQUIRED",
+        ),
+        ("calendar_closed", "scheduling_calendar_closed", "USER_CORRECTION_REQUIRED"),
+        (
+            "interval_unavailable",
+            "scheduling_interval_unavailable",
+            "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            "capacity_exhausted",
+            "scheduling_capacity_exhausted",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_capacity_failures_preserve_safe_operator_reason(
+    failure: str, code: str, recovery: str
+) -> None:
+    translated = translate_scheduling_error(
+        SchedulingCapacityError(SchedulingCapacityFailure(failure))
+    )
+    assert translated.status_code == 409
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == recovery
+    assert translated.detail["message"]
 
 
 @pytest.mark.asyncio
