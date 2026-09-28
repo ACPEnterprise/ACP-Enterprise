@@ -871,9 +871,20 @@ class RecoveryService:
                 or reset_token.revoked_at is not None
             ):
                 raise InvalidTokenError("Password reset token is invalid.")
+            user = await session.scalar(
+                select(User)
+                .where(User.id == reset_token.user_id)
+                .with_for_update()
+            )
+            if (
+                user is None
+                or user.status != "active"
+                or user.archived_at is not None
+            ):
+                raise InvalidTokenError("Password reset token is invalid.")
             credential = await session.scalar(
                 select(UserCredential)
-                .where(UserCredential.user_id == reset_token.user_id)
+                .where(UserCredential.user_id == user.id)
                 .with_for_update()
             )
             if credential is None:

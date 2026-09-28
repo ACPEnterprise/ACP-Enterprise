@@ -12,6 +12,7 @@ from app.platform.auth.errors import (
     InvalidCredentialsError,
     InvalidTokenError,
     PasswordChangeRequiredError,
+    PasswordPolicyError,
     RateLimitExceededError,
     RefreshTokenReuseError,
 )
@@ -542,6 +543,165 @@ async def test_logout_password_reset_and_email_verification(
         )
         assert verification_record is not None
         assert verification_record.consumed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_password_reset_policy_retry_concurrency_and_sign_in(
+    service_stack: tuple[
+        AsyncEngine,
+        async_sessionmaker[AsyncSession],
+        PasswordService,
+        CredentialService,
+        AuthenticationService,
+        RecoveryService,
+    ],
+) -> None:
+    _, factory, _, credential_service, auth_service, recovery = service_stack
+    email = f"physical-reset-{uuid4()}@example.com"
+    original_password = "original correct horse battery staple"
+    replacement_password = "replacement correct horse battery staple"
+    user_id = await create_user(factory, email=email)
+    await set_password(factory, credential_service, user_id, original_password)
+
+    async with factory() as session:
+        prior_login = await auth_service.authenticate(
+            session, email=email, password=original_password
+        )
+    async with factory() as session:
+        delivery = await recovery.request_password_reset(session, email=email)
+    assert delivery.plaintext_token is not None
+    token_hash = auth_service.token_service.hash_token(delivery.plaintext_token)
+
+    async with factory() as session:
+        with pytest.raises(PasswordPolicyError):
+            await recovery.confirm_password_reset(
+                session,
+                plaintext_token=delivery.plaintext_token,
+                new_password="short",
+            )
+    async with factory() as session:
+        pending = await session.scalar(
+            select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+        )
+        assert pending is not None
+        assert pending.consumed_at is None and pending.revoked_at is None
+
+    async def redeem() -> None:
+        async with factory() as session:
+            await recovery.confirm_password_reset(
+                session,
+                plaintext_token=delivery.plaintext_token,
+                new_password=replacement_password,
+            )
+
+    outcomes = await asyncio.gather(redeem(), redeem(), return_exceptions=True)
+    assert outcomes.count(None) == 1
+    assert sum(isinstance(value, InvalidTokenError) for value in outcomes) == 1
+
+    async with factory() as session:
+        prior_session = await session.get(AuthenticationSession, prior_login.session_id)
+        assert prior_session is not None
+        assert prior_session.status == "revoked"
+        prior_refresh = await session.scalar(
+            select(RefreshToken).where(
+                RefreshToken.session_id == prior_login.session_id
+            )
+        )
+        assert prior_refresh is not None and prior_refresh.revoked_at is not None
+        consumed = await session.scalar(
+            select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+        )
+        assert consumed is not None and consumed.consumed_at is not None
+
+    async with factory() as session:
+        with pytest.raises(InvalidCredentialsError):
+            await auth_service.authenticate(
+                session, email=email, password=original_password
+            )
+    async with factory() as session:
+        replacement_login = await auth_service.authenticate(
+            session, email=email, password=replacement_password
+        )
+        assert replacement_login.user.id == user_id
+    async with factory() as session:
+        with pytest.raises(InvalidTokenError):
+            await recovery.confirm_password_reset(
+                session,
+                plaintext_token=delivery.plaintext_token,
+                new_password="another replacement password value",
+            )
+
+
+@pytest.mark.asyncio
+async def test_password_reset_expiry_and_user_scope_fail_without_consumption(
+    service_stack: tuple[
+        AsyncEngine,
+        async_sessionmaker[AsyncSession],
+        PasswordService,
+        CredentialService,
+        AuthenticationService,
+        RecoveryService,
+    ],
+) -> None:
+    _, factory, _, credential_service, auth_service, recovery = service_stack
+    expired_email = f"reset-scope-{uuid4()}@example.com"
+    user_id = await create_user(factory, email=expired_email)
+    await set_password(factory, credential_service, user_id)
+
+    async with factory() as session:
+        expired_delivery = await recovery.request_password_reset(
+            session, email=expired_email
+        )
+    assert expired_delivery.plaintext_token is not None
+    expired_hash = auth_service.token_service.hash_token(
+        expired_delivery.plaintext_token
+    )
+    expired_issued_at = utc_now() - timedelta(hours=2)
+    async with factory() as session, session.begin():
+        await session.execute(
+            update(PasswordResetToken)
+            .where(PasswordResetToken.token_hash == expired_hash)
+            .values(
+                issued_at=expired_issued_at,
+                expires_at=expired_issued_at + timedelta(minutes=30),
+            )
+        )
+    async with factory() as session:
+        with pytest.raises(InvalidTokenError):
+            await recovery.confirm_password_reset(
+                session,
+                plaintext_token=expired_delivery.plaintext_token,
+                new_password="new correct horse battery staple",
+            )
+        expired = await session.scalar(
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == expired_hash
+            )
+        )
+        assert expired is not None and expired.consumed_at is None
+
+    email = f"reset-ineligible-{uuid4()}@example.com"
+    ineligible_id = await create_user(factory, email=email)
+    await set_password(factory, credential_service, ineligible_id)
+    async with factory() as session:
+        scope_delivery = await recovery.request_password_reset(session, email=email)
+    assert scope_delivery.plaintext_token is not None
+    scope_hash = auth_service.token_service.hash_token(scope_delivery.plaintext_token)
+    async with factory() as session, session.begin():
+        await session.execute(
+            update(User).where(User.id == ineligible_id).values(status="disabled")
+        )
+    async with factory() as session:
+        with pytest.raises(InvalidTokenError):
+            await recovery.confirm_password_reset(
+                session,
+                plaintext_token=scope_delivery.plaintext_token,
+                new_password="new correct horse battery staple",
+            )
+        scoped = await session.scalar(
+            select(PasswordResetToken).where(PasswordResetToken.token_hash == scope_hash)
+        )
+        assert scoped is not None and scoped.consumed_at is None
 
 
 @pytest.mark.asyncio

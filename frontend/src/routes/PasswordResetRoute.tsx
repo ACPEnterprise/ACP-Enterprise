@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import axios from "axios";
 
 import { apiClient } from "../api/client";
 import { brandConfig } from "../branding/brandConfig";
@@ -40,10 +41,16 @@ export function PasswordResetRoute() {
       setComplete(true);
       setPassword("");
       setConfirmation("");
-    } catch {
-      setError(token
-        ? "This reset link is expired, already used, or unavailable. Request a new link."
-        : "Password recovery is temporarily unavailable. Please try again later.");
+    } catch (failure) {
+      if (!token) {
+        setError("Password recovery is temporarily unavailable. Please try again later.");
+      } else if (axios.isAxiosError(failure) && failure.response?.status === 422) {
+        setError("Choose a password with at least 12 characters, then try again. Your reset link is still available.");
+      } else if (axios.isAxiosError(failure) && failure.response?.status === 400) {
+        setError("This reset link is expired, already used, or unavailable. Request a new link.");
+      } else {
+        setError("Password reset could not be completed right now. Your link was not marked as used; try again.");
+      }
     } finally {
       setSubmitting(false);
     }
