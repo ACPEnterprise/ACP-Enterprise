@@ -2,8 +2,12 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dispatch.models import DispatchAssignment, DispatchCrewMember
+from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.models import MembershipRole, Role
+from app.platform.users.models import User
+from app.workforce.employee_identity_classification import employee_is_synthetic
 from app.workforce.models import (
     Capability,
     Language,
@@ -72,6 +76,65 @@ class WorkforceEligibilityService:
         ).all()
         result: list[EligibleTechnician] = []
         for employee, profile, branch_eligibility in rows:
+            if await employee_is_synthetic(session, employee=employee):
+                continue
+            membership = (
+                None
+                if employee.membership_id is None
+                else await session.scalar(
+                    select(Membership).where(
+                        Membership.company_id == query.company_id,
+                        Membership.id == employee.membership_id,
+                    )
+                )
+            )
+            user = (
+                None
+                if membership is None
+                else await session.scalar(
+                    select(User).where(
+                        User.id == membership.user_id,
+                        User.status == "active",
+                        User.archived_at.is_(None),
+                    )
+                )
+            )
+            role_codes = (
+                frozenset()
+                if membership is None
+                else frozenset(
+                    await session.scalars(
+                        select(Role.code)
+                        .join(MembershipRole, MembershipRole.role_id == Role.id)
+                        .where(
+                            MembershipRole.company_id == query.company_id,
+                            MembershipRole.membership_id == membership.id,
+                            MembershipRole.revoked_at.is_(None),
+                            Role.status == "active",
+                            Role.archived_at.is_(None),
+                        )
+                    )
+                )
+            )
+            explicit_branch_access = bool(
+                membership
+                and await session.scalar(
+                    select(MembershipBranchAccess.id)
+                    .where(
+                        MembershipBranchAccess.membership_id == membership.id,
+                        MembershipBranchAccess.branch_id == query.branch_id,
+                    )
+                    .limit(1)
+                )
+            )
+            membership_branch_ready = bool(
+                membership
+                and (
+                    membership.has_all_branch_access
+                    or membership.default_branch_id == query.branch_id
+                    or explicit_branch_access
+                )
+            )
             capabilities = (
                 ()
                 if profile is None
@@ -178,6 +241,14 @@ class WorkforceEligibilityService:
                 .limit(1)
             )
             reasons: list[str] = []
+            if membership is None or membership.status != "active" or user is None:
+                reasons.append("identity_not_ready")
+            if not membership_branch_ready:
+                reasons.append("membership_branch_not_ready")
+            if "TECHNICIAN" not in role_codes:
+                reasons.append("technician_role_missing")
+            if "ACP_EMPLOYEE_MOBILE" not in role_codes:
+                reasons.append("mobile_role_missing")
             if employee.status != "active" or (
                 profile is not None and profile.status != "active"
             ):

@@ -4,9 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.employee_operations.permissions import EmployeeOperationsPermission
@@ -57,6 +54,8 @@ from app.platform.permissions.codes import (
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.timekeeping.permissions import TimekeepingPermission
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -246,14 +245,25 @@ def test_acp_employee_mobile_role_has_only_approved_field_authority() -> None:
             EmployeeOperationsPermission.OWN_DAY_READ,
             TimekeepingPermission.OWN_PUNCH,
             TimekeepingPermission.OWN_READ,
-            JobPermission.READ,
             JobPermission.EXECUTE,
         }
     )
     assert role.permission_codes.isdisjoint(CustomerPermission.ALL)
+    assert role.permission_codes.isdisjoint(SchedulingPermission.ALL)
+    assert JobPermission.READ not in role.permission_codes
     assert role.permission_codes.isdisjoint(AdministrationPermission.ALL)
     assert role.permission_codes.isdisjoint(AccountingPermission.ALL)
     assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
+
+
+def test_technician_role_uses_assignment_scoped_job_authority_only() -> None:
+    role = next(
+        value for value in LAUNCH_ROLE_MATRIX if value.code is LaunchRoleCode.TECHNICIAN
+    )
+    assert JobPermission.EXECUTE in role.permission_codes
+    assert JobPermission.READ not in role.permission_codes
+    assert role.permission_codes.isdisjoint(CustomerPermission.ALL)
+    assert role.permission_codes.isdisjoint(SchedulingPermission.ALL)
 
 
 @pytest.mark.parametrize(

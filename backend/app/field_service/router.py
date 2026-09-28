@@ -60,7 +60,9 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 
 router = APIRouter(prefix="/api/v1/technician", tags=["Technician Field Service"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
-Read = Annotated[AuthorizationContext, Depends(require_permission(JobPermission.READ))]
+Read = Annotated[
+    AuthorizationContext, Depends(require_permission(JobPermission.EXECUTE))
+]
 Execute = Annotated[
     AuthorizationContext, Depends(require_permission(JobPermission.EXECUTE))
 ]

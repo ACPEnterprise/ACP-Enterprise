@@ -14,13 +14,8 @@ SYNTHETIC_REQUEST_KEYS = frozenset(
 )
 
 
-async def employee_is_synthetic(
-    session: AsyncSession, *, employee: Employee
-) -> bool:
+async def employee_is_synthetic(session: AsyncSession, *, employee: Employee) -> bool:
     """Classify known acceptance fixtures from durable identity evidence."""
-    number = employee.employee_number.strip().upper()
-    if number.startswith(("SYN-", "SYN_", "SYNTHETIC", "BETA")):
-        return True
     onboarding = await session.scalar(
         select(IdentityOnboardingRequest).where(
             IdentityOnboardingRequest.company_id == employee.company_id,
