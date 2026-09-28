@@ -164,6 +164,7 @@ def upgrade() -> None:
         sa.Column("request_digest", sa.String(64)),
         sa.Column("actor_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["company_id", "branch_id", "lead_id"],
             [
