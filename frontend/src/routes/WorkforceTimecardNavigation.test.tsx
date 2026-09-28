@@ -32,6 +32,11 @@ vi.mock("../hooks/useWorkforce", () => ({
     isLoading: false,
     isError: false,
   }),
+  useEmployeeFieldReadiness: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
   useEmployeeTimeline: () => ({
     data: undefined,
     isLoading: false,

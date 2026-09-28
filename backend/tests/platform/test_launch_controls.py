@@ -18,9 +18,9 @@ from app.platform.company.models import Company
 from app.platform.launch_controls import (
     COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
     LAUNCH_ROLE_MATRIX,
+    OFFICE_MANAGER_OPERATIONAL_PERMISSIONS,
     PLATFORM_ADMIN_NORMAL_PERMISSIONS,
     PLATFORM_OWNER_ADMIN_PERMISSIONS,
-    OFFICE_MANAGER_OPERATIONAL_PERMISSIONS,
     LaunchRoleCode,
     validate_launch_role_matrix,
 )
