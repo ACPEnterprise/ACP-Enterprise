@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { getTechnicianItinerary } from "./technician";
+import { getTechnicianHistory, getTechnicianItinerary } from "./technician";
 
 vi.mock("./client", () => ({ apiClient: { get: vi.fn() } }));
 
@@ -20,5 +20,11 @@ describe("technician API", () => {
     expect(apiClient.get).toHaveBeenCalledWith("/api/v1/technician/itinerary", {
       params: { service_date: "2026-08-26" },
     });
+  });
+
+  it("requests bounded own-assignment history without sending an empty search", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { items: [] } });
+    await getTechnicianHistory({ startDate: "2026-07-01", endDate: "2026-08-01", query: " " });
+    expect(apiClient.get).toHaveBeenCalledWith("/api/v1/technician/history", { params: { start_date: "2026-07-01", end_date: "2026-08-01", limit: 50 } });
   });
 });

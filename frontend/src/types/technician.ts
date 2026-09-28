@@ -30,3 +30,26 @@ export interface TechnicianItinerary {
   readonly technician_display_name: string;
   readonly items: readonly TechnicianItineraryItem[];
 }
+
+export interface TechnicianHistoryItem {
+  readonly appointment_id: string;
+  readonly appointment_number: string;
+  readonly job_id: string;
+  readonly job_number: string;
+  readonly service_date: string;
+  readonly window_start_at: string;
+  readonly window_end_at: string;
+  readonly appointment_status: string;
+  readonly job_status: string;
+  readonly service_type: string | null;
+  readonly customer_display_name: string;
+  readonly service_location_label: string;
+}
+
+export interface TechnicianHistory {
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly query: string | null;
+  readonly limit: number;
+  readonly items: readonly TechnicianHistoryItem[];
+}
