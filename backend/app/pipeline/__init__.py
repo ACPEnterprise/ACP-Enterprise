@@ -1,0 +1,1 @@
+"""Canonical Lead/Pipeline authority."""
