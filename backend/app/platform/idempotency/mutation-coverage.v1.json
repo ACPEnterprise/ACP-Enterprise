@@ -1,5 +1,7 @@
 {
   "entries": [
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"workforce","mechanism":"Company-scoped Employee and functional-area row locking with canonical role target state","method":"PUT","operation_id":"grant_functional_access_api_v1_workforce_administration_employees__employee_id__functional_access_put","path":"/api/v1/workforce/administration/employees/{employee_id}/functional-access","reason":"A functional-area update supersedes the prior active grant and advances authorization version atomically.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"workforce","mechanism":"Company-scoped immutable role-grant identity and idempotent revocation timestamp","method":"POST","operation_id":"revoke_functional_access_api_v1_workforce_administration_employees__employee_id__functional_access__assignment_id__revoke_post","path":"/api/v1/workforce/administration/employees/{employee_id}/functional-access/{assignment_id}/revoke","reason":"Repeated revocation leaves the same grant ineffective and preserves its history.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"scheduling","mechanism":"Branch calendar row lock, optimistic policy version, and complete target-state replacement","method":"PUT","operation_id":"configure_branch_scheduling_policy_api_v1_scheduling_branches__branch_id__policy_put","path":"/api/v1/scheduling/branches/{branch_id}/policy","reason":"Owner policy updates reject stale versions and converge on the explicitly submitted Branch calendar state.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Company-scoped governed run identity and immutable assembly digest","method":"POST","operation_id":"assemble_run_api_v1_payroll_operator_runs_assemble_post","path":"/api/v1/payroll/operator/runs/assemble","reason":"Run assembly is replay-safe and population scoped.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and append-only review evidence","method":"POST","operation_id":"review_run_api_v1_payroll_operator_runs__run_id__review_post","path":"/api/v1/payroll/operator/runs/{run_id}/review","reason":"Review initiation converges on the governed run lifecycle.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
@@ -3305,6 +3307,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "dae38b959b69502196bbfba12a82dbad96d3e3c84ca6a006508610d955b6b075",
+  "fingerprint": "3360dc83e175cd18422fcf72d81f7119f362d3c5f972452e18e201871c6cd919",
   "schema_version": "1"
 }
