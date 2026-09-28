@@ -255,9 +255,6 @@ LAUNCH_ROLE_MATRIX = (
         ),
         permission_codes=frozenset(
             {
-                CustomerPermission.READ,
-                SchedulingPermission.READ,
-                JobPermission.READ,
                 JobPermission.EXECUTE,
                 EmployeeOperationsPermission.OWN_DAY_READ,
                 TimekeepingPermission.OWN_READ,
@@ -328,7 +325,6 @@ LAUNCH_ROLE_MATRIX = (
                 EmployeeOperationsPermission.OWN_DAY_READ,
                 TimekeepingPermission.OWN_PUNCH,
                 TimekeepingPermission.OWN_READ,
-                JobPermission.READ,
                 JobPermission.EXECUTE,
             }
         ),

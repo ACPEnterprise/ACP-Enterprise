@@ -9,12 +9,12 @@ import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFieldReadiness, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
-  return <Badge variant={state === "READY" ? "success" : state === "BLOCKED" ? "danger" : "neutral"}>{state.replaceAll("_", " ")}</Badge>;
+  return <Badge variant={state === "READY" ? "success" : "danger"}>{state === "READY" ? "DISPATCH READY" : "NOT DISPATCH READY"}</Badge>;
 }
 
 function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {
@@ -47,6 +47,7 @@ export function WorkforceRoute() {
   const [statusFilter, setStatusFilter] = useState("");
   const [readinessFilter, setReadinessFilter] = useState("");
   const detail = useWorkforceEmployee(selected);
+  const fieldReadiness = useEmployeeFieldReadiness(selected);
   const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
   const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
@@ -82,6 +83,9 @@ export function WorkforceRoute() {
   const [branchId, setBranchId] = useState(() => activeCompany?.default_branch_id ?? activeCompany?.branches?.[0]?.id ?? "");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
+  const [readinessWindowStart, setReadinessWindowStart] = useState("");
+  const [readinessWindowEnd, setReadinessWindowEnd] = useState("");
+  const [readinessReason, setReadinessReason] = useState("");
   const selectPayPeriod = (payPeriodId: string) => {
     setSelectedPayPeriodId(payPeriodId);
     const next = new URLSearchParams(searchParams);
@@ -710,8 +714,30 @@ export function WorkforceRoute() {
             </section>
             {detail.data.readiness_blockers.length > 0 && (
               <section className="mt-5 rounded-xl border border-status-warning/40 bg-status-warning/5 p-4">
-                <h4 className="font-semibold">Assignment readiness blockers</h4>
+                <h4 className="font-semibold">Not Dispatch ready</h4>
                 <ReadinessBlockers blockers={detail.data.readiness_blockers} />
+                {permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE") && permissionCodes.includes("COMPANY_WORKFORCE_AVAILABILITY_MANAGE") && (
+                  <form className="mt-4 grid gap-3 rounded-lg border border-stroke bg-surface p-3 sm:grid-cols-2" onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!detail.data.home_branch_id) return;
+                    fieldReadiness.mutate({
+                      branchId: detail.data.home_branch_id,
+                      windowStartAt: new Date(readinessWindowStart).toISOString(),
+                      windowEndAt: new Date(readinessWindowEnd).toISOString(),
+                      reason: readinessReason.trim(),
+                    });
+                  }}>
+                    <div className="sm:col-span-2">
+                      <h5 className="font-semibold">Confirm technician capability and working availability</h5>
+                      <p className="mt-1 text-sm text-content-muted">This records owner-confirmed Technician capability and a bounded working window. It does not infer plumbing skills, certifications, languages, Payroll state, or assign a Job.</p>
+                    </div>
+                    <label className="text-sm">Available from<Input required className="mt-1" type="datetime-local" value={readinessWindowStart} onChange={(event) => setReadinessWindowStart(event.target.value)} /></label>
+                    <label className="text-sm">Available through<Input required className="mt-1" type="datetime-local" value={readinessWindowEnd} onChange={(event) => setReadinessWindowEnd(event.target.value)} /></label>
+                    <label className="text-sm sm:col-span-2">Owner confirmation reason<Input required minLength={3} className="mt-1" value={readinessReason} onChange={(event) => setReadinessReason(event.target.value)} placeholder="Confirmed field technician and operating window" /></label>
+                    <Button className="sm:col-span-2" disabled={!detail.data.home_branch_id || !readinessWindowStart || !readinessWindowEnd || readinessReason.trim().length < 3 || fieldReadiness.isPending} type="submit">{fieldReadiness.isPending ? "Recording…" : "Record confirmed Dispatch readiness"}</Button>
+                    {fieldReadiness.isError && <Alert className="sm:col-span-2" variant="danger">Readiness evidence conflicts with current authority. Refresh and review the Employee before retrying.</Alert>}
+                  </form>
+                )}
               </section>
             )}
             {canAdministerEmployees && administration.isLoading && (
