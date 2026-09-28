@@ -17,6 +17,9 @@ const explanations: Record<string, ReadinessExplanation> = {
   MOBILE_ROLE_NOT_READY: { missing: "ACP Employee Mobile authority is not active.", actor: "OWNER", next: "Assign ACP_EMPLOYEE_MOBILE after identity, Membership, and Branch are correct." },
   PASSWORD_NOT_ESTABLISHED: { missing: "The Employee has not established an ACP password.", actor: "EMPLOYEE", next: "Use the single-use activation or password-recovery flow; administrators cannot set it." },
   PROFILE_MISSING: { missing: "No active Workforce profile supports assignment readiness.", actor: "OWNER", next: "Review the Employee and record authorized Workforce evidence." },
+  capability_profile_missing: { missing: "Capability profile missing.", actor: "OWNER", next: "Confirm technician capability and a bounded working-availability window on this Employee profile." },
+  technician_capability_missing: { missing: "Technician capability has not been confirmed.", actor: "OWNER", next: "Confirm only the capability supported by owner evidence." },
+  working_availability_missing: { missing: "Working availability is not configured.", actor: "OWNER", next: "Record an authorized operating window for the Employee's Branch." },
   BRANCH_INELIGIBLE: { missing: "The Employee is not eligible for the requested Branch.", actor: "OWNER", next: "Confirm Branch authority; do not infer coverage from prior Jobs." },
   AVAILABILITY_MISSING: { missing: "No bounded available window covers the requested work period.", actor: "OWNER", next: "Record the human-confirmed Branch availability window." },
 };

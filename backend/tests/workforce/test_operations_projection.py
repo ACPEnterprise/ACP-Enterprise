@@ -71,23 +71,37 @@ def employee(*, status: str = "active"):
 
 
 def test_readiness_uses_explicit_capability_credential_and_branch_evidence() -> None:
-    state, blockers = WorkforceOperationsService._readiness(employee(), profile())
+    state, blockers = WorkforceOperationsService._readiness(
+        employee(), profile(), availability_configured=True
+    )
     assert state == "READY"
     assert blockers == ()
 
 
 def test_expired_credential_is_an_explicit_blocker() -> None:
     state, blockers = WorkforceOperationsService._readiness(
-        employee(), profile(expires_on=date(2020, 1, 1))
+        employee(),
+        profile(expires_on=date(2020, 1, 1)),
+        availability_configured=True,
     )
     assert state == "BLOCKED"
     assert blockers == ("credential_not_current",)
 
 
 def test_missing_profile_remains_visible_as_insufficient_evidence() -> None:
-    state, blockers = WorkforceOperationsService._readiness(employee(), None)
+    state, blockers = WorkforceOperationsService._readiness(
+        employee(), None, availability_configured=False
+    )
     assert state == "INSUFFICIENT_EVIDENCE"
     assert blockers == ("capability_profile_missing",)
+
+
+def test_missing_working_availability_is_an_explicit_dispatch_blocker() -> None:
+    state, blockers = WorkforceOperationsService._readiness(
+        employee(), profile(), availability_configured=False
+    )
+    assert state == "BLOCKED"
+    assert blockers == ("working_availability_missing",)
 
 
 def test_public_workforce_contract_cannot_expose_payroll_material() -> None:
