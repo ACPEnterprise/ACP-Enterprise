@@ -53,3 +53,47 @@ export interface AppointmentRescheduleInput {
     | "scheduling_conflict"
     | "weather";
 }
+
+export interface BranchWeeklyInterval {
+  day_of_week: number;
+  start_minute: number;
+  end_minute: number;
+  capacity_units: string;
+}
+
+export interface BranchSchedulingException {
+  exception_date: string;
+  start_minute: number | null;
+  end_minute: number | null;
+  is_closed: boolean;
+  capacity_units: string | null;
+  reason_code: string;
+}
+
+export interface BranchSchedulingPolicy {
+  branch_id: string;
+  timezone: string;
+  status: "NOT_CONFIGURED" | "ACTIVE" | "INACTIVE";
+  readiness: "SCHEDULING_READY" | "SCHEDULING_SETUP_REQUIRED";
+  blockers: string[];
+  version: number | null;
+  booking_horizon_days: number | null;
+  minimum_notice_minutes: number | null;
+  slot_interval_minutes: number | null;
+  default_capacity_units: string | null;
+  weekly_intervals: BranchWeeklyInterval[];
+  exceptions: BranchSchedulingException[];
+}
+
+export interface BranchSchedulingPolicyInput {
+  expected_version: number | null;
+  timezone: string;
+  active: boolean;
+  booking_horizon_days: number;
+  minimum_notice_minutes: number;
+  slot_interval_minutes: number;
+  default_capacity_units: string;
+  weekly_intervals: BranchWeeklyInterval[];
+  exceptions: BranchSchedulingException[];
+  reason: string;
+}

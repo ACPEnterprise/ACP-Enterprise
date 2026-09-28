@@ -457,6 +457,7 @@ class EventType(str, Enum):
     APPOINTMENT_RESCHEDULED = "appointment.rescheduled"
     APPOINTMENT_CANCELLED = "appointment.cancelled"
     APPOINTMENT_MIGRATED = "appointment.migrated"
+    BRANCH_SCHEDULING_POLICY_CONFIGURED = "branch_scheduling_policy.configured"
 
     # Dispatch
     TECHNICIAN_DISPATCHED = "technician.dispatched"

@@ -1,5 +1,6 @@
 {
   "entries": [
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"scheduling","mechanism":"Branch calendar row lock, optimistic policy version, and complete target-state replacement","method":"PUT","operation_id":"configure_branch_scheduling_policy_api_v1_scheduling_branches__branch_id__policy_put","path":"/api/v1/scheduling/branches/{branch_id}/policy","reason":"Owner policy updates reject stale versions and converge on the explicitly submitted Branch calendar state.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Company-scoped governed run identity and immutable assembly digest","method":"POST","operation_id":"assemble_run_api_v1_payroll_operator_runs_assemble_post","path":"/api/v1/payroll/operator/runs/assemble","reason":"Run assembly is replay-safe and population scoped.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and append-only review evidence","method":"POST","operation_id":"review_run_api_v1_payroll_operator_runs__run_id__review_post","path":"/api/v1/payroll/operator/runs/{run_id}/review","reason":"Review initiation converges on the governed run lifecycle.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and immutable review decision evidence","method":"POST","operation_id":"decide_run_review_api_v1_payroll_operator_runs__run_id__review_decision_post","path":"/api/v1/payroll/operator/runs/{run_id}/review/decision","reason":"Review decisions are append-only and reject contradictory replay.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
@@ -3294,6 +3295,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2926c5d12f405445e368a5e3f2afa2c09c19611d6d24a583521d4e40fa4485f1",
+  "fingerprint": "0cde8af52910cfb0480cde098cb177fc77b4a2411b40e3a9313c8e5efd568119",
   "schema_version": "1"
 }
