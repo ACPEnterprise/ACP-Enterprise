@@ -44,9 +44,10 @@ export const navigationCatalog = [
   {
     id: "command-center",
     label: "Command Center",
-    path: "/",
+    path: "/command-center",
     icon: MonitorCog,
     availability: "available",
+    requiredPermission: "COMPANY_ANALYTICS_READ",
   },
   {
     id: "mission-control",
@@ -78,6 +79,14 @@ export const navigationCatalog = [
     icon: MapPinned,
     availability: "available",
     requiredPermission: "COMPANY_JOB_EXECUTE",
+  },
+  {
+    id: "my-schedule",
+    label: "My Schedule",
+    path: "/technician/schedule",
+    icon: CalendarDays,
+    availability: "available",
+    requiredPermission: "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
   },
   {
     id: "dispatch",
@@ -116,6 +125,14 @@ export const navigationCatalog = [
     path: "/jobs",
     icon: BriefcaseBusiness,
     availability: "available",
+  },
+  {
+    id: "my-jobs",
+    label: "My Jobs",
+    path: "/technician/jobs",
+    icon: BriefcaseBusiness,
+    availability: "available",
+    requiredPermission: "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
   },
   {
     id: "engineering",
@@ -335,7 +352,9 @@ export const navigationGroups = [
       item("customers"),
       item("service-agreements"),
       item("technician"),
+      item("my-schedule"),
       item("workday"),
+      item("my-jobs"),
       item("scheduling"),
       item("jobs"),
       item("dispatch"),

@@ -1,5 +1,6 @@
 import { CalendarDays, RotateCw } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
 import { TechnicianItineraryCard } from "../features/technician/TechnicianItineraryCard";
@@ -12,6 +13,12 @@ function localDate(date: Date) {
 }
 
 export function TechnicianRoute() {
+  const location = useLocation();
+  const heading = location.pathname.endsWith("/schedule")
+    ? "My Schedule"
+    : location.pathname.endsWith("/jobs")
+      ? "My Jobs"
+      : "My day";
   const [serviceDate, setServiceDate] = useState(() => localDate(new Date()));
   const itinerary = useTechnicianItinerary(serviceDate);
   const itineraryError = itinerary.error
@@ -22,7 +29,7 @@ export function TechnicianRoute() {
     <div className="mx-auto w-full max-w-3xl space-y-ui-6 pb-ui-8">
       <header>
         <p className="text-sm font-medium text-action-primary">Field Service</p>
-        <h2 className="mt-ui-1 text-2xl font-bold sm:text-3xl">My day</h2>
+        <h2 className="mt-ui-1 text-2xl font-bold sm:text-3xl">{heading}</h2>
         <p className="mt-ui-2 text-content-muted">
           Your assigned visits in scheduled order.
         </p>
