@@ -323,6 +323,41 @@ async def test_assignment_is_idempotent_audited_and_releasable(dispatch_fixture)
 
 
 @pytest.mark.asyncio
+async def test_arrival_promise_does_not_expand_technician_work_interval(
+    dispatch_fixture,
+):
+    factory, context, appointment, technician, _ = dispatch_fixture
+    async with factory() as session, session.begin():
+        persisted = await session.get(Appointment, appointment.id)
+        assert persisted is not None
+        persisted.arrival_window_end_at = persisted.arrival_window_start_at + timedelta(
+            hours=6
+        )
+    async with factory() as session:
+        option = next(
+            item
+            for item in await DispatchService().eligible(
+                session, context=context, appointment_id=appointment.id
+            )
+            if item.employee_id == technician.id
+        )
+        assert option.eligible
+    async with factory() as session:
+        assignment = await DispatchService().assign(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            employee_id=technician.id,
+            reason="Planned work interval",
+            idempotency_key="dispatch-arrival-promise-001",
+        )
+    assert assignment.window_start_at == appointment.arrival_window_start_at
+    assert assignment.window_end_at == appointment.arrival_window_start_at + timedelta(
+        minutes=120
+    )
+
+
+@pytest.mark.asyncio
 async def test_overlapping_assignment_and_company_scope_fail_closed(dispatch_fixture):
     factory, context, appointment, technician, _ = dispatch_fixture
     service = DispatchService()

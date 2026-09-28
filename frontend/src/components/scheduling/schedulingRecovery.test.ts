@@ -39,6 +39,21 @@ describe("Scheduling mutation recovery", () => {
     });
   });
 
+  it.each([
+    ["scheduling_calendar_missing", "Branch scheduling setup required"],
+    ["scheduling_calendar_unavailable", "Branch schedule unavailable"],
+    ["scheduling_calendar_closed", "Branch closed at requested time"],
+    ["scheduling_interval_unavailable", "Outside Branch operating hours"],
+    ["scheduling_capacity_exhausted", "Branch capacity already committed"],
+  ])("renders an actionable reason for %s", (code, title) => {
+    expect(
+      schedulingMutationRecovery(
+        failure(409, { code, recovery: "USER_CORRECTION_REQUIRED" }),
+        "Job scheduling",
+      ),
+    ).toMatchObject({ state: code === "scheduling_calendar_unavailable" ? "FAILED_REQUIRES_REFRESH" : "FAILED", title, retryLabel: null });
+  });
+
   it("keeps authorization rejection definitive and non-retryable", () => {
     expect(schedulingMutationRecovery(failure(403, { code: "forbidden", recovery: "TERMINAL_FAILURE" }), "booking")).toMatchObject({
       state: "FAILED",

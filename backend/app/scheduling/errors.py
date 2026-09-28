@@ -1,3 +1,4 @@
+from enum import StrEnum
 from uuid import UUID
 
 
@@ -18,8 +19,18 @@ class SchedulingConflictError(SchedulingError):
     pass
 
 
+class SchedulingCapacityFailure(StrEnum):
+    CALENDAR_MISSING = "calendar_missing"
+    CALENDAR_UNAVAILABLE = "calendar_unavailable"
+    CALENDAR_CLOSED = "calendar_closed"
+    INTERVAL_UNAVAILABLE = "interval_unavailable"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+
+
 class SchedulingCapacityError(SchedulingConflictError):
-    pass
+    def __init__(self, failure: SchedulingCapacityFailure) -> None:
+        self.failure = failure
+        super().__init__(failure.value)
 
 
 class SchedulingVersionConflictError(SchedulingConflictError):
