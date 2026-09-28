@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import and_, func, select
@@ -35,6 +35,23 @@ ACTIVE = ("proposed", "assigned", "acknowledged", "reconciliation_required")
 
 
 class DispatchService:
+    @staticmethod
+    def _technician_work_interval(
+        appointment: Appointment,
+    ) -> tuple[datetime, datetime]:
+        """Return the occupied technician interval, distinct from the arrival promise."""
+        if appointment.arrival_window_start_at is None:
+            raise DispatchValidation("Appointment has no authoritative time window.")
+        if appointment.expected_duration_minutes is not None:
+            return (
+                appointment.arrival_window_start_at,
+                appointment.arrival_window_start_at
+                + timedelta(minutes=appointment.expected_duration_minutes),
+            )
+        if appointment.arrival_window_end_at is None:
+            raise DispatchValidation("Appointment has no authoritative time window.")
+        return appointment.arrival_window_start_at, appointment.arrival_window_end_at
+
     async def board(
         self,
         session: AsyncSession,
@@ -212,11 +229,7 @@ class DispatchService:
         appointment_id: UUID,
     ):
         appointment = await self._appointment(session, context, appointment_id)
-        if (
-            appointment.arrival_window_start_at is None
-            or appointment.arrival_window_end_at is None
-        ):
-            raise DispatchValidation("Appointment has no authoritative time window.")
+        work_start, work_end = self._technician_work_interval(appointment)
         return await workforce_eligibility_service.eligible_technicians(
             session,
             context=context,
@@ -224,8 +237,8 @@ class DispatchService:
                 company_id=context.company.id,
                 authorized_branch_ids=context.authorized_branch_ids,
                 branch_id=appointment.branch_id,
-                window_start_at=appointment.arrival_window_start_at,
-                window_end_at=appointment.arrival_window_end_at,
+                window_start_at=work_start,
+                window_end_at=work_end,
             ),
         )
 
@@ -276,13 +289,7 @@ class DispatchService:
                 raise DispatchConflict(
                     "A primary technician is already assigned; use replacement."
                 )
-            if (
-                appointment.arrival_window_start_at is None
-                or appointment.arrival_window_end_at is None
-            ):
-                raise DispatchValidation(
-                    "Appointment has no authoritative time window."
-                )
+            work_start, work_end = self._technician_work_interval(appointment)
             await self._employee_lock(session, context.company.id, employee_id)
             await self._require_eligible(session, context, appointment, employee_id)
             job_id = await session.scalar(
@@ -304,8 +311,8 @@ class DispatchService:
                     status="assigned",
                     assignment_reason=reason,
                     assigned_by_user_id=context.user.id,
-                    window_start_at=appointment.arrival_window_start_at,
-                    window_end_at=appointment.arrival_window_end_at,
+                    window_start_at=work_start,
+                    window_end_at=work_end,
                     effective_at=now,
                     version=1,
                     created_at=now,
