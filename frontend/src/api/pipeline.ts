@@ -12,4 +12,3 @@ export async function createLead(payload: LeadCreate): Promise<Lead> {
   const response = await apiClient.post<Lead>("/api/v1/pipeline", payload);
   return response.data;
 }
-
