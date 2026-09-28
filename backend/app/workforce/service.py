@@ -70,7 +70,10 @@ class WorkforceOperationsService:
 
     @staticmethod
     def _readiness(
-        employee: Employee, profile: WorkforceCapabilityProfileRecord | None
+        employee: Employee,
+        profile: WorkforceCapabilityProfileRecord | None,
+        *,
+        availability_configured: bool,
     ) -> tuple[Literal["READY", "BLOCKED", "INSUFFICIENT_EVIDENCE"], tuple[str, ...]]:
         blockers: list[str] = []
         if employee.status != "active" or employee.archived_at is not None:
@@ -85,6 +88,8 @@ class WorkforceOperationsService:
         }
         if "technician" not in active_codes:
             blockers.append("technician_capability_missing")
+        if not availability_configured:
+            blockers.append("working_availability_missing")
         today = datetime.now(timezone.utc).date()
         if any(
             item.status != "active"
@@ -103,9 +108,15 @@ class WorkforceOperationsService:
 
     @classmethod
     def _summary(
-        cls, employee: Employee, profile: WorkforceCapabilityProfileRecord | None
+        cls,
+        employee: Employee,
+        profile: WorkforceCapabilityProfileRecord | None,
+        *,
+        availability_configured: bool,
     ) -> WorkforceEmployeeSummary:
-        readiness, blockers = cls._readiness(employee, profile)
+        readiness, blockers = cls._readiness(
+            employee, profile, availability_configured=availability_configured
+        )
         capabilities = (
             tuple(item.code for item in profile.capabilities if item.status == "active")
             if profile
@@ -162,10 +173,30 @@ class WorkforceOperationsService:
                     session, company_id=context.company.id, profile_id=profile_model.id
                 )
             )
+            availability_configured = bool(
+                profile_model
+                and await session.scalar(
+                    select(WorkforceWorkingAvailability.id)
+                    .where(
+                        WorkforceWorkingAvailability.company_id == context.company.id,
+                        WorkforceWorkingAvailability.profile_id == profile_model.id,
+                        WorkforceWorkingAvailability.status == "available",
+                        WorkforceWorkingAvailability.end_at
+                        > datetime.now(timezone.utc),
+                    )
+                    .limit(1)
+                )
+            )
             if employee.home_branch_id is None or context.can_access_branch(
                 employee.home_branch_id
             ):
-                items.append(self._summary(employee, profile))
+                items.append(
+                    self._summary(
+                        employee,
+                        profile,
+                        availability_configured=availability_configured,
+                    )
+                )
         return WorkforceDirectory(items=tuple(items), total=len(items))
 
     async def detail(
@@ -188,7 +219,7 @@ class WorkforceOperationsService:
             )
         )
         if profile_id is None:
-            summary = self._summary(employee, None)
+            summary = self._summary(employee, None, availability_configured=False)
             return WorkforceEmployeeDetail(
                 **summary.model_dump(),
                 capabilities=(),
@@ -204,7 +235,6 @@ class WorkforceOperationsService:
         )
         if complete is None:
             return None
-        summary = self._summary(employee, complete)
         availability = tuple(
             WorkforceAvailabilityItem(
                 branch_id=item.branch_id,
@@ -227,6 +257,14 @@ class WorkforceOperationsService:
                 )
             ).all()
             if context.can_access_branch(item.branch_id)
+        )
+        summary = self._summary(
+            employee,
+            complete,
+            availability_configured=any(
+                item.status == "available" and item.end_at > datetime.now(timezone.utc)
+                for item in availability
+            ),
         )
         return WorkforceEmployeeDetail(
             **summary.model_dump(),
