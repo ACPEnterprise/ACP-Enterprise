@@ -4,14 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.events.models import BusinessEvent
 from app.platform.audit.models import AuditRecord
@@ -23,6 +15,13 @@ from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User, UserCredential
 from app.workforce.access_lock import EmployeeAccessLockService
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @pytest_asyncio.fixture

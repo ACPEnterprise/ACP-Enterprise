@@ -8,14 +8,6 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.analytics.service import AnalyticsService
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
@@ -57,6 +49,13 @@ from app.scheduling.models import (
     BranchSchedulingWeeklyInterval,
 )
 from app.scheduling.router import router, translate_scheduling_error
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @dataclass(frozen=True)
@@ -576,9 +575,8 @@ async def test_company_admin_configures_versioned_branch_scheduling_policy(
 
 
 def test_branch_scheduling_policy_rejects_overlapping_intervals() -> None:
-    from pydantic import ValidationError
-
     from app.scheduling.schemas import BranchSchedulingPolicyWrite
+    from pydantic import ValidationError
 
     with pytest.raises(ValidationError, match="cannot overlap"):
         BranchSchedulingPolicyWrite.model_validate(

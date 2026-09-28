@@ -2,11 +2,10 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from app.pipeline.models import Lead
 from app.pipeline.schemas import LeadCreate
 from app.pipeline.service import ALLOWED_TRANSITIONS, PipelineService, attention_state
+from pydantic import ValidationError
 
 NOW = datetime(2026, 9, 22, 14, 0, tzinfo=timezone.utc)
 

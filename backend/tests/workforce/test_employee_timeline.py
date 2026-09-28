@@ -5,8 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -14,6 +12,7 @@ from app.platform.employees.models import Employee
 from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User
 from app.workforce.employee_timeline import EmployeeTimelineService
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class Rows:
