@@ -26,9 +26,9 @@ interface LoginLocationState {
 }
 
 function destinationFromState(state: unknown): string {
-  if (!state || typeof state !== "object" || !("from" in state)) return "/mission-control";
+  if (!state || typeof state !== "object" || !("from" in state)) return "/";
   const destination = (state as LoginLocationState).from;
-  return destination?.startsWith("/") && destination !== "/login" ? destination : "/mission-control";
+  return destination?.startsWith("/") && destination !== "/login" ? destination : "/";
 }
 
 export function LoginRoute() {
