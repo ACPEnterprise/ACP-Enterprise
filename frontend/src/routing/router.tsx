@@ -160,6 +160,13 @@ export const appRoutes: RouteObject[] = [
                   Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
                 }),
               },
+              {
+                path: "technician/jobs/:jobId",
+                handle: technicianHandle,
+                lazy: async () => ({
+                  Component: (await import("../routes/TechnicianJobRoute")).TechnicianJobRoute,
+                }),
+              },
             ],
           },
           {
