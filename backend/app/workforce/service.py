@@ -72,33 +72,17 @@ class WorkforceOperationsService:
     def _readiness(
         employee: Employee,
         profile: WorkforceCapabilityProfileRecord | None,
-        *,
-        availability_configured: bool,
     ) -> tuple[Literal["READY", "BLOCKED", "INSUFFICIENT_EVIDENCE"], tuple[str, ...]]:
         blockers: list[str] = []
         if employee.status != "active" or employee.archived_at is not None:
             blockers.append("employee_inactive")
-        if profile is None:
-            blockers.append("capability_profile_missing")
-            return "INSUFFICIENT_EVIDENCE", tuple(blockers)
-        if profile.status != "active":
+        if profile is not None and profile.status != "active":
             blockers.append("profile_inactive")
-        active_codes = {
-            item.code for item in profile.capabilities if item.status == "active"
-        }
-        if "technician" not in active_codes:
-            blockers.append("technician_capability_missing")
-        if not availability_configured:
-            blockers.append("working_availability_missing")
-        today = datetime.now(timezone.utc).date()
-        if any(
-            item.status != "active"
-            or (item.expires_on is not None and item.expires_on < today)
-            for item in profile.certifications
-        ):
-            blockers.append("credential_not_current")
         if (
-            not any(item.status == "active" for item in profile.branch_eligibilities)
+            profile is not None
+            and not any(
+                item.status == "active" for item in profile.branch_eligibilities
+            )
             and employee.home_branch_id is None
         ):
             blockers.append("branch_authority_missing")
@@ -114,9 +98,7 @@ class WorkforceOperationsService:
         *,
         availability_configured: bool,
     ) -> WorkforceEmployeeSummary:
-        readiness, blockers = cls._readiness(
-            employee, profile, availability_configured=availability_configured
-        )
+        readiness, blockers = cls._readiness(employee, profile)
         capabilities = (
             tuple(item.code for item in profile.capabilities if item.status == "active")
             if profile

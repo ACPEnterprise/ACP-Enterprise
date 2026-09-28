@@ -60,6 +60,11 @@ const summary = {
 describe("WorkforceRoute", () => {
   afterEach(() => { authState.permissionCodes = []; });
   function mockEligibility() {
+    vi.mocked(workforceHooks.useEmployeeFunctionalAccess).mockReturnValue({
+      query: { data: [], isLoading: false, isError: false },
+      grant: { isPending: false, isError: false, mutate: vi.fn() },
+      revoke: { isPending: false, isError: false, mutate: vi.fn() },
+    } as never);
     vi.mocked(workforceHooks.useSourceCertification).mockReturnValue({
       query: { data: undefined, isLoading: false, isError: false },
       decide: { isPending: false, mutate: vi.fn() },
@@ -422,8 +427,9 @@ describe("WorkforceRoute", () => {
     expect(screen.getByText("ACCESS ACTIVE")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Lock Access" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("4 scheduled assignments");
-    await userEvent.type(screen.getByLabelText("Reason"), "Lost mobile device");
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Lock Access" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.type(within(dialog).getByLabelText("Reason"), "Lost mobile device");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Lock Access" }));
     expect(mutate).toHaveBeenCalledWith(
       { locked: true, reason: "Lost mobile device", expected_authorization_version: 7 },
       expect.any(Object),
@@ -457,18 +463,12 @@ describe("WorkforceRoute", () => {
     expect(screen.queryByPlaceholderText("Authorized Branch UUID")).not.toBeInTheDocument();
   });
 
-  it("lets an authorized owner record explicit dispatch-readiness evidence", async () => {
+  it("separates Branch-derived availability from demonstrated capability evidence", async () => {
     authState.permissionCodes = [
       "COMPANY_WORKFORCE_CAPABILITY_MANAGE",
       "COMPANY_WORKFORCE_AVAILABILITY_MANAGE",
     ];
     mockEligibility();
-    const mutate = vi.fn();
-    vi.mocked(workforceHooks.useEmployeeFieldReadiness).mockReturnValue({
-      isPending: false,
-      isError: false,
-      mutate,
-    } as never);
     vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({
       data: [{
         ...summary,
@@ -508,19 +508,11 @@ describe("WorkforceRoute", () => {
     render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
     await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
 
-    expect(screen.getAllByText("NOT DISPATCH READY").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Capability profile missing/)).toBeVisible();
-    expect(screen.getByText(/Working availability is not configured/)).toBeVisible();
-    await userEvent.type(screen.getByLabelText("Available from"), "2026-09-29T08:00");
-    await userEvent.type(screen.getByLabelText("Available through"), "2026-09-29T17:00");
-    await userEvent.type(screen.getByLabelText("Owner confirmation reason"), "Owner confirmed field technician");
-    await userEvent.click(screen.getByRole("button", { name: "Record confirmed Dispatch readiness" }));
-
-    expect(mutate).toHaveBeenCalledWith({
-      branchId: "branch-1",
-      windowStartAt: "2026-09-29T12:00:00.000Z",
-      windowEndAt: "2026-09-29T21:00:00.000Z",
-      reason: "Owner confirmed field technician",
-    });
+    expect(screen.getByRole("heading", { name: "Demonstrated capability / evidence" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Schedule / Availability" })).toBeVisible();
+    expect(screen.getByText(/inherits the home Branch schedule/i)).toBeVisible();
+    expect(screen.getByText(/does not by itself block ordinary technician assignment/i)).toBeVisible();
+    expect(screen.queryByLabelText("Available from")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record confirmed Dispatch readiness" })).not.toBeInTheDocument();
   });
 });
