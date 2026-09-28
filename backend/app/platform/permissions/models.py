@@ -247,6 +247,14 @@ class MembershipRole(Base):
             "revoked_at IS NULL OR revoked_at >= assigned_at",
             name="ck_membership_roles_revocation_after_assignment",
         ),
+        CheckConstraint(
+            "expires_at IS NULL OR effective_at IS NULL OR expires_at > effective_at",
+            name="ck_membership_roles_expiration_after_effective",
+        ),
+        CheckConstraint(
+            "(functional_area IS NULL) = (access_level IS NULL)",
+            name="ck_membership_roles_functional_access_pair",
+        ),
         ForeignKeyConstraint(
             ["company_id", "membership_id"],
             ["memberships.company_id", "memberships.id"],
@@ -268,6 +276,14 @@ class MembershipRole(Base):
         ),
         Index("ix_membership_roles_membership_id", "membership_id"),
         Index("ix_membership_roles_role_id", "role_id"),
+        Index(
+            "ix_membership_roles_functional_effective",
+            "company_id",
+            "membership_id",
+            "functional_area",
+            "effective_at",
+            "expires_at",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -289,6 +305,20 @@ class MembershipRole(Base):
         nullable=True,
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    functional_area: Mapped[str | None] = mapped_column(String(50))
+    access_level: Mapped[str | None] = mapped_column(String(50))
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    grant_reason: Mapped[str | None] = mapped_column(Text)
+    revoked_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "users.id",
+            name="fk_membership_roles_revoked_by_user_id_users",
+            ondelete="RESTRICT",
+        ),
+    )
+    revocation_reason: Mapped[str | None] = mapped_column(Text)
 
     membership: Mapped["Membership"] = relationship(
         back_populates="role_assignments",
