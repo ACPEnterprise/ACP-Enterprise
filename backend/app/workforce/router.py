@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
 
@@ -20,6 +21,11 @@ from app.workforce.administration_commands import (
 )
 from app.workforce.employee_administration import employee_administration_service
 from app.workforce.employee_timeline import employee_timeline_service
+from app.workforce.functional_access import (
+    FunctionalAccessConflict,
+    FunctionalAccessView,
+    functional_access_service,
+)
 from app.workforce.notification_targeting import employee_notification_targeting_service
 from app.workforce.real_roster_service import RealRosterConflict, real_roster_service
 from app.workforce.schemas import (
@@ -32,6 +38,10 @@ from app.workforce.schemas import (
     EmployeeTimeline,
     FieldReadinessRequest,
     FieldReadinessResponse,
+    FunctionalAccessGrantRequest,
+    FunctionalAccessItem,
+    FunctionalAccessResponse,
+    FunctionalAccessRevokeRequest,
     LanguageEvidenceRequest,
     RealRosterBindingRequest,
     RealRosterReadiness,
@@ -70,6 +80,10 @@ AvailabilityManageContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(WorkforcePermission.AVAILABILITY_MANAGE)),
 ]
+CompanyAdministrationContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AdministrationPermission.COMPANY_ADMINISTER)),
+]
 
 
 def _require_employee_administration(context: AuthorizationContext) -> None:
@@ -91,6 +105,89 @@ def _workforce_conflict(error: ValueError) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+
+
+def _functional_access_response(
+    employee_id: UUID, items: tuple[FunctionalAccessView, ...]
+) -> FunctionalAccessResponse:
+    return FunctionalAccessResponse(
+        employee_id=employee_id,
+        items=tuple(FunctionalAccessItem(**asdict(item)) for item in items),
+    )
+
+
+@router.get(
+    "/administration/employees/{employee_id}/functional-access",
+    response_model=FunctionalAccessResponse,
+)
+async def list_functional_access(
+    employee_id: UUID,
+    context: CompanyAdministrationContext,
+    session: Session,
+) -> FunctionalAccessResponse:
+    try:
+        items = await functional_access_service.list(
+            session, context=context, employee_id=employee_id
+        )
+    except FunctionalAccessConflict as error:
+        raise _workforce_conflict(error) from error
+    return _functional_access_response(employee_id, items)
+
+
+@router.put(
+    "/administration/employees/{employee_id}/functional-access",
+    response_model=FunctionalAccessResponse,
+)
+async def grant_functional_access(
+    employee_id: UUID,
+    data: FunctionalAccessGrantRequest,
+    context: CompanyAdministrationContext,
+    session: Session,
+) -> FunctionalAccessResponse:
+    try:
+        await functional_access_service.grant(
+            session,
+            context=context,
+            employee_id=employee_id,
+            functional_area=data.functional_area,
+            access_level=data.access_level,
+            effective_at=data.effective_at,
+            expires_at=data.expires_at,
+            reason=data.reason,
+        )
+        items = await functional_access_service.list(
+            session, context=context, employee_id=employee_id
+        )
+    except FunctionalAccessConflict as error:
+        raise _workforce_conflict(error) from error
+    return _functional_access_response(employee_id, items)
+
+
+@router.post(
+    "/administration/employees/{employee_id}/functional-access/{assignment_id}/revoke",
+    response_model=FunctionalAccessResponse,
+)
+async def revoke_functional_access(
+    employee_id: UUID,
+    assignment_id: UUID,
+    data: FunctionalAccessRevokeRequest,
+    context: CompanyAdministrationContext,
+    session: Session,
+) -> FunctionalAccessResponse:
+    try:
+        await functional_access_service.revoke(
+            session,
+            context=context,
+            employee_id=employee_id,
+            assignment_id=assignment_id,
+            reason=data.reason,
+        )
+        items = await functional_access_service.list(
+            session, context=context, employee_id=employee_id
+        )
+    except FunctionalAccessConflict as error:
+        raise _workforce_conflict(error) from error
+    return _functional_access_response(employee_id, items)
 
 
 @router.get("/employees", response_model=WorkforceDirectory)

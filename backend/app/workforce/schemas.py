@@ -109,6 +109,42 @@ class WorkforceEligibilityResponse(WorkforceSchema):
     items: tuple[WorkforceEligibilityItem, ...]
 
 
+class FunctionalAccessGrantRequest(WorkforceSchema):
+    functional_area: Literal[
+        "FIELD_OPERATIONS",
+        "CUSTOMER_SERVICE",
+        "DISPATCH",
+        "REPORTING_ECONOMICS",
+    ]
+    access_level: str = Field(min_length=1, max_length=50)
+    effective_at: datetime
+    expires_at: datetime | None = None
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class FunctionalAccessRevokeRequest(WorkforceSchema):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class FunctionalAccessItem(WorkforceSchema):
+    assignment_id: UUID
+    employee_id: UUID
+    functional_area: str
+    access_level: str
+    role_code: str
+    effective_at: datetime
+    expires_at: datetime | None
+    effective: bool
+    lifecycle_state: Literal["EFFECTIVE", "SCHEDULED", "EXPIRED", "REVOKED"]
+    revoked_at: datetime | None
+    reason: str
+
+
+class FunctionalAccessResponse(WorkforceSchema):
+    employee_id: UUID
+    items: tuple[FunctionalAccessItem, ...]
+
+
 class RealRosterBindingRequest(WorkforceSchema):
     employee_id: UUID
 

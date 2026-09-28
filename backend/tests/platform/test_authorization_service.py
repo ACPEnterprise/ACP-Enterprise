@@ -6,6 +6,15 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import Depends, FastAPI
+from sqlalchemy import func, inspect, select, update
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.database.session import get_database_session, get_security_database_session
@@ -39,14 +48,6 @@ from app.platform.permissions.models import (
 from app.platform.permissions.router import router as authorization_router
 from app.platform.users.models import User, UserCredential
 from app.scheduling import models as scheduling_models  # noqa: F401
-from fastapi import Depends, FastAPI
-from sqlalchemy import func, inspect, select, update
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 @dataclass(frozen=True)
@@ -294,6 +295,35 @@ async def test_permission_resolution_and_company_branch_isolation(
                 company_id=fixture.company_id,
                 branch_id=fixture.unauthorized_branch_id,
             )
+
+
+@pytest.mark.asyncio
+async def test_expired_functional_access_is_denied_by_backend_authorization(
+    authorization_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = authorization_database
+    fixture = await seed_authorization_fixture(factory, prefix="AUTHZEXPIRED")
+    async with factory() as session, session.begin():
+        await session.execute(
+            update(MembershipRole)
+            .where(MembershipRole.company_id == fixture.company_id)
+            .values(
+                functional_area="CUSTOMER_SERVICE",
+                access_level="CSR",
+                effective_at=utc_now() - timedelta(days=2),
+                expires_at=utc_now() - timedelta(days=1),
+            )
+        )
+
+    async with factory() as session:
+        context = await AuthorizationService().resolve(
+            session,
+            authenticated=fixture.authenticated,
+            company_id=fixture.company_id,
+        )
+
+    assert context.role_codes == frozenset()
+    assert context.permission_codes == frozenset()
 
 
 @pytest.mark.asyncio
