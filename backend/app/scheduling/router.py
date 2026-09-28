@@ -13,6 +13,7 @@ from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 from app.scheduling.errors import (
     SchedulingCapacityError,
+    SchedulingCapacityFailure,
     SchedulingConflictError,
     SchedulingError,
     SchedulingNotFoundError,
@@ -78,10 +79,38 @@ def translate_scheduling_error(error: SchedulingError) -> HTTPException:
             detail=failure.detail(),
         )
     if isinstance(error, SchedulingCapacityError):
+        capacity_failures = {
+            SchedulingCapacityFailure.CALENDAR_MISSING: (
+                FailureCode.SCHEDULING_CALENDAR_MISSING,
+                "Branch scheduling capacity is not configured.",
+                ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+            ),
+            SchedulingCapacityFailure.CALENDAR_UNAVAILABLE: (
+                FailureCode.SCHEDULING_CALENDAR_UNAVAILABLE,
+                "Branch scheduling capacity is temporarily unavailable.",
+                ClientRecovery.RECONCILIATION_REQUIRED,
+            ),
+            SchedulingCapacityFailure.CALENDAR_CLOSED: (
+                FailureCode.SCHEDULING_CALENDAR_CLOSED,
+                "The Branch calendar is closed for the requested time.",
+                ClientRecovery.USER_CORRECTION_REQUIRED,
+            ),
+            SchedulingCapacityFailure.INTERVAL_UNAVAILABLE: (
+                FailureCode.SCHEDULING_INTERVAL_UNAVAILABLE,
+                "The requested work interval is outside configured Branch hours.",
+                ClientRecovery.USER_CORRECTION_REQUIRED,
+            ),
+            SchedulingCapacityFailure.CAPACITY_EXHAUSTED: (
+                FailureCode.SCHEDULING_CAPACITY_EXHAUSTED,
+                "The requested work interval has no remaining Branch capacity.",
+                ClientRecovery.USER_CORRECTION_REQUIRED,
+            ),
+        }
+        code, message, recovery = capacity_failures[error.failure]
         failure = SafeFailure(
-            FailureCode.CONCURRENCY_CONFLICT,
-            "Requested scheduling capacity or availability is unavailable.",
-            ClientRecovery.RETRY_AFTER_REFRESH,
+            code,
+            message,
+            recovery,
             current_correlation_id(),
         )
         return HTTPException(
