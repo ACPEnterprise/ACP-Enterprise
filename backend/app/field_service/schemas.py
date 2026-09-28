@@ -237,15 +237,24 @@ class FieldEstimatePresentation(FieldSchema):
 
 
 class FieldHistoryItem(FieldSchema):
+    appointment_id: UUID
+    appointment_number: str
     job_id: UUID
     job_number: str
-    completed_at: datetime
+    service_date: date
+    window_start_at: datetime
+    window_end_at: datetime
+    appointment_status: str
+    job_status: str
+    service_type: str | None
     customer_display_name: str
     service_location_label: str
 
 
 class FieldHistoryProjection(FieldSchema):
-    days: int
+    start_date: date
+    end_date: date
+    query: str | None
     limit: int
     items: tuple[FieldHistoryItem, ...]
 

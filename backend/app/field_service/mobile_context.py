@@ -1,8 +1,8 @@
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer, ServiceLocation
@@ -13,6 +13,7 @@ from app.estimates.models import (
     EstimateLineItem,
     EstimateRevision,
 )
+from app.field_service.errors import FieldServiceValidation
 from app.field_service.schemas import (
     FieldEquipmentItem,
     FieldEquipmentProjection,
@@ -239,7 +240,9 @@ class MobileFieldContext:
         session: AsyncSession,
         *,
         context: AuthorizationContext,
-        days: int,
+        start_date: date | None,
+        end_date: date | None,
+        query: str | None,
         limit: int,
     ) -> FieldHistoryProjection:
         employee = await field_service._employee(session, context)
@@ -247,44 +250,86 @@ class MobileFieldContext:
             DispatchCrewMember.company_id == context.company.id,
             DispatchCrewMember.employee_id == employee.id,
         )
-        since = datetime.now(timezone.utc) - timedelta(days=days)
+        today = datetime.now(timezone.utc).date()
+        resolved_end = end_date or today
+        resolved_start = start_date or (resolved_end - timedelta(days=90))
+        if resolved_start > resolved_end:
+            raise FieldServiceValidation("history start_date must not follow end_date")
+        start_at = datetime.combine(resolved_start, datetime.min.time(), timezone.utc)
+        end_at = datetime.combine(
+            resolved_end + timedelta(days=1), datetime.min.time(), timezone.utc
+        )
+        statement = (
+            select(Job, DispatchAssignment, Appointment, Customer, ServiceLocation)
+            .join(DispatchAssignment, DispatchAssignment.job_id == Job.id)
+            .join(Appointment, Appointment.id == DispatchAssignment.appointment_id)
+            .join(Customer, Customer.id == Appointment.customer_id)
+            .join(ServiceLocation, ServiceLocation.id == Appointment.service_location_id)
+            .where(
+                Job.company_id == context.company.id,
+                DispatchAssignment.company_id == context.company.id,
+                Appointment.company_id == context.company.id,
+                Customer.company_id == context.company.id,
+                Job.branch_id.in_(context.authorized_branch_ids),
+                DispatchAssignment.branch_id.in_(context.authorized_branch_ids),
+                Appointment.branch_id.in_(context.authorized_branch_ids),
+                Appointment.arrival_window_start_at >= start_at,
+                Appointment.arrival_window_start_at < end_at,
+                or_(
+                    DispatchAssignment.primary_employee_id == employee.id,
+                    DispatchAssignment.id.in_(crew_ids),
+                ),
+            )
+        )
+        normalized_query = query.strip() if query else None
+        if normalized_query:
+            escaped_query = normalized_query.replace("%", r"\%").replace("_", r"\_")
+            pattern = f"%{escaped_query}%"
+            statement = statement.where(
+                or_(
+                    Customer.display_name.ilike(pattern, escape="\\"),
+                    Job.job_number.ilike(pattern, escape="\\"),
+                    func.concat_ws(
+                        " ",
+                        ServiceLocation.address,
+                        ServiceLocation.address_line_2,
+                        ServiceLocation.city,
+                        ServiceLocation.state,
+                        ServiceLocation.postal_code,
+                    ).ilike(pattern, escape="\\"),
+                    Job.job_type_code.ilike(pattern, escape="\\"),
+                )
+            )
         rows = (
             await session.execute(
-                select(Job, DispatchAssignment, Appointment, Customer, ServiceLocation)
-                .join(DispatchAssignment, DispatchAssignment.job_id == Job.id)
-                .join(Appointment, Appointment.id == DispatchAssignment.appointment_id)
-                .join(Customer, Customer.id == Appointment.customer_id)
-                .join(
-                    ServiceLocation,
-                    ServiceLocation.id == Appointment.service_location_id,
+                statement.order_by(
+                    Appointment.arrival_window_start_at.desc(), Appointment.id
                 )
-                .where(
-                    Job.company_id == context.company.id,
-                    Job.branch_id.in_(context.authorized_branch_ids),
-                    Job.status == "completed",
-                    Job.completed_at >= since,
-                    or_(
-                        DispatchAssignment.primary_employee_id == employee.id,
-                        DispatchAssignment.id.in_(crew_ids),
-                    ),
-                )
-                .order_by(Job.completed_at.desc(), Job.id)
                 .limit(limit)
             )
         ).all()
         return FieldHistoryProjection(
-            days=days,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            query=normalized_query,
             limit=limit,
             items=tuple(
                 FieldHistoryItem(
+                    appointment_id=appointment.id,
+                    appointment_number=appointment.appointment_number,
                     job_id=job.id,
                     job_number=job.job_number,
-                    completed_at=job.completed_at,
+                    service_date=appointment.arrival_window_start_at.date(),
+                    window_start_at=appointment.arrival_window_start_at,
+                    window_end_at=appointment.arrival_window_end_at,
+                    appointment_status=appointment.status,
+                    job_status=job.status,
+                    service_type=job.job_type_code,
                     customer_display_name=customer.display_name,
                     service_location_label=field_service._location_label(location),
                 )
                 for job, _assignment, _appointment, customer, location in rows
-                if job.completed_at is not None
+                for appointment in (_appointment,)
             ),
         )
 

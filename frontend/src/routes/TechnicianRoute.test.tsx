@@ -2,13 +2,14 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useTechnicianItinerary } from "../hooks/useTechnicianItinerary";
+import { useTechnicianHistory, useTechnicianItinerary } from "../hooks/useTechnicianItinerary";
 import { TechnicianRoute } from "./TechnicianRoute";
 
-vi.mock("../hooks/useTechnicianItinerary", () => ({ useTechnicianItinerary: vi.fn() }));
+vi.mock("../hooks/useTechnicianItinerary", () => ({ useTechnicianItinerary: vi.fn(), useTechnicianHistory: vi.fn() }));
 
 describe("TechnicianRoute", () => {
   beforeEach(() => {
+    vi.mocked(useTechnicianHistory).mockReturnValue({ isLoading: false, isError: false, isSuccess: true, data: { start_date: "2026-06-01", end_date: "2026-08-26", query: null, limit: 50, items: [] } } as never);
     vi.mocked(useTechnicianItinerary).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -45,7 +46,7 @@ describe("TechnicianRoute", () => {
     expect(screen.getByText("Taylor Home")).toBeInTheDocument();
     expect(screen.getByText("En route")).toBeInTheDocument();
     expect(screen.getByText(/service call · ready/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open JOB-1001" })).toHaveAttribute("href", "/jobs/job-1");
+    expect(screen.getByRole("link", { name: "Open JOB-1001" })).toHaveAttribute("href", "/technician/jobs/job-1");
   });
 
   it("renders a truthful empty state", () => {
@@ -57,5 +58,21 @@ describe("TechnicianRoute", () => {
     } as never);
     render(<MemoryRouter><TechnicianRoute /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "No assigned visits" })).toBeInTheDocument();
+  });
+
+  it("renders only the server-scoped Job history returned for the field employee", () => {
+    vi.mocked(useTechnicianHistory).mockReturnValue({
+      isLoading: false, isError: false, isSuccess: true,
+      data: { start_date: "2026-06-01", end_date: "2026-08-26", query: "", limit: 50, items: [{
+        appointment_id: "appointment-old", appointment_number: "APT-0099", job_id: "job-old", job_number: "JOB-0099",
+        service_date: "2026-07-12", window_start_at: "2026-07-12T13:00:00Z", window_end_at: "2026-07-12T15:00:00Z",
+        appointment_status: "completed", job_status: "completed", service_type: "water_heater",
+        customer_display_name: "Prior Customer", service_location_label: "20 Oak Street",
+      }] },
+    } as never);
+    render(<MemoryRouter initialEntries={["/technician/jobs"]}><TechnicianRoute /></MemoryRouter>);
+    expect(screen.getByRole("heading", { name: "My Jobs" })).toBeInTheDocument();
+    expect(screen.getByText("Prior Customer")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open field-safe Job detail" })).toHaveAttribute("href", "/technician/jobs/job-old");
   });
 });
