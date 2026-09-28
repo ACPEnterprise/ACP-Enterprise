@@ -47,6 +47,7 @@ from app.platform.permissions.codes import (
     LuminaryPermission,
     MigrationPermission,
     PaymentPermission,
+    PipelinePermission,
     PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
@@ -140,6 +141,9 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
         {
             CustomerPermission.READ,
             CustomerPermission.MANAGE,
+            PipelinePermission.READ,
+            PipelinePermission.CREATE,
+            PipelinePermission.UPDATE,
             EstimatePermission.READ,
             EstimatePermission.MANAGE,
             SchedulingPermission.READ,
@@ -173,6 +177,15 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
     )
     assert role.permission_codes.isdisjoint(prohibited)
     assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
+
+
+def test_field_technician_has_no_pipeline_authority() -> None:
+    role = next(
+        value
+        for value in LAUNCH_ROLE_MATRIX
+        if value.code is LaunchRoleCode.TECHNICIAN
+    )
+    assert role.permission_codes.isdisjoint(PipelinePermission.ALL)
 
 
 def test_office_manager_has_normal_operations_without_owner_hard_gates() -> None:

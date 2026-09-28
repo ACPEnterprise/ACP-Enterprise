@@ -63,6 +63,7 @@ from app.payroll.cutover_router import router as payroll_cutover_router
 from app.payroll.operator_router import router as payroll_operator_router
 from app.payroll.router import router as payroll_router
 from app.payroll.setup_router import router as payroll_setup_router
+from app.pipeline.router import router as pipeline_router
 from app.platform.audit.router import router as platform_audit_router
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
@@ -184,6 +185,7 @@ app.include_router(beacon_router)
 app.include_router(business_economics_router)
 app.include_router(luminary_router)
 app.include_router(customers_router)
+app.include_router(pipeline_router)
 app.include_router(data_quality_router)
 app.include_router(location_identity_router)
 app.include_router(customer_population_router)

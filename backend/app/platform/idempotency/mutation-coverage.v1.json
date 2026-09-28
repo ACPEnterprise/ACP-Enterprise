@@ -3262,8 +3262,38 @@
       "path": "/api/v1/invoices/{invoice_id}/manual-payments",
       "reason": "Manual payment replay returns one receipt and one AR application while conflicting or duplicate evidence fails closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "pipeline",
+      "mechanism": "Company and actor scoped creation key with canonical request digest",
+      "method": "POST",
+      "operation_id": "create_lead_api_v1_pipeline_post",
+      "path": "/api/v1/pipeline",
+      "reason": "Lead creation replay returns one canonical Lead and rejects contradictory reuse.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "pipeline",
+      "mechanism": "Optimistic Lead version and constrained lifecycle transition",
+      "method": "POST",
+      "operation_id": "transition_lead_api_v1_pipeline__lead_id__transition_post",
+      "path": "/api/v1/pipeline/{lead_id}/transition",
+      "reason": "A version can transition once; stale replay cannot mutate the Lead twice.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "pipeline",
+      "mechanism": "Company and Lead scoped immutable contact-history replay key",
+      "method": "POST",
+      "operation_id": "record_contact_api_v1_pipeline__lead_id__contacts_post",
+      "path": "/api/v1/pipeline/{lead_id}/contacts",
+      "reason": "Contact activity replay cannot increment attempts or advance lifecycle twice.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "3ad597514fbf48ed58dc4368395f8edeb1d5170034894a3f04826e36fb86d0ba",
+  "fingerprint": "2926c5d12f405445e368a5e3f2afa2c09c19611d6d24a583521d4e40fa4485f1",
   "schema_version": "1"
 }
