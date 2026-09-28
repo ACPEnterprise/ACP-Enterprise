@@ -17,7 +17,7 @@ function renderLogin(signIn: AuthenticationContextValue["signIn"]) {
     signOutAll: vi.fn(),
     requireReauthentication: vi.fn(),
   };
-  const router = createMemoryRouter([{ path: "/login", Component: LoginRoute }, { path: "/mission-control", element: <p>Mission Control loaded</p> }], { initialEntries: ["/login"] });
+  const router = createMemoryRouter([{ path: "/login", Component: LoginRoute }, { path: "/", element: <p>Role landing loaded</p> }], { initialEntries: ["/login"] });
   render(<ThemeProvider preference="dark"><AuthenticationContext.Provider value={context}><RouterProvider router={router} /></AuthenticationContext.Provider></ThemeProvider>);
 }
 
@@ -39,14 +39,14 @@ describe("LoginRoute", () => {
     );
   });
 
-  it("submits credentials and enters Mission Control", async () => {
+  it("submits credentials and enters role-aware landing", async () => {
     const signIn = vi.fn().mockResolvedValue(undefined);
     renderLogin(signIn);
     await userEvent.type(screen.getByLabelText(/email address/i), "admin@example.com");
     await userEvent.type(screen.getByLabelText(/^password/i), "valid-password");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(signIn).toHaveBeenCalledWith({ email: "admin@example.com", password: "valid-password" });
-    expect(await screen.findByText("Mission Control loaded")).toBeInTheDocument();
+    expect(await screen.findByText("Role landing loaded")).toBeInTheDocument();
   });
 
   it("shows a generic invalid-credentials message and supports password visibility", async () => {
