@@ -444,6 +444,9 @@ class EventType(str, Enum):
     LEAD_CREATED = "lead.created"
     LEAD_QUALIFIED = "lead.qualified"
     LEAD_CONVERTED = "lead.converted"
+    LEAD_UPDATED = "lead.updated"
+    LEAD_LOST = "lead.lost"
+    LEAD_ASSIGNED = "lead.assigned"
 
     # Communications
     CALL_RECEIVED = "call.received"
