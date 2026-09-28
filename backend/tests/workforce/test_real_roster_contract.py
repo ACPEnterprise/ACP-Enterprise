@@ -3,15 +3,15 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
+from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.users.models import User
 from app.workforce.real_roster import REAL_ALL_COUNTY_ROSTER, RealRosterRole
 from app.workforce.real_roster_service import RealRosterConflict, RealRosterService
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -86,6 +86,27 @@ async def real_roster_database():
                 ),
             ]
         )
+        await session.flush()
+        synthetic_user = User(
+            normalized_email=f"synthetic-{uuid4().hex}@preview.invalid",
+            first_name="Synthetic",
+            last_name="Fixture",
+            display_name="Synthetic Fixture",
+            status="active",
+        )
+        session.add(synthetic_user)
+        await session.flush()
+        synthetic_membership = Membership(
+            user_id=synthetic_user.id,
+            company_id=company_id,
+            status="active",
+            default_branch_id=branch_id,
+        )
+        session.add(synthetic_membership)
+        await session.flush()
+        synthetic_employee = await session.get(Employee, synthetic_id)
+        assert synthetic_employee is not None
+        synthetic_employee.membership_id = synthetic_membership.id
     context = SimpleNamespace(
         company=SimpleNamespace(id=company_id),
         user=SimpleNamespace(id=actor_id),

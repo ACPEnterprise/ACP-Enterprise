@@ -15,6 +15,7 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User
 from app.scheduling.models import Appointment
 from app.workforce.models import (
@@ -99,21 +100,68 @@ async def dispatch_fixture() -> AsyncIterator[
         )
         session.add(membership)
         await session.flush()
-        employees = [
-            Employee(
+        technician_roles = [
+            Role(
                 company_id=company.id,
-                home_branch_id=branch.id,
-                employee_number=f"T-{i}-{uuid4().hex[:5]}",
-                first_name=f"Tech{i}",
-                last_name="Test",
-                display_name=f"Technician {i}",
-                job_title="Service Technician",
-                employee_type="employee",
+                code=code,
+                name=code.replace("_", " ").title(),
                 status="active",
+                is_system=True,
             )
-            for i in (1, 2)
+            for code in ("TECHNICIAN", "ACP_EMPLOYEE_MOBILE")
         ]
-        employees[0].membership_id = membership.id
+        session.add_all(technician_roles)
+        await session.flush()
+        employees = []
+        for i in (1, 2):
+            if i == 1:
+                membership.default_branch_id = branch.id
+                tech_membership = membership
+            else:
+                tech_user = User(
+                    normalized_email=f"tech-{i}-{uuid4().hex}@example.test",
+                    first_name=f"Tech{i}",
+                    last_name="Test",
+                    display_name=f"Technician {i}",
+                    status="active",
+                )
+                session.add(tech_user)
+                await session.flush()
+                tech_membership = Membership(
+                    user_id=tech_user.id,
+                    company_id=company.id,
+                    status="active",
+                    default_branch_id=branch.id,
+                    has_all_branch_access=False,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(tech_membership)
+                await session.flush()
+            session.add_all(
+                [
+                    MembershipRole(
+                        company_id=company.id,
+                        membership_id=tech_membership.id,
+                        role_id=role.id,
+                    )
+                    for role in technician_roles
+                ]
+            )
+            employees.append(
+                Employee(
+                    company_id=company.id,
+                    home_branch_id=branch.id,
+                    membership_id=tech_membership.id,
+                    employee_number=f"T-{i}-{uuid4().hex[:5]}",
+                    first_name=f"Tech{i}",
+                    last_name="Test",
+                    display_name=f"Technician {i}",
+                    job_title="Service Technician",
+                    employee_type="employee",
+                    status="active",
+                )
+            )
         session.add_all(employees)
         await session.flush()
         category = CapabilityCategory(
