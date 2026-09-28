@@ -51,7 +51,7 @@ export function TechnicianItineraryCard({ item }: { readonly item: TechnicianIti
         {item.job_id ? (
           <Link
             className="inline-flex min-h-11 items-center font-semibold text-action-primary underline-offset-4 hover:underline"
-            to={`/jobs/${item.job_id}`}
+            to={`/technician/jobs/${item.job_id}`}
           >
             Open {item.job_number ?? "job"}
           </Link>
