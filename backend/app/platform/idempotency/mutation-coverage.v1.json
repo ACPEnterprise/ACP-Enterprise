@@ -3368,8 +3368,23 @@
       "path": "/api/v1/pipeline/{lead_id}/contacts",
       "reason": "Contact activity replay cannot increment attempts or advance lifecycle twice.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "marketing",
+      "mechanism": "Company-scoped confirmation key, canonical request digest, typed target, and append-only assignment",
+      "method": "POST",
+      "operation_id": "manual_confirmation_api_v1_marketing_attributions_manual_confirmation_post",
+      "path": "/api/v1/marketing/attributions/manual-confirmation",
+      "reason": "Exact replay returns the existing attribution; corrections append a superseding assignment and contradictory key reuse fails closed.",
+      "replay_evidence": [
+        "marketing_attribution_assignments.idempotency_key",
+        "marketing_attribution_assignments.request_digest",
+        "marketing_attribution_assignments.supersedes_assignment_id"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "1dc32bb44585455b38b0b5849bb162b381746856d3f6d252261730c8797a5b71",
+  "fingerprint": "2ec5311fbab6cae0d571086e243d950d92974ada6c22cb9a9a1338574dd36323",
   "schema_version": "1"
 }
