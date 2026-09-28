@@ -4,9 +4,31 @@ import type {
   AppointmentListParams,
   AppointmentRescheduleInput,
   CalendarQueryResult,
+  BranchSchedulingPolicy,
+  BranchSchedulingPolicyInput,
 } from "../types/scheduling";
 
 const APPOINTMENTS_PATH = "/api/v1/scheduling/appointments";
+
+export async function getBranchSchedulingPolicy(branchId: string) {
+  return (
+    await apiClient.get<BranchSchedulingPolicy>(
+      `/api/v1/scheduling/branches/${branchId}/policy`,
+    )
+  ).data;
+}
+
+export async function configureBranchSchedulingPolicy(
+  branchId: string,
+  input: BranchSchedulingPolicyInput,
+) {
+  return (
+    await apiClient.put<BranchSchedulingPolicy>(
+      `/api/v1/scheduling/branches/${branchId}/policy`,
+      input,
+    )
+  ).data;
+}
 
 export async function getAppointment(
   appointmentId: string,
