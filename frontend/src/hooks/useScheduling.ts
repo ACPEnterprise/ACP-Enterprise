@@ -3,12 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { shouldRetryApiQuery } from "../api/errors";
 import {
   getAppointment,
+  getBranchSchedulingPolicy,
+  configureBranchSchedulingPolicy,
   listAppointments,
   rescheduleAppointment,
 } from "../api/scheduling";
 import type {
   AppointmentListParams,
   AppointmentRescheduleInput,
+  BranchSchedulingPolicyInput,
 } from "../types/scheduling";
 
 export const appointmentKeys = {
@@ -18,6 +21,26 @@ export const appointmentKeys = {
   list: (query: AppointmentListParams) =>
     ["appointments", "list", query] as const,
 };
+
+export function useBranchSchedulingPolicy(branchId: string | undefined) {
+  return useQuery({
+    queryKey: ["scheduling", "branch-policy", branchId],
+    queryFn: () => getBranchSchedulingPolicy(branchId as string),
+    enabled: Boolean(branchId),
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useConfigureBranchSchedulingPolicy() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ branchId, input }: { branchId: string; input: BranchSchedulingPolicyInput }) =>
+      configureBranchSchedulingPolicy(branchId, input),
+    onSuccess: async (_, variables) => {
+      await client.invalidateQueries({ queryKey: ["scheduling", "branch-policy", variables.branchId] });
+    },
+  });
+}
 
 export function useAppointment(
   appointmentId: string | undefined,

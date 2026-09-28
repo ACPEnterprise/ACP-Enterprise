@@ -1,7 +1,10 @@
+from datetime import date
 from decimal import Decimal
+from itertools import pairwise
+from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from app.scheduling.types import (
     AppointmentCancellationReason,
@@ -109,3 +112,83 @@ class CalendarQueryResult(SchedulingApiSchema):
     page_size: int = Field(ge=1, le=200)
     start_at: AwareDatetime
     end_at: AwareDatetime
+
+
+class BranchWeeklyIntervalInput(SchedulingApiSchema):
+    day_of_week: int = Field(ge=0, le=6)
+    start_minute: int = Field(ge=0, lt=1440)
+    end_minute: int = Field(gt=0, le=1440)
+    capacity_units: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+
+    @model_validator(mode="after")
+    def valid_window(self):
+        if self.end_minute <= self.start_minute:
+            raise ValueError("Operating interval end must follow start.")
+        return self
+
+
+class BranchSchedulingExceptionInput(SchedulingApiSchema):
+    exception_date: date
+    start_minute: int | None = Field(default=None, ge=0, lt=1440)
+    end_minute: int | None = Field(default=None, gt=0, le=1440)
+    is_closed: bool
+    capacity_units: Decimal | None = Field(
+        default=None, gt=0, max_digits=10, decimal_places=2
+    )
+    reason_code: str = Field(min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def valid_exception(self):
+        if (self.start_minute is None) != (self.end_minute is None):
+            raise ValueError("Exception start and end must both be supplied.")
+        if self.start_minute is not None and self.end_minute <= self.start_minute:
+            raise ValueError("Exception end must follow start.")
+        if self.is_closed and self.capacity_units is not None:
+            raise ValueError("Closed exceptions cannot declare capacity.")
+        if not self.is_closed and self.capacity_units is None:
+            raise ValueError("Open exceptions require capacity.")
+        return self
+
+
+class BranchSchedulingPolicyWrite(SchedulingApiSchema):
+    expected_version: int | None = Field(default=None, ge=1)
+    timezone: str = Field(min_length=1, max_length=64)
+    active: bool
+    booking_horizon_days: int = Field(gt=0, le=1095)
+    minimum_notice_minutes: int = Field(ge=0, le=10080)
+    slot_interval_minutes: int = Field(gt=0, le=1440)
+    default_capacity_units: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    weekly_intervals: tuple[BranchWeeklyIntervalInput, ...] = ()
+    exceptions: tuple[BranchSchedulingExceptionInput, ...] = ()
+    reason: str = Field(min_length=3, max_length=500)
+
+    @model_validator(mode="after")
+    def valid_policy(self):
+        ordered = sorted(
+            self.weekly_intervals,
+            key=lambda item: (item.day_of_week, item.start_minute),
+        )
+        for prior, current in pairwise(ordered):
+            if (
+                prior.day_of_week == current.day_of_week
+                and prior.end_minute > current.start_minute
+            ):
+                raise ValueError("Weekly operating intervals cannot overlap.")
+        if self.active and not self.weekly_intervals:
+            raise ValueError("An active calendar requires operating hours.")
+        return self
+
+
+class BranchSchedulingPolicyResponse(SchedulingApiSchema):
+    branch_id: UUID
+    timezone: str
+    status: Literal["NOT_CONFIGURED", "ACTIVE", "INACTIVE"]
+    readiness: Literal["SCHEDULING_READY", "SCHEDULING_SETUP_REQUIRED"]
+    blockers: tuple[str, ...]
+    version: int | None
+    booking_horizon_days: int | None
+    minimum_notice_minutes: int | None
+    slot_interval_minutes: int | None
+    default_capacity_units: Decimal | None
+    weekly_intervals: tuple[BranchWeeklyIntervalInput, ...]
+    exceptions: tuple[BranchSchedulingExceptionInput, ...]
