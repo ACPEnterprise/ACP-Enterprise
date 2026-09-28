@@ -5,6 +5,8 @@ import {
   bindRealRosterEmployee,
   decideSourceCertification,
   getEmployeeAdministration,
+  getEmployeeFunctionalAccess,
+  grantEmployeeFunctionalAccess,
   getEmployeePasswordReset,
   getEmployeeTimeline,
   getRealRosterReadiness,
@@ -16,6 +18,8 @@ import {
   setEmployeeMembershipStatus,
   setEmployeeRole,
   sendEmployeePasswordReset,
+  setEmployeeAccessLock,
+  revokeEmployeeFunctionalAccess,
 } from "../api/workforce";
 
 export function useWorkforceDirectory() {
@@ -147,6 +151,36 @@ export function useEmployeeAdministration(
   });
 }
 
+export function useEmployeeFunctionalAccess(employeeId: string | null, enabled: boolean) {
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ["employee-functional-access", employeeId],
+    queryFn: () => getEmployeeFunctionalAccess(employeeId as string),
+    enabled: enabled && Boolean(employeeId),
+  });
+  const grant = useMutation({
+    mutationFn: (input: Parameters<typeof grantEmployeeFunctionalAccess>[1]) =>
+      grantEmployeeFunctionalAccess(employeeId as string, input),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["employee-functional-access", employeeId] }),
+        client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
+      ]);
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: ({ assignmentId, reason }: { assignmentId: string; reason: string }) =>
+      revokeEmployeeFunctionalAccess(employeeId as string, assignmentId, reason),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["employee-functional-access", employeeId] }),
+        client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
+      ]);
+    },
+  });
+  return { query, grant, revoke };
+}
+
 export function useEmployeeAccessMutation(employeeId: string | null) {
   const client = useQueryClient();
   return useMutation({
@@ -170,6 +204,24 @@ export function useEmployeeAccessMutation(employeeId: string | null) {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
         client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+      ]);
+    },
+  });
+}
+
+export function useEmployeeAccessLock(employeeId: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      locked: boolean;
+      reason: string;
+      expected_authorization_version: number;
+    }) => setEmployeeAccessLock(employeeId as string, input),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+        client.invalidateQueries({ queryKey: ["employee-timeline", employeeId] }),
       ]);
     },
   });

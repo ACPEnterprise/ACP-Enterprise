@@ -1,10 +1,14 @@
 from collections import defaultdict
+from datetime import datetime, time, timezone
 from typing import Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.dispatch.models import DispatchAssignment, DispatchCrewMember
+from app.platform.audit.models import AuditRecord
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.employees.models import Employee
 from app.platform.notifications.models import NotificationOutbox
@@ -75,15 +79,17 @@ class EmployeeAdministrationService:
         has_branch_access: bool,
         effective_permission_codes: frozenset[str],
     ) -> tuple[
-        Literal["ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"],
+        Literal["ACTIVE", "LOCKED", "DISABLED", "INVITED", "NOT_LINKED"],
         Literal["READY", "BLOCKED", "NOT_LINKED"],
         tuple[str, ...],
     ]:
         blockers: list[str] = []
         if membership_status is None or user_status is None:
-            access_status: Literal["ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"] = (
-                "NOT_LINKED"
-            )
+            access_status: Literal[
+                "ACTIVE", "LOCKED", "DISABLED", "INVITED", "NOT_LINKED"
+            ] = "NOT_LINKED"
+        elif user_status == "locked":
+            access_status = "LOCKED"
         elif membership_status == "invited" or user_status == "invited":
             access_status = "INVITED"
         elif (
@@ -320,6 +326,76 @@ class EmployeeAdministrationService:
                 effective_permission_codes=effective_permission_codes,
             )
         )
+        locked_audit = await session.scalar(
+            select(AuditRecord)
+            .where(
+                AuditRecord.company_id == context.company.id,
+                AuditRecord.resource_type == "employee",
+                AuditRecord.resource_id == employee_id,
+                AuditRecord.action == "workforce.employee_access_locked",
+            )
+            .order_by(AuditRecord.occurred_at.desc(), AuditRecord.id.desc())
+            .limit(1)
+        )
+        locked_by = (
+            await session.scalar(select(User).where(User.id == locked_audit.actor_user_id))
+            if locked_audit is not None and locked_audit.actor_user_id is not None
+            else None
+        )
+        now = datetime.now(timezone.utc)
+        local_zone = ZoneInfo(context.company.timezone)
+        tomorrow = datetime.combine(
+            now.astimezone(local_zone).date(), time.max, tzinfo=local_zone
+        ).astimezone(timezone.utc)
+        assigned = (
+            select(DispatchAssignment.id)
+            .outerjoin(
+                DispatchCrewMember,
+                (DispatchCrewMember.company_id == DispatchAssignment.company_id)
+                & (DispatchCrewMember.assignment_id == DispatchAssignment.id)
+                & (DispatchCrewMember.status == "active"),
+            ).distinct()
+            .where(
+                DispatchAssignment.company_id == context.company.id,
+                DispatchAssignment.status.in_(
+                    ("proposed", "assigned", "acknowledged", "reconciliation_required")
+                ),
+                or_(
+                    DispatchAssignment.primary_employee_id == employee_id,
+                    DispatchCrewMember.employee_id == employee_id,
+                ),
+            )
+        )
+        active_assignment_count = int(
+            await session.scalar(
+                select(func.count()).select_from(
+                    assigned.where(
+                        DispatchAssignment.window_start_at <= now,
+                        DispatchAssignment.window_end_at > now,
+                    ).subquery()
+                )
+            )
+            or 0
+        )
+        today_future_assignment_count = int(
+            await session.scalar(
+                select(func.count()).select_from(
+                    assigned.where(
+                        DispatchAssignment.window_start_at > now,
+                        DispatchAssignment.window_start_at <= tomorrow,
+                    ).subquery()
+                )
+            )
+            or 0
+        )
+        future_assignment_count = int(
+            await session.scalar(
+                select(func.count()).select_from(
+                    assigned.where(DispatchAssignment.window_start_at > tomorrow).subquery()
+                )
+            )
+            or 0
+        )
         return EmployeeAdministrationSummary(
             **workforce.model_dump(
                 exclude={
@@ -345,6 +421,23 @@ class EmployeeAdministrationService:
             login_email=user.normalized_email if user else None,
             masked_login=onboarding.masked_login if onboarding else None,
             access_status=access_status,
+            access_locked_at=(
+                locked_audit.occurred_at if user is not None and user.status == "locked" and locked_audit else None
+            ),
+            access_locked_by_user_id=(
+                locked_audit.actor_user_id if user is not None and user.status == "locked" and locked_audit else None
+            ),
+            access_locked_by_display_name=(
+                locked_by.display_name if user is not None and user.status == "locked" and locked_by else None
+            ),
+            access_lock_reason=(
+                str(locked_audit.details.get("reason"))
+                if user is not None and user.status == "locked" and locked_audit
+                else None
+            ),
+            active_assignment_count=active_assignment_count,
+            today_future_assignment_count=today_future_assignment_count,
+            future_assignment_count=future_assignment_count,
             mobile_readiness=mobile_state,
             mobile_readiness_blockers=mobile_blockers,
         )

@@ -297,6 +297,35 @@ async def test_permission_resolution_and_company_branch_isolation(
 
 
 @pytest.mark.asyncio
+async def test_expired_functional_access_is_denied_by_backend_authorization(
+    authorization_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = authorization_database
+    fixture = await seed_authorization_fixture(factory, prefix="AUTHZEXPIRED")
+    async with factory() as session, session.begin():
+        await session.execute(
+            update(MembershipRole)
+            .where(MembershipRole.company_id == fixture.company_id)
+            .values(
+                functional_area="CUSTOMER_SERVICE",
+                access_level="CSR",
+                effective_at=utc_now() - timedelta(days=2),
+                expires_at=utc_now() - timedelta(days=1),
+            )
+        )
+
+    async with factory() as session:
+        context = await AuthorizationService().resolve(
+            session,
+            authenticated=fixture.authenticated,
+            company_id=fixture.company_id,
+        )
+
+    assert context.role_codes == frozenset()
+    assert context.permission_codes == frozenset()
+
+
+@pytest.mark.asyncio
 async def test_accessible_companies_include_only_active_tenant_memberships(
     authorization_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
 ) -> None:

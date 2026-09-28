@@ -282,6 +282,8 @@ class EventType(str, Enum):
     ROLE_PERMISSIONS_CHANGED = "role_permissions.changed"
     USER_LOGIN = "user.login"
     USER_LOGOUT = "user.logout"
+    USER_ACCESS_LOCKED = "identity.access_locked"
+    USER_ACCESS_UNLOCKED = "identity.access_unlocked"
     IDENTITY_ONBOARDING_INITIATED = "identity.onboarding_initiated"
     IDENTITY_INVITATION_ISSUED = "identity.invitation_issued"
     IDENTITY_INVITATION_REVOKED = "identity.invitation_revoked"
@@ -442,6 +444,9 @@ class EventType(str, Enum):
     LEAD_CREATED = "lead.created"
     LEAD_QUALIFIED = "lead.qualified"
     LEAD_CONVERTED = "lead.converted"
+    LEAD_UPDATED = "lead.updated"
+    LEAD_LOST = "lead.lost"
+    LEAD_ASSIGNED = "lead.assigned"
 
     # Communications
     CALL_RECEIVED = "call.received"
@@ -454,6 +459,8 @@ class EventType(str, Enum):
     APPOINTMENT_RESCHEDULED = "appointment.rescheduled"
     APPOINTMENT_CANCELLED = "appointment.cancelled"
     APPOINTMENT_MIGRATED = "appointment.migrated"
+    BRANCH_SCHEDULING_POLICY_CONFIGURED = "branch_scheduling_policy.configured"
+    EMPLOYEE_FUNCTIONAL_ACCESS_CHANGED = "employee.functional_access_changed"
 
     # Dispatch
     TECHNICIAN_DISPATCHED = "technician.dispatched"

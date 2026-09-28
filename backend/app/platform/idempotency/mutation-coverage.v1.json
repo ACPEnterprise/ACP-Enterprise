@@ -1,5 +1,8 @@
 {
   "entries": [
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"workforce","mechanism":"Company-scoped Employee and functional-area row locking with canonical role target state","method":"PUT","operation_id":"grant_functional_access_api_v1_workforce_administration_employees__employee_id__functional_access_put","path":"/api/v1/workforce/administration/employees/{employee_id}/functional-access","reason":"A functional-area update supersedes the prior active grant and advances authorization version atomically.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"workforce","mechanism":"Company-scoped immutable role-grant identity and idempotent revocation timestamp","method":"POST","operation_id":"revoke_functional_access_api_v1_workforce_administration_employees__employee_id__functional_access__assignment_id__revoke_post","path":"/api/v1/workforce/administration/employees/{employee_id}/functional-access/{assignment_id}/revoke","reason":"Repeated revocation leaves the same grant ineffective and preserves its history.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"scheduling","mechanism":"Branch calendar row lock, optimistic policy version, and complete target-state replacement","method":"PUT","operation_id":"configure_branch_scheduling_policy_api_v1_scheduling_branches__branch_id__policy_put","path":"/api/v1/scheduling/branches/{branch_id}/policy","reason":"Owner policy updates reject stale versions and converge on the explicitly submitted Branch calendar state.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Company-scoped governed run identity and immutable assembly digest","method":"POST","operation_id":"assemble_run_api_v1_payroll_operator_runs_assemble_post","path":"/api/v1/payroll/operator/runs/assemble","reason":"Run assembly is replay-safe and population scoped.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and append-only review evidence","method":"POST","operation_id":"review_run_api_v1_payroll_operator_runs__run_id__review_post","path":"/api/v1/payroll/operator/runs/{run_id}/review","reason":"Review initiation converges on the governed run lifecycle.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Run row lock and immutable review decision evidence","method":"POST","operation_id":"decide_run_review_api_v1_payroll_operator_runs__run_id__review_decision_post","path":"/api/v1/payroll/operator/runs/{run_id}/review/decision","reason":"Review decisions are append-only and reject contradictory replay.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
@@ -1510,6 +1513,16 @@
       "operation_id": "ensure_profile_api_v1_workforce_administration_employees__employee_id__profile_put",
       "path": "/api/v1/workforce/administration/employees/{employee_id}/profile",
       "reason": "Repeated profile creation converges on the one Company/Employee profile.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Company-scoped Employee/User row lock, expected authorization version, convergent target state, credential version rotation, and complete session revocation",
+      "method": "PUT",
+      "operation_id": "set_employee_access_lock_api_v1_workforce_administration_employees__employee_id__access_lock_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/access-lock",
+      "reason": "Exact lock or unlock replay converges on the requested access state while stale contradictory changes fail closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -3262,8 +3275,38 @@
       "path": "/api/v1/invoices/{invoice_id}/manual-payments",
       "reason": "Manual payment replay returns one receipt and one AR application while conflicting or duplicate evidence fails closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "pipeline",
+      "mechanism": "Company and actor scoped creation key with canonical request digest",
+      "method": "POST",
+      "operation_id": "create_lead_api_v1_pipeline_post",
+      "path": "/api/v1/pipeline",
+      "reason": "Lead creation replay returns one canonical Lead and rejects contradictory reuse.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "pipeline",
+      "mechanism": "Optimistic Lead version and constrained lifecycle transition",
+      "method": "POST",
+      "operation_id": "transition_lead_api_v1_pipeline__lead_id__transition_post",
+      "path": "/api/v1/pipeline/{lead_id}/transition",
+      "reason": "A version can transition once; stale replay cannot mutate the Lead twice.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "pipeline",
+      "mechanism": "Company and Lead scoped immutable contact-history replay key",
+      "method": "POST",
+      "operation_id": "record_contact_api_v1_pipeline__lead_id__contacts_post",
+      "path": "/api/v1/pipeline/{lead_id}/contacts",
+      "reason": "Contact activity replay cannot increment attempts or advance lifecycle twice.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "3ad597514fbf48ed58dc4368395f8edeb1d5170034894a3f04826e36fb86d0ba",
+  "fingerprint": "3360dc83e175cd18422fcf72d81f7119f362d3c5f972452e18e201871c6cd919",
   "schema_version": "1"
 }

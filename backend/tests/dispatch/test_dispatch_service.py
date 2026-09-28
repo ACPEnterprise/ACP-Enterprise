@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -18,7 +19,11 @@ from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User
-from app.scheduling.models import Appointment
+from app.scheduling.models import (
+    Appointment,
+    BranchSchedulingCalendar,
+    BranchSchedulingWeeklyInterval,
+)
 from app.workforce.models import (
     Capability,
     CapabilityCategory,
@@ -451,7 +456,9 @@ async def test_overlapping_assignment_and_company_scope_fail_closed(dispatch_fix
 
 
 @pytest.mark.asyncio
-async def test_missing_availability_is_reported_unknown(dispatch_fixture):
+async def test_employee_inherits_branch_schedule_without_copied_availability(
+    dispatch_fixture,
+):
     factory, context, appointment, _, technician = dispatch_fixture
     async with factory() as session, session.begin():
         profile_id = await session.scalar(
@@ -465,6 +472,32 @@ async def test_missing_availability_is_reported_unknown(dispatch_fixture):
             )
         )
         await session.delete(availability)
+        calendar = BranchSchedulingCalendar(
+            company_id=context.company.id,
+            branch_id=appointment.branch_id,
+            booking_horizon_days=365,
+            minimum_notice_minutes=0,
+            slot_interval_minutes=30,
+            default_capacity_units=2,
+        )
+        session.add(calendar)
+        await session.flush()
+        local_start = appointment.arrival_window_start_at.astimezone(
+            ZoneInfo("America/New_York")
+        )
+        local_end = (
+            appointment.arrival_window_start_at
+            + timedelta(minutes=appointment.expected_duration_minutes)
+        ).astimezone(ZoneInfo("America/New_York"))
+        session.add(
+            BranchSchedulingWeeklyInterval(
+                calendar_id=calendar.id,
+                day_of_week=local_start.weekday(),
+                start_minute=local_start.hour * 60,
+                end_minute=local_end.hour * 60 + local_end.minute,
+                capacity_units=2,
+            )
+        )
     async with factory() as session:
         option = next(
             item
@@ -473,11 +506,12 @@ async def test_missing_availability_is_reported_unknown(dispatch_fixture):
             )
             if item.employee_id == technician.id
         )
-        assert option.decision == "availability_unknown" and not option.eligible
+        assert option.decision == "eligible" and option.eligible
+        assert option.availability_confidence == "branch_schedule"
 
 
 @pytest.mark.asyncio
-async def test_job_title_does_not_substitute_for_workforce_capability(
+async def test_subjective_capability_is_not_required_without_job_constraint(
     dispatch_fixture,
 ):
     factory, context, appointment, technician, _ = dispatch_fixture
@@ -501,8 +535,8 @@ async def test_job_title_does_not_substitute_for_workforce_capability(
             )
             if item.employee_id == technician.id
         )
-    assert option.decision == "missing_required_capability"
-    assert not option.eligible
+    assert option.decision == "eligible"
+    assert option.eligible
 
 
 @pytest.mark.asyncio
