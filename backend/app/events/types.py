@@ -448,6 +448,11 @@ class EventType(str, Enum):
     LEAD_LOST = "lead.lost"
     LEAD_ASSIGNED = "lead.assigned"
 
+    # Marketing
+    MARKETING_ATTRIBUTION_CONFIRMED = "marketing.attribution_confirmed"
+    MARKETING_TOUCH_INGESTED = "marketing.touch_ingested"
+    MARKETING_PROVIDER_SNAPSHOT_RECORDED = "marketing.provider_snapshot_recorded"
+
     # Communications
     CALL_RECEIVED = "call.received"
     CALL_ANSWERED = "call.answered"

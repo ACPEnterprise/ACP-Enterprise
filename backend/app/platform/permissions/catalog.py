@@ -25,6 +25,7 @@ from app.platform.permissions.codes import (
     JobPermission,
     LaunchPlatformPermission,
     LuminaryPermission,
+    MarketingPermission,
     MigrationPermission,
     PaymentPermission,
     PipelinePermission,
@@ -174,6 +175,17 @@ PIPELINE_DEFINITIONS = tuple(
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(PipelinePermission.ALL)
+)
+
+MARKETING_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="marketing",
+        action=code.removeprefix("COMPANY_MARKETING_").lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(MarketingPermission.ALL)
 )
 
 ASSET_DEFINITIONS = tuple(
@@ -505,6 +517,7 @@ permission_catalog = PermissionCatalog(
     + LAUNCH_PLATFORM_DEFINITIONS
     + CUSTOMER_DEFINITIONS
     + PIPELINE_DEFINITIONS
+    + MARKETING_DEFINITIONS
     + ASSET_DEFINITIONS
     + ANALYTICS_DEFINITIONS
     + LUMINARY_DEFINITIONS
