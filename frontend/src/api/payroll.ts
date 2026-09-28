@@ -179,6 +179,27 @@ export async function calculatePayrollRun(runId: string, idempotencyKey: string)
 export async function closePayrollRun(runId: string, reason: string, idempotencyKey: string): Promise<Record<string, unknown>> {
   return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/close`, { reason_code: reason, idempotency_key: idempotencyKey })).data;
 }
+export async function reviewPayrollRun(runId: string, reason: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/review`, { reason_code: reason })).data;
+}
+export async function decidePayrollRunReview(runId: string, reason: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/review/decision`, { decision: "accepted", reason_code: reason })).data;
+}
+export async function approvePayrollRun(runId: string, reason: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/approve`, { reason_code: reason })).data;
+}
+export async function assemblePayrollRun(body: { pay_period_id: string; employee_ids: string[]; members: Array<{ employee_id: string; disposition: "pending_calculation" | "ready" | "blocked"; tax_result_id?: string | null }>; currency: string }): Promise<Record<string, unknown>> {
+  return (await apiClient.post("/api/v1/payroll/operator/runs/assemble", body)).data;
+}
+export async function issuePayrollPaperCheck(runId: string, body: { employee_id: string; check_number: string; issue_date: string; idempotency_key: string }): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/paper-checks`, body)).data;
+}
+export async function voidPayrollPaperCheck(checkId: string, reason: string, idempotencyKey: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/paper-checks/${checkId}/void`, { reason, idempotency_key: idempotencyKey })).data;
+}
+export async function reissuePayrollPaperCheck(runId: string, body: { original_check_id: string; employee_id: string; check_number: string; issue_date: string; idempotency_key: string }): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/runs/${runId}/paper-checks/reissue`, body)).data;
+}
 
 export async function getPayrollEmployeeSetup(employeeId: string): Promise<PayrollEmployeeSetup> {
   return (await apiClient.get<PayrollEmployeeSetup>(`/api/v1/payroll/setup/employees/${employeeId}`)).data;
