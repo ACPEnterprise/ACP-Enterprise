@@ -2,8 +2,8 @@
 
 ## Authority and boundary
 
-This candidate started from `origin/integration/om2-operations` at
-`b531aea65586366eef93819a9156a25e27bd7e00`. It consumes the latest complete,
+This candidate is reconciled to `origin/integration/om2-operations` at
+`5b7cca8a2130235a3a6c24dd82156778aca7ac0e`. It consumes the latest complete,
 digest-verified Production bounded snapshot already present in
 `QBO_PRODUCTION_EVIDENCE_ROOT`. It performs no provider acquisition, QBO mutation,
 Accounting posting, payment, Payroll execution, or tax action.
