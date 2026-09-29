@@ -357,6 +357,18 @@ describe("PayrollRoute authorization", () => {
     await waitFor(() => expect(review).toHaveBeenCalledWith({ runId: "run-1", reason: "Operator reviewed Payroll register" }));
   });
 
+  it("shows the owner-facing first Payroll readiness checklist", () => {
+    permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_TIMEKEEPING_ADMIN_READ"]);
+    vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 2, history_ready: false, aggregate_approved_gross: "0.00", aggregate_approved_net: "0.00", reconciliation_state: "attention_required", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: {}, member_dispositions: {}, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
+    vi.mocked(usePayrollPeriodOperations).mockReturnValue(query({ contract_version: "v1", pay_period_id: "period-1", period_start: "2026-09-01", period_end: "2026-09-07", policy_readiness: "MISSING_CONFIGURATION", employees: [{ employee_id: "employee-1", employee_number: "E-1", display_name: "Real Employee", home_branch_id: null, accepted_minutes: 0, regular_candidate_minutes: null, overtime_candidate_minutes: null, compensation_readiness: "MISSING", withholding_readiness: "MISSING", gross_pay_readiness: "BLOCKED", exception_codes: ["TIME_EVIDENCE_MISSING"], payroll_review_status: "BLOCKED", time_evidence_revision_ids: [] }], limitations: [] }) as never);
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
+    expect(screen.getByRole("heading", { name: "First real Payroll readiness" })).toBeVisible();
+    expect(screen.getByText("Approved Payroll policy")).toBeVisible();
+    expect(screen.getAllByText("Owner / Payroll admin").length).toBeGreaterThan(0);
+    expect(screen.getByText("Employee / Accountant")).toBeVisible();
+    expect(screen.getByText("Manager / Timekeeper")).toBeVisible();
+  });
+
   it("renders and invokes Approve Payroll for reviewed accepted state", async () => {
     permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_APPROVE"]);
     const approve = vi.fn();
