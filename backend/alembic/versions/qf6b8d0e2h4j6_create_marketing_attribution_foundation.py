@@ -1,7 +1,7 @@
 """create Marketing attribution foundation
 
 Revision ID: qf6b8d0e2h4j6
-Revises: pe5a7c9e1g3i5
+Revises: pf6b8d0f2h4j6
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "qf6b8d0e2h4j6"
-down_revision: str | Sequence[str] | None = "pe5a7c9e1g3i5"
+down_revision: str | Sequence[str] | None = "pf6b8d0f2h4j6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
