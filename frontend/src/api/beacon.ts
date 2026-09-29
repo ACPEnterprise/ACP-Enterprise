@@ -26,6 +26,31 @@ export type BeaconWorkflowAction =
   | "transfer"
   | "release";
 
+export type BeaconAdapterStatus =
+  | "ACTIVE"
+  | "ADAPTER_GATED"
+  | "SOURCE_GATED"
+  | "POLICY_GATED";
+
+export interface BeaconRecommendationCoverage {
+  family: string;
+  source_authority: string;
+  contract: string;
+  status: BeaconAdapterStatus;
+  responsibility:
+    | "OWNER"
+    | "OFFICE"
+    | "TECHNICIAN"
+    | "EMPLOYEE"
+    | "ACCOUNTANT"
+    | "PROVIDER"
+    | "ENGINEERING"
+    | "SYSTEM"
+    | "SOURCE";
+  clearing_condition: string;
+  limitation: string | null;
+}
+
 export interface BeaconWorkflowState {
   company_id: string;
   branch_id: string | null;
@@ -157,6 +182,7 @@ export interface BeaconSignalPage {
   evaluated_at: string;
   expires_at: string;
   lifecycle_commands_available: boolean;
+  recommendation_coverage: BeaconRecommendationCoverage[];
 }
 
 export interface BeaconMorningBrief {
@@ -188,7 +214,7 @@ export async function getBeaconMorningBrief(): Promise<BeaconMorningBrief> {
 }
 
 export async function getBeaconSignals(): Promise<BeaconSignalPage> {
-  const [page, workflow] = await Promise.all([
+  const [page, workflow, coverage] = await Promise.all([
     apiClient.get<BeaconSignalPage>("/api/v1/beacon/signals"),
     apiClient.get<{
       ranking_version: string;
@@ -206,6 +232,9 @@ export async function getBeaconSignals(): Promise<BeaconSignalPage> {
     }>("/api/v1/beacon/operational-signals/workflow", {
       params: { view: "all" },
     }),
+    apiClient.get<{
+      registrations: BeaconRecommendationCoverage[];
+    }>("/api/v1/beacon/cross-domain-adapters"),
   ]);
   return {
     ...page.data,
@@ -220,6 +249,7 @@ export async function getBeaconSignals(): Promise<BeaconSignalPage> {
       workflow: item.workflow,
       escalation: item.escalation,
     })),
+    recommendation_coverage: coverage.data.registrations,
   };
 }
 

@@ -42,6 +42,10 @@ describe("Beacon lifecycle API", () => {
       "/api/v1/beacon/operational-signals/workflow",
       { params: { view: "all" } },
     );
+    expect(apiClient.get).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/beacon/cross-domain-adapters",
+    );
   });
 
   it("submits exact evidence and explicit lifecycle operations", async () => {
