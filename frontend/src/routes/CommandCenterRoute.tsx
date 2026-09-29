@@ -15,10 +15,12 @@ import { Link } from "react-router";
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
 import { BeaconPanel } from "../components/command-center/BeaconPanel";
+import { BeaconReasoningPanel } from "../components/command-center/BeaconReasoningPanel";
 import { JobsEvidenceGraph } from "../components/command-center/JobsEvidenceGraph";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
   useBeaconLifecycleActions,
+  useActiveBeaconRecommendations,
   useBeaconSignals,
   useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
@@ -287,6 +289,7 @@ export function CommandCenterRoute() {
   );
   const analytics = useAnalyticsSummary(canReadAnalytics && !branchId);
   const beacon = useBeaconSignals(canReadAnalytics);
+  const recommendations = useActiveBeaconRecommendations(canReadAnalytics);
   const beaconLifecycle = useBeaconLifecycleActions();
   const beaconWorkflow = useBeaconWorkflowActions();
   const economics = useEconomicsMeasurementFoundation(canReadEconomics);
@@ -346,34 +349,42 @@ export function CommandCenterRoute() {
       </header>
 
       {canReadAnalytics ? (
-        <BeaconPanel
-          signals={beacon.data?.items}
-          snoozedSignals={beacon.data?.snoozed_items}
-          recommendationCoverage={beacon.data?.recommendation_coverage}
-          canReview={beacon.data?.lifecycle_commands_available ?? false}
-          canOwn={permissions.has("COMPANY_BEACON_OWN")}
-          canAssign={permissions.has("COMPANY_BEACON_ASSIGN")}
-          currentUserId={user?.id ?? null}
-          evaluatedAt={beacon.data?.evaluated_at ?? null}
-          loading={beacon.isLoading}
-          error={beacon.isError}
-          lifecycleError={beaconLifecycle.isError}
-          lifecyclePending={beaconLifecycle.isPending}
-          workflowError={beaconWorkflow.isError}
-          workflowPending={beaconWorkflow.isPending}
-          onLifecycleAction={(signal, action, snoozeUntil) =>
-            beaconLifecycle.mutate({ signal, action, snoozeUntil })
-          }
-          onWorkflowAction={(signal, action, expectedVersion, ownerUserId) =>
-            beaconWorkflow.mutate({
-              signal,
-              action,
-              expectedVersion,
-              ownerUserId,
-            })
-          }
-          retry={() => void beacon.refetch()}
-        />
+        <>
+          <BeaconPanel
+            signals={beacon.data?.items}
+            snoozedSignals={beacon.data?.snoozed_items}
+            recommendationCoverage={beacon.data?.recommendation_coverage}
+            canReview={beacon.data?.lifecycle_commands_available ?? false}
+            canOwn={permissions.has("COMPANY_BEACON_OWN")}
+            canAssign={permissions.has("COMPANY_BEACON_ASSIGN")}
+            currentUserId={user?.id ?? null}
+            evaluatedAt={beacon.data?.evaluated_at ?? null}
+            loading={beacon.isLoading}
+            error={beacon.isError}
+            lifecycleError={beaconLifecycle.isError}
+            lifecyclePending={beaconLifecycle.isPending}
+            workflowError={beaconWorkflow.isError}
+            workflowPending={beaconWorkflow.isPending}
+            onLifecycleAction={(signal, action, snoozeUntil) =>
+              beaconLifecycle.mutate({ signal, action, snoozeUntil })
+            }
+            onWorkflowAction={(signal, action, expectedVersion, ownerUserId) =>
+              beaconWorkflow.mutate({
+                signal,
+                action,
+                expectedVersion,
+                ownerUserId,
+              })
+            }
+            retry={() => void beacon.refetch()}
+          />
+          <BeaconReasoningPanel
+            evaluatedAt={recommendations.data?.evaluated_at}
+            isError={recommendations.isError}
+            isPending={recommendations.isPending}
+            items={recommendations.data?.items}
+          />
+        </>
       ) : (
         <Alert variant="information" title="Beacon access unavailable">
           Analytics read permission is required to view Beacon evidence.
