@@ -131,6 +131,35 @@ export interface LuminaryOwnerEconomics {
     ranking_basis: string;
     causality_semantics: Record<string, string>;
   };
+  driver_analysis: {
+    state: string;
+    reason?: string;
+    observed_changes: Array<{
+      metric: string;
+      classification: "OBSERVED_CHANGE";
+      current: number;
+      prior: number;
+      change: number;
+      change_basis_points_of_prior: number | null;
+      unit: "minor_currency" | "count";
+      currency: string | null;
+    }>;
+    measured_drivers: Array<{
+      component: string;
+      classification: "MEASURED_DRIVER";
+      contribution_effect_minor: number;
+      materiality_basis: string;
+      causality: "UNPROVEN";
+    }>;
+    possible_drivers: Array<{ driver: string; classification: string; reason: string }>;
+    unproven_causes: Array<{ cause: string; classification: string; reason: string }>;
+    unknown_components: string[];
+    economic_health?: {
+      value_basis_points: number | null;
+      distance_from_break_even_basis_points: number | null;
+    };
+    cash_health?: { state: string; ar_and_collections_included: false; reason: string };
+  };
   job_economics: Array<{
     job_id: string;
     job_number: string;
@@ -275,6 +304,7 @@ interface EvidenceGapReasoning {
   decision_impact: string;
   priority_tier: number;
   affected_job_count: number | null;
+  affected_authoritative_revenue_minor: number | null;
   affected_calculations: string[];
   expected_source: string;
   responsible_party: "OWNER" | "ACCOUNTANT" | "SYSTEM" | "PROVIDER";
@@ -282,6 +312,9 @@ interface EvidenceGapReasoning {
   ui_path_label: string;
   why_it_matters: string;
   unlocks: string;
+  evidence_freshness: string;
+  normal_workflow_available: boolean;
+  owner_decision_dependency: boolean;
 }
 
 type EvidenceClassification = "MEASURED" | "AUTHORITATIVE" | "OWNER_CONFIRMED" | "UNAVAILABLE";
