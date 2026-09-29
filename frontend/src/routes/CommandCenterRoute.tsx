@@ -15,7 +15,9 @@ import { Link } from "react-router";
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
 import { JobsEvidenceGraph } from "../components/command-center/JobsEvidenceGraph";
+import { BeaconReasoningPanel } from "../components/command-center/BeaconReasoningPanel";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import { useActiveBeaconRecommendations } from "../hooks/useBeaconSignals";
 import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics";
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
@@ -250,6 +252,7 @@ export function CommandCenterRoute() {
   const canReadDispatch = permissions.has("COMPANY_DISPATCH_READ");
   const canReadPayments = permissions.has("COMPANY_PAYMENT_READ");
   const canReadAnalytics = permissions.has("COMPANY_ANALYTICS_READ");
+  const recommendations = useActiveBeaconRecommendations(canReadAnalytics);
   const canReadEconomics = permissions.has(
     "COMPANY_ECONOMICS_MEASUREMENT_READ",
   );
@@ -335,6 +338,15 @@ export function CommandCenterRoute() {
           </Select>
         </label>
       </header>
+
+      {canReadAnalytics && (
+        <BeaconReasoningPanel
+          evaluatedAt={recommendations.data?.evaluated_at}
+          isError={recommendations.isError}
+          isPending={recommendations.isPending}
+          items={recommendations.data?.items}
+        />
+      )}
 
       <Panel
         title="Money / Cash Position"
