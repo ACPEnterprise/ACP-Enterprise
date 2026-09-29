@@ -5,6 +5,7 @@ import type {
   BeaconLifecycleAction,
   BeaconLifecycleEvent,
   BeaconPriorityBand,
+  BeaconRecommendationCoverage,
   BeaconSeverity,
   BeaconSignal,
   BeaconSupportingFact,
@@ -167,7 +168,7 @@ function SignalRow({
         </div>
       </div>
       <p className="mt-ui-3 rounded-md border border-stroke bg-surface-muted p-ui-3 text-body-s text-content-secondary">
-        <span className="font-semibold text-content">Why this priority:</span>{" "}
+        <span className="font-semibold text-content">Interpretation:</span>{" "}
         {signal.priority.explanation}
       </p>
       {signal.evidence_quality && (
@@ -201,7 +202,13 @@ function SignalRow({
           Escalation: {signal.escalation.reason}
         </p>
       )}
-      <dl className="mt-ui-3 grid gap-ui-2 text-body-s sm:grid-cols-2">
+      <h4 className="mt-ui-3 font-semibold text-content">Measured facts</h4>
+      <p className="mt-ui-1 text-body-s text-content-muted">
+        Evaluated {new Date(signal.priority.evaluated_at).toLocaleString()} ·
+        relevant until {new Date(signal.expires_at).toLocaleString()} unless the
+        source evidence changes first.
+      </p>
+      <dl className="mt-ui-2 grid gap-ui-2 text-body-s sm:grid-cols-2">
         {signal.supporting_facts.map((fact) => (
           <div className="rounded-md bg-surface-muted p-ui-3" key={fact.name}>
             <dt className="break-words text-content-muted">
@@ -244,10 +251,13 @@ function SignalRow({
           )}
         </ul>
       </details>
-      <p className="mt-ui-3 text-body-s text-content-secondary">
-        <span className="font-semibold text-content">Recommended action:</span>{" "}
-        {signal.recommended_action}
-      </p>
+      <div className="mt-ui-3 rounded-md border border-stroke p-ui-3 text-body-s text-content-secondary">
+        <h4 className="font-semibold text-content">Recommended human action</h4>
+        <p className="mt-ui-1">{signal.recommended_action}</p>
+        <p className="mt-ui-1 text-content-muted">
+          Beacon does not execute this action or alter the source record.
+        </p>
+      </div>
       <div className="mt-ui-3 rounded-md border border-stroke bg-surface-muted p-ui-3 text-body-s">
         <p className="font-semibold text-content">Operator responsibility</p>
         <p className="mt-ui-1 text-content-secondary">
@@ -442,6 +452,7 @@ function SignalRow({
 export function BeaconPanel({
   signals,
   snoozedSignals,
+  recommendationCoverage,
   canReview,
   canOwn,
   canAssign,
@@ -459,6 +470,9 @@ export function BeaconPanel({
 }: {
   readonly signals: readonly BeaconSignal[] | undefined;
   readonly snoozedSignals: readonly BeaconSignal[] | undefined;
+  readonly recommendationCoverage?:
+    | readonly BeaconRecommendationCoverage[]
+    | undefined;
   readonly canReview: boolean;
   readonly canOwn: boolean;
   readonly canAssign: boolean;
@@ -497,6 +511,12 @@ export function BeaconPanel({
         signal.evidence_quality.freshness === "stale" ||
         signal.evidence_quality.reconciliation !== "reconciled"),
   ).length;
+  const activeCoverage = recommendationCoverage?.filter(
+    (item) => item.status === "ACTIVE",
+  );
+  const gatedCoverage = recommendationCoverage?.filter(
+    (item) => item.status !== "ACTIVE",
+  );
   return (
     <CommandCenterPanel
       title="Beacon"
@@ -539,6 +559,43 @@ export function BeaconPanel({
           or invalid. Refresh the authoritative queue before trying again.
         </Alert>
       )}
+      {!loading && !error && recommendationCoverage && (
+        <details className="mb-ui-4 rounded-md border border-stroke p-ui-3">
+          <summary className="cursor-pointer font-semibold text-content">
+            Recommendation coverage · {activeCoverage?.length ?? 0} active ·{" "}
+            {gatedCoverage?.length ?? 0} not yet evaluable
+          </summary>
+          <p className="mt-ui-2 text-body-s text-content-muted">
+            No signal means only that an active rule found no condition. Gated
+            families were not evaluated and are not being represented as healthy.
+          </p>
+          <div className="mt-ui-3 grid gap-ui-3 lg:grid-cols-2">
+            <section>
+              <h4 className="font-semibold text-content">Evaluated now</h4>
+              <ul className="mt-ui-2 list-disc pl-ui-5 text-body-s text-content-secondary">
+                {activeCoverage?.map((item) => (
+                  <li key={item.family}>
+                    {item.family.replaceAll("_", " ")} · {item.source_authority}
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section>
+              <h4 className="font-semibold text-content">Not yet evaluable</h4>
+              <ul className="mt-ui-2 space-y-ui-2 text-body-s text-content-secondary">
+                {gatedCoverage?.map((item) => (
+                  <li key={item.family}>
+                    <span className="font-medium text-content">
+                      {item.family.replaceAll("_", " ")}
+                    </span>{" "}
+                    · {item.limitation ?? item.clearing_condition}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
+        </details>
+      )}
       {!loading && !error && visibleSignals.length > 0 && (
         <dl className="mb-ui-4 grid gap-ui-2 text-body-s sm:grid-cols-4">
           <div className="rounded-md border border-stroke p-ui-3">
@@ -573,7 +630,7 @@ export function BeaconPanel({
         snoozedSignals?.length === 0 && (
         <EmptyState
           title="No active Beacon signals"
-          description="Current authoritative records do not satisfy any configured deterministic signal rule."
+          description="Current authoritative records do not satisfy any active deterministic signal rule. Review recommendation coverage for families Beacon could not evaluate."
         />
       )}
       {!loading && !error && signals && signals.length > 0 && (

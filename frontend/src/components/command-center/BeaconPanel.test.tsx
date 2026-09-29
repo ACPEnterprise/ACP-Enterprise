@@ -125,6 +125,12 @@ describe("BeaconPanel", () => {
     expect(screen.getByText("Important severity")).toBeInTheDocument();
     expect(screen.getByText("First for owner attention")).toBeInTheDocument();
     expect(screen.getByText("partial completeness")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Measured facts" })).toBeInTheDocument();
+    expect(screen.getByText(/^Interpretation:/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Recommended human action" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/does not execute this action/)).toBeInTheDocument();
     expect(screen.getByText(/intentionally bounded/)).toBeInTheDocument();
     expect(screen.getByText("Open source workflow")).toHaveAttribute(
       "href",
@@ -169,6 +175,40 @@ describe("BeaconPanel", () => {
       />,
     );
     expect(screen.getByText("No active Beacon signals")).toBeInTheDocument();
+    expect(screen.queryByText(/all systems operational/i)).not.toBeInTheDocument();
+  });
+
+  it("distinguishes evaluated recommendation families from gated families", () => {
+    render(
+      <BeaconPanel
+        {...panelProps}
+        signals={[]}
+        recommendationCoverage={[
+          {
+            family: "scheduling_dispatch",
+            source_authority: "Scheduling and Dispatch",
+            contract: "appointment authority",
+            status: "ACTIVE",
+            responsibility: "OFFICE",
+            clearing_condition: "Record the authoritative outcome.",
+            limitation: null,
+          },
+          {
+            family: "economics_luminary",
+            source_authority: "Business Economics and Luminary",
+            contract: "immutable economics result",
+            status: "ADAPTER_GATED",
+            responsibility: "OWNER",
+            clearing_condition: "Admit the adapter.",
+            limitation: "Beacon does not recalculate Economics.",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/1 active · 1 not yet evaluable/)).toBeInTheDocument();
+    expect(screen.getByText(/No signal means only/)).toBeInTheDocument();
+    expect(screen.getByText(/Beacon does not recalculate Economics/)).toBeInTheDocument();
     expect(screen.queryByText(/all systems operational/i)).not.toBeInTheDocument();
   });
 
