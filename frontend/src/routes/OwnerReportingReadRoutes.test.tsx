@@ -33,6 +33,21 @@ vi.mock("../hooks/usePayroll", () => ({
   usePayrollOperatingRegisters: () => ({ isPending: false, isError: false, data: [] }),
   useComplianceSchemas: () => ({ isPending: false, isError: false, data: [] }),
   usePayrollPeriodOperations: () => ({ isLoading: false, isError: false, data: undefined }),
+  usePayrollRunActions: () => ({
+    assemble: { isPending: false, mutateAsync: vi.fn() },
+    calculate: { isPending: false, mutateAsync: vi.fn() },
+    review: { isPending: false, mutateAsync: vi.fn() },
+    approve: { isPending: false, mutateAsync: vi.fn() },
+    close: { isPending: false, mutateAsync: vi.fn() },
+    issuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+    voidPaperCheck: { isPending: false, mutateAsync: vi.fn() },
+    reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
+  }),
+  usePayrollPolicy: () => ({ isPending: false, isError: false, data: { configured: false, policy: null, drafts: [] } }),
+  usePayrollPolicyActions: () => ({
+    draft: { isPending: false, mutateAsync: vi.fn() },
+    approve: { isPending: false, mutateAsync: vi.fn() },
+  }),
 }));
 vi.mock("../hooks/useWorkdayTime", () => ({
   useCreatePayPeriod: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -53,7 +68,7 @@ describe("owner reporting read routes", () => {
   it("renders Payroll Administration with reporting-read alone", () => {
     permissions.add("COMPANY_PAYROLL_REPORTING_READ");
     render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
-    expect(screen.getByRole("heading", { name: "Payroll Administration" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Payroll" })).toBeVisible();
   });
 
   it("renders Accounts Payable reporting with report-read alone", () => {

@@ -11,6 +11,16 @@ import { PayrollPolicySetup } from "../components/payroll/PayrollPolicySetup";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
 
+const employeeRequirement = (code: string) => {
+  if (code === "TIME_EVIDENCE_MISSING") return { requirement: "Accepted time", owner: "OWNER", next: "Open the linked Timecard, resolve the period exception, and accept the time." };
+  if (code.includes("COMPENSATION") || code.includes("PAY_RATE") || code.includes("SALARY")) return { requirement: "Compensation", owner: "OWNER", next: "Open Payroll setup and enter or approve the effective pay rate." };
+  if (code.includes("W4") || code.includes("WITHHOLDING")) return { requirement: "W-4 / withholding election", owner: "EMPLOYEE", next: "Provide the employee's withholding election through Payroll setup." };
+  if (code.includes("JURISDICTION") || code.includes("TAX")) return { requirement: "Tax jurisdiction", owner: "ACCOUNTANT", next: "Provide and approve the employee's work/residence jurisdiction and tax authority." };
+  if (code.includes("DEDUCTION")) return { requirement: "Deductions", owner: "ACCOUNTANT", next: "Enter or approve the applicable deduction authority in Payroll setup." };
+  if (code.includes("YTD") || code.includes("OPENING") || code.includes("HISTORY")) return { requirement: "Opening / YTD evidence", owner: "ACCOUNTANT", next: "Enter or approve opening and year-to-date evidence in Payroll setup." };
+  return { requirement: label(code), owner: "SYSTEM", next: "Review the linked Payroll setup blocker and contact Operations if it cannot be resolved." };
+};
+
 function StateList({ values, empty }: { values: Record<string, number>; empty: string }) {
   const entries = Object.entries(values).sort(([left], [right]) => left.localeCompare(right));
   if (!entries.length) return <p className="text-sm text-content-muted">{empty}</p>;
@@ -209,6 +219,38 @@ export function PayrollRoute() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                      <div className="mt-6 space-y-3" id="payroll-owner-action-queue">
+                        <h3 className="font-semibold">Employee action queue</h3>
+                        <p className="text-sm text-content-muted">Every unresolved Employee requirement is listed with the person responsible and the next normal UI action.</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[860px] text-left text-sm">
+                            <thead><tr className="text-content-muted"><th className="pb-2">Employee</th><th>Requirement</th><th>State</th><th>Responsible</th><th>Next action</th></tr></thead>
+                            <tbody>
+                              {employees.flatMap((employee) => {
+                                const blockers = employee.exception_codes.length ? employee.exception_codes : [];
+                                const rows = blockers.length ? blockers : [null];
+                                return rows.map((code) => {
+                                  const item = code ? employeeRequirement(code) : { requirement: "Payroll prerequisites", owner: "SYSTEM", next: "No Employee blocker is reported; continue with the next Payroll step." };
+                                  const ready = !code;
+                                  const setupHref = `/payroll?employee=${employee.employee_id}&period=${effectivePayPeriodId}#payroll-employee-${employee.employee_id}`;
+                                  const href = code === "TIME_EVIDENCE_MISSING"
+                                    ? `/employees?employee=${employee.employee_id}&period=${effectivePayPeriodId}#timecard-${employee.employee_id}`
+                                    : setupHref;
+                                  return (
+                                    <tr className="border-t border-stroke align-top" key={`${employee.employee_id}-${code ?? "ready"}`}>
+                                      <td className="py-3 font-semibold">{employee.display_name}</td>
+                                      <td className="py-3">{item.requirement}</td>
+                                      <td className="py-3">{ready ? "READY" : "ACTION REQUIRED"}</td>
+                                      <td className="py-3">{item.owner}</td>
+                                      <td className="py-3">{item.next}{!ready && <Link className="ml-2 font-semibold text-action-primary underline" to={href}>Open next step</Link>}</td>
+                                    </tr>
+                                  );
+                                });
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
