@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     qbo_repository_root: str = "/app"
     hcp_source4_evidence_root: str | None = None
 
+    # Google Ads secrets remain in the platform secret provider. These values are
+    # opaque references and callback metadata only; live access is separately gated.
+    google_ads_oauth_client_reference: str | None = None
+    google_ads_developer_token_reference: str | None = None
+    google_ads_callback_uri: str | None = None
+    google_ads_live_access_enabled: bool = False
+
     password_min_length: int = 12
     password_max_length: int = 256
     argon2_time_cost: int = 3
@@ -212,6 +219,26 @@ class Settings(BaseSettings):
                 != "ACP Employee <no-reply@allcountyhomeservices.com>"
             ):
                 raise ValueError("Postmark identity sender is not owner-approved")
+        if self.google_ads_live_access_enabled:
+            if self.environment != "beta":
+                raise ValueError("Google Ads live access is admitted for Beta only")
+            google_ads_references = (
+                self.google_ads_oauth_client_reference,
+                self.google_ads_developer_token_reference,
+            )
+            prefix = f"marketing/{self.environment}/google-ads/"
+            if any(
+                not reference or not reference.startswith(prefix)
+                for reference in google_ads_references
+            ):
+                raise ValueError(
+                    "Google Ads requires environment-scoped opaque secret references"
+                )
+            if (
+                not self.google_ads_callback_uri
+                or not self.google_ads_callback_uri.startswith("https://")
+            ):
+                raise ValueError("Google Ads requires an HTTPS callback URI")
         if self.qbo_sandbox_enabled:
             expected_callback = (
                 "https://preview.allcountyhomeservices.com"

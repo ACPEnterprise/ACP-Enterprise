@@ -57,7 +57,8 @@ export type NavigationItemId =
   | "dispatch-ai"
   | "customer-care-ai"
   | "accounting-ai"
-  | "marketing-ai";
+  | "marketing-ai"
+  | "marketing-provider-connections";
 
 export interface NavigationItem {
   readonly id: NavigationItemId;
