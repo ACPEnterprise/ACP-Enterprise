@@ -3,12 +3,35 @@ import { useState } from "react";
 import { useHasPermission } from "../auth";
 import {
   useApplyQboSafeMajority,
+  useDecideQboReview,
   useQboApplicationLedger,
   useQboReviewQueue,
 } from "../hooks/useQboNativeApplication";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
+import type { QboReviewItem } from "../api/qboNativeApplication";
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Spinner } from "../ui";
 
 const label = (value: string) => value.replaceAll("_", " ").toLowerCase();
+
+function ReviewCard({ item }: { item: QboReviewItem }) {
+  const decide = useDecideQboReview();
+  const [action, setAction] = useState(item.allowed_actions[0]?.action ?? "");
+  const [reason, setReason] = useState("");
+  const [target, setTarget] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const needsTarget = ["BIND_EXISTING", "MAP_ACCOUNT", "MAP_CUSTOMER", "MAP_VENDOR"].includes(action);
+  const selected = item.allowed_actions.find((candidate) => candidate.action === action);
+  return <article className="rounded-lg border border-stroke p-4"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-semibold">{label(item.source_family)} · {item.reference_number ?? item.provider_record_id}</h2><Badge variant="warning">Needs review</Badge></div><p className="mt-1 text-xs text-content-muted">Provider ID {item.provider_record_id} · version {item.provider_version ?? "not supplied"}</p><p className="mt-2 text-sm">{item.exact_conflict}</p><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-content-muted">Date</dt><dd>{item.source_date ?? "Not supplied"}</dd></div><div><dt className="text-content-muted">Amount</dt><dd>{item.source_amount ?? "Not supplied"}</dd></div><div><dt className="text-content-muted">Entity</dt><dd>{item.source_entity_names.join(", ") || "Not supplied"}</dd></div><div><dt className="text-content-muted">Could unlock</dt><dd>{item.unlocks} dependent records</dd></div></dl>{item.affected_dependents.length > 0 && <p className="mt-2 text-sm"><strong>Dependent records:</strong> {item.affected_dependents.join(", ")}</p>}
+    {item.current_decision && <Alert variant="warning">Current decision: {label(item.current_decision.action)} · {item.current_decision.reason}. A replacement preserves and supersedes this history.</Alert>}
+    <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); void decide.mutateAsync({ reviewItemId: item.id, input: { action, reason, target_native_id: needsTarget ? target : undefined, evidence_reference: evidence || undefined, supersedes_decision_id: item.current_decision?.id } }); }}>
+      <label className="text-sm font-medium">Decision<select aria-label={`Decision for ${item.reference_number ?? item.provider_record_id}`} className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" value={action} onChange={(event) => setAction(event.target.value)}>{item.allowed_actions.map((candidate) => <option value={candidate.action} key={candidate.action}>{label(candidate.action)} — {label(candidate.required_authority)}</option>)}</select></label>
+      {needsTarget && <Input aria-label="Exact native identity" required value={target} onChange={(event) => setTarget(event.target.value)} placeholder="Exact native UUID"/>}
+      <Input aria-label="Decision reason" required minLength={4} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this decision is supported"/>
+      <Input aria-label="Evidence reference" value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="External evidence reference, if applicable"/>
+      <div className="sm:col-span-2"><p className="mb-2 text-sm text-content-muted">Required authority: <strong>{selected ? label(selected.required_authority) : "not available"}</strong>. No fuzzy match, QBO write, or Accounting posting occurs.</p><Button type="submit" loading={decide.isPending} disabled={!action || reason.trim().length < 4 || (needsTarget && !target)}>Record decision</Button></div>
+      {decide.isError && <Alert variant="danger">Decision was rejected. Verify current authority, exact identity, and decision history.</Alert>}
+    </form>
+  </article>;
+}
 
 export function QboMigrationRoute() {
   const canReconcile = useHasPermission("COMPANY_ACCOUNTING_RECONCILE");
@@ -45,7 +68,7 @@ export function QboMigrationRoute() {
     </CardContent></Card>
 
     <Card><CardHeader><CardTitle>Needs review</CardTitle><CardDescription>Only records with a specific conflict or missing authority appear here. Unrelated records continue.</CardDescription></CardHeader><CardContent>
-      {review.isPending ? <Spinner label="Loading reconciliation review queue"/> : review.isError ? <Alert variant="warning">The review queue could not be loaded.</Alert> : review.data?.length ? <div className="space-y-3">{review.data.map((item) => <article className="rounded-lg border border-stroke p-4" key={item.id}><div className="flex flex-wrap justify-between gap-2"><h2 className="font-semibold">{label(item.source_family)} · {item.reference_number ?? item.provider_record_id}</h2><Badge variant="warning">Needs review</Badge></div><p className="mt-2 text-sm">{item.exact_conflict}</p><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-content-muted">Date</dt><dd>{item.source_date ?? "Not supplied"}</dd></div><div><dt className="text-content-muted">Amount</dt><dd>{item.source_amount ?? "Not supplied"}</dd></div><div><dt className="text-content-muted">Entity</dt><dd>{item.source_entity_names.join(", ") || "Not supplied"}</dd></div><div><dt className="text-content-muted">Candidate native identity</dt><dd>{item.candidate_native_ids.join(", ") || "No exact candidate"}</dd></div></dl>{item.affected_dependents.length > 0 && <p className="mt-2 text-sm"><strong>Dependent records:</strong> {item.affected_dependents.join(", ")}</p>}<p className="mt-2 text-sm text-content-muted">Allowed next actions: {item.allowed_actions.map(label).join(" · ")}</p></article>)}</div> : <p className="text-sm text-content-muted">No open reconciliation conflicts.</p>}
+      {review.isPending ? <Spinner label="Loading reconciliation review queue"/> : review.isError ? <Alert variant="warning">The review queue could not be loaded.</Alert> : review.data?.length ? <div className="space-y-3">{review.data.map((item) => <ReviewCard item={item} key={item.id}/>)}</div> : <p className="text-sm text-content-muted">No open reconciliation conflicts.</p>}
     </CardContent></Card>
   </div>;
 }

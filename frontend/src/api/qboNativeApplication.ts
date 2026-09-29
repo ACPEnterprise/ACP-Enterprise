@@ -48,7 +48,10 @@ export interface QboReviewItem {
   conflicting_fields: string[];
   exact_conflict: string;
   affected_dependents: string[];
-  allowed_actions: string[];
+  provider_version: string | null;
+  allowed_actions: { action: string; required_authority: "OWNER" | "ACCOUNTANT" | "SYSTEM" | "EXTERNAL_EVIDENCE_REQUIRED" }[];
+  current_decision: { id: string; action: string; authority_class: string; reason: string; decided_at: string } | null;
+  unlocks: number;
   state: string;
 }
 
@@ -74,3 +77,17 @@ export const getQboReviewQueue = async (): Promise<QboReviewItem[]> =>
 
 export const applyQboSafeMajority = async (): Promise<QboApplicationReceipt> =>
   (await apiClient.post<QboApplicationReceipt>(root)).data;
+
+export interface QboReviewDecisionInput {
+  action: string;
+  reason: string;
+  target_native_id?: string;
+  evidence_reference?: string;
+  supersedes_decision_id?: string;
+}
+
+export const decideQboReview = async (
+  reviewItemId: string,
+  input: QboReviewDecisionInput,
+): Promise<{ decision_id: string; authority_class: string }> =>
+  (await apiClient.post(`${root}/review-queue/${reviewItemId}/decisions`, input)).data;

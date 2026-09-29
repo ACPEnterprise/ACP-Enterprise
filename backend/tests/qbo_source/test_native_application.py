@@ -26,12 +26,14 @@ from app.platform.permissions.models import Permission
 from app.platform.users.models import User
 from app.qbo_source.application_models import (
     QboNativeApplicationRecord,
+    QboNativeReviewDecision,
     QboNativeReviewItem,
 )
 from app.qbo_source.contracts import QboSourceEnvelope, SnapshotIdentity
 from app.qbo_source.native_application import (
     QboApplicationError,
     QboNativeApplicationService,
+    ReviewDecisionCommand,
 )
 
 
@@ -202,7 +204,7 @@ async def test_clean_majority_binds_exact_and_quarantines_only_conflicts(databas
     assert len(reviews) == 1
     assert reviews[0].provider_record_id == "invoice-conflict"
     assert reviews[0].source_amount == "10.00"
-    assert "MAP_CUSTOMER" in reviews[0].allowed_actions
+    assert "HOLD_FOR_ACCOUNTANT" in reviews[0].allowed_actions
     assert reviews[0].affected_dependents == ["dependency-1"]
 
     replay = await service.apply_clean_majority(
@@ -221,6 +223,136 @@ async def test_clean_majority_binds_exact_and_quarantines_only_conflicts(databas
                 QboNativeReviewItem.company_id == context.company.id
             )
         ) == 1
+
+
+@pytest.mark.asyncio
+async def test_review_decision_binds_exact_vendor_and_preserves_history(database) -> None:
+    factory = database
+    context = await seed_context(factory, name="QBO Review Decisions")
+    service = QboNativeApplicationService()
+    await service.apply_clean_majority(
+        factory,
+        context=context,
+        envelopes=(evidence(envelope("vendor", "vendor-review")),),
+    )
+    review = (await service.open_review_items(factory, context=context))[0]
+    async with factory() as session, session.begin():
+        vendor = AccountingVendor(
+            company_id=context.company.id,
+            code="QBO-REVIEW-VENDOR",
+            legal_name="Explicit Review Vendor",
+            display_name="Explicit Review Vendor",
+            status="active",
+            provenance="operator_review",
+            created_by_user_id=context.user.id,
+        )
+        session.add(vendor)
+        await session.flush()
+        vendor_id = vendor.id
+
+    decision = await service.decide_review(
+        factory,
+        context=context,
+        review_item_id=review.id,
+        command=ReviewDecisionCommand(
+            action="MAP_VENDOR",
+            reason="Owner selected the exact existing Vendor identity.",
+            target_native_id=vendor_id,
+        ),
+    )
+    assert decision.authority_class == "OWNER"
+    counts = {item.source_family: item for item in await service.family_counts(factory, context=context)}
+    assert counts["vendor"].bound == 1
+    assert counts["vendor"].quarantined == 0
+    assert await service.open_review_items(factory, context=context) == ()
+    async with factory() as session:
+        assert await session.scalar(
+            select(func.count()).select_from(QboNativeReviewDecision).where(
+                QboNativeReviewDecision.company_id == context.company.id
+            )
+        ) == 1
+
+
+@pytest.mark.asyncio
+async def test_review_decision_supersession_is_explicit_and_stale_replay_fails(database) -> None:
+    factory = database
+    context = await seed_context(factory, name="QBO Review Supersession")
+    service = QboNativeApplicationService()
+    await service.apply_clean_majority(
+        factory,
+        context=context,
+        envelopes=(evidence(envelope("invoice", "invoice-review")),),
+    )
+    review = (await service.open_review_items(factory, context=context))[0]
+    first = await service.decide_review(
+        factory,
+        context=context,
+        review_item_id=review.id,
+        command=ReviewDecisionCommand(
+            action="DEFER_EXTERNAL",
+            reason="External bank reconciliation is pending.",
+            evidence_reference="bank-control-2026-05",
+        ),
+    )
+    with pytest.raises(QboApplicationError, match="stale"):
+        await service.decide_review(
+            factory,
+            context=context,
+            review_item_id=review.id,
+            command=ReviewDecisionCommand(
+                action="DEFER_EXTERNAL",
+                reason="Contradictory replay without predecessor.",
+            ),
+        )
+    second = await service.decide_review(
+        factory,
+        context=context,
+        review_item_id=review.id,
+        command=ReviewDecisionCommand(
+            action="DEFER_EXTERNAL",
+            reason="Updated external reconciliation evidence remains pending.",
+            evidence_reference="bank-control-2026-05-v2",
+            supersedes_decision_id=first.id,
+        ),
+    )
+    assert second.supersedes_decision_id == first.id
+    async with factory() as session:
+        predecessor = await session.get(QboNativeReviewDecision, first.id)
+        assert predecessor is not None and predecessor.superseded_at is not None
+
+
+@pytest.mark.asyncio
+async def test_review_decision_authority_and_company_isolation_fail_closed(database) -> None:
+    factory = database
+    owner = await seed_context(factory, name="QBO Review Owner")
+    foreign = await seed_context(factory, name="QBO Review Foreign")
+    service = QboNativeApplicationService()
+    await service.apply_clean_majority(
+        factory,
+        context=owner,
+        envelopes=(evidence(envelope("invoice", "invoice-authority")),),
+    )
+    review = (await service.open_review_items(factory, context=owner))[0]
+    with pytest.raises(QboApplicationError, match="finance approval"):
+        await service.decide_review(
+            factory,
+            context=owner,
+            review_item_id=review.id,
+            command=ReviewDecisionCommand(
+                action="HOLD_FOR_ACCOUNTANT",
+                reason="Accountant review is required.",
+            ),
+        )
+    with pytest.raises(QboApplicationError, match="not found"):
+        await service.decide_review(
+            factory,
+            context=foreign,
+            review_item_id=review.id,
+            command=ReviewDecisionCommand(
+                action="DEFER_EXTERNAL",
+                reason="Must not cross Company scope.",
+            ),
+        )
 
 
 @pytest.mark.asyncio
