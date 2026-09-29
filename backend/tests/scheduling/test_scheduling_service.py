@@ -1038,6 +1038,60 @@ async def test_reschedule_moves_capacity_and_rejects_stale_version(
 
 
 @pytest.mark.asyncio
+async def test_reschedule_reconciles_imported_schedule_without_reservation(
+    service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
+) -> None:
+    factory, fixture = service_database
+    service = SchedulingService(clock=lambda: FIXED_NOW)
+    replacement = FIRST_START + timedelta(days=1)
+    async with factory() as session:
+        appointment = await service.create_appointment(
+            session, context=fixture.context, command=create_command(fixture)
+        )
+        appointment_id = appointment.id
+    async with factory.begin() as session:
+        await session.execute(
+            delete(AppointmentCapacityReservation).where(
+                AppointmentCapacityReservation.appointment_id == appointment_id
+            )
+        )
+    async with factory() as session:
+        moved = await service.reschedule_appointment(
+            session,
+            context=fixture.context,
+            command=RescheduleAppointmentCommand(
+                appointment_id=appointment_id,
+                expected_version=1,
+                arrival_window_start_at=replacement,
+                arrival_window_end_at=replacement + timedelta(hours=1),
+                expected_duration_minutes=90,
+                capacity_units=Decimal("1.00"),
+                reason_code=AppointmentRescheduleReason.OPERATIONAL_ADJUSTMENT,
+            ),
+        )
+        assert moved.concurrency_version == 2
+    async with factory() as session:
+        reservation = await SchedulingRepository.get_capacity_reservation(
+            session,
+            company_id=fixture.company.id,
+            appointment_id=appointment_id,
+        )
+        event = await session.scalar(
+            select(BusinessEvent).where(
+                BusinessEvent.entity_id == appointment_id,
+                BusinessEvent.event_type == "appointment.rescheduled",
+            )
+        )
+    assert reservation is not None
+    assert reservation.reserved_start_at == replacement
+    assert event is not None
+    assert (
+        event.payload["capacity_reservation_transition"]
+        == "CREATED_FROM_CONFIRMED_RESCHEDULE"
+    )
+
+
+@pytest.mark.asyncio
 async def test_unsupported_cancellation_and_reschedule_reasons_are_rejected(
     service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
 ) -> None:

@@ -114,6 +114,23 @@ class CalendarQueryResult(SchedulingApiSchema):
     end_at: AwareDatetime
 
 
+class BranchCalendarTechnician(SchedulingApiSchema):
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    job_title: str | None
+    readiness: Literal["AVAILABLE", "UNAVAILABLE", "READINESS_BLOCKED"]
+    readiness_reasons: tuple[str, ...]
+    availability_confidence: str
+
+
+class BranchCalendarRoster(SchedulingApiSchema):
+    branch_id: UUID
+    window_start_at: AwareDatetime
+    window_end_at: AwareDatetime
+    technicians: tuple[BranchCalendarTechnician, ...]
+
+
 class BranchWeeklyIntervalInput(SchedulingApiSchema):
     day_of_week: int = Field(ge=0, le=6)
     start_minute: int = Field(ge=0, lt=1440)

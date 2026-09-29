@@ -4,6 +4,7 @@ import { shouldRetryApiQuery } from "../api/errors";
 import {
   getAppointment,
   getBranchSchedulingPolicy,
+  getBranchCalendarRoster,
   configureBranchSchedulingPolicy,
   listAppointments,
   rescheduleAppointment,
@@ -26,6 +27,19 @@ export function useBranchSchedulingPolicy(branchId: string | undefined) {
   return useQuery({
     queryKey: ["scheduling", "branch-policy", branchId],
     queryFn: () => getBranchSchedulingPolicy(branchId as string),
+    enabled: Boolean(branchId),
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useBranchCalendarRoster(
+  branchId: string | undefined,
+  startAt: string,
+  endAt: string,
+) {
+  return useQuery({
+    queryKey: ["scheduling", "branch-calendar-roster", branchId, startAt, endAt],
+    queryFn: () => getBranchCalendarRoster(branchId as string, startAt, endAt),
     enabled: Boolean(branchId),
     retry: shouldRetryApiQuery,
   });
