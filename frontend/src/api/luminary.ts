@@ -83,6 +83,27 @@ export interface LuminaryOwnerEconomics {
   currency: string | null;
   readiness: string;
   confidence: { score_percent: number; method: string };
+  owner_health: {
+    revenue_production: OwnerHealthMoneyMeasure & { basis: string };
+    economic_contribution: OwnerHealthMoneyMeasure & { formula: string };
+    required_economic_burden: OwnerHealthMoneyMeasure & {
+      missing_components: string[];
+      policy_state: string;
+    };
+    economic_health: {
+      value_basis_points: number | null;
+      classification: EvidenceClassification;
+      break_even_basis_points: 10000;
+      status: string;
+      formula: string;
+      limitation: string | null;
+    };
+    cash_health: {
+      classification: "UNAVAILABLE";
+      separate_from_economic_health: true;
+      limitation: string;
+    };
+  };
   job_economics: Array<{
     job_id: string;
     job_number: string;
@@ -218,6 +239,14 @@ export interface LuminaryOwnerEconomics {
   };
   mutation_authority: "none";
   packet_digest: string;
+}
+
+type EvidenceClassification = "MEASURED" | "AUTHORITATIVE" | "OWNER_CONFIRMED" | "UNAVAILABLE";
+interface OwnerHealthMoneyMeasure {
+  value_minor: number | null;
+  classification: EvidenceClassification;
+  currency: string | null;
+  limitation: string | null;
 }
 export async function getLuminaryBriefing(start: string, end: string) {
   return (

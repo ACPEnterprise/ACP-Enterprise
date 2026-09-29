@@ -29,6 +29,17 @@ const localDate = (value: Date) =>
   `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 const today = localDate(new Date());
 const monthStart = `${today.slice(0, 7)}-01`;
+const rangeFor = (kind: "DAY" | "WEEK" | "MONTH" | "YEAR") => {
+  const now = new Date();
+  const end = localDate(now);
+  if (kind === "DAY") return { start: end, end };
+  if (kind === "MONTH") return { start: `${end.slice(0, 7)}-01`, end };
+  if (kind === "YEAR") return { start: `${end.slice(0, 4)}-01-01`, end };
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const mondayOffset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - mondayOffset);
+  return { start: localDate(start), end };
+};
 const words = (value: string) => value.replaceAll("_", " ");
 const money = (item: LuminaryObservation) =>
   item.value_minor == null || !item.currency
@@ -231,6 +242,18 @@ export function LuminaryRoute() {
       </header>
       <Card>
         <CardContent className="pt-6">
+          <div className="mb-3 flex flex-wrap gap-2" aria-label="Common business periods">
+            {(["DAY", "WEEK", "MONTH", "YEAR"] as const).map((kind) => (
+              <Button key={kind} type="button" variant="secondary" onClick={() => {
+                const period = rangeFor(kind);
+                setStart(period.start);
+                setEnd(period.end);
+                setScope(period);
+              }}>
+                {kind === "DAY" ? "Today" : `This ${kind.toLowerCase()}`}
+              </Button>
+            ))}
+          </div>
           <form
             className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
             onSubmit={(event) => {
@@ -285,6 +308,42 @@ export function LuminaryRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <section aria-labelledby="owner-health-title" className="rounded-lg border border-stroke p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="owner-health-title">Where the business stands</h3>
+                  <p className="text-sm text-content-muted">Revenue, contribution, required burden, and break-even stay separate. Cash is not inferred.</p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                  {words(ownerEconomics.data.owner_health.economic_health.status)}
+                </span>
+              </div>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ["Revenue production", ownerEconomics.data.owner_health.revenue_production.value_minor, ownerEconomics.data.owner_health.revenue_production.classification],
+                  ["Economic contribution", ownerEconomics.data.owner_health.economic_contribution.value_minor, ownerEconomics.data.owner_health.economic_contribution.classification],
+                  ["Required economic burden", ownerEconomics.data.owner_health.required_economic_burden.value_minor, ownerEconomics.data.owner_health.required_economic_burden.classification],
+                ].map(([label, value, classification]) => (
+                  <div className="rounded-md bg-surface-muted p-3" key={String(label)}>
+                    <dt className="text-xs font-semibold uppercase tracking-wide">{label}</dt>
+                    <dd className="text-lg font-semibold">{minorMoney(value as number | null, ownerEconomics.data.currency)}</dd>
+                    <dd className="text-xs text-content-muted">{words(String(classification))}</dd>
+                  </div>
+                ))}
+                <div className="rounded-md bg-surface-muted p-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wide">Economic health</dt>
+                  <dd className="text-lg font-semibold">{ownerEconomics.data.owner_health.economic_health.value_basis_points == null ? "Not yet available" : `${(ownerEconomics.data.owner_health.economic_health.value_basis_points / 100).toFixed(1)}%`}</dd>
+                  <dd className="text-xs text-content-muted">{words(ownerEconomics.data.owner_health.economic_health.classification)} · 100% is break-even</dd>
+                </div>
+              </dl>
+              {ownerEconomics.data.owner_health.economic_health.limitation ? <Alert variant="warning">{ownerEconomics.data.owner_health.economic_health.limitation}</Alert> : null}
+              <details className="mt-3 text-sm text-content-muted">
+                <summary className="cursor-pointer font-medium">Evidence and missing burden inputs</summary>
+                <p className="mt-2">Revenue basis: {words(ownerEconomics.data.owner_health.revenue_production.basis)}.</p>
+                <p>{ownerEconomics.data.owner_health.required_economic_burden.missing_components.length ? `Still needed: ${ownerEconomics.data.owner_health.required_economic_burden.missing_components.map(words).join(" · ")}.` : "The approved burden pool is available for this period."}</p>
+                <p>{ownerEconomics.data.owner_health.cash_health.limitation}</p>
+              </details>
+            </section>
             <section
               aria-labelledby="period-comparison-title"
               className="rounded-lg border border-stroke p-4"
