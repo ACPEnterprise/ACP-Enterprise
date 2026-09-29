@@ -481,7 +481,7 @@ def upgrade() -> None:
             table,
             sa.Column("assignment_id", UUID, primary_key=True),
             sa.Column("company_id", UUID, nullable=False),
-            sa.Column("branch_id", UUID, nullable=not branch_required),
+            sa.Column("branch_id", UUID, nullable=True),
             sa.Column(target_column, UUID, nullable=False),
             sa.ForeignKeyConstraint(
                 assignment_local,
