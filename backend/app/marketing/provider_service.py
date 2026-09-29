@@ -9,6 +9,7 @@ from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.provider_connections.models import ProviderConnectionBinding
+from app.platform.secrets import SecretProviderError
 
 from .models import (
     MarketingProviderAccount,
@@ -17,6 +18,7 @@ from .models import (
     MarketingProviderReconciliationFinding,
     MarketingProviderSyncRun,
 )
+from .oauth import GoogleAdsOAuthError, build_google_ads_oauth_runtime
 from .schemas import (
     GoogleAdsAccountBindingCreate,
     GoogleAdsAccountBindingResponse,
@@ -52,10 +54,15 @@ class MarketingProviderService:
             settings.google_ads_oauth_client_reference,
             settings.google_ads_developer_token_reference,
         )
-        safe_custody = all(
+        references_safe = all(
             reference is not None and reference.startswith(prefix)
             for reference in references
         )
+        try:
+            runtime = build_google_ads_oauth_runtime(settings)
+            safe_custody = references_safe and runtime.ready()
+        except (GoogleAdsOAuthError, SecretProviderError, OSError, ValueError):
+            safe_custody = False
         checks = {
             "oauth_client_not_configured": bool(
                 settings.google_ads_oauth_client_reference
@@ -70,7 +77,7 @@ class MarketingProviderService:
         configuration_blockers = tuple(
             name for name, ready in checks.items() if not ready
         )
-        blockers = configuration_blockers + ("owner_oauth_runtime_not_released",)
+        blockers = configuration_blockers
         bound_count = await session.scalar(
             select(func.count(MarketingProviderAccountBinding.id)).where(
                 MarketingProviderAccountBinding.company_id == context.company.id,
@@ -115,7 +122,7 @@ class MarketingProviderService:
             is not None,
             environment_safe_secret_custody=safe_custody,
             live_ingestion_enabled=settings.google_ads_live_access_enabled,
-            authorization_available=False,
+            authorization_available=not configuration_blockers,
             granted_scopes=tuple(connection.granted_scopes) if connection else (),
             connected_at=connection.consented_at if connection else None,
             bound_account_count=bound_count or 0,

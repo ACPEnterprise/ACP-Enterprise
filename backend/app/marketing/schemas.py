@@ -127,6 +127,10 @@ class GoogleAdsConnectionReadinessResponse(MarketingSchema):
     blockers: tuple[str, ...]
 
 
+class GoogleAdsOAuthStartResponse(MarketingSchema):
+    authorization_url: str
+
+
 class GoogleAdsAccountBindingSummary(MarketingSchema):
     id: UUID
     branch_id: UUID

@@ -3398,8 +3398,18 @@
         "tests/marketing/test_google_ads_readonly.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "marketing",
+      "mechanism": "short-lived single-use signed OAuth state with no provider or business mutation",
+      "method": "POST",
+      "operation_id": "google_ads_oauth_authorize_api_v1_marketing_google_ads_oauth_authorize_post",
+      "path": "/api/v1/marketing/google-ads/oauth/authorize",
+      "reason": "Initiation creates only expiring anti-CSRF state and returns an authorization URL; it cannot bind an account, ingest evidence, or mutate Google Ads.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "12219338bd644c9783751a2576b6e878b370bef37deef4c2409c5440b6f8c984",
+  "fingerprint": "0f02cb179e4b0ed49ee9c5252f7b13aa557b242bb2781e2f291272b60078757f",
   "schema_version": "1"
 }

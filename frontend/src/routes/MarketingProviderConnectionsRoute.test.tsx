@@ -5,12 +5,13 @@ import { useAuth } from "../auth";
 import { MarketingProviderConnectionsRoute } from "./MarketingProviderConnectionsRoute";
 
 vi.mock("../auth", () => ({ useAuth: vi.fn() }));
-vi.mock("@tanstack/react-query", () => ({ useQuery: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({ useQuery: vi.fn(), useMutation: vi.fn() }));
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 describe("MarketingProviderConnectionsRoute", () => {
   beforeEach(() => {
+    vi.mocked(useMutation).mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<typeof useMutation>);
     vi.mocked(useAuth).mockReturnValue({ activeCompany: { id: "company-1", name: "All County", branches: [] } } as unknown as ReturnType<typeof useAuth>);
     vi.mocked(useQuery).mockReturnValue({
       isPending: false,

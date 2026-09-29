@@ -6,7 +6,7 @@ This runbook admits a real Google Ads connection only after the owner-facing cod
 
 1. Use a TwelveHats-controlled Google Cloud project and enable the Google Ads API.
 2. Configure the OAuth consent screen for the TwelveHats Beta application and add Michael's Google identity as an authorized/test user while the application remains in testing.
-3. Create a Web application OAuth client. Register the exact Beta callback URI supplied by the deployed TwelveHats release; do not register wildcards, localhost, Preview, or Production callbacks for this credential.
+3. Create a Web application OAuth client. Register exactly `https://preview.allcountyhomeservices.com/api/v1/marketing/google-ads/oauth/callback`; do not register wildcards, localhost, or Production callbacks for this Beta credential.
 4. Request only `https://www.googleapis.com/auth/adwords`. Google makes this broad scope unavoidable; TwelveHats enforces read-only behavior in its adapter and routes.
 5. Obtain the Google Ads developer token in the manager account used for reporting. Confirm its access level supports the intended real account.
 6. Place the OAuth client configuration and developer token in the platform secret provider under separate opaque references rooted at `marketing/beta/google-ads/`. Never put either value in application configuration, a Marketing table, logs, tickets, or this runbook.
@@ -16,7 +16,10 @@ Set only these non-secret Beta application values:
 - `GOOGLE_ADS_OAUTH_CLIENT_REFERENCE`
 - `GOOGLE_ADS_DEVELOPER_TOKEN_REFERENCE`
 - `GOOGLE_ADS_CALLBACK_URI`
+- `GOOGLE_ADS_RUNTIME_ROOT` — absolute owner-restricted persistent volume outside the repository
 - `GOOGLE_ADS_LIVE_ACCESS_ENABLED=true` only in Beta after the callback and secret-provider implementation are admitted
+
+Provision or rotate the three source values from owner-readable `0600` files with `backend/scripts/provision_google_ads_secrets.py`. Supply the current generation for rotation. The command reports only status and generation numbers; values are never printed. Restart the Beta workload after configuration changes and verify all five readiness checks before selecting Connect.
 
 Production must use different credentials and references. The application rejects live access outside Beta.
 
