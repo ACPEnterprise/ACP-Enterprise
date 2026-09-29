@@ -329,10 +329,7 @@ describe("PayrollRoute authorization", () => {
       "/employees?employee=employee-1&period=period-1#timecard-employee-1",
     );
     expect(screen.queryByText("No current pay period")).not.toBeInTheDocument();
-    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveAttribute(
-      "id",
-      "payroll-employee-employee-1",
-    );
+    expect(document.getElementById("payroll-employee-employee-1")).toBeVisible();
     expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveClass(
       "bg-action-primary/5",
     );
