@@ -101,23 +101,64 @@ vi.mock("../hooks/useLuminary", () => ({
         ranked_evidence_gaps: [{
           rank: 1, gap: "certified_direct_wage_cost", evidence_state: "UNAVAILABLE",
           decision_impact: "BLOCKS_CONTRIBUTION_AND_HEALTH", priority_tier: 1,
-          affected_job_count: 1, affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
+          affected_job_count: 1, affected_authoritative_revenue_minor: 12550,
+          affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
           expected_source: "Payroll / Business Economics", responsible_party: "OWNER",
           ui_path: "/payroll", ui_path_label: "Payroll -> First real Payroll readiness",
           why_it_matters: "Economic Contribution cannot subtract authoritative Job-variable labor cost.",
           unlocks: "direct labor cost and Job Economic Contribution",
+          evidence_freshness: "partial", normal_workflow_available: true,
+          owner_decision_dependency: true,
         }],
         highest_value_next_action: {
           rank: 1, gap: "certified_direct_wage_cost", evidence_state: "UNAVAILABLE",
           decision_impact: "BLOCKS_CONTRIBUTION_AND_HEALTH", priority_tier: 1,
-          affected_job_count: 1, affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
+          affected_job_count: 1, affected_authoritative_revenue_minor: 12550,
+          affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
           expected_source: "Payroll / Business Economics", responsible_party: "OWNER",
           ui_path: "/payroll", ui_path_label: "Payroll -> First real Payroll readiness",
           why_it_matters: "Economic Contribution cannot subtract authoritative Job-variable labor cost.",
           unlocks: "direct labor cost and Job Economic Contribution",
+          evidence_freshness: "partial", normal_workflow_available: true,
+          owner_decision_dependency: true,
         },
         ranking_basis: "Decision dependency first, then affected authoritative Job population; missing values are never estimated.",
         causality_semantics: {},
+      },
+      driver_analysis: {
+        state: "AVAILABLE",
+        observed_changes: [
+          {
+            metric: "revenue_production", classification: "OBSERVED_CHANGE",
+            current: 12550, prior: 10050, change: 2500,
+            change_basis_points_of_prior: 2487, unit: "minor_currency", currency: "USD",
+          },
+          {
+            metric: "job_count", classification: "OBSERVED_CHANGE",
+            current: 2, prior: 1, change: 1,
+            change_basis_points_of_prior: 10000, unit: "count", currency: null,
+          },
+        ],
+        measured_drivers: [{
+          component: "revenue_production", classification: "MEASURED_DRIVER",
+          contribution_effect_minor: 2500,
+          materiality_basis: "absolute_arithmetic_contribution_effect",
+          causality: "UNPROVEN",
+        }],
+        possible_drivers: [{
+          driver: "job_mix", classification: "POSSIBLE_DRIVER",
+          reason: "Job count changed; service-mix evidence must be inspected before attributing cause.",
+        }],
+        unproven_causes: [{
+          cause: "why_measured_components_changed", classification: "UNPROVEN_CAUSE",
+          reason: "Arithmetic period movement does not establish operational causation.",
+        }],
+        unknown_components: ["certified_direct_wage_cost"],
+        economic_health: { value_basis_points: null, distance_from_break_even_basis_points: null },
+        cash_health: {
+          state: "SEPARATE_AUTHORITY", ar_and_collections_included: false,
+          reason: "AR and collections belong to Cash Health and are not used to explain Economic Health.",
+        },
       },
       facts: [
         {
@@ -322,7 +363,7 @@ describe("Luminary workspace recovery", () => {
     expect(
       screen.getByText("Can I trust the profitability answer?"),
     ).toBeVisible();
-    expect(screen.getByText("AVAILABLE")).toBeVisible();
+    expect(screen.getAllByText("AVAILABLE").length).toBeGreaterThan(0);
     expect(screen.getByText("POLICY REQUIRED")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
@@ -341,10 +382,14 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("Highest-value missing evidence")).toBeVisible();
     expect(screen.getByRole("link", { name: "Payroll -> First real Payroll readiness" })).toHaveAttribute("href", "/payroll");
     expect(screen.getByText(/covers 0 of 1 admitted Jobs/)).toBeVisible();
+    expect(screen.getByText("What happened and what drove it")).toBeVisible();
+    expect(screen.getAllByText("+$25.00").length).toBeGreaterThan(0);
+    expect(screen.getByText(/cause unproven/)).toBeVisible();
+    expect(screen.getByText(/AR and collections belong to Cash Health/)).toBeVisible();
     expect(screen.getByText(/owner compensation · trucks and fixed costs/)).toBeInTheDocument();
     expect(screen.getByText(/Cash Health is a separate Accounting authority/)).toBeInTheDocument();
     expect(screen.getByText("What changed from the prior equal period")).toBeVisible();
-    expect(screen.getByText("+$25.00")).toBeVisible();
+    expect(screen.getAllByText("+$25.00").length).toBeGreaterThan(0);
     expect(screen.getByText("Why the measured economics changed")).toBeVisible();
     expect(screen.getByText(/cannot explain contribution change/)).toBeVisible();
     expect(screen.getByText(/not operational cause/)).toBeVisible();
