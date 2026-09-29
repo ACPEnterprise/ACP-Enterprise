@@ -5,6 +5,7 @@ import { apiClient } from "./client";
 import {
   addCustomerContact,
   addCustomerProperty,
+  admitCustomerCleanMajority,
   createCustomer,
   getCustomer,
   listCustomers,
@@ -92,10 +93,37 @@ describe("customer response normalization", () => {
       "/api/v1/customer-migration/population/refresh",
       { source_system: "housecall_pro" },
       {
+        timeout: 300_000,
         headers: {
           "Idempotency-Key": "refresh-request-1",
           "X-Branch-ID": "branch-1",
         },
+      },
+    );
+  });
+
+  it("keeps deterministic admission connected through a governed long-running receipt", async () => {
+    const result = {
+      classification: "CUSTOMER_CLEAN_MAJORITY_ADMITTED",
+      source_system: "housecall_pro",
+      selected: 2,
+      admitted: 1,
+      replayed: 0,
+      quarantined: 1,
+      remaining_unexplained: 0,
+      before_evidence_digest: "a".repeat(64),
+      after_evidence_digest: "b".repeat(64),
+      customer_admission_performed: true,
+    } as const;
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: result } as never);
+
+    await expect(admitCustomerCleanMajority("branch-1")).resolves.toEqual(result);
+    expect(post).toHaveBeenCalledWith(
+      "/api/v1/customer-migration/population/admit-clean-majority",
+      { source_system: "housecall_pro", limit: 5000 },
+      {
+        timeout: 1_800_000,
+        headers: { "X-Branch-ID": "branch-1" },
       },
     );
   });

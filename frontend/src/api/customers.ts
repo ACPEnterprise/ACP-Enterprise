@@ -206,6 +206,11 @@ export async function refreshCustomerPopulation(
       "/api/v1/customer-migration/population/refresh",
       { source_system: "housecall_pro" },
       {
+        // The current authoritative HCP population is classified row by row.
+        // Keep the browser request alive long enough to receive the governed
+        // receipt instead of reporting a false transport failure while the
+        // backend continues the transaction.
+        timeout: 300_000,
         headers: {
           "Idempotency-Key": idempotencyKey,
           "X-Branch-ID": branchId,
@@ -222,7 +227,13 @@ export async function admitCustomerCleanMajority(
     await apiClient.post<CustomerCleanMajorityAdmissionResult>(
       "/api/v1/customer-migration/population/admit-clean-majority",
       { source_system: "housecall_pro", limit: 5000 },
-      { headers: { "X-Branch-ID": branchId } },
+      {
+        // Admission applies thousands of deterministic rows independently and
+        // returns one truthful completion receipt. Avoid an ambiguous client
+        // timeout that could invite a duplicate operator attempt.
+        timeout: 1_800_000,
+        headers: { "X-Branch-ID": branchId },
+      },
     )
   ).data;
 }

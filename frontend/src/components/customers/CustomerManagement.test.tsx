@@ -278,11 +278,11 @@ describe("CustomerManagement", () => {
 
     render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
 
-    expect(screen.getByText(/Source evidence through 2026-09-10/)).toBeInTheDocument();
-    expect(screen.getByText("90 admitted / 100 source")).toBeInTheDocument();
+    expect(screen.getByText(/sealed HCP migration rehearsal through 2026-09-10/)).toBeInTheDocument();
+    expect(screen.getByText("90 projected / 100 acquired source")).toBeInTheDocument();
     expect(screen.getByText(/5 held · 3 exception · 1 deferred · 1 unresolved · delta 0/)).toBeInTheDocument();
     expect(screen.getByText("Source population is partial")).toBeInTheDocument();
-    expect(screen.getByText(/never presented as native Customers/)).toBeInTheDocument();
+    expect(screen.getByText(/do not replace the current live classification/i)).toBeInTheDocument();
   });
 
   it("makes stale source evidence explicit without disabling the native roster", () => {
