@@ -568,6 +568,112 @@ def _direction(value: int) -> str:
     return "increased" if value > 0 else "decreased" if value < 0 else "did not change"
 
 
+def _owner_health_snapshot(workspace: dict[str, object]) -> dict[str, object]:
+    """Name the four owner-facing measures without creating Economics truth."""
+    totals = _mapping(workspace.get("totals"))
+    native = _mapping(workspace.get("native_evidence"))
+    native_summary = _mapping(native.get("summary"))
+    currency = workspace.get("currency") or native_summary.get("currency")
+
+    revenue = totals.get("revenue")
+    revenue_authority = "MEASURED"
+    revenue_basis = "earned_revenue"
+    if not isinstance(revenue, int):
+        revenue = native_summary.get("invoiced_revenue_minor")
+        revenue_authority = (
+            "AUTHORITATIVE" if isinstance(revenue, int) else "UNAVAILABLE"
+        )
+        revenue_basis = (
+            "invoiced_revenue" if isinstance(revenue, int) else "unavailable"
+        )
+
+    contribution = totals.get("gross_profit")
+    contribution_available = isinstance(contribution, int)
+    burden = totals.get("overhead")
+    burden_available = workspace.get(
+        "fully_allocated_available"
+    ) is True and isinstance(burden, int)
+    health_basis_points = None
+    if contribution_available and burden_available and cast(int, burden) > 0:
+        health_basis_points = cast(int, contribution) * 10_000 // cast(int, burden)
+
+    readiness = _mapping(workspace.get("readiness"))
+    allocation = _mapping(readiness.get("allocation_authority"))
+    missing_burden = (
+        []
+        if burden_available
+        else [
+            "field_capacity_burden",
+            "office_and_administration",
+            "owner_compensation",
+            "trucks_and_fixed_costs",
+            "rent_and_utilities",
+            "insurance_software_and_professional",
+            "marketing",
+            "other_admitted_fixed_or_semi_fixed_burden",
+        ]
+    )
+    return {
+        "revenue_production": {
+            "value_minor": revenue if isinstance(revenue, int) else None,
+            "classification": revenue_authority,
+            "basis": revenue_basis,
+            "currency": currency,
+            "limitation": (
+                "Accepted invoiced revenue is shown; it is not earned revenue or collected cash."
+                if revenue_basis == "invoiced_revenue"
+                else None
+            ),
+        },
+        "economic_contribution": {
+            "value_minor": contribution if contribution_available else None,
+            "classification": "MEASURED" if contribution_available else "UNAVAILABLE",
+            "currency": currency,
+            "formula": "revenue minus admitted job-variable costs",
+            "limitation": None
+            if contribution_available
+            else "Complete admitted direct costs are required.",
+        },
+        "required_economic_burden": {
+            "value_minor": burden if burden_available else None,
+            "classification": "AUTHORITATIVE" if burden_available else "UNAVAILABLE",
+            "currency": currency,
+            "missing_components": missing_burden,
+            "policy_state": allocation.get("state")
+            or readiness.get("allocation_policy")
+            or "policy_required",
+            "limitation": None
+            if burden_available
+            else "ACP has not admitted a complete approved burden pool and allocation for this period.",
+        },
+        "economic_health": {
+            "value_basis_points": health_basis_points,
+            "classification": "MEASURED"
+            if health_basis_points is not None
+            else "UNAVAILABLE",
+            "break_even_basis_points": 10_000,
+            "status": (
+                "ABOVE_BREAK_EVEN"
+                if health_basis_points is not None and health_basis_points > 10_000
+                else "AT_BREAK_EVEN"
+                if health_basis_points == 10_000
+                else "BELOW_BREAK_EVEN"
+                if health_basis_points is not None
+                else "UNAVAILABLE"
+            ),
+            "formula": "economic contribution divided by required economic burden",
+            "limitation": None
+            if health_basis_points is not None
+            else "Economic Health remains unknown until both contribution and required burden are authoritative for the same period.",
+        },
+        "cash_health": {
+            "classification": "UNAVAILABLE",
+            "separate_from_economic_health": True,
+            "limitation": "Cash Health is a separate Accounting authority and is not inferred here.",
+        },
+    }
+
+
 def _delta_explanation(
     workspace: dict[str, object],
     *,
@@ -900,6 +1006,7 @@ def project_owner_economics(
         "facts": facts,
         "job_economics": job_economics,
         "service_line_economics": service_line_economics,
+        "owner_health": _owner_health_snapshot(workspace),
         "evidence_priority_queue": _evidence_priority_queue(job_economics),
         "owner_question_answers": _owner_question_answers(
             job_economics, service_line_economics
