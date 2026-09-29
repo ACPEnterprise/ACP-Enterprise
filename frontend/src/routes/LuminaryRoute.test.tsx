@@ -54,6 +54,35 @@ vi.mock("../hooks/useLuminary", () => ({
       generated_at: "2026-09-16T12:00:00Z",
       readiness: "READY",
       confidence: { score_percent: 90 },
+      currency: "USD",
+      owner_health: {
+        revenue_production: {
+          value_minor: 12550, classification: "AUTHORITATIVE",
+          basis: "invoiced_revenue", currency: "USD",
+          limitation: "Accepted invoiced revenue is not earned revenue.",
+        },
+        economic_contribution: {
+          value_minor: null, classification: "UNAVAILABLE", currency: "USD",
+          formula: "revenue minus admitted job-variable costs",
+          limitation: "Complete admitted direct costs are required.",
+        },
+        required_economic_burden: {
+          value_minor: null, classification: "UNAVAILABLE", currency: "USD",
+          missing_components: ["owner_compensation", "trucks_and_fixed_costs"],
+          policy_state: "policy_required",
+          limitation: "A complete approved burden pool is required.",
+        },
+        economic_health: {
+          value_basis_points: null, classification: "UNAVAILABLE",
+          break_even_basis_points: 10000, status: "UNAVAILABLE",
+          formula: "economic contribution divided by required economic burden",
+          limitation: "Economic Health remains unknown until contribution and burden are authoritative.",
+        },
+        cash_health: {
+          classification: "UNAVAILABLE", separate_from_economic_health: true,
+          limitation: "Cash Health is a separate Accounting authority and is not inferred here.",
+        },
+      },
       facts: [
         {
           family: "REVENUE", metric: "invoiced_revenue", value: 12550,
@@ -234,6 +263,11 @@ describe("Luminary workspace recovery", () => {
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
     ).toBeVisible();
     expect(screen.getByText("Owner economics decision support")).toBeVisible();
+    expect(screen.getByText("Where the business stands")).toBeVisible();
+    expect(screen.getByText("Revenue production")).toBeVisible();
+    expect(screen.getByText("Economic health")).toBeVisible();
+    expect(screen.getByText(/owner compensation · trucks and fixed costs/)).toBeInTheDocument();
+    expect(screen.getByText(/Cash Health is a separate Accounting authority/)).toBeInTheDocument();
     expect(screen.getByText("What changed from the prior equal period")).toBeVisible();
     expect(screen.getByText("+$25.00")).toBeVisible();
     expect(screen.getByText("Why the measured economics changed")).toBeVisible();
@@ -247,6 +281,14 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("No hypothetical scenario selected.")).toBeVisible();
     expect(screen.getByText("Review measured Job contribution")).toBeVisible();
     expect(screen.getByText(/No price, Employee, Payroll, payment, or Accounting state can be changed/i)).toBeVisible();
+  });
+
+  it("offers day, week, month, and year owner periods", () => {
+    renderRoute();
+    expect(screen.getByRole("button", { name: "Today" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "This week" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "This month" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "This year" })).toBeVisible();
   });
 
   it("does not submit an invented numeric change for evidence-gated scenarios", () => {
