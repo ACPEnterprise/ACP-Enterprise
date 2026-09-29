@@ -49,6 +49,11 @@ vi.mock("../hooks/usePayroll", () => ({
     voidPaperCheck: { mutateAsync: vi.fn(), isPending: false },
     reissuePaperCheck: { mutateAsync: vi.fn(), isPending: false },
   }),
+  usePayrollPolicy: () => ({ isPending: false, isError: false, data: { configured: false, policy: null, drafts: [] } }),
+  usePayrollPolicyActions: () => ({
+    draft: { isPending: false, mutateAsync: vi.fn() },
+    approve: { isPending: false, mutateAsync: vi.fn() },
+  }),
 }));
 vi.mock("../hooks/useWorkdayTime", () => ({
   useCreatePayPeriod: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -69,7 +74,7 @@ describe("owner reporting read routes", () => {
   it("renders Payroll Administration with reporting-read alone", () => {
     permissions.add("COMPANY_PAYROLL_REPORTING_READ");
     render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
-    expect(screen.getByRole("heading", { name: "Payroll Administration" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Payroll" })).toBeVisible();
   });
 
   it("renders Accounts Payable reporting with report-read alone", () => {
