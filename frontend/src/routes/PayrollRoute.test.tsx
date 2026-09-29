@@ -35,6 +35,8 @@ vi.mock("../hooks/usePayroll", () => ({
     voidPaperCheck: { isPending: false, mutateAsync: vi.fn() },
     reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() },
   })),
+  usePayrollPolicy: vi.fn(() => ({ data: { configured: false, policy: null, drafts: [] }, isPending: false, isError: false })),
+  usePayrollPolicyActions: vi.fn(() => ({ draft: { isPending: false, mutateAsync: vi.fn() }, approve: { isPending: false, mutateAsync: vi.fn() } })),
 }));
 vi.mock("../hooks/useWorkdayTime", () => ({
   useCreatePayPeriod: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),

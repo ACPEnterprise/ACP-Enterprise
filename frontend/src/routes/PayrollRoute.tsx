@@ -7,6 +7,7 @@ import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup";
 import { PayrollCutoverReview } from "../components/payroll/PayrollCutoverReview";
+import { PayrollPolicySetup } from "../components/payroll/PayrollPolicySetup";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
 
@@ -109,6 +110,7 @@ export function PayrollRoute() {
         <Card><CardHeader><CardTitle>Checks to write</CardTitle><CardDescription>Paper-check evidence only</CardDescription></CardHeader><CardContent className="text-xl font-bold">{value.payment_counts.issued ?? 0}</CardContent></Card>
       </section>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
+      <PayrollPolicySetup />
       {canReadCutover && <PayrollCutoverReview />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
         {value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.
