@@ -58,6 +58,7 @@ from app.invoicing import models as invoicing_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.luminary import models as luminary_models  # noqa: F401
 from app.marketing import models as marketing_models  # noqa: F401
+from app.platform.provider_connections import models as provider_connection_models  # noqa: F401
 from app.operational_assets import models as operational_asset_models  # noqa: F401
 from app.operational_measurement import (
     models as operational_measurement_models,  # noqa: F401

@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -653,3 +656,423 @@ class MarketingJobAttribution(_AttributionLink, Base):
         ),
     )
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+
+
+class MarketingProviderAccountBinding(Base):
+    __tablename__ = "marketing_provider_account_bindings"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "provider_account_id"],
+            [
+                "marketing_provider_accounts.company_id",
+                "marketing_provider_accounts.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "connection_binding_id"],
+            [
+                "platform_provider_connection_bindings.company_id",
+                "platform_provider_connection_bindings.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "provider_account_id",
+            "branch_id",
+            name="uq_marketing_provider_account_binding",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    provider_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    connection_binding_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    bound_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    ingestion_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    bound_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class MarketingProviderCursor(Base):
+    __tablename__ = "marketing_provider_cursors"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "provider_account_id"],
+            [
+                "marketing_provider_accounts.company_id",
+                "marketing_provider_accounts.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "last_completed_sync_run_id"],
+            [
+                "marketing_provider_sync_runs.company_id",
+                "marketing_provider_sync_runs.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "provider_account_id",
+            "stream",
+            "partition_key",
+            name="uq_marketing_provider_cursor_partition",
+        ),
+        CheckConstraint(
+            "length(cursor_digest) = 64", name="ck_marketing_cursor_digest"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    provider_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    stream: Mapped[str] = mapped_column(String(80), nullable=False)
+    partition_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    watermark_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    cursor_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    last_completed_sync_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class MarketingPerformanceObservation(Base):
+    __tablename__ = "marketing_performance_observations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "provider_account_id"],
+            [
+                "marketing_provider_accounts.company_id",
+                "marketing_provider_accounts.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "provider_object_identity_id"],
+            [
+                "marketing_provider_object_identities.company_id",
+                "marketing_provider_object_identities.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "provider_snapshot_id"],
+            [
+                "marketing_provider_snapshots.company_id",
+                "marketing_provider_snapshots.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "interval_end > interval_start", name="ck_marketing_performance_interval"
+        ),
+        CheckConstraint(
+            "length(observation_digest) = 64", name="ck_marketing_performance_digest"
+        ),
+        UniqueConstraint(
+            "company_id", "observation_digest", name="uq_marketing_performance_digest"
+        ),
+        Index(
+            "ix_marketing_performance_interval",
+            "company_id",
+            "provider_account_id",
+            "interval_start",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    provider_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    provider_object_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    provider_snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    interval_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    interval_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    provider_as_of: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    grain: Mapped[str] = mapped_column(String(80), nullable=False)
+    dimensions: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    currency: Mapped[str | None] = mapped_column(String(3))
+    cost_micros: Mapped[int | None] = mapped_column(BigInteger)
+    impressions: Mapped[int | None] = mapped_column(BigInteger)
+    clicks: Mapped[int | None] = mapped_column(BigInteger)
+    interactions: Mapped[int | None] = mapped_column(BigInteger)
+    calls: Mapped[int | None] = mapped_column(BigInteger)
+    provider_conversions: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    provider_conversion_value: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    observation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class MarketingSearchTermObservation(Base):
+    __tablename__ = "marketing_search_term_observations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "provider_snapshot_id"],
+            [
+                "marketing_provider_snapshots.company_id",
+                "marketing_provider_snapshots.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "provider_account_id"],
+            [
+                "marketing_provider_accounts.company_id",
+                "marketing_provider_accounts.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "campaign_identity_id"],
+            [
+                "marketing_provider_object_identities.company_id",
+                "marketing_provider_object_identities.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "length(search_term_digest) = 64", name="ck_marketing_search_term_digest"
+        ),
+        CheckConstraint(
+            "length(observation_digest) = 64",
+            name="ck_marketing_search_observation_digest",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "observation_digest",
+            name="uq_marketing_search_observation_digest",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    provider_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    provider_snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    campaign_identity_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    interval_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    interval_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    provider_as_of: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    search_term_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    keyword_text_digest: Mapped[str | None] = mapped_column(String(64))
+    match_type: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[str | None] = mapped_column(String(40))
+    metrics: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    dimensions: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    observation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class MarketingProviderReconciliationFinding(Base):
+    __tablename__ = "marketing_provider_reconciliation_findings"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "provider_account_id"],
+            [
+                "marketing_provider_accounts.company_id",
+                "marketing_provider_accounts.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "sync_run_id"],
+            [
+                "marketing_provider_sync_runs.company_id",
+                "marketing_provider_sync_runs.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "state IN ('open','resolved','not_available','accepted_gap')",
+            name="ck_marketing_reconciliation_state",
+        ),
+        UniqueConstraint(
+            "company_id", "finding_digest", name="uq_marketing_reconciliation_digest"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    provider_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    sync_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    kind: Mapped[str] = mapped_column(String(80), nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    missing_components: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    details: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    finding_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class MarketingProviderCoverageManifest(Base):
+    __tablename__ = "marketing_provider_coverage_manifests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "provider_account_id"],
+            [
+                "marketing_provider_accounts.company_id",
+                "marketing_provider_accounts.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "sync_run_id"],
+            [
+                "marketing_provider_sync_runs.company_id",
+                "marketing_provider_sync_runs.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "availability IN ('complete','partial','unavailable','not_applicable')",
+            name="ck_marketing_provider_coverage_availability",
+        ),
+        CheckConstraint(
+            "coverage_percent BETWEEN 0 AND 100",
+            name="ck_marketing_provider_coverage_percent",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "manifest_digest",
+            name="uq_marketing_provider_coverage_digest",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    provider_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    sync_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    interval_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    interval_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attribution_policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_count: Mapped[int] = mapped_column(nullable=False)
+    coverage_percent: Mapped[int] = mapped_column(nullable=False)
+    missing_components: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    availability: Mapped[str] = mapped_column(String(24), nullable=False)
+    manifest_digest: Mapped[str] = mapped_column(String(64), nullable=False)
