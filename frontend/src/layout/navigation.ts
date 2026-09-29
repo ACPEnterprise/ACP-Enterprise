@@ -198,6 +198,14 @@ export const navigationCatalog = [
     requiredPermission: "COMPANY_ACCOUNTING_REPORT_READ",
   },
   {
+    id: "qbo-migration",
+    label: "QuickBooks migration",
+    path: "/accounting/quickbooks-migration",
+    icon: Landmark,
+    availability: "available",
+    requiredPermission: "COMPANY_ACCOUNTING_RECONCILE",
+  },
+  {
     id: "business-economics",
     label: "Business Economics",
     path: "/business-economics",
@@ -378,6 +386,7 @@ export const navigationGroups = [
       item("payroll"),
       item("accounts-payable"),
       item("financial-reports"),
+      item("qbo-migration"),
       item("purchasing"),
     ],
   },

@@ -73,6 +73,12 @@ class ApplicationRunResult:
     family_counts: tuple[FamilyDispositionCount, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ApplicationLedgerSummary:
+    total_dispositions: int
+    last_applied_at: datetime | None
+
+
 _QBO_SOURCE_SYSTEMS = ("quickbooks_online", "qbo")
 _REVIEW_ACTIONS = {
     "account": ("MAP_ACCOUNT", "HOLD_FOR_ACCOUNTANT", "IGNORE_SOURCE", "REJECT_WITH_REASON"),
@@ -172,6 +178,29 @@ class QboNativeApplicationService:
                 )
             )
             return True
+
+    async def ledger_summary(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+    ) -> ApplicationLedgerSummary:
+        self._authorize(context)
+        async with factory() as session:
+            row = (
+                await session.execute(
+                    select(
+                        func.count(QboNativeApplicationRecord.id),
+                        func.max(QboNativeApplicationRecord.applied_at),
+                    ).where(
+                        QboNativeApplicationRecord.company_id == context.company.id,
+                        QboNativeApplicationRecord.superseded_at.is_(None),
+                    )
+                )
+            ).one()
+        return ApplicationLedgerSummary(
+            total_dispositions=int(row[0] or 0), last_applied_at=row[1]
+        )
 
     async def _apply_one(
         self,
