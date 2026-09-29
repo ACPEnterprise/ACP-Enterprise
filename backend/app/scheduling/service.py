@@ -18,6 +18,7 @@ from app.scheduling.errors import (
     SchedulingConflictError,
     SchedulingNotFoundError,
     SchedulingValidationError,
+    SchedulingValidationFailure,
     SchedulingVersionConflictError,
 )
 from app.scheduling.models import (
@@ -701,11 +702,20 @@ class SchedulingService:
         try:
             zone = ZoneInfo(branch_timezone)
         except ZoneInfoNotFoundError as error:
-            raise SchedulingValidationError("Branch timezone is invalid.") from error
+            raise SchedulingValidationError(
+                "Branch timezone is invalid.",
+                SchedulingValidationFailure.INVALID_TIMEZONE,
+            ) from error
         if window_start_at < now + timedelta(minutes=calendar.minimum_notice_minutes):
-            raise SchedulingValidationError("Arrival window violates minimum notice.")
+            raise SchedulingValidationError(
+                "Arrival window violates minimum notice.",
+                SchedulingValidationFailure.MINIMUM_NOTICE,
+            )
         if window_start_at > now + timedelta(days=calendar.booking_horizon_days):
-            raise SchedulingValidationError("Arrival window exceeds booking horizon.")
+            raise SchedulingValidationError(
+                "Arrival window exceeds booking horizon.",
+                SchedulingValidationFailure.BOOKING_HORIZON,
+            )
         local_start = window_start_at.astimezone(zone)
         local_arrival_end = window_end_at.astimezone(zone)
         local_work_end = reservation_end_at.astimezone(zone)
@@ -714,7 +724,8 @@ class SchedulingService:
             or local_start.date() != local_work_end.date()
         ):
             raise SchedulingValidationError(
-                "Scheduling intervals must remain within one Branch calendar day."
+                "Scheduling intervals must remain within one Branch calendar day.",
+                SchedulingValidationFailure.CROSS_DAY,
             )
         if (
             (local_start.hour * 60 + local_start.minute)
@@ -723,10 +734,14 @@ class SchedulingService:
             or local_start.microsecond
         ):
             raise SchedulingValidationError(
-                "Arrival window does not align with the Branch slot interval."
+                "Arrival window does not align with the Branch slot interval.",
+                SchedulingValidationFailure.SLOT_ALIGNMENT,
             )
         if window_end_at <= window_start_at:
-            raise SchedulingValidationError("Arrival window is invalid.")
+            raise SchedulingValidationError(
+                "Arrival window is invalid.",
+                SchedulingValidationFailure.INVALID_WINDOW,
+            )
         return local_start, local_arrival_end, local_work_end
 
     @staticmethod

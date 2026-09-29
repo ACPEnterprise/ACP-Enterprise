@@ -11,8 +11,24 @@ class SchedulingNotFoundError(SchedulingError):
         super().__init__(f"{resource} {resource_id} was not found.")
 
 
+class SchedulingValidationFailure(StrEnum):
+    GENERIC = "generic"
+    INVALID_TIMEZONE = "invalid_timezone"
+    MINIMUM_NOTICE = "minimum_notice"
+    BOOKING_HORIZON = "booking_horizon"
+    CROSS_DAY = "cross_day"
+    SLOT_ALIGNMENT = "slot_alignment"
+    INVALID_WINDOW = "invalid_window"
+
+
 class SchedulingValidationError(SchedulingError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        failure: SchedulingValidationFailure = SchedulingValidationFailure.GENERIC,
+    ) -> None:
+        self.failure = failure
+        super().__init__(message)
 
 
 class SchedulingConflictError(SchedulingError):

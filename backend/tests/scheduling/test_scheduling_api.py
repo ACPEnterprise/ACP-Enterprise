@@ -47,6 +47,7 @@ from app.scheduling.errors import (
     SchedulingCapacityFailure,
     SchedulingError,
     SchedulingValidationError,
+    SchedulingValidationFailure,
     SchedulingVersionConflictError,
 )
 from app.scheduling.models import (
@@ -1078,6 +1079,29 @@ def test_scheduling_failures_use_safe_recovery_contract(
     assert detail["code"] == code
     assert detail["recovery"] == recovery
     assert detail["correlation_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("failure", "code"),
+    [
+        (SchedulingValidationFailure.INVALID_TIMEZONE, "scheduling_invalid_timezone"),
+        (SchedulingValidationFailure.MINIMUM_NOTICE, "scheduling_minimum_notice"),
+        (SchedulingValidationFailure.BOOKING_HORIZON, "scheduling_booking_horizon"),
+        (SchedulingValidationFailure.CROSS_DAY, "scheduling_cross_day"),
+        (SchedulingValidationFailure.SLOT_ALIGNMENT, "scheduling_slot_alignment"),
+        (SchedulingValidationFailure.INVALID_WINDOW, "scheduling_invalid_window"),
+    ],
+)
+def test_booking_policy_validation_preserves_safe_first_failing_predicate(
+    failure: SchedulingValidationFailure, code: str
+) -> None:
+    translated = translate_scheduling_error(
+        SchedulingValidationError("protected internal context", failure)
+    )
+    assert translated.status_code == 422
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert "protected internal context" not in translated.detail["message"]
 
 
 @pytest.mark.parametrize(

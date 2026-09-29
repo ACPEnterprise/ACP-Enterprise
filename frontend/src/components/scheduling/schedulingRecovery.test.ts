@@ -40,6 +40,22 @@ describe("Scheduling mutation recovery", () => {
   });
 
   it.each([
+    ["scheduling_invalid_timezone", "Branch timezone requires correction"],
+    ["scheduling_minimum_notice", "Inside minimum-notice window"],
+    ["scheduling_booking_horizon", "Beyond booking horizon"],
+    ["scheduling_cross_day", "Work interval crosses the Branch day"],
+    ["scheduling_slot_alignment", "Start time does not match booking intervals"],
+    ["scheduling_invalid_window", "Arrival window is invalid"],
+  ])("renders the exact safe booking predicate for %s", (code, title) => {
+    expect(
+      schedulingMutationRecovery(
+        failure(422, { code, recovery: "USER_CORRECTION_REQUIRED" }),
+        "Job scheduling",
+      ),
+    ).toMatchObject({ state: "FAILED", title, retryLabel: null });
+  });
+
+  it.each([
     ["scheduling_calendar_missing", "Branch scheduling setup required"],
     ["scheduling_calendar_unavailable", "Branch schedule unavailable"],
     ["scheduling_calendar_closed", "Branch closed at requested time"],
