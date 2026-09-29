@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  getActiveBeaconRecommendations,
   getBeaconSignals,
   getBeaconMorningBrief,
   recordBeaconLifecycleAction,
@@ -9,6 +10,15 @@ import {
   type BeaconSignal,
   type BeaconWorkflowAction,
 } from "../api/beacon";
+
+export function useActiveBeaconRecommendations(enabled = true) {
+  return useQuery({
+    queryKey: ["beacon-active-recommendations"],
+    queryFn: getActiveBeaconRecommendations,
+    refetchInterval: 60_000,
+    enabled,
+  });
+}
 
 export function useBeaconMorningBrief(enabled = true) {
   return useQuery({
