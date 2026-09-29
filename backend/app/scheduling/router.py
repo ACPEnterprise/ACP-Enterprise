@@ -22,6 +22,7 @@ from app.scheduling.errors import (
     SchedulingError,
     SchedulingNotFoundError,
     SchedulingValidationError,
+    SchedulingValidationFailure,
     SchedulingVersionConflictError,
 )
 from app.scheduling.models import Appointment
@@ -139,9 +140,39 @@ def translate_scheduling_error(error: SchedulingError) -> HTTPException:
             detail=failure.detail(),
         )
     if isinstance(error, SchedulingValidationError):
+        validation_failures = {
+            SchedulingValidationFailure.INVALID_TIMEZONE: (
+                FailureCode.SCHEDULING_INVALID_TIMEZONE,
+                "The Branch scheduling timezone is invalid.",
+            ),
+            SchedulingValidationFailure.MINIMUM_NOTICE: (
+                FailureCode.SCHEDULING_MINIMUM_NOTICE,
+                "The requested start is inside the Branch minimum-notice window.",
+            ),
+            SchedulingValidationFailure.BOOKING_HORIZON: (
+                FailureCode.SCHEDULING_BOOKING_HORIZON,
+                "The requested start exceeds the Branch booking horizon.",
+            ),
+            SchedulingValidationFailure.CROSS_DAY: (
+                FailureCode.SCHEDULING_CROSS_DAY,
+                "The arrival or expected-work interval crosses a Branch calendar day.",
+            ),
+            SchedulingValidationFailure.SLOT_ALIGNMENT: (
+                FailureCode.SCHEDULING_SLOT_ALIGNMENT,
+                "The requested start is not aligned with the Branch booking interval.",
+            ),
+            SchedulingValidationFailure.INVALID_WINDOW: (
+                FailureCode.SCHEDULING_INVALID_WINDOW,
+                "The requested arrival window is invalid.",
+            ),
+        }
+        code, message = validation_failures.get(
+            error.failure,
+            (FailureCode.VALIDATION, "Scheduling request violates domain validation rules."),
+        )
         failure = SafeFailure(
-            FailureCode.VALIDATION,
-            "Scheduling request violates domain validation rules.",
+            code,
+            message,
             ClientRecovery.USER_CORRECTION_REQUIRED,
             current_correlation_id(),
         )
