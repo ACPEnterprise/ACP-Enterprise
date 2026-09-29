@@ -200,7 +200,7 @@ def test_provider_snapshot_revision_and_append_only_migration_contract() -> None
     ):
         assert f'"{table}"' in migration
     assert "trg_{table}_append_only" in migration
-    assert "pe5a7c9e1g3i5" in migration
+    assert "pf6b8d0f2h4j6" in migration
 
 
 def test_only_manual_confirmation_is_exposed_as_marketing_mutation() -> None:
@@ -215,7 +215,10 @@ def test_only_manual_confirmation_is_exposed_as_marketing_mutation() -> None:
         for method, path in routes
         if method not in {"GET", "HEAD", "OPTIONS"}
     }
-    assert mutations == {("POST", "/api/v1/marketing/attributions/manual-confirmation")}
+    assert mutations == {
+        ("POST", "/api/v1/marketing/attributions/manual-confirmation"),
+        ("POST", "/api/v1/marketing/google-ads/account-bindings"),
+    }
     assert all("provider" not in path for _, path in mutations)
 
 
@@ -245,3 +248,9 @@ def test_economics_projection_is_reference_only_and_carries_coverage() -> None:
 def test_assignment_supports_append_only_supersession() -> None:
     assert "supersedes_assignment_id" in MarketingAttributionAssignment.__table__.c
     assert "request_digest" in MarketingAttributionAssignment.__table__.c
+
+
+def test_manual_confirmation_replay_and_duplicate_conflict_contract() -> None:
+    columns = MarketingAttributionAssignment.__table__.c
+    assert "idempotency_key" in columns
+    assert "request_digest" in columns
