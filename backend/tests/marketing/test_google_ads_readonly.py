@@ -178,7 +178,7 @@ def test_migration_lineage_and_append_only_contract() -> None:
     migration = Path(
         "alembic/versions/rg7c9e1f3i5k7_google_ads_readonly_ingestion.py"
     ).read_text()
-    assert 'down_revision: str | Sequence[str] | None = "qf6b8d0e2h4j6"' in migration
+    assert 'down_revision: str | Sequence[str] | None = "q7s9u1w3y5a7"' in migration
     for table in (
         "marketing_performance_observations",
         "marketing_search_term_observations",
