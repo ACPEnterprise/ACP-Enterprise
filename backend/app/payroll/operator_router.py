@@ -4,6 +4,7 @@ This router deliberately does not calculate, transmit, or post Payroll. It
 exposes the governed run lifecycle only when prerequisite evidence exists.
 """
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -22,9 +23,17 @@ from app.payroll.calculation_authority import (
     configured_input_cipher,
 )
 from app.payroll.calculation_inputs import resolve_tax_deduction_requirements
-from app.payroll.contracts import PayrollConflictError, canonical_digest
+from app.payroll.commands import DraftPayrollPolicy
+from app.payroll.contracts import (
+    CompanyPayrollPolicyDefinition,
+    OvertimePolicy,
+    PayrollConflictError,
+    SalariedTimeRequirement,
+    canonical_digest,
+)
 from app.payroll.finalization import GrossReviewDecision, PayrollGrossResultService
 from app.payroll.models import (
+    CompanyPayrollPolicyVersion,
     PayrollCalculationInputSnapshotRecord,
     PayrollGrossCalculationResultRecord,
     PayrollInputAuthorityVersion,
@@ -75,6 +84,9 @@ from app.timekeeping.service import WorkdayTimeService
 router = APIRouter(prefix="/api/v1/payroll/operator", tags=["Payroll Operator"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
 Read = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.REPORTING_READ))]
+PolicyRead = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.POLICY_READ))]
+PolicyManage = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.POLICY_MANAGE))]
+PolicyApprove = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.POLICY_APPROVE))]
 Assemble = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.RUN_ASSEMBLE))]
 Review = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.RUN_REVIEW))]
 Approve = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.RUN_APPROVE))]
@@ -140,6 +152,81 @@ class ReviewDecisionInput(ReviewInput):
     decision: str = Field(pattern="^(accepted|rejected)$")
 
 
+class OvertimePolicyInput(BaseModel):
+    weekly_threshold_minutes: int | None = None
+    daily_threshold_minutes: int | None = None
+    multiplier: str | None = None
+    double_time_threshold_minutes: int | None = None
+    double_time_multiplier: str | None = None
+    workweek_start_day: int
+    workweek_start_time: str
+    included_earning_categories: list[str] = Field(min_length=1)
+    excluded_earning_categories: list[str] = Field(default_factory=list)
+
+
+class PayrollPolicyInput(BaseModel):
+    policy_version: int = Field(ge=1)
+    effective_start: date
+    effective_end: date | None = None
+    pay_frequency: str = Field(min_length=1)
+    schedule_definition_id: str = Field(min_length=1)
+    schedule_version: int = Field(ge=1)
+    regular_earning_categories: list[str] = Field(min_length=1)
+    overtime: OvertimePolicyInput | None = None
+    break_treatment: str = Field(min_length=1)
+    leave_category_refs: list[str] = Field(default_factory=list)
+    holiday_policy_ref: str | None = None
+    pto_policy_ref: str | None = None
+    salaried_time_requirement: SalariedTimeRequirement
+    minimum_increment_minutes: int | None = None
+    rounding_rule: str | None = None
+    pre_finalization_correction_treatment: str = Field(min_length=1)
+    post_finalization_adjustment_treatment: str = Field(min_length=1)
+    post_payment_adjustment_treatment: str = Field(min_length=1)
+    cutoff_rule: str = Field(min_length=1)
+    required_time_approvals: int = Field(ge=1)
+    compensation_authority_required: bool = True
+    decision_evidence_digest: str = Field(min_length=1)
+    audit_reason: str = Field(min_length=1, max_length=500)
+    supersedes_policy_id: UUID | None = None
+
+
+def _policy_definition(payload: PayrollPolicyInput) -> CompanyPayrollPolicyDefinition:
+    overtime = None
+    if payload.overtime is not None:
+        overtime = OvertimePolicy(
+            weekly_threshold_minutes=payload.overtime.weekly_threshold_minutes,
+            daily_threshold_minutes=payload.overtime.daily_threshold_minutes,
+            multiplier=Decimal(payload.overtime.multiplier) if payload.overtime.multiplier is not None else None,
+            double_time_threshold_minutes=payload.overtime.double_time_threshold_minutes,
+            double_time_multiplier=Decimal(payload.overtime.double_time_multiplier) if payload.overtime.double_time_multiplier is not None else None,
+            workweek_start_day=payload.overtime.workweek_start_day,
+            workweek_start_time=payload.overtime.workweek_start_time,
+            included_earning_categories=tuple(payload.overtime.included_earning_categories),
+            excluded_earning_categories=tuple(payload.overtime.excluded_earning_categories),
+        )
+    return CompanyPayrollPolicyDefinition(
+        pay_frequency=payload.pay_frequency,
+        schedule_definition_id=payload.schedule_definition_id,
+        schedule_version=payload.schedule_version,
+        regular_earning_categories=tuple(payload.regular_earning_categories),
+        overtime=overtime,
+        break_treatment=payload.break_treatment,
+        leave_category_refs=tuple(payload.leave_category_refs),
+        holiday_policy_ref=payload.holiday_policy_ref,
+        pto_policy_ref=payload.pto_policy_ref,
+        salaried_time_requirement=payload.salaried_time_requirement,
+        minimum_increment_minutes=payload.minimum_increment_minutes,
+        rounding_rule=payload.rounding_rule,
+        pre_finalization_correction_treatment=payload.pre_finalization_correction_treatment,
+        post_finalization_adjustment_treatment=payload.post_finalization_adjustment_treatment,
+        post_payment_adjustment_treatment=payload.post_payment_adjustment_treatment,
+        cutoff_rule=payload.cutoff_rule,
+        required_time_approvals=payload.required_time_approvals,
+        compensation_authority_required=payload.compensation_authority_required,
+    )
+
+
 def _run_blockers(run: PayrollRunRecord, members: tuple[PayrollRunMemberRecord, ...]) -> list[str]:
     blockers: list[str] = []
     if run.lifecycle not in {"assembled", "under_review", "reviewed", "approved"}:
@@ -170,6 +257,49 @@ async def workflow(context: Read, session: Session) -> dict[str, object]:
         "blockers": blockers,
         "boundaries": ["paper_check_evidence_only", "no_ach", "no_tax_filing", "no_accounting_posting"],
     }
+
+
+@router.get("/policy")
+async def payroll_policy(context: PolicyRead, session: Session) -> dict[str, object]:
+    current = await PayrollAuthorityService().resolve_policy(
+        session, company_id=context.company.id, as_of_date=datetime.now(timezone.utc).date()
+    )
+    drafts = tuple((await session.scalars(select(CompanyPayrollPolicyVersion).where(CompanyPayrollPolicyVersion.company_id == context.company.id, CompanyPayrollPolicyVersion.lifecycle == "draft").order_by(CompanyPayrollPolicyVersion.policy_version.desc()))).all())
+    return {
+        "configured": current is not None,
+        "drafts": [{"id": str(item.id), "version": item.policy_version, "effective_start": item.effective_start.isoformat(), "reason": item.audit_reason} for item in drafts],
+        "policy": None if current is None else {
+            "id": str(current.policy_id),
+            "version": current.policy_version,
+            "effective_start": current.effective_start.isoformat(),
+            "effective_end": current.effective_end.isoformat() if current.effective_end else None,
+            "definition": current.definition.canonical_content(),
+        },
+    }
+
+
+@router.post("/policy/draft")
+async def draft_payroll_policy(payload: PayrollPolicyInput, context: PolicyManage, session: Session) -> dict[str, object]:
+    value = await PayrollAuthorityService().draft_policy(
+        session,
+        context=context,
+        command=DraftPayrollPolicy(
+            policy_version=payload.policy_version,
+            effective_start=payload.effective_start,
+            effective_end=payload.effective_end,
+            definition=_policy_definition(payload),
+            decision_evidence_digest=payload.decision_evidence_digest,
+            audit_reason=payload.audit_reason,
+            supersedes_policy_id=payload.supersedes_policy_id,
+        ),
+    )
+    return {"id": str(value.id), "version": value.policy_version, "lifecycle": value.lifecycle}
+
+
+@router.post("/policy/{policy_id}/approve")
+async def approve_payroll_policy(policy_id: UUID, context: PolicyApprove, session: Session) -> dict[str, object]:
+    value = await PayrollAuthorityService().approve_policy(session, context=context, policy_id=policy_id)
+    return {"id": str(value.id), "version": value.policy_version, "lifecycle": value.lifecycle}
 
 
 @router.post("/runs/assemble")

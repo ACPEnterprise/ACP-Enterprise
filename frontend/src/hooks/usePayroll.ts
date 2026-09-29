@@ -8,12 +8,15 @@ import {
   getPayrollPeriodOperations,
   getPayrollEmployeeReadiness, getPayrollEmployeeSetup, draftPayrollCompensation,
   approvePayrollCompensation, approvePayrollInput,
+  getPayrollPolicy, draftPayrollPolicy, approvePayrollPolicy,
   type CompensationDraft,
   calculatePayrollRun, closePayrollRun, reviewPayrollRun, approvePayrollRun, assemblePayrollRun, issuePayrollPaperCheck, voidPayrollPaperCheck, reissuePayrollPaperCheck,
 } from "../api/payroll";
 
 export const usePayrollOperationsSummary = (enabled = true) =>
   useQuery({ queryKey: ["payroll", "operations"], queryFn: getPayrollOperationsSummary, enabled });
+export const usePayrollPolicy = (enabled = true) =>
+  useQuery({ queryKey: ["payroll", "policy"], queryFn: getPayrollPolicy, enabled });
 
 export const usePayrollReports = (enabled = true) =>
   useQuery({ queryKey: ["payroll", "reporting"], queryFn: listPayrollReports, enabled });
@@ -42,6 +45,15 @@ export function usePayrollRunActions() {
     issuePaperCheck: useMutation({ mutationFn: ({ runId, body }: { runId: string; body: { employee_id: string; check_number: string; issue_date: string; idempotency_key: string } }) => issuePayrollPaperCheck(runId, body), onSuccess: refresh }),
     voidPaperCheck: useMutation({ mutationFn: ({ checkId, reason, idempotencyKey }: { checkId: string; reason: string; idempotencyKey: string }) => voidPayrollPaperCheck(checkId, reason, idempotencyKey), onSuccess: refresh }),
     reissuePaperCheck: useMutation({ mutationFn: ({ runId, body }: { runId: string; body: { original_check_id: string; employee_id: string; check_number: string; issue_date: string; idempotency_key: string } }) => reissuePayrollPaperCheck(runId, body), onSuccess: refresh }),
+  };
+}
+
+export function usePayrollPolicyActions() {
+  const client = useQueryClient();
+  const refresh = () => { void client.invalidateQueries({ queryKey: ["payroll", "policy"] }); void client.invalidateQueries({ queryKey: ["payroll"] }); };
+  return {
+    draft: useMutation({ mutationFn: draftPayrollPolicy, onSuccess: refresh }),
+    approve: useMutation({ mutationFn: approvePayrollPolicy, onSuccess: refresh }),
   };
 }
 

@@ -7,8 +7,19 @@ import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup";
 import { PayrollCutoverReview } from "../components/payroll/PayrollCutoverReview";
+import { PayrollPolicySetup } from "../components/payroll/PayrollPolicySetup";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
+
+const employeeRequirement = (code: string) => {
+  if (code === "TIME_EVIDENCE_MISSING") return { requirement: "Accepted time", owner: "OWNER", next: "Open the linked Timecard, resolve the period exception, and accept the time." };
+  if (code.includes("COMPENSATION") || code.includes("PAY_RATE") || code.includes("SALARY")) return { requirement: "Compensation", owner: "OWNER", next: "Open Payroll setup and enter or approve the effective pay rate." };
+  if (code.includes("W4") || code.includes("WITHHOLDING")) return { requirement: "W-4 / withholding election", owner: "EMPLOYEE", next: "Provide the employee's withholding election through Payroll setup." };
+  if (code.includes("JURISDICTION") || code.includes("TAX")) return { requirement: "Tax jurisdiction", owner: "ACCOUNTANT", next: "Provide and approve the employee's work/residence jurisdiction and tax authority." };
+  if (code.includes("DEDUCTION")) return { requirement: "Deductions", owner: "ACCOUNTANT", next: "Enter or approve the applicable deduction authority in Payroll setup." };
+  if (code.includes("YTD") || code.includes("OPENING") || code.includes("HISTORY")) return { requirement: "Opening / YTD evidence", owner: "ACCOUNTANT", next: "Enter or approve opening and year-to-date evidence in Payroll setup." };
+  return { requirement: label(code), owner: "SYSTEM", next: "Review the linked Payroll setup blocker and contact Operations if it cannot be resolved." };
+};
 
 function StateList({ values, empty }: { values: Record<string, number>; empty: string }) {
   const entries = Object.entries(values).sort(([left], [right]) => left.localeCompare(right));
@@ -106,11 +117,12 @@ export function PayrollRoute() {
         <Card><CardHeader><CardTitle>Checks to write</CardTitle><CardDescription>Paper-check evidence only</CardDescription></CardHeader><CardContent className="text-xl font-bold">{value.payment_counts.issued ?? 0}</CardContent></Card>
       </section>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
+      <PayrollPolicySetup />
       {canReadCutover && <PayrollCutoverReview />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
         {value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.
       </Alert>
-      <Card>
+      <Card id="pay-periods">
         <CardHeader>
           <CardTitle>Pay Periods</CardTitle>
           <CardDescription>Company-scoped, immutable Payroll calendar authority. Creating a period does not calculate or execute Payroll.</CardDescription>
@@ -140,7 +152,7 @@ export function PayrollRoute() {
           ) : <Alert variant="information">Pay-period administration requires Payroll policy management authority.</Alert>}
         </CardContent>
       </Card>
-      <Card>
+      <Card id="payroll-period-review">
         <CardHeader>
           <CardTitle>Current pay-period review</CardTitle>
           <CardDescription>Accepted time through compensation, withholding, and gross-pay readiness. Calculate and approval actions become available only after every required authority is complete.</CardDescription>
@@ -170,6 +182,80 @@ export function PayrollRoute() {
           )}
           {periodOperations.data && (
             <div className="space-y-4">
+              {(() => {
+                const employees = periodOperations.data.employees;
+                const policyReady = periodOperations.data.policy_readiness === "READY";
+                const compensationReady = employees.length > 0 && employees.every((employee) => employee.compensation_readiness === "READY");
+                const withholdingReady = employees.length > 0 && employees.every((employee) => employee.withholding_readiness === "READY");
+                const timeReady = employees.length > 0 && employees.every((employee) => !employee.exception_codes.includes("TIME_EVIDENCE_MISSING"));
+                const employeeReady = employees.length > 0 && employees.every((employee) => employee.exception_codes.length === 0);
+                const checklist = [
+                  { label: "Approved Payroll policy", state: policyReady, owner: "Owner / Payroll admin", detail: policyReady ? "Approved policy governs this period." : `Policy is ${label(periodOperations.data.policy_readiness)}. Configure or approve it in Pay Period administration.`, href: "#pay-periods" },
+                  { label: "Canonical Employees", state: employees.length > 0, owner: "Owner / Workforce admin", detail: employees.length > 0 ? `${employees.length} Employee(s) are in the selected period.` : "No canonical Employees are available; do not create a synthetic payroll population.", href: "#payroll-period-review" },
+                  { label: "Compensation authority", state: compensationReady, owner: "Owner / Payroll admin", detail: compensationReady ? "Every included Employee has effective compensation." : "Open each Employee’s Payroll setup to enter and approve compensation.", href: "#payroll-period-review" },
+                  { label: "W-4, jurisdiction, and tax inputs", state: withholdingReady, owner: "Employee / Accountant", detail: withholdingReady ? "Required withholding and jurisdiction authority is approved." : "The Employee or accountant must provide W-4, work/residence jurisdiction, and withholding evidence.", href: "#payroll-period-review" },
+                  { label: "Deductions and opening/YTD evidence", state: value.history_ready && withholdingReady, owner: "Accountant", detail: value.history_ready && withholdingReady ? "Opening/YTD history and deduction authority are available." : "Accountant evidence is required for deductions and opening/YTD history; no value is inferred.", href: "#payroll-period-review" },
+                  { label: "Accepted time", state: timeReady, owner: "Manager / Timekeeper", detail: timeReady ? "Accepted time is present for the selected period." : "Resolve missing or unaccepted time in the linked Timecard before assembly.", href: "#payroll-period-review" },
+                  { label: "Ready to assemble", state: employeeReady && policyReady && value.history_ready, owner: "Payroll operator", detail: employeeReady && policyReady && value.history_ready ? "All visible prerequisites are satisfied; Assemble Payroll is available." : "Resolve the rows above before assembling. Payroll will fail closed while any blocker remains.", href: "#payroll-period-review" },
+                ];
+                return (
+                  <Card id="payroll-readiness-checklist">
+                    <CardHeader>
+                      <CardTitle>First real Payroll readiness</CardTitle>
+                      <CardDescription>One owner-facing checklist for the selected period. Evidence is read from canonical authority; nothing is inferred or entered by this screen.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[760px] text-left text-sm">
+                          <thead><tr className="text-content-muted"><th className="pb-2">Requirement</th><th>State</th><th>Who provides it</th><th>Next action</th></tr></thead>
+                          <tbody>
+                            {checklist.map((item) => (
+                              <tr className="border-t border-stroke align-top" key={item.label}>
+                                <td className="py-3 font-semibold">{item.label}</td>
+                                <td className="py-3">{item.state ? "READY" : "ACTION REQUIRED"}</td>
+                                <td className="py-3">{item.owner}</td>
+                                <td className="py-3"><span>{item.detail}</span>{!item.state && <Link className="ml-2 font-semibold text-action-primary underline" to={item.href}>Open setup</Link>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-6 space-y-3" id="payroll-owner-action-queue">
+                        <h3 className="font-semibold">Employee action queue</h3>
+                        <p className="text-sm text-content-muted">Every unresolved Employee requirement is listed with the person responsible and the next normal UI action.</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[860px] text-left text-sm">
+                            <thead><tr className="text-content-muted"><th className="pb-2">Employee</th><th>Requirement</th><th>State</th><th>Responsible</th><th>Next action</th></tr></thead>
+                            <tbody>
+                              {employees.flatMap((employee) => {
+                                const blockers = employee.exception_codes.length ? employee.exception_codes : [];
+                                const rows = blockers.length ? blockers : [null];
+                                return rows.map((code) => {
+                                  const item = code ? employeeRequirement(code) : { requirement: "Payroll prerequisites", owner: "SYSTEM", next: "No Employee blocker is reported; continue with the next Payroll step." };
+                                  const ready = !code;
+                                  const setupHref = `/payroll?employee=${employee.employee_id}&period=${effectivePayPeriodId}#payroll-employee-${employee.employee_id}`;
+                                  const href = code === "TIME_EVIDENCE_MISSING"
+                                    ? `/employees?employee=${employee.employee_id}&period=${effectivePayPeriodId}#timecard-${employee.employee_id}`
+                                    : setupHref;
+                                  return (
+                                    <tr className="border-t border-stroke align-top" key={`${employee.employee_id}-${code ?? "ready"}`}>
+                                      <td className="py-3 font-semibold">{employee.display_name}</td>
+                                      <td className="py-3">{item.requirement}</td>
+                                      <td className="py-3">{ready ? "READY" : "ACTION REQUIRED"}</td>
+                                      <td className="py-3">{item.owner}</td>
+                                      <td className="py-3">{item.next}{!ready && <Link className="ml-2 font-semibold text-action-primary underline" to={href}>Open next step</Link>}</td>
+                                    </tr>
+                                  );
+                                });
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="font-semibold">
                   Pay period
