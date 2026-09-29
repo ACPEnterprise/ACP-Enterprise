@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.dispatch.errors import DispatchNotFound
 from app.dispatch.service import dispatch_service
 from app.lia.owner_answers import compose_owner_answer

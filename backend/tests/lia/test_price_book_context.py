@@ -7,7 +7,6 @@ from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.lia.owner_answers import compose_owner_answer
 from app.lia.planner import plan_question
 from app.lia.price_book_context import (

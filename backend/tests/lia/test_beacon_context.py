@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.lia.owner_answers import compose_owner_answer
 from app.lia.retrieval import GovernedRetrievalService
 

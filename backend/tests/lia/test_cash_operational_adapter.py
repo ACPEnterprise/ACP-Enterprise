@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 
 import pytest
-
 from app.lia.adapters import cash_operational_evidence
 from app.lia.foundation import EvidenceState
 

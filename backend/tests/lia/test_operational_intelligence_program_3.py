@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.lia.contracts import LiaRequest
 from app.lia.retrieval import GovernedRetrievalService, permitted_domain_names
 from app.lia.service import LiaService

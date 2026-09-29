@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.lia.acceptance_corpus import (
     OWNER_QUESTION_CORPUS,
     Usefulness,

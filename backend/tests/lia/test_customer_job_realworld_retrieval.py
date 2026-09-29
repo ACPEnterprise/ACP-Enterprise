@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.customers.lia_context import customer_lia_context_service
 from app.jobs.lia_context import job_lia_context_service
 from app.lia.contracts import (

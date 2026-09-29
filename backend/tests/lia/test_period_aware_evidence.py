@@ -8,7 +8,6 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
-
 from app.beacon.history import EvaluationDisposition
 from app.lia.contracts import (
     EvidenceReference,

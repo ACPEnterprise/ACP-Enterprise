@@ -7,7 +7,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-
 from app.employee_operations.permissions import EmployeeOperationsPermission
 from app.employee_operations.repository import EmployeeDayRecord
 from app.field_service.errors import FieldServiceNotFound
