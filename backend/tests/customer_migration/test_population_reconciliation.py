@@ -8,6 +8,15 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customer_migration.models import (
     CustomerMigrationCandidate,
@@ -56,18 +65,10 @@ from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
-from fastapi import FastAPI
 from scripts.customer_population_reconciliation import (
     execute_action as execute_reconciliation_action,
 )
 from scripts.customer_population_reconciliation import parser as reconciliation_parser
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 HAMMER_PROVIDER_ID = "147405829"
 
@@ -833,6 +834,68 @@ async def test_clean_majority_admits_safe_customer_and_quarantines_only_conflict
     replay = await service.admit_clean_majority(factory, context=context)
     assert replay.selected == 0
     assert replay.admitted == replay.replayed == replay.quarantined == 0
+    assert replay.remaining_unexplained == 0
+
+
+@pytest.mark.asyncio
+async def test_clean_majority_quarantines_broken_row_without_blocking_same_artifact(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Shared Artifact Company")
+    safe_provider_id = "safe-shared-provider-100"
+    conflict_provider_id = "conflict-shared-provider-200"
+    artifact = await stage_hammer(factory, context, provider_id=safe_provider_id)
+    async with factory() as session, session.begin():
+        artifact = await session.get(CustomerMigrationSourceArtifact, artifact.id)
+        assert artifact is not None
+        artifact.row_count = 2
+        session.add(
+            CustomerMigrationSourceRow(
+                artifact_id=artifact.id,
+                row_number=3,
+                source_identity=conflict_provider_id,
+                source_id_sha256=digest(conflict_provider_id),
+                source_row_sha256=digest(
+                    f"authoritative-hcp-row:{conflict_provider_id}"
+                ),
+                disposition="accepted",
+            )
+        )
+
+    service = CustomerPopulationReconciliationService()
+    result = await service.admit_clean_majority(factory, context=context)
+
+    assert result.selected == 2
+    assert result.admitted == 1
+    assert result.replayed == 0
+    assert result.quarantined == 1
+    assert result.remaining_unexplained == 0
+    async with factory() as session:
+        safe_binding = await session.scalar(
+            select(CustomerSourceIdentity).where(
+                CustomerSourceIdentity.company_id == context.company.id,
+                CustomerSourceIdentity.source_customer_id == safe_provider_id,
+            )
+        )
+        assert safe_binding is not None
+        conflict = await session.scalar(
+            select(CustomerPopulationReconciliationDisposition)
+            .where(
+                CustomerPopulationReconciliationDisposition.company_id
+                == context.company.id,
+                CustomerPopulationReconciliationDisposition.source_customer_id
+                == conflict_provider_id,
+            )
+            .order_by(CustomerPopulationReconciliationDisposition.version.desc())
+            .limit(1)
+        )
+        assert conflict is not None
+        assert conflict.disposition == "HELD"
+        assert conflict.reason_code == "source_aggregate_validation_required"
+
+    replay = await service.admit_clean_majority(factory, context=context)
+    assert replay.selected == 0
     assert replay.remaining_unexplained == 0
 
 
