@@ -32,6 +32,11 @@ vi.mock("../hooks/useWorkforce", () => ({
     isLoading: false,
     isError: false,
   }),
+  useEmployeeFieldReadiness: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
   useEmployeeTimeline: () => ({
     data: undefined,
     isLoading: false,
@@ -42,6 +47,12 @@ vi.mock("../hooks/useWorkforce", () => ({
     isLoading: false,
     isError: false,
   }),
+  useEmployeeFunctionalAccess: () => ({
+    query: { data: [], isLoading: false, isError: false },
+    grant: { mutate: vi.fn(), isPending: false, isError: false },
+    revoke: { mutate: vi.fn(), isPending: false, isError: false },
+  }),
+  useEmployeeAccessLock: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useEmployeeAccessMutation: () => ({
     mutate: vi.fn(),
     isPending: false,

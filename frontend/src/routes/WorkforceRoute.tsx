@@ -8,13 +8,12 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
-import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
-  return <Badge variant={state === "READY" ? "success" : state === "BLOCKED" ? "danger" : "neutral"}>{state.replaceAll("_", " ")}</Badge>;
+  return <Badge variant={state === "READY" ? "success" : "danger"}>{state === "READY" ? "EMPLOYMENT READY" : "EMPLOYMENT BLOCKED"}</Badge>;
 }
 
 function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {
@@ -50,18 +49,24 @@ export function WorkforceRoute() {
   const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
   const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
+  const functionalAccess = useEmployeeFunctionalAccess(selected, canAdministerIdentity);
+  const [functionalArea, setFunctionalArea] = useState("FIELD_OPERATIONS");
+  const [functionalLevel, setFunctionalLevel] = useState("TECHNICIAN");
+  const [functionalEffective, setFunctionalEffective] = useState("");
+  const [functionalExpires, setFunctionalExpires] = useState("");
+  const [functionalReason, setFunctionalReason] = useState("");
   const passwordReset = useEmployeePasswordReset(
     administration.data?.user_id ?? null,
     canAdministerIdentity && administration.data?.access_status === "ACTIVE",
   );
   const [confirmPasswordReset, setConfirmPasswordReset] = useState(false);
+  const [confirmAccessLock, setConfirmAccessLock] = useState(false);
+  const [accessLockReason, setAccessLockReason] = useState("");
+  const accessLock = useEmployeeAccessLock(selected);
   const accessMutation = useEmployeeAccessMutation(selected);
   const canManageMembership = permissionCodes.includes("COMPANY_MEMBERSHIP_MANAGE");
   const canManageBranches = permissionCodes.includes("COMPANY_BRANCH_ACCESS_MANAGE");
-  const canManageRoles = permissionCodes.includes("COMPANY_ROLE_MANAGE");
-  const roles = useRoles(canManageRoles);
   const [selectedBranchGrant, setSelectedBranchGrant] = useState("");
-  const [selectedRoleGrant, setSelectedRoleGrant] = useState("");
   const eligibility = useWorkforceEligibility();
   const canReviewTime = permissionCodes.includes("COMPANY_TIMEKEEPING_ADMIN_READ");
   const timeReview = useAdminTimecardReview(canReviewTime);
@@ -707,8 +712,9 @@ export function WorkforceRoute() {
             </section>
             {detail.data.readiness_blockers.length > 0 && (
               <section className="mt-5 rounded-xl border border-status-warning/40 bg-status-warning/5 p-4">
-                <h4 className="font-semibold">Assignment readiness blockers</h4>
+                <h4 className="font-semibold">Employment blockers</h4>
                 <ReadinessBlockers blockers={detail.data.readiness_blockers} />
+                <p className="mt-3 text-sm text-content-muted">Basic technician eligibility now derives from active employment, effective Field Operations access, Branch schedule, and explicit exceptions. Skills remain evidence; genuine credentials and restrictions remain hard constraints.</p>
               </section>
             )}
             {canAdministerEmployees && administration.isLoading && (
@@ -749,7 +755,9 @@ export function WorkforceRoute() {
                   </div>
                   <div>
                     <dt className="text-content-muted">Employee access</dt>
-                    <dd className="font-medium">{administration.data.access_status.replaceAll("_", " ")}</dd>
+                    <dd className={`font-semibold ${administration.data.access_status === "LOCKED" ? "text-status-danger" : ""}`}>
+                      ACCESS {administration.data.access_status === "ACTIVE" ? "ACTIVE" : administration.data.access_status}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-content-muted">Invite status</dt>
@@ -768,6 +776,22 @@ export function WorkforceRoute() {
                     <dd className="font-medium">{administration.data.employee_status === "active" ? "Active" : "Disabled"}</dd>
                   </div>
                 </dl>
+                {administration.data.access_status === "LOCKED" && (
+                  <Alert className="mt-4" variant="danger" title="Access locked">
+                    Locked {administration.data.access_locked_at ? new Date(administration.data.access_locked_at).toLocaleString() : "at an unavailable time"}
+                    {administration.data.access_locked_by_display_name ? ` by ${administration.data.access_locked_by_display_name}` : ""}. Reason: {administration.data.access_lock_reason ?? "Recorded in audit history"}. Old sessions remain revoked after unlock.
+                  </Alert>
+                )}
+                {canAdministerIdentity && administration.data.user_id && ["ACTIVE", "LOCKED"].includes(administration.data.access_status) && (
+                  <div className="mt-4 rounded-lg border border-stroke bg-surface-subtle p-3">
+                    <h5 className="text-sm font-semibold">Emergency access control</h5>
+                    <p className="mt-1 text-sm text-content-muted">Locking access is separate from employment status and preserves Employee and operating history.</p>
+                    <Button className="mt-3" variant={administration.data.access_status === "ACTIVE" ? "destructive" : "secondary"} onClick={() => { setAccessLockReason(""); setConfirmAccessLock(true); }}>
+                      {administration.data.access_status === "ACTIVE" ? "Lock Access" : "Unlock Access"}
+                    </Button>
+                    {accessLock.isError && <Alert className="mt-3" variant="danger">The access state was not changed. Refresh current authority and try again.</Alert>}
+                  </div>
+                )}
                 {canAdministerIdentity && administration.data.user_id && administration.data.access_status === "ACTIVE" && (
                   <div className="mt-4 rounded-lg bg-surface-subtle p-3">
                     <h5 className="text-sm font-semibold">Account Access</h5>
@@ -797,7 +821,7 @@ export function WorkforceRoute() {
                     <p className="mt-2 break-words text-sm text-content-muted">{administration.data.branch_ids.length ? administration.data.branch_ids.map(branchName).join(", ") : "No explicit Branch access."}</p>
                   </div>
                 </div>
-                {administration.data.membership_id && (canManageMembership || canManageBranches || canManageRoles) && (
+                {administration.data.membership_id && (canManageMembership || canManageBranches) && (
                   <div className="mt-4 grid gap-3 rounded-lg bg-surface-subtle p-3 lg:grid-cols-3">
                     {canManageMembership && (
                       <div>
@@ -848,37 +872,6 @@ export function WorkforceRoute() {
                         </button>
                       </form>
                     )}
-                    {canManageRoles && (
-                      <form
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          const role = roles.data?.find((item) => item.id === selectedRoleGrant);
-                          if (role)
-                            accessMutation.mutate({
-                              type: "role",
-                              membershipId: administration.data.membership_id!,
-                              roleId: role.id,
-                              enabled: !administration.data.role_codes.includes(role.code),
-                            });
-                        }}
-                      >
-                        <label className="text-sm font-semibold" htmlFor="employee-role-grant">
-                          Role bundle
-                        </label>
-                        <select id="employee-role-grant" className="mt-2 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2" value={selectedRoleGrant} onChange={(event) => setSelectedRoleGrant(event.target.value)}>
-                          <option value="">Select role</option>
-                          {(roles.data ?? []).map((role) => (
-                            <option key={role.id} value={role.id}>
-                              {role.name}
-                              {administration.data.role_codes.includes(role.code) ? " (assigned)" : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <button type="submit" disabled={!selectedRoleGrant || accessMutation.isPending} className="mt-2 rounded-lg border border-stroke px-3 py-2 text-sm font-medium">
-                          Update role
-                        </button>
-                      </form>
-                    )}
                   </div>
                 )}
                 {accessMutation.isError && (
@@ -887,6 +880,39 @@ export function WorkforceRoute() {
                       The change conflicts with current authority or requires a permitted administrator. Refresh and review the Employee state.
                     </Alert>
                   </div>
+                )}
+                {canAdministerIdentity && (
+                  <section className="mt-5 rounded-lg border border-stroke bg-surface-subtle p-4" aria-label="Platform Access">
+                    <h5 className="font-semibold">Platform Access</h5>
+                    <p className="mt-1 text-sm text-content-muted">Functional access controls what this Employee may do in TwelveHats. It does not change employment, compensation, demonstrated skill, or work history.</p>
+                    {functionalAccess.query.isLoading && <Spinner label="Loading functional access" />}
+                    <ul className="mt-3 space-y-2">
+                      {(functionalAccess.query.data ?? []).filter((item) => item.revoked_at === null).map((item) => (
+                        <li key={item.assignment_id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-stroke bg-surface p-3 text-sm">
+                          <span><strong>{item.functional_area.replaceAll("_", " ")}</strong> → {item.access_level.replaceAll("_", " ")} · {item.lifecycle_state.toLocaleLowerCase()}{item.expires_at ? ` until ${new Date(item.expires_at).toLocaleString()}` : " until removed"}</span>
+                          {item.effective && <Button type="button" variant="outline" onClick={() => functionalAccess.revoke.mutate({ assignmentId: item.assignment_id, reason: "Owner removed functional access" })}>Remove</Button>}
+                        </li>
+                      ))}
+                    </ul>
+                    <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={(event) => {
+                      event.preventDefault();
+                      functionalAccess.grant.mutate({
+                        functional_area: functionalArea,
+                        access_level: functionalLevel,
+                        effective_at: functionalEffective ? new Date(functionalEffective).toISOString() : new Date().toISOString(),
+                        expires_at: functionalExpires ? new Date(functionalExpires).toISOString() : null,
+                        reason: functionalReason.trim(),
+                      });
+                    }}>
+                      <label className="text-sm">Functional area<Select className="mt-1" value={functionalArea} onChange={(event) => { const area = event.target.value; setFunctionalArea(area); setFunctionalLevel(area === "FIELD_OPERATIONS" ? "TECHNICIAN" : area === "CUSTOMER_SERVICE" ? "CSR" : area === "DISPATCH" ? "DISPATCHER" : "READ"); }}><option value="FIELD_OPERATIONS">Field Operations</option><option value="CUSTOMER_SERVICE">Customer Service</option><option value="DISPATCH">Dispatch</option><option value="REPORTING_ECONOMICS">Reporting / Economics</option></Select></label>
+                      <label className="text-sm">Access level<Select className="mt-1" value={functionalLevel} onChange={(event) => setFunctionalLevel(event.target.value)}>{functionalArea === "FIELD_OPERATIONS" && <option value="TECHNICIAN">Technician</option>}{functionalArea === "CUSTOMER_SERVICE" && <option value="CSR">CSR</option>}{functionalArea === "DISPATCH" && <option value="DISPATCHER">Dispatcher</option>}{functionalArea === "REPORTING_ECONOMICS" && <option value="READ">Read</option>}</Select></label>
+                      <label className="text-sm">Effective from (blank = now)<Input className="mt-1" type="datetime-local" value={functionalEffective} onChange={(event) => setFunctionalEffective(event.target.value)} /></label>
+                      <label className="text-sm">Expires (blank = until removed)<Input className="mt-1" type="datetime-local" value={functionalExpires} onChange={(event) => setFunctionalExpires(event.target.value)} /></label>
+                      <label className="text-sm sm:col-span-2">Reason<Input required minLength={3} className="mt-1" value={functionalReason} onChange={(event) => setFunctionalReason(event.target.value)} placeholder="Temporary office coverage" /></label>
+                      <Button className="sm:col-span-2" type="submit" disabled={functionalReason.trim().length < 3 || functionalAccess.grant.isPending}>Apply functional access</Button>
+                    </form>
+                    {(functionalAccess.grant.isError || functionalAccess.revoke.isError) && <Alert className="mt-3" variant="danger">Functional access was not changed. Review canonical roles, dates, and current Company authority.</Alert>}
+                  </section>
                 )}
                 {administration.data.mobile_readiness_blockers.length > 0 && (
                   <Alert variant="warning" title="Mobile readiness blockers">
@@ -920,7 +946,7 @@ export function WorkforceRoute() {
               <section className="rounded-xl border border-stroke p-4">
                 <h4 className="flex items-center gap-2 font-semibold">
                   <UserRoundCheck size={17} />
-                  Capabilities
+                  Demonstrated capability / evidence
                 </h4>
                 <div className="mt-3 space-y-2">
                   {detail.data.capabilities.map((item) => (
@@ -928,7 +954,7 @@ export function WorkforceRoute() {
                       <strong>{item.display_name}</strong> · {item.proficiency}
                     </p>
                   ))}
-                  {detail.data.capabilities.length === 0 && <p className="text-sm text-content-muted">No explicit capability evidence.</p>}
+                  {detail.data.capabilities.length === 0 && <p className="text-sm text-content-muted">Insufficient demonstrated evidence. This does not by itself block ordinary technician assignment.</p>}
                 </div>
               </section>
               <section className="rounded-xl border border-stroke p-4">
@@ -987,7 +1013,8 @@ export function WorkforceRoute() {
                 <p className="mt-2 text-sm text-content-muted">{detail.data.equipment_capabilities.length ? detail.data.equipment_capabilities.map((item) => item.display_name).join(", ") : "No equipment capability evidence."}</p>
               </section>
               <section className="rounded-xl border border-stroke p-4 md:col-span-2">
-                <h4 className="font-semibold">Recorded availability</h4>
+                <h4 className="font-semibold">Schedule / Availability</h4>
+                <p className="mt-1 text-sm text-content-muted">Normal availability inherits the home Branch schedule within active employment. Employee-specific records below are overrides or exceptions; Branch hours are not copied to the Employee.</p>
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {detail.data.availability.map((item) => (
                     <div key={`${item.branch_id}-${item.start_at}-${item.end_at}`} className="rounded-lg bg-surface-subtle p-3 text-sm">
@@ -1000,7 +1027,7 @@ export function WorkforceRoute() {
                       </p>
                     </div>
                   ))}
-                  {detail.data.availability.length === 0 && <p className="text-sm text-content-muted">No configured working-availability evidence.</p>}
+                  {detail.data.availability.length === 0 && <p className="text-sm text-content-muted">No Employee-specific exception or override. The active employment envelope and Branch schedule apply.</p>}
                 </div>
               </section>
             </div>
@@ -1033,6 +1060,33 @@ export function WorkforceRoute() {
           onCancel={() => setConfirmPasswordReset(false)}
           onConfirm={() => passwordReset.mutation.mutate(undefined, { onSuccess: () => setConfirmPasswordReset(false) })}
         />
+      )}
+      {confirmAccessLock && administration.data?.user_id && administration.data.authorization_version && (
+        <ConfirmationDialog
+          title={administration.data.access_status === "LOCKED" ? "Unlock employee access?" : "Lock employee access immediately?"}
+          description={administration.data.access_status === "LOCKED" ? "Future authentication will be restored, but every old web and Mobile session stays invalid. The employee must sign in again." : "This immediately blocks new authentication and revokes every active web, refresh, and Mobile session. Employment status and business history are unchanged."}
+          confirmLabel={administration.data.access_status === "LOCKED" ? "Unlock Access" : "Lock Access"}
+          destructive={administration.data.access_status !== "LOCKED"}
+          pending={accessLock.isPending}
+          onCancel={() => setConfirmAccessLock(false)}
+          onConfirm={() => {
+            if (accessLockReason.trim().length < 3) return;
+            accessLock.mutate({
+              locked: administration.data.access_status !== "LOCKED",
+              reason: accessLockReason.trim(),
+              expected_authorization_version: administration.data.authorization_version!,
+            }, { onSuccess: () => setConfirmAccessLock(false) });
+          }}
+        >
+          {administration.data.access_status !== "LOCKED" && (
+            <Alert variant={administration.data.active_assignment_count + administration.data.today_future_assignment_count + administration.data.future_assignment_count > 0 ? "warning" : "information"} title="Assignment check">
+              This employee currently has {administration.data.active_assignment_count + administration.data.today_future_assignment_count + administration.data.future_assignment_count} scheduled assignments ({administration.data.active_assignment_count} active now, {administration.data.today_future_assignment_count} later today, {administration.data.future_assignment_count} future). Assignments will not be canceled or reassigned. <Link className="font-semibold underline" to="/dispatch">Open Dispatch</Link> or <Link className="font-semibold underline" to="/scheduling">Scheduling</Link> to reassign work.
+            </Alert>
+          )}
+          <label className="block font-medium" htmlFor="employee-access-lock-reason">Reason</label>
+          <Input id="employee-access-lock-reason" value={accessLockReason} onChange={(event) => setAccessLockReason(event.target.value)} minLength={3} maxLength={500} required placeholder={administration.data.access_status === "LOCKED" ? "Reason access may be restored" : "Emergency security reason"} />
+          {accessLockReason.trim().length > 0 && accessLockReason.trim().length < 3 && <p className="text-status-danger">Enter at least 3 characters.</p>}
+        </ConfirmationDialog>
       )}
       </div>
     </div>

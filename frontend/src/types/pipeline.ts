@@ -31,7 +31,7 @@ export interface Lead {
   contact_attempt_count: number;
   appointment_id: string | null;
   job_id: string | null;
-  estimate_id: string | null;
+  estimate_proposal_id: string | null;
   attributable_value_minor: number | null;
   value_currency: string | null;
   value_authority: string | null;
@@ -46,6 +46,7 @@ export interface LeadList {
 }
 
 export interface LeadCreate {
+  idempotency_key: string;
   branch_id: string;
   prospect_name: string;
   contact_phone?: string;
@@ -56,4 +57,3 @@ export interface LeadCreate {
   next_action_type?: string;
   next_action_due_at?: string;
 }
-

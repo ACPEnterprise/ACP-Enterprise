@@ -193,7 +193,14 @@ export interface EmployeeAdministrationSummary extends WorkforceEmployeeSummary 
   delivery_status: string | null;
   login_email: string | null;
   masked_login: string | null;
-  access_status: "ACTIVE" | "DISABLED" | "INVITED" | "NOT_LINKED";
+  access_status: "ACTIVE" | "LOCKED" | "DISABLED" | "INVITED" | "NOT_LINKED";
+  access_locked_at: string | null;
+  access_locked_by_user_id: string | null;
+  access_locked_by_display_name: string | null;
+  access_lock_reason: string | null;
+  active_assignment_count: number;
+  today_future_assignment_count: number;
+  future_assignment_count: number;
   mobile_readiness: "READY" | "BLOCKED" | "NOT_LINKED";
   mobile_readiness_blockers: string[];
 }
@@ -218,6 +225,51 @@ export interface PasswordResetDelivery {
 export interface EmployeeAdministrationDetail extends EmployeeAdministrationSummary {
   permissions: EmployeePermissionExplanation[];
   workforce: WorkforceEmployeeDetail;
+}
+
+export interface FunctionalAccessItem {
+  assignment_id: string;
+  employee_id: string;
+  functional_area: string;
+  access_level: string;
+  role_code: string;
+  effective_at: string;
+  expires_at: string | null;
+  effective: boolean;
+  lifecycle_state: "EFFECTIVE" | "SCHEDULED" | "EXPIRED" | "REVOKED";
+  revoked_at: string | null;
+  reason: string;
+}
+
+export async function getEmployeeFunctionalAccess(employeeId: string) {
+  return (
+    await apiClient.get<{ employee_id: string; items: FunctionalAccessItem[] }>(
+      `/api/v1/workforce/administration/employees/${employeeId}/functional-access`,
+    )
+  ).data.items;
+}
+
+export async function grantEmployeeFunctionalAccess(employeeId: string, input: {
+  functional_area: string;
+  access_level: string;
+  effective_at: string;
+  expires_at: string | null;
+  reason: string;
+}) {
+  return (
+    await apiClient.put<{ employee_id: string; items: FunctionalAccessItem[] }>(
+      `/api/v1/workforce/administration/employees/${employeeId}/functional-access`, input,
+    )
+  ).data.items;
+}
+
+export async function revokeEmployeeFunctionalAccess(employeeId: string, assignmentId: string, reason: string) {
+  return (
+    await apiClient.post<{ employee_id: string; items: FunctionalAccessItem[] }>(
+      `/api/v1/workforce/administration/employees/${employeeId}/functional-access/${assignmentId}/revoke`,
+      { reason },
+    )
+  ).data.items;
 }
 
 export async function listWorkforceEmployees(): Promise<WorkforceEmployeeSummary[]> {
@@ -296,6 +348,18 @@ export async function getEmployeeAdministration(
   return (
     await apiClient.get<EmployeeAdministrationDetail>(
       `/api/v1/workforce/administration/employees/${employeeId}`,
+    )
+  ).data;
+}
+
+export async function setEmployeeAccessLock(
+  employeeId: string,
+  input: { locked: boolean; reason: string; expected_authorization_version: number },
+): Promise<EmployeeAdministrationDetail> {
+  return (
+    await apiClient.put<EmployeeAdministrationDetail>(
+      `/api/v1/workforce/administration/employees/${employeeId}/access-lock`,
+      input,
     )
   ).data;
 }

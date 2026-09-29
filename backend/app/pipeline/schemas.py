@@ -24,6 +24,7 @@ class LeadStage(StrEnum):
 
 
 class LeadCreate(Schema):
+    idempotency_key: str = Field(min_length=8, max_length=200)
     branch_id: UUID
     customer_id: UUID | None = None
     prospect_name: str | None = Field(default=None, max_length=300)
@@ -59,7 +60,7 @@ class LeadTransition(Schema):
     assigned_user_id: UUID | None = None
     appointment_id: UUID | None = None
     job_id: UUID | None = None
-    estimate_id: UUID | None = None
+    estimate_proposal_id: UUID | None = None
     lost_reason: str | None = Field(default=None, max_length=200)
     attributable_value_minor: int | None = Field(default=None, ge=0)
     value_currency: str | None = Field(default=None, min_length=3, max_length=3)
@@ -101,7 +102,7 @@ class LeadResponse(Schema):
     contact_attempt_count: int
     appointment_id: UUID | None
     job_id: UUID | None
-    estimate_id: UUID | None
+    estimate_proposal_id: UUID | None
     outcome: str | None
     lost_reason: str | None
     attributable_value_minor: int | None

@@ -2,11 +2,10 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from app.pipeline.models import Lead
 from app.pipeline.schemas import LeadCreate
 from app.pipeline.service import ALLOWED_TRANSITIONS, PipelineService, attention_state
+from pydantic import ValidationError
 
 NOW = datetime(2026, 9, 22, 14, 0, tzinfo=timezone.utc)
 
@@ -63,6 +62,7 @@ def test_source_does_not_determine_whether_record_is_a_lead() -> None:
     )
     for source in sources:
         item = LeadCreate(
+            idempotency_key=f"lead-{source}",
             branch_id=uuid4(),
             prospect_name="A real service opportunity",
             lead_source=source,
@@ -73,6 +73,7 @@ def test_source_does_not_determine_whether_record_is_a_lead() -> None:
 
 def test_prospect_can_exist_before_customer() -> None:
     item = LeadCreate(
+        idempotency_key="lead-new-prospect",
         branch_id=uuid4(),
         prospect_name="New prospect",
         lead_source="web_form",
@@ -84,6 +85,7 @@ def test_prospect_can_exist_before_customer() -> None:
 def test_customer_or_prospect_is_required() -> None:
     with pytest.raises(ValidationError):
         LeadCreate(
+            idempotency_key="lead-missing-subject",
             branch_id=uuid4(),
             lead_source="incoming_phone",
             service_need="Service requested",
@@ -93,6 +95,7 @@ def test_customer_or_prospect_is_required() -> None:
 def test_imported_identity_requires_source_system() -> None:
     with pytest.raises(ValidationError):
         LeadCreate(
+            idempotency_key="lead-imported-identity",
             branch_id=uuid4(),
             prospect_name="Imported opportunity",
             lead_source="other",

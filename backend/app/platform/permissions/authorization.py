@@ -1,14 +1,15 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.auth.services import AuthenticatedContext
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
+from app.platform.employees.models import Employee
 from app.platform.permissions.models import (
     MembershipRole,
     Permission,
@@ -359,6 +360,23 @@ class AuthorizationService:
         )
         if membership is None:
             raise TenantAccessDeniedError("Tenant access denied.")
+        employee = await session.scalar(
+            select(Employee).where(
+                Employee.company_id == company.id,
+                Employee.membership_id == membership.id,
+                Employee.archived_at.is_(None),
+            )
+        )
+        today = datetime.now(timezone.utc).date()
+        if employee is not None and (
+            employee.status != "active"
+            or (employee.hire_date is not None and employee.hire_date > today)
+            or (
+                employee.termination_date is not None
+                and employee.termination_date <= today
+            )
+        ):
+            raise TenantAccessDeniedError("Tenant access denied.")
 
         authorized_branches = await self._resolve_branches(
             session,
@@ -387,6 +405,14 @@ class AuthorizationService:
                         MembershipRole.membership_id == membership.id,
                         MembershipRole.company_id == company.id,
                         MembershipRole.revoked_at.is_(None),
+                        or_(
+                            MembershipRole.effective_at.is_(None),
+                            MembershipRole.effective_at <= datetime.now(timezone.utc),
+                        ),
+                        or_(
+                            MembershipRole.expires_at.is_(None),
+                            MembershipRole.expires_at > datetime.now(timezone.utc),
+                        ),
                         Role.company_id == company.id,
                         Role.status == "active",
                         Role.archived_at.is_(None),
@@ -411,6 +437,14 @@ class AuthorizationService:
                         MembershipRole.membership_id == membership.id,
                         MembershipRole.company_id == company.id,
                         MembershipRole.revoked_at.is_(None),
+                        or_(
+                            MembershipRole.effective_at.is_(None),
+                            MembershipRole.effective_at <= datetime.now(timezone.utc),
+                        ),
+                        or_(
+                            MembershipRole.expires_at.is_(None),
+                            MembershipRole.expires_at > datetime.now(timezone.utc),
+                        ),
                         Role.company_id == company.id,
                         Role.status == "active",
                         Role.archived_at.is_(None),

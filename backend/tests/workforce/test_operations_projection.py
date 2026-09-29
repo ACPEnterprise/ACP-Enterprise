@@ -76,18 +76,25 @@ def test_readiness_uses_explicit_capability_credential_and_branch_evidence() -> 
     assert blockers == ()
 
 
-def test_expired_credential_is_an_explicit_blocker() -> None:
+def test_generic_expired_credential_is_evidence_not_global_authority() -> None:
     state, blockers = WorkforceOperationsService._readiness(
-        employee(), profile(expires_on=date(2020, 1, 1))
+        employee(),
+        profile(expires_on=date(2020, 1, 1)),
     )
-    assert state == "BLOCKED"
-    assert blockers == ("credential_not_current",)
+    assert state == "READY"
+    assert blockers == ()
 
 
-def test_missing_profile_remains_visible_as_insufficient_evidence() -> None:
+def test_missing_profile_does_not_block_normal_employment_readiness() -> None:
     state, blockers = WorkforceOperationsService._readiness(employee(), None)
-    assert state == "INSUFFICIENT_EVIDENCE"
-    assert blockers == ("capability_profile_missing",)
+    assert state == "READY"
+    assert blockers == ()
+
+
+def test_employee_availability_rows_are_not_required_for_branch_inheritance() -> None:
+    state, blockers = WorkforceOperationsService._readiness(employee(), profile())
+    assert state == "READY"
+    assert blockers == ()
 
 
 def test_public_workforce_contract_cannot_expose_payroll_material() -> None:
@@ -141,3 +148,14 @@ def test_employee_access_status_distinguishes_invited_and_disabled() -> None:
     )
     assert disabled[0] == "DISABLED"
     assert "employee_inactive" in disabled[2]
+
+    locked = EmployeeAdministrationService._access_and_mobile_readiness(
+        employee_status="active",
+        membership_status="active",
+        user_status="locked",
+        has_branch_access=True,
+        effective_permission_codes=MOBILE_REQUIRED_PERMISSION_CODES,
+    )
+    assert locked[0] == "LOCKED"
+    assert locked[1] == "BLOCKED"
+    assert "user_inactive" in locked[2]

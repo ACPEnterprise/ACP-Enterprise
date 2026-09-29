@@ -97,8 +97,26 @@ async def execute_action(
             "version": disposition.version,
             "evidence_digest": disposition.evidence_digest,
         }
+    if args.action == "admit-clean-majority":
+        clean_result = await service.admit_clean_majority(
+            factory,
+            context=context,
+            source_system=args.source_system,
+            limit=args.limit,
+        )
+        return {
+            "classification": "CUSTOMER_CLEAN_MAJORITY_ADMISSION_COMPLETE",
+            "source_system": clean_result.source_system,
+            "selected": clean_result.selected,
+            "admitted": clean_result.admitted,
+            "replayed": clean_result.replayed,
+            "quarantined": clean_result.quarantined,
+            "remaining_unexplained": clean_result.remaining_unexplained,
+            "before_digest": clean_result.before_digest,
+            "after_digest": clean_result.after_digest,
+        }
     if args.action == "admit":
-        result = await service.admit_exact(
+        admission_result = await service.admit_exact(
             factory,
             context=context,
             command=ExactCustomerAdmissionCommand(
@@ -117,16 +135,18 @@ async def execute_action(
         )
         return {
             "classification": "CUSTOMER_PROVIDER_ID_ADMITTED",
-            "customer_id": str(result.customer_id),
-            "customer_source_identity_id": str(result.customer_source_identity_id),
-            "disposition_id": str(result.disposition_id),
+            "customer_id": str(admission_result.customer_id),
+            "customer_source_identity_id": str(
+                admission_result.customer_source_identity_id
+            ),
+            "disposition_id": str(admission_result.disposition_id),
             "counts": {
-                "customers": result.customers,
-                "contacts": result.contacts,
-                "service_locations": result.service_locations,
-                "billing_addresses": result.billing_addresses,
+                "customers": admission_result.customers,
+                "contacts": admission_result.contacts,
+                "service_locations": admission_result.service_locations,
+                "billing_addresses": admission_result.billing_addresses,
             },
-            "replayed": result.replayed,
+            "replayed": admission_result.replayed,
         }
     raise ValueError("unsupported Customer population action")
 
@@ -146,6 +166,10 @@ def parser() -> argparse.ArgumentParser:
     hold.add_argument("--source-system", default=HCP_SOURCE_SYSTEM)
     hold.add_argument("--provider-customer-id", required=True)
     hold.add_argument("--reason-code", required=True)
+
+    clean_majority = actions.add_parser("admit-clean-majority")
+    clean_majority.add_argument("--source-system", default=HCP_SOURCE_SYSTEM)
+    clean_majority.add_argument("--limit", type=int, default=5000)
 
     admit = actions.add_parser("admit")
     admit.add_argument("--source-system", default=HCP_SOURCE_SYSTEM)

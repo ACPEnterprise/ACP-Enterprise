@@ -109,6 +109,42 @@ class WorkforceEligibilityResponse(WorkforceSchema):
     items: tuple[WorkforceEligibilityItem, ...]
 
 
+class FunctionalAccessGrantRequest(WorkforceSchema):
+    functional_area: Literal[
+        "FIELD_OPERATIONS",
+        "CUSTOMER_SERVICE",
+        "DISPATCH",
+        "REPORTING_ECONOMICS",
+    ]
+    access_level: str = Field(min_length=1, max_length=50)
+    effective_at: datetime
+    expires_at: datetime | None = None
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class FunctionalAccessRevokeRequest(WorkforceSchema):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class FunctionalAccessItem(WorkforceSchema):
+    assignment_id: UUID
+    employee_id: UUID
+    functional_area: str
+    access_level: str
+    role_code: str
+    effective_at: datetime
+    expires_at: datetime | None
+    effective: bool
+    lifecycle_state: Literal["EFFECTIVE", "SCHEDULED", "EXPIRED", "REVOKED"]
+    revoked_at: datetime | None
+    reason: str
+
+
+class FunctionalAccessResponse(WorkforceSchema):
+    employee_id: UUID
+    items: tuple[FunctionalAccessItem, ...]
+
+
 class RealRosterBindingRequest(WorkforceSchema):
     employee_id: UUID
 
@@ -246,7 +282,14 @@ class EmployeeAdministrationSummary(WorkforceEmployeeSummary):
     delivery_status: str | None
     login_email: str | None
     masked_login: str | None
-    access_status: Literal["ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"]
+    access_status: Literal["ACTIVE", "LOCKED", "DISABLED", "INVITED", "NOT_LINKED"]
+    access_locked_at: datetime | None
+    access_locked_by_user_id: UUID | None
+    access_locked_by_display_name: str | None
+    access_lock_reason: str | None
+    active_assignment_count: int = Field(ge=0)
+    today_future_assignment_count: int = Field(ge=0)
+    future_assignment_count: int = Field(ge=0)
     mobile_readiness: Literal["READY", "BLOCKED", "NOT_LINKED"]
     mobile_readiness_blockers: tuple[str, ...]
 
@@ -263,6 +306,12 @@ class EmployeePermissionExplanation(WorkforceSchema):
 class EmployeeAdministrationDetail(EmployeeAdministrationSummary):
     permissions: tuple[EmployeePermissionExplanation, ...]
     workforce: WorkforceEmployeeDetail
+
+
+class EmployeeAccessLockRequest(WorkforceSchema):
+    locked: bool
+    reason: str = Field(min_length=3, max_length=500)
+    expected_authorization_version: int = Field(ge=1)
 
 
 class WorkforceProfileResponse(WorkforceSchema):

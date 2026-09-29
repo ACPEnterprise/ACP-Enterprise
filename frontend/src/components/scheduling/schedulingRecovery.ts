@@ -57,6 +57,46 @@ export function schedulingMutationRecovery(
       retryLabel: null,
     };
   }
+  if (code === "scheduling_calendar_missing") {
+    return {
+      state: "FAILED",
+      title: "Branch scheduling setup required",
+      message: "This Branch has no approved capacity calendar. An authorized owner must establish Branch operating hours and capacity before assigned work can be booked.",
+      retryLabel: null,
+    };
+  }
+  if (code === "scheduling_calendar_unavailable") {
+    return {
+      state: "FAILED_REQUIRES_REFRESH",
+      title: "Branch schedule unavailable",
+      message: "The configured Branch capacity calendar could not be verified. No booking was accepted; refresh once and contact Enterprise Operations if it remains unavailable.",
+      retryLabel: null,
+    };
+  }
+  if (code === "scheduling_calendar_closed") {
+    return {
+      state: "FAILED",
+      title: "Branch closed at requested time",
+      message: "The requested arrival and work interval overlaps a configured Branch closure. Choose an open operating interval.",
+      retryLabel: null,
+    };
+  }
+  if (code === "scheduling_interval_unavailable") {
+    return {
+      state: "FAILED",
+      title: "Outside Branch operating hours",
+      message: "The requested technician work interval is outside configured Branch hours. Choose a time covered by the Branch calendar.",
+      retryLabel: null,
+    };
+  }
+  if (code === "scheduling_capacity_exhausted") {
+    return {
+      state: "FAILED",
+      title: "Branch capacity already committed",
+      message: "The requested technician work interval has no remaining Branch capacity. Review existing work for that interval or choose another planned start.",
+      retryLabel: null,
+    };
+  }
   if (code === "resource_state_conflict") {
     return {
       state: "FAILED_REQUIRES_REFRESH",

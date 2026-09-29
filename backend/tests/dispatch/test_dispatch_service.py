@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -16,8 +17,13 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User
-from app.scheduling.models import Appointment
+from app.scheduling.models import (
+    Appointment,
+    BranchSchedulingCalendar,
+    BranchSchedulingWeeklyInterval,
+)
 from app.workforce.models import (
     Capability,
     CapabilityCategory,
@@ -100,21 +106,68 @@ async def dispatch_fixture() -> AsyncIterator[
         )
         session.add(membership)
         await session.flush()
-        employees = [
-            Employee(
+        technician_roles = [
+            Role(
                 company_id=company.id,
-                home_branch_id=branch.id,
-                employee_number=f"T-{i}-{uuid4().hex[:5]}",
-                first_name=f"Tech{i}",
-                last_name="Test",
-                display_name=f"Technician {i}",
-                job_title="Service Technician",
-                employee_type="employee",
+                code=code,
+                name=code.replace("_", " ").title(),
                 status="active",
+                is_system=True,
             )
-            for i in (1, 2)
+            for code in ("TECHNICIAN", "ACP_EMPLOYEE_MOBILE")
         ]
-        employees[0].membership_id = membership.id
+        session.add_all(technician_roles)
+        await session.flush()
+        employees = []
+        for i in (1, 2):
+            if i == 1:
+                membership.default_branch_id = branch.id
+                tech_membership = membership
+            else:
+                tech_user = User(
+                    normalized_email=f"tech-{i}-{uuid4().hex}@example.test",
+                    first_name=f"Tech{i}",
+                    last_name="Test",
+                    display_name=f"Technician {i}",
+                    status="active",
+                )
+                session.add(tech_user)
+                await session.flush()
+                tech_membership = Membership(
+                    user_id=tech_user.id,
+                    company_id=company.id,
+                    status="active",
+                    default_branch_id=branch.id,
+                    has_all_branch_access=False,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(tech_membership)
+                await session.flush()
+            session.add_all(
+                [
+                    MembershipRole(
+                        company_id=company.id,
+                        membership_id=tech_membership.id,
+                        role_id=role.id,
+                    )
+                    for role in technician_roles
+                ]
+            )
+            employees.append(
+                Employee(
+                    company_id=company.id,
+                    home_branch_id=branch.id,
+                    membership_id=tech_membership.id,
+                    employee_number=f"T-{i}-{uuid4().hex[:5]}",
+                    first_name=f"Tech{i}",
+                    last_name="Test",
+                    display_name=f"Technician {i}",
+                    job_title="Service Technician",
+                    employee_type="employee",
+                    status="active",
+                )
+            )
         session.add_all(employees)
         await session.flush()
         category = CapabilityCategory(
@@ -323,6 +376,41 @@ async def test_board_exposes_customer_job_and_location_drilldown_context(
 
 
 @pytest.mark.asyncio
+async def test_arrival_promise_does_not_expand_technician_work_interval(
+    dispatch_fixture,
+):
+    factory, context, appointment, technician, _ = dispatch_fixture
+    async with factory() as session, session.begin():
+        persisted = await session.get(Appointment, appointment.id)
+        assert persisted is not None
+        persisted.arrival_window_end_at = persisted.arrival_window_start_at + timedelta(
+            hours=6
+        )
+    async with factory() as session:
+        option = next(
+            item
+            for item in await DispatchService().eligible(
+                session, context=context, appointment_id=appointment.id
+            )
+            if item.employee_id == technician.id
+        )
+        assert option.eligible
+    async with factory() as session:
+        assignment = await DispatchService().assign(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            employee_id=technician.id,
+            reason="Planned work interval",
+            idempotency_key="dispatch-arrival-promise-001",
+        )
+    assert assignment.window_start_at == appointment.arrival_window_start_at
+    assert assignment.window_end_at == appointment.arrival_window_start_at + timedelta(
+        minutes=120
+    )
+
+
+@pytest.mark.asyncio
 async def test_overlapping_assignment_and_company_scope_fail_closed(dispatch_fixture):
     factory, context, appointment, technician, _ = dispatch_fixture
     service = DispatchService()
@@ -368,7 +456,9 @@ async def test_overlapping_assignment_and_company_scope_fail_closed(dispatch_fix
 
 
 @pytest.mark.asyncio
-async def test_missing_availability_is_reported_unknown(dispatch_fixture):
+async def test_employee_inherits_branch_schedule_without_copied_availability(
+    dispatch_fixture,
+):
     factory, context, appointment, _, technician = dispatch_fixture
     async with factory() as session, session.begin():
         profile_id = await session.scalar(
@@ -382,6 +472,32 @@ async def test_missing_availability_is_reported_unknown(dispatch_fixture):
             )
         )
         await session.delete(availability)
+        calendar = BranchSchedulingCalendar(
+            company_id=context.company.id,
+            branch_id=appointment.branch_id,
+            booking_horizon_days=365,
+            minimum_notice_minutes=0,
+            slot_interval_minutes=30,
+            default_capacity_units=2,
+        )
+        session.add(calendar)
+        await session.flush()
+        local_start = appointment.arrival_window_start_at.astimezone(
+            ZoneInfo("America/New_York")
+        )
+        local_end = (
+            appointment.arrival_window_start_at
+            + timedelta(minutes=appointment.expected_duration_minutes)
+        ).astimezone(ZoneInfo("America/New_York"))
+        session.add(
+            BranchSchedulingWeeklyInterval(
+                calendar_id=calendar.id,
+                day_of_week=local_start.weekday(),
+                start_minute=local_start.hour * 60,
+                end_minute=local_end.hour * 60 + local_end.minute,
+                capacity_units=2,
+            )
+        )
     async with factory() as session:
         option = next(
             item
@@ -390,11 +506,12 @@ async def test_missing_availability_is_reported_unknown(dispatch_fixture):
             )
             if item.employee_id == technician.id
         )
-        assert option.decision == "availability_unknown" and not option.eligible
+        assert option.decision == "eligible" and option.eligible
+        assert option.availability_confidence == "branch_schedule"
 
 
 @pytest.mark.asyncio
-async def test_job_title_does_not_substitute_for_workforce_capability(
+async def test_subjective_capability_is_not_required_without_job_constraint(
     dispatch_fixture,
 ):
     factory, context, appointment, technician, _ = dispatch_fixture
@@ -418,8 +535,8 @@ async def test_job_title_does_not_substitute_for_workforce_capability(
             )
             if item.employee_id == technician.id
         )
-    assert option.decision == "missing_required_capability"
-    assert not option.eligible
+    assert option.decision == "eligible"
+    assert option.eligible
 
 
 @pytest.mark.asyncio

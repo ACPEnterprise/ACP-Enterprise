@@ -23,16 +23,19 @@ from app.pipeline.service import (
     pipeline_service,
 )
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import CustomerPermission
+from app.platform.permissions.codes import PipelinePermission
 from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(prefix="/api/v1/pipeline", tags=["Pipeline"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 ReadContext = Annotated[
-    AuthorizationContext, Depends(require_permission(CustomerPermission.READ))
+    AuthorizationContext, Depends(require_permission(PipelinePermission.READ))
 ]
-ManageContext = Annotated[
-    AuthorizationContext, Depends(require_permission(CustomerPermission.MANAGE))
+CreateContext = Annotated[
+    AuthorizationContext, Depends(require_permission(PipelinePermission.CREATE))
+]
+UpdateContext = Annotated[
+    AuthorizationContext, Depends(require_permission(PipelinePermission.UPDATE))
 ]
 
 
@@ -87,13 +90,13 @@ async def list_leads(
 
 @router.post("", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
 async def create_lead(
-    payload: LeadCreate, context: ManageContext, session: DatabaseSession
+    payload: LeadCreate, context: CreateContext, session: DatabaseSession
 ) -> LeadResponse:
     try:
         return response(
             await pipeline_service.create(session, context=context, data=payload)
         )
-    except PipelineNotFound as error:
+    except (PipelineConflict, PipelineNotFound) as error:
         raise pipeline_error(error) from error
 
 
@@ -112,7 +115,7 @@ async def get_lead(
         return response(
             await pipeline_service.get(session, context=context, lead_id=lead_id)
         )
-    except PipelineNotFound as error:
+    except (PipelineConflict, PipelineNotFound) as error:
         raise pipeline_error(error) from error
 
 
@@ -133,7 +136,7 @@ async def lead_history(
 async def transition_lead(
     lead_id: UUID,
     payload: LeadTransition,
-    context: ManageContext,
+    context: UpdateContext,
     session: DatabaseSession,
 ) -> LeadResponse:
     try:
@@ -149,13 +152,13 @@ async def transition_lead(
 async def record_contact(
     lead_id: UUID,
     payload: ContactActivityCreate,
-    context: ManageContext,
+    context: UpdateContext,
     session: DatabaseSession,
 ) -> LeadResponse:
     try:
         lead = await pipeline_service.record_contact(
             session, context=context, lead_id=lead_id, data=payload
         )
-    except PipelineNotFound as error:
+    except (PipelineConflict, PipelineNotFound) as error:
         raise pipeline_error(error) from error
     return response(lead)

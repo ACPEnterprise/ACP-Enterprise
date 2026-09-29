@@ -46,6 +46,26 @@ class Lead(Base):
             name="fk_pipeline_leads_company_branch",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "appointment_id"],
+            ["appointments.company_id", "appointments.branch_id", "appointments.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "estimate_proposal_id"],
+            ["estimate_proposals.company_id", "estimate_proposals.id"],
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "stage IN ('new','contacted','qualified','appointment_needed',"
             "'scheduled','estimate_follow_up','won','lost','nurture')",
@@ -72,12 +92,21 @@ class Lead(Base):
             name="ck_pipeline_leads_lost_reason",
         ),
         UniqueConstraint("company_id", "id", name="uq_pipeline_leads_company_id"),
+        UniqueConstraint(
+            "company_id", "branch_id", "id", name="uq_pipeline_leads_company_branch_id"
+        ),
         Index(
             "ix_pipeline_leads_queue",
             "company_id",
             "branch_id",
             "stage",
             "next_action_due_at",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "created_by_user_id",
+            "creation_idempotency_key",
+            name="uq_pipeline_leads_creation_idempotency",
         ),
         Index(
             "ix_pipeline_leads_assignee",
@@ -105,9 +134,7 @@ class Lead(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT")
-    )
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     prospect_name: Mapped[str | None] = mapped_column(String(300))
     contact_phone: Mapped[str | None] = mapped_column(String(40))
     contact_email: Mapped[str | None] = mapped_column(String(320))
@@ -131,15 +158,9 @@ class Lead(Base):
     contact_attempt_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
-    appointment_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("appointments.id", ondelete="RESTRICT")
-    )
-    job_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("jobs.id", ondelete="RESTRICT")
-    )
-    estimate_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("estimates.id", ondelete="RESTRICT")
-    )
+    appointment_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    job_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    estimate_proposal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     outcome: Mapped[str | None] = mapped_column(String(20))
     lost_reason: Mapped[str | None] = mapped_column(String(200))
     attributable_value_minor: Mapped[int | None] = mapped_column(Integer)
@@ -161,6 +182,8 @@ class Lead(Base):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    creation_idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    creation_request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
@@ -175,16 +198,13 @@ class LeadHistory(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    lead_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("pipeline_leads.id", ondelete="CASCADE"),
-        nullable=False,
-    )
+    lead_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     action_type: Mapped[str] = mapped_column(String(80), nullable=False)
     from_stage: Mapped[str | None] = mapped_column(String(40))
     to_stage: Mapped[str | None] = mapped_column(String(40))
     detail: Mapped[str | None] = mapped_column(String(500))
     idempotency_key: Mapped[str | None] = mapped_column(String(200))
+    request_digest: Mapped[str | None] = mapped_column(String(64))
     actor_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -194,6 +214,15 @@ class LeadHistory(Base):
         DateTime(timezone=True), nullable=False, default=utc_now
     )
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "lead_id"],
+            [
+                "pipeline_leads.company_id",
+                "pipeline_leads.branch_id",
+                "pipeline_leads.id",
+            ],
+            ondelete="CASCADE",
+        ),
         UniqueConstraint(
             "company_id",
             "lead_id",

@@ -10,6 +10,9 @@ import { appRoutes } from "./router";
 
 vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
 vi.mock("../routes/CommandCenterRoute", () => ({ CommandCenterRoute: () => <div>Command Center route content</div> }));
+vi.mock("../features/administration/hooks", () => ({
+  useAdministrationAccess: () => ({ isSuccess: true }),
+}));
 const routeFailure = vi.hoisted(() => ({ customers: false }));
 
 vi.mock("../routes/CustomersRoute", () => ({
@@ -43,6 +46,18 @@ const authenticatedContext: AuthenticationContextValue = {
   signOutAll: vi.fn(),
   refreshAuthorization: vi.fn(),
   requireReauthentication: vi.fn(),
+  permissionCodes: ["COMPANY_ANALYTICS_READ"],
+};
+
+const fieldTechnicianContext: AuthenticationContextValue = {
+  ...authenticatedContext,
+  permissionCodes: [
+    "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+    "COMPANY_JOB_EXECUTE",
+    "COMPANY_JOB_READ",
+    "COMPANY_SCHEDULING_READ",
+    "COMPANY_TIMEKEEPING_OWN_READ",
+  ],
 };
 
 function renderRoute(path: string, context: AuthenticationContextValue = authenticatedContext) {
@@ -63,11 +78,31 @@ describe("application routing", () => {
     expect(router.state.location.pathname).toBe("/login");
   });
 
-  it("uses Command Center as the authenticated landing route", async () => {
+  it("uses Command Center as the authorized owner landing route", async () => {
     const router = renderRoute("/");
     expect(await screen.findByText("Command Center route content")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.pathname).toBe("/command-center");
     expect(screen.getByRole("link", { name: "Command Center" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("lands a field technician on My Day with only own-work navigation", async () => {
+    const router = renderRoute("/", fieldTechnicianContext);
+    expect(await screen.findByText("Technician route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/technician");
+    expect(screen.queryByRole("link", { name: "Command Center" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Jobs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Scheduling" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "My day" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "My Schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "My time clock" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "My Jobs" })).toBeInTheDocument();
+  });
+
+  it("denies direct Command Center navigation to a field technician", async () => {
+    const router = renderRoute("/command-center", fieldTechnicianContext);
+    expect(await screen.findByText("Technician route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/technician");
+    expect(screen.queryByText("Command Center route content")).not.toBeInTheDocument();
   });
 
   it("renders Customers directly and marks its navigation link active", async () => {
@@ -125,7 +160,7 @@ describe("application routing", () => {
   it("allows a field-capable user to load the technician shell", async () => {
     renderRoute("/technician", {
       ...authenticatedContext,
-      permissionCodes: ["COMPANY_JOB_EXECUTE"],
+      permissionCodes: ["COMPANY_JOB_EXECUTE", "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ"],
     });
     expect(await screen.findByText("Technician route content")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "My day" })).toHaveAttribute("aria-current", "page");
@@ -133,8 +168,8 @@ describe("application routing", () => {
 
   it("redirects a user without field permission away from the technician route", async () => {
     const router = renderRoute("/technician", { ...authenticatedContext, permissionCodes: [] });
-    expect(await screen.findByText("Command Center route content")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/");
+    expect(await screen.findByText("Mission route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/mission-control");
     expect(screen.queryByRole("link", { name: "My day" })).not.toBeInTheDocument();
   });
 

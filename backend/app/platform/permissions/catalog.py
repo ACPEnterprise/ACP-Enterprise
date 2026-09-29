@@ -27,6 +27,7 @@ from app.platform.permissions.codes import (
     LuminaryPermission,
     MigrationPermission,
     PaymentPermission,
+    PipelinePermission,
     PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
@@ -160,6 +161,17 @@ CUSTOMER_DEFINITIONS = tuple(
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(CustomerPermission.ALL)
+)
+
+PIPELINE_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="pipeline_lead",
+        action=code.removeprefix("COMPANY_PIPELINE_LEAD_").removeprefix("COMPANY_PIPELINE_").lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(PipelinePermission.ALL)
 )
 
 ASSET_DEFINITIONS = tuple(
@@ -490,6 +502,7 @@ permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + LAUNCH_PLATFORM_DEFINITIONS
     + CUSTOMER_DEFINITIONS
+    + PIPELINE_DEFINITIONS
     + ASSET_DEFINITIONS
     + ANALYTICS_DEFINITIONS
     + LUMINARY_DEFINITIONS

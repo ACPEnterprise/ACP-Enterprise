@@ -2,6 +2,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
+import { CommandCenterRouteGuard } from "../auth/CommandCenterRouteGuard";
 import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuard";
 import {
   accountsPayableHandle,
@@ -81,11 +82,23 @@ export const appRoutes: RouteObject[] = [
         children: [
           {
             index: true,
-            handle: commandCenterHandle,
             lazy: async () => ({
-              Component: (await import("../routes/CommandCenterRoute"))
-                .CommandCenterRoute,
+              Component: (await import("../routes/AuthenticatedLandingRoute"))
+                .AuthenticatedLandingRoute,
             }),
+          },
+          {
+            Component: CommandCenterRouteGuard,
+            children: [
+              {
+                path: "command-center",
+                handle: commandCenterHandle,
+                lazy: async () => ({
+                  Component: (await import("../routes/CommandCenterRoute"))
+                    .CommandCenterRoute,
+                }),
+              },
+            ],
           },
           {
             path: "lia",
@@ -121,9 +134,7 @@ export const appRoutes: RouteObject[] = [
           {
             path: "pipeline",
             handle: pipelineHandle,
-            lazy: async () => ({
-              Component: (await import("../routes/PipelineRoute")).PipelineRoute,
-            }),
+            lazy: async () => ({ Component: (await import("../routes/PipelineRoute")).PipelineRoute }),
           },
           { path: "service-agreements", handle: serviceAgreementsHandle, lazy: async () => ({ Component: (await import("../routes/ServiceAgreementsRoute")).ServiceAgreementsRoute }) },
           {
@@ -139,6 +150,27 @@ export const appRoutes: RouteObject[] = [
                 handle: technicianHandle,
                 lazy: async () => ({
                   Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
+                }),
+              },
+              {
+                path: "technician/schedule",
+                handle: technicianHandle,
+                lazy: async () => ({
+                  Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
+                }),
+              },
+              {
+                path: "technician/jobs",
+                handle: technicianHandle,
+                lazy: async () => ({
+                  Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
+                }),
+              },
+              {
+                path: "technician/jobs/:jobId",
+                handle: technicianHandle,
+                lazy: async () => ({
+                  Component: (await import("../routes/TechnicianJobRoute")).TechnicianJobRoute,
                 }),
               },
             ],

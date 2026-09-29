@@ -14,6 +14,7 @@ from app.events.types import EventType
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.errors import (
     SchedulingCapacityError,
+    SchedulingCapacityFailure,
     SchedulingConflictError,
     SchedulingNotFoundError,
     SchedulingValidationError,
@@ -478,7 +479,9 @@ class SchedulingService:
                 branch_id=current.branch_id,
             )
             if capacity_context is None:
-                raise SchedulingCapacityError("Branch has no scheduling calendar.")
+                raise SchedulingCapacityError(
+                    SchedulingCapacityFailure.CALENDAR_MISSING
+                )
             appointment = await self._repository.get_appointment_for_update(
                 session,
                 company_id=context.company.id,
@@ -587,7 +590,7 @@ class SchedulingService:
             session, company_id=company_id, branch_id=branch_id
         )
         if capacity_context is None:
-            raise SchedulingCapacityError("Branch has no scheduling calendar.")
+            raise SchedulingCapacityError(SchedulingCapacityFailure.CALENDAR_MISSING)
         return await self._evaluate_capacity(
             session,
             capacity_context=capacity_context,
@@ -618,7 +621,9 @@ class SchedulingService:
             branch_id=capacity_context.branch_id,
         )
         if calendar is None or calendar.id != capacity_context.calendar_id:
-            raise SchedulingCapacityError("Scheduling calendar is unavailable.")
+            raise SchedulingCapacityError(
+                SchedulingCapacityFailure.CALENDAR_UNAVAILABLE
+            )
         reservation_end = window_start_at + timedelta(minutes=expected_duration_minutes)
         local_start, local_arrival_end, local_work_end = self._validate_calendar_policy(
             calendar,
@@ -670,7 +675,7 @@ class SchedulingService:
             (reservation.capacity_units for reservation in overlaps), Decimal("0.00")
         )
         if reserved + capacity_units > available:
-            raise SchedulingCapacityError("Insufficient scheduling capacity.")
+            raise SchedulingCapacityError(SchedulingCapacityFailure.CAPACITY_EXHAUSTED)
         return _CapacityDecision(
             context=capacity_context,
             reservation_start_at=window_start_at,
@@ -748,7 +753,7 @@ class SchedulingService:
             )
         ]
         if closed_exceptions:
-            raise SchedulingCapacityError("Branch calendar is closed.")
+            raise SchedulingCapacityError(SchedulingCapacityFailure.CALENDAR_CLOSED)
         exception_capacity = [
             exception.capacity_units
             for exception in exceptions
@@ -774,7 +779,9 @@ class SchedulingService:
             and interval.end_minute >= end_minute
         ]
         if not interval_capacity:
-            raise SchedulingCapacityError("Requested interval is not available.")
+            raise SchedulingCapacityError(
+                SchedulingCapacityFailure.INTERVAL_UNAVAILABLE
+            )
         return min(min(interval_capacity), calendar.default_capacity_units)
 
     @staticmethod

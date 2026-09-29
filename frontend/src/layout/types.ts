@@ -19,6 +19,8 @@ export interface ShellRouteHandle {
 export type NavigationItemId =
   | "lia"
   | "command-center"
+  | "my-schedule"
+  | "my-jobs"
   | "mission-control"
   | "factory-control"
   | "customers"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -25,6 +27,7 @@ from app.pipeline.schemas import (
 from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.company.membership_models import Membership
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import PipelinePermission
 from app.scheduling.models import Appointment
 
 ALLOWED_TRANSITIONS = {
@@ -103,6 +106,21 @@ class PipelineService:
         context: AuthorizationContext,
         data: LeadCreate,
     ) -> Lead:
+        request_values = data.model_dump(mode="json", exclude={"idempotency_key"})
+        request_digest = hashlib.sha256(
+            json.dumps(request_values, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        replay = await session.scalar(
+            select(Lead).where(
+                Lead.company_id == context.company.id,
+                Lead.created_by_user_id == context.user.id,
+                Lead.creation_idempotency_key == data.idempotency_key,
+            )
+        )
+        if replay is not None:
+            if replay.creation_request_digest != request_digest:
+                raise PipelineConflict("idempotency key was used for another Lead")
+            return replay
         if data.branch_id not in branch_ids(context):
             raise PipelineNotFound("Lead not found")
         customer: Customer | None = None
@@ -127,21 +145,34 @@ class PipelineService:
             if existing is not None:
                 if existing.branch_id not in branch_ids(context):
                     raise PipelineNotFound("Lead not found")
+                if existing.creation_request_digest != request_digest:
+                    raise PipelineConflict(
+                        "provider identity is already bound to another Lead request"
+                    )
                 return existing
 
         now = datetime.now(timezone.utc)
-        values = data.model_dump()
+        values = data.model_dump(exclude={"idempotency_key"})
         if customer is not None and not values["prospect_name"]:
             values["prospect_name"] = customer.display_name
         lead = Lead(
             company_id=context.company.id,
             created_by_user_id=context.user.id,
             updated_by_user_id=context.user.id,
+            creation_idempotency_key=data.idempotency_key,
+            creation_request_digest=request_digest,
             **values,
         )
         session.add(lead)
         await session.flush()
-        self._history(session, lead, context.user.id, "created", to_stage="new")
+        self._history(
+            session,
+            lead,
+            context.user.id,
+            "created",
+            to_stage="new",
+            idempotency_key=data.idempotency_key,
+        )
         BusinessEventService.stage(
             session,
             BusinessEventCreate(
@@ -205,6 +236,14 @@ class PipelineService:
         if lead.version != data.version:
             raise PipelineConflict("Lead changed; refresh")
         target = data.stage.value
+        if data.assigned_user_id is not None and not context.has_permission(
+            PipelinePermission.ASSIGN
+        ):
+            raise PipelineNotFound("Lead not found")
+        if target in {"scheduled", "won"} and not context.has_permission(
+            PipelinePermission.CONVERT
+        ):
+            raise PipelineNotFound("Lead not found")
         if target not in ALLOWED_TRANSITIONS[lead.stage]:
             raise PipelineConflict("Lead stage transition is not allowed")
         if target == "lost" and not (data.lost_reason or "").strip():
@@ -224,7 +263,7 @@ class PipelineService:
             "assigned_user_id",
             "appointment_id",
             "job_id",
-            "estimate_id",
+            "estimate_proposal_id",
             "lost_reason",
             "attributable_value_minor",
             "value_currency",
@@ -247,13 +286,15 @@ class PipelineService:
             from_stage=old,
             to_stage=target,
         )
-        event = (
-            EventType.LEAD_CONVERTED
-            if target == "won"
-            else EventType.LEAD_QUALIFIED
-            if target == "qualified"
-            else EventType.LEAD_UPDATED
-        )
+        event = EventType.LEAD_UPDATED
+        if target == "won":
+            event = EventType.LEAD_CONVERTED
+        elif target == "qualified":
+            event = EventType.LEAD_QUALIFIED
+        elif target == "lost":
+            event = EventType.LEAD_LOST
+        elif data.assigned_user_id is not None:
+            event = EventType.LEAD_ASSIGNED
         BusinessEventService.stage(
             session,
             BusinessEventCreate(
@@ -263,7 +304,22 @@ class PipelineService:
                 company_id=lead.company_id,
                 branch_id=lead.branch_id,
                 user_id=context.user.id,
-                payload={"version": "1.0", "from_stage": old, "to_stage": target},
+                payload={
+                    "version": "1.0",
+                    "lead_version": lead.version,
+                    "from_stage": old,
+                    "to_stage": target,
+                    "appointment_id": str(lead.appointment_id)
+                    if lead.appointment_id
+                    else None,
+                    "job_id": str(lead.job_id) if lead.job_id else None,
+                    "estimate_proposal_id": str(lead.estimate_proposal_id)
+                    if lead.estimate_proposal_id
+                    else None,
+                    "customer_id": str(lead.customer_id) if lead.customer_id else None,
+                    "source_system": lead.source_system,
+                    "source_version": lead.source_version,
+                },
             ),
         )
         audit_service.stage(
@@ -291,14 +347,23 @@ class PipelineService:
         data: ContactActivityCreate,
     ) -> Lead:
         lead = await self.get(session, context=context, lead_id=lead_id)
+        request_digest = hashlib.sha256(
+            json.dumps(
+                data.model_dump(mode="json", exclude={"idempotency_key"}),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
         duplicate = await session.scalar(
-            select(LeadHistory.id).where(
+            select(LeadHistory).where(
                 LeadHistory.company_id == lead.company_id,
                 LeadHistory.lead_id == lead.id,
                 LeadHistory.idempotency_key == data.idempotency_key,
             )
         )
         if duplicate is not None:
+            if duplicate.request_digest != request_digest:
+                raise PipelineConflict("idempotency key was used for another activity")
             return lead
         lead.contact_attempt_count += 1
         lead.first_contact_at = lead.first_contact_at or data.occurred_at
@@ -316,6 +381,7 @@ class PipelineService:
             f"contact:{data.channel}",
             detail=data.disposition,
             idempotency_key=data.idempotency_key,
+            request_digest=request_digest,
         )
         await session.commit()
         await session.refresh(lead)
@@ -438,7 +504,7 @@ class PipelineService:
         for record_id, model in (
             (data.appointment_id, Appointment),
             (data.job_id, Job),
-            (data.estimate_id, Estimate),
+            (data.estimate_proposal_id, Estimate),
         ):
             if record_id is None:
                 continue
@@ -505,6 +571,7 @@ class PipelineService:
         to_stage: str | None = None,
         detail: str | None = None,
         idempotency_key: str | None = None,
+        request_digest: str | None = None,
     ) -> None:
         session.add(
             LeadHistory(
@@ -516,6 +583,7 @@ class PipelineService:
                 to_stage=to_stage,
                 detail=detail,
                 idempotency_key=idempotency_key,
+                request_digest=request_digest,
                 actor_user_id=actor,
             )
         )

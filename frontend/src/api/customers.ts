@@ -43,6 +43,19 @@ export interface CustomerPopulationRefreshResult {
   customer_admission_performed: false;
 }
 
+export interface CustomerCleanMajorityAdmissionResult {
+  classification: "CUSTOMER_CLEAN_MAJORITY_ADMITTED";
+  source_system: "housecall_pro";
+  selected: number;
+  admitted: number;
+  replayed: number;
+  quarantined: number;
+  remaining_unexplained: number;
+  before_evidence_digest: string;
+  after_evidence_digest: string;
+  customer_admission_performed: true;
+}
+
 function stringValue(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -193,10 +206,33 @@ export async function refreshCustomerPopulation(
       "/api/v1/customer-migration/population/refresh",
       { source_system: "housecall_pro" },
       {
+        // The current authoritative HCP population is classified row by row.
+        // Keep the browser request alive long enough to receive the governed
+        // receipt instead of reporting a false transport failure while the
+        // backend continues the transaction.
+        timeout: 300_000,
         headers: {
           "Idempotency-Key": idempotencyKey,
           "X-Branch-ID": branchId,
         },
+      },
+    )
+  ).data;
+}
+
+export async function admitCustomerCleanMajority(
+  branchId: string,
+): Promise<CustomerCleanMajorityAdmissionResult> {
+  return (
+    await apiClient.post<CustomerCleanMajorityAdmissionResult>(
+      "/api/v1/customer-migration/population/admit-clean-majority",
+      { source_system: "housecall_pro", limit: 5000 },
+      {
+        // Admission applies thousands of deterministic rows independently and
+        // returns one truthful completion receipt. Avoid an ambiguous client
+        // timeout that could invite a duplicate operator attempt.
+        timeout: 1_800_000,
+        headers: { "X-Branch-ID": branchId },
       },
     )
   ).data;

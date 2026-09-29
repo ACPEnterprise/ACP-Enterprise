@@ -63,7 +63,7 @@ async def test_timeline_composes_native_authority_without_payroll_details():
         scalar=AsyncMock(side_effect=[employee, None, membership, None]),
         execute=AsyncMock(side_effect=[Rows([(role_assignment, role)])]),
         scalars=AsyncMock(
-            side_effect=[Rows([]), Rows([]), Rows([clock]), Rows([actor])]
+            side_effect=[Rows([]), Rows([]), Rows([]), Rows([clock]), Rows([actor])]
         ),
     )
 

@@ -56,15 +56,15 @@ function LeadCard({ lead }: { readonly lead: Lead }) {
         {lead.customer_id && <Link className="text-link" to={`/customers/${lead.customer_id}`}>Open Customer</Link>}
         {lead.job_id && <Link className="text-link" to={`/jobs/${lead.job_id}`}>Open Job</Link>}
         {lead.appointment_id && <Link className="text-link" to={`/appointments/${lead.appointment_id}`}>Open Appointment</Link>}
-        {lead.estimate_id && <Link className="text-link" to="/estimates">Open linked Estimate</Link>}
+        {lead.estimate_proposal_id && <Link className="text-link" to="/estimates">Open linked Estimate</Link>}
       </div>
     </article>
   );
 }
 
 export function PipelineRoute() {
-  const canRead = useHasPermission("COMPANY_CUSTOMER_READ");
-  const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
+  const canRead = useHasPermission("COMPANY_PIPELINE_READ");
+  const canCreate = useHasPermission("COMPANY_PIPELINE_LEAD_CREATE");
   const { activeCompany } = useAuth();
   const [params, setParams] = useSearchParams();
   const view = params.get("view") ?? "needs_attention";
@@ -79,6 +79,7 @@ export function PipelineRoute() {
     const form = new FormData(event.currentTarget);
     const branchId = String(form.get("branch_id") ?? "");
     await create.mutateAsync({
+      idempotency_key: crypto.randomUUID(),
       branch_id: branchId,
       prospect_name: String(form.get("prospect_name") ?? ""),
       contact_phone: String(form.get("contact_phone") ?? "") || undefined,
@@ -96,7 +97,7 @@ export function PipelineRoute() {
     <section className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="text-2xl font-semibold">Pipeline</h1><p className="text-content-muted">Every legitimate service opportunity, with its next action.</p></div>
-        {canManage && <button className="rounded-md bg-action px-4 py-2 text-on-action" onClick={() => setShowCreate((value) => !value)}>New Lead</button>}
+        {canCreate && <button className="rounded-md bg-action px-4 py-2 text-on-action" onClick={() => setShowCreate((value) => !value)}>New Lead</button>}
       </header>
       <nav aria-label="Pipeline views" className="flex gap-2 overflow-x-auto pb-1">
         {views.map(([key, label]) => <button key={key} className={`whitespace-nowrap rounded-md border px-3 py-2 ${view === key ? "border-action bg-action-subtle" : "border-stroke"}`} aria-current={view === key ? "page" : undefined} onClick={() => setParams({ view: key })}>{label}</button>)}

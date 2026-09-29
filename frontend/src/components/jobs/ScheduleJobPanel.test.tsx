@@ -83,6 +83,12 @@ describe("ScheduleJobPanel", () => {
     }), expect.any(Object));
   });
 
+  it("explains arrival promise and occupied work duration separately", () => {
+    renderPanel();
+    expect(screen.getByText(/capacity and technician availability begin here/i)).toBeVisible();
+    expect(screen.getByText(/not the full arrival window/i)).toBeVisible();
+  });
+
   it("explains emergency work and permits scheduling without Dispatch authority", () => {
     renderPanel(false);
     expect(screen.getByText(/supports emergency work before scheduling/i)).toBeVisible();

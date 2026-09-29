@@ -18,9 +18,9 @@ from app.platform.company.models import Company
 from app.platform.launch_controls import (
     COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
     LAUNCH_ROLE_MATRIX,
+    OFFICE_MANAGER_OPERATIONAL_PERMISSIONS,
     PLATFORM_ADMIN_NORMAL_PERMISSIONS,
     PLATFORM_OWNER_ADMIN_PERMISSIONS,
-    OFFICE_MANAGER_OPERATIONAL_PERMISSIONS,
     LaunchRoleCode,
     validate_launch_role_matrix,
 )
@@ -33,6 +33,7 @@ from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import (
     AccountingPermission,
     AdministrationPermission,
+    AnalyticsPermission,
     BeaconPermission,
     CommunicationsPermission,
     CustomerPermission,
@@ -46,6 +47,7 @@ from app.platform.permissions.codes import (
     LuminaryPermission,
     MigrationPermission,
     PaymentPermission,
+    PipelinePermission,
     PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
@@ -139,6 +141,9 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
         {
             CustomerPermission.READ,
             CustomerPermission.MANAGE,
+            PipelinePermission.READ,
+            PipelinePermission.CREATE,
+            PipelinePermission.UPDATE,
             EstimatePermission.READ,
             EstimatePermission.MANAGE,
             SchedulingPermission.READ,
@@ -172,6 +177,15 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
     )
     assert role.permission_codes.isdisjoint(prohibited)
     assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
+
+
+def test_field_technician_has_no_pipeline_authority() -> None:
+    role = next(
+        value
+        for value in LAUNCH_ROLE_MATRIX
+        if value.code is LaunchRoleCode.TECHNICIAN
+    )
+    assert role.permission_codes.isdisjoint(PipelinePermission.ALL)
 
 
 def test_office_manager_has_normal_operations_without_owner_hard_gates() -> None:
@@ -245,14 +259,38 @@ def test_acp_employee_mobile_role_has_only_approved_field_authority() -> None:
             EmployeeOperationsPermission.OWN_LIA_READ,
             TimekeepingPermission.OWN_PUNCH,
             TimekeepingPermission.OWN_READ,
-            JobPermission.READ,
             JobPermission.EXECUTE,
         }
     )
     assert role.permission_codes.isdisjoint(CustomerPermission.ALL)
+    assert role.permission_codes.isdisjoint(SchedulingPermission.ALL)
+    assert JobPermission.READ not in role.permission_codes
     assert role.permission_codes.isdisjoint(AdministrationPermission.ALL)
     assert role.permission_codes.isdisjoint(AccountingPermission.ALL)
     assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
+
+
+def test_technician_role_uses_assignment_scoped_job_authority_only() -> None:
+    role = next(
+        value for value in LAUNCH_ROLE_MATRIX if value.code is LaunchRoleCode.TECHNICIAN
+    )
+    assert JobPermission.EXECUTE in role.permission_codes
+    assert JobPermission.READ not in role.permission_codes
+    assert role.permission_codes.isdisjoint(CustomerPermission.ALL)
+    assert role.permission_codes.isdisjoint(SchedulingPermission.ALL)
+
+
+@pytest.mark.parametrize(
+    "role_code",
+    [LaunchRoleCode.TECHNICIAN, LaunchRoleCode.ACP_EMPLOYEE_MOBILE],
+)
+def test_field_roles_exclude_owner_command_center_authority(role_code) -> None:
+    role = next(value for value in LAUNCH_ROLE_MATRIX if value.code is role_code)
+    assert AnalyticsPermission.READ not in role.permission_codes
+    assert role.permission_codes.isdisjoint(AccountingPermission.ALL)
+    assert role.permission_codes.isdisjoint(EconomicsPolicyPermission.ALL)
+    assert role.permission_codes.isdisjoint(LuminaryPermission.ALL)
+    assert role.permission_codes.isdisjoint(LaunchPlatformPermission.ALL)
 
 
 def test_audit_permission_fails_closed_without_explicit_grant() -> None:

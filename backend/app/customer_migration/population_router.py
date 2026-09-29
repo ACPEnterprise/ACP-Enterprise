@@ -3,13 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.customer_migration.population_reconciliation import (
     CustomerPopulationReconciliationError,
     customer_population_reconciliation_service,
 )
-from app.database.session import get_database_session
+from app.database.session import AsyncSessionFactory, get_database_session
 from app.platform.idempotency.errors import reliability_http_error
 from app.platform.idempotency.reliability import MutationReliabilityError
 from app.platform.permissions.authorization import AuthorizationContext
@@ -30,6 +30,16 @@ CustomerManager = Annotated[
 IdempotencyKey = Annotated[
     str,
     Header(alias="Idempotency-Key", min_length=8, max_length=160),
+]
+
+
+def get_population_session_factory() -> async_sessionmaker[AsyncSession]:
+    return AsyncSessionFactory
+
+
+PopulationSessionFactory = Annotated[
+    async_sessionmaker[AsyncSession],
+    Depends(get_population_session_factory),
 ]
 
 
@@ -59,6 +69,24 @@ class PopulationRefreshResponse(StrictSchema):
     evidence_digest: str
     completed_at: str
     customer_admission_performed: Literal[False] = False
+
+
+class CleanMajorityAdmissionRequest(StrictSchema):
+    source_system: Literal["housecall_pro"] = "housecall_pro"
+    limit: int = 5000
+
+
+class CleanMajorityAdmissionResponse(StrictSchema):
+    classification: Literal["CUSTOMER_CLEAN_MAJORITY_ADMITTED"]
+    source_system: Literal["housecall_pro"]
+    selected: int
+    admitted: int
+    replayed: int
+    quarantined: int
+    remaining_unexplained: int
+    before_evidence_digest: str
+    after_evidence_digest: str
+    customer_admission_performed: Literal[True] = True
 
 
 def reconciliation_error() -> HTTPException:
@@ -113,4 +141,39 @@ async def refresh_customer_population(
         ),
         evidence_digest=run.evidence_digest,
         completed_at=run.completed_at.isoformat(),
+    )
+
+
+@router.post(
+    "/admit-clean-majority",
+    response_model=CleanMajorityAdmissionResponse,
+)
+async def admit_customer_clean_majority(
+    data: CleanMajorityAdmissionRequest,
+    context: CustomerManager,
+    factory: PopulationSessionFactory,
+    response: Response,
+) -> CleanMajorityAdmissionResponse:
+    """Admit exact safe HCP identities and quarantine only failed records."""
+
+    try:
+        result = await customer_population_reconciliation_service.admit_clean_majority(
+            factory,
+            context=context,
+            source_system=data.source_system,
+            limit=data.limit,
+        )
+    except CustomerPopulationReconciliationError as error:
+        raise reconciliation_error() from error
+    response.headers["Cache-Control"] = "private, no-store"
+    return CleanMajorityAdmissionResponse(
+        classification="CUSTOMER_CLEAN_MAJORITY_ADMITTED",
+        source_system="housecall_pro",
+        selected=result.selected,
+        admitted=result.admitted,
+        replayed=result.replayed,
+        quarantined=result.quarantined,
+        remaining_unexplained=result.remaining_unexplained,
+        before_evidence_digest=result.before_digest,
+        after_evidence_digest=result.after_digest,
     )

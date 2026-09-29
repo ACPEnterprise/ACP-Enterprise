@@ -18,7 +18,7 @@ describe("PrimaryNavigation", () => {
 
   it("retains accessible names when collapsed", () => {
     render(<MemoryRouter><PrimaryNavigation groups={navigationGroups} collapsed /></MemoryRouter>);
-    expect(screen.getByRole("link", { name: "Command Center" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Command Center" })).toHaveAttribute("href", "/command-center");
     expect(screen.getByRole("link", { name: "Mission Control" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Customers" })).toBeInTheDocument();
     expect(screen.getByLabelText("Settings, Coming Soon")).toBeInTheDocument();

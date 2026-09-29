@@ -11,10 +11,10 @@ API represented a prospect before Customer creation or required the next CSR
 action.
 
 Pipeline reuses those authorities by identity. It does not duplicate Customer,
-Job, Appointment, Estimate, assignment, or communication state. Existing
-Customer read/manage permissions govern this first CRM increment, preserving
-the established CSR and owner/admin role boundary without a parallel grant
-system.
+Job, Appointment, Estimate, assignment, or communication state. Dedicated
+Pipeline permissions govern read, creation, lifecycle updates, assignment, and
+conversion through the current launch-role matrix. FIELD_TECH receives no
+Pipeline authority.
 
 ## Canonical contract
 
@@ -24,6 +24,12 @@ Lead source is attribution and never determines whether the opportunity is a
 Lead. Active lifecycle stages retain owner, last action, next action, due time,
 and contact attempts. Every mutation emits append-only Lead history; lifecycle
 changes also emit Business Event and audit evidence.
+
+Links to Estimate authority use canonical `estimate_proposals`; Pipeline has no
+dependency on the legacy migration-compatibility Estimate table. `lead_source`
+is bounded operational source evidence, not Marketing's future multi-touch
+attribution authority. Marketing can reference the stable Lead identity later
+without replacing Pipeline state.
 
 The lifecycle is:
 

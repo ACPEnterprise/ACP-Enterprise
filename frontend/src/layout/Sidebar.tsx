@@ -7,6 +7,7 @@ import { navigationGroups } from "./navigation";
 import { PrimaryNavigation } from "./PrimaryNavigation";
 import { useAdministrationAccess } from "../features/administration/hooks";
 import { useEffectivePermissions } from "../auth/usePermissions";
+import { isFieldTechnicianProfile } from "../auth/authorizationProfiles";
 
 interface SidebarProps {
   readonly brand: BrandConfiguration;
@@ -27,6 +28,8 @@ export function Sidebar({
 }: SidebarProps) {
   const administrationAccess = useAdministrationAccess();
   const permissions = useEffectivePermissions();
+  const fieldTechnician = isFieldTechnicianProfile(permissions);
+  const fieldNavigationIds = new Set(["technician", "my-schedule", "workday", "my-jobs"]);
   const visibleGroups = navigationGroups.map((group) => ({
     ...group,
     items: group.items.filter((item) => {
@@ -34,9 +37,13 @@ export function Sidebar({
       const requiredPermission = "requiredPermission" in item
         ? item.requiredPermission
         : undefined;
-      return !requiredPermission || permissions.has(requiredPermission);
+      return (
+        (!fieldTechnician || fieldNavigationIds.has(item.id)) &&
+        (!requiredPermission || permissions.has(requiredPermission))
+      );
     }),
-  }));
+  }))
+    .filter((group) => group.items.length > 0);
   return (
     <aside
       aria-label={mobile ? "Mobile application navigation" : "Application navigation"}

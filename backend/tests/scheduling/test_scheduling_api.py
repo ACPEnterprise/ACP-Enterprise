@@ -16,13 +16,17 @@ from app.events.models import BusinessEvent
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.platform.audit.models import AuditRecord
 from app.platform.auth.models import AuthenticationSession
 from app.platform.auth.services import access_token_service, utc_now
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
-from app.platform.permissions.codes import SchedulingPermission
+from app.platform.permissions.codes import (
+    AdministrationPermission,
+    SchedulingPermission,
+)
 from app.platform.permissions.models import (
     MembershipRole,
     Permission,
@@ -32,6 +36,7 @@ from app.platform.permissions.models import (
 from app.platform.users.models import User, UserCredential
 from app.scheduling.errors import (
     SchedulingCapacityError,
+    SchedulingCapacityFailure,
     SchedulingError,
     SchedulingValidationError,
     SchedulingVersionConflictError,
@@ -262,14 +267,20 @@ async def scheduling_api() -> AsyncIterator[SchedulingApiFixture]:
             (
                 await session.scalars(
                     select(Permission).where(
-                        Permission.code.in_(SchedulingPermission.ALL)
+                        Permission.code.in_(
+                            (
+                                *SchedulingPermission.ALL,
+                                AdministrationPermission.COMPANY_ADMINISTER,
+                            )
+                        )
                     )
                 )
             ).all()
         )
-        assert {permission.code for permission in canonical_permissions} == set(
-            SchedulingPermission.ALL
-        )
+        assert {permission.code for permission in canonical_permissions} == {
+            *SchedulingPermission.ALL,
+            AdministrationPermission.COMPANY_ADMINISTER,
+        }
         user, auth_session = await _add_actor(
             session,
             company=company,
@@ -442,6 +453,156 @@ async def _get(
             path,
             params=params,
             headers=_headers(fixture, token=token),
+        )
+
+
+async def _put(
+    fixture: SchedulingApiFixture,
+    path: str,
+    payload: Mapping[str, object],
+    *,
+    token: str | None,
+) -> httpx.Response:
+    transport = httpx.ASGITransport(app=fixture.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.put(
+            path,
+            json=payload,
+            headers=_headers(fixture, token=token),
+        )
+
+
+@pytest.mark.asyncio
+async def test_company_admin_configures_versioned_branch_scheduling_policy(
+    scheduling_api: SchedulingApiFixture,
+) -> None:
+    path = f"/api/v1/scheduling/branches/{scheduling_api.branch_id}/policy"
+    current = await _get(scheduling_api, path, token=scheduling_api.token)
+    assert current.status_code == 200
+    assert current.json()["readiness"] == "SCHEDULING_READY"
+
+    payload = {
+        "expected_version": current.json()["version"],
+        "timezone": "America/New_York",
+        "active": True,
+        "booking_horizon_days": 120,
+        "minimum_notice_minutes": 30,
+        "slot_interval_minutes": 15,
+        "default_capacity_units": "3.00",
+        "weekly_intervals": [
+            {
+                "day_of_week": scheduling_api.start.astimezone(
+                    ZoneInfo("America/New_York")
+                ).weekday(),
+                "start_minute": 480,
+                "end_minute": 1020,
+                "capacity_units": "3.00",
+            }
+        ],
+        "exceptions": [
+            {
+                "exception_date": "2027-01-01",
+                "start_minute": None,
+                "end_minute": None,
+                "is_closed": True,
+                "capacity_units": None,
+                "reason_code": "HOLIDAY",
+            }
+        ],
+        "reason": "Owner confirmed Branch policy",
+    }
+    invalid_timezone = await _put(
+        scheduling_api,
+        path,
+        {**payload, "timezone": "Not/A_Timezone"},
+        token=scheduling_api.token,
+    )
+    assert invalid_timezone.status_code == 422
+    updated = await _put(scheduling_api, path, payload, token=scheduling_api.token)
+    assert updated.status_code == 200
+    assert updated.json()["version"] == current.json()["version"] + 1
+    assert updated.json()["booking_horizon_days"] == 120
+    assert updated.json()["weekly_intervals"] == payload["weekly_intervals"]
+    assert updated.json()["readiness"] == "SCHEDULING_READY"
+
+    appointment = await _post(
+        scheduling_api,
+        "/api/v1/scheduling/appointments",
+        _create_payload(scheduling_api, capacity="3.00"),
+        token=scheduling_api.token,
+    )
+    assert appointment.status_code == 201
+
+    stale = await _put(scheduling_api, path, payload, token=scheduling_api.token)
+    denied = await _put(
+        scheduling_api, path, payload, token=scheduling_api.denied_token
+    )
+    wrong_branch = await _put(
+        scheduling_api,
+        f"/api/v1/scheduling/branches/{scheduling_api.unauthorized_branch_id}/policy",
+        payload,
+        token=scheduling_api.token,
+    )
+    assert stale.status_code == 409
+    assert denied.status_code == 403
+    assert wrong_branch.status_code == 404
+
+    async with scheduling_api.factory() as session:
+        events = list(
+            (
+                await session.scalars(
+                    select(BusinessEvent).where(
+                        BusinessEvent.company_id == scheduling_api.company_id,
+                        BusinessEvent.event_type
+                        == EventType.BRANCH_SCHEDULING_POLICY_CONFIGURED.value,
+                    )
+                )
+            ).all()
+        )
+        audits = list(
+            (
+                await session.scalars(
+                    select(AuditRecord).where(
+                        AuditRecord.company_id == scheduling_api.company_id,
+                        AuditRecord.action == "branch_scheduling_policy.configure",
+                    )
+                )
+            ).all()
+        )
+    assert len(events) == 1
+    assert len(audits) == 1
+    assert audits[0].actor_user_id is not None
+
+
+def test_branch_scheduling_policy_rejects_overlapping_intervals() -> None:
+    from app.scheduling.schemas import BranchSchedulingPolicyWrite
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="cannot overlap"):
+        BranchSchedulingPolicyWrite.model_validate(
+            {
+                "active": True,
+                "timezone": "America/New_York",
+                "booking_horizon_days": 120,
+                "minimum_notice_minutes": 0,
+                "slot_interval_minutes": 30,
+                "default_capacity_units": "2.00",
+                "weekly_intervals": [
+                    {
+                        "day_of_week": 0,
+                        "start_minute": 480,
+                        "end_minute": 720,
+                        "capacity_units": "2.00",
+                    },
+                    {
+                        "day_of_week": 0,
+                        "start_minute": 600,
+                        "end_minute": 900,
+                        "capacity_units": "2.00",
+                    },
+                ],
+                "reason": "Owner configured policy",
+            }
         )
 
 
@@ -887,10 +1048,10 @@ async def test_create_conceals_tenant_and_branch_references(
             "RETRY_AFTER_REFRESH",
         ),
         (
-            SchedulingCapacityError("capacity"),
+            SchedulingCapacityError(SchedulingCapacityFailure.CAPACITY_EXHAUSTED),
             409,
-            "concurrency_conflict",
-            "RETRY_AFTER_REFRESH",
+            "scheduling_capacity_exhausted",
+            "USER_CORRECTION_REQUIRED",
         ),
         (
             SchedulingValidationError("invalid"),
@@ -915,6 +1076,44 @@ def test_scheduling_failures_use_safe_recovery_contract(
     assert detail["code"] == code
     assert detail["recovery"] == recovery
     assert detail["correlation_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("failure", "code", "recovery"),
+    [
+        (
+            "calendar_missing",
+            "scheduling_calendar_missing",
+            "OWNER_ADMIN_ACTION_REQUIRED",
+        ),
+        (
+            "calendar_unavailable",
+            "scheduling_calendar_unavailable",
+            "RECONCILIATION_REQUIRED",
+        ),
+        ("calendar_closed", "scheduling_calendar_closed", "USER_CORRECTION_REQUIRED"),
+        (
+            "interval_unavailable",
+            "scheduling_interval_unavailable",
+            "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            "capacity_exhausted",
+            "scheduling_capacity_exhausted",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_capacity_failures_preserve_safe_operator_reason(
+    failure: str, code: str, recovery: str
+) -> None:
+    translated = translate_scheduling_error(
+        SchedulingCapacityError(SchedulingCapacityFailure(failure))
+    )
+    assert translated.status_code == 409
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == recovery
+    assert translated.detail["message"]
 
 
 @pytest.mark.asyncio

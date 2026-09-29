@@ -60,7 +60,9 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 
 router = APIRouter(prefix="/api/v1/technician", tags=["Technician Field Service"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
-Read = Annotated[AuthorizationContext, Depends(require_permission(JobPermission.READ))]
+Read = Annotated[
+    AuthorizationContext, Depends(require_permission(JobPermission.EXECUTE))
+]
 Execute = Annotated[
     AuthorizationContext, Depends(require_permission(JobPermission.EXECUTE))
 ]
@@ -165,7 +167,9 @@ async def job_estimate(
 async def completed_history(
     context: Read,
     session: Session,
-    days: Annotated[int, Query(ge=1, le=90)] = 30,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> FieldHistoryProjection:
     # Bounds are enforced here so no client can turn this into Company history.
@@ -173,7 +177,9 @@ async def completed_history(
         return await mobile_field_context.history(
             session,
             context=context,
-            days=days,
+            start_date=start_date,
+            end_date=end_date,
+            query=q,
             limit=limit,
         )
     except FieldServiceError as error:
