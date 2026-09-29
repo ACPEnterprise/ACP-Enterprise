@@ -245,3 +245,14 @@ def test_economics_projection_is_reference_only_and_carries_coverage() -> None:
 def test_assignment_supports_append_only_supersession() -> None:
     assert "supersedes_assignment_id" in MarketingAttributionAssignment.__table__.c
     assert "request_digest" in MarketingAttributionAssignment.__table__.c
+
+
+def test_manual_confirmation_replay_identity_is_company_scoped() -> None:
+    """The assignment identity is the durable replay/duplicate guard."""
+    columns = MarketingAttributionAssignment.__table__.c
+    assert "company_id" in columns
+    assert "idempotency_key" in columns
+    assert any(
+        constraint.name == "uq_marketing_attribution_idempotency"
+        for constraint in MarketingAttributionAssignment.__table__.constraints
+    )
