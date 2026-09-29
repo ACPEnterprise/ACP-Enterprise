@@ -74,3 +74,10 @@ export async function getGoogleAdsOwnerWorkspace() {
     reconciliation: reconciliation.data,
   };
 }
+
+export async function beginGoogleAdsAuthorization(): Promise<string> {
+  const response = await apiClient.post<{ authorization_url: string }>(
+    "/api/v1/marketing/google-ads/oauth/authorize",
+  );
+  return response.data.authorization_url;
+}

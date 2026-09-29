@@ -1,9 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, ExternalLink, RefreshCw, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 
 import { getOperatorApiError } from "../api/errors";
-import { getGoogleAdsOwnerWorkspace } from "../api/marketing";
+import { beginGoogleAdsAuthorization, getGoogleAdsOwnerWorkspace } from "../api/marketing";
 import { useAuth } from "../auth";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Select, Spinner } from "../ui";
 
@@ -22,6 +22,10 @@ export function MarketingProviderConnectionsRoute() {
   const workspace = useQuery({ queryKey: ["marketing", "google-ads", "owner-workspace", activeCompany?.id], queryFn: getGoogleAdsOwnerWorkspace, enabled: Boolean(activeCompany) });
   const error = workspace.isError ? getOperatorApiError(workspace.error, "Google Ads provider connection") : null;
   const data = workspace.data;
+  const connect = useMutation({
+    mutationFn: beginGoogleAdsAuthorization,
+    onSuccess: (authorizationUrl) => window.location.assign(authorizationUrl),
+  });
   return <div className="space-y-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="text-sm font-medium text-action-primary">Marketing · Provider Connections</p><h2 className="mt-1 text-2xl font-bold sm:text-3xl">Google Ads</h2><p className="mt-2 max-w-3xl text-content-muted">Connect one owner-selected account for read-only evidence ingestion. TwelveHats cannot change campaigns, budgets, bids, targeting, keywords, ads, or websites.</p></div>
@@ -31,7 +35,7 @@ export function MarketingProviderConnectionsRoute() {
     {error && <Alert variant="danger" title={error.title}>{error.message}</Alert>}
     {data && <>
       <section className="grid gap-4 lg:grid-cols-2">
-        <Card><CardHeader><CardTitle>Connection status</CardTitle><CardDescription>Beta environment: {data.readiness.environment}</CardDescription></CardHeader><CardContent className="space-y-4"><div className="flex items-center gap-2"><Badge variant={data.readiness.connection_status === "connected" ? "success" : "warning"}>{label(data.readiness.connection_status)}</Badge><span className="text-sm text-content-muted">{data.readiness.bound_account_count} bound account(s)</span></div>{data.readiness.connected_at && <p className="text-sm">Authorized {new Date(data.readiness.connected_at).toLocaleString()}</p>}<Button disabled><ExternalLink size={16}/>Connect Google Ads</Button><Alert variant="warning">Connection remains locked until the Beta release supplies the OAuth callback and platform secret-provider runtime. No authorization request has been started.</Alert></CardContent></Card>
+        <Card><CardHeader><CardTitle>Connection status</CardTitle><CardDescription>Beta environment: {data.readiness.environment}</CardDescription></CardHeader><CardContent className="space-y-4"><div className="flex items-center gap-2"><Badge variant={data.readiness.connection_status === "connected" ? "success" : "warning"}>{label(data.readiness.connection_status)}</Badge><span className="text-sm text-content-muted">{data.readiness.bound_account_count} bound account(s)</span></div>{data.readiness.connected_at && <p className="text-sm">Authorized {new Date(data.readiness.connected_at).toLocaleString()}</p>}<Button disabled={!data.readiness.authorization_available || connect.isPending} onClick={() => connect.mutate()}><ExternalLink size={16}/>{connect.isPending ? "Preparing secure connection…" : "Connect Google Ads"}</Button>{!data.readiness.authorization_available && <Alert variant="warning">Connection remains locked until every Beta runtime readiness check passes. No authorization request has been started.</Alert>}{connect.isError && <Alert variant="danger">The authorization request could not be prepared. No Google connection was created.</Alert>}</CardContent></Card>
         <Card><CardHeader><CardTitle>Configuration readiness</CardTitle><CardDescription>Only readiness booleans are exposed; secret names and values never reach this page.</CardDescription></CardHeader><CardContent><ul className="space-y-3">{readinessRows(data.readiness).map(([name, ready]) => <li className="flex items-center justify-between gap-3" key={name}><span>{name}</span>{ready ? <Badge variant="success"><CheckCircle2 size={14}/>Ready</Badge> : <Badge variant="warning"><CircleDashed size={14}/>Required</Badge>}</li>)}</ul></CardContent></Card>
       </section>
       <Card><CardHeader><CardTitle>Owner connection workflow</CardTitle><CardDescription>Authorization and discovery are separate from account binding. Accessible accounts are never selected automatically.</CardDescription></CardHeader><CardContent><ol className="grid gap-3 md:grid-cols-5">{["Authorize with Google", "Review exact accessible accounts", "Select All County and map its Branch", "Confirm read-only ingestion and history", "Sync, reconcile, and review coverage"].map((step, index) => <li className="rounded-lg border border-stroke p-3" key={step}><span className="text-xs font-semibold text-content-muted">STEP {index + 1}</span><p className="mt-1 font-medium">{step}</p></li>)}</ol></CardContent></Card>

@@ -220,8 +220,13 @@ def test_only_manual_confirmation_is_exposed_as_marketing_mutation() -> None:
     assert mutations == {
         ("POST", "/api/v1/marketing/attributions/manual-confirmation"),
         ("POST", "/api/v1/marketing/google-ads/account-bindings"),
+        ("POST", "/api/v1/marketing/google-ads/oauth/authorize"),
     }
-    assert all("provider" not in path for _, path in mutations)
+    assert not any(
+        word in path
+        for _, path in mutations
+        for word in ("campaigns", "budgets", "bids", "targeting", "keywords")
+    )
 
 
 def test_economics_projection_is_reference_only_and_carries_coverage() -> None:

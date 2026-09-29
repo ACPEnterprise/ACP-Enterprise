@@ -1588,6 +1588,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "marketing",
+      "mechanism": "short-lived single-use signed OAuth state with no provider or business mutation",
+      "method": "POST",
+      "operation_id": "google_ads_oauth_authorize_api_v1_marketing_google_ads_oauth_authorize_post",
+      "path": "/api/v1/marketing/google-ads/oauth/authorize",
+      "reason": "Initiation creates only expiring anti-CSRF state and returns an authorization URL; it cannot bind an account, ingest evidence, or mutate Google Ads.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "engineering",
       "mechanism": "domain-owned deterministic evidence/receipt identity",
@@ -3385,6 +3395,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "d99de67d98266be57c34c9a5c55eeb34f2fb487e2b3626e6e479f59ecc340b52",
+  "fingerprint": "948015925f21f783dfb0b85d0a9a1beed1de188b607bfd90e5fab36f89c9de4e",
   "schema_version": "1"
 }
