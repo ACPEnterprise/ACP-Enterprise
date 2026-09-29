@@ -97,3 +97,20 @@ export interface BranchSchedulingPolicyInput {
   exceptions: BranchSchedulingException[];
   reason: string;
 }
+
+export interface BranchCalendarTechnician {
+  employee_id: string;
+  employee_number: string;
+  display_name: string;
+  job_title: string | null;
+  readiness: "AVAILABLE" | "UNAVAILABLE" | "READINESS_BLOCKED";
+  readiness_reasons: string[];
+  availability_confidence: string;
+}
+
+export interface BranchCalendarRoster {
+  branch_id: string;
+  window_start_at: string;
+  window_end_at: string;
+  technicians: BranchCalendarTechnician[];
+}

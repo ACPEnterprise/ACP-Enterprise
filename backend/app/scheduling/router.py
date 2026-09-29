@@ -1,4 +1,4 @@
-from typing import Annotated, TypeVar
+from typing import Annotated, Literal, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -34,6 +34,8 @@ from app.scheduling.schemas import (
     AppointmentRescheduleRequest,
     AppointmentResponse,
     AppointmentSummary,
+    BranchCalendarRoster,
+    BranchCalendarTechnician,
     BranchSchedulingPolicyResponse,
     BranchSchedulingPolicyWrite,
     CalendarQueryResult,
@@ -45,6 +47,8 @@ from app.scheduling.service import (
     scheduling_service,
 )
 from app.scheduling.types import AppointmentCancellationReason, AppointmentStatus
+from app.workforce.query import WorkforceEligibilityQuery
+from app.workforce.query_service import workforce_eligibility_service
 
 router = APIRouter(prefix="/api/v1/scheduling", tags=["Scheduling"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -63,6 +67,70 @@ SchedulingAdministrationContext = Annotated[
 AppointmentResponseType = TypeVar(
     "AppointmentResponseType", AppointmentDetail, AppointmentSummary
 )
+
+
+@router.get(
+    "/branches/{branch_id}/calendar-roster",
+    response_model=BranchCalendarRoster,
+    summary="Read the effective Branch technician roster for a calendar window",
+)
+async def branch_calendar_roster(
+    branch_id: UUID,
+    start_at: Annotated[AwareDatetime, Query()],
+    end_at: Annotated[AwareDatetime, Query()],
+    context: SchedulingReadContext,
+    session: DatabaseSession,
+) -> BranchCalendarRoster:
+    if not context.can_access_branch(branch_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Branch was not found.")
+    if end_at <= start_at:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Calendar window is invalid."
+        )
+    rows = await workforce_eligibility_service.eligible_technicians(
+        session,
+        context=context,
+        query=WorkforceEligibilityQuery(
+            company_id=context.company.id,
+            authorized_branch_ids=context.authorized_branch_ids,
+            branch_id=branch_id,
+            window_start_at=start_at,
+            window_end_at=end_at,
+        ),
+    )
+    technicians = []
+    for row in rows:
+        if "technician_role_missing" in row.reasons or "wrong_branch" in row.reasons:
+            continue
+        blocking = tuple(
+            reason
+            for reason in row.reasons
+            if reason not in {"unavailable", "conflicting_assignment"}
+        )
+        readiness: Literal["AVAILABLE", "UNAVAILABLE", "READINESS_BLOCKED"] = (
+            "READINESS_BLOCKED"
+            if blocking
+            else "UNAVAILABLE"
+            if "unavailable" in row.reasons
+            else "AVAILABLE"
+        )
+        technicians.append(
+            BranchCalendarTechnician(
+                employee_id=row.employee_id,
+                employee_number=row.employee_number,
+                display_name=row.display_name,
+                job_title=row.job_title,
+                readiness=readiness,
+                readiness_reasons=row.reasons,
+                availability_confidence=row.availability_confidence,
+            )
+        )
+    return BranchCalendarRoster(
+        branch_id=branch_id,
+        window_start_at=start_at,
+        window_end_at=end_at,
+        technicians=tuple(technicians),
+    )
 
 
 def translate_scheduling_error(error: SchedulingError) -> HTTPException:

@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
 import {
+  useBranchCalendarRoster,
+  useBranchSchedulingPolicy,
   useAppointments,
   useRescheduleAppointment,
 } from "../hooks/useScheduling";
@@ -32,6 +34,7 @@ const appointment = {
   status: "scheduled",
   arrival_window_start_at: "2026-08-13T13:00:00Z",
   arrival_window_end_at: "2026-08-13T15:00:00Z",
+  capacity_units: null,
 };
 const expectedLocalInput = (value: string) => {
   const date = new Date(value);
@@ -62,6 +65,29 @@ describe("SchedulingRoute", () => {
       isError: false,
       isSuccess: false,
       mutate: rescheduleMutate,
+    } as never);
+    vi.mocked(useBranchSchedulingPolicy).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        branch_id: "branch-1",
+        timezone: "America/New_York",
+        status: "ACTIVE",
+        readiness: "SCHEDULING_READY",
+        blockers: [],
+        version: 1,
+        booking_horizon_days: 365,
+        minimum_notice_minutes: 0,
+        slot_interval_minutes: 15,
+        default_capacity_units: "2.00",
+        weekly_intervals: Array.from({ length: 7 }, (_, day_of_week) => ({ day_of_week, start_minute: 420, end_minute: 1140, capacity_units: "2.00" })),
+        exceptions: [],
+      },
+    } as never);
+    vi.mocked(useBranchCalendarRoster).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { branch_id: "branch-1", window_start_at: "2026-08-13T00:00:00Z", window_end_at: "2026-08-14T00:00:00Z", technicians: [] },
     } as never);
   });
 
@@ -234,7 +260,7 @@ describe("SchedulingRoute", () => {
     );
   });
 
-  it("reports a truthful empty day", () => {
+  it("keeps the roster calendar visible on a truthful empty day", () => {
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -245,9 +271,25 @@ describe("SchedulingRoute", () => {
         <SchedulingRoute />
       </MemoryRouter>,
     );
-    expect(
-      screen.getByRole("heading", { name: "No scheduled appointments" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
+    expect(screen.getByText(/available technician lanes remain visible/i)).toBeVisible();
+  });
+
+  it("blocks a normal calendar when Branch Scheduling setup is required", () => {
+    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 100 } } as never);
+    vi.mocked(useBranchSchedulingPolicy).mockReturnValue({ isLoading: false, isError: false, data: { readiness: "SCHEDULING_SETUP_REQUIRED", blockers: ["NO_ACTIVE_CALENDAR"] } } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getByText("SCHEDULING SETUP REQUIRED")).toBeVisible();
+    expect(screen.getByRole("link", { name: /Administration.*Branch Scheduling Setup/i })).toHaveAttribute("href", "/administration");
+    expect(screen.queryByRole("region", { name: "Day calendar" })).not.toBeInTheDocument();
+  });
+
+  it("shows Branch roster technicians even when they have zero Appointments", () => {
+    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 100 } } as never);
+    vi.mocked(useBranchCalendarRoster).mockReturnValue({ isLoading: false, isError: false, data: { technicians: [{ employee_id: "employee-michael", employee_number: "E-1", display_name: "Michael Brian", job_title: "Technician", readiness: "AVAILABLE", readiness_reasons: [], availability_confidence: "branch_schedule" }] } } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getAllByText("Michael Brian").some((item) => item.tagName === "DIV")).toBe(true);
+    expect(screen.getByText("Available roster")).toBeVisible();
   });
 
   it("exposes CSR booking only with Customer read plus Scheduling and Job manage authority", () => {
@@ -293,6 +335,19 @@ describe("SchedulingRoute", () => {
     expect(screen.getByRole("region", { name: "Week calendar" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous week" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Next week" })).toBeVisible();
+  });
+
+  it("renders a technician-lane Week grid with open capacity and multi-day Job visits", async () => {
+    const nextVisit = { ...appointment, id: "appointment-2", appointment_number: "APT-000002", arrival_window_start_at: "2026-08-14T13:00:00Z", arrival_window_end_at: "2026-08-14T15:00:00Z" };
+    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [appointment, nextVisit], total_count: 2, page: 1, page_size: 100 } } as never);
+    vi.mocked(useBranchCalendarRoster).mockReturnValue({ isLoading: false, isError: false, data: { technicians: [{ employee_id: "employee-alex", employee_number: "E-1", display_name: "Alex Technician", job_title: null, readiness: "AVAILABLE", readiness_reasons: [], availability_confidence: "branch_schedule" }] } } as never);
+    vi.mocked(useDispatchBoard).mockReturnValue({ isLoading: false, isError: false, data: { total_count: 2, items: [appointment, nextVisit].map((item) => ({ appointment_id: item.id, appointment_number: item.appointment_number, job_id: "job-multi", branch_id: "branch-1", status: "scheduled", window_start_at: item.arrival_window_start_at, window_end_at: item.arrival_window_end_at, assignment: { id: `assignment-${item.id}`, appointment_id: item.id, appointment_number: item.appointment_number, job_id: "job-multi", company_id: "company-1", branch_id: "branch-1", primary_employee_id: "employee-alex", primary_employee_name: "Alex Technician", status: "assigned", arrival_state: "pending", active_exception_code: null, assignment_reason: "scheduled", window_start_at: item.arrival_window_start_at, window_end_at: item.arrival_window_end_at, effective_at: item.arrival_window_start_at, released_at: null, version: 1, crew_members: [] } })) } } as never);
+    render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}><SchedulingRoute /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Week" }));
+    const week = screen.getByRole("region", { name: "Week calendar" });
+    expect(within(week).getByText("Alex Technician")).toBeVisible();
+    expect(within(week).getAllByText("Continuation")).toHaveLength(2);
+    expect(within(week).getAllByText("Open capacity").length).toBeGreaterThan(0);
   });
 
   it("projects the same appointments across Work Week, Month, and Dispatch", async () => {
@@ -400,6 +455,7 @@ describe("SchedulingRoute", () => {
     expect(
       screen.getAllByText("Customer context unavailable").at(-1),
     ).toBeVisible();
+    expect(screen.getByText("Imported schedule without capacity reservation")).toBeVisible();
     await userEvent.clear(screen.getByLabelText("New start"));
     await userEvent.type(
       screen.getByLabelText("New start"),
@@ -676,8 +732,12 @@ describe("SchedulingRoute", () => {
             window_start_at: appointment.arrival_window_start_at,
             window_end_at: appointment.arrival_window_end_at,
             assignment: {
+              id: "assignment-1",
+              primary_employee_id: "employee-alex",
               primary_employee_name: "Alex Technician",
+              status: "assigned",
               arrival_state: "en_route",
+              crew_members: [],
             },
           },
           {
@@ -707,7 +767,7 @@ describe("SchedulingRoute", () => {
       screen.getAllByText("Unassigned").some((item) => item.tagName === "DIV"),
     ).toBe(true);
     expect(
-      screen.getByText(/not verified technician availability/i),
+      screen.getByText(/lane labels disclose roster availability authority/i),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: /APT-000001.*EN ROUTE/i }),
