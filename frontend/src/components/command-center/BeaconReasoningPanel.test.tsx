@@ -9,6 +9,7 @@ const recommendation: ActiveBeaconRecommendation = {
   recommendation_id: "11111111-1111-4111-8111-111111111111",
   definition_id: "evidence_gap.branch_scheduling_policy",
   definition_version: 1,
+  root_issue_key: "branch-scheduling:branch-1",
   kind: "EVIDENCE_GAP",
   title: "Main Branch scheduling policy is incomplete",
   measured_fact: "Main Branch has no scheduling calendar.",
@@ -19,9 +20,19 @@ const recommendation: ActiveBeaconRecommendation = {
   coverage: "One authorized Branch",
   confidence: "HIGH",
   limitations: ["No financial impact is inferred."],
+  affected_capabilities: ["Scheduling", "Dispatch"],
+  decisions_blocked: ["Scheduling capacity"],
   priority_window: "TODAY",
   priority_score: 80,
   priority_reason: "Owner configuration is required.",
+  priority_factors: [
+    {
+      factor: "operational_blocker",
+      available: true,
+      contribution: 30,
+      explanation: "Scheduling is blocked.",
+    },
+  ],
   improves_if_resolved: "Dispatch capacity becomes evaluable.",
   drilldown_path:
     "/administration#branch-scheduling-setup",
@@ -34,6 +45,7 @@ const recommendation: ActiveBeaconRecommendation = {
       as_of: "2026-09-29T12:00:00Z",
     },
   ],
+  related_recommendations: [],
   expires_at: "2026-09-29T12:15:00Z",
 };
 
@@ -55,6 +67,12 @@ describe("BeaconReasoningPanel", () => {
     expect(screen.getByText("Interpretation")).toBeInTheDocument();
     expect(screen.getByText("Recommended human action")).toBeInTheDocument();
     expect(screen.getByText(/Coverage: One authorized Branch/)).toBeInTheDocument();
+    expect(screen.getByText(/Scheduling capacity/)).toBeInTheDocument();
+    expect(screen.getByText(/Scheduling, Dispatch/)).toBeInTheDocument();
+    expect(screen.getByText(/operational blocker/i)).toBeInTheDocument();
+    expect(screen.getByText("Scheduling is blocked.").closest("li")).toHaveTextContent(
+      "+30",
+    );
     expect(
       screen.getByRole("link", {
         name: "Administration → Branch Scheduling Setup",

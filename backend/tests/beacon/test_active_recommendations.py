@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -44,6 +45,12 @@ def test_reasoner_separates_scheduling_fact_interpretation_and_human_action() ->
     )
     assert item.priority_window == "TODAY"
     assert item.action_destination == "Administration → Branch Scheduling Setup"
+    assert item.priority_score == sum(
+        factor.contribution for factor in item.priority_factors
+    )
+    assert next(
+        factor for factor in item.priority_factors if factor.factor == "economic_materiality"
+    ).available is False
 
 
 def test_reasoner_uses_exact_customer_population_run_without_identity_inference() -> (
@@ -90,6 +97,7 @@ def test_reasoner_preserves_canonical_luminary_gap_and_limitations() -> None:
                 ("No burden policy is accepted.",),
                 ("Complete Payroll readiness inputs.",),
                 "b" * 64,
+                "d" * 64,
                 "2026-09-01",
                 "2026-09-28",
                 NOW,
@@ -104,6 +112,10 @@ def test_reasoner_preserves_canonical_luminary_gap_and_limitations() -> None:
     assert item.recommended_human_action == "Complete Payroll readiness inputs."
     assert item.confidence == "40% (Luminary canonical confidence)"
     assert item.limitations == ("No burden policy is accepted.",)
+    assert item.decisions_blocked == (
+        "Economic interpretation",
+        "Owner economic decision",
+    )
 
 
 def test_measured_luminary_finding_recommends_investigation_not_employment_action() -> (
@@ -125,6 +137,7 @@ def test_measured_luminary_finding_recommends_investigation_not_employment_actio
                 ("Correlation is not causation.",),
                 ("Review the supporting Job evidence.",),
                 "c" * 64,
+                "e" * 64,
                 "2026-09-01",
                 "2026-09-28",
                 NOW,
@@ -141,6 +154,59 @@ def test_measured_luminary_finding_recommends_investigation_not_employment_actio
     assert "terminate" not in combined
     assert "discipline" not in combined
     assert "demote" not in combined
+
+
+def test_related_findings_group_only_on_explicit_shared_root_key() -> None:
+    first = LuminaryFindingFact(
+        UUID("44444444-4444-4444-8444-444444444444"),
+        None,
+        "insufficient_evidence",
+        "missing_evidence",
+        "Payroll burden missing",
+        "Employer burden is unavailable.",
+        "Break-even is blocked.",
+        40,
+        "partial",
+        "current",
+        ("Burden policy unavailable.",),
+        ("Complete Payroll readiness.",),
+        "a" * 64,
+        "f" * 64,
+        "2026-09-01",
+        "2026-09-28",
+        NOW,
+    )
+    related_fact = replace(
+        first,
+        finding_id=UUID("55555555-5555-4555-8555-555555555555"),
+        title="Technician burden unavailable",
+        summary="Technician burden cannot be measured.",
+        finding_digest="b" * 64,
+        finding_identity="payroll-technician-burden",
+    )
+    separate_fact = replace(
+        first,
+        finding_id=UUID("66666666-6666-4666-8666-666666666666"),
+        title="Separate source gap",
+        finding_digest="c" * 64,
+        finding_identity="separate-source-gap",
+    )
+
+    ungrouped = ActiveRecommendationReasoner().reason(
+        luminary=(first, related_fact, separate_fact),
+        evaluated_at=NOW,
+    )
+    primary, related, separate = ungrouped
+    grouped_items = ActiveRecommendationReasoner._group(
+        [primary, replace(related, root_issue_key=primary.root_issue_key), separate]
+    )
+
+    assert len(grouped_items) == 2
+    grouped = next(item for item in grouped_items if item.related_recommendations)
+    assert len(grouped.related_recommendations) == 1
+    assert len(grouped.evidence) == 2
+    assert grouped.priority_factors[-1].factor == "root_condition_breadth"
+    assert "canonical root-condition key" in grouped.priority_reason
 
 
 def test_recommendation_identity_order_and_digest_are_deterministic() -> None:

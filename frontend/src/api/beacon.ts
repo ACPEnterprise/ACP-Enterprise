@@ -211,6 +211,7 @@ export interface ActiveBeaconRecommendation {
   recommendation_id: string;
   definition_id: string;
   definition_version: number;
+  root_issue_key: string;
   kind: "EVIDENCE_GAP" | "MEASURED_FINDING";
   title: string;
   measured_fact: string;
@@ -221,9 +222,17 @@ export interface ActiveBeaconRecommendation {
   coverage: string;
   confidence: string;
   limitations: string[];
+  affected_capabilities: string[];
+  decisions_blocked: string[];
   priority_window: "NOW" | "TODAY" | "THIS_WEEK" | "WATCH";
   priority_score: number;
   priority_reason: string;
+  priority_factors: Array<{
+    factor: string;
+    available: boolean;
+    contribution: number;
+    explanation: string;
+  }>;
   improves_if_resolved: string;
   drilldown_path: string;
   action_destination: string;
@@ -232,6 +241,13 @@ export interface ActiveBeaconRecommendation {
     entity_id: string;
     digest: string | null;
     as_of: string;
+  }>;
+  related_recommendations: Array<{
+    recommendation_id: string;
+    title: string;
+    measured_fact: string;
+    interpretation: string;
+    evidence_digest: string | null;
   }>;
   expires_at: string;
 }

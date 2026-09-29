@@ -81,10 +81,16 @@ def workspace(*, quality: str = "complete") -> dict[str, object]:
             "current": {
                 "revenue_minor": 300_000,
                 "contribution_minor": 115_000,
+                "labor_minor": 90_000,
+                "materials_minor": 80_000,
+                "other_direct_cost_minor": 15_000,
             },
             "prior": {
                 "revenue_minor": 280_000,
                 "contribution_minor": 110_000,
+                "labor_minor": 82_000,
+                "materials_minor": 78_000,
+                "other_direct_cost_minor": 10_000,
             },
             "revenue_change_minor": 20_000,
             "contribution_change_minor": 5_000,
@@ -234,6 +240,74 @@ def test_complete_health_has_no_fabricated_burden_gap() -> None:
     }
     assert reasoning["ranked_evidence_gaps"] == []
     assert reasoning["highest_value_next_action"] is None
+
+
+def test_driver_analysis_quantifies_materiality_without_claiming_cause() -> None:
+    drivers = project(workspace())["driver_analysis"]
+    assert drivers["state"] == "AVAILABLE"
+    observations = {item["metric"]: item for item in drivers["observed_changes"]}
+    assert observations["revenue_production"]["change"] == 20_000
+    assert observations["revenue_production"]["change_basis_points_of_prior"] == 714
+    assert observations["economic_contribution"]["change"] == 5_000
+    assert observations["job_variable_cost"]["change"] == 15_000
+    assert observations["material_cost_per_job"]["change"] == 2_000
+    assert observations["job_count"]["current"] == 1
+    measured = drivers["measured_drivers"]
+    assert measured[0] == {
+        "component": "revenue_production",
+        "classification": "MEASURED_DRIVER",
+        "contribution_effect_minor": 20_000,
+        "materiality_basis": "absolute_arithmetic_contribution_effect",
+        "causality": "UNPROVEN",
+    }
+    assert drivers["unproven_causes"][0]["classification"] == "UNPROVEN_CAUSE"
+    assert drivers["cash_health"]["ar_and_collections_included"] is False
+
+
+def test_driver_analysis_fails_closed_without_comparable_periods() -> None:
+    value = workspace()
+    value["comparison"] = {
+        "state": "unavailable",
+        "reason": "Prior equal-period evidence is incomplete.",
+    }
+    drivers = project(value)["driver_analysis"]
+    assert drivers["state"] == "UNAVAILABLE"
+    assert drivers["reason"] == "Prior equal-period evidence is incomplete."
+    assert drivers["observed_changes"] == []
+    assert drivers["measured_drivers"] == []
+
+
+def test_gap_ranking_uses_authoritative_population_value_not_missing_value() -> None:
+    value = workspace()
+    value["native_evidence"] = {
+        "jobs": [
+            {
+                "job_id": "job-a",
+                "job_number": "J-100",
+                "job_status": "completed",
+                "customer_id": "customer-a",
+                "customer_name": "Fixture Customer",
+                "branch_id": str(BRANCH),
+                "branch_name": "Main",
+                "service_category": "drain",
+                "invoiced_revenue_minor": 100_000,
+                "accepted_worked_seconds": 3_600,
+                "material_quantity_evidence_count": 1,
+                "material_cost_minor": None,
+                "references": [],
+            }
+        ]
+    }
+    reasoning = project(value)["active_reasoning"]
+    material = next(
+        item
+        for item in reasoning["ranked_evidence_gaps"]
+        if item["gap"] == "actual_material_valuation"
+    )
+    assert material["affected_authoritative_revenue_minor"] == 100_000
+    assert "estimated_missing_value_minor" not in material
+    assert material["normal_workflow_available"] is True
+    assert material["evidence_freshness"] == "complete"
 
 
 def test_equal_period_delta_is_exactly_decomposed_without_causal_claim() -> None:

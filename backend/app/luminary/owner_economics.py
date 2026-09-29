@@ -823,12 +823,30 @@ def _active_economic_reasoning(
     )
 
     candidates: list[dict[str, object]] = []
+    job_by_id = {str(item.get("job_id")): item for item in jobs}
     for item in job_queue:
         gap = str(item.get("prerequisite"))
         guidance = _GAP_GUIDANCE.get(gap)
         if guidance is None:
             continue
         affected_job_count = item.get("affected_job_count")
+        affected_job_ids = item.get("affected_job_ids")
+        bounded_ids = (
+            [str(value) for value in affected_job_ids]
+            if isinstance(affected_job_ids, list)
+            else []
+        )
+        revenue_population = [
+            job_by_id[job_id].get("invoiced_revenue_minor")
+            for job_id in bounded_ids
+            if job_id in job_by_id
+        ]
+        affected_revenue = (
+            sum(cast(int, value) for value in revenue_population)
+            if revenue_population
+            and all(isinstance(value, int) for value in revenue_population)
+            else None
+        )
         candidates.append(
             {
                 "gap": gap,
@@ -842,6 +860,7 @@ def _active_economic_reasoning(
                 "affected_job_count": affected_job_count
                 if isinstance(affected_job_count, int)
                 else 0,
+                "affected_authoritative_revenue_minor": affected_revenue,
                 "affected_calculations": ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
                 "expected_source": guidance["source"],
                 "responsible_party": guidance["party"],
@@ -849,6 +868,11 @@ def _active_economic_reasoning(
                 "ui_path_label": guidance["path_label"],
                 "why_it_matters": guidance["why"],
                 "unlocks": guidance["unlocks"],
+                "evidence_freshness": str(
+                    workspace.get("quality_state", "unavailable")
+                ),
+                "normal_workflow_available": bool(guidance["path"]),
+                "owner_decision_dependency": guidance["party"] == "OWNER",
             }
         )
     missing_burden = health_burden.get("missing_components")
@@ -865,6 +889,7 @@ def _active_economic_reasoning(
                     "decision_impact": "BLOCKS_AUTHORITATIVE_BREAK_EVEN",
                     "priority_tier": 3,
                     "affected_job_count": None,
+                    "affected_authoritative_revenue_minor": None,
                     "affected_calculations": [
                         "REQUIRED_ECONOMIC_BURDEN",
                         "ECONOMIC_HEALTH",
@@ -875,6 +900,11 @@ def _active_economic_reasoning(
                     "ui_path_label": guidance["path_label"],
                     "why_it_matters": guidance["why"],
                     "unlocks": guidance["unlocks"],
+                    "evidence_freshness": str(
+                        workspace.get("quality_state", "unavailable")
+                    ),
+                    "normal_workflow_available": bool(guidance["path"]),
+                    "owner_decision_dependency": guidance["party"] == "OWNER",
                 }
             )
     ordered = sorted(
@@ -882,6 +912,8 @@ def _active_economic_reasoning(
         key=lambda item: (
             cast(int, item["priority_tier"]),
             -cast(int, item["affected_job_count"] or 0),
+            -cast(int, item["affected_authoritative_revenue_minor"] or 0),
+            not cast(bool, item["normal_workflow_available"]),
             str(item["gap"]),
         ),
     )
@@ -941,6 +973,227 @@ def _active_economic_reasoning(
             "interpretation": "arithmetic effect on contribution when complete",
             "possible_driver": "a measured component worth investigating",
             "unproven_cause": "no causal conclusion without owning-domain evidence",
+        },
+    }
+
+
+def _safe_change_basis_points(current: object, prior: object) -> int | None:
+    if not isinstance(current, int) or not isinstance(prior, int) or prior == 0:
+        return None
+    return (current - prior) * 10_000 // abs(prior)
+
+
+def _driver_analysis(
+    workspace: dict[str, object],
+    active_reasoning: dict[str, object],
+    owner_health: dict[str, object],
+) -> dict[str, object]:
+    """Describe exact period movement while retaining the causality boundary."""
+    comparison = _mapping(workspace.get("comparison"))
+    current = _mapping(comparison.get("current"))
+    prior = _mapping(comparison.get("prior"))
+    references = _mapping(comparison.get("evidence_references"))
+    current_refs = _rows(references.get("current"))
+    prior_refs = _rows(references.get("prior"))
+    if comparison.get("state") != "available":
+        return {
+            "state": "UNAVAILABLE",
+            "reason": comparison.get("reason")
+            or "Both equal periods need complete comparable admitted Economics evidence.",
+            "observed_changes": [],
+            "measured_drivers": [],
+            "possible_drivers": [],
+            "unproven_causes": [],
+            "unknown_components": [
+                item.get("gap")
+                for item in cast(
+                    list[dict[str, object]],
+                    active_reasoning.get("ranked_evidence_gaps", []),
+                )
+            ],
+        }
+
+    currency = workspace.get("currency")
+    current_job_count = len(current_refs)
+    prior_job_count = len(prior_refs)
+    current_revenue = current.get("revenue_minor")
+    prior_revenue = prior.get("revenue_minor")
+    current_material = current.get("materials_minor")
+    prior_material = prior.get("materials_minor")
+    current_variable = (
+        sum(
+            cast(int, current[key])
+            for key in ("labor_minor", "materials_minor", "other_direct_cost_minor")
+        )
+        if all(
+            isinstance(current.get(key), int)
+            for key in ("labor_minor", "materials_minor", "other_direct_cost_minor")
+        )
+        else None
+    )
+    prior_variable = (
+        sum(
+            cast(int, prior[key])
+            for key in ("labor_minor", "materials_minor", "other_direct_cost_minor")
+        )
+        if all(
+            isinstance(prior.get(key), int)
+            for key in ("labor_minor", "materials_minor", "other_direct_cost_minor")
+        )
+        else None
+    )
+    observations: list[dict[str, object]] = []
+
+    def add_change(
+        metric: str,
+        current_value: int | None,
+        prior_value: int | None,
+        *,
+        unit: str = "minor_currency",
+    ) -> None:
+        if current_value is None or prior_value is None:
+            return
+        observations.append(
+            {
+                "metric": metric,
+                "classification": "OBSERVED_CHANGE",
+                "current": current_value,
+                "prior": prior_value,
+                "change": current_value - prior_value,
+                "change_basis_points_of_prior": _safe_change_basis_points(
+                    current_value, prior_value
+                ),
+                "unit": unit,
+                "currency": currency if unit == "minor_currency" else None,
+            }
+        )
+
+    add_change(
+        "revenue_production",
+        cast(int, current_revenue) if isinstance(current_revenue, int) else None,
+        cast(int, prior_revenue) if isinstance(prior_revenue, int) else None,
+    )
+    add_change("job_count", current_job_count, prior_job_count, unit="count")
+    add_change(
+        "average_produced_revenue_per_job",
+        cast(int, current_revenue) // current_job_count
+        if isinstance(current_revenue, int) and current_job_count
+        else None,
+        cast(int, prior_revenue) // prior_job_count
+        if isinstance(prior_revenue, int) and prior_job_count
+        else None,
+    )
+    add_change(
+        "economic_contribution",
+        cast(int, current.get("contribution_minor"))
+        if isinstance(current.get("contribution_minor"), int)
+        else None,
+        cast(int, prior.get("contribution_minor"))
+        if isinstance(prior.get("contribution_minor"), int)
+        else None,
+    )
+    add_change("job_variable_cost", current_variable, prior_variable)
+    add_change(
+        "direct_labor_cost",
+        cast(int, current.get("labor_minor"))
+        if isinstance(current.get("labor_minor"), int)
+        else None,
+        cast(int, prior.get("labor_minor"))
+        if isinstance(prior.get("labor_minor"), int)
+        else None,
+    )
+    add_change(
+        "direct_material_cost",
+        cast(int, current_material) if isinstance(current_material, int) else None,
+        cast(int, prior_material) if isinstance(prior_material, int) else None,
+    )
+    add_change(
+        "material_cost_per_job",
+        cast(int, current_material) // current_job_count
+        if isinstance(current_material, int) and current_job_count
+        else None,
+        cast(int, prior_material) // prior_job_count
+        if isinstance(prior_material, int) and prior_job_count
+        else None,
+    )
+    component_effects = {
+        "revenue_production": comparison.get("revenue_change_minor"),
+        "direct_labor_cost": (
+            -cast(int, comparison["labor_change_minor"])
+            if isinstance(comparison.get("labor_change_minor"), int)
+            else None
+        ),
+        "direct_material_cost": (
+            -cast(int, comparison["materials_change_minor"])
+            if isinstance(comparison.get("materials_change_minor"), int)
+            else None
+        ),
+        "other_direct_cost": (
+            -cast(int, comparison["other_direct_cost_change_minor"])
+            if isinstance(comparison.get("other_direct_cost_change_minor"), int)
+            else None
+        ),
+    }
+    measured_drivers = sorted(
+        [
+            {
+                "component": key,
+                "classification": "MEASURED_DRIVER",
+                "contribution_effect_minor": value,
+                "materiality_basis": "absolute_arithmetic_contribution_effect",
+                "causality": "UNPROVEN",
+            }
+            for key, value in component_effects.items()
+            if isinstance(value, int)
+        ],
+        key=lambda item: (
+            -abs(cast(int, item["contribution_effect_minor"])),
+            str(item["component"]),
+        ),
+    )
+    unknown = [
+        str(item.get("gap"))
+        for item in cast(
+            list[dict[str, object]],
+            active_reasoning.get("ranked_evidence_gaps", []),
+        )
+    ]
+    health = _mapping(owner_health.get("economic_health"))
+    health_value = health.get("value_basis_points")
+    return {
+        "state": "AVAILABLE",
+        "observed_changes": observations,
+        "measured_drivers": measured_drivers,
+        "possible_drivers": [
+            {
+                "driver": "job_mix",
+                "classification": "POSSIBLE_DRIVER",
+                "reason": "Job count or average produced revenue changed; service-mix evidence must be inspected before attributing cause.",
+            }
+        ]
+        if current_job_count != prior_job_count
+        else [],
+        "unproven_causes": [
+            {
+                "cause": "why_measured_components_changed",
+                "classification": "UNPROVEN_CAUSE",
+                "reason": "Arithmetic period movement does not establish customer, Employee, marketing, pricing, or operational causation.",
+            }
+        ],
+        "unknown_components": unknown,
+        "economic_health": {
+            "value_basis_points": health_value,
+            "distance_from_break_even_basis_points": (
+                cast(int, health_value) - 10_000
+                if isinstance(health_value, int)
+                else None
+            ),
+        },
+        "evidence_coverage": active_reasoning.get("contribution"),
+        "cash_health": {
+            "state": "SEPARATE_AUTHORITY",
+            "ar_and_collections_included": False,
+            "reason": "AR and collections belong to Cash Health and are not used to explain Economic Health.",
         },
     }
 
@@ -1267,6 +1520,12 @@ def project_owner_economics(
     service_line_economics = _service_line_economics(job_economics)
     owner_health = _owner_health_snapshot(workspace)
     evidence_priority_queue = _evidence_priority_queue(job_economics)
+    active_reasoning = _active_economic_reasoning(
+        workspace,
+        job_economics,
+        owner_health,
+        evidence_priority_queue,
+    )
     packet: dict[str, object] = {
         "contract_version": CONTRACT_VERSION,
         "engine_version": ENGINE_VERSION,
@@ -1280,12 +1539,8 @@ def project_owner_economics(
         "job_economics": job_economics,
         "service_line_economics": service_line_economics,
         "owner_health": owner_health,
-        "active_reasoning": _active_economic_reasoning(
-            workspace,
-            job_economics,
-            owner_health,
-            evidence_priority_queue,
-        ),
+        "active_reasoning": active_reasoning,
+        "driver_analysis": _driver_analysis(workspace, active_reasoning, owner_health),
         "evidence_priority_queue": evidence_priority_queue,
         "owner_question_answers": _owner_question_answers(
             job_economics, service_line_economics
@@ -1363,6 +1618,11 @@ def project_owner_economics(
         "beacon_boundary": "references existing conditions only; Beacon retains lifecycle ownership",
         "lia_boundary": "Luminary owns economics truth; LIA may present this packet conversationally and cannot mutate it",
         "mutation_authority": "none",
+        "revision_semantics": {
+            "current_evaluation": "recomputed_from_current_admitted_evidence_on_each_request",
+            "historical_findings": "preserved_by_luminary_finding_and_briefing_lineage",
+            "stale_current_evidence": "labeled_and_never_silently_promoted",
+        },
         "generated_at": generated_at.isoformat(),
     }
     packet["packet_digest"] = _digest(packet)
