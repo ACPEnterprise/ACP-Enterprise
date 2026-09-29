@@ -133,6 +133,38 @@ def test_fact_projection_is_deterministic_scoped_and_source_labeled() -> None:
     assert revenue["evidence_references"]
 
 
+def test_owner_health_uses_only_same_period_admitted_economics() -> None:
+    value = workspace()
+    value["fully_allocated_available"] = True
+    totals = value["totals"]
+    assert isinstance(totals, dict)
+    totals["overhead"] = 100_000
+    result = project(value)["owner_health"]
+    assert result["revenue_production"] == {
+        "value_minor": 300_000,
+        "classification": "MEASURED",
+        "basis": "earned_revenue",
+        "currency": "USD",
+        "limitation": None,
+    }
+    assert result["economic_contribution"]["value_minor"] == 115_000
+    assert result["required_economic_burden"]["classification"] == "AUTHORITATIVE"
+    assert result["economic_health"]["value_basis_points"] == 11_500
+    assert result["economic_health"]["status"] == "ABOVE_BREAK_EVEN"
+    assert result["cash_health"]["separate_from_economic_health"] is True
+
+
+def test_owner_health_keeps_missing_burden_and_health_unavailable() -> None:
+    result = project(workspace())["owner_health"]
+    assert result["economic_contribution"]["classification"] == "MEASURED"
+    assert result["required_economic_burden"]["value_minor"] is None
+    assert (
+        "owner_compensation" in result["required_economic_burden"]["missing_components"]
+    )
+    assert result["economic_health"]["status"] == "UNAVAILABLE"
+    assert result["economic_health"]["value_basis_points"] is None
+
+
 def test_equal_period_delta_is_exactly_decomposed_without_causal_claim() -> None:
     delta = project(workspace())["delta_explanation"]
     assert delta["state"] == "EXPLAINED"
