@@ -97,6 +97,36 @@ export function schedulingMutationRecovery(
       retryLabel: null,
     };
   }
+  const policyValidation = {
+    scheduling_invalid_timezone: [
+      "Branch timezone requires correction",
+      "The Branch scheduling timezone is invalid. An authorized administrator must correct Branch Scheduling Setup before booking.",
+    ],
+    scheduling_minimum_notice: [
+      "Inside minimum-notice window",
+      "The planned start is too soon for the configured Branch minimum notice. Choose a start after that boundary.",
+    ],
+    scheduling_booking_horizon: [
+      "Beyond booking horizon",
+      "The planned start is beyond the configured Branch booking horizon. Choose a date within the allowed horizon.",
+    ],
+    scheduling_cross_day: [
+      "Work interval crosses the Branch day",
+      "The arrival window or expected duration crosses into another Branch calendar day. Keep this visit within one operating day.",
+    ],
+    scheduling_slot_alignment: [
+      "Start time does not match booking intervals",
+      "The planned start must align with the Branch booking interval. Choose a start shown by the configured schedule.",
+    ],
+    scheduling_invalid_window: [
+      "Arrival window is invalid",
+      "The arrival-window end must be after its start.",
+    ],
+  } as const;
+  if (code && code in policyValidation) {
+    const [title, message] = policyValidation[code as keyof typeof policyValidation];
+    return { state: "FAILED", title, message, retryLabel: null };
+  }
   if (code === "resource_state_conflict") {
     return {
       state: "FAILED_REQUIRES_REFRESH",
