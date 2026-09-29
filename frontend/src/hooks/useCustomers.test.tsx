@@ -81,6 +81,7 @@ describe("useCustomerMutations activity consistency", () => {
     const client = new QueryClient({
       defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
     });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -96,6 +97,7 @@ describe("useCustomerMutations activity consistency", () => {
     expect(refresh.mock.calls[1]?.[0]).toBe(refresh.mock.calls[0]?.[0]);
     expect(refresh).toHaveBeenNthCalledWith(1, expect.any(String), "branch-1");
     expect(refresh).toHaveBeenNthCalledWith(2, expect.any(String), "branch-1");
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
   it("invalidates detail, roster, and paginated timeline after a Customer event", async () => {
