@@ -1,7 +1,7 @@
 """Google Ads read-only ingestion authority.
 
 Revision ID: rg7c9e1f3i5k7
-Revises: qf6b8d0e2h4j6
+Revises: q7s9u1w3y5a7
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "rg7c9e1f3i5k7"
-down_revision: str | Sequence[str] | None = "qf6b8d0e2h4j6"
+down_revision: str | Sequence[str] | None = "q7s9u1w3y5a7"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
