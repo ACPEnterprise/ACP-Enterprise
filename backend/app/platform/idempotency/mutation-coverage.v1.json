@@ -886,6 +886,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "customers",
+      "mechanism": "Company-scoped exact provider identity, disposition row locks, deterministic admission digest, and replay-safe Customer/source lineage",
+      "method": "POST",
+      "operation_id": "admit_customer_clean_majority_api_v1_customer_migration_population_admit_clean_majority_post",
+      "path": "/api/v1/customer-migration/population/admit-clean-majority",
+      "reason": "Clean-majority admission admits only exact provider identities, quarantines conflicts, and identical replay creates no duplicate Customer authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "customers",
       "mechanism": "optional Platform transactional receipt; headerless legacy compatibility remains",
@@ -3307,6 +3317,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "3360dc83e175cd18422fcf72d81f7119f362d3c5f972452e18e201871c6cd919",
+  "fingerprint": "74ef7e87382dbc07d252e9809e0dca402162bd18c771ecc17b39311ff6511db9",
   "schema_version": "1"
 }
