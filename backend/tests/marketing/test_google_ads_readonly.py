@@ -95,7 +95,10 @@ def test_routes_expose_no_google_provider_mutation_except_owner_binding() -> Non
         for method in getattr(route, "methods", set())
         if "google-ads" in route.path and method not in {"GET", "HEAD", "OPTIONS"}
     }
-    assert mutations == {("POST", "/api/v1/marketing/google-ads/account-bindings")}
+    assert mutations == {
+        ("POST", "/api/v1/marketing/google-ads/account-bindings"),
+        ("POST", "/api/v1/marketing/google-ads/oauth/authorize"),
+    }
     assert not any(
         f"/{word}" in path
         for _, path in mutations
@@ -236,7 +239,11 @@ def test_migration_lineage_and_append_only_contract() -> None:
     assert "marketing_reject_append_only_mutation" in migration
 
 
-def test_no_live_google_client_dependency_or_endpoint() -> None:
+def test_no_google_sdk_or_provider_mutation_endpoint() -> None:
     requirements = Path("requirements.txt").read_text().lower()
     assert "google-ads" not in requirements
-    assert not any("oauth" in route.path for route in router.routes)
+    assert not any(
+        word in route.path
+        for route in router.routes
+        for word in ("campaigns", "budgets", "bids", "keywords", "targeting")
+    )
