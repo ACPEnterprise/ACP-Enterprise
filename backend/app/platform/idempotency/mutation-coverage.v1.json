@@ -3378,13 +3378,24 @@
       "path": "/api/v1/marketing/attributions/manual-confirmation",
       "reason": "Exact replay returns the existing attribution; corrections append a superseding assignment and contradictory key reuse fails closed.",
       "replay_evidence": [
-        "marketing_attribution_assignments.idempotency_key",
-        "marketing_attribution_assignments.request_digest",
-        "marketing_attribution_assignments.supersedes_assignment_id"
+        "tests/marketing/test_marketing_foundation.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "marketing",
+      "mechanism": "Unique Company/provider-account/Branch owner binding",
+      "method": "POST",
+      "operation_id": "bind_google_ads_account_api_v1_marketing_google_ads_account_bindings_post",
+      "path": "/api/v1/marketing/google-ads/account-bindings",
+      "reason": "An explicitly selected Google Ads account is bound once per Company and Branch; duplicate submission fails closed.",
+      "replay_evidence": [
+        "tests/marketing/test_google_ads_readonly.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2ec5311fbab6cae0d571086e243d950d92974ada6c22cb9a9a1338574dd36323",
+  "fingerprint": "f9f2358d28f392418a3c80dabc890baaa8e1b48f72b740961b730ea4c782d435",
   "schema_version": "1"
 }
