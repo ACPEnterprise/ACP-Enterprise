@@ -116,6 +116,49 @@ export function BeaconReasoningPanel({
                             </dd>
                           </div>
                         </dl>
+                        {recommendation.related_recommendations.length > 0 && (
+                          <div className="mt-4 rounded-md border border-stroke bg-surface p-3">
+                            <p className="text-sm font-semibold text-content">
+                              Related evidence under this root issue
+                            </p>
+                            <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-content-muted">
+                              {recommendation.related_recommendations.map((related) => (
+                                <li key={related.recommendation_id}>
+                                  <span className="font-medium text-content">
+                                    {related.title}:
+                                  </span>{" "}
+                                  {related.measured_fact}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div className="mt-4">
+                          <p className="text-sm font-semibold text-content">
+                            Priority factors
+                          </p>
+                          <ul className="mt-2 space-y-2 text-sm text-content-muted">
+                            {recommendation.priority_factors.map((factor) => (
+                              <li key={factor.factor}>
+                                <span className="font-medium capitalize text-content">
+                                  {factor.factor.replaceAll("_", " ")}
+                                </span>{" "}
+                                · {factor.available ? `+${factor.contribution}` : "not available"}
+                                <span className="block text-xs">{factor.explanation}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="mt-4 text-sm text-content-muted">
+                          <p>
+                            <span className="font-semibold text-content">Decisions blocked:</span>{" "}
+                            {recommendation.decisions_blocked.join(", ") || "None asserted"}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-content">What it unlocks:</span>{" "}
+                            {recommendation.affected_capabilities.join(", ")}
+                          </p>
+                        </div>
                         <div className="mt-4 rounded-md border border-stroke p-3 text-xs text-content-muted">
                           <p>{recommendation.source_authority}</p>
                           <p>Coverage: {recommendation.coverage}</p>
