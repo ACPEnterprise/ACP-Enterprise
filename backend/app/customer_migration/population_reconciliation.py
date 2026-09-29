@@ -872,6 +872,7 @@ class CustomerPopulationReconciliationService:
         )
         # The models intentionally do not expose a bidirectional staging relationship.
         aggregates: list[ReviewedCustomerAggregate] = []
+        invalid_accepted: list[str] = []
         for row in rows:
             if row.disposition != "accepted":
                 continue
@@ -884,12 +885,31 @@ class CustomerPopulationReconciliationService:
                     )
                 ).all()
             )
-            aggregates.append(self._aggregate(row, candidates))
+            try:
+                aggregates.append(self._aggregate(row, candidates))
+            except (CustomerPopulationReconciliationError, ValueError):
+                # A reviewed artifact must still balance to the immutable staged
+                # row count.  Treat an accepted row whose aggregate cannot be
+                # reconstructed as rejected review evidence so an unrelated,
+                # exact provider identity in the same artifact can proceed.  The
+                # population loop records the broken identity as HELD independently
+                # of any safe admission from this artifact.
+                invalid_accepted.append(
+                    row.source_id_sha256
+                    or hashlib.sha256(
+                        str(row.source_identity or row.id).encode()
+                    ).hexdigest()
+                )
         rejected = tuple(
             sorted(
-                row.source_id_sha256
-                for row in rows
-                if row.disposition == "rejected" and row.source_id_sha256
+                {
+                    *invalid_accepted,
+                    *(
+                        row.source_id_sha256
+                        for row in rows
+                        if row.disposition == "rejected" and row.source_id_sha256
+                    ),
+                }
             )
         )
         duplicates = tuple(
