@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     google_ads_oauth_client_reference: str | None = None
     google_ads_developer_token_reference: str | None = None
     google_ads_callback_uri: str | None = None
+    google_ads_runtime_root: str | None = None
     google_ads_live_access_enabled: bool = False
 
     password_min_length: int = 12
@@ -234,11 +235,19 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Google Ads requires environment-scoped opaque secret references"
                 )
+            expected_google_ads_callback = (
+                "https://preview.allcountyhomeservices.com"
+                "/api/v1/marketing/google-ads/oauth/callback"
+            )
+            if self.google_ads_callback_uri != expected_google_ads_callback:
+                raise ValueError("Google Ads requires the exact HTTPS callback URI")
             if (
-                not self.google_ads_callback_uri
-                or not self.google_ads_callback_uri.startswith("https://")
+                not self.google_ads_runtime_root
+                or not Path(self.google_ads_runtime_root).is_absolute()
             ):
-                raise ValueError("Google Ads requires an HTTPS callback URI")
+                raise ValueError(
+                    "Google Ads requires an absolute protected runtime root"
+                )
         if self.qbo_sandbox_enabled:
             expected_callback = (
                 "https://preview.allcountyhomeservices.com"
