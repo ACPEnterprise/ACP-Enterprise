@@ -3385,8 +3385,21 @@
         "marketing_attribution_assignments.supersedes_assignment_id"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "marketing",
+      "mechanism": "Unique Company/provider-account/Branch owner binding",
+      "method": "POST",
+      "operation_id": "bind_google_ads_account_api_v1_marketing_google_ads_account_bindings_post",
+      "path": "/api/v1/marketing/google-ads/account-bindings",
+      "reason": "An explicitly selected Google Ads account is bound once per Company and Branch; duplicate submission fails closed.",
+      "replay_evidence": [
+        "tests/marketing/test_google_ads_readonly.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "7033b1fa576378ee85ee942f3a2caf99d339d0c4f27599d5ae6a8d12635a8eae",
+  "fingerprint": "12219338bd644c9783751a2576b6e878b370bef37deef4c2409c5440b6f8c984",
   "schema_version": "1"
 }

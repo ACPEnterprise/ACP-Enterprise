@@ -89,3 +89,55 @@ class EvidenceCoverageResponse(MarketingSchema):
     coverage_percent: int
     availability: str
     missing_components: tuple[str, ...]
+
+
+class GoogleAdsAccountBindingCreate(MarketingSchema):
+    connection_binding_id: UUID
+    branch_id: UUID
+    external_customer_id: str = Field(pattern=r"^[0-9]{10}$")
+    descriptive_name: str = Field(min_length=1, max_length=200)
+    currency_code: str | None = Field(default=None, min_length=3, max_length=3)
+    time_zone: str | None = Field(default=None, max_length=100)
+    ingestion_enabled: bool = False
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class GoogleAdsAccountBindingResponse(MarketingSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    provider_account_id: UUID
+    connection_binding_id: UUID
+    ingestion_enabled: bool
+    bound_at: datetime
+
+
+class ProviderSyncStatusResponse(MarketingSchema):
+    provider_account_id: UUID
+    status: str
+    requested_start_at: datetime | None
+    requested_end_at: datetime | None
+    record_count: int
+    exception_count: int
+    completed_at: datetime | None
+
+
+class ProviderCoverageResponse(MarketingSchema):
+    provider_account_id: UUID
+    interval_start: datetime
+    interval_end: datetime
+    as_of: datetime
+    attribution_policy_version: str
+    evidence_count: int
+    coverage_percent: int
+    missing_components: list[str]
+    availability: str
+
+
+class ReconciliationFindingResponse(MarketingSchema):
+    id: UUID
+    provider_account_id: UUID
+    kind: str
+    state: str
+    missing_components: list[str]
+    observed_at: datetime
