@@ -84,6 +84,41 @@ vi.mock("../hooks/useLuminary", () => ({
           limitation: "Cash Health is a separate Accounting authority and is not inferred here.",
         },
       },
+      active_reasoning: {
+        contribution: {
+          state: "PARTIAL", value_minor: null,
+          job_population_coverage_basis_points: 0,
+          coverage_basis: "jobs_with_complete_admitted_variable_costs",
+          ready_job_count: 0, job_count: 1,
+        },
+        required_burden: {
+          state: "UNAVAILABLE", value_minor: null, coverage_basis_points: null,
+          coverage_limitation: "Category coverage is not converted to a percentage without category-level authoritative values.",
+        },
+        economic_health: { state: "UNAVAILABLE", status: "UNAVAILABLE", value_basis_points: null },
+        can_conclude: ["Revenue Production at its explicitly labeled authority and basis."],
+        cannot_conclude: ["ACP cannot state whether the business is above or below break-even."],
+        ranked_evidence_gaps: [{
+          rank: 1, gap: "certified_direct_wage_cost", evidence_state: "UNAVAILABLE",
+          decision_impact: "BLOCKS_CONTRIBUTION_AND_HEALTH", priority_tier: 1,
+          affected_job_count: 1, affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
+          expected_source: "Payroll / Business Economics", responsible_party: "OWNER",
+          ui_path: "/payroll", ui_path_label: "Payroll -> First real Payroll readiness",
+          why_it_matters: "Economic Contribution cannot subtract authoritative Job-variable labor cost.",
+          unlocks: "direct labor cost and Job Economic Contribution",
+        }],
+        highest_value_next_action: {
+          rank: 1, gap: "certified_direct_wage_cost", evidence_state: "UNAVAILABLE",
+          decision_impact: "BLOCKS_CONTRIBUTION_AND_HEALTH", priority_tier: 1,
+          affected_job_count: 1, affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
+          expected_source: "Payroll / Business Economics", responsible_party: "OWNER",
+          ui_path: "/payroll", ui_path_label: "Payroll -> First real Payroll readiness",
+          why_it_matters: "Economic Contribution cannot subtract authoritative Job-variable labor cost.",
+          unlocks: "direct labor cost and Job Economic Contribution",
+        },
+        ranking_basis: "Decision dependency first, then affected authoritative Job population; missing values are never estimated.",
+        causality_semantics: {},
+      },
       facts: [
         {
           family: "REVENUE", metric: "invoiced_revenue", value: 12550,
@@ -302,6 +337,10 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("Where the business stands")).toBeVisible();
     expect(screen.getByText("Revenue production")).toBeVisible();
     expect(screen.getByText("Economic health")).toBeVisible();
+    expect(screen.getByText("What this evidence means")).toBeVisible();
+    expect(screen.getByText("Highest-value missing evidence")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Payroll -> First real Payroll readiness" })).toHaveAttribute("href", "/payroll");
+    expect(screen.getByText(/covers 0 of 1 admitted Jobs/)).toBeVisible();
     expect(screen.getByText(/owner compensation · trucks and fixed costs/)).toBeInTheDocument();
     expect(screen.getByText(/Cash Health is a separate Accounting authority/)).toBeInTheDocument();
     expect(screen.getByText("What changed from the prior equal period")).toBeVisible();

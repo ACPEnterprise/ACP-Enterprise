@@ -344,6 +344,64 @@ export function LuminaryRoute() {
                 <p>{ownerEconomics.data.owner_health.cash_health.limitation}</p>
               </details>
             </section>
+            <section aria-labelledby="active-reasoning-title" className="rounded-lg border border-stroke p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="active-reasoning-title">What this evidence means</h3>
+                  <p className="text-sm text-content-muted">
+                    Luminary evaluates the decision boundary without estimating missing values.
+                  </p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                  {words(ownerEconomics.data.active_reasoning.contribution.state)} contribution
+                </span>
+              </div>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-md bg-surface-muted p-3">
+                  <h4 className="text-sm font-semibold">What ACP can conclude</h4>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    {ownerEconomics.data.active_reasoning.can_conclude.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-md bg-surface-muted p-3">
+                  <h4 className="text-sm font-semibold">What remains unknown</h4>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    {ownerEconomics.data.active_reasoning.cannot_conclude.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <p className="mt-3 text-sm">
+                Contribution evidence covers {ownerEconomics.data.active_reasoning.contribution.ready_job_count} of {ownerEconomics.data.active_reasoning.contribution.job_count} admitted Jobs ({(ownerEconomics.data.active_reasoning.contribution.job_population_coverage_basis_points / 100).toFixed(0)}% by Job population).
+              </p>
+              <p className="text-xs text-content-muted">{ownerEconomics.data.active_reasoning.required_burden.coverage_limitation}</p>
+              {ownerEconomics.data.active_reasoning.highest_value_next_action ? (
+                <div className="mt-4 rounded-lg border border-stroke p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Highest-value missing evidence</p>
+                  <p className="font-semibold">{words(ownerEconomics.data.active_reasoning.highest_value_next_action.gap)}</p>
+                  <p className="text-sm text-content-muted">{ownerEconomics.data.active_reasoning.highest_value_next_action.why_it_matters}</p>
+                  <p className="mt-2 text-sm"><span className="font-semibold">Who acts:</span> {words(ownerEconomics.data.active_reasoning.highest_value_next_action.responsible_party)}</p>
+                  <p className="text-sm"><span className="font-semibold">What becomes knowable:</span> {ownerEconomics.data.active_reasoning.highest_value_next_action.unlocks}</p>
+                  {ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path ? (
+                    <Link className="mt-2 inline-block text-sm font-semibold text-action-primary underline" to={ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path}>
+                      {ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path_label}
+                    </Link>
+                  ) : <p className="mt-2 text-sm text-content-muted">{ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path_label}</p>}
+                </div>
+              ) : <p className="mt-3 text-sm text-content-muted">No missing evidence is currently ranked.</p>}
+              <details className="mt-4 text-sm">
+                <summary className="cursor-pointer font-medium">Ranked evidence gaps</summary>
+                <ol className="mt-2 space-y-2">
+                  {ownerEconomics.data.active_reasoning.ranked_evidence_gaps.map((gap) => (
+                    <li className="rounded-md bg-surface-muted p-3" key={gap.gap}>
+                      <p className="font-semibold">{gap.rank}. {words(gap.gap)} · {words(gap.responsible_party)}</p>
+                      <p className="text-content-muted">{gap.why_it_matters}</p>
+                      <p className="text-xs text-content-muted">Impact: {words(gap.decision_impact)} · Source: {gap.expected_source} · Unlocks: {gap.unlocks}</p>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-2 text-xs text-content-muted">{ownerEconomics.data.active_reasoning.ranking_basis}</p>
+              </details>
+            </section>
             <section
               aria-labelledby="period-comparison-title"
               className="rounded-lg border border-stroke p-4"

@@ -674,6 +674,277 @@ def _owner_health_snapshot(workspace: dict[str, object]) -> dict[str, object]:
     }
 
 
+_GAP_GUIDANCE: Final[dict[str, dict[str, str]]] = {
+    "invoiced_revenue": {
+        "why": "Revenue Production cannot be established for the affected Jobs.",
+        "source": "Invoices",
+        "party": "SYSTEM",
+        "path": "/invoices",
+        "path_label": "Invoices",
+        "unlocks": "authoritative invoiced Revenue Production",
+    },
+    "accepted_job_work": {
+        "why": "Job labor duration and the basis for direct labor cost remain incomplete.",
+        "source": "Timekeeping",
+        "party": "OWNER",
+        "path": "/employees",
+        "path_label": "Employees & Time -> Time & Attendance",
+        "unlocks": "accepted Job work and downstream labor-cost evidence",
+    },
+    "certified_direct_wage_cost": {
+        "why": "Economic Contribution cannot subtract authoritative Job-variable labor cost.",
+        "source": "Payroll / Business Economics",
+        "party": "OWNER",
+        "path": "/payroll",
+        "path_label": "Payroll -> First real Payroll readiness",
+        "unlocks": "direct labor cost and Job Economic Contribution",
+    },
+    "actual_material_usage_or_not_applicable_authority": {
+        "why": "ACP cannot tell whether material cost is absent or merely unrecorded for affected Jobs.",
+        "source": "Inventory / Field Operations",
+        "party": "OWNER",
+        "path": "/inventory",
+        "path_label": "Inventory -> Job material evidence",
+        "unlocks": "material completeness for Job contribution",
+    },
+    "actual_material_valuation": {
+        "why": "Used materials cannot be valued as authoritative Job-variable cost.",
+        "source": "Inventory / Purchasing / Accounting",
+        "party": "ACCOUNTANT",
+        "path": "/purchasing",
+        "path_label": "Purchasing -> Material and receipt review",
+        "unlocks": "actual material cost and stronger Job contribution",
+    },
+    "other_direct_cost_completeness": {
+        "why": "Merchant fees, subcontractors, permits, disposal, rentals, or other direct Job costs may be incomplete.",
+        "source": "Accounts Payable / Business Economics",
+        "party": "ACCOUNTANT",
+        "path": "/accounts-payable",
+        "path_label": "Accounts Payable -> Vendor obligation review",
+        "unlocks": "complete other direct cost and Job contribution",
+    },
+    "admitted_direct_contribution": {
+        "why": "All source inputs may exist, but an admitted immutable Economics result is not available.",
+        "source": "Business Economics",
+        "party": "SYSTEM",
+        "path": "/business-economics",
+        "path_label": "Business Economics -> Evidence workspace",
+        "unlocks": "measured Economic Contribution",
+    },
+    "field_capacity_burden": {
+        "why": "Every break-even comparison needs admitted field capacity and employer burden.",
+        "source": "Payroll / Workforce",
+        "party": "ACCOUNTANT",
+        "path": "/payroll",
+        "path_label": "Payroll -> First real Payroll readiness",
+        "unlocks": "field capacity burden within Required Economic Burden",
+    },
+    "office_and_administration": {
+        "why": "Required Economic Burden cannot include office and administrative capacity yet.",
+        "source": "Payroll / Accounting",
+        "party": "OWNER",
+        "path": "/business-economics/administration",
+        "path_label": "Business Economics -> Policy administration",
+        "unlocks": "office and administrative burden",
+    },
+    "owner_compensation": {
+        "why": "Break-even would be understated without the owner's approved compensation burden.",
+        "source": "Payroll / Business Economics policy",
+        "party": "OWNER",
+        "path": "/business-economics/administration",
+        "path_label": "Business Economics -> Policy administration",
+        "unlocks": "owner compensation within Required Economic Burden",
+    },
+    "trucks_and_fixed_costs": {
+        "why": "Required field fleet and fixed operating cost are not admitted for this period.",
+        "source": "Assets / Accounting",
+        "party": "OWNER",
+        "path": "/assets",
+        "path_label": "Assets -> Fleet evidence",
+        "unlocks": "truck and fixed field burden",
+    },
+    "rent_and_utilities": {
+        "why": "Occupancy burden is absent from the authoritative break-even denominator.",
+        "source": "Accounts Payable / Accounting",
+        "party": "ACCOUNTANT",
+        "path": "/accounts-payable",
+        "path_label": "Accounts Payable -> Vendor obligation review",
+        "unlocks": "rent and utility burden",
+    },
+    "insurance_software_and_professional": {
+        "why": "Recurring insurance, software, and professional burden is not complete.",
+        "source": "Accounts Payable / Accounting",
+        "party": "ACCOUNTANT",
+        "path": "/accounts-payable",
+        "path_label": "Accounts Payable -> Vendor obligation review",
+        "unlocks": "recurring insurance, software, and professional burden",
+    },
+    "marketing": {
+        "why": "Economic Health cannot include authoritative marketing burden yet.",
+        "source": "Marketing Economics / Accounting",
+        "party": "PROVIDER",
+        "path": "",
+        "path_label": "Unavailable — no authoritative Marketing input route",
+        "unlocks": "marketing burden and service-acquisition context",
+    },
+    "other_admitted_fixed_or_semi_fixed_burden": {
+        "why": "Other approved fixed or semi-fixed obligations may still be outside the burden pool.",
+        "source": "Accounting / Business Economics policy",
+        "party": "ACCOUNTANT",
+        "path": "/business-economics/administration",
+        "path_label": "Business Economics -> Policy administration",
+        "unlocks": "complete Required Economic Burden",
+    },
+}
+
+
+def _active_economic_reasoning(
+    workspace: dict[str, object],
+    jobs: list[dict[str, object]],
+    owner_health: dict[str, object],
+    job_queue: list[dict[str, object]],
+) -> dict[str, object]:
+    """Interpret admitted completeness without estimating any missing value."""
+    health_contribution = _mapping(owner_health.get("economic_contribution"))
+    health_burden = _mapping(owner_health.get("required_economic_burden"))
+    health = _mapping(owner_health.get("economic_health"))
+    admitted_results = _rows(workspace.get("jobs"))
+    ready_jobs = sum(
+        isinstance(item.get("contribution_minor"), int) for item in admitted_results
+    )
+    job_count = max(len(jobs), len(admitted_results))
+    contribution_coverage = ready_jobs * 10_000 // job_count if job_count else 0
+    contribution_state = (
+        "AUTHORITATIVE"
+        if job_count and ready_jobs == job_count
+        else "PARTIAL"
+        if ready_jobs
+        else "UNAVAILABLE"
+    )
+
+    candidates: list[dict[str, object]] = []
+    for item in job_queue:
+        gap = str(item.get("prerequisite"))
+        guidance = _GAP_GUIDANCE.get(gap)
+        if guidance is None:
+            continue
+        affected_job_count = item.get("affected_job_count")
+        candidates.append(
+            {
+                "gap": gap,
+                "evidence_state": "UNAVAILABLE",
+                "decision_impact": (
+                    "BLOCKS_CONTRIBUTION_AND_HEALTH"
+                    if gap != "admitted_direct_contribution"
+                    else "BLOCKS_MEASURED_CONTRIBUTION"
+                ),
+                "priority_tier": 1 if gap != "admitted_direct_contribution" else 2,
+                "affected_job_count": affected_job_count
+                if isinstance(affected_job_count, int)
+                else 0,
+                "affected_calculations": ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
+                "expected_source": guidance["source"],
+                "responsible_party": guidance["party"],
+                "ui_path": guidance["path"],
+                "ui_path_label": guidance["path_label"],
+                "why_it_matters": guidance["why"],
+                "unlocks": guidance["unlocks"],
+            }
+        )
+    missing_burden = health_burden.get("missing_components")
+    if isinstance(missing_burden, list):
+        for raw_gap in missing_burden:
+            gap = str(raw_gap)
+            guidance = _GAP_GUIDANCE.get(gap)
+            if guidance is None:
+                continue
+            candidates.append(
+                {
+                    "gap": gap,
+                    "evidence_state": "UNAVAILABLE",
+                    "decision_impact": "BLOCKS_AUTHORITATIVE_BREAK_EVEN",
+                    "priority_tier": 3,
+                    "affected_job_count": None,
+                    "affected_calculations": [
+                        "REQUIRED_ECONOMIC_BURDEN",
+                        "ECONOMIC_HEALTH",
+                    ],
+                    "expected_source": guidance["source"],
+                    "responsible_party": guidance["party"],
+                    "ui_path": guidance["path"],
+                    "ui_path_label": guidance["path_label"],
+                    "why_it_matters": guidance["why"],
+                    "unlocks": guidance["unlocks"],
+                }
+            )
+    ordered = sorted(
+        candidates,
+        key=lambda item: (
+            cast(int, item["priority_tier"]),
+            -cast(int, item["affected_job_count"] or 0),
+            str(item["gap"]),
+        ),
+    )
+    for index, item in enumerate(ordered, start=1):
+        item["rank"] = index
+
+    can_conclude = ["Revenue Production at its explicitly labeled authority and basis."]
+    if contribution_state == "AUTHORITATIVE":
+        can_conclude.append(
+            "Economic Contribution for the complete admitted Job population."
+        )
+    elif contribution_state == "PARTIAL":
+        can_conclude.append(
+            "Economic Contribution for only the Jobs with complete admitted variable costs."
+        )
+    if health.get("value_basis_points") is not None:
+        can_conclude.append("Economic Health against the approved same-period burden.")
+    cannot_conclude = []
+    if contribution_state != "AUTHORITATIVE":
+        cannot_conclude.append("Company-wide Economic Contribution remains incomplete.")
+    if health.get("value_basis_points") is None:
+        cannot_conclude.append(
+            "ACP cannot state whether the business is above or below break-even."
+        )
+    cannot_conclude.append(
+        "Observed component movement does not prove an operational cause."
+    )
+    return {
+        "contribution": {
+            "state": contribution_state,
+            "value_minor": health_contribution.get("value_minor")
+            if contribution_state == "AUTHORITATIVE"
+            else None,
+            "job_population_coverage_basis_points": contribution_coverage,
+            "coverage_basis": "jobs_with_complete_admitted_variable_costs",
+            "ready_job_count": ready_jobs,
+            "job_count": job_count,
+        },
+        "required_burden": {
+            "state": health_burden.get("classification", "UNAVAILABLE"),
+            "value_minor": health_burden.get("value_minor"),
+            "coverage_basis_points": None,
+            "coverage_limitation": "Category coverage is not converted to a percentage without category-level authoritative values.",
+        },
+        "economic_health": {
+            "state": health.get("classification", "UNAVAILABLE"),
+            "status": health.get("status", "UNAVAILABLE"),
+            "value_basis_points": health.get("value_basis_points"),
+        },
+        "can_conclude": can_conclude,
+        "cannot_conclude": cannot_conclude,
+        "ranked_evidence_gaps": ordered,
+        "highest_value_next_action": ordered[0] if ordered else None,
+        "ranking_basis": "Decision dependency first, then affected authoritative Job population; missing values are never estimated.",
+        "causality_semantics": {
+            "observed_change": "authoritative equal-period component difference",
+            "interpretation": "arithmetic effect on contribution when complete",
+            "possible_driver": "a measured component worth investigating",
+            "unproven_cause": "no causal conclusion without owning-domain evidence",
+        },
+    }
+
+
 def _delta_explanation(
     workspace: dict[str, object],
     *,
@@ -994,6 +1265,8 @@ def project_owner_economics(
     )
     job_economics = _job_economics(workspace)
     service_line_economics = _service_line_economics(job_economics)
+    owner_health = _owner_health_snapshot(workspace)
+    evidence_priority_queue = _evidence_priority_queue(job_economics)
     packet: dict[str, object] = {
         "contract_version": CONTRACT_VERSION,
         "engine_version": ENGINE_VERSION,
@@ -1006,8 +1279,14 @@ def project_owner_economics(
         "facts": facts,
         "job_economics": job_economics,
         "service_line_economics": service_line_economics,
-        "owner_health": _owner_health_snapshot(workspace),
-        "evidence_priority_queue": _evidence_priority_queue(job_economics),
+        "owner_health": owner_health,
+        "active_reasoning": _active_economic_reasoning(
+            workspace,
+            job_economics,
+            owner_health,
+            evidence_priority_queue,
+        ),
+        "evidence_priority_queue": evidence_priority_queue,
         "owner_question_answers": _owner_question_answers(
             job_economics, service_line_economics
         ),

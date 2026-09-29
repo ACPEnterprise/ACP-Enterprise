@@ -104,6 +104,33 @@ export interface LuminaryOwnerEconomics {
       limitation: string;
     };
   };
+  active_reasoning: {
+    contribution: {
+      state: string;
+      value_minor: number | null;
+      job_population_coverage_basis_points: number;
+      coverage_basis: string;
+      ready_job_count: number;
+      job_count: number;
+    };
+    required_burden: {
+      state: string;
+      value_minor: number | null;
+      coverage_basis_points: number | null;
+      coverage_limitation: string;
+    };
+    economic_health: {
+      state: string;
+      status: string;
+      value_basis_points: number | null;
+    };
+    can_conclude: string[];
+    cannot_conclude: string[];
+    ranked_evidence_gaps: EvidenceGapReasoning[];
+    highest_value_next_action: EvidenceGapReasoning | null;
+    ranking_basis: string;
+    causality_semantics: Record<string, string>;
+  };
   job_economics: Array<{
     job_id: string;
     job_number: string;
@@ -239,6 +266,22 @@ export interface LuminaryOwnerEconomics {
   };
   mutation_authority: "none";
   packet_digest: string;
+}
+
+interface EvidenceGapReasoning {
+  rank: number;
+  gap: string;
+  evidence_state: string;
+  decision_impact: string;
+  priority_tier: number;
+  affected_job_count: number | null;
+  affected_calculations: string[];
+  expected_source: string;
+  responsible_party: "OWNER" | "ACCOUNTANT" | "SYSTEM" | "PROVIDER";
+  ui_path: string;
+  ui_path_label: string;
+  why_it_matters: string;
+  unlocks: string;
 }
 
 type EvidenceClassification = "MEASURED" | "AUTHORITATIVE" | "OWNER_CONFIRMED" | "UNAVAILABLE";
