@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
@@ -121,6 +122,35 @@ def _family_count_response(item: FamilyDispositionCount) -> dict[str, object]:
     }
 
 
+def _sealed_evidence_readiness(authorization: AuthorizationContext) -> dict[str, object]:
+    if (
+        not settings.qbo_production_acp_company_id
+        or settings.qbo_production_acp_company_id != authorization.company.id
+        or not settings.qbo_production_evidence_root
+    ):
+        return {"available": False, "reason": "Production source custody is not configured for this Company."}
+    try:
+        packet = latest_bounded_evidence(Path(settings.qbo_production_evidence_root))
+        if packet is None:
+            return {"available": False, "reason": "No complete sealed QuickBooks acquisition is available."}
+        envelopes = load_bounded_envelopes(packet)
+        families = Counter(envelope.native_entity_type.lower() for _, envelope in envelopes)
+        return {
+            "available": True,
+            "reason": None,
+            "source_run_id": packet.manifest.get("run_id"),
+            "source_manifest_sha256": packet.manifest_sha256,
+            "acquired_at": packet.manifest.get("ended_at"),
+            "total_source_records": len(envelopes),
+            "source_families": [
+                {"source_family": family, "total_source": total}
+                for family, total in sorted(families.items())
+            ],
+        }
+    except (KeyError, OSError, ValueError, BoundedEvidenceError):
+        return {"available": False, "reason": "Sealed QuickBooks evidence failed custody or digest validation."}
+
+
 @router.post(NATIVE_APPLICATION_PATH, name="qbo-native-clean-majority-application")
 async def apply_qbo_native_clean_majority(
     authorization: _Reconcile,
@@ -205,8 +235,24 @@ async def qbo_native_application_ledger(
     counts = await qbo_native_application_service.family_counts(
         factory, context=authorization
     )
+    summary = await qbo_native_application_service.ledger_summary(
+        factory, context=authorization
+    )
     return JSONResponse(
-        content={"families": [_family_count_response(item) for item in counts]},
+        content={
+            "source_evidence": _sealed_evidence_readiness(authorization),
+            "families": [_family_count_response(item) for item in counts],
+            "last_execution": {
+                "total_dispositions": summary.total_dispositions,
+                "last_applied_at": (
+                    summary.last_applied_at.isoformat()
+                    if summary.last_applied_at is not None
+                    else None
+                ),
+            },
+            "qbo_write_performed": False,
+            "accounting_posting_performed": False,
+        },
         headers={"Cache-Control": "private, no-store"},
     )
 

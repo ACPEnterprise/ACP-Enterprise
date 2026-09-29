@@ -7,6 +7,7 @@ import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuar
 import {
   accountsPayableHandle,
   financialReportsHandle,
+  qboMigrationHandle,
   businessEconomicsHandle,
   economicsAdministrationHandle,
   luminaryHandle,
@@ -251,6 +252,11 @@ export const appRoutes: RouteObject[] = [
             path: "financial-reports",
             handle: financialReportsHandle,
             lazy: async () => ({ Component: (await import("../routes/FinancialReportsRoute")).FinancialReportsRoute }),
+          },
+          {
+            path: "accounting/quickbooks-migration",
+            handle: qboMigrationHandle,
+            lazy: async () => ({ Component: (await import("../routes/QboMigrationRoute")).QboMigrationRoute }),
           },
           {
             path: "business-economics",
