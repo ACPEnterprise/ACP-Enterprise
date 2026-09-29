@@ -7,8 +7,10 @@ import { useDispatchBoard } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
 import {
   useAppointments,
+  useBranchSchedulingPolicy,
   useRescheduleAppointment,
 } from "../hooks/useScheduling";
+import { branchLocalInput } from "../components/scheduling/calendarTime";
 import { SchedulingRoute } from "./SchedulingRoute";
 
 let permissions = new Set(["COMPANY_SCHEDULING_READ"]);
@@ -33,11 +35,8 @@ const appointment = {
   arrival_window_start_at: "2026-08-13T13:00:00Z",
   arrival_window_end_at: "2026-08-13T15:00:00Z",
 };
-const expectedLocalInput = (value: string) => {
-  const date = new Date(value);
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
+const expectedLocalInput = (value: string) =>
+  branchLocalInput(value, "America/New_York");
 
 describe("SchedulingRoute", () => {
   beforeEach(() => {
@@ -62,6 +61,22 @@ describe("SchedulingRoute", () => {
       isError: false,
       isSuccess: false,
       mutate: rescheduleMutate,
+    } as never);
+    vi.mocked(useBranchSchedulingPolicy).mockReturnValue({
+      data: {
+        branch_id: "branch-1",
+        timezone: "America/New_York",
+        status: "ACTIVE",
+        readiness: "SCHEDULING_READY",
+        blockers: [],
+        version: 1,
+        booking_horizon_days: 120,
+        minimum_notice_minutes: 0,
+        slot_interval_minutes: 15,
+        default_capacity_units: "5.00",
+        weekly_intervals: [],
+        exceptions: [],
+      },
     } as never);
   });
 
@@ -102,7 +117,7 @@ describe("SchedulingRoute", () => {
 
   it("shows current time on today's Schedule and Dispatch timelines", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 7, 13, 10, 30));
+    vi.setSystemTime(new Date("2026-08-13T14:30:00.000Z"));
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -289,8 +304,15 @@ describe("SchedulingRoute", () => {
         <SchedulingRoute />
       </MemoryRouter>,
     );
+    const date = screen.getByLabelText("Service date");
+    await userEvent.clear(date);
+    await userEvent.type(date, "2026-08-13");
     await userEvent.click(screen.getByRole("button", { name: "Week" }));
     expect(screen.getByRole("region", { name: "Week calendar" })).toBeVisible();
+    expect(screen.getAllByLabelText(/technician lane/)).toHaveLength(7);
+    expect(
+      screen.getByRole("button", { name: /APT-000001.*unassigned/i }),
+    ).toHaveStyle({ top: "120px", height: "120px" });
     expect(screen.getByRole("button", { name: "Previous week" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Next week" })).toBeVisible();
   });
@@ -425,8 +447,8 @@ describe("SchedulingRoute", () => {
     expect(rescheduleMutate).toHaveBeenCalledWith(
       expect.objectContaining({
         input: expect.objectContaining({
-          arrival_window_start_at: new Date("2026-08-14T09:00").toISOString(),
-          arrival_window_end_at: new Date("2026-08-14T12:00").toISOString(),
+          arrival_window_start_at: "2026-08-14T13:00:00.000Z",
+          arrival_window_end_at: "2026-08-14T16:00:00.000Z",
           expected_duration_minutes: 90,
         }),
       }),

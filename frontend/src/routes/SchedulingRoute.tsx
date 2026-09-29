@@ -18,6 +18,14 @@ import { activeDispatchAssignment } from "../components/dispatch/dispatchOperati
 import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
 import { CalendarReadinessCard } from "../components/scheduling/CalendarReadinessCard";
 import {
+  branchInputInstant,
+  branchLocalInput,
+  branchLocalInstant,
+  calendarDateKey,
+  calendarMinute,
+  calendarTimeLabel,
+} from "../components/scheduling/calendarTime";
+import {
   calendarIssues,
   CURRENT_CALENDAR_QUERY_RANGE,
   sortAppointments,
@@ -29,7 +37,6 @@ import {
 } from "../components/scheduling/NeedsSchedulingQueue";
 import { schedulingMutationRecovery } from "../components/scheduling/schedulingRecovery";
 import {
-  dayRange,
   localDateValue,
   moveDate,
   operationalJobStatuses,
@@ -38,6 +45,7 @@ import { useDispatchBoard } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
 import {
   useAppointments,
+  useBranchSchedulingPolicy,
   useRescheduleAppointment,
 } from "../hooks/useScheduling";
 import {
@@ -49,7 +57,11 @@ import {
 } from "../routing/paths";
 import type { DispatchBoardItem } from "../types/dispatch";
 import type { JobListItem, JobPriority, JobStatus } from "../types/jobs";
-import type { AppointmentDetail, AppointmentStatus } from "../types/scheduling";
+import type {
+  AppointmentDetail,
+  AppointmentStatus,
+  BranchSchedulingPolicy,
+} from "../types/scheduling";
 import {
   Alert,
   Badge,
@@ -84,61 +96,48 @@ const views: readonly View[] = [
 ];
 
 const label = (value: string) => value.replaceAll("_", " ");
-const time = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "Time unknown";
-const toLocalInput = (value: string | null) => {
-  if (!value) return "";
-  const date = new Date(value);
-  const number = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${number(date.getMonth() + 1)}-${number(date.getDate())}T${number(date.getHours())}:${number(date.getMinutes())}`;
-};
 
-function weekRange(date: string) {
+function weekRange(date: string, timeZone: string) {
   const selected = new Date(`${date}T12:00:00`);
   const start = new Date(selected);
   start.setDate(selected.getDate() - selected.getDay());
   const end = new Date(start);
   end.setDate(start.getDate() + 7);
   return {
-    startAt: new Date(
-      start.getFullYear(),
-      start.getMonth(),
-      start.getDate(),
-    ).toISOString(),
-    endAt: new Date(
-      end.getFullYear(),
-      end.getMonth(),
-      end.getDate(),
-    ).toISOString(),
+    startAt: branchLocalInstant(localDateValue(start), 0, timeZone).toISOString(),
+    endAt: branchLocalInstant(localDateValue(end), 0, timeZone).toISOString(),
   };
 }
 
-function calendarRange(date: string, view: View) {
+function calendarRange(date: string, view: View, timeZone: string) {
   const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
     ? date
     : localDateValue(new Date());
-  if (view === "day" || view === "unassigned") return dayRange(safeDate);
+  if (view === "day" || view === "unassigned") {
+    const start = branchLocalInstant(safeDate, 0, timeZone);
+    const next = new Date(`${safeDate}T12:00:00`);
+    next.setDate(next.getDate() + 1);
+    return {
+      startAt: start.toISOString(),
+      endAt: branchLocalInstant(localDateValue(next), 0, timeZone).toISOString(),
+    };
+  }
   if (view === "month") {
     const selected = new Date(`${safeDate}T12:00:00`);
     return {
-      startAt: new Date(
-        selected.getFullYear(),
-        selected.getMonth(),
-        1,
+      startAt: branchLocalInstant(
+        localDateValue(new Date(selected.getFullYear(), selected.getMonth(), 1, 12)),
+        0,
+        timeZone,
       ).toISOString(),
-      endAt: new Date(
-        selected.getFullYear(),
-        selected.getMonth() + 1,
-        1,
+      endAt: branchLocalInstant(
+        localDateValue(new Date(selected.getFullYear(), selected.getMonth() + 1, 1, 12)),
+        0,
+        timeZone,
       ).toISOString(),
     };
   }
-  return weekRange(safeDate);
+  return weekRange(safeDate, timeZone);
 }
 
 function appointmentState(
@@ -203,7 +202,11 @@ export function SchedulingRoute({
       : "day",
   );
   const [branchId, setBranchId] = useState(
-    () => searchParams.get("branch") ?? "",
+    () =>
+      searchParams.get("branch") ??
+      activeCompany?.default_branch_id ??
+      activeCompany?.branches[0]?.id ??
+      "",
   );
   const [status, setStatus] = useState<AppointmentStatus | "">(() =>
     statuses.includes(searchParams.get("status") as AppointmentStatus)
@@ -248,8 +251,12 @@ export function SchedulingRoute({
     searchParams.get("appointment"),
   );
   const [booking, setBooking] = useState(false);
-  const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const range = calendarRange(date, view);
+  const selectedBranchId =
+    branchId || activeCompany?.default_branch_id || activeCompany?.branches[0]?.id;
+  const branchPolicy = useBranchSchedulingPolicy(selectedBranchId);
+  const displayTimeZone =
+    branchPolicy?.data?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const range = calendarRange(date, view, displayTimeZone);
   const graphAppointments = useAppointments(
     {
       ...CURRENT_CALENDAR_QUERY_RANGE,
@@ -637,9 +644,8 @@ export function SchedulingRoute({
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-content-muted">
-            Times are shown in this device&apos;s {displayTimeZone} timezone
-            until the Branch-timezone candidate is integrated. Appointment
-            source windows remain stored as authoritative instants.
+            Times are shown in the selected Branch&apos;s {displayTimeZone} timezone.
+            Appointment source windows remain stored as authoritative instants.
           </p>
           <Button
             variant="outline"
@@ -655,6 +661,22 @@ export function SchedulingRoute({
           </Button>
         </div>
       </Card>
+      {branchPolicy?.data?.readiness === "SCHEDULING_SETUP_REQUIRED" && (
+        <Alert variant="warning" title="Branch Scheduling setup required">
+          <p>
+            Booking remains fail-closed until an authorized administrator
+            configures this Branch&apos;s timezone, operating hours, and capacity.
+          </p>
+          {branchPolicy.data.blockers.length > 0 && (
+            <p className="mt-2 text-sm">
+              Missing: {branchPolicy.data.blockers.map(label).join(", ")}.
+            </p>
+          )}
+          <Link className="mt-3 inline-flex font-semibold text-action-primary underline" to="/administration">
+            Open Branch Scheduling Setup
+          </Link>
+        </Alert>
+      )}
       <CalendarReadinessCard
         appointments={graphAppointments.data?.items ?? []}
         appointmentTotal={graphAppointments.data?.total_count ?? 0}
@@ -758,6 +780,8 @@ export function SchedulingRoute({
         ) : view === "day" && perspective === "schedule" ? (
           <DayCalendar
             date={date}
+            timeZone={displayTimeZone}
+            policy={branchPolicy?.data}
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
@@ -766,6 +790,7 @@ export function SchedulingRoute({
         ) : view === "day" ? (
           <DispatchTimeline
             date={date}
+            timeZone={displayTimeZone}
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
@@ -774,6 +799,7 @@ export function SchedulingRoute({
         ) : view === "month" ? (
           <MonthCalendar
             date={date}
+            timeZone={displayTimeZone}
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
@@ -787,6 +813,8 @@ export function SchedulingRoute({
           <WeekCalendar
             date={date}
             workWeek={view === "work_week"}
+            timeZone={displayTimeZone}
+            policy={branchPolicy?.data}
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
@@ -826,6 +854,7 @@ export function SchedulingRoute({
                 : undefined
             }
             canManage={canManage}
+            timeZone={displayTimeZone}
             returnTo={returnTo}
             onClose={() => setSelectedId(null)}
           />
@@ -855,12 +884,16 @@ export function SchedulingRoute({
 
 function DayCalendar({
   date,
+  timeZone,
+  policy,
   items,
   dispatchByAppointment,
   jobsById,
   onSelect,
 }: {
   readonly date: string;
+  readonly timeZone: string;
+  readonly policy?: BranchSchedulingPolicy;
   readonly items: readonly AppointmentDetail[];
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
@@ -868,8 +901,8 @@ function DayCalendar({
 }) {
   const now = new Date();
   const currentMinute =
-    localDateValue(now) === date
-      ? now.getHours() * 60 + now.getMinutes() - START_HOUR * 60
+    calendarDateKey(now, timeZone) === date
+      ? calendarMinute(now.toISOString(), timeZone) - START_HOUR * 60
       : null;
   const lanes = useMemo(() => {
     const names = Array.from(
@@ -913,7 +946,7 @@ function DayCalendar({
               key={item.id}
             >
               <span className="flex items-center justify-between gap-3">
-                <strong>{time(item.arrival_window_start_at)}</strong>
+                <strong>{calendarTimeLabel(item.arrival_window_start_at, timeZone)}</strong>
                 <Badge>{appointmentState(item, dispatch, job)}</Badge>
               </span>
               <span className="mt-2 block font-semibold">
@@ -960,6 +993,11 @@ function DayCalendar({
             ))}
           </div>
           <div className="relative" style={{ height: `${MINUTES_VISIBLE}px` }}>
+            {policy && (
+              <div className="absolute right-3 top-3 z-10 rounded bg-surface/90 px-2 py-1 text-xs text-content-muted">
+                Branch capacity {policy.default_capacity_units ?? "not configured"} · {policy.readiness.replaceAll("_", " ")}
+              </div>
+            )}
             {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, index) => (
               <div
                 className="absolute inset-x-0 border-t border-stroke"
@@ -1001,10 +1039,10 @@ function DayCalendar({
                 ? new Date(item.arrival_window_start_at)
                 : null;
               const startMinutes = start
-                ? start.getHours() * 60 + start.getMinutes() - START_HOUR * 60
+                ? calendarMinute(start.toISOString(), timeZone) - START_HOUR * 60
                 : 0;
               const duration = Math.max(
-                45,
+                1,
                 item.expected_duration_minutes ??
                   (item.arrival_window_start_at && item.arrival_window_end_at
                     ? (new Date(item.arrival_window_end_at).getTime() -
@@ -1018,7 +1056,7 @@ function DayCalendar({
               return (
                 <button
                   type="button"
-                  aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${primaryTechnicianName(dispatch) ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
+                  aria-label={`${item.appointment_number}, ${calendarTimeLabel(item.arrival_window_start_at, timeZone)}, ${primaryTechnicianName(dispatch) ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
                   onClick={() => onSelect(item)}
                   key={item.id}
                   className="absolute overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm hover:bg-action-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
@@ -1037,7 +1075,7 @@ function DayCalendar({
                       "Customer context unavailable"}
                   </span>
                   <span className="block truncate text-xs text-content-muted">
-                    {time(item.arrival_window_start_at)} ·{" "}
+                    {calendarTimeLabel(item.arrival_window_start_at, timeZone)} ·{" "}
                     {appointmentState(item, dispatch, job)}
                   </span>
                 </button>
@@ -1052,12 +1090,14 @@ function DayCalendar({
 
 function DispatchTimeline({
   date,
+  timeZone,
   items,
   dispatchByAppointment,
   jobsById,
   onSelect,
 }: {
   readonly date: string;
+  readonly timeZone: string;
   readonly items: readonly AppointmentDetail[];
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
@@ -1065,8 +1105,8 @@ function DispatchTimeline({
 }) {
   const now = new Date();
   const currentMinute =
-    localDateValue(now) === date
-      ? now.getHours() * 60 + now.getMinutes() - START_HOUR * 60
+    calendarDateKey(now, timeZone) === date
+      ? calendarMinute(now.toISOString(), timeZone) - START_HOUR * 60
       : null;
   const lanes = useMemo(() => {
     const names = Array.from(
@@ -1152,13 +1192,12 @@ function DispatchTimeline({
                   const start = item.arrival_window_start_at
                     ? new Date(item.arrival_window_start_at)
                     : null;
-                  const startMinutes = start
-                    ? start.getHours() * 60 +
-                      start.getMinutes() -
+                    const startMinutes = start
+                    ? calendarMinute(start.toISOString(), timeZone) -
                       START_HOUR * 60
                     : 0;
                   const duration = Math.max(
-                    45,
+                    1,
                     item.expected_duration_minutes ?? 60,
                   );
                   return (
@@ -1166,7 +1205,7 @@ function DispatchTimeline({
                       type="button"
                       key={item.id}
                       onClick={() => onSelect(item)}
-                      aria-label={`${lane}, ${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}
+                      aria-label={`${lane}, ${item.appointment_number}, ${calendarTimeLabel(item.arrival_window_start_at, timeZone)}, ${appointmentState(item, dispatch, job)}`}
                       className="absolute top-2 h-16 overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                       style={{
                         left: `${(Math.max(0, startMinutes) / MINUTES_VISIBLE) * 100}%`,
@@ -1177,7 +1216,7 @@ function DispatchTimeline({
                         {job?.customer_display_name ?? "Customer"}
                       </strong>
                       <span className="block truncate text-xs">
-                        {job?.job_type_code ?? job?.job_number ?? item.appointment_number} · {time(item.arrival_window_start_at)} ·{" "}
+                        {job?.job_type_code ?? job?.job_number ?? item.appointment_number} · {calendarTimeLabel(item.arrival_window_start_at, timeZone)} ·{" "}
                         {appointmentState(item, dispatch, job)}
                       </span>
                       <span className="block truncate text-[11px] text-content-muted">
@@ -1201,6 +1240,7 @@ function DispatchTimeline({
 
 function MonthCalendar({
   date,
+  timeZone,
   items,
   dispatchByAppointment,
   jobsById,
@@ -1208,6 +1248,7 @@ function MonthCalendar({
   onOpenDay,
 }: {
   readonly date: string;
+  readonly timeZone: string;
   readonly items: readonly AppointmentDetail[];
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
@@ -1236,8 +1277,7 @@ function MonthCalendar({
         const rows = items.filter(
           (item) =>
             item.arrival_window_start_at &&
-            new Date(item.arrival_window_start_at).toDateString() ===
-              day.toDateString(),
+            calendarDateKey(item.arrival_window_start_at, timeZone) === dayKey,
         );
         const expanded = expandedDays.has(dayKey);
         const displayedRows = expanded
@@ -1279,10 +1319,10 @@ function MonthCalendar({
                     className="block w-full rounded border border-stroke p-1.5 text-left text-xs hover:border-action-primary"
                     onClick={() => onSelect(item)}
                     key={item.id}
-                    aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}
+                    aria-label={`${item.appointment_number}, ${calendarTimeLabel(item.arrival_window_start_at, timeZone)}, ${appointmentState(item, dispatch, job)}`}
                   >
                     <strong className="block truncate">
-                      {time(item.arrival_window_start_at)} ·{" "}
+                      {calendarTimeLabel(item.arrival_window_start_at, timeZone)} ·{" "}
                       {job?.job_number ?? item.appointment_number}
                     </strong>
                     <span className="block truncate">
@@ -1329,6 +1369,8 @@ function MonthCalendar({
 function WeekCalendar({
   date,
   workWeek,
+  timeZone,
+  policy,
   items,
   dispatchByAppointment,
   jobsById,
@@ -1336,6 +1378,8 @@ function WeekCalendar({
 }: {
   readonly date: string;
   readonly workWeek: boolean;
+  readonly timeZone: string;
+  readonly policy?: BranchSchedulingPolicy;
   readonly items: readonly AppointmentDetail[];
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
@@ -1349,56 +1393,123 @@ function WeekCalendar({
     );
     return sunday;
   });
+  const dayKeys = days.map((day) => localDateValue(day));
   return (
     <section
       aria-label={workWeek ? "Work Week calendar" : "Week calendar"}
-      className={`grid gap-3 md:grid-cols-2 ${workWeek ? "xl:grid-cols-5" : "xl:grid-cols-7"}`}
+      className="overflow-x-auto rounded-xl border border-stroke bg-surface"
     >
-      {days.map((day) => {
-        const rows = items.filter(
-          (item) =>
-            item.arrival_window_start_at &&
-            new Date(item.arrival_window_start_at).toDateString() ===
-              day.toDateString(),
-        );
-        return (
-          <Card className="min-w-0 p-3" key={day.toISOString()}>
-            <h2 className="font-semibold">
-              {day.toLocaleDateString([], {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-            </h2>
-            <div className="mt-3 space-y-2">
-              {rows.map((item) => {
-                const dispatch = dispatchByAppointment.get(item.id);
-                const job = dispatch?.job_id
-                  ? jobsById.get(dispatch.job_id)
-                  : undefined;
-                return (
-                  <button
-                    className="w-full rounded-lg border border-stroke p-2 text-left text-sm hover:border-action-primary"
-                    onClick={() => onSelect(item)}
-                    key={item.id}
-                  >
-                    <strong className="block truncate">
-                      {time(item.arrival_window_start_at)} ·{" "}
-                      {job?.job_number ?? item.appointment_number}
-                    </strong>
-                    <span className="block truncate text-xs text-content-muted">
-                      {primaryTechnicianName(dispatch) ?? "Unassigned"}
-                    </span>
-                  </button>
-                );
-              })}
-              {!rows.length && (
-                <p className="text-xs text-content-muted">No appointments</p>
-              )}
+      <div className={workWeek ? "min-w-[900px]" : "min-w-[1180px]"}>
+        <div
+          className="grid border-b border-stroke bg-surface-subtle"
+          style={{ gridTemplateColumns: `5rem repeat(${days.length}, minmax(10rem, 1fr))` }}
+        >
+          <div className="p-3 text-xs font-semibold text-content-muted">Time</div>
+          {days.map((day, index) => {
+            const technicians = Array.from(
+              new Set(
+                items
+                  .filter(
+                    (item) =>
+                      item.arrival_window_start_at &&
+                      calendarDateKey(item.arrival_window_start_at, timeZone) ===
+                        dayKeys[index],
+                  )
+                  .map(
+                    (item) =>
+                      primaryTechnicianName(dispatchByAppointment.get(item.id)) ??
+                      "Unassigned",
+                  ),
+              ),
+            );
+            return (
+              <div className="border-l border-stroke p-3" key={dayKeys[index]}>
+                <strong className="block">
+                  {day.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
+                </strong>
+                <span className="block truncate text-[11px] text-content-muted">
+                  {technicians.length ? technicians.join(" · ") : "Open day"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="relative" style={{ height: `${MINUTES_VISIBLE}px` }}>
+          {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, index) => (
+            <div
+              className="absolute inset-x-0 border-t border-stroke"
+              style={{ top: `${index * 60}px` }}
+              key={index}
+            >
+              <span className="absolute left-2 -translate-y-1/2 bg-surface pr-2 text-xs text-content-muted">
+                {new Date(2026, 0, 1, START_HOUR + index).toLocaleTimeString([], { hour: "numeric" })}
+              </span>
             </div>
-          </Card>
-        );
-      })}
+          ))}
+          {days.map((day, dayIndex) => (
+            <div
+              aria-label={`${day.toLocaleDateString()} technician lane`}
+              className="absolute inset-y-0 border-l border-stroke"
+              style={{
+                left: `calc(5rem + ${dayIndex} * ((100% - 5rem) / ${days.length}))`,
+                width: `calc((100% - 5rem) / ${days.length})`,
+              }}
+              key={dayKeys[dayIndex]}
+            />
+          ))}
+          {items.map((item) => {
+            if (!item.arrival_window_start_at) return null;
+            const dayIndex = dayKeys.indexOf(
+              calendarDateKey(item.arrival_window_start_at, timeZone),
+            );
+            if (dayIndex < 0) return null;
+            const dispatch = dispatchByAppointment.get(item.id);
+            const job = dispatch?.job_id ? jobsById.get(dispatch.job_id) : undefined;
+            const startMinutes =
+              calendarMinute(item.arrival_window_start_at, timeZone) -
+              START_HOUR * 60;
+            const duration = Math.max(
+              1,
+              item.expected_duration_minutes ??
+                (item.arrival_window_end_at
+                  ? (new Date(item.arrival_window_end_at).getTime() -
+                      new Date(item.arrival_window_start_at).getTime()) /
+                    60000
+                  : 60),
+            );
+            return (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => onSelect(item)}
+                aria-label={`${item.appointment_number}, ${calendarTimeLabel(item.arrival_window_start_at, timeZone)}, ${primaryTechnicianName(dispatch) ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
+                className="absolute z-[1] overflow-hidden rounded border border-action-primary/30 bg-action-primary/10 p-1.5 text-left shadow-sm hover:bg-action-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+                style={{
+                  top: `${Math.max(0, startMinutes)}px`,
+                  height: `${Math.min(duration, MINUTES_VISIBLE - Math.max(0, startMinutes))}px`,
+                  left: `calc(5rem + ${dayIndex} * ((100% - 5rem) / ${days.length}) + .2rem)`,
+                  width: `calc((100% - 5rem) / ${days.length} - .4rem)`,
+                }}
+              >
+                <strong className="block truncate text-xs">
+                  {calendarTimeLabel(item.arrival_window_start_at, timeZone)} · {job?.job_number ?? item.appointment_number}
+                </strong>
+                <span className="block truncate text-[11px]">
+                  {job?.customer_display_name ?? "Customer"} · {primaryTechnicianName(dispatch) ?? "Unassigned"}
+                </span>
+                <span className="block truncate text-[10px] text-content-muted">
+                  {appointmentState(item, dispatch, job)} · {duration} min
+                </span>
+              </button>
+            );
+          })}
+          {policy && (
+            <div className="absolute bottom-2 left-2 z-10 rounded bg-surface/90 px-2 py-1 text-[11px] text-content-muted">
+              {policy.readiness.replaceAll("_", " ")} · Branch capacity {policy.default_capacity_units ?? "not configured"}
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
@@ -1408,6 +1519,7 @@ function AppointmentPanel({
   dispatchItem,
   job,
   canManage,
+  timeZone,
   returnTo,
   onClose,
 }: {
@@ -1415,6 +1527,7 @@ function AppointmentPanel({
   readonly dispatchItem?: DispatchBoardItem;
   readonly job?: JobListItem;
   readonly canManage: boolean;
+  readonly timeZone: string;
   readonly returnTo: string;
   readonly onClose: () => void;
 }) {
@@ -1423,10 +1536,10 @@ function AppointmentPanel({
     ? schedulingMutationRecovery(mutation.error, "appointment move")
     : null;
   const [start, setStart] = useState(() =>
-    toLocalInput(appointment.arrival_window_start_at),
+    branchLocalInput(appointment.arrival_window_start_at, timeZone),
   );
   const [end, setEnd] = useState(() =>
-    toLocalInput(appointment.arrival_window_end_at),
+    branchLocalInput(appointment.arrival_window_end_at, timeZone),
   );
   const [duration, setDuration] = useState(
     appointment.expected_duration_minutes ?? 60,
@@ -1439,8 +1552,8 @@ function AppointmentPanel({
     if (validWindow) setConfirmMove(true);
   };
   const submit = () => {
-    const startAt = new Date(start);
-    const endAt = new Date(end);
+    const startAt = branchInputInstant(start, timeZone);
+    const endAt = branchInputInstant(end, timeZone);
     mutation.mutate(
       {
         appointmentId: appointment.id,
