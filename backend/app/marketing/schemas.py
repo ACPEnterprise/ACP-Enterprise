@@ -112,6 +112,33 @@ class GoogleAdsAccountBindingResponse(MarketingSchema):
     bound_at: datetime
 
 
+class GoogleAdsConnectionReadinessResponse(MarketingSchema):
+    connection_status: str
+    environment: str
+    oauth_client_configured: bool
+    callback_configured: bool
+    developer_token_configured: bool
+    environment_safe_secret_custody: bool
+    live_ingestion_enabled: bool
+    authorization_available: bool
+    granted_scopes: tuple[str, ...]
+    connected_at: datetime | None
+    bound_account_count: int
+    blockers: tuple[str, ...]
+
+
+class GoogleAdsAccountBindingSummary(MarketingSchema):
+    id: UUID
+    branch_id: UUID
+    provider_account_id: UUID
+    external_customer_id: str
+    descriptive_name: str
+    currency_code: str | None
+    time_zone: str | None
+    ingestion_enabled: bool
+    bound_at: datetime
+
+
 class ProviderSyncStatusResponse(MarketingSchema):
     provider_account_id: UUID
     status: str

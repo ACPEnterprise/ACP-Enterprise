@@ -17,6 +17,8 @@ from .schemas import (
     EvidenceCoverageResponse,
     GoogleAdsAccountBindingCreate,
     GoogleAdsAccountBindingResponse,
+    GoogleAdsAccountBindingSummary,
+    GoogleAdsConnectionReadinessResponse,
     ManualAttributionConfirmation,
     ProviderCoverageResponse,
     ProviderSyncStatusResponse,
@@ -41,6 +43,30 @@ ProviderAdminContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(MarketingPermission.PROVIDER_ADMIN)),
 ]
+
+
+@router.get(
+    "/google-ads/connection-readiness",
+    response_model=GoogleAdsConnectionReadinessResponse,
+)
+async def google_ads_connection_readiness(
+    context: ProviderAdminContext, session: DatabaseSession
+) -> GoogleAdsConnectionReadinessResponse:
+    return await marketing_provider_service.google_ads_connection_readiness(
+        session, context=context
+    )
+
+
+@router.get(
+    "/google-ads/account-bindings",
+    response_model=tuple[GoogleAdsAccountBindingSummary, ...],
+)
+async def google_ads_account_bindings(
+    context: ProviderAdminContext, session: DatabaseSession
+) -> tuple[GoogleAdsAccountBindingSummary, ...]:
+    return await marketing_provider_service.google_ads_account_bindings(
+        session, context=context
+    )
 
 
 @router.get("/catalog", response_model=CatalogResponse)

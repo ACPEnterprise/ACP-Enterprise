@@ -5,7 +5,9 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
+from app.core.config import Settings
 from app.marketing.google_ads import (
     GOOGLE_ADS_SCOPE,
     DiscoveredGoogleAdsAccount,
@@ -22,6 +24,7 @@ from app.marketing.models import (
 )
 from app.marketing.provider_service import MarketingProviderService
 from app.marketing.router import router
+from app.marketing.schemas import GoogleAdsConnectionReadinessResponse
 from app.marketing.secret_custody import (
     GoogleAdsCredentialEnvelope,
     require_environment_scoped_reference,
@@ -60,6 +63,32 @@ async def test_live_google_adapter_is_disabled_by_default() -> None:
             GoogleAdsHttpAdapter(client=client, credentials=credentials)
 
 
+def test_google_ads_live_configuration_is_beta_and_environment_scoped() -> None:
+    security = {
+        "access_token_signing_key": "x" * 32,
+        "security_token_hmac_key": "y" * 32,
+    }
+    with pytest.raises(ValidationError, match="admitted for Beta only"):
+        Settings(
+            environment="development",
+            google_ads_live_access_enabled=True,
+            **security,
+        )
+    with pytest.raises(ValidationError, match="environment-scoped"):
+        Settings(
+            environment="beta",
+            google_ads_live_access_enabled=True,
+            google_ads_oauth_client_reference=(
+                "marketing/production/google-ads/client"
+            ),
+            google_ads_developer_token_reference=(
+                "marketing/beta/google-ads/developer"
+            ),
+            google_ads_callback_uri="https://beta.example.test/google/callback",
+            **security,
+        )
+
+
 def test_routes_expose_no_google_provider_mutation_except_owner_binding() -> None:
     mutations = {
         (method, route.path)
@@ -73,6 +102,25 @@ def test_routes_expose_no_google_provider_mutation_except_owner_binding() -> Non
         for _, path in mutations
         for word in ("campaigns", "budgets", "bids", "keywords", "targeting")
     )
+
+
+def test_owner_connection_routes_are_read_only_and_secret_safe() -> None:
+    paths = {
+        (method, route.path)
+        for route in router.routes
+        for method in getattr(route, "methods", set())
+        if "google-ads" in route.path
+    }
+    assert ("GET", "/api/v1/marketing/google-ads/connection-readiness") in paths
+    assert ("GET", "/api/v1/marketing/google-ads/account-bindings") in paths
+    fields = set(GoogleAdsConnectionReadinessResponse.model_fields)
+    assert not fields & {
+        "oauth_client_reference",
+        "developer_token_reference",
+        "client_secret",
+        "refresh_token",
+        "access_token",
+    }
 
 
 def test_connection_metadata_excludes_secret_material() -> None:

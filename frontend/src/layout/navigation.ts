@@ -344,6 +344,14 @@ export const navigationCatalog = [
     availability: "coming-soon",
   },
   {
+    id: "marketing-provider-connections",
+    label: "Marketing",
+    path: "/marketing/provider-connections/google-ads",
+    icon: Megaphone,
+    availability: "available",
+    requiredPermission: "COMPANY_MARKETING_PROVIDER_ADMIN",
+  },
+  {
     id: "marketing-ai",
     label: "Marketing AI",
     path: "/ai/marketing",
@@ -413,6 +421,7 @@ export const navigationGroups = [
       item("operator-guide"),
       item("administration"),
       item("settings"),
+      item("marketing-provider-connections"),
     ],
   },
 ] as const satisfies readonly NavigationGroup[];

@@ -32,6 +32,7 @@ import {
   paymentsHandle,
   payrollHandle,
   pipelineHandle,
+  marketingProviderConnectionsHandle,
   revenueCycleHandle,
   jobsHandle,
   liaHandle,
@@ -136,6 +137,14 @@ export const appRoutes: RouteObject[] = [
             path: "pipeline",
             handle: pipelineHandle,
             lazy: async () => ({ Component: (await import("../routes/PipelineRoute")).PipelineRoute }),
+          },
+          {
+            path: "marketing/provider-connections/google-ads",
+            handle: marketingProviderConnectionsHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/MarketingProviderConnectionsRoute"))
+                .MarketingProviderConnectionsRoute,
+            }),
           },
           { path: "service-agreements", handle: serviceAgreementsHandle, lazy: async () => ({ Component: (await import("../routes/ServiceAgreementsRoute")).ServiceAgreementsRoute }) },
           {
