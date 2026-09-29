@@ -228,7 +228,9 @@ export function PayrollRoute() {
                             <thead><tr className="text-content-muted"><th className="pb-2">Employee</th><th>Requirement</th><th>State</th><th>Responsible</th><th>Next action</th></tr></thead>
                             <tbody>
                               {employees.flatMap((employee) => {
-                                const blockers = employee.exception_codes.length ? employee.exception_codes : [];
+                                const blockers = [...employee.exception_codes];
+                                if (employee.compensation_readiness !== "READY" && !blockers.some((code) => code.includes("COMPENSATION") || code.includes("PAY_RATE") || code.includes("SALARY"))) blockers.push("COMPENSATION_AUTHORITY_MISSING");
+                                if (employee.withholding_readiness !== "READY" && !blockers.some((code) => code.includes("WITHHOLDING") || code.includes("W4") || code.includes("JURISDICTION") || code.includes("TAX"))) blockers.push("WITHHOLDING_AUTHORITY_MISSING");
                                 const rows = blockers.length ? blockers : [null];
                                 return rows.map((code) => {
                                   const item = code ? employeeRequirement(code) : { requirement: "Payroll prerequisites", owner: "SYSTEM", next: "No Employee blocker is reported; continue with the next Payroll step." };
