@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.beacon.models import BeaconEvaluationRunModel, BeaconSignalEvaluationModel
@@ -234,6 +234,29 @@ class BeaconEvaluationHistoryService:
             ).all()
         )
         return tuple(_record(item) for item in rows)
+
+    async def has_completed_run(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID | None,
+        since: datetime,
+        until: datetime,
+    ) -> bool:
+        statement = select(
+            exists().where(
+                BeaconEvaluationRunModel.company_id == company_id,
+                BeaconEvaluationRunModel.evaluated_at > since,
+                BeaconEvaluationRunModel.evaluated_at <= until,
+                (
+                    BeaconEvaluationRunModel.branch_id == branch_id
+                    if branch_id is not None
+                    else BeaconEvaluationRunModel.branch_id.is_(None)
+                ),
+            )
+        )
+        return bool(await session.scalar(statement))
 
     @staticmethod
     async def _latest_by_condition(

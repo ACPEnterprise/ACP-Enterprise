@@ -9,7 +9,7 @@ import {
   type StatementRow,
   type TrialBalance,
 } from "../api/financialReporting";
-import { useHasPermission } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
 import { QboSourceEvidence } from "../components/accounting/QboSourceEvidence";
 import { useFinancialReport } from "../hooks/useFinancialReporting";
 import {
@@ -35,16 +35,32 @@ const isBalanceSheet = (value: FinancialReport): value is BalanceSheet =>
 const isIncomeStatement = (value: FinancialReport): value is IncomeStatement =>
   value.manifest.report_name === "income_statement";
 
+function formatAmount(value: string, currency: string): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "Unavailable";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+  }).format(amount);
+}
+
 function StatementSection({
   title,
   rows,
+  currency,
 }: {
   title: string;
   rows: StatementRow[];
+  currency: string;
 }) {
   return (
     <section>
       <h3 className="mb-2 font-semibold">{title}</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-content-muted">
+          No posted {title.toLowerCase()} accounts exist for this report scope.
+        </p>
+      ) : (
       <table className="w-full text-sm">
         <tbody>
           {rows.map((row) => (
@@ -52,17 +68,21 @@ function StatementSection({
               <td className="py-2">
                 {row.code} · {row.name}
               </td>
-              <td className="py-2 text-right tabular-nums">{row.amount}</td>
+              <td className="py-2 text-right tabular-nums">{formatAmount(row.amount, currency)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      )}
     </section>
   );
 }
 
 function ReportBody({ report }: { report: FinancialReport }) {
   if (isTrialBalance(report)) {
+    if (report.rows.length === 0) {
+      return <p className="text-content-muted">No posted account balances exist for this report scope.</p>;
+    }
     return (
       <table className="w-full text-sm">
         <thead>
@@ -80,10 +100,10 @@ function ReportBody({ report }: { report: FinancialReport }) {
               <td className="py-2">
                 {row.code} · {row.name}
               </td>
-              <td>{row.beginning_balance}</td>
-              <td>{row.debits}</td>
-              <td>{row.credits}</td>
-              <td>{row.ending_balance}</td>
+              <td>{formatAmount(row.beginning_balance, report.manifest.currency)}</td>
+              <td>{formatAmount(row.debits, report.manifest.currency)}</td>
+              <td>{formatAmount(row.credits, report.manifest.currency)}</td>
+              <td>{formatAmount(row.ending_balance, report.manifest.currency)}</td>
             </tr>
           ))}
         </tbody>
@@ -93,27 +113,27 @@ function ReportBody({ report }: { report: FinancialReport }) {
   if (isBalanceSheet(report)) {
     return (
       <div className="grid gap-6 md:grid-cols-2">
-        <StatementSection title="Assets" rows={report.assets} />
+        <StatementSection title="Assets" rows={report.assets} currency={report.manifest.currency} />
         <div className="space-y-6">
-          <StatementSection title="Liabilities" rows={report.liabilities} />
-          <StatementSection title="Equity" rows={report.equity} />
+          <StatementSection title="Liabilities" rows={report.liabilities} currency={report.manifest.currency} />
+          <StatementSection title="Equity" rows={report.equity} currency={report.manifest.currency} />
           <p className="font-semibold">
             Current earnings{" "}
             <span className="float-right tabular-nums">
-              {report.current_earnings}
+              {formatAmount(report.current_earnings, report.manifest.currency)}
             </span>
           </p>
         </div>
         <p className="font-bold">
           Total assets{" "}
           <span className="float-right tabular-nums">
-            {report.total_assets}
+            {formatAmount(report.total_assets, report.manifest.currency)}
           </span>
         </p>
         <p className="font-bold">
           Liabilities, equity, and current earnings{" "}
           <span className="float-right tabular-nums">
-            {report.liabilities_equity_and_current_earnings}
+            {formatAmount(report.liabilities_equity_and_current_earnings, report.manifest.currency)}
           </span>
         </p>
       </div>
@@ -122,16 +142,19 @@ function ReportBody({ report }: { report: FinancialReport }) {
   if (isIncomeStatement(report)) {
     return (
       <div className="space-y-6">
-        <StatementSection title="Revenue" rows={report.revenue} />
-        <StatementSection title="Expenses" rows={report.expenses} />
+        <StatementSection title="Revenue" rows={report.revenue} currency={report.manifest.currency} />
+        <StatementSection title="Expenses" rows={report.expenses} currency={report.manifest.currency} />
         <p className="font-bold">
           Net income{" "}
-          <span className="float-right tabular-nums">{report.net_income}</span>
+          <span className="float-right tabular-nums">{formatAmount(report.net_income, report.manifest.currency)}</span>
         </p>
       </div>
     );
   }
   const ledger = report as GeneralLedger;
+  if (ledger.rows.length === 0) {
+    return <p className="text-content-muted">No posted General Ledger lines exist for this report period and scope.</p>;
+  }
   return (
     <table className="w-full text-sm">
       <thead>
@@ -154,9 +177,9 @@ function ReportBody({ report }: { report: FinancialReport }) {
             <td>
               {row.source_type} · {row.source_identity}
             </td>
-            <td>{row.debit}</td>
-            <td>{row.credit}</td>
-            <td>{row.running_balance}</td>
+            <td>{formatAmount(row.debit, report.manifest.currency)}</td>
+            <td>{formatAmount(row.credit, report.manifest.currency)}</td>
+            <td>{formatAmount(row.running_balance, report.manifest.currency)}</td>
           </tr>
         ))}
       </tbody>
@@ -165,6 +188,7 @@ function ReportBody({ report }: { report: FinancialReport }) {
 }
 
 export function FinancialReportsRoute() {
+  const { activeCompany } = useAuth();
   const canRead = useHasPermission("COMPANY_ACCOUNTING_REPORT_READ");
   const [reportName, setReportName] = useState<ReportName>("trial-balance");
   const [startDate, setStartDate] = useState(yearStart);
@@ -176,6 +200,7 @@ export function FinancialReportsRoute() {
     endDate,
     branchId: "",
   });
+  const invalidPeriod = !endDate || Boolean(startDate && startDate > endDate);
   const report = useFinancialReport(request, canRead);
   if (!canRead)
     return (
@@ -222,6 +247,7 @@ export function FinancialReportsRoute() {
               className="grid gap-3 md:grid-cols-5"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (invalidPeriod) return;
                 setRequest({
                   report: reportName,
                   startDate,
@@ -255,13 +281,25 @@ export function FinancialReportsRoute() {
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
               />
-              <Input
-                aria-label="Branch ID (optional)"
+              <Select
+                aria-label="Branch"
                 value={branchId}
                 onChange={(event) => setBranchId(event.target.value)}
-              />
+              >
+                <option value="">Company-wide</option>
+                {(activeCompany?.branches ?? []).map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}{branch.code ? ` (${branch.code})` : ""}
+                  </option>
+                ))}
+              </Select>
               <Button type="submit">Generate</Button>
             </form>
+            {invalidPeriod ? (
+              <p className="mt-3 text-sm text-status-danger" role="alert">
+                Choose a start date on or before the end date. No financial report was requested.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
         {report.isPending ? (

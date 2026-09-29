@@ -33,6 +33,30 @@ def compose_owner_answer(
 ) -> OwnerAnswer:
     """Render a useful conclusion without exceeding the supplied evidence."""
     normalized = question.casefold()
+    beacon_history = tuple(
+        item
+        for item in evidence
+        if item.domain == "beacon"
+        and item.authority == "AUTHORITATIVE_SIGNAL_HISTORY"
+    )
+    if len(beacon_history) == 2:
+        period_summaries = []
+        for item in beacon_history:
+            states = _states(item)
+            period_summaries.append(
+                f"{item.period_label or 'the bounded period'}: "
+                f"{states.get('new', 0)} new, {states.get('changed', 0)} changed, "
+                f"{states.get('resolved', 0)} resolved, and "
+                f"{states.get('expired', 0)} expired"
+            )
+        return OwnerAnswer(
+            (
+                "Beacon's persisted evaluation history shows "
+                + "; ".join(period_summaries)
+                + ". Both periods use the same evaluation-history contract; these counts do not establish business causality."
+            ),
+            "Open Beacon attention",
+        )
     by_domain = {item.domain: item for item in evidence}
 
     # Context projections already provide a bounded, entity-specific safe summary.
@@ -69,7 +93,28 @@ def compose_owner_answer(
 
     if "beacon" in by_domain:
         item = by_domain["beacon"]
+        if item.authority == "BEACON.INTELLIGENCE.v1" and item.state:
+            return OwnerAnswer(
+                item.state
+                + " Beacon supplies the accepted explanation and review guidance; LIA did not infer a cause or clear the signal.",
+                "Open Beacon attention",
+            )
         states = _states(item)
+        if item.authority == "AUTHORITATIVE_SIGNAL_HISTORY":
+            changed = states.get("changed", 0)
+            new = states.get("new", 0)
+            resolved = states.get("resolved", 0)
+            expired = states.get("expired", 0)
+            still_active = states.get("still_active", 0)
+            return OwnerAnswer(
+                (
+                    f"During {item.period_label or 'the requested period'}, Beacon recorded "
+                    f"{new} new, {changed} changed, {resolved} resolved, and {expired} expired "
+                    f"condition{'s' if item.count != 1 else ''}; {still_active} remained active without changed evidence. "
+                    "These are persisted evaluation outcomes, not an inferred timeline or permission to remediate them."
+                ),
+                "Open Beacon attention",
+            )
         active = states.get("active", 0)
         snoozed = states.get("snoozed", 0)
         conclusion = (
@@ -160,7 +205,38 @@ def compose_owner_answer(
             "Open Financial Reports",
         )
 
+    if "price-book" in by_domain:
+        item = by_domain["price-book"]
+        if item.authority == "PRICE_BOOK.LIA_CONTEXT.v1" and item.state:
+            state, _, summary = item.state.partition("|")
+            if state == "CURRENT_PRICE":
+                return OwnerAnswer(
+                    summary
+                    + " This is the current authorized customer price; cost and margin evidence are not included.",
+                    "Open Price Book",
+                )
+            return OwnerAnswer(
+                summary
+                + " LIA did not substitute a draft, historical, or calculated price.",
+                "Open Price Book",
+            )
+
     if "scheduling" in by_domain or "dispatch" in by_domain:
+        dispatch_context = next(
+            (
+                item
+                for item in evidence
+                if item.authority == "DISPATCH.LIA_CONTEXT.v1" and item.state
+            ),
+            None,
+        )
+        if dispatch_context is not None:
+            _, _, summary = (dispatch_context.state or "").partition("|")
+            return OwnerAnswer(
+                summary
+                + " This is current read-only Dispatch evidence; LIA did not assign or release anyone.",
+                "Open Dispatch",
+            )
         schedule_parts: list[str] = []
         for domain in ("scheduling", "dispatch"):
             schedule_item = by_domain.get(domain)

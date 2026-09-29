@@ -3,6 +3,8 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+
 from app.beacon.escalation import escalation_service
 from app.beacon.evaluation import SignalEvaluationService
 from app.beacon.intelligence import build_intelligence_packet
@@ -37,7 +39,6 @@ from app.lia.safety import (
     validate_structured_claim,
 )
 from app.platform.permissions.codes import AnalyticsPermission, JobPermission
-from pydantic import ValidationError
 from tests.beacon.test_beacon import BRANCH_ID, COMPANY_ID, NOW, snapshot
 
 

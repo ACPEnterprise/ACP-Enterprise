@@ -119,6 +119,51 @@ def test_period_comparison_fails_closed_without_both_complete_periods() -> None:
     assert unavailable["state"] == "unavailable"
 
 
+def test_period_comparison_preserves_components_and_immutable_evidence() -> None:
+    current_record = _record(
+        revenue=120_000, labor=35_000, materials=22_000, contribution=63_000
+    )
+    prior_record = _record(
+        revenue=100_000, labor=30_000, materials=20_000, contribution=50_000
+    )
+    branch_id = uuid4()
+    current_record.branch_id = branch_id
+    prior_record.branch_id = branch_id
+    current = EconomicsWorkspaceService._project(
+        (current_record,),
+        {
+            current_record.subject_id: JobIdentity(
+                "JOB-CURRENT",
+                "completed",
+                branch_id,
+                "Main",
+                uuid4(),
+                "Current",
+                "repair",
+            )
+        },
+    )
+    prior = EconomicsWorkspaceService._project(
+        (prior_record,),
+        {
+            prior_record.subject_id: JobIdentity(
+                "JOB-PRIOR", "completed", branch_id, "Main", uuid4(), "Prior", "repair"
+            )
+        },
+    )
+    value = EconomicsWorkspaceService._comparison(current, prior)
+    assert value["state"] == "available"
+    assert value["current"]["revenue_minor"] == 120_000
+    assert value["prior"]["contribution_minor"] == 50_000
+    assert value["other_direct_cost_change_minor"] == 0
+    assert value["evidence_references"]["current"] == [
+        {
+            "result_id": str(current_record.id),
+            "result_digest": current_record.result_digest,
+        }
+    ]
+
+
 def test_competing_active_job_results_fail_closed_instead_of_double_counting() -> None:
     first = _record(
         revenue=100_000, labor=30_000, materials=20_000, contribution=50_000

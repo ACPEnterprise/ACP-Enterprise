@@ -6,16 +6,18 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+
 from app.lia.acceptance_corpus import (
     OWNER_QUESTION_CORPUS,
     Usefulness,
     corpus_totals,
 )
-from app.lia.contracts import EvidenceReference, LiaRequest
+from app.lia.contracts import AnswerAuthority, EvidenceReference, LiaRequest
+from app.lia.conversation import ResponseMode
 from app.lia.owner_answers import compose_owner_answer
 from app.lia.planner import QuestionIntent, plan_question
 from app.lia.retrieval import GovernedRetrievalService
-from app.lia.service import LiaService
+from app.lia.service import LiaService, _compose_answer
 
 
 def _evidence(
@@ -43,8 +45,8 @@ def test_owner_acceptance_corpus_is_broad_and_has_no_accepted_failures() -> None
     assert len({case.case_id for case in OWNER_QUESTION_CORPUS}) == 112
     assert len({case.family for case in OWNER_QUESTION_CORPUS}) == 14
     assert totals == {
-        Usefulness.USEFUL_PASS: 94,
-        Usefulness.SAFE_BUT_NOT_USEFUL: 18,
+        Usefulness.USEFUL_PASS: 104,
+        Usefulness.SAFE_BUT_NOT_USEFUL: 8,
         Usefulness.FAIL: 0,
     }
     assert all(
@@ -151,6 +153,20 @@ def test_contextual_safe_summary_is_preserved_without_inventing_fields() -> None
     answer = compose_owner_answer("Is this Employee mobile ready?", (evidence,))
     assert "Mobile readiness READY" in answer.text
     assert "bank" not in answer.text.casefold()
+
+
+def test_brief_response_mode_is_actually_concise() -> None:
+    evidence = (_evidence("beacon", "active=2", count=2),)
+    answer = _compose_answer(
+        lines=["A useful owner conclusion. " + ("Supporting explanation. " * 30)],
+        mode=ResponseMode.BRIEF,
+        authority=AnswerAuthority.ACP_AUTHORITATIVE,
+        period=None,
+        evidence=evidence,
+    )
+    assert len(answer) <= 370
+    assert answer.endswith("…")
+    assert answer.startswith("ACP's native authorized records show:")
 
 
 @pytest.mark.asyncio

@@ -256,6 +256,7 @@ def test_acp_employee_mobile_role_has_only_approved_field_authority() -> None:
     assert role.permission_codes == frozenset(
         {
             EmployeeOperationsPermission.OWN_DAY_READ,
+            EmployeeOperationsPermission.OWN_LIA_READ,
             TimekeepingPermission.OWN_PUNCH,
             TimekeepingPermission.OWN_READ,
             JobPermission.EXECUTE,

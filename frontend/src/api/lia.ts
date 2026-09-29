@@ -1,5 +1,10 @@
 import { apiClient } from "./client";
-import type { LiaFoundationReadiness, LiaReadiness, LiaResponse } from "../types/lia";
+import type {
+  LiaFoundationReadiness,
+  LiaReadiness,
+  LiaResponse,
+  LiaTemporalContext,
+} from "../types/lia";
 
 export async function getLiaReadiness(): Promise<LiaReadiness> {
   return (await apiClient.get<LiaReadiness>("/api/v1/lia/readiness")).data;
@@ -23,6 +28,7 @@ export async function askLia(input: {
     evidence_digest?: string;
     as_of?: string;
     topic_domains?: string[];
+    temporal?: LiaTemporalContext | null;
   };
 }): Promise<LiaResponse> {
   return (await apiClient.post<LiaResponse>("/api/v1/lia/ask", input)).data;

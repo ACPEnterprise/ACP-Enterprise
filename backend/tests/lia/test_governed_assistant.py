@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+
 from app.lia.contracts import (
     EvidenceReference,
     LiaFeedbackReceipt,
@@ -14,8 +15,23 @@ from app.lia.contracts import (
     TruthClassification,
 )
 from app.lia.retrieval import GovernedRetrievalService
+from app.lia.router import briefing
 from app.lia.service import LiaService
 from app.platform.permissions.codes import LuminaryPermission
+
+
+@pytest.mark.asyncio
+async def test_default_owner_briefing_requests_current_state_not_fake_today_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = object()
+    operation = AsyncMock(return_value=response)
+    monkeypatch.setattr("app.lia.router.lia_service.ask", operation)
+
+    assert await briefing(context=object(), session=AsyncMock()) is response
+    request = operation.await_args.kwargs["request"]
+    assert request.question == "How are we doing and what needs attention?"
+    assert "today" not in request.question.casefold()
 
 
 def authorization_context(*permissions: str):

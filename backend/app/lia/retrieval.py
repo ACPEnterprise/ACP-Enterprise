@@ -5,18 +5,25 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta, timezone
 from typing import Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounting.models import AccountingPeriod
+from app.beacon.history import (
+    EvaluationDisposition,
+    beacon_evaluation_history_service,
+)
 from app.beacon.service import beacon_query_service
 from app.business_economics.models import EconomicsProfitabilityResultRecord
 from app.customers.lia_context import customer_lia_context_service
 from app.customers.models import Customer
 from app.data_quality.catalog import QUALITY_CATALOG
+from app.dispatch.errors import DispatchNotFound
 from app.dispatch.models import DispatchAssignment
+from app.dispatch.service import dispatch_service
 from app.estimates.models import Estimate
 from app.financial_reporting.errors import (
     ReportingIntegrityError,
@@ -82,6 +89,8 @@ class AdapterSpec:
     temporal_start_column: Any | None = None
     temporal_end_column: Any | None = None
     temporal_kind: str | None = None
+    entity_column: Any | None = None
+    entity_columns: dict[str, Any] | None = None
 
 
 ADAPTERS = (
@@ -112,6 +121,12 @@ ADAPTERS = (
         DispatchAssignment.window_start_at,
         DispatchAssignment.window_end_at,
         "datetime_overlap",
+        None,
+        {
+            "workforce": DispatchAssignment.primary_employee_id,
+            "scheduling": DispatchAssignment.appointment_id,
+            "jobs": DispatchAssignment.job_id,
+        },
     ),
     AdapterSpec(
         "estimates",
@@ -169,6 +184,7 @@ ADAPTERS = (
         WorkdayTimeEntryRevision.work_date,
         None,
         "date_start",
+        WorkdayTimeEntryRevision.employee_id,
     ),
     AdapterSpec(
         "accounting",
@@ -205,13 +221,17 @@ class GovernedRetrievalService:
         context: AuthorizationContext,
         domains: set[str] | None = None,
         entity_id: Any | None = None,
+        entity_domain: str | None = None,
         temporal: LiaTemporalContext | None = None,
         requested_accounting_basis: str | None = None,
     ) -> tuple[EvidenceReference, ...]:
+        observed_at = datetime.now(timezone.utc)
         contextual_domains = (
             {"customers", "jobs", "assets", "workforce"} & domains if domains else set()
         )
         contextual_reference: EvidenceReference | None = None
+        dispatch_reference: EvidenceReference | None = None
+        contextual_dispatch_attempted = False
         if entity_id is not None and len(contextual_domains) == 1 and temporal is None:
             domain = next(iter(contextual_domains))
             if domain == "customers":
@@ -298,6 +318,87 @@ class GovernedRetrievalService:
                         authorization_version=workforce_projection.authorization_version,
                         limitations=workforce_projection.limitations,
                     )
+        if (
+            entity_id is not None
+            and entity_domain == "scheduling"
+            and domains is not None
+            and "dispatch" in domains
+            and context.has_permission(DispatchPermission.READ)
+        ):
+            contextual_dispatch_attempted = True
+            appointment_branches = (
+                frozenset({context.active_branch.id})
+                if context.active_branch is not None
+                else context.authorized_branch_ids
+            )
+            authorized_appointment = await session.scalar(
+                select(Appointment.id).where(
+                    Appointment.id == entity_id,
+                    Appointment.company_id == context.company.id,
+                    Appointment.branch_id.in_(appointment_branches),
+                )
+            )
+            if authorized_appointment is not None:
+                try:
+                    assignment = await dispatch_service.detail(
+                        session, context=context, appointment_id=entity_id
+                    )
+                except DispatchNotFound:
+                    assignment = None
+                state = (
+                    f"ASSIGNED|Appointment {assignment.appointment_number} is assigned to "
+                    f"{assignment.primary_employee_name or 'no primary technician'}; "
+                    f"assignment {assignment.status}; field state {assignment.arrival_state}."
+                    if assignment is not None
+                    else "UNASSIGNED|This Appointment has no authoritative Dispatch assignment."
+                )
+                dispatch_payload = {
+                    "contract": "DISPATCH.LIA_CONTEXT.v1",
+                    "company_id": str(context.company.id),
+                    "appointment_id": str(entity_id),
+                    "assignment_id": str(assignment.id)
+                    if assignment is not None
+                    else None,
+                    "assignment_version": assignment.version
+                    if assignment is not None
+                    else None,
+                    "primary_employee_id": str(assignment.primary_employee_id)
+                    if assignment is not None
+                    and assignment.primary_employee_id is not None
+                    else None,
+                    "status": assignment.status
+                    if assignment is not None
+                    else "unassigned",
+                    "arrival_state": assignment.arrival_state
+                    if assignment is not None
+                    else None,
+                }
+                dispatch_reference = EvidenceReference(
+                    domain="dispatch",
+                    label="Appointment Dispatch context",
+                    authority="DISPATCH.LIA_CONTEXT.v1",
+                    observed_at=observed_at,
+                    freshness="CURRENT_QUERY",
+                    entity_id=entity_id,
+                    evidence_digest=hashlib.sha256(
+                        json.dumps(
+                            dispatch_payload, sort_keys=True, separators=(",", ":")
+                        ).encode()
+                    ).hexdigest(),
+                    count=1 if assignment is not None else 0,
+                    state=state,
+                    source_contract_version="DISPATCH.LIA_CONTEXT.v1",
+                    company_id=context.company.id,
+                    branch_ids=(
+                        (assignment.branch_id,)
+                        if assignment is not None
+                        else (context.active_branch.id,)
+                        if context.active_branch is not None
+                        else ()
+                    ),
+                    authorization_version=context.authorization_version,
+                    limitations=("read_only_no_assignment_mutation",),
+                )
         # Permission checks select adapters before any protected query is executed.
         permitted = tuple(
             adapter
@@ -305,12 +406,14 @@ class GovernedRetrievalService:
             if context.has_permission(adapter.permission)
             and (domains is None or adapter.domain in domains)
             and not (entity_id is not None and adapter.domain in contextual_domains)
+            and not (contextual_dispatch_attempted and adapter.domain == "dispatch")
             and (temporal is None or adapter.temporal_kind is not None)
         )
-        observed_at = datetime.now(timezone.utc)
         evidence: list[EvidenceReference] = (
             [contextual_reference] if contextual_reference is not None else []
         )
+        if dispatch_reference is not None:
+            evidence.append(dispatch_reference)
         for adapter in permitted:
             predicates = [adapter.model.company_id == context.company.id]
             evidence_branch_ids: tuple[Any, ...] = ()
@@ -328,7 +431,21 @@ class GovernedRetrievalService:
                 predicates.append(branch_predicate)
                 evidence_branch_ids = tuple(sorted(branch_ids, key=str))
             if entity_id is not None:
-                predicates.append(adapter.model.id == entity_id)
+                scoped_entity_column = (
+                    adapter.entity_columns.get(entity_domain)
+                    if adapter.entity_columns is not None and entity_domain is not None
+                    else None
+                )
+                predicates.append(
+                    (
+                        scoped_entity_column
+                        if scoped_entity_column is not None
+                        else adapter.entity_column
+                        if adapter.entity_column is not None
+                        else adapter.model.id
+                    )
+                    == entity_id
+                )
             if temporal is not None:
                 predicates.extend(_temporal_predicates(adapter, temporal))
             rows = (
@@ -490,11 +607,18 @@ class GovernedRetrievalService:
             domains is None or "beacon" in domains
         ):
             if temporal is None:
-                evidence.extend(await self._beacon(session, context, observed_at))
+                evidence.extend(
+                    await self._beacon(
+                        session,
+                        context,
+                        observed_at,
+                        entity_id=entity_id if entity_domain == "beacon" else None,
+                    )
+                )
             else:
-                evidence.append(
-                    _period_unavailable(
-                        "beacon", "Beacon lifecycle history", temporal, observed_at
+                evidence.extend(
+                    await self._beacon_history(
+                        session, context, observed_at, temporal
                     )
                 )
         if context.has_permission(AdministrationPermission.COMPANY_ADMINISTER) and (
@@ -657,12 +781,46 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _beacon(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        *,
+        entity_id: UUID | None = None,
     ) -> tuple[EvidenceReference, ...]:
         queue = await beacon_query_service.get_attention_queue(
             session, context=context, now=observed_at
         )
         signals = (*queue.active, *queue.snoozed)
+        if entity_id is not None:
+            signal = next((item for item in signals if item.id == entity_id), None)
+            if signal is None:
+                return ()
+            state = (
+                f"{signal.title} | Severity {signal.severity.value}; priority {signal.priority.band.value}. "
+                f"Why: {signal.priority.explanation} Recommended review: {signal.recommended_action}"
+            )
+            return (
+                EvidenceReference(
+                    domain="beacon",
+                    label="Beacon attention condition",
+                    authority="BEACON.INTELLIGENCE.v1",
+                    observed_at=observed_at,
+                    freshness="CURRENT_QUERY",
+                    entity_id=signal.id,
+                    evidence_digest=signal.evidence_digest,
+                    count=1,
+                    state=state,
+                    source_contract_version="BEACON.INTELLIGENCE.v1",
+                    company_id=context.company.id,
+                    branch_ids=(context.active_branch.id,)
+                    if context.active_branch is not None
+                    else tuple(sorted(context.authorized_branch_ids, key=str)),
+                    authorization_version=context.authorization_version,
+                    limitations=(
+                        "Beacon recommendation is read-only and does not establish business authority or execute remediation.",
+                    ),
+                ),
+            )
         states = {
             "active": len(queue.active),
             "snoozed": len(queue.snoozed),
@@ -675,6 +833,108 @@ class GovernedRetrievalService:
                 observed_at=observed_at,
                 rows=tuple((str(item.id), item.evidence_digest) for item in signals),
                 states=states,
+            ),
+        )
+
+    @staticmethod
+    async def _beacon_history(
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        temporal: LiaTemporalContext,
+    ) -> tuple[EvidenceReference, ...]:
+        if (temporal.end_date - temporal.start_date).days >= 31:
+            return (
+                _period_unavailable(
+                    "beacon",
+                    "Beacon evaluation history",
+                    temporal,
+                    observed_at,
+                    limitation="beacon_history_window_exceeds_31_days",
+                ),
+            )
+        start_at, end_at = _datetime_bounds(temporal)
+        history_since = start_at - timedelta(microseconds=1)
+        history_until = end_at - timedelta(microseconds=1)
+        branch_id = context.active_branch.id if context.active_branch else None
+        records = await beacon_evaluation_history_service.deltas(
+            session,
+            company_id=context.company.id,
+            branch_id=branch_id,
+            since=history_since,
+            until=history_until,
+        )
+        completed = await beacon_evaluation_history_service.has_completed_run(
+            session,
+            company_id=context.company.id,
+            branch_id=branch_id,
+            since=history_since,
+            until=history_until,
+        )
+        if not completed:
+            return (
+                _period_unavailable(
+                    "beacon",
+                    "Beacon evaluation history",
+                    temporal,
+                    observed_at,
+                    limitation="no_completed_beacon_evaluation_in_period",
+                ),
+            )
+
+        states = {
+            disposition.value: sum(
+                item.disposition is disposition for item in records
+            )
+            for disposition in EvaluationDisposition
+        }
+        canonical = {
+            "company_id": str(context.company.id),
+            "branch_id": str(branch_id) if branch_id else None,
+            "period": _temporal_canonical(temporal),
+            "records": sorted(
+                (
+                    str(item.id),
+                    str(item.run_id),
+                    str(item.condition_key),
+                    item.evidence_digest,
+                    item.disposition.value,
+                    item.evaluated_at.isoformat(),
+                    item.evidence_as_of.isoformat(),
+                )
+                for item in records
+            ),
+            "states": states,
+        }
+        digest = hashlib.sha256(
+            json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        state = ", ".join(
+            f"{key}={value}" for key, value in sorted(states.items()) if value
+        )
+        return (
+            EvidenceReference(
+                domain="beacon",
+                label="Beacon evaluation history",
+                authority="AUTHORITATIVE_SIGNAL_HISTORY",
+                observed_at=max(
+                    (item.evaluated_at for item in records), default=observed_at
+                ),
+                freshness="PERSISTED_EVIDENCE",
+                evidence_digest=digest,
+                count=len(records),
+                state=state or "no Beacon changes recorded",
+                source_contract_version="BEACON.EVALUATION_HISTORY.v1",
+                company_id=context.company.id,
+                branch_ids=(branch_id,) if branch_id else (),
+                authorization_version=context.authorization_version,
+                limitations=(
+                    "Historical dispositions explain recorded Beacon evaluations; they do not replace current lifecycle state or authorize remediation.",
+                ),
+                period_start=temporal.start_date,
+                period_end=temporal.end_date,
+                period_label=temporal.period_label,
+                timezone=temporal.timezone,
             ),
         )
 

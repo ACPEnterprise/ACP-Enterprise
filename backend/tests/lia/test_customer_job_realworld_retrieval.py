@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.customers.lia_context import customer_lia_context_service
 from app.jobs.lia_context import job_lia_context_service
 from app.lia.contracts import (
@@ -14,9 +15,21 @@ from app.lia.contracts import (
     TruthClassification,
 )
 from app.lia.planner import plan_question
-from app.lia.retrieval import GovernedRetrievalService
-from app.lia.service import LiaService
-from app.platform.permissions.codes import CustomerPermission, JobPermission
+from app.lia.retrieval import ADAPTERS, GovernedRetrievalService
+from app.lia.service import ROUTES, LiaService, _evidence_route
+from app.payroll.permissions import PayrollPermission
+from app.platform.permissions.codes import (
+    CustomerPermission,
+    DispatchPermission,
+    EstimatePermission,
+    InvoicePermission,
+    JobPermission,
+    PaymentPermission,
+    SchedulingPermission,
+    WorkforcePermission,
+)
+from app.timekeeping.permissions import TimekeepingPermission
+from app.workforce.service import workforce_operations_service
 
 
 def _context(*permissions: str) -> SimpleNamespace:
@@ -66,6 +79,86 @@ def test_named_customer_and_job_plans_are_bounded() -> None:
     assert job.subject_query == "306"
     assert job.domains == frozenset({"jobs"})
 
+    spoken_job = plan_question("Show me job three thirteen")
+    assert spoken_job.subject_domain == "jobs"
+    assert spoken_job.subject_query == "three thirteen"
+
+    embedded_job = plan_question("Who is assigned to Job JOB-000306?")
+    assert embedded_job.subject_domain == "jobs"
+    assert embedded_job.subject_query == "JOB-000306"
+
+    open_employee = plan_question("Open Lianne Hernandez")
+    assert open_employee.subject_domain == "identity"
+    assert open_employee.subject_query == "Lianne Hernandez"
+
+    payroll_employee = plan_question("Is Lianne Hernandez ready for payroll?")
+    assert payroll_employee.subject_domain == "workforce"
+    assert payroll_employee.subject_query == "Lianne Hernandez"
+    assert payroll_employee.domains == frozenset({"workforce", "payroll"})
+
+    employee = plan_question("Show me Employee Lianne Hernandez")
+    assert employee.subject_domain == "workforce"
+    assert employee.subject_query == "Lianne Hernandez"
+    assert employee.domains == frozenset({"workforce"})
+
+    assert "price-book" in plan_question("What's our price for drain cleaning?").domains
+    assert "payments" in plan_question("What did they pay us last time?").domains
+    for question, domain, reference in (
+        ("Show me Estimate EST-000123", "estimates", "EST-000123"),
+        ("Show me Invoice INV-000456", "invoicing", "INV-000456"),
+        ("Show me Appointment APT-000267", "scheduling", "APT-000267"),
+    ):
+        plan = plan_question(question)
+        assert plan.subject_domain == domain
+        assert plan.subject_query == reference
+
+    employee_time = plan_question("How many hours did Lianne Hernandez work last week?")
+    assert employee_time.subject_domain == "workforce"
+    assert employee_time.subject_query == "Lianne Hernandez"
+    assert employee_time.domains == frozenset({"workforce", "timekeeping"})
+
+
+def test_exact_subject_corrections_replace_customer_and_job_referents() -> None:
+    customer = plan_question("No, I meant Acme Plumbing", "customers", ("customers",))
+    assert customer.subject_domain == "customers"
+    assert customer.subject_query == "Acme Plumbing"
+    assert customer.domains == frozenset({"customers"})
+
+    job = plan_question("No, I meant JOB-000307", "jobs", ("jobs",))
+    assert job.subject_domain == "jobs"
+    assert job.subject_query == "JOB-000307"
+    assert job.domains == frozenset({"jobs"})
+
+
+def test_navigation_targets_use_canonical_product_routes() -> None:
+    assert ROUTES["accounting"] == "/financial-reports"
+    assert ROUTES["timekeeping"] == "/employees"
+    assert ROUTES["communications"] == "/administration/communications"
+    entity_id = uuid4()
+    for domain, expected in (
+        ("scheduling", f"/appointments/{entity_id}"),
+        ("invoicing", f"/invoices/{entity_id}"),
+        ("payments", f"/payments/{entity_id}"),
+    ):
+        evidence = EvidenceReference(
+            domain=domain,
+            label=domain,
+            authority="AUTHORITATIVE_FACT",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=entity_id,
+            evidence_digest="a" * 64,
+        )
+        assert _evidence_route(evidence) == expected
+
+
+def test_employee_context_filters_time_and_dispatch_by_employee_identity() -> None:
+    adapters = {adapter.domain: adapter for adapter in ADAPTERS}
+    assert adapters["timekeeping"].entity_column.key == "employee_id"
+    assert adapters["dispatch"].entity_columns["workforce"].key == "primary_employee_id"
+    assert adapters["dispatch"].entity_columns["scheduling"].key == "appointment_id"
+    assert adapters["dispatch"].entity_columns["jobs"].key == "job_id"
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -110,6 +203,133 @@ async def test_exact_authorized_subject_resolves_to_existing_projection(
     assert response.proposals == ()
     assert retrieval.retrieve.await_args.kwargs["entity_id"] == entity_id
     assert retrieval.retrieve.await_args.kwargs["domains"] == {domain}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "domain", "permission"),
+    (
+        ("Show me Estimate EST-000123", "estimates", EstimatePermission.READ),
+        ("Show me Invoice INV-000456", "invoicing", InvoicePermission.READ),
+        (
+            "Show me Appointment APT-000267",
+            "scheduling",
+            SchedulingPermission.READ,
+        ),
+    ),
+)
+async def test_canonical_operational_reference_resolves_without_uuid(
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+    domain: str,
+    permission: str,
+) -> None:
+    entity_id = uuid4()
+    resolver = AsyncMock(return_value=(entity_id,))
+    monkeypatch.setattr("app.lia.service.resolve_canonical_reference", resolver)
+    evidence = EvidenceReference(
+        domain=domain,
+        label=domain,
+        authority="AUTHORITATIVE_FACT",
+        observed_at=datetime.now(timezone.utc),
+        freshness="CURRENT_QUERY",
+        entity_id=entity_id,
+        evidence_digest="r" * 64,
+        count=1,
+        state="active=1",
+    )
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (evidence,)
+
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(), context=_context(permission), request=LiaRequest(question=question)
+    )
+
+    assert response.subject_domain == domain
+    assert response.subject_id == entity_id
+    resolver.assert_awaited_once()
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] == entity_id
+
+
+@pytest.mark.asyncio
+async def test_appointment_assignment_question_composes_dispatch_by_appointment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    appointment_id = uuid4()
+    resolver = AsyncMock(return_value=(appointment_id,))
+    monkeypatch.setattr("app.lia.service.resolve_canonical_reference", resolver)
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="dispatch",
+            label="Dispatch assignments",
+            authority="AUTHORITATIVE_FACT",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=appointment_id,
+            evidence_digest="d" * 64,
+            count=1,
+            state="assigned=1",
+        ),
+    )
+
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(SchedulingPermission.READ, DispatchPermission.READ),
+        request=LiaRequest(question="Who is assigned to Appointment APT-000267?"),
+    )
+
+    assert response.subject_domain == "scheduling"
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {
+        "scheduling",
+        "dispatch",
+    }
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] == appointment_id
+    assert retrieval.retrieve.await_args.kwargs["entity_domain"] == "scheduling"
+
+
+@pytest.mark.asyncio
+async def test_named_employee_time_query_keeps_employee_and_timekeeping_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    employee_id = uuid4()
+    monkeypatch.setattr(
+        workforce_operations_service,
+        "resolve_display_name",
+        AsyncMock(return_value=(employee_id,)),
+    )
+    evidence = EvidenceReference(
+        domain="timekeeping",
+        label="Accepted timekeeping revisions",
+        authority="AUTHORITATIVE_FACT",
+        observed_at=datetime.now(timezone.utc),
+        freshness="CURRENT_QUERY",
+        evidence_digest="t" * 64,
+        count=2,
+        state="accepted=2",
+    )
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (evidence,)
+
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(WorkforcePermission.READ, TimekeepingPermission.ADMIN_READ),
+        request=LiaRequest(
+            question="How many hours did Lianne Hernandez work last week?"
+        ),
+    )
+
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] == employee_id
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {
+        "workforce",
+        "timekeeping",
+    }
+    assert response.classification is TruthClassification.INCOMPLETE
+    assert "does not provide an authoritative total-hours aggregate" in response.answer
+    assert any(
+        limitation.startswith("Scheduled duration was not substituted")
+        for limitation in response.limitations
+    )
 
 
 @pytest.mark.asyncio
@@ -218,6 +438,124 @@ async def test_customer_and_job_follow_ups_retain_authoritative_referent() -> No
 
 
 @pytest.mark.asyncio
+async def test_initial_domain_question_binds_safe_follow_up_topic() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="scheduling",
+            label="Appointments",
+            authority="AUTHORITATIVE_FACT",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            evidence_digest="s" * 64,
+            count=1,
+            state="SCHEDULED=1",
+        ),
+    )
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(SchedulingPermission.READ),
+        request=LiaRequest(question="What is scheduled today?"),
+    )
+
+    assert response.subject_domain == "scheduling"
+    assert response.subject_id is None
+    assert response.temporal is not None
+    assert response.temporal.period_label == "today"
+
+
+@pytest.mark.asyncio
+async def test_direct_named_payroll_question_uses_employee_specific_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    employee_id = uuid4()
+    monkeypatch.setattr(
+        workforce_operations_service,
+        "resolve_display_name",
+        AsyncMock(return_value=(employee_id,)),
+    )
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="workforce",
+            label="Minimum-necessary Workforce readiness context",
+            authority="WORKFORCE.LIA_CONTEXT.v1",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=employee_id,
+            evidence_digest="w" * 64,
+            count=1,
+            state="Employee Lianne Hernandez is active",
+        ),
+        EvidenceReference(
+            domain="payroll",
+            label="Payroll readiness for Lianne Hernandez",
+            authority="PAYROLL.PERIOD.OPERATIONS.v1",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=employee_id,
+            evidence_digest="p" * 64,
+            count=1,
+            state="blocker:TIME_EVIDENCE_MISSING",
+        ),
+    )
+
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(
+            WorkforcePermission.READ,
+            PayrollPermission.REPORTING_READ,
+        ),
+        request=LiaRequest(question="Is Lianne Hernandez ready for payroll?"),
+    )
+
+    assert response.subject_domain == "workforce"
+    assert response.subject_id == employee_id
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {
+        "workforce",
+        "payroll",
+    }
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] == employee_id
+    assert response.answer.startswith("ACP's native authorized records show: No.")
+
+
+@pytest.mark.asyncio
+async def test_explicit_topic_switch_drops_prior_entity_referent() -> None:
+    customer_id = uuid4()
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="scheduling",
+            label="Appointments",
+            authority="AUTHORITATIVE_FACT",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            evidence_digest="s" * 64,
+            count=1,
+            state="SCHEDULED=1",
+        ),
+    )
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(CustomerPermission.READ, SchedulingPermission.READ),
+        request=LiaRequest(
+            question="What is scheduled tomorrow?",
+            context=LiaContext(
+                domain="customers",
+                entity_id=customer_id,
+                authorization_version=14,
+                topic_domains=("customers",),
+            ),
+        ),
+    )
+
+    assert response.subject_domain == "scheduling"
+    assert response.subject_id is None
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] is None
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {"scheduling"}
+
+
+@pytest.mark.asyncio
 async def test_source_resolvers_apply_company_and_branch_scope() -> None:
     for resolver, argument in (
         (
@@ -242,3 +580,29 @@ async def test_source_resolvers_apply_company_and_branch_scope() -> None:
             if isinstance(value, (list, tuple, set, frozenset))
             for item in value
         }
+
+
+@pytest.mark.asyncio
+async def test_invoice_payment_follow_up_never_falls_back_to_company_counts() -> None:
+    invoice_id = uuid4()
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(InvoicePermission.READ, PaymentPermission.READ),
+        request=LiaRequest(
+            question="What payment evidence exists?",
+            context=LiaContext(
+                domain="invoicing",
+                entity_id=invoice_id,
+                authorization_version=14,
+                topic_domains=("invoicing",),
+            ),
+        ),
+    )
+    assert response.classification is TruthClassification.INCOMPLETE
+    assert any(
+        limitation.startswith("Company-wide Payment records were not substituted")
+        for limitation in response.limitations
+    )
+    assert response.navigation[0].internal_path == f"/invoices/{invoice_id}"
+    retrieval.retrieve.assert_not_awaited()

@@ -8,6 +8,8 @@ let cashAllowed = false;
 let workspaceEnabled: boolean | undefined;
 let detailEnabled: boolean | undefined;
 let workspaceMode: "success" | "error" | "pending" = "success";
+let workspaceCurrency: string | null = "USD";
+let workspacePeriod: { start: string; end: string } | undefined;
 const refetch = vi.fn();
 vi.mock("../auth", () => ({
   useHasPermission: (permission: string) =>
@@ -91,6 +93,7 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
     return { isPending: false, isError: false, data: null };
   },
   useEconomicsWorkspace: (_start: string, _end: string, enabled: boolean) => {
+    workspacePeriod = { start: _start, end: _end };
     workspaceEnabled = enabled;
     if (workspaceMode === "pending")
       return { isPending: true, isError: false, data: null, refetch };
@@ -104,7 +107,7 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
         period: { start: "2027-01-01", end: "2027-01-31" },
         prior_period: { start: "2026-12-01", end: "2026-12-31" },
         quality_state: "partial",
-        currency: "USD",
+        currency: workspaceCurrency,
         source_result_count: 2,
         excluded_job_count: 0,
         job_count: 2,
@@ -190,6 +193,8 @@ describe("BusinessEconomicsRoute", () => {
     allowed = false;
     cashAllowed = false;
     workspaceMode = "success";
+    workspaceCurrency = "USD";
+    workspacePeriod = undefined;
     workspaceEnabled = undefined;
     detailEnabled = undefined;
     refetch.mockReset();
@@ -251,5 +256,25 @@ describe("BusinessEconomicsRoute", () => {
       screen.getByRole("button", { name: /retry economics/i }),
     );
     expect(refetch).toHaveBeenCalledOnce();
+  });
+  it("rejects reversed periods before issuing a new Economics request", async () => {
+    allowed = true;
+    render(<BusinessEconomicsRoute />);
+    const initialPeriod = workspacePeriod;
+    await userEvent.clear(screen.getByLabelText("Start date"));
+    await userEvent.type(screen.getByLabelText("Start date"), "2027-02-20");
+    await userEvent.clear(screen.getByLabelText("End date"));
+    await userEvent.type(screen.getByLabelText("End date"), "2027-02-10");
+    await userEvent.click(screen.getByRole("button", { name: "Compare period" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose a start date on or before the end date");
+    expect(workspacePeriod).toEqual(initialPeriod);
+  });
+  it("does not invent USD when Economics currency authority is unavailable", () => {
+    allowed = true;
+    workspaceCurrency = null;
+    render(<BusinessEconomicsRoute />);
+    expect(screen.getByText(/Currency authority is unavailable/i)).toBeVisible();
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+    expect(screen.queryByText("$1,000.00")).not.toBeInTheDocument();
   });
 });

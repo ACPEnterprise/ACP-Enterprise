@@ -52,8 +52,14 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("dispatch", ("dispatch", "assigned", "technician conflict", "who has")),
     ("estimates", ("estimate", "proposal")),
-    ("invoicing", ("invoice", "outstanding", "open ar", "revenue")),
-    ("payments", ("payment", "settlement", "cash collected", "paid us", "collect")),
+    (
+        "invoicing",
+        ("invoice", "outstanding", "open ar", "revenue", "did we charge"),
+    ),
+    (
+        "payments",
+        ("payment", "settlement", "cash collected", "paid us", "pay us", "collect"),
+    ),
     ("communications", ("communication", "message delivery", "bounce")),
     ("assets", ("asset", "equipment", "fleet", "warranty")),
     (
@@ -70,7 +76,17 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "login ready",
         ),
     ),
-    ("timekeeping", ("timekeeping", "time entry", "labor hours", "clock")),
+    (
+        "timekeeping",
+        (
+            "timekeeping",
+            "time entry",
+            "timecard",
+            "labor hours",
+            "jobsite hours",
+            "hours",
+        ),
+    ),
     (
         "payroll",
         (
@@ -80,6 +96,7 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "direct deposit",
             "pay statement",
             "holding payroll",
+            "calculate after prerequisites",
         ),
     ),
     (
@@ -110,7 +127,16 @@ DOMAIN_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "completeness",
         ),
     ),
-    ("price-book", ("price book", "pricing review", "what did we charge")),
+    (
+        "price-book",
+        (
+            "price book",
+            "pricing review",
+            "our price",
+            "price for",
+            "what did we charge",
+        ),
+    ),
     ("beacon", ("beacon", "signal", "needs attention", "worried about")),
     (
         "business-economics",
@@ -191,11 +217,19 @@ def plan_question(
     conversation = interpret_conversation(question)
     normalized = conversation.normalized
     subject = _named_subject(question) if context_domain is None else None
+    corrected_subject = conversation.corrected_subject
+    corrected_reference = _named_subject(corrected_subject) if corrected_subject else None
     corrected_context_subject = bool(
-        conversation.corrected_subject and context_domain == "workforce"
+        corrected_subject
+        and corrected_reference is None
+        and context_domain in {"customers", "jobs", "workforce"}
     )
-    if corrected_context_subject:
-        subject = ("workforce", conversation.corrected_subject or "")
+    if corrected_reference is not None:
+        subject = corrected_reference
+    elif corrected_context_subject:
+        subject = (context_domain or "identity", corrected_subject or "")
+    elif corrected_subject:
+        subject = ("identity", corrected_subject)
     subject_domain, subject_query = subject if subject is not None else (None, None)
     if subject_domain == "identity":
         domains = frozenset({"customers", "workforce"})
@@ -259,12 +293,61 @@ def plan_question(
 
 
 def _named_subject(question: str) -> tuple[str, str] | None:
+    price_reference = re.fullmatch(
+        r"\s*(?:what(?:'s| is)\s+)?(?:our\s+)?price\s+(?:for|of)\s+(.+?)[?.!]?\s*",
+        question,
+        re.IGNORECASE,
+    )
+    if price_reference:
+        return ("price-book", " ".join(price_reference.group(1).split()))
+    for pattern in (
+        r"\s*how\s+many\s+hours\s+did\s+(.+?)\s+work(?:\s+.+)?[?.!]?\s*",
+        r"\s*what\s+are\s+(.+?)(?:'s|’s)\s+jobsite\s+hours(?:\s+.+)?[?.!]?\s*",
+        r"\s*show\s+me\s+(.+?)(?:'s|’s)\s+time\s+entries(?:\s+.+)?[?.!]?\s*",
+    ):
+        employee_time = re.fullmatch(pattern, question, re.IGNORECASE)
+        if employee_time:
+            return ("workforce", " ".join(employee_time.group(1).split()))
+    for domain, label, prefix in (
+        ("estimates", "estimate", "EST"),
+        ("invoicing", "invoice", "INV"),
+        ("scheduling", "appointment", "APT"),
+    ):
+        record_reference = re.search(
+            rf"\b{label}\s+(?:{prefix}-)?(\d+)\b", question, re.IGNORECASE
+        )
+        if record_reference:
+            return (domain, f"{prefix}-{record_reference.group(1)}")
+    job_reference = re.search(
+        r"\bjob\s+([A-Z]+(?:-[A-Z]+)*-?\d+|\d+)\b", question, re.IGNORECASE
+    )
+    if job_reference:
+        return ("jobs", job_reference.group(1))
     patterns = (
-        ("jobs", r"\s*show\s+me\s+job\s+([A-Z0-9-]+)[?.!]?\s*"),
-        ("customers", r"\s*show\s+me\s+customer\s+(.+?)[?.!]?\s*"),
+        (
+            "workforce",
+            r"\s*is\s+(.+?)\s+(?:ready\s+for\s+payroll|payroll[- ]ready)[?.!]?\s*",
+        ),
+        (
+            "workforce",
+            r"\s*what(?:\s+specifically)?\s+(?:is\s+)?preventing\s+(.+?)\s+from\s+being\s+payroll[- ]ready[?.!]?\s*",
+        ),
+        (
+            "workforce",
+            r"\s*what\s+should\s+i\s+do(?:\s+next)?\s+to\s+make\s+(.+?)\s+payroll[- ]ready[?.!]?\s*",
+        ),
+        ("jobs", r"\s*(?:show\s+me|find|open)\s+job\s+(.+?)[?.!]?\s*"),
+        (
+            "customers",
+            r"\s*(?:show\s+me|find|open)\s+customer\s+(.+?)[?.!]?\s*",
+        ),
+        (
+            "workforce",
+            r"\s*(?:show\s+me|find|open)\s+employee\s+(.+?)[?.!]?\s*",
+        ),
         (
             "identity",
-            r"\s*(?:uh\s+)?(?:show me|find|actually,?\s*show me)\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){0,7})[?.!]?\s*",
+            r"\s*(?:uh\s+)?(?:show me|find|open|actually,?\s*show me)\s+([\w'’&.,-]+(?:\s+[\w'’&.,-]+){0,7})[?.!]?\s*",
         ),
     )
     for domain, pattern in patterns:

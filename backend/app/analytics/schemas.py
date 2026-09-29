@@ -7,8 +7,12 @@ from pydantic import BaseModel, Field
 
 class MetricValue(BaseModel):
     name: str
-    value: Decimal = Decimal("0.00")
+    value: Decimal | None = Decimal("0.00")
     event_count: int = 0
+    observed_event_count: int = 0
+    excluded_event_count: int = 0
+    completeness: str = "NO_EVENTS"
+    authority: str = "business_event_projection"
 
 
 class CountMetric(BaseModel):
@@ -39,10 +43,12 @@ class AnalyticsSummaryResponse(BaseModel):
 
 class RevenueTrendPoint(BaseModel):
     date: date
-    booked_revenue: Decimal = Decimal("0.00")
-    cash_collected: Decimal = Decimal("0.00")
+    booked_revenue: Decimal | None = Decimal("0.00")
+    cash_collected: Decimal | None = Decimal("0.00")
     booked_event_count: int = 0
     payment_event_count: int = 0
+    excluded_booked_event_count: int = 0
+    excluded_payment_event_count: int = 0
 
 
 class RevenueTrendResponse(BaseModel):
@@ -50,4 +56,7 @@ class RevenueTrendResponse(BaseModel):
     period_end: datetime
     timezone: str
     days: int
+    authority: str = "business_event_projection"
+    completeness: str = "NO_EVENTS"
+    excluded_event_count: int = 0
     points: list[RevenueTrendPoint]

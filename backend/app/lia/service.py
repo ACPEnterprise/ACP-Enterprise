@@ -37,6 +37,8 @@ from .conversation import (
 from .owner_answers import compose_owner_answer
 from .payroll_guidance import payroll_guidance_answer
 from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
+from .price_book_context import price_book_lia_context_service
+from .record_resolution import resolve_canonical_reference
 from .retrieval import GovernedRetrievalService, permitted_domain_names
 from .security import (
     EXFILTRATION_PATTERNS,
@@ -77,13 +79,13 @@ ROUTES = {
     "inventory": "/inventory",
     "assets": "/assets",
     "workforce": "/employees",
-    "communications": "/communications",
-    "accounting": "/reports",
+    "communications": "/administration/communications",
+    "accounting": "/financial-reports",
     "data-quality": "/data-quality",
     "launch-readiness": "/administration",
     "price-book": "/price-book",
     "audit": "/audit",
-    "timekeeping": "/employees/time-attendance",
+    "timekeeping": "/employees",
 }
 
 
@@ -129,9 +131,7 @@ class LiaService:
             resolved_temporal is None
             and temporal is not None
             and temporal.prior_start is not None
-            and re.search(
-                r"\bcompare (?:them|those|the two)\b", question, re.IGNORECASE
-            )
+            and re.search(r"(?<!\w)compare(?!\w)", question, re.IGNORECASE)
         ):
             temporal = temporal.model_copy(
                 update={
@@ -246,6 +246,26 @@ class LiaService:
                     "LIA did not guess or restore stale conversation context.",
                 ),
             )
+        if re.search(
+            r"\b(?:the (?:first|second|last) one|the other one|the other smith)\b",
+            question,
+            re.IGNORECASE,
+        ):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "I don't have an authorized candidate list in this request, so I can't safely tell which record you mean. "
+                    "Name the record or select it in its authoritative workspace."
+                ),
+                limitations=(
+                    "No ordinal or similar-name record was guessed.",
+                    "No protected lookup occurred.",
+                ),
+            )
         if conversation.pronouns and request.context is None:
             return self._response(
                 context=context,
@@ -259,6 +279,32 @@ class LiaService:
                 ),
                 limitations=(
                     "No referent was guessed and no protected lookup occurred.",
+                ),
+            )
+
+        if re.search(
+            r"\b(?:what did (?:we|the business|that job) make|how much did (?:we|that job) do)\b",
+            question.casefold(),
+        ):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "“Make” could mean invoiced amount, earned revenue, collected cash, "
+                    "QuickBooks income, net income, or contribution. Which measure do you want?"
+                ),
+                limitations=(
+                    "No financially material definition was chosen silently.",
+                    "No amount was calculated or inferred.",
+                ),
+                navigation=(
+                    NavigationSuggestion(
+                        label="Open Financial Reports",
+                        internal_path="/financial-reports",
+                    ),
                 ),
             )
 
@@ -297,6 +343,35 @@ class LiaService:
                 limitations=("ACP does not reveal whether protected records exist.",),
             )
         if (
+            request.context is not None
+            and request.context.domain == "invoicing"
+            and request.context.entity_id is not None
+            and "payments" in selected
+            and "invoicing" not in selected
+        ):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "ACP can retain the selected Invoice, but the current LIA evidence contract does not bind "
+                    "that Invoice to authoritative payment application, settlement, or collected-cash evidence. "
+                    "Open the Invoice to inspect its current authorized payment state."
+                ),
+                limitations=(
+                    "Company-wide Payment records were not substituted for this Invoice.",
+                    "Payment existence was not treated as settlement or collected cash.",
+                ),
+                navigation=(
+                    NavigationSuggestion(
+                        label="Open Invoice",
+                        internal_path=f"/invoices/{request.context.entity_id}",
+                    ),
+                ),
+            )
+        if (
             temporal is None
             and "payroll" in selected
             and "pay period" in question.casefold()
@@ -323,9 +398,30 @@ class LiaService:
             question, selected, temporal
         )
         if unsupported_period_reason is not None:
+            response_request = request
+            if temporal is not None:
+                prior_context = request.context
+                response_request = request.model_copy(
+                    update={
+                        "context": LiaContext(
+                            domain=prior_context.domain if prior_context else None,
+                            entity_id=prior_context.entity_id if prior_context else None,
+                            authorization_version=context.authorization_version,
+                            evidence_digest=(
+                                prior_context.evidence_digest
+                                if prior_context is not None and not period_changed
+                                else None
+                            ),
+                            topic_domains=(
+                                prior_context.topic_domains if prior_context else ()
+                            ),
+                            temporal=temporal,
+                        )
+                    }
+                )
             return self._response(
                 context=context,
-                request=request,
+                request=response_request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.INCOMPLETE,
@@ -337,7 +433,54 @@ class LiaService:
             )
         effective_request = request
         entity_id = request.context.entity_id if request.context else None
-        if plan.subject_query is not None and plan.subject_domain is not None:
+        preloaded_evidence: tuple[EvidenceReference, ...] = ()
+        if (
+            plan.subject_query is not None
+            and plan.subject_domain == "price-book"
+            and "price-book" in selected
+        ):
+            price_lookup = await price_book_lia_context_service.resolve_exact(
+                session,
+                context=context,
+                query=plan.subject_query,
+            )
+            if price_lookup.branch_required:
+                return self._response(
+                    context=context,
+                    request=request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    classification=TruthClassification.INCOMPLETE,
+                    answer="Select an authorized Branch before asking for a current Price Book price.",
+                    limitations=(
+                        "A Company-wide price was not substituted for Branch price authority.",
+                    ),
+                )
+            if len(price_lookup.matches) != 1 or price_lookup.evidence is None:
+                return self._response(
+                    context=context,
+                    request=request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    classification=(
+                        TruthClassification.INCOMPLETE
+                        if price_lookup.matches
+                        else TruthClassification.UNAVAILABLE
+                    ),
+                    answer=(
+                        "More than one authorized Price Book service matches that exact name or code. Open Price Book and select the intended service."
+                        if price_lookup.matches
+                        else "No active authorized Price Book service with that exact name or code is available in the selected Branch."
+                    ),
+                    limitations=("No fuzzy service identity or price was inferred.",),
+                    navigation=(
+                        NavigationSuggestion(
+                            label="Open Price Book", internal_path="/price-book"
+                        ),
+                    ),
+                )
+            preloaded_evidence = (price_lookup.evidence,)
+        elif plan.subject_query is not None and plan.subject_domain is not None:
             subject_matches: list[tuple[str, UUID]] = []
             if "customers" in selected and plan.subject_domain in {
                 "customers",
@@ -372,12 +515,26 @@ class LiaService:
                         job_number=plan.subject_query,
                     )
                 )
+            if plan.subject_domain in {"estimates", "invoicing", "scheduling"}:
+                subject_matches.extend(
+                    (plan.subject_domain, match)
+                    for match in await resolve_canonical_reference(
+                        session,
+                        context=context,
+                        domain=plan.subject_domain,
+                        reference=plan.subject_query,
+                    )
+                )
             if len(subject_matches) != 1:
                 subject_label = {
                     "customers": "Customer",
                     "jobs": "Job",
                     "identity": "Customer or Employee",
                     "workforce": "Employee",
+                    "price-book": "Price Book service",
+                    "estimates": "Estimate",
+                    "invoicing": "Invoice",
+                    "scheduling": "Appointment",
                 }[plan.subject_domain]
                 return self._response(
                     context=context,
@@ -399,13 +556,29 @@ class LiaService:
                     ),
                 )
             resolved_domain, entity_id = subject_matches[0]
-            selected = {resolved_domain}
+            selected = (
+                {
+                    domain
+                    for domain in selected
+                    if domain in {"workforce", "payroll", "timekeeping", "dispatch"}
+                }
+                if resolved_domain == "workforce"
+                else {
+                    domain
+                    for domain in selected
+                    if domain in {"scheduling", "dispatch"}
+                }
+                if resolved_domain == "scheduling"
+                else {resolved_domain}
+            )
+            selected.add(resolved_domain)
             effective_request = request.model_copy(
                 update={
                     "context": LiaContext(
                         domain=resolved_domain,
                         entity_id=entity_id,
                         authorization_version=context.authorization_version,
+                        topic_domains=tuple(sorted(selected)),
                         temporal=temporal,
                     )
                 }
@@ -427,13 +600,79 @@ class LiaService:
                     )
                 }
             )
+        if plan.subject_query is None and selected:
+            prior_context = request.context
+            selected_domain = (
+                next(iter(selected))
+                if len(selected) == 1
+                else prior_context.domain
+                if prior_context is not None and prior_context.domain in selected
+                else None
+            )
+            if selected_domain is not None:
+                same_subject = bool(
+                    prior_context is not None
+                    and prior_context.domain == selected_domain
+                )
+                prior_entity_id = (
+                    prior_context.entity_id
+                    if prior_context is not None and same_subject
+                    else None
+                )
+                prior_evidence_digest = (
+                    prior_context.evidence_digest
+                    if prior_context is not None and same_subject and not period_changed
+                    else None
+                )
+                entity_id = prior_entity_id
+                effective_request = request.model_copy(
+                    update={
+                        "context": LiaContext(
+                            domain=selected_domain,
+                            entity_id=entity_id,
+                            authorization_version=context.authorization_version,
+                            evidence_digest=prior_evidence_digest,
+                            topic_domains=tuple(sorted(selected)),
+                            temporal=temporal,
+                        )
+                    }
+                )
+        if temporal is not None:
+            prior_context = effective_request.context
+            effective_request = effective_request.model_copy(
+                update={
+                    "context": LiaContext(
+                        domain=prior_context.domain if prior_context else None,
+                        entity_id=prior_context.entity_id if prior_context else entity_id,
+                        authorization_version=context.authorization_version,
+                        evidence_digest=(
+                            prior_context.evidence_digest
+                            if prior_context is not None and not period_changed
+                            else None
+                        ),
+                        topic_domains=(
+                            prior_context.topic_domains
+                            if prior_context is not None
+                            else tuple(sorted(selected))
+                        ),
+                        temporal=temporal,
+                    )
+                }
+            )
         requested_basis = _requested_accounting_basis(question)
-        if temporal is None:
+        if preloaded_evidence:
+            evidence = preloaded_evidence
+        elif temporal is None:
             evidence = await self.retrieval.retrieve(
                 session,
                 context=context,
                 domains=selected,
                 entity_id=entity_id,
+                entity_domain=(
+                    effective_request.context.domain
+                    if effective_request.context is not None
+                    else None
+                ),
             )
         else:
             evidence = await self.retrieval.retrieve(
@@ -441,6 +680,11 @@ class LiaService:
                 context=context,
                 domains=selected,
                 entity_id=entity_id,
+                entity_domain=(
+                    effective_request.context.domain
+                    if effective_request.context is not None
+                    else None
+                ),
                 temporal=temporal,
                 requested_accounting_basis=requested_basis,
             )
@@ -460,6 +704,11 @@ class LiaService:
                         context=context,
                         domains=selected,
                         entity_id=entity_id,
+                        entity_domain=(
+                            effective_request.context.domain
+                            if effective_request.context is not None
+                            else None
+                        ),
                         temporal=comparison,
                         requested_accounting_basis=requested_basis,
                     )
@@ -476,6 +725,67 @@ class LiaService:
                 limitations=(
                     "AI_PROVIDER_NOT_CONFIGURED",
                     "No eligible source adapter returned evidence.",
+                ),
+            )
+
+        numeric_amount_request = _requests_financial_amount(question)
+        has_authoritative_financial_amount = any(
+            item.authority == "ACP_POSTED_LEDGER_AUTHORITY" for item in evidence
+        )
+        if (
+            numeric_amount_request
+            and selected & {"invoicing", "payments", "accounting"}
+            and not has_authoritative_financial_amount
+        ):
+            return self._response(
+                context=context,
+                request=effective_request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "ACP found authorized records for the requested scope, but the current LIA evidence contract "
+                    "does not provide the authoritative monetary aggregate needed to answer this amount question. "
+                    "Open the cited financial workspace to inspect the available total and its accounting or settlement authority."
+                ),
+                evidence=evidence,
+                limitations=(
+                    "Record counts were not presented as dollars.",
+                    "Invoice, payment, settlement, collected cash, revenue, and income were not collapsed into one amount.",
+                ),
+                navigation=tuple(
+                    NavigationSuggestion(
+                        label=f"Open {item.label}",
+                        internal_path=_evidence_route(item),
+                    )
+                    for item in evidence
+                    if item.domain in ROUTES
+                ),
+            )
+
+        if "timekeeping" in selected and re.search(
+            r"\bhow\s+many\s+hours\b|\bjobsite\s+hours\b", question.casefold()
+        ):
+            return self._response(
+                context=context,
+                request=effective_request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "ACP found the authorized accepted timekeeping records for the requested Employee and period, "
+                    "but the current LIA evidence contract does not provide an authoritative total-hours aggregate. "
+                    "Open Time & Attendance to review the accepted intervals and total."
+                ),
+                evidence=evidence,
+                limitations=(
+                    "Accepted-record counts were not presented as worked or paid hours.",
+                    "Scheduled duration was not substituted for accepted time.",
+                ),
+                navigation=(
+                    NavigationSuggestion(
+                        label="Open Time & Attendance", internal_path="/employees"
+                    ),
                 ),
             )
 
@@ -671,8 +981,16 @@ class LiaService:
 
 def _evidence_route(item: EvidenceReference) -> str:
     base = ROUTES[item.domain]
-    if item.entity_id is not None and item.domain in {"customers", "jobs"}:
-        return f"{base}/{item.entity_id}"
+    if item.entity_id is not None:
+        entity_base = {
+            "customers": "/customers",
+            "jobs": "/jobs",
+            "scheduling": "/appointments",
+            "invoicing": "/invoices",
+            "payments": "/payments",
+        }.get(item.domain)
+        if entity_base is not None:
+            return f"{entity_base}/{item.entity_id}"
     return base
 
 
@@ -726,7 +1044,7 @@ def _compose_answer(
             "date-filtered, so they must not be treated as period totals."
         )
     if mode is ResponseMode.BRIEF:
-        first = lines[0] if lines else "No result was returned."
+        first = _brief_text(lines[0]) if lines else "No result was returned."
         return f"{authority_text}: {first}{period_text}"
     detail = " ".join(lines)
     answer = f"{authority_text}: {detail}{period_text}"
@@ -737,6 +1055,17 @@ def _compose_answer(
         as_of = max(item.observed_at for item in evidence).isoformat()
         answer += f" Evidence authority: {sources}. As of {as_of}."
     return answer
+
+
+def _brief_text(answer: str, *, limit: int = 320) -> str:
+    """Keep the spoken/default brief answer useful without hiding evidence metadata."""
+    normalized = " ".join(answer.split())
+    if len(normalized) <= limit:
+        return normalized
+    boundary = normalized.rfind(" ", 0, limit - 1)
+    if boundary < limit // 2:
+        boundary = limit - 1
+    return f"{normalized[:boundary].rstrip('.,;:')}…"
 
 
 def _capability_answer(question: str) -> str:
@@ -891,20 +1220,43 @@ def _period_answer(
         f"{temporal.period_label} ({temporal.start_date.isoformat()} through "
         f"{temporal.end_date.isoformat()}, {temporal.timezone})"
     )
-    prefix = f"For {period}, "
-    if temporal.comparison_start is not None:
-        comparison_end = temporal.comparison_end or temporal.comparison_start
-        prefix = (
-            f"Comparing {period} with {temporal.comparison_label} "
-            f"({temporal.comparison_start.isoformat()} through "
-            f"{comparison_end.isoformat()}), "
-        )
     suffix = ""
     if unavailable:
         suffix = (
             " Historical filtering is unavailable for: "
             + ", ".join(sorted({item.domain for item in unavailable}))
             + "."
+        )
+    prefix = f"For {period}, "
+    if temporal.comparison_start is not None:
+        comparison_end = temporal.comparison_end or temporal.comparison_start
+        primary_evidence = tuple(
+            item
+            for item in supported
+            if item.period_start == temporal.start_date
+            and item.period_end == temporal.end_date
+        )
+        comparison_evidence = tuple(
+            item
+            for item in supported
+            if item.period_start == temporal.comparison_start
+            and item.period_end == comparison_end
+        )
+        if primary_evidence and comparison_evidence:
+            return (
+                f"Comparing {period} with {temporal.comparison_label} "
+                f"({temporal.comparison_start.isoformat()} through "
+                f"{comparison_end.isoformat()}), the authorized evidence reports "
+                f"{temporal.period_label}: {_period_evidence_summary(primary_evidence)} "
+                f"{temporal.comparison_label}: "
+                f"{_period_evidence_summary(comparison_evidence)} "
+                "LIA did not manufacture a difference, percentage, or causal explanation."
+                + suffix
+            )
+        prefix = (
+            f"Comparing {period} with {temporal.comparison_label} "
+            f"({temporal.comparison_start.isoformat()} through "
+            f"{comparison_end.isoformat()}), "
         )
     if not supported:
         return (
@@ -913,6 +1265,25 @@ def _period_answer(
             + suffix
         )
     return prefix + answer[0].lower() + answer[1:] + suffix
+
+
+def _requests_financial_amount(question: str) -> bool:
+    normalized = question.casefold()
+    return bool(
+        re.search(
+            r"\bhow\s+much\b"
+            r"|\btotal\s+(?:amount|invoiced|paid|collected)\b"
+            r"|\bwhat\s+(?:were|was)\s+(?:sales|revenue|income|profit)\b",
+            normalized,
+        )
+    )
+
+
+def _period_evidence_summary(evidence: tuple[EvidenceReference, ...]) -> str:
+    return "; ".join(
+        f"{item.label} — {item.state or f'{item.count or 0} accepted records'}."
+        for item in evidence
+    )
 
 
 def _unavailable_period_answer(

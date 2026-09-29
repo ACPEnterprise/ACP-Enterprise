@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AxiosError } from "axios";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LuminaryRoute } from "./LuminaryRoute";
@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   error: undefined as unknown,
   refetch: vi.fn(),
   analyze: vi.fn(),
+  emptyServices: false,
 }));
 
 vi.mock("../auth", () => ({
@@ -49,8 +50,60 @@ vi.mock("../hooks/useLuminary", () => ({
   useLuminaryOwnerEconomics: () => ({
     isPending: false,
     data: {
+      period: { start: "2026-09-01", end: "2026-09-15" },
+      prior_period: { start: "2026-08-17", end: "2026-08-31" },
+      generated_at: "2026-09-16T12:00:00Z",
       readiness: "READY",
       confidence: { score_percent: 90 },
+      facts: [
+        {
+          family: "REVENUE", metric: "invoiced_revenue", value: 12550,
+          units: "minor_currency", currency: "USD",
+          authority: "accepted_native_invoiced_or_valued_fact",
+          prerequisite_completeness: "AVAILABLE",
+          as_of: "2026-09-16T12:00:00Z",
+        },
+      ],
+      trend_support: {
+        state: "READY",
+        authority: "equal_length_single_authority_periods_only",
+        mixed_authority_periods: "labeled_and_not_combined",
+        comparison: {
+          state: "AVAILABLE", basis: "ACP_NATIVE_INVOICED",
+          invoiced_revenue_change_minor: 2500,
+        },
+      },
+      delta_explanation: {
+        state: "PARTIAL",
+        authority: "accepted_native_invoiced_evidence",
+        classification: "MEASURED_PERIOD_DIFFERENCE",
+        headline: "Invoiced revenue increased by 2500 minor currency units.",
+        explanation: "ACP can measure invoiced revenue change but cannot explain contribution change without admitted direct costs.",
+        period: { start: "2026-09-01", end: "2026-09-15" },
+        prior_period: { start: "2026-08-17", end: "2026-08-31" },
+        scope: { company_id: "company-1", branch_id: "branch-1" },
+        as_of: "2026-09-16T12:00:00Z",
+        freshness: "partial",
+        currency: "USD",
+        causality_boundary: "Arithmetic decomposition identifies measured contributors, not operational cause.",
+        components: [{
+          component: "invoiced_revenue", change_minor: 2500,
+          contribution_effect_minor: null,
+          classification: "MEASURED_PERIOD_DIFFERENCE",
+          authority: "accepted_native_invoiced_evidence",
+        }],
+        unexplained_change_minor: null,
+        missing_evidence: ["admitted_direct_contribution"],
+      },
+      evidence_priority_queue: [
+        {
+          prerequisite: "certified_direct_wage_cost",
+          affected_job_count: 1,
+          responsible_domain: "Payroll/Economics policy",
+          next_safe_step: "owner_input_required",
+          economic_unlock: "direct_contribution",
+        },
+      ],
       job_economics: [
         {
           job_id: "job-1", job_number: "J-100", job_status: "completed",
@@ -65,7 +118,7 @@ vi.mock("../hooks/useLuminary", () => ({
           confidence_percent: 70,
         },
       ],
-      service_line_economics: [
+      service_line_economics: state.emptyServices ? [] : [
         {
           service_category: "drain_cleaning", job_count: 1,
           contribution_ready_job_count: 0, invoiced_revenue_minor: 12550,
@@ -115,10 +168,16 @@ vi.mock("../hooks/useLuminary", () => ({
   }),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
+}
+
 const renderRoute = () =>
   render(
     <MemoryRouter>
       <LuminaryRoute />
+      <LocationProbe />
     </MemoryRouter>,
   );
 
@@ -127,6 +186,7 @@ describe("Luminary workspace recovery", () => {
     state.canRead = true;
     state.canAnalyze = true;
     state.error = undefined;
+    state.emptyServices = false;
     state.refetch.mockReset();
     state.analyze.mockReset();
   });
@@ -144,6 +204,28 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("What it means by service line")).toBeVisible();
     expect(screen.getAllByText("$125.50").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/certified direct wage cost/).length).toBeGreaterThan(0);
+  });
+
+  it("rejects a reversed period before requesting a misleading comparison", () => {
+    renderRoute();
+    fireEvent.change(screen.getByLabelText("Start date"), {
+      target: { value: "2026-09-20" },
+    });
+    fireEvent.change(screen.getByLabelText("End date"), {
+      target: { value: "2026-09-10" },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Choose a start date on or before the end date",
+    );
+  });
+
+  it("explains an empty service-line result without inventing categories", () => {
+    state.emptyServices = true;
+    renderRoute();
+    expect(
+      screen.getByText(/No authoritative service-category evidence exists for this period/i),
+    ).toBeVisible();
+    expect(screen.getByText(/did not infer categories from Job descriptions/i)).toBeVisible();
   });
 
   it("retries a temporary briefing failure without offering analysis", () => {
@@ -181,10 +263,36 @@ describe("Luminary workspace recovery", () => {
     expect(
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
     ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ask LIA about this evidence" }),
+    );
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/lia?contextDomain=luminary",
+    );
     expect(screen.getByText("Owner economics decision support")).toBeVisible();
+    expect(screen.getByText("What changed from the prior equal period")).toBeVisible();
+    expect(screen.getByText("+$25.00")).toBeVisible();
+    expect(screen.getByText("Why the measured economics changed")).toBeVisible();
+    expect(screen.getByText(/cannot explain contribution change/)).toBeVisible();
+    expect(screen.getByText(/not operational cause/)).toBeVisible();
+    expect(screen.getByText(/ACP cannot yet explain: admitted direct contribution/)).toBeVisible();
+    expect(screen.getByText("Measurement freshness and authority")).toBeVisible();
+    expect(screen.getByText("What evidence would improve this answer?")).toBeVisible();
+    expect(screen.getByText(/responsible domain: Payroll\/Economics policy/)).toBeVisible();
     expect(screen.getByText("Read-only scenario")).toBeVisible();
     expect(screen.getByText("No hypothetical scenario selected.")).toBeVisible();
     expect(screen.getByText("Review measured Job contribution")).toBeVisible();
     expect(screen.getByText(/No price, Employee, Payroll, payment, or Accounting state can be changed/i)).toBeVisible();
+  });
+
+  it("does not submit an invented numeric change for evidence-gated scenarios", () => {
+    renderRoute();
+    fireEvent.change(screen.getByLabelText("Assumption"), {
+      target: { value: "ADD_TRUCK" },
+    });
+    expect(screen.getByLabelText("Change (basis points)")).toBeDisabled();
+    expect(screen.getByText(/scenario is evidence-gated/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate scenario" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
