@@ -405,7 +405,9 @@ class LiaService:
                     update={
                         "context": LiaContext(
                             domain=prior_context.domain if prior_context else None,
-                            entity_id=prior_context.entity_id if prior_context else None,
+                            entity_id=prior_context.entity_id
+                            if prior_context
+                            else None,
                             authorization_version=context.authorization_version,
                             evidence_digest=(
                                 prior_context.evidence_digest
@@ -643,7 +645,9 @@ class LiaService:
                 update={
                     "context": LiaContext(
                         domain=prior_context.domain if prior_context else None,
-                        entity_id=prior_context.entity_id if prior_context else entity_id,
+                        entity_id=prior_context.entity_id
+                        if prior_context
+                        else entity_id,
                         authorization_version=context.authorization_version,
                         evidence_digest=(
                             prior_context.evidence_digest

@@ -218,7 +218,9 @@ def plan_question(
     normalized = conversation.normalized
     subject = _named_subject(question) if context_domain is None else None
     corrected_subject = conversation.corrected_subject
-    corrected_reference = _named_subject(corrected_subject) if corrected_subject else None
+    corrected_reference = (
+        _named_subject(corrected_subject) if corrected_subject else None
+    )
     corrected_context_subject = bool(
         corrected_subject
         and corrected_reference is None

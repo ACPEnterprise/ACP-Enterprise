@@ -246,9 +246,7 @@ async def test_beacon_period_without_completed_evaluation_is_explicitly_incomple
 
     assert evidence[0].authority == "PERIOD_AUTHORITY_UNAVAILABLE"
     assert evidence[0].freshness == "NO_ACCEPTED_EVIDENCE"
-    assert evidence[0].limitations == (
-        "no_completed_beacon_evaluation_in_period",
-    )
+    assert evidence[0].limitations == ("no_completed_beacon_evaluation_in_period",)
 
 
 @pytest.mark.asyncio

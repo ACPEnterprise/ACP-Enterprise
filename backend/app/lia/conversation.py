@@ -216,7 +216,9 @@ def _correction(question: str) -> CorrectionKind:
         for phrase in ("the other", "the first one", "the second one")
     ):
         return CorrectionKind.AMBIGUOUS
-    if re.search(r"\bthat\s+(job|invoice|customer|appointment),?\s+not\s+the\s+", question):
+    if re.search(
+        r"\bthat\s+(job|invoice|customer|appointment),?\s+not\s+the\s+", question
+    ):
         return CorrectionKind.SUBJECT
     return CorrectionKind.NONE
 

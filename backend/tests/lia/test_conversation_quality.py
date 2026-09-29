@@ -170,7 +170,9 @@ async def test_unbound_pronoun_requires_clarification_without_retrieval() -> Non
 
 
 @pytest.mark.asyncio
-async def test_ordinal_referent_without_candidate_contract_requires_clarification() -> None:
+async def test_ordinal_referent_without_candidate_contract_requires_clarification() -> (
+    None
+):
     retrieval = AsyncMock(spec=GovernedRetrievalService)
     result = await LiaService(retrieval=retrieval).ask(
         AsyncMock(),

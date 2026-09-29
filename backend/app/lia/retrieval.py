@@ -617,9 +617,7 @@ class GovernedRetrievalService:
                 )
             else:
                 evidence.extend(
-                    await self._beacon_history(
-                        session, context, observed_at, temporal
-                    )
+                    await self._beacon_history(session, context, observed_at, temporal)
                 )
         if context.has_permission(AdministrationPermission.COMPANY_ADMINISTER) and (
             domains is None or "migration" in domains
@@ -883,9 +881,7 @@ class GovernedRetrievalService:
             )
 
         states = {
-            disposition.value: sum(
-                item.disposition is disposition for item in records
-            )
+            disposition.value: sum(item.disposition is disposition for item in records)
             for disposition in EvaluationDisposition
         }
         canonical = {

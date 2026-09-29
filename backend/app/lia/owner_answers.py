@@ -36,8 +36,7 @@ def compose_owner_answer(
     beacon_history = tuple(
         item
         for item in evidence
-        if item.domain == "beacon"
-        and item.authority == "AUTHORITATIVE_SIGNAL_HISTORY"
+        if item.domain == "beacon" and item.authority == "AUTHORITATIVE_SIGNAL_HISTORY"
     )
     if len(beacon_history) == 2:
         period_summaries = []

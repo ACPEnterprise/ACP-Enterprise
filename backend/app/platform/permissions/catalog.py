@@ -168,7 +168,9 @@ PIPELINE_DEFINITIONS = tuple(
         code=code,
         name=code.replace("_", " ").title(),
         resource="pipeline_lead",
-        action=code.removeprefix("COMPANY_PIPELINE_LEAD_").removeprefix("COMPANY_PIPELINE_").lower(),
+        action=code.removeprefix("COMPANY_PIPELINE_LEAD_")
+        .removeprefix("COMPANY_PIPELINE_")
+        .lower(),
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(PipelinePermission.ALL)

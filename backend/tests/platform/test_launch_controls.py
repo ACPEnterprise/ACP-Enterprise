@@ -181,9 +181,7 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
 
 def test_field_technician_has_no_pipeline_authority() -> None:
     role = next(
-        value
-        for value in LAUNCH_ROLE_MATRIX
-        if value.code is LaunchRoleCode.TECHNICIAN
+        value for value in LAUNCH_ROLE_MATRIX if value.code is LaunchRoleCode.TECHNICIAN
     )
     assert role.permission_codes.isdisjoint(PipelinePermission.ALL)
 
