@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import { useActiveBeaconRecommendations } from "../hooks/useBeaconSignals";
 import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics";
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
@@ -16,6 +17,7 @@ import { CommandCenterRoute } from "./CommandCenterRoute";
 vi.mock("../auth/useAuth");
 vi.mock("../auth/usePermissions");
 vi.mock("../hooks/useAnalyticsSummary");
+vi.mock("../hooks/useBeaconSignals");
 vi.mock("../hooks/useBusinessEconomics");
 vi.mock("../hooks/useDispatch");
 vi.mock("../hooks/useInvoices");
@@ -36,6 +38,16 @@ function queryResult<T>(data: T) {
 }
 
 function arrange() {
+  vi.mocked(useActiveBeaconRecommendations).mockReturnValue(
+    queryResult({
+      company_id: "company-1",
+      branch_id: null,
+      evaluated_at: "2026-09-22T12:00:00Z",
+      recommendation_digest: "a".repeat(64),
+      items: [],
+      autonomous_action: false,
+    }),
+  );
   vi.mocked(useAuth).mockReturnValue({
     activeCompany: {
       id: "company-1",

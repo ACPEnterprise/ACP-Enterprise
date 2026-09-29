@@ -61,7 +61,7 @@ export function BranchSchedulingSetup() {
     }});
   };
 
-  return <Card>
+  return <Card id="branch-scheduling-setup">
     <CardHeader><CardTitle>Branch Scheduling Setup</CardTitle><CardDescription>Configure the selected Branch calendar, capacity, booking limits, and exceptions. No values are assumed.</CardDescription></CardHeader>
     <CardContent className="space-y-ui-4">
       <label><span className="text-body-s font-semibold">Branch</span><Select value={branchId} onChange={(event) => setBranchId(event.target.value)}>{activeCompany?.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</Select></label>
