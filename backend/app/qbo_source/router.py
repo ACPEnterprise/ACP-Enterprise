@@ -7,9 +7,12 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
@@ -29,6 +32,11 @@ from .accounting_evidence_projection import (
     project_latest_qbo_workspace,
     unavailable_qbo_workspace,
 )
+from .application_models import (
+    QboNativeApplicationRecord,
+    QboNativeReviewDecision,
+    QboNativeReviewItem,
+)
 from .bounded_evidence import (
     BoundedEvidenceError,
     latest_bounded_evidence,
@@ -39,7 +47,9 @@ from .intuit import IntuitAuthenticationError, IntuitError, IntuitProtocolError
 from .native_application import (
     FamilyDispositionCount,
     QboApplicationError,
+    ReviewDecisionCommand,
     qbo_native_application_service,
+    review_action_authority,
 )
 from .production import (
     ProductionAgedReceivablesRequest,
@@ -95,6 +105,14 @@ AGED_RECEIVABLES_PATH = (
 )
 NATIVE_APPLICATION_PATH = "/api/v1/accounting/source-evidence/qbo/native-application"
 NATIVE_REVIEW_PATH = f"{NATIVE_APPLICATION_PATH}/review-queue"
+
+
+class QboReviewDecisionRequest(BaseModel):
+    action: str = Field(min_length=1, max_length=40)
+    reason: str = Field(min_length=4, max_length=1000)
+    target_native_id: UUID | None = None
+    evidence_reference: str | None = Field(default=None, max_length=240)
+    supersedes_decision_id: UUID | None = None
 _PRODUCTION_CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com"
     "/api/v1/integrations/qbo/production/oauth/callback"
@@ -266,6 +284,35 @@ async def qbo_native_review_queue(
     items = await qbo_native_application_service.open_review_items(
         factory, context=authorization, limit=limit
     )
+    application_ids = [item.application_record_id for item in items]
+    async with factory() as session:
+        records = {
+            record.id: record
+            for record in (
+                await session.scalars(
+                    select(QboNativeApplicationRecord).where(
+                        QboNativeApplicationRecord.company_id
+                        == authorization.company.id,
+                        QboNativeApplicationRecord.id.in_(application_ids),
+                    )
+                )
+            ).all()
+        }
+        decisions = {
+            decision.review_item_id: decision
+            for decision in (
+                await session.scalars(
+                    select(QboNativeReviewDecision).where(
+                        QboNativeReviewDecision.company_id
+                        == authorization.company.id,
+                        QboNativeReviewDecision.review_item_id.in_(
+                            [item.id for item in items]
+                        ),
+                        QboNativeReviewDecision.superseded_at.is_(None),
+                    )
+                )
+            ).all()
+        }
     return JSONResponse(
         content={
             "items": [
@@ -273,6 +320,11 @@ async def qbo_native_review_queue(
                     "id": str(item.id),
                     "source_family": item.source_family,
                     "provider_record_id": item.provider_record_id,
+                    "provider_version": (
+                        records[item.application_record_id].provider_version
+                        if item.application_record_id in records
+                        else None
+                    ),
                     "reference_number": item.reference_number,
                     "source_date": item.source_date,
                     "source_amount": item.source_amount,
@@ -281,11 +333,98 @@ async def qbo_native_review_queue(
                     "conflicting_fields": item.conflicting_fields,
                     "exact_conflict": item.exact_conflict,
                     "affected_dependents": item.affected_dependents,
-                    "allowed_actions": item.allowed_actions,
+                    "allowed_actions": [
+                        {
+                            "action": action,
+                            "required_authority": review_action_authority(action),
+                        }
+                        for action in item.allowed_actions
+                    ],
+                    "current_decision": (
+                        {
+                            "id": str(decisions[item.id].id),
+                            "action": decisions[item.id].action,
+                            "authority_class": decisions[item.id].authority_class,
+                            "reason": decisions[item.id].reason,
+                            "decided_at": decisions[item.id].decided_at.isoformat(),
+                        }
+                        if item.id in decisions
+                        else None
+                    ),
                     "state": item.state,
+                    "unlocks": len(item.affected_dependents),
                 }
                 for item in items
             ]
+        },
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.post(
+    f"{NATIVE_REVIEW_PATH}/{{review_item_id}}/decisions",
+    name="qbo-native-review-decision",
+)
+async def decide_qbo_native_review(
+    review_item_id: UUID,
+    command: QboReviewDecisionRequest,
+    authorization: _Reconcile,
+    factory: _ApplicationFactory,
+) -> JSONResponse:
+    try:
+        decision = await qbo_native_application_service.decide_review(
+            factory,
+            context=authorization,
+            review_item_id=review_item_id,
+            command=ReviewDecisionCommand(
+                action=command.action,
+                reason=command.reason,
+                target_native_id=command.target_native_id,
+                evidence_reference=command.evidence_reference,
+                supersedes_decision_id=command.supersedes_decision_id,
+            ),
+        )
+    except QboApplicationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    re_evaluated = 0
+    if settings.qbo_production_evidence_root:
+        async with factory() as session:
+            item = await session.scalar(
+                select(QboNativeReviewItem).where(
+                    QboNativeReviewItem.id == review_item_id,
+                    QboNativeReviewItem.company_id == authorization.company.id,
+                )
+            )
+        if item is not None and item.affected_dependents:
+            try:
+                packet = latest_bounded_evidence(
+                    Path(settings.qbo_production_evidence_root)
+                )
+                if packet is not None:
+                    dependent_ids = set(item.affected_dependents)
+                    bounded = tuple(
+                        value
+                        for value in load_bounded_envelopes(packet)
+                        if value[1].native_id in dependent_ids
+                    )
+                    if bounded:
+                        replay = await qbo_native_application_service.apply_clean_majority(
+                            factory, context=authorization, envelopes=bounded
+                        )
+                        re_evaluated = replay.processed
+            except (KeyError, OSError, ValueError, BoundedEvidenceError, QboApplicationError):
+                re_evaluated = 0
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={
+            "decision_id": str(decision.id),
+            "review_item_id": str(decision.review_item_id),
+            "action": decision.action,
+            "authority_class": decision.authority_class,
+            "decided_at": decision.decided_at.isoformat(),
+            "dependent_records_re_evaluated": re_evaluated,
+            "qbo_write_performed": False,
+            "accounting_posting_performed": False,
         },
         headers={"Cache-Control": "private, no-store"},
     )

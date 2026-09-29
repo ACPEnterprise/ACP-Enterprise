@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    QBO_REVIEW_DECIDED = "qbo.review_decided"
     ASSET_CREATED = "asset.created"
     ASSET_EVIDENCE_RECORDED = "asset.evidence_recorded"
     ASSET_RELATIONSHIP_RECORDED = "asset.relationship_recorded"
