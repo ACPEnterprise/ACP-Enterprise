@@ -1,7 +1,7 @@
 """create qbo native application ledger
 
 Revision ID: q7s9u1w3y5a7
-Revises: pf6b8d0f2h4j6
+Revises: qf6b8d0e2h4j6
 Create Date: 2026-09-29
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "q7s9u1w3y5a7"
-down_revision: str | tuple[str, ...] | None = "pf6b8d0f2h4j6"
+down_revision: str | tuple[str, ...] | None = "qf6b8d0e2h4j6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
