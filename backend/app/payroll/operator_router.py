@@ -23,6 +23,7 @@ from app.payroll.calculation_authority import (
     configured_input_cipher,
 )
 from app.payroll.calculation_inputs import resolve_tax_deduction_requirements
+from app.payroll.commands import DraftPayrollPolicy
 from app.payroll.contracts import (
     CompanyPayrollPolicyDefinition,
     OvertimePolicy,
@@ -30,11 +31,10 @@ from app.payroll.contracts import (
     SalariedTimeRequirement,
     canonical_digest,
 )
-from app.payroll.commands import DraftPayrollPolicy
 from app.payroll.finalization import GrossReviewDecision, PayrollGrossResultService
 from app.payroll.models import (
-    PayrollCalculationInputSnapshotRecord,
     CompanyPayrollPolicyVersion,
+    PayrollCalculationInputSnapshotRecord,
     PayrollGrossCalculationResultRecord,
     PayrollInputAuthorityVersion,
     PayrollPaperCheckEvidenceRecord,
@@ -262,7 +262,7 @@ async def workflow(context: Read, session: Session) -> dict[str, object]:
 @router.get("/policy")
 async def payroll_policy(context: PolicyRead, session: Session) -> dict[str, object]:
     current = await PayrollAuthorityService().resolve_policy(
-        session, company_id=context.company.id, as_of_date=date.today()
+        session, company_id=context.company.id, as_of_date=datetime.now(timezone.utc).date()
     )
     drafts = tuple((await session.scalars(select(CompanyPayrollPolicyVersion).where(CompanyPayrollPolicyVersion.company_id == context.company.id, CompanyPayrollPolicyVersion.lifecycle == "draft").order_by(CompanyPayrollPolicyVersion.policy_version.desc()))).all())
     return {
