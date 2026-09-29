@@ -331,9 +331,7 @@ describe("PayrollRoute authorization", () => {
     );
     expect(screen.queryByText("No current pay period")).not.toBeInTheDocument();
     expect(document.getElementById("payroll-employee-employee-1")).toBeVisible();
-    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveClass(
-      "bg-action-primary/5",
-    );
+    expect(document.getElementById("payroll-employee-employee-1")).toHaveClass("bg-action-primary/5");
     expect(screen.getByTestId("payroll-employee-setup")).toHaveTextContent(
       "Payroll setup for employee-1",
     );
