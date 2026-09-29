@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -34,10 +34,28 @@ class RecommendationEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class RecommendationPriorityFactor:
+    factor: str
+    available: bool
+    contribution: int
+    explanation: str
+
+
+@dataclass(frozen=True, slots=True)
+class RelatedRecommendation:
+    recommendation_id: UUID
+    title: str
+    measured_fact: str
+    interpretation: str
+    evidence_digest: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ActiveOwnerRecommendation:
     recommendation_id: UUID
     definition_id: str
     definition_version: int
+    root_issue_key: str
     kind: RecommendationKind
     title: str
     measured_fact: str
@@ -48,13 +66,17 @@ class ActiveOwnerRecommendation:
     coverage: str
     confidence: str
     limitations: tuple[str, ...]
+    affected_capabilities: tuple[str, ...]
+    decisions_blocked: tuple[str, ...]
     priority_window: PriorityWindow
     priority_score: int
     priority_reason: str
+    priority_factors: tuple[RecommendationPriorityFactor, ...]
     improves_if_resolved: str
     drilldown_path: str
     action_destination: str
     evidence: tuple[RecommendationEvidence, ...]
+    related_recommendations: tuple[RelatedRecommendation, ...]
     expires_at: datetime
 
 
@@ -96,6 +118,7 @@ class LuminaryFindingFact:
     limitations: tuple[str, ...]
     investigate_next: tuple[str, ...]
     finding_digest: str
+    finding_identity: str
     period_start: str
     period_end: str
     generated_at: datetime
@@ -117,9 +140,10 @@ class ActiveRecommendationReasoner:
             *(self._customers(item, evaluated_at) for item in customers),
             *(self._luminary(item, evaluated_at) for item in luminary),
         ]
+        grouped = self._group(values)
         return tuple(
             sorted(
-                values,
+                grouped,
                 key=lambda item: (
                     -item.priority_score,
                     item.evidence_as_of,
@@ -127,6 +151,162 @@ class ActiveRecommendationReasoner:
                 ),
             )
         )
+
+    @staticmethod
+    def _group(
+        values: list[ActiveOwnerRecommendation],
+    ) -> tuple[ActiveOwnerRecommendation, ...]:
+        groups: dict[str, list[ActiveOwnerRecommendation]] = {}
+        for value in values:
+            groups.setdefault(value.root_issue_key, []).append(value)
+        result: list[ActiveOwnerRecommendation] = []
+        for group in groups.values():
+            primary = max(
+                group,
+                key=lambda item: (item.priority_score, item.evidence_as_of),
+            )
+            if len(group) == 1:
+                result.append(primary)
+                continue
+            related = tuple(
+                RelatedRecommendation(
+                    item.recommendation_id,
+                    item.title,
+                    item.measured_fact,
+                    item.interpretation,
+                    item.evidence[0].digest if item.evidence else None,
+                )
+                for item in group
+                if item.recommendation_id != primary.recommendation_id
+            )
+            breadth = min(10, (len(group) - 1) * 2)
+            score = min(100, primary.priority_score + breadth)
+            result.append(
+                replace(
+                    primary,
+                    coverage=f"{primary.coverage} · {len(group)} related accepted findings",
+                    limitations=tuple(
+                        dict.fromkeys(
+                            limitation
+                            for item in group
+                            for limitation in item.limitations
+                        )
+                    ),
+                    affected_capabilities=tuple(
+                        dict.fromkeys(
+                            capability
+                            for item in group
+                            for capability in item.affected_capabilities
+                        )
+                    ),
+                    decisions_blocked=tuple(
+                        dict.fromkeys(
+                            decision
+                            for item in group
+                            for decision in item.decisions_blocked
+                        )
+                    ),
+                    priority_score=score,
+                    priority_window=ActiveRecommendationReasoner._window(score),
+                    priority_reason=(
+                        f"{primary.priority_reason} {len(group)} accepted findings share "
+                        "the same canonical root-condition key."
+                    ),
+                    priority_factors=(
+                        *primary.priority_factors,
+                        RecommendationPriorityFactor(
+                            "root_condition_breadth",
+                            True,
+                            breadth,
+                            f"{len(group)} accepted findings share this deterministic root key.",
+                        ),
+                    ),
+                    evidence=tuple(
+                        dict.fromkeys(evidence for item in group for evidence in item.evidence)
+                    ),
+                    related_recommendations=related,
+                )
+            )
+        return tuple(result)
+
+    @staticmethod
+    def _window(score: int) -> PriorityWindow:
+        if score >= 85:
+            return "NOW"
+        if score >= 60:
+            return "TODAY"
+        if score >= 30:
+            return "THIS_WEEK"
+        return "WATCH"
+
+    @classmethod
+    def _priority(
+        cls,
+        *,
+        operational_blocker: bool,
+        economic_materiality: bool,
+        decisions_blocked: tuple[str, ...],
+        owner_action_required: bool,
+        explicit_urgency: PriorityWindow | None,
+        evidence_quality: str,
+    ) -> tuple[int, PriorityWindow, tuple[RecommendationPriorityFactor, ...]]:
+        urgency_points = {"NOW": 15, "TODAY": 10, "THIS_WEEK": 5, "WATCH": 0}
+        factors = (
+            RecommendationPriorityFactor(
+                "operational_blocker",
+                True,
+                30 if operational_blocker else 0,
+                "Canonical evidence proves an operating capability is blocked."
+                if operational_blocker
+                else "No current operating block is asserted.",
+            ),
+            RecommendationPriorityFactor(
+                "economic_materiality",
+                economic_materiality,
+                15 if economic_materiality else 0,
+                "An accepted Luminary economic finding supports management review."
+                if economic_materiality
+                else "No authoritative economic-materiality classification is available for priority scoring.",
+            ),
+            RecommendationPriorityFactor(
+                "decisions_blocked",
+                bool(decisions_blocked),
+                min(20, len(decisions_blocked) * 10),
+                f"{len(decisions_blocked)} explicitly identified decision areas are blocked."
+                if decisions_blocked
+                else "No blocked management decision is asserted.",
+            ),
+            RecommendationPriorityFactor(
+                "owner_action_required",
+                owner_action_required,
+                15 if owner_action_required else 0,
+                "A normal owner or office workflow can advance this condition."
+                if owner_action_required
+                else "No direct owner action is established.",
+            ),
+            RecommendationPriorityFactor(
+                "age_or_urgency",
+                explicit_urgency is not None,
+                urgency_points.get(explicit_urgency or "WATCH", 0),
+                f"Canonical domain semantics support {explicit_urgency or 'no'} urgency."
+                if explicit_urgency
+                else "No deadline or urgency is inferred from record age alone.",
+            ),
+            RecommendationPriorityFactor(
+                "evidence_quality",
+                True,
+                5,
+                f"Canonical evidence quality is {evidence_quality}; the state is shown without invented confidence.",
+            ),
+            RecommendationPriorityFactor(
+                "reversibility_and_risk",
+                True,
+                0,
+                "The recommendation is human review or configuration; Beacon performs no mutation.",
+            ),
+        )
+        score = sum(item.contribution for item in factors)
+        return score, cls._window(score), factors
 
     def _scheduling(
         self, fact: SchedulingGapFact, evaluated_at: datetime
@@ -136,8 +316,18 @@ class ActiveRecommendationReasoner:
             if fact.calendar_id is None
             else "the Branch calendar has no operating-hour intervals"
         )
+        blocked = ("Scheduling capacity", "Dispatch assignment readiness")
+        score, window, factors = self._priority(
+            operational_blocker=True,
+            economic_materiality=False,
+            decisions_blocked=blocked,
+            owner_action_required=True,
+            explicit_urgency="TODAY",
+            evidence_quality="complete configuration evidence",
+        )
         return self._build(
             definition_id="evidence_gap.branch_scheduling_policy",
+            root_issue_key=f"branch-scheduling:{fact.branch_id}",
             kind="EVIDENCE_GAP",
             subject=fact.branch_id,
             title=f"{fact.branch_name} scheduling policy is incomplete",
@@ -154,8 +344,11 @@ class ActiveRecommendationReasoner:
             limitations=(
                 "This is a configuration-readiness finding, not evidence of poor employee performance.",
             ),
-            window="TODAY",
-            score=80,
+            affected_capabilities=("Scheduling", "Dispatch"),
+            decisions_blocked=blocked,
+            window=window,
+            score=score,
+            priority_factors=factors,
             reason=(
                 "Owner configuration is required and Scheduling/Dispatch decisions are blocked; "
                 "no financial impact is inferred."
@@ -178,8 +371,20 @@ class ActiveRecommendationReasoner:
         self, fact: CustomerAdmissionGapFact, evaluated_at: datetime
     ) -> ActiveOwnerRecommendation:
         unresolved = fact.held_count + fact.ambiguous_count + fact.unexplained_count
+        blocked = ("Customer history coverage", "Customer attribution coverage")
+        score, window, factors = self._priority(
+            operational_blocker=False,
+            economic_materiality=False,
+            decisions_blocked=blocked,
+            owner_action_required=True,
+            explicit_urgency=None,
+            evidence_quality="incomplete admitted population",
+        )
         return self._build(
             definition_id="evidence_gap.customer_population_admission",
+            root_issue_key=(
+                f"customer-admission:{fact.branch_id}:{fact.source_system}"
+            ),
             kind="EVIDENCE_GAP",
             subject=fact.run_id,
             title="Customer source reconciliation is incomplete",
@@ -201,8 +406,15 @@ class ActiveRecommendationReasoner:
                 "Beacon does not infer Customer identity or perform fuzzy matching.",
                 "This recommendation does not authorize source admission.",
             ),
-            window="THIS_WEEK",
-            score=60,
+            affected_capabilities=(
+                "Customer history",
+                "Customer lifetime analysis",
+                "Attribution analysis",
+            ),
+            decisions_blocked=blocked,
+            window=window,
+            score=score,
+            priority_factors=factors,
             reason=(
                 "A completed canonical run proves unresolved coverage; urgency is limited "
                 "because no current operational dependency is inferred."
@@ -229,10 +441,23 @@ class ActiveRecommendationReasoner:
             "conflicting_evidence",
             "policy_required",
         }
-        window: PriorityWindow = "TODAY" if evidence_gap else "THIS_WEEK"
-        score = 75 if fact.finding_class == "conflicting_evidence" else 65
-        if not evidence_gap:
-            score = 55
+        blocked = (
+            ("Economic interpretation", "Owner economic decision")
+            if evidence_gap
+            else ("Management investigation",)
+        )
+        score, window, factors = self._priority(
+            operational_blocker=False,
+            economic_materiality=False,
+            decisions_blocked=blocked,
+            owner_action_required=True,
+            explicit_urgency=(
+                "TODAY" if fact.finding_class == "conflicting_evidence" else None
+            ),
+            evidence_quality=(
+                f"{fact.completeness}/{fact.freshness}/{fact.finding_class}"
+            ),
+        )
         action = (
             fact.investigate_next[0]
             if fact.investigate_next
@@ -240,6 +465,9 @@ class ActiveRecommendationReasoner:
         )
         return self._build(
             definition_id=f"luminary.{fact.finding_type}",
+            root_issue_key=(
+                f"luminary:{fact.finding_type}:{fact.finding_identity}"
+            ),
             kind="EVIDENCE_GAP" if evidence_gap else "MEASURED_FINDING",
             subject=fact.finding_id,
             title=fact.title,
@@ -251,8 +479,15 @@ class ActiveRecommendationReasoner:
             coverage=f"{fact.period_start} through {fact.period_end}",
             confidence=f"{fact.confidence_percent}% (Luminary canonical confidence)",
             limitations=fact.limitations,
+            affected_capabilities=(
+                ("Luminary", "Economic Health", "Management reporting")
+                if evidence_gap
+                else ("Luminary", "Management investigation")
+            ),
+            decisions_blocked=blocked,
             window=window,
             score=score,
+            priority_factors=factors,
             reason=(
                 "Accepted Luminary evidence is conflicting and blocks reliable conclusions."
                 if fact.finding_class == "conflicting_evidence"
@@ -282,6 +517,7 @@ class ActiveRecommendationReasoner:
     def _build(
         *,
         definition_id: str,
+        root_issue_key: str,
         kind: RecommendationKind,
         subject: UUID,
         title: str,
@@ -293,8 +529,11 @@ class ActiveRecommendationReasoner:
         coverage: str,
         confidence: str,
         limitations: tuple[str, ...],
+        affected_capabilities: tuple[str, ...],
+        decisions_blocked: tuple[str, ...],
         window: PriorityWindow,
         score: int,
+        priority_factors: tuple[RecommendationPriorityFactor, ...],
         reason: str,
         improves: str,
         path: str,
@@ -316,6 +555,7 @@ class ActiveRecommendationReasoner:
             recommendation_id=recommendation_id,
             definition_id=definition_id,
             definition_version=1,
+            root_issue_key=root_issue_key,
             kind=kind,
             title=title,
             measured_fact=measured_fact,
@@ -326,13 +566,17 @@ class ActiveRecommendationReasoner:
             coverage=coverage,
             confidence=confidence,
             limitations=limitations,
+            affected_capabilities=affected_capabilities,
+            decisions_blocked=decisions_blocked,
             priority_window=window,
             priority_score=score,
             priority_reason=reason,
+            priority_factors=priority_factors,
             improves_if_resolved=improves,
             drilldown_path=path,
             action_destination=destination,
             evidence=evidence,
+            related_recommendations=(),
             expires_at=evaluated_at + timedelta(minutes=15),
         )
 
@@ -503,6 +747,7 @@ class ActiveRecommendationService:
                 tuple(row.limitations),
                 tuple(row.investigate_next),
                 row.finding_digest,
+                row.finding_identity,
                 row.period_start.isoformat(),
                 row.period_end.isoformat(),
                 row.generated_at,

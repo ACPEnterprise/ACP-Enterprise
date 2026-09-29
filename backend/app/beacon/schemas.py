@@ -61,12 +61,32 @@ class ActiveRecommendationEvidenceResponse(BaseModel):
     as_of: datetime
 
 
+class RecommendationPriorityFactorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    factor: str
+    available: bool
+    contribution: int
+    explanation: str
+
+
+class RelatedRecommendationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    recommendation_id: UUID
+    title: str
+    measured_fact: str
+    interpretation: str
+    evidence_digest: str | None
+
+
 class ActiveOwnerRecommendationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     recommendation_id: UUID
     definition_id: str
     definition_version: int
+    root_issue_key: str
     kind: str
     title: str
     measured_fact: str
@@ -77,13 +97,17 @@ class ActiveOwnerRecommendationResponse(BaseModel):
     coverage: str
     confidence: str
     limitations: tuple[str, ...]
+    affected_capabilities: tuple[str, ...]
+    decisions_blocked: tuple[str, ...]
     priority_window: str
     priority_score: int
     priority_reason: str
+    priority_factors: tuple[RecommendationPriorityFactorResponse, ...]
     improves_if_resolved: str
     drilldown_path: str
     action_destination: str
     evidence: tuple[ActiveRecommendationEvidenceResponse, ...]
+    related_recommendations: tuple[RelatedRecommendationResponse, ...]
     expires_at: datetime
 
 
