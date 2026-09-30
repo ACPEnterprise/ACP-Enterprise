@@ -104,6 +104,89 @@ export interface LuminaryOwnerEconomics {
       limitation: string;
     };
   };
+  active_reasoning: {
+    contribution: {
+      state: string;
+      value_minor: number | null;
+      job_population_coverage_basis_points: number;
+      coverage_basis: string;
+      ready_job_count: number;
+      job_count: number;
+    };
+    required_burden: {
+      state: string;
+      value_minor: number | null;
+      coverage_basis_points: number | null;
+      coverage_limitation: string;
+    };
+    economic_health: {
+      state: string;
+      status: string;
+      value_basis_points: number | null;
+    };
+    can_conclude: string[];
+    cannot_conclude: string[];
+    ranked_evidence_gaps: EvidenceGapReasoning[];
+    highest_value_next_action: EvidenceGapReasoning | null;
+    ranking_basis: string;
+    causality_semantics: Record<string, string>;
+  };
+  economic_completion_planner: {
+    contract_version: "luminary.economic-completion-planner.v1";
+    read_only: true;
+    period: { start?: string; end?: string };
+    summary: {
+      complete_category_count: number;
+      partial_category_count: number;
+      missing_category_count: number;
+      total_category_count: number;
+    };
+    categories: EconomicCompletionCategory[];
+    ranked_completion_plan: EconomicCompletionCategory[];
+    highest_value_next_completion: EconomicCompletionCategory | null;
+    ranking_basis: string[];
+    ranking_limit: string;
+    owner_confirmed_authority: {
+      found: boolean;
+      reason: string;
+      required_future_contract: string;
+    };
+    decision_unlock_graph: {
+      category_nodes: string[];
+      calculation_nodes: string[];
+      decision_nodes: string[];
+      edges: Array<{ from: string; to: string; relationship: string }>;
+    };
+  };
+  driver_analysis: {
+    state: string;
+    reason?: string;
+    observed_changes: Array<{
+      metric: string;
+      classification: "OBSERVED_CHANGE";
+      current: number;
+      prior: number;
+      change: number;
+      change_basis_points_of_prior: number | null;
+      unit: "minor_currency" | "count";
+      currency: string | null;
+    }>;
+    measured_drivers: Array<{
+      component: string;
+      classification: "MEASURED_DRIVER";
+      contribution_effect_minor: number;
+      materiality_basis: string;
+      causality: "UNPROVEN";
+    }>;
+    possible_drivers: Array<{ driver: string; classification: string; reason: string }>;
+    unproven_causes: Array<{ cause: string; classification: string; reason: string }>;
+    unknown_components: string[];
+    economic_health?: {
+      value_basis_points: number | null;
+      distance_from_break_even_basis_points: number | null;
+    };
+    cash_health?: { state: string; ar_and_collections_included: false; reason: string };
+  };
   job_economics: Array<{
     job_id: string;
     job_number: string;
@@ -239,6 +322,54 @@ export interface LuminaryOwnerEconomics {
   };
   mutation_authority: "none";
   packet_digest: string;
+}
+
+export interface EconomicCompletionCategory {
+  category: string;
+  label: string;
+  economic_role: string;
+  dependencies: string[];
+  sources: string[];
+  responsible_parties: string[];
+  ui_path: string;
+  ui_path_label: string;
+  blocked_calculations: string[];
+  blocked_decisions: string[];
+  unlocks: string[];
+  priority_tier: number;
+  rank?: number;
+  state: "COMPLETE" | "PARTIAL" | "MISSING";
+  missing_dependencies: string[];
+  affected_job_count: number | null;
+  affected_authoritative_revenue_minor: number | null;
+  evidence_freshness: string;
+  normal_workflow_available: boolean;
+  owner_confirmed: {
+    supported: false;
+    reason: string;
+    effective_period: { start?: string; end?: string };
+    supersession_behavior: string;
+  };
+}
+
+interface EvidenceGapReasoning {
+  rank: number;
+  gap: string;
+  evidence_state: string;
+  decision_impact: string;
+  priority_tier: number;
+  affected_job_count: number | null;
+  affected_authoritative_revenue_minor: number | null;
+  affected_calculations: string[];
+  expected_source: string;
+  responsible_party: "OWNER" | "ACCOUNTANT" | "SYSTEM" | "PROVIDER";
+  ui_path: string;
+  ui_path_label: string;
+  why_it_matters: string;
+  unlocks: string;
+  evidence_freshness: string;
+  normal_workflow_available: boolean;
+  owner_decision_dependency: boolean;
 }
 
 type EvidenceClassification = "MEASURED" | "AUTHORITATIVE" | "OWNER_CONFIRMED" | "UNAVAILABLE";

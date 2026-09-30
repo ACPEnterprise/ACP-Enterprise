@@ -207,9 +207,71 @@ export interface BeaconMorningBrief {
   brief_digest: string;
 }
 
+export interface ActiveBeaconRecommendation {
+  recommendation_id: string;
+  definition_id: string;
+  definition_version: number;
+  root_issue_key: string;
+  kind: "EVIDENCE_GAP" | "MEASURED_FINDING";
+  title: string;
+  measured_fact: string;
+  interpretation: string;
+  recommended_human_action: string;
+  source_authority: string;
+  evidence_as_of: string;
+  coverage: string;
+  confidence: string;
+  limitations: string[];
+  affected_capabilities: string[];
+  decisions_blocked: string[];
+  priority_window: "NOW" | "TODAY" | "THIS_WEEK" | "WATCH";
+  priority_score: number;
+  priority_reason: string;
+  priority_factors: Array<{
+    factor: string;
+    available: boolean;
+    contribution: number;
+    explanation: string;
+  }>;
+  improves_if_resolved: string;
+  drilldown_path: string;
+  action_destination: string;
+  evidence: Array<{
+    entity_type: string;
+    entity_id: string;
+    digest: string | null;
+    as_of: string;
+  }>;
+  related_recommendations: Array<{
+    recommendation_id: string;
+    title: string;
+    measured_fact: string;
+    interpretation: string;
+    evidence_digest: string | null;
+  }>;
+  expires_at: string;
+}
+
+export interface ActiveBeaconRecommendationPage {
+  company_id: string;
+  branch_id: string | null;
+  evaluated_at: string;
+  recommendation_digest: string;
+  items: ActiveBeaconRecommendation[];
+  autonomous_action: false;
+}
+
 export async function getBeaconMorningBrief(): Promise<BeaconMorningBrief> {
   return (
     await apiClient.get<BeaconMorningBrief>("/api/v1/beacon/morning-brief")
+  ).data;
+}
+
+export async function getActiveBeaconRecommendations(): Promise<ActiveBeaconRecommendationPage> {
+  return (
+    await apiClient.get<ActiveBeaconRecommendationPage>(
+      "/api/v1/beacon/active-recommendations",
+    )
   ).data;
 }
 
