@@ -1710,6 +1710,7 @@ function AppointmentPanel({
               className="mt-1"
               required
               type="datetime-local"
+              step={900}
               value={start}
               onChange={(event) => setStart(event.target.value)}
             />
@@ -1720,6 +1721,7 @@ function AppointmentPanel({
               className="mt-1"
               required
               type="datetime-local"
+              step={900}
               min={start || undefined}
               value={end}
               onChange={(event) => setEnd(event.target.value)}
@@ -1736,7 +1738,8 @@ function AppointmentPanel({
               className="mt-1"
               required
               type="number"
-              min={1}
+              min={15}
+              step={15}
               value={duration}
               onChange={(event) => setDuration(Number(event.target.value))}
             />
@@ -1755,7 +1758,7 @@ function AppointmentPanel({
           <Button
             type="submit"
             loading={mutation.isPending}
-            disabled={!validWindow || duration < 1}
+            disabled={!validWindow || duration < 15 || duration % 15 !== 0}
           >
             Review new time
           </Button>

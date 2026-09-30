@@ -12,6 +12,12 @@ const localInput = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
+const nextOfficeSlot = (date: Date) => {
+  const slot = new Date(date);
+  slot.setSeconds(0, 0);
+  slot.setMinutes(Math.ceil(slot.getMinutes() / 15) * 15);
+  return slot;
+};
 
 export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   readonly job: JobDetail;
@@ -21,8 +27,8 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   const schedule = useScheduleExistingJob(job.id);
   const workforceEligibility = useWorkforceEligibility();
   const evaluateEligibility = workforceEligibility.mutate;
-  const [startAt, setStartAt] = useState(() => localInput(new Date(Date.now() + 60 * 60 * 1000)));
-  const [endAt, setEndAt] = useState(() => localInput(new Date(Date.now() + 3 * 60 * 60 * 1000)));
+  const [startAt, setStartAt] = useState(() => localInput(nextOfficeSlot(new Date(Date.now() + 60 * 60 * 1000))));
+  const [endAt, setEndAt] = useState(() => localInput(nextOfficeSlot(new Date(Date.now() + 3 * 60 * 60 * 1000))));
   const [duration, setDuration] = useState(120);
   const [employeeId, setEmployeeId] = useState("");
   const [lastAttempt, setLastAttempt] = useState<{ fingerprint: string; requestId: string } | null>(null);
@@ -44,10 +50,14 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
     () => (workforceEligibility.data ?? []).filter((employee) => employee.eligible),
     [workforceEligibility.data],
   );
+  const officeSlotValid = [startAt, endAt].every((value) => {
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime()) && parsed.getMinutes() % 15 === 0;
+  }) && duration >= 15 && duration % 15 === 0;
   const book = () => {
     const start = new Date(startAt);
     const end = new Date(endAt);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start || duration < 15) return;
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start || !officeSlotValid) return;
     const intent = {
       expected_job_version: job.concurrency_version,
       branch_id: job.branch_id,
@@ -75,16 +85,17 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
     {schedule.isSuccess && schedule.data.assignmentState === "FAILED" ? <Alert className="mt-4" variant="warning" title="Appointment booked; technician not assigned">The Appointment exists and will remain in Needs Scheduling. Open it to review current Dispatch eligibility and assign a technician; do not book it again.<div className="mt-2"><Link className="font-semibold underline" to={appointmentDetailPath(schedule.data.appointment.id)}>Open {schedule.data.appointment.appointment_number}</Link></div></Alert> : null}
     {schedule.isSuccess && schedule.data.assignmentState !== "FAILED" ? <Alert className="mt-4" variant="success" title="Job scheduled">SUCCEEDED — The Appointment was linked to this Job{schedule.data.assignmentState === "ASSIGNED" ? " and the technician was assigned" : ""}. Authoritative operating views were refreshed.{returnTo ? <div className="mt-2"><Link className="font-semibold underline" to={schedulingReturnPath(returnTo)}>Return to prior Schedule view</Link></div> : null}</Alert> : null}
     <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
-      <Field label="Arrival window starts / planned technician start" required helperText="Capacity and technician availability begin here; this is also the earliest promised arrival."><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
-      <Field label="Arrival window ends" required helperText={startAt && endAt && new Date(endAt) <= new Date(startAt) ? "Arrival window must end after it starts." : "Customer-facing arrival window; separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
-      <Field label="Expected duration (minutes)" required helperText="The occupied technician interval is planned start plus this duration; it is not the full arrival window."><Input type="number" min={15} max={1440} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
+      <Field label="Arrival window starts / planned technician start" required helperText="Capacity and technician availability begin here; choose a 15-minute office slot."><Input type="datetime-local" step={900} value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
+      <Field label="Arrival window ends" required helperText={startAt && endAt && new Date(endAt) <= new Date(startAt) ? "Arrival window must end after it starts." : "Customer-facing arrival window in 15-minute increments; separate from expected work duration."}><Input type="datetime-local" step={900} value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
+      <Field label="Expected duration (minutes)" required helperText="The occupied technician interval uses 15-minute increments; it is not the full arrival window."><Input type="number" min={15} max={1440} step={15} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
+      {!officeSlotValid ? <p className="text-sm text-status-danger sm:col-span-2">Choose :00, :15, :30, or :45 and use a 15-minute duration increment.</p> : null}
       <Field label="Technician" helperText={canAssign ? "Leave Unassigned when Dispatch should decide later." : "Dispatch assignment requires additional authority."} className="sm:col-span-2">
         <Select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} disabled={!canAssign || workforceEligibility.isPending}>
           <option value="">Unassigned / Needs Scheduling</option>
           {technicians.map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} — {employee.employee_number}</option>)}
         </Select>
       </Field>
-      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || !endAt || new Date(endAt) <= new Date(startAt) || duration < 15}>Book Appointment</Button></div>
+      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || !endAt || new Date(endAt) <= new Date(startAt) || !officeSlotValid}>Book Appointment</Button></div>
     </form>
   </section>;
 }
