@@ -242,6 +242,86 @@ def test_complete_health_has_no_fabricated_burden_gap() -> None:
     assert reasoning["highest_value_next_action"] is None
 
 
+def test_completion_planner_projects_explicit_categories_and_unlock_graph() -> None:
+    planner = project(workspace())["economic_completion_planner"]
+    assert planner["contract_version"] == "luminary.economic-completion-planner.v1"
+    assert planner["read_only"] is True
+    assert planner["summary"] == {
+        "complete_category_count": 3,
+        "partial_category_count": 1,
+        "missing_category_count": 8,
+        "total_category_count": 12,
+    }
+    categories = {item["category"]: item for item in planner["categories"]}
+    assert categories["FIELD_LABOR_AND_PAYROLL_BURDEN"]["state"] == "PARTIAL"
+    assert categories["MATERIAL_AND_JOB_VARIABLE_COST"]["state"] == "COMPLETE"
+    assert categories["OWNER_COMPENSATION"]["state"] == "MISSING"
+    assert categories["MARKETING_SPEND"]["normal_workflow_available"] is False
+    assert planner["highest_value_next_completion"]["category"] == (
+        "FIELD_LABOR_AND_PAYROLL_BURDEN"
+    )
+    assert {
+        edge["to"]
+        for edge in planner["decision_unlock_graph"]["edges"]
+        if edge["from"] == "MATERIAL_AND_JOB_VARIABLE_COST"
+    } >= {"ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"}
+
+
+def test_completion_planner_does_not_invent_owner_confirmed_value_authority() -> None:
+    planner = project(workspace())["economic_completion_planner"]
+    assert planner["owner_confirmed_authority"]["found"] is False
+    assert "effective-dated" in planner["owner_confirmed_authority"][
+        "required_future_contract"
+    ]
+    for category in planner["categories"]:
+        assert category["owner_confirmed"]["supported"] is False
+        assert category["owner_confirmed"]["effective_period"] == {
+            "start": "2026-08-01",
+            "end": "2026-08-31",
+        }
+        assert "value" not in category["owner_confirmed"]
+
+
+def test_completion_plan_uses_authoritative_population_not_missing_value() -> None:
+    value = workspace()
+    jobs = value["jobs"]
+    assert isinstance(jobs, list)
+    jobs[0]["contribution_minor"] = None
+    jobs[0]["missing_categories"] = ["actual_material_valuation"]
+    value["totals"]["gross_profit"] = None
+    value["native_evidence"] = {
+        "jobs": [
+            {
+                "job_id": "job-a",
+                "job_number": "J-100",
+                "job_status": "completed",
+                "customer_id": "customer-a",
+                "customer_name": "Fixture Customer",
+                "branch_id": str(BRANCH),
+                "branch_name": "Main",
+                "service_category": "drain",
+                "invoiced_revenue_minor": 100_000,
+                "accepted_worked_seconds": 3_600,
+                "material_quantity_evidence_count": 1,
+                "material_cost_minor": None,
+                "references": [],
+            }
+        ]
+    }
+    planner = project(value)["economic_completion_planner"]
+    material = next(
+        item
+        for item in planner["ranked_completion_plan"]
+        if item["category"] == "MATERIAL_AND_JOB_VARIABLE_COST"
+    )
+    assert material["affected_job_count"] == 1
+    assert material["affected_authoritative_revenue_minor"] == 100_000
+    assert "estimated_missing_value_minor" not in material
+    assert planner["ranking_limit"] == (
+        "No missing dollar value or industry estimate is used."
+    )
+
+
 def test_driver_analysis_quantifies_materiality_without_claiming_cause() -> None:
     drivers = project(workspace())["driver_analysis"]
     assert drivers["state"] == "AVAILABLE"

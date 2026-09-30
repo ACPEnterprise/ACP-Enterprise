@@ -131,6 +131,33 @@ export interface LuminaryOwnerEconomics {
     ranking_basis: string;
     causality_semantics: Record<string, string>;
   };
+  economic_completion_planner: {
+    contract_version: "luminary.economic-completion-planner.v1";
+    read_only: true;
+    period: { start?: string; end?: string };
+    summary: {
+      complete_category_count: number;
+      partial_category_count: number;
+      missing_category_count: number;
+      total_category_count: number;
+    };
+    categories: EconomicCompletionCategory[];
+    ranked_completion_plan: EconomicCompletionCategory[];
+    highest_value_next_completion: EconomicCompletionCategory | null;
+    ranking_basis: string[];
+    ranking_limit: string;
+    owner_confirmed_authority: {
+      found: boolean;
+      reason: string;
+      required_future_contract: string;
+    };
+    decision_unlock_graph: {
+      category_nodes: string[];
+      calculation_nodes: string[];
+      decision_nodes: string[];
+      edges: Array<{ from: string; to: string; relationship: string }>;
+    };
+  };
   driver_analysis: {
     state: string;
     reason?: string;
@@ -295,6 +322,34 @@ export interface LuminaryOwnerEconomics {
   };
   mutation_authority: "none";
   packet_digest: string;
+}
+
+export interface EconomicCompletionCategory {
+  category: string;
+  label: string;
+  economic_role: string;
+  dependencies: string[];
+  sources: string[];
+  responsible_parties: string[];
+  ui_path: string;
+  ui_path_label: string;
+  blocked_calculations: string[];
+  blocked_decisions: string[];
+  unlocks: string[];
+  priority_tier: number;
+  rank?: number;
+  state: "COMPLETE" | "PARTIAL" | "MISSING";
+  missing_dependencies: string[];
+  affected_job_count: number | null;
+  affected_authoritative_revenue_minor: number | null;
+  evidence_freshness: string;
+  normal_workflow_available: boolean;
+  owner_confirmed: {
+    supported: false;
+    reason: string;
+    effective_period: { start?: string; end?: string };
+    supersession_behavior: string;
+  };
 }
 
 interface EvidenceGapReasoning {

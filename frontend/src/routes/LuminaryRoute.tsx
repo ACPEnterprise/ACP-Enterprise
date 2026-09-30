@@ -404,6 +404,48 @@ export function LuminaryRoute() {
                 <p className="mt-2 text-xs text-content-muted">{ownerEconomics.data.active_reasoning.ranking_basis}</p>
               </details>
             </section>
+            <section aria-labelledby="completion-planner-title" className="rounded-lg border border-stroke p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="completion-planner-title">Complete the economics model</h3>
+                  <p className="text-sm text-content-muted">Luminary shows what is missing, who owns it, where it belongs, and what it unlocks. It cannot enter or estimate a value.</p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                  {ownerEconomics.data.economic_completion_planner.summary.complete_category_count} of {ownerEconomics.data.economic_completion_planner.summary.total_category_count} complete
+                </span>
+              </div>
+              {(ownerEconomics.data.economic_completion_planner.highest_value_next_completion ?? ownerEconomics.data.economic_completion_planner.ranked_completion_plan[0]) ? (() => {
+                const next = (ownerEconomics.data.economic_completion_planner.highest_value_next_completion ?? ownerEconomics.data.economic_completion_planner.ranked_completion_plan[0])!;
+                return (
+                  <div className="mt-4 rounded-lg border border-stroke bg-surface-muted p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Complete next</p>
+                    <p className="font-semibold">{next.label}</p>
+                    <p className="mt-1 text-sm"><span className="font-semibold">Who:</span> {next.responsible_parties.map(words).join(" / ")}</p>
+                    <p className="text-sm"><span className="font-semibold">Source:</span> {next.sources.join(" / ")}</p>
+                    <p className="text-sm"><span className="font-semibold">What it unlocks:</span> {next.unlocks.join("; ")}</p>
+                    {next.affected_job_count != null ? <p className="text-sm">Affected population: {next.affected_job_count} Job(s){next.affected_authoritative_revenue_minor != null ? ` · ${minorMoney(next.affected_authoritative_revenue_minor, ownerEconomics.data.currency)} authoritative invoiced revenue` : ""}</p> : null}
+                    {next.ui_path ? <Link className="mt-2 inline-block text-sm font-semibold text-action-primary underline" to={next.ui_path}>{next.ui_path_label}</Link> : <p className="mt-2 text-sm text-content-muted">{next.ui_path_label}</p>}
+                  </div>
+                );
+              })() : <p className="mt-3 text-sm">All evaluated Economics categories are complete for this period.</p>}
+              <Alert variant="warning" className="mt-3">
+                Temporary owner-confirmed amounts are not supported by the current canonical Economics authority. Luminary will not create one or treat a note as economic evidence.
+              </Alert>
+              <details className="mt-4 text-sm">
+                <summary className="cursor-pointer font-medium">Completion matrix</summary>
+                <ol className="mt-2 space-y-2">
+                  {ownerEconomics.data.economic_completion_planner.ranked_completion_plan.map((item) => (
+                    <li className="rounded-md bg-surface-muted p-3" key={item.category}>
+                      <p className="font-semibold">{item.rank}. {item.label} · {words(item.state)}</p>
+                      <p className="text-content-muted">Missing: {item.missing_dependencies.map(words).join(" · ")}</p>
+                      <p className="text-xs text-content-muted">Who: {item.responsible_parties.map(words).join(" / ")} · Source: {item.sources.join(" / ")}</p>
+                      <p className="text-xs text-content-muted">Unlocks: {item.unlocks.join("; ")}</p>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-2 text-xs text-content-muted">{ownerEconomics.data.economic_completion_planner.ranking_limit}</p>
+              </details>
+            </section>
             <section aria-labelledby="driver-analysis-title" className="rounded-lg border border-stroke p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>

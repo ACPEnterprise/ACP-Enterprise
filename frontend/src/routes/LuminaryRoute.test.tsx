@@ -125,6 +125,56 @@ vi.mock("../hooks/useLuminary", () => ({
         ranking_basis: "Decision dependency first, then affected authoritative Job population; missing values are never estimated.",
         causality_semantics: {},
       },
+      economic_completion_planner: {
+        contract_version: "luminary.economic-completion-planner.v1",
+        read_only: true,
+        period: { start: "2026-09-01", end: "2026-09-15" },
+        summary: {
+          complete_category_count: 3,
+          partial_category_count: 1,
+          missing_category_count: 8,
+          total_category_count: 12,
+        },
+        categories: [],
+        ranked_completion_plan: [{
+          category: "FIELD_LABOR_AND_PAYROLL_BURDEN",
+          label: "Field labor and Payroll burden",
+          economic_role: "VARIABLE_COST_AND_REQUIRED_BURDEN",
+          dependencies: ["certified_direct_wage_cost", "field_capacity_burden"],
+          sources: ["Payroll", "Timekeeping", "Workforce"],
+          responsible_parties: ["OWNER", "ACCOUNTANT", "SYSTEM"],
+          ui_path: "/payroll",
+          ui_path_label: "Payroll -> First real Payroll readiness",
+          blocked_calculations: ["ECONOMIC_CONTRIBUTION", "REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"],
+          blocked_decisions: ["JOB_PROFITABILITY_CONFIDENCE", "BREAK_EVEN_EVALUATION"],
+          unlocks: ["authoritative Job-variable labor cost", "stronger break-even authority"],
+          priority_tier: 1,
+          rank: 1,
+          state: "PARTIAL",
+          missing_dependencies: ["field_capacity_burden"],
+          affected_job_count: 1,
+          affected_authoritative_revenue_minor: 12550,
+          evidence_freshness: "partial",
+          normal_workflow_available: true,
+          owner_confirmed: {
+            supported: false,
+            reason: "No canonical owner-confirmed value authority.",
+            effective_period: { start: "2026-09-01", end: "2026-09-15" },
+            supersession_behavior: "UNAVAILABLE_UNTIL_CANONICAL_AUTHORITY_EXISTS",
+          },
+        }],
+        highest_value_next_completion: null,
+        ranking_basis: ["business decisions blocked"],
+        ranking_limit: "No missing dollar value or industry estimate is used.",
+        owner_confirmed_authority: {
+          found: false,
+          reason: "No canonical owner-confirmed value authority exists.",
+          required_future_contract: "An owning-domain authority is required.",
+        },
+        decision_unlock_graph: {
+          category_nodes: [], calculation_nodes: [], decision_nodes: [], edges: [],
+        },
+      },
       driver_analysis: {
         state: "AVAILABLE",
         observed_changes: [
@@ -379,8 +429,13 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("Revenue production")).toBeVisible();
     expect(screen.getByText("Economic health")).toBeVisible();
     expect(screen.getByText("What this evidence means")).toBeVisible();
+    expect(screen.getByText("Complete the economics model")).toBeVisible();
+    expect(screen.getByText("Complete next")).toBeVisible();
+    expect(screen.getByText("Field labor and Payroll burden")).toBeVisible();
+    expect(screen.getByText(/Temporary owner-confirmed amounts are not supported/)).toBeVisible();
+    expect(screen.getByText(/No missing dollar value or industry estimate/)).toBeInTheDocument();
     expect(screen.getByText("Highest-value missing evidence")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Payroll -> First real Payroll readiness" })).toHaveAttribute("href", "/payroll");
+    expect(screen.getAllByRole("link", { name: "Payroll -> First real Payroll readiness" })[0]).toHaveAttribute("href", "/payroll");
     expect(screen.getByText(/covers 0 of 1 admitted Jobs/)).toBeVisible();
     expect(screen.getByText("What happened and what drove it")).toBeVisible();
     expect(screen.getAllByText("+$25.00").length).toBeGreaterThan(0);

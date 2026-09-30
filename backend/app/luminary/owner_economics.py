@@ -798,6 +798,317 @@ _GAP_GUIDANCE: Final[dict[str, dict[str, str]]] = {
 }
 
 
+# This catalog is a read projection over owning-domain evidence.  It neither
+# accepts a value nor treats the presence of a remediation route as evidence.
+_COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
+    {
+        "category": "FIELD_LABOR_AND_PAYROLL_BURDEN",
+        "label": "Field labor and Payroll burden",
+        "economic_role": "VARIABLE_COST_AND_REQUIRED_BURDEN",
+        "dependencies": ("certified_direct_wage_cost", "field_capacity_burden"),
+        "sources": ("Payroll", "Timekeeping", "Workforce"),
+        "parties": ("OWNER", "ACCOUNTANT", "SYSTEM"),
+        "ui_path": "/payroll",
+        "ui_path_label": "Payroll -> First real Payroll readiness",
+        "blocked_calculations": (
+            "ECONOMIC_CONTRIBUTION",
+            "REQUIRED_ECONOMIC_BURDEN",
+            "ECONOMIC_HEALTH",
+        ),
+        "blocked_decisions": (
+            "JOB_PROFITABILITY_CONFIDENCE",
+            "BREAK_EVEN_EVALUATION",
+            "TECHNICIAN_CAPACITY_ECONOMICS",
+        ),
+        "unlocks": (
+            "authoritative Job-variable labor cost",
+            "field capacity burden",
+            "stronger break-even authority",
+        ),
+        "priority_tier": 1,
+    },
+    {
+        "category": "OFFICE_AND_ADMIN_PAYROLL",
+        "label": "Office and administrative Payroll",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("office_and_administration",),
+        "sources": ("Payroll", "Accounting"),
+        "parties": ("OWNER", "ACCOUNTANT"),
+        "ui_path": "/business-economics/administration",
+        "ui_path_label": "Business Economics -> Policy administration",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
+        "unlocks": ("office and administrative burden", "stronger break-even authority"),
+        "priority_tier": 2,
+    },
+    {
+        "category": "OWNER_COMPENSATION",
+        "label": "Owner compensation",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("owner_compensation",),
+        "sources": ("Payroll", "Business Economics policy"),
+        "parties": ("OWNER",),
+        "ui_path": "/business-economics/administration",
+        "ui_path_label": "Business Economics -> Policy administration",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
+        "unlocks": ("owner compensation burden", "non-understated break-even evaluation"),
+        "priority_tier": 2,
+    },
+    {
+        "category": "MATERIAL_AND_JOB_VARIABLE_COST",
+        "label": "Material and Job-variable cost",
+        "economic_role": "VARIABLE_COST",
+        "dependencies": (
+            "actual_material_usage_or_not_applicable_authority",
+            "actual_material_valuation",
+        ),
+        "sources": ("Inventory", "Purchasing", "QBO Accounting"),
+        "parties": ("OWNER", "ACCOUNTANT", "SYSTEM"),
+        "ui_path": "/purchasing",
+        "ui_path_label": "Purchasing -> Material and receipt review",
+        "blocked_calculations": ("ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("JOB_PROFITABILITY_CONFIDENCE", "PRICE_BOOK_INTELLIGENCE"),
+        "unlocks": ("actual material cost", "Job contribution confidence", "Price Book intelligence"),
+        "priority_tier": 1,
+    },
+    {
+        "category": "VEHICLES_AND_FIELD_FIXED_COST",
+        "label": "Vehicles and field fixed cost",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("trucks_and_fixed_costs",),
+        "sources": ("Assets", "Accounting", "Business Economics"),
+        "parties": ("OWNER", "ACCOUNTANT"),
+        "ui_path": "/assets",
+        "ui_path_label": "Assets -> Fleet evidence",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("BREAK_EVEN_EVALUATION", "FIELD_CAPACITY_ECONOMICS"),
+        "unlocks": ("fleet and fixed field burden", "stronger field-capacity economics"),
+        "priority_tier": 2,
+    },
+    {
+        "category": "RENT_AND_UTILITIES",
+        "label": "Rent and utilities",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("rent_and_utilities",),
+        "sources": ("Accounting", "Accounts Payable"),
+        "parties": ("ACCOUNTANT",),
+        "ui_path": "/accounts-payable",
+        "ui_path_label": "Accounts Payable -> Vendor obligation review",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
+        "unlocks": ("occupancy burden", "stronger break-even authority"),
+        "priority_tier": 3,
+    },
+    {
+        "category": "INSURANCE",
+        "label": "Insurance",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("insurance_software_and_professional",),
+        "sources": ("Accounting", "Accounts Payable"),
+        "parties": ("ACCOUNTANT",),
+        "ui_path": "/accounts-payable",
+        "ui_path_label": "Accounts Payable -> Vendor obligation review",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
+        "unlocks": ("insurance burden", "stronger break-even authority"),
+        "priority_tier": 3,
+    },
+    {
+        "category": "SOFTWARE_PROFESSIONAL_AND_LICENSES",
+        "label": "Software, professional services, and licenses",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("insurance_software_and_professional",),
+        "sources": ("Accounting", "Accounts Payable"),
+        "parties": ("ACCOUNTANT",),
+        "ui_path": "/accounts-payable",
+        "ui_path_label": "Accounts Payable -> Vendor obligation review",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
+        "unlocks": ("recurring operating burden", "stronger break-even authority"),
+        "priority_tier": 3,
+    },
+    {
+        "category": "MARKETING_SPEND",
+        "label": "Marketing spend",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("marketing",),
+        "sources": ("Marketing", "Accounting"),
+        "parties": ("PROVIDER", "ACCOUNTANT"),
+        "ui_path": "",
+        "ui_path_label": "Unavailable — no authoritative Marketing input route",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("MARKETING_ACQUISITION_ECONOMICS", "BREAK_EVEN_EVALUATION"),
+        "unlocks": ("marketing burden", "marketing acquisition economics"),
+        "priority_tier": 3,
+    },
+    {
+        "category": "MERCHANT_FEES",
+        "label": "Merchant fees",
+        "economic_role": "VARIABLE_COST",
+        "dependencies": ("other_direct_cost_completeness",),
+        "sources": ("Payments", "Settlement evidence", "Accounting"),
+        "parties": ("SYSTEM", "ACCOUNTANT"),
+        "ui_path": "/payments",
+        "ui_path_label": "Payments -> Settlement evidence",
+        "blocked_calculations": ("ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("JOB_PROFITABILITY_CONFIDENCE", "PAYMENT_ECONOMICS"),
+        "unlocks": ("complete payment-variable cost", "stronger contribution authority"),
+        "priority_tier": 2,
+    },
+    {
+        "category": "PERMITS_SUBCONTRACTORS_DISPOSAL_AND_RENTALS",
+        "label": "Permits, subcontractors, disposal, and rentals",
+        "economic_role": "VARIABLE_COST",
+        "dependencies": ("other_direct_cost_completeness",),
+        "sources": ("Job cost", "Accounts Payable", "Accounting"),
+        "parties": ("OWNER", "ACCOUNTANT"),
+        "ui_path": "/accounts-payable",
+        "ui_path_label": "Accounts Payable -> Vendor obligation review",
+        "blocked_calculations": ("ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("JOB_PROFITABILITY_CONFIDENCE", "PRICE_BOOK_INTELLIGENCE"),
+        "unlocks": ("complete other direct Job cost", "stronger contribution authority"),
+        "priority_tier": 2,
+    },
+    {
+        "category": "OTHER_FIXED_OR_SEMI_FIXED_BURDEN",
+        "label": "Other approved fixed or semi-fixed burden",
+        "economic_role": "REQUIRED_BURDEN",
+        "dependencies": ("other_admitted_fixed_or_semi_fixed_burden",),
+        "sources": ("Accounting", "Business Economics policy"),
+        "parties": ("OWNER", "ACCOUNTANT"),
+        "ui_path": "/business-economics/administration",
+        "ui_path_label": "Business Economics -> Policy administration",
+        "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
+        "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
+        "unlocks": ("complete Required Economic Burden",),
+        "priority_tier": 4,
+    },
+)
+
+
+def _economic_completion_planner(
+    workspace: dict[str, object],
+    active_reasoning: dict[str, object],
+) -> dict[str, object]:
+    """Project the explicit evidence-to-decision graph without accepting inputs."""
+    gap_rows = cast(
+        list[dict[str, object]], active_reasoning.get("ranked_evidence_gaps", [])
+    )
+    gaps = {str(item.get("gap")): item for item in gap_rows}
+    period = _mapping(workspace.get("period"))
+    categories: list[dict[str, object]] = []
+    for spec in _COMPLETION_CATEGORIES:
+        dependencies = cast(tuple[str, ...], spec["dependencies"])
+        missing = [value for value in dependencies if value in gaps]
+        dependency_rows = [gaps[value] for value in missing]
+        state = "COMPLETE" if not missing else "PARTIAL" if len(missing) < len(dependencies) else "MISSING"
+        affected_counts = [
+            cast(int, item["affected_job_count"])
+            for item in dependency_rows
+            if isinstance(item.get("affected_job_count"), int)
+        ]
+        affected_revenues = [
+            cast(int, item["affected_authoritative_revenue_minor"])
+            for item in dependency_rows
+            if isinstance(item.get("affected_authoritative_revenue_minor"), int)
+        ]
+        categories.append(
+            {
+                **spec,
+                "dependencies": list(dependencies),
+                "sources": list(cast(tuple[str, ...], spec["sources"])),
+                "responsible_parties": list(cast(tuple[str, ...], spec["parties"])),
+                "blocked_calculations": list(cast(tuple[str, ...], spec["blocked_calculations"])),
+                "blocked_decisions": list(cast(tuple[str, ...], spec["blocked_decisions"])),
+                "unlocks": list(cast(tuple[str, ...], spec["unlocks"])),
+                "state": state,
+                "missing_dependencies": missing,
+                "affected_job_count": max(affected_counts) if affected_counts else None,
+                "affected_authoritative_revenue_minor": max(affected_revenues) if affected_revenues else None,
+                "evidence_freshness": str(workspace.get("quality_state", "unavailable")),
+                "normal_workflow_available": bool(spec["ui_path"]),
+                "owner_confirmed": {
+                    "supported": False,
+                    "reason": "Business Economics has provisional evidence labeling, but no canonical owner-confirmed value authority or mutation contract.",
+                    "effective_period": period,
+                    "supersession_behavior": "UNAVAILABLE_UNTIL_CANONICAL_AUTHORITY_EXISTS",
+                },
+            }
+        )
+
+    incomplete = [item for item in categories if item["state"] != "COMPLETE"]
+    ranked = sorted(
+        incomplete,
+        key=lambda item: (
+            cast(int, item["priority_tier"]),
+            -len(cast(list[str], item["blocked_decisions"])),
+            -len(cast(list[str], item["blocked_calculations"])),
+            -cast(int, item["affected_job_count"] or 0),
+            -cast(int, item["affected_authoritative_revenue_minor"] or 0),
+            not cast(bool, item["normal_workflow_available"]),
+            str(item["category"]),
+        ),
+    )
+    for rank, item in enumerate(ranked, start=1):
+        item["rank"] = rank
+
+    calculation_nodes = sorted(
+        {value for item in categories for value in cast(list[str], item["blocked_calculations"])}
+    )
+    decision_nodes = sorted(
+        {value for item in categories for value in cast(list[str], item["blocked_decisions"])}
+    )
+    edges = sorted(
+        [
+            {"from": str(item["category"]), "to": target, "relationship": "UNLOCKS_CALCULATION"}
+            for item in categories
+            for target in cast(list[str], item["blocked_calculations"])
+        ]
+        + [
+            {"from": calculation, "to": decision, "relationship": "SUPPORTS_DECISION"}
+            for item in categories
+            for calculation in cast(list[str], item["blocked_calculations"])
+            for decision in cast(list[str], item["blocked_decisions"])
+        ],
+        key=lambda item: (item["from"], item["to"], item["relationship"]),
+    )
+    return {
+        "contract_version": "luminary.economic-completion-planner.v1",
+        "read_only": True,
+        "period": period,
+        "summary": {
+            "complete_category_count": len(categories) - len(incomplete),
+            "partial_category_count": sum(item["state"] == "PARTIAL" for item in categories),
+            "missing_category_count": sum(item["state"] == "MISSING" for item in categories),
+            "total_category_count": len(categories),
+        },
+        "categories": categories,
+        "ranked_completion_plan": ranked,
+        "highest_value_next_completion": ranked[0] if ranked else None,
+        "ranking_basis": [
+            "business decisions blocked",
+            "economic calculations blocked",
+            "authoritative affected Job population and revenue when available",
+            "evidence freshness",
+            "normal remediation workflow availability",
+            "responsible party",
+        ],
+        "ranking_limit": "No missing dollar value or industry estimate is used.",
+        "owner_confirmed_authority": {
+            "found": False,
+            "reason": "No canonical effective-dated owner-confirmed Economics value authority exists in current protected contracts.",
+            "required_future_contract": "An owning-domain authority would need effective-dated period scope, approval, provenance, value digest, retirement, and measured-evidence supersession semantics.",
+        },
+        "decision_unlock_graph": {
+            "category_nodes": [str(item["category"]) for item in categories],
+            "calculation_nodes": calculation_nodes,
+            "decision_nodes": decision_nodes,
+            "edges": edges,
+        },
+    }
+
+
 def _active_economic_reasoning(
     workspace: dict[str, object],
     jobs: list[dict[str, object]],
@@ -1540,6 +1851,9 @@ def project_owner_economics(
         "service_line_economics": service_line_economics,
         "owner_health": owner_health,
         "active_reasoning": active_reasoning,
+        "economic_completion_planner": _economic_completion_planner(
+            workspace, active_reasoning
+        ),
         "driver_analysis": _driver_analysis(workspace, active_reasoning, owner_health),
         "evidence_priority_queue": evidence_priority_queue,
         "owner_question_answers": _owner_question_answers(
