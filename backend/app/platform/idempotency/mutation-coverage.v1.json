@@ -2655,6 +2655,26 @@
     },
     {
       "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "technician",
+      "mechanism": "Company/Employee-scoped immutable activity event identity and canonical evidence digest",
+      "method": "POST",
+      "operation_id": "record_job_activity_api_v1_technician_jobs__job_id__activity_post",
+      "path": "/api/v1/technician/jobs/{job_id}/activity",
+      "reason": "Exact replay returns one immutable Job-attributed activity event and contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "technician",
+      "mechanism": "Company/Employee-scoped durable continuation request identity",
+      "method": "POST",
+      "operation_id": "continue_job_api_v1_technician_jobs__job_id__continuation_post",
+      "path": "/api/v1/technician/jobs/{job_id}/continuation",
+      "reason": "Exact replay returns one continuation request against the existing Job; contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "timekeeping",
       "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
@@ -3400,6 +3420,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "12219338bd644c9783751a2576b6e878b370bef37deef4c2409c5440b6f8c984",
+  "fingerprint": "83d219785e8f29511a865b557275162478744dd8bc952ba44d39bda881424c76",
   "schema_version": "1"
 }
