@@ -4,6 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.employee_operations.permissions import EmployeeOperationsPermission
@@ -45,6 +48,7 @@ from app.platform.permissions.codes import (
     JobPermission,
     LaunchPlatformPermission,
     LuminaryPermission,
+    MarketingPermission,
     MigrationPermission,
     PaymentPermission,
     PipelinePermission,
@@ -55,8 +59,6 @@ from app.platform.permissions.codes import (
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.timekeeping.permissions import TimekeepingPermission
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -112,6 +114,9 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     assert WorkforcePermission.AVAILABILITY_MANAGE in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_READ in administrator
     assert LuminaryPermission.READ in administrator
+    assert MarketingPermission.READ in administrator
+    assert MarketingPermission.EVIDENCE_READ in administrator
+    assert MarketingPermission.PROVIDER_ADMIN not in administrator
     assert LuminaryPermission.ANALYZE not in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_EXECUTE not in administrator
     assert PayrollPermission.REPORTING_MANAGE not in administrator
@@ -122,6 +127,8 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     assert platform_admin == PLATFORM_ADMIN_NORMAL_PERMISSIONS
     assert AdministrationPermission.PERMISSION_MANAGE in owner
     assert CustomerPermission.MANAGE in owner
+    assert MarketingPermission.ALL <= owner
+    assert MarketingPermission.ALL <= platform_admin
     assert PayrollPermission.CALCULATION_EXECUTE in owner
     assert PayrollPermission.PAYMENT_EXECUTION_AUTHORIZE not in owner
     assert PayrollPermission.REMITTANCE_EXECUTE not in owner
