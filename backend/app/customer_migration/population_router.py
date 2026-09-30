@@ -80,9 +80,12 @@ class CleanMajorityAdmissionResponse(StrictSchema):
     classification: Literal["CUSTOMER_CLEAN_MAJORITY_ADMITTED"]
     source_system: Literal["housecall_pro"]
     selected: int
+    processed: int
     admitted: int
     replayed: int
     quarantined: int
+    rejected: Literal[0] = 0
+    provider_unavailable: Literal[0] = 0
     remaining_unexplained: int
     before_evidence_digest: str
     after_evidence_digest: str
@@ -170,6 +173,7 @@ async def admit_customer_clean_majority(
         classification="CUSTOMER_CLEAN_MAJORITY_ADMITTED",
         source_system="housecall_pro",
         selected=result.selected,
+        processed=result.selected,
         admitted=result.admitted,
         replayed=result.replayed,
         quarantined=result.quarantined,
