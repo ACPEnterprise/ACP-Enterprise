@@ -15,9 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customer_migration.models import CustomerPopulationRefreshRun
 from app.luminary.models import LuminaryFindingRecord
+from app.marketing.provider_service import marketing_provider_service
 from app.payroll.models import PayrollRunMemberRecord, PayrollRunRecord
 from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
+from app.qbo_source.application_models import (
+    QboNativeApplicationRecord,
+    QboNativeReviewItem,
+)
 from app.scheduling.models import (
     BranchSchedulingCalendar,
     BranchSchedulingWeeklyInterval,
@@ -130,6 +135,29 @@ class PayrollReadinessGapFact:
 
 
 @dataclass(frozen=True, slots=True)
+class QboReadinessGapFact:
+    company_id: UUID
+    total_count: int
+    applied_count: int
+    bound_count: int
+    quarantined_count: int
+    open_review_count: int
+    evidence_digest: str
+    observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class MarketingReadinessGapFact:
+    company_id: UUID
+    connection_status: str
+    bound_account_count: int
+    live_ingestion_enabled: bool
+    blockers: tuple[str, ...]
+    evidence_digest: str
+    observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class LuminaryFindingFact:
     finding_id: UUID
     branch_id: UUID | None
@@ -159,6 +187,8 @@ class ActiveRecommendationReasoner:
         scheduling: tuple[SchedulingGapFact, ...] = (),
         customers: tuple[CustomerAdmissionGapFact, ...] = (),
         payroll: tuple[PayrollReadinessGapFact, ...] = (),
+        qbo: tuple[QboReadinessGapFact, ...] = (),
+        marketing: tuple[MarketingReadinessGapFact, ...] = (),
         luminary: tuple[LuminaryFindingFact, ...] = (),
         evaluated_at: datetime,
     ) -> tuple[ActiveOwnerRecommendation, ...]:
@@ -166,6 +196,8 @@ class ActiveRecommendationReasoner:
             *(self._scheduling(item, evaluated_at) for item in scheduling),
             *(self._customers(item, evaluated_at) for item in customers),
             *(self._payroll(item, evaluated_at) for item in payroll),
+            *(self._qbo(item, evaluated_at) for item in qbo),
+            *(self._marketing(item, evaluated_at) for item in marketing),
             *(self._luminary(item, evaluated_at) for item in luminary),
         ]
         grouped = self._group(values)
@@ -604,6 +636,131 @@ class ActiveRecommendationReasoner:
             evaluated_at=evaluated_at,
         )
 
+    def _qbo(
+        self, fact: QboReadinessGapFact, evaluated_at: datetime
+    ) -> ActiveOwnerRecommendation:
+        blocked = ("QBO Accounting admission", "Authoritative financial reporting")
+        score, window, factors = self._priority(
+            operational_blocker=True,
+            economic_materiality=False,
+            decisions_blocked=blocked,
+            owner_action_required=True,
+            explicit_urgency="THIS_WEEK",
+            evidence_quality="canonical QBO application dispositions",
+        )
+        return self._build(
+            definition_id="evidence_gap.qbo_accounting_admission",
+            root_issue_key=f"qbo-accounting-admission:{fact.company_id}",
+            kind="EVIDENCE_GAP",
+            subject=fact.company_id,
+            title="QBO Accounting admission needs review",
+            measured_fact=(
+                f"The current QBO application population contains {fact.total_count} "
+                f"records: {fact.applied_count} applied, {fact.bound_count} bound, "
+                f"{fact.quarantined_count} quarantined, and {fact.open_review_count} "
+                "open review items."
+            ),
+            interpretation=(
+                "Unresolved QBO dispositions limit the Accounting evidence available "
+                "to downstream reporting and management decisions."
+            ),
+            action="Review the canonical QuickBooks Migration queue.",
+            responsibility="ACCOUNTANT",
+            source="QBO native application and review authority",
+            as_of=fact.observed_at,
+            coverage=f"{fact.total_count} current QBO application records",
+            confidence="HIGH",
+            limitations=(
+                "Source-backed QBO evidence is not ACP Accounting truth.",
+                "Beacon does not inspect provider payloads or resolve review items.",
+            ),
+            affected_capabilities=(
+                "Accounting reporting",
+                "Economic Health",
+                "Management reporting",
+            ),
+            decisions_blocked=blocked,
+            window=window,
+            score=score,
+            priority_factors=factors,
+            reason=(
+                "Canonical review evidence proves an Accounting admission blocker; "
+                "no financial impact is inferred."
+            ),
+            improves="Accepted Accounting evidence becomes available to authorized reporting.",
+            path="/accounting/quickbooks-migration",
+            destination="Accounting → QuickBooks Migration / Review Queue",
+            evidence=(
+                RecommendationEvidence(
+                    "qbo_native_application_population",
+                    fact.company_id,
+                    fact.evidence_digest,
+                    fact.observed_at,
+                ),
+            ),
+            evaluated_at=evaluated_at,
+        )
+
+    def _marketing(
+        self, fact: MarketingReadinessGapFact, evaluated_at: datetime
+    ) -> ActiveOwnerRecommendation:
+        blocked = ("Google Ads evidence acquisition", "Marketing attribution coverage")
+        score, window, factors = self._priority(
+            operational_blocker=False,
+            economic_materiality=False,
+            decisions_blocked=blocked,
+            owner_action_required=True,
+            explicit_urgency=None,
+            evidence_quality="canonical Marketing provider readiness",
+        )
+        return self._build(
+            definition_id="evidence_gap.marketing_google_ads_readiness",
+            root_issue_key=f"marketing-google-ads:{fact.company_id}",
+            kind="EVIDENCE_GAP",
+            subject=fact.company_id,
+            title="Google Ads evidence is not operationally ready",
+            measured_fact=(
+                f"Google Ads connection status is {fact.connection_status}; "
+                f"{fact.bound_account_count} accounts are bound and live ingestion is "
+                f"{'enabled' if fact.live_ingestion_enabled else 'disabled'}."
+            ),
+            interpretation=(
+                "Marketing spend and attribution coverage cannot be treated as current "
+                "operating evidence until the accepted readiness blockers are cleared."
+            ),
+            action="Review the Google Ads connection workspace.",
+            responsibility="OWNER",
+            source="Marketing Google Ads connection readiness authority",
+            as_of=fact.observed_at,
+            coverage="Company Google Ads provider readiness",
+            confidence="HIGH",
+            limitations=tuple(
+                f"Readiness blocker: {blocker}." for blocker in fact.blockers
+            )
+            or ("No blocker detail was exposed by Marketing authority.",),
+            affected_capabilities=("Marketing evidence", "Attribution analysis"),
+            decisions_blocked=blocked,
+            window=window,
+            score=score,
+            priority_factors=factors,
+            reason=(
+                "Canonical provider readiness limits Marketing evidence; no campaign "
+                "performance or economic impact is inferred."
+            ),
+            improves="Authorized Google Ads evidence can support Marketing reporting.",
+            path="/marketing/provider-connections",
+            destination="Marketing → Provider Connections",
+            evidence=(
+                RecommendationEvidence(
+                    "marketing_google_ads_readiness",
+                    fact.company_id,
+                    fact.evidence_digest,
+                    fact.observed_at,
+                ),
+            ),
+            evaluated_at=evaluated_at,
+        )
+
     @staticmethod
     def _build(
         *,
@@ -696,11 +853,15 @@ class ActiveRecommendationService:
         )
         customers = await self._customers(session, context.company.id, branch_ids)
         payroll = await self._payroll(session, context.company.id)
+        qbo = await self._qbo(session, context.company.id, now)
+        marketing = await self._marketing(session, context, now)
         luminary = await self._luminary(session, context.company.id, branch_ids)
         return self.reasoner.reason(
             scheduling=scheduling,
             customers=customers,
             payroll=payroll,
+            qbo=qbo,
+            marketing=marketing,
             luminary=luminary,
             evaluated_at=now,
         )
@@ -722,6 +883,8 @@ class ActiveRecommendationService:
         )
         customers = await self._customers(session, context.company.id, branch_ids)
         payroll = await self._payroll(session, context.company.id)
+        qbo = await self._qbo(session, context.company.id, evaluated_at)
+        marketing = await self._marketing(session, context, evaluated_at)
         payroll_source_available = bool(
             await session.scalar(
                 select(
@@ -750,11 +913,11 @@ class ActiveRecommendationService:
             ),
             ReadinessAdapterEvaluation(
                 "QBO_ACCOUNTING",
-                "ADAPTER_GATED",
-                "Sealed QBO and Accounting admission authority",
-                0,
+                "EVALUATED",
+                "QBO native application and review authority",
+                len(qbo),
                 evaluated_at,
-                "Current authority has safe source-evidence and connection projections but no Company-scoped canonical admission-count read model for Beacon.",
+                None,
             ),
             ReadinessAdapterEvaluation(
                 "SCHEDULING_DISPATCH",
@@ -766,11 +929,107 @@ class ActiveRecommendationService:
             ),
             ReadinessAdapterEvaluation(
                 "MARKETING",
-                "ADAPTER_GATED",
-                "Marketing connection readiness authority",
-                0,
+                "EVALUATED",
+                "Marketing Google Ads connection readiness authority",
+                len(marketing),
                 evaluated_at,
-                "No accepted Company-scoped Marketing provider/OAuth readiness contract exists in current authority.",
+                None,
+            ),
+        )
+
+    @staticmethod
+    async def _qbo(
+        session: AsyncSession, company_id: UUID, observed_at: datetime
+    ) -> tuple[QboReadinessGapFact, ...]:
+        rows = (
+            await session.execute(
+                select(
+                    QboNativeApplicationRecord.disposition,
+                    func.count(),
+                    func.max(QboNativeApplicationRecord.applied_at),
+                )
+                .where(
+                    QboNativeApplicationRecord.company_id == company_id,
+                    QboNativeApplicationRecord.superseded_at.is_(None),
+                )
+                .group_by(QboNativeApplicationRecord.disposition)
+            )
+        ).all()
+        counts = Counter({str(row[0]): int(row[1]) for row in rows})
+        total = sum(counts.values())
+        open_reviews = int(
+            await session.scalar(
+                select(func.count(QboNativeReviewItem.id)).where(
+                    QboNativeReviewItem.company_id == company_id,
+                    QboNativeReviewItem.state == "OPEN",
+                )
+            )
+            or 0
+        )
+        unresolved = counts["QUARANTINED"] + open_reviews
+        if total == 0 or unresolved == 0:
+            return ()
+        evidence = {
+            "total": total,
+            "applied": counts["APPLIED"],
+            "bound": counts["BOUND"],
+            "quarantined": counts["QUARANTINED"],
+            "open_review": open_reviews,
+        }
+        digest = hashlib.sha256(
+            json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        latest = max(
+            (row[2] for row in rows if row[2] is not None), default=observed_at
+        )
+        return (
+            QboReadinessGapFact(
+                company_id,
+                total,
+                counts["APPLIED"],
+                counts["BOUND"],
+                counts["QUARANTINED"],
+                open_reviews,
+                digest,
+                latest,
+            ),
+        )
+
+    @staticmethod
+    async def _marketing(
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+    ) -> tuple[MarketingReadinessGapFact, ...]:
+        readiness = await marketing_provider_service.google_ads_connection_readiness(
+            session, context=context
+        )
+        ready = (
+            readiness.connection_status == "connected"
+            and readiness.bound_account_count > 0
+            and readiness.live_ingestion_enabled
+            and not readiness.blockers
+        )
+        if ready:
+            return ()
+        evidence = {
+            "connection_status": readiness.connection_status,
+            "bound_account_count": readiness.bound_account_count,
+            "live_ingestion_enabled": readiness.live_ingestion_enabled,
+            "blockers": readiness.blockers,
+        }
+        digest = hashlib.sha256(
+            json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        return (
+            MarketingReadinessGapFact(
+                context.company.id,
+                readiness.connection_status,
+                readiness.bound_account_count,
+                readiness.live_ingestion_enabled,
+                readiness.blockers,
+                digest,
+                observed_at,
             ),
         )
 
