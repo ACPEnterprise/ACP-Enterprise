@@ -15,10 +15,12 @@ import { Link } from "react-router";
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
 import { BeaconPanel } from "../components/command-center/BeaconPanel";
+import { BeaconReasoningPanel } from "../components/command-center/BeaconReasoningPanel";
 import { JobsEvidenceGraph } from "../components/command-center/JobsEvidenceGraph";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
   useBeaconLifecycleActions,
+  useActiveBeaconRecommendations,
   useBeaconSignals,
   useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
@@ -287,6 +289,8 @@ export function CommandCenterRoute() {
   );
   const analytics = useAnalyticsSummary(canReadAnalytics && !branchId);
   const beacon = useBeaconSignals(canReadAnalytics);
+  const canOwnBeacon = permissions.has("COMPANY_BEACON_OWN");
+  const recommendations = useActiveBeaconRecommendations(canOwnBeacon);
   const beaconLifecycle = useBeaconLifecycleActions();
   const beaconWorkflow = useBeaconWorkflowActions();
   const economics = useEconomicsMeasurementFoundation(canReadEconomics);
@@ -346,6 +350,7 @@ export function CommandCenterRoute() {
       </header>
 
       {canReadAnalytics ? (
+        <>
         <BeaconPanel
           signals={beacon.data?.items}
           snoozedSignals={beacon.data?.snoozed_items}
@@ -374,6 +379,14 @@ export function CommandCenterRoute() {
           }
           retry={() => void beacon.refetch()}
         />
+        <BeaconReasoningPanel
+          evaluatedAt={recommendations.data?.evaluated_at}
+          isError={recommendations.isError}
+          isPending={recommendations.isPending}
+          items={recommendations.data?.items}
+          readinessAdapters={recommendations.data?.readiness_adapters}
+        />
+        </>
       ) : (
         <Alert variant="information" title="Beacon access unavailable">
           Analytics read permission is required to view Beacon evidence.

@@ -53,6 +53,7 @@ export function MigrationWorkspace() {
     <section
       aria-labelledby="migration-workspace-title"
       className="space-y-ui-5"
+      id="migration-readiness"
     >
       <header className="space-y-ui-2">
         <div className="flex flex-wrap items-center gap-ui-3">

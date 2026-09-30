@@ -57,3 +57,23 @@ export async function transitionJob(jobId: string, action: "start" | "pause" | "
     ...(action === "pause" ? { reason_code: "operational_hold" } : {}),
   })).data;
 }
+
+export async function recordJobActivity(jobId: string, input: { action: "start" | "change" | "finish_visit"; activity: "working" | "parts_run" | null; jobVersion: number; appointmentVersion: number }) {
+  return (await apiClient.post(`${ROOT}/jobs/${jobId}/activity`, {
+    action: input.action,
+    activity: input.activity,
+    expected_job_version: input.jobVersion,
+    expected_appointment_version: input.appointmentVersion,
+    idempotency_key: crypto.randomUUID(),
+  })).data;
+}
+
+export async function continueJob(jobId: string) {
+  return (await apiClient.post(`${ROOT}/jobs/${jobId}/continuation`, {
+    reason: "return_visit",
+    requested_return_date: null,
+    needs_scheduling: true,
+    note: null,
+    idempotency_key: crypto.randomUUID(),
+  })).data;
+}

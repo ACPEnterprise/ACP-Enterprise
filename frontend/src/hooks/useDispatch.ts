@@ -13,6 +13,7 @@ import {
   resolveReconciliation,
 } from "../api/dispatch";
 import type { DispatchExceptionCode } from "../types/dispatch";
+import { appointmentKeys } from "./useScheduling";
 
 export const dispatchKeys = {
   all: ["dispatch"] as const,
@@ -77,7 +78,10 @@ export function useEligibleTechnicians(id?: string) {
 export function useDispatchMutations() {
   const client = useQueryClient();
   const refresh = () =>
-    client.invalidateQueries({ queryKey: dispatchKeys.all });
+    Promise.all([
+      client.invalidateQueries({ queryKey: dispatchKeys.all }),
+      client.invalidateQueries({ queryKey: appointmentKeys.lists() }),
+    ]);
   return {
     assign: useMutation({
       mutationFn: (x: {

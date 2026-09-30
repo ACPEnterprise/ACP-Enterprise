@@ -318,7 +318,10 @@ describe("PayrollRoute authorization", () => {
         <PayrollRoute />
       </MemoryRouter>,
     );
-    expect(screen.getByText("Marisol Rivera")).toBeVisible();
+    expect(screen.getAllByText("Marisol Rivera")).toHaveLength(4);
+    expect(screen.getByText("40.00")).toBeVisible();
+    expect(screen.queryByText("No time entries")).not.toBeInTheDocument();
+    expect(screen.queryByText("Time Evidence Missing")).not.toBeInTheDocument();
     expect(screen.getAllByText("Not calculated")).toHaveLength(3);
     expect(
       screen.getAllByText(/Missing configuration/i).length,
@@ -328,13 +331,8 @@ describe("PayrollRoute authorization", () => {
       "/employees?employee=employee-1&period=period-1#timecard-employee-1",
     );
     expect(screen.queryByText("No current pay period")).not.toBeInTheDocument();
-    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveAttribute(
-      "id",
-      "payroll-employee-employee-1",
-    );
-    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveClass(
-      "bg-action-primary/5",
-    );
+    expect(document.getElementById("payroll-employee-employee-1")).toBeVisible();
+    expect(document.getElementById("payroll-employee-employee-1")).toHaveClass("bg-action-primary/5");
     expect(screen.getByTestId("payroll-employee-setup")).toHaveTextContent(
       "Payroll setup for employee-1",
     );

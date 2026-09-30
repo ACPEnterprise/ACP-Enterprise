@@ -52,6 +52,19 @@ export const pipelineHandle = {
   workspace: { pageTitle: "Pipeline", breadcrumbs: [{ label: "Pipeline" }], helpTopic: "pipeline", aiContext: "pipeline" },
 } as const satisfies ShellRouteHandle;
 
+export const marketingProviderConnectionsHandle = {
+  workspace: {
+    pageTitle: "Google Ads Connection",
+    breadcrumbs: [
+      { label: "Marketing" },
+      { label: "Provider Connections" },
+      { label: "Google Ads" },
+    ],
+    helpTopic: "marketing-provider-connections",
+    aiContext: "marketing-google-ads-connection",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const serviceAgreementsHandle = { workspace: { pageTitle: "Service Agreements", breadcrumbs: [{ label: "Service Agreements" }], helpTopic: "service-agreements", aiContext: "service-agreements" } } as const satisfies ShellRouteHandle;
 
 export const customerDetailHandle = {
@@ -193,6 +206,18 @@ export const accountsPayableHandle = {
 
 export const financialReportsHandle = {
   workspace: { pageTitle: "Financial Reports", breadcrumbs: [{ label: "Financial Reports" }], helpTopic: "financial-reporting", aiContext: "financial-reporting" },
+} as const satisfies ShellRouteHandle;
+
+export const qboMigrationHandle = {
+  workspace: {
+    pageTitle: "QuickBooks Migration",
+    breadcrumbs: [
+      { label: "Accounting", path: "/financial-reports" },
+      { label: "QuickBooks Migration" },
+    ],
+    helpTopic: "quickbooks-migration",
+    aiContext: "qbo-native-application",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const businessEconomicsHandle = {

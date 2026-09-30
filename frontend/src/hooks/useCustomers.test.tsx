@@ -34,9 +34,13 @@ describe("useCustomerMutations activity consistency", () => {
       classification: "CUSTOMER_CLEAN_MAJORITY_ADMITTED",
       source_system: "housecall_pro",
       selected: 2,
+      processed: 2,
       admitted: 1,
       replayed: 0,
       quarantined: 1,
+      rejected: 0,
+      provider_unavailable: 0,
+      quarantine_records: [{ source_customer_id: "provider-2", reason_code: "deterministic_admission_review_required", reason: "Review required." }],
       remaining_unexplained: 0,
       before_evidence_digest: "a".repeat(64),
       after_evidence_digest: "b".repeat(64),
@@ -81,6 +85,7 @@ describe("useCustomerMutations activity consistency", () => {
     const client = new QueryClient({
       defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
     });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -96,6 +101,7 @@ describe("useCustomerMutations activity consistency", () => {
     expect(refresh.mock.calls[1]?.[0]).toBe(refresh.mock.calls[0]?.[0]);
     expect(refresh).toHaveBeenNthCalledWith(1, expect.any(String), "branch-1");
     expect(refresh).toHaveBeenNthCalledWith(2, expect.any(String), "branch-1");
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
   it("invalidates detail, roster, and paginated timeline after a Customer event", async () => {

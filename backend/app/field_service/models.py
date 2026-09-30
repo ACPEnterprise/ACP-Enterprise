@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -62,6 +63,156 @@ class FieldWorkNote(Base):
     )
     note_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class FieldJobActivityEvent(Base):
+    """Immutable Job-attributed activity evidence; never payable-time authority."""
+
+    __tablename__ = "field_job_activity_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_field_job_activity_events_job",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "appointment_id"],
+            ["appointments.company_id", "appointments.branch_id", "appointments.id"],
+            name="fk_field_job_activity_events_appointment",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "action IN ('start','change','finish_visit')",
+            name="ck_field_job_activity_events_action",
+        ),
+        CheckConstraint(
+            "activity IS NULL OR activity IN ('working','parts_run')",
+            name="ck_field_job_activity_events_activity",
+        ),
+        CheckConstraint(
+            "(action IN ('start','change') AND activity IS NOT NULL) OR "
+            "(action = 'finish_visit' AND activity IS NULL)",
+            name="ck_field_job_activity_events_shape",
+        ),
+        CheckConstraint(
+            "evidence_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_field_job_activity_events_digest",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "idempotency_key",
+            name="uq_field_job_activity_events_idempotency",
+        ),
+        Index(
+            "ix_field_job_activity_events_visit",
+            "company_id",
+            "employee_id",
+            "appointment_id",
+            "occurred_at",
+            "id",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("employees.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    appointment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    assignment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    activity: Mapped[str | None] = mapped_column(String(24))
+    job_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    appointment_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class FieldJobContinuation(Base):
+    __tablename__ = "field_job_continuations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_field_job_continuations_job",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "reason IN ('parts_material','additional_labor','return_visit','multi_day_planned','inspection_permit','customer_availability','other')",
+            name="ck_field_job_continuations_reason",
+        ),
+        CheckConstraint(
+            "needs_scheduling OR requested_return_date IS NOT NULL",
+            name="ck_field_job_continuations_return",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "idempotency_key",
+            name="uq_field_job_continuations_idempotency",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("employees.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    appointment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("appointments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    assignment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    requested_return_date: Mapped[date | None] = mapped_column(Date)
+    needs_scheduling: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     recorded_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

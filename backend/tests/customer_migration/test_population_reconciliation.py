@@ -29,6 +29,7 @@ from app.customer_migration.population_router import (
 from app.customer_migration.population_router import (
     router as population_router,
 )
+from app.customers.detail import CustomerDetailService
 from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.customers.repository import CustomerRepository
 from app.customers.schemas import (
@@ -410,7 +411,9 @@ async def test_http_population_refresh_is_authorized_replay_safe_and_non_admitti
 
 
 @pytest.mark.asyncio
-async def test_http_clean_majority_admits_exact_rows_and_is_replay_safe(database) -> None:
+async def test_http_clean_majority_admits_exact_rows_and_is_replay_safe(
+    database,
+) -> None:
     _, factory = database
     context = await seed_context(factory, name="Clean Majority API")
     await stage_hammer(factory, context)
@@ -430,7 +433,11 @@ async def test_http_clean_majority_admits_exact_rows_and_is_replay_safe(database
 
     assert first.status_code == replay.status_code == 200
     assert first.json()["selected"] == first.json()["admitted"] == 1
+    assert first.json()["processed"] == 1
     assert first.json()["quarantined"] == 0
+    assert first.json()["rejected"] == 0
+    assert first.json()["provider_unavailable"] == 0
+    assert first.json()["quarantine_records"] == []
     assert first.json()["remaining_unexplained"] == 0
     assert first.json()["customer_admission_performed"] is True
     assert first.headers["Cache-Control"] == "private, no-store"
@@ -682,6 +689,14 @@ async def test_hammer_exact_admission_is_searchable_and_replay_safe(database) ->
             )
         )
         assert binding is not None and binding.customer_id == first.customer_id
+        detail = await CustomerDetailService().get_detail(
+            session,
+            context=context,
+            customer_id=first.customer_id,
+        )
+        assert [lineage.source_customer_id for lineage in detail.source_lineage] == [
+            HAMMER_PROVIDER_ID
+        ]
         disposition = await session.get(
             CustomerPopulationReconciliationDisposition, first.disposition_id
         )
@@ -826,9 +841,7 @@ async def test_clean_majority_admits_safe_customer_and_quarantines_only_conflict
         )
         assert latest_conflict is not None
         assert latest_conflict.disposition == "HELD"
-        assert (
-            latest_conflict.reason_code == "source_aggregate_validation_required"
-        )
+        assert latest_conflict.reason_code == "source_aggregate_validation_required"
 
     replay = await service.admit_clean_majority(factory, context=context)
     assert replay.selected == 0

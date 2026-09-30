@@ -6,6 +6,7 @@ import type {
   CalendarQueryResult,
   BranchSchedulingPolicy,
   BranchSchedulingPolicyInput,
+  BranchCalendarRoster,
 } from "../types/scheduling";
 
 const APPOINTMENTS_PATH = "/api/v1/scheduling/appointments";
@@ -14,6 +15,15 @@ export async function getBranchSchedulingPolicy(branchId: string) {
   return (
     await apiClient.get<BranchSchedulingPolicy>(
       `/api/v1/scheduling/branches/${branchId}/policy`,
+    )
+  ).data;
+}
+
+export async function getBranchCalendarRoster(branchId: string, startAt: string, endAt: string) {
+  return (
+    await apiClient.get<BranchCalendarRoster>(
+      `/api/v1/scheduling/branches/${branchId}/calendar-roster`,
+      { params: { start_at: startAt, end_at: endAt } },
     )
   ).data;
 }

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.field_service.activities import field_activity_service
 from app.field_service.artifacts import field_artifact_service
 from app.field_service.errors import (
     FieldServiceConflict,
@@ -22,10 +23,14 @@ from app.field_service.field_purchases import field_purchase_service
 from app.field_service.mobile_context import mobile_field_context
 from app.field_service.schemas import (
     ApprovalInput,
+    FieldActivityInput,
+    FieldActivityOut,
     FieldArtifactFinalizeInput,
     FieldArtifactIntentInput,
     FieldArtifactIntentOut,
     FieldArtifactOut,
+    FieldContinuationInput,
+    FieldContinuationOut,
     FieldEquipmentProjection,
     FieldEstimatePresentation,
     FieldHistoryProjection,
@@ -119,6 +124,34 @@ def field_error(error: FieldServiceError) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+
+
+@router.post("/jobs/{job_id}/activity", response_model=FieldActivityOut)
+async def record_job_activity(
+    job_id: UUID, payload: FieldActivityInput, context: Execute, session: Session
+) -> FieldActivityOut:
+    try:
+        return FieldActivityOut.model_validate(
+            await field_activity_service.record(
+                session, context=context, job_id=job_id, **payload.model_dump()
+            )
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post("/jobs/{job_id}/continuation", response_model=FieldContinuationOut)
+async def continue_job(
+    job_id: UUID, payload: FieldContinuationInput, context: Execute, session: Session
+) -> FieldContinuationOut:
+    try:
+        return FieldContinuationOut.model_validate(
+            await field_activity_service.continue_job(
+                session, context=context, job_id=job_id, **payload.model_dump()
+            )
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
 
 
 @router.get("/itinerary", response_model=Itinerary)

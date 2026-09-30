@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    QBO_REVIEW_DECIDED = "qbo.review_decided"
     ASSET_CREATED = "asset.created"
     ASSET_EVIDENCE_RECORDED = "asset.evidence_recorded"
     ASSET_RELATIONSHIP_RECORDED = "asset.relationship_recorded"
@@ -251,6 +252,8 @@ class EventType(str, Enum):
     FIELD_PURCHASE_EXTRACTION_RECORDED = "field.purchase.extraction_recorded"
     FIELD_PURCHASE_DISPOSITION_CONFIRMED = "field.purchase.disposition_confirmed"
     FIELD_PURCHASE_VENDOR_MAPPING_CERTIFIED = "field.purchase.vendor_mapping_certified"
+    FIELD_JOB_ACTIVITY_RECORDED = "field.job_activity_recorded"
+    FIELD_JOB_CONTINUATION_REQUESTED = "field.job_continuation_requested"
 
     # Price Book
     PRICE_BOOK_PRICE_VERSION_ACTIVATED = "price_book.price_version_activated"

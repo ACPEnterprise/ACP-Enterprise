@@ -81,10 +81,16 @@ def workspace(*, quality: str = "complete") -> dict[str, object]:
             "current": {
                 "revenue_minor": 300_000,
                 "contribution_minor": 115_000,
+                "labor_minor": 90_000,
+                "materials_minor": 80_000,
+                "other_direct_cost_minor": 15_000,
             },
             "prior": {
                 "revenue_minor": 280_000,
                 "contribution_minor": 110_000,
+                "labor_minor": 82_000,
+                "materials_minor": 78_000,
+                "other_direct_cost_minor": 10_000,
             },
             "revenue_change_minor": 20_000,
             "contribution_change_minor": 5_000,
@@ -162,6 +168,227 @@ def test_owner_health_keeps_missing_burden_and_health_unavailable() -> None:
     )
     assert result["economic_health"]["status"] == "UNAVAILABLE"
     assert result["economic_health"]["value_basis_points"] is None
+
+
+def test_active_reasoning_ranks_decision_dependencies_without_values() -> None:
+    result = project(workspace())["active_reasoning"]
+    assert result["contribution"] == {
+        "state": "AUTHORITATIVE",
+        "value_minor": 115_000,
+        "job_population_coverage_basis_points": 10_000,
+        "coverage_basis": "jobs_with_complete_admitted_variable_costs",
+        "ready_job_count": 2,
+        "job_count": 2,
+    }
+    assert result["required_burden"]["state"] == "UNAVAILABLE"
+    assert result["economic_health"]["status"] == "UNAVAILABLE"
+    assert result["highest_value_next_action"]["gap"] == "field_capacity_burden"
+    assert result["highest_value_next_action"]["responsible_party"] == "ACCOUNTANT"
+    assert result["highest_value_next_action"]["ui_path"] == "/payroll"
+    assert all("value" not in item for item in result["ranked_evidence_gaps"])
+    assert "does not prove" in result["cannot_conclude"][-1]
+
+
+def test_partial_reasoning_prioritizes_gaps_affecting_more_jobs() -> None:
+    value = workspace()
+    jobs = value["jobs"]
+    assert isinstance(jobs, list)
+    jobs[0]["contribution_minor"] = None
+    jobs[0]["missing_categories"] = ["actual_material_valuation"]
+    value["totals"]["gross_profit"] = None
+    value["native_evidence"] = {
+        "jobs": [
+            {
+                "job_id": "job-a",
+                "job_number": "J-100",
+                "job_status": "completed",
+                "customer_id": "customer-a",
+                "customer_name": "Fixture Customer",
+                "branch_id": str(BRANCH),
+                "branch_name": "Main",
+                "service_category": "drain",
+                "invoiced_revenue_minor": 100_000,
+                "accepted_worked_seconds": 3_600,
+                "material_quantity_evidence_count": 1,
+                "material_cost_minor": None,
+                "references": [],
+            }
+        ]
+    }
+    reasoning = project(value)["active_reasoning"]
+    assert reasoning["contribution"]["state"] == "PARTIAL"
+    assert reasoning["contribution"]["job_population_coverage_basis_points"] == 5_000
+    material = next(
+        item
+        for item in reasoning["ranked_evidence_gaps"]
+        if item["gap"] == "actual_material_valuation"
+    )
+    assert material["decision_impact"] == "BLOCKS_CONTRIBUTION_AND_HEALTH"
+    assert material["expected_source"] == "Inventory / Purchasing / Accounting"
+    assert material["unlocks"] == "actual material cost and stronger Job contribution"
+
+
+def test_complete_health_has_no_fabricated_burden_gap() -> None:
+    value = workspace()
+    value["fully_allocated_available"] = True
+    value["totals"]["overhead"] = 100_000
+    reasoning = project(value)["active_reasoning"]
+    assert reasoning["economic_health"] == {
+        "state": "MEASURED",
+        "status": "ABOVE_BREAK_EVEN",
+        "value_basis_points": 11_500,
+    }
+    assert reasoning["ranked_evidence_gaps"] == []
+    assert reasoning["highest_value_next_action"] is None
+
+
+def test_completion_planner_projects_explicit_categories_and_unlock_graph() -> None:
+    planner = project(workspace())["economic_completion_planner"]
+    assert planner["contract_version"] == "luminary.economic-completion-planner.v1"
+    assert planner["read_only"] is True
+    assert planner["summary"] == {
+        "complete_category_count": 3,
+        "partial_category_count": 1,
+        "missing_category_count": 8,
+        "total_category_count": 12,
+    }
+    categories = {item["category"]: item for item in planner["categories"]}
+    assert categories["FIELD_LABOR_AND_PAYROLL_BURDEN"]["state"] == "PARTIAL"
+    assert categories["MATERIAL_AND_JOB_VARIABLE_COST"]["state"] == "COMPLETE"
+    assert categories["OWNER_COMPENSATION"]["state"] == "MISSING"
+    assert categories["MARKETING_SPEND"]["normal_workflow_available"] is False
+    assert planner["highest_value_next_completion"]["category"] == (
+        "FIELD_LABOR_AND_PAYROLL_BURDEN"
+    )
+    assert {
+        edge["to"]
+        for edge in planner["decision_unlock_graph"]["edges"]
+        if edge["from"] == "MATERIAL_AND_JOB_VARIABLE_COST"
+    } >= {"ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"}
+
+
+def test_completion_planner_does_not_invent_owner_confirmed_value_authority() -> None:
+    planner = project(workspace())["economic_completion_planner"]
+    assert planner["owner_confirmed_authority"]["found"] is False
+    assert (
+        "effective-dated"
+        in planner["owner_confirmed_authority"]["required_future_contract"]
+    )
+    for category in planner["categories"]:
+        assert category["owner_confirmed"]["supported"] is False
+        assert category["owner_confirmed"]["effective_period"] == {
+            "start": "2026-08-01",
+            "end": "2026-08-31",
+        }
+        assert "value" not in category["owner_confirmed"]
+
+
+def test_completion_plan_uses_authoritative_population_not_missing_value() -> None:
+    value = workspace()
+    jobs = value["jobs"]
+    assert isinstance(jobs, list)
+    jobs[0]["contribution_minor"] = None
+    jobs[0]["missing_categories"] = ["actual_material_valuation"]
+    value["totals"]["gross_profit"] = None
+    value["native_evidence"] = {
+        "jobs": [
+            {
+                "job_id": "job-a",
+                "job_number": "J-100",
+                "job_status": "completed",
+                "customer_id": "customer-a",
+                "customer_name": "Fixture Customer",
+                "branch_id": str(BRANCH),
+                "branch_name": "Main",
+                "service_category": "drain",
+                "invoiced_revenue_minor": 100_000,
+                "accepted_worked_seconds": 3_600,
+                "material_quantity_evidence_count": 1,
+                "material_cost_minor": None,
+                "references": [],
+            }
+        ]
+    }
+    planner = project(value)["economic_completion_planner"]
+    material = next(
+        item
+        for item in planner["ranked_completion_plan"]
+        if item["category"] == "MATERIAL_AND_JOB_VARIABLE_COST"
+    )
+    assert material["affected_job_count"] == 1
+    assert material["affected_authoritative_revenue_minor"] == 100_000
+    assert "estimated_missing_value_minor" not in material
+    assert planner["ranking_limit"] == (
+        "No missing dollar value or industry estimate is used."
+    )
+
+
+def test_driver_analysis_quantifies_materiality_without_claiming_cause() -> None:
+    drivers = project(workspace())["driver_analysis"]
+    assert drivers["state"] == "AVAILABLE"
+    observations = {item["metric"]: item for item in drivers["observed_changes"]}
+    assert observations["revenue_production"]["change"] == 20_000
+    assert observations["revenue_production"]["change_basis_points_of_prior"] == 714
+    assert observations["economic_contribution"]["change"] == 5_000
+    assert observations["job_variable_cost"]["change"] == 15_000
+    assert observations["material_cost_per_job"]["change"] == 2_000
+    assert observations["job_count"]["current"] == 1
+    measured = drivers["measured_drivers"]
+    assert measured[0] == {
+        "component": "revenue_production",
+        "classification": "MEASURED_DRIVER",
+        "contribution_effect_minor": 20_000,
+        "materiality_basis": "absolute_arithmetic_contribution_effect",
+        "causality": "UNPROVEN",
+    }
+    assert drivers["unproven_causes"][0]["classification"] == "UNPROVEN_CAUSE"
+    assert drivers["cash_health"]["ar_and_collections_included"] is False
+
+
+def test_driver_analysis_fails_closed_without_comparable_periods() -> None:
+    value = workspace()
+    value["comparison"] = {
+        "state": "unavailable",
+        "reason": "Prior equal-period evidence is incomplete.",
+    }
+    drivers = project(value)["driver_analysis"]
+    assert drivers["state"] == "UNAVAILABLE"
+    assert drivers["reason"] == "Prior equal-period evidence is incomplete."
+    assert drivers["observed_changes"] == []
+    assert drivers["measured_drivers"] == []
+
+
+def test_gap_ranking_uses_authoritative_population_value_not_missing_value() -> None:
+    value = workspace()
+    value["native_evidence"] = {
+        "jobs": [
+            {
+                "job_id": "job-a",
+                "job_number": "J-100",
+                "job_status": "completed",
+                "customer_id": "customer-a",
+                "customer_name": "Fixture Customer",
+                "branch_id": str(BRANCH),
+                "branch_name": "Main",
+                "service_category": "drain",
+                "invoiced_revenue_minor": 100_000,
+                "accepted_worked_seconds": 3_600,
+                "material_quantity_evidence_count": 1,
+                "material_cost_minor": None,
+                "references": [],
+            }
+        ]
+    }
+    reasoning = project(value)["active_reasoning"]
+    material = next(
+        item
+        for item in reasoning["ranked_evidence_gaps"]
+        if item["gap"] == "actual_material_valuation"
+    )
+    assert material["affected_authoritative_revenue_minor"] == 100_000
+    assert "estimated_missing_value_minor" not in material
+    assert material["normal_workflow_available"] is True
+    assert material["evidence_freshness"] == "complete"
 
 
 def test_equal_period_delta_is_exactly_decomposed_without_causal_claim() -> None:

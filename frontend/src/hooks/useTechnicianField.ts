@@ -27,5 +27,7 @@ export function useTechnicianField(jobId: string, jobVersion: number, assignment
     handoff: useMutation({ mutationFn: () => api.refreshInvoiceHandoff(jobId, jobVersion, assignmentVersion), onSuccess: update }),
     arrival: useMutation({ mutationFn: (input: { appointmentId: string; state: "en_route" | "arrived"; version: number }) => api.recordArrival(input.appointmentId, input.state, input.version), onSuccess: () => client.invalidateQueries({ queryKey: ["technician-itinerary"] }) }),
     lifecycle: useMutation({ mutationFn: (input: { action: "start" | "pause" | "resume" | "complete"; version: number }) => api.transitionJob(jobId, input.action, input.version), onSuccess: () => { void client.invalidateQueries({ queryKey: ["technician-itinerary"] }); void client.invalidateQueries({ queryKey: key(jobId) }); } }),
+    activity: useMutation({ mutationFn: api.recordJobActivity.bind(null, jobId), onSuccess: () => client.invalidateQueries({ queryKey: key(jobId) }) }),
+    continuation: useMutation({ mutationFn: () => api.continueJob(jobId), onSuccess: () => client.invalidateQueries({ queryKey: key(jobId) }) }),
   };
 }

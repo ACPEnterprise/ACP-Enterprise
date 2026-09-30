@@ -44,7 +44,17 @@ export interface LiaResponse {
   response_mode: "BRIEF" | "NORMAL" | "DETAILED" | "EVIDENCE";
   evidence: LiaEvidence[];
   limitations: string[];
-  navigation: { label: string; internal_path: string }[];
+  navigation: {
+    label: string;
+    internal_path: string;
+    required_permission?: string | null;
+    available?: boolean;
+    unavailable_reason?: string | null;
+    entity_type?: string | null;
+    entity_id?: string | null;
+    action_category?: string;
+    source_identity?: string | null;
+  }[];
   proposals: { proposal_id: string; action: string; state: string }[];
   completeness: string;
   freshness: string;

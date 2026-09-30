@@ -22,6 +22,7 @@ from app.platform.auth.services import access_token_service, utc_now
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
+from app.platform.employees.models import Employee
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
 from app.platform.permissions.codes import (
     AdministrationPermission,
@@ -39,6 +40,7 @@ from app.scheduling.errors import (
     SchedulingCapacityFailure,
     SchedulingError,
     SchedulingValidationError,
+    SchedulingValidationFailure,
     SchedulingVersionConflictError,
 )
 from app.scheduling.models import (
@@ -1079,6 +1081,29 @@ def test_scheduling_failures_use_safe_recovery_contract(
 
 
 @pytest.mark.parametrize(
+    ("failure", "code"),
+    [
+        (SchedulingValidationFailure.INVALID_TIMEZONE, "scheduling_invalid_timezone"),
+        (SchedulingValidationFailure.MINIMUM_NOTICE, "scheduling_minimum_notice"),
+        (SchedulingValidationFailure.BOOKING_HORIZON, "scheduling_booking_horizon"),
+        (SchedulingValidationFailure.CROSS_DAY, "scheduling_cross_day"),
+        (SchedulingValidationFailure.SLOT_ALIGNMENT, "scheduling_slot_alignment"),
+        (SchedulingValidationFailure.INVALID_WINDOW, "scheduling_invalid_window"),
+    ],
+)
+def test_booking_policy_validation_preserves_safe_first_failing_predicate(
+    failure: SchedulingValidationFailure, code: str
+) -> None:
+    translated = translate_scheduling_error(
+        SchedulingValidationError("protected internal context", failure)
+    )
+    assert translated.status_code == 422
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert "protected internal context" not in translated.detail["message"]
+
+
+@pytest.mark.parametrize(
     ("failure", "code", "recovery"),
     [
         (
@@ -1329,6 +1354,83 @@ async def test_reschedule_moves_reservation_and_stages_event(
     assert reservation is not None
     assert reservation.reserved_start_at == replacement
     assert event_count == 1
+
+
+@pytest.mark.asyncio
+async def test_calendar_roster_uses_effective_technician_role_and_branch_scope(
+    scheduling_api: SchedulingApiFixture,
+) -> None:
+    async with scheduling_api.factory() as session, session.begin():
+        membership = await session.scalar(
+            select(Membership)
+            .join(User, User.id == Membership.user_id)
+            .where(
+                Membership.company_id == scheduling_api.company_id,
+                Membership.status == "active",
+                User.normalized_email.like("scheduler-allowed-%"),
+            )
+        )
+        assert membership is not None
+        role = Role(
+            company_id=scheduling_api.company_id,
+            code="TECHNICIAN",
+            name="Technician",
+            status="active",
+            is_system=False,
+            created_by_user_id=membership.user_id,
+            updated_by_user_id=membership.user_id,
+        )
+        session.add(role)
+        await session.flush()
+        session.add_all(
+            [
+                MembershipRole(
+                    company_id=scheduling_api.company_id,
+                    membership_id=membership.id,
+                    role_id=role.id,
+                    assigned_by_user_id=membership.user_id,
+                    functional_area="FIELD_OPERATIONS",
+                    access_level="TECHNICIAN",
+                    effective_at=scheduling_api.start - timedelta(days=1),
+                ),
+                Employee(
+                    company_id=scheduling_api.company_id,
+                    membership_id=membership.id,
+                    home_branch_id=scheduling_api.branch_id,
+                    employee_number="TECH-ROSTER-1",
+                    first_name="Michael",
+                    last_name="Brian",
+                    display_name="Michael Brian",
+                    employee_type="employee",
+                    status="active",
+                ),
+            ]
+        )
+    path = f"/api/v1/scheduling/branches/{scheduling_api.branch_id}/calendar-roster"
+    params = {
+        "start_at": scheduling_api.start.isoformat(),
+        "end_at": (scheduling_api.start + timedelta(hours=8)).isoformat(),
+    }
+    response = await _get(
+        scheduling_api, path, token=scheduling_api.token, params=params
+    )
+    denied = await _get(
+        scheduling_api, path, token=scheduling_api.denied_token, params=params
+    )
+    foreign = await _get(
+        scheduling_api,
+        path.replace(
+            str(scheduling_api.branch_id), str(scheduling_api.unauthorized_branch_id)
+        ),
+        token=scheduling_api.token,
+        params=params,
+    )
+    assert response.status_code == 200
+    assert [item["display_name"] for item in response.json()["technicians"]] == [
+        "Michael Brian"
+    ]
+    assert denied.status_code == 403
+    assert foreign.status_code == 404
 
 
 @pytest.mark.asyncio

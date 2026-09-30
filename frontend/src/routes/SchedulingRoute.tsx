@@ -37,6 +37,8 @@ import {
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
 import {
+  useBranchCalendarRoster,
+  useBranchSchedulingPolicy,
   useAppointments,
   useRescheduleAppointment,
 } from "../hooks/useScheduling";
@@ -49,7 +51,12 @@ import {
 } from "../routing/paths";
 import type { DispatchBoardItem } from "../types/dispatch";
 import type { JobListItem, JobPriority, JobStatus } from "../types/jobs";
-import type { AppointmentDetail, AppointmentStatus } from "../types/scheduling";
+import type {
+  AppointmentDetail,
+  AppointmentStatus,
+  BranchCalendarTechnician,
+  BranchSchedulingPolicy,
+} from "../types/scheduling";
 import {
   Alert,
   Badge,
@@ -91,6 +98,35 @@ const time = (value: string | null) =>
         minute: "2-digit",
       })
     : "Time unknown";
+const zonedParts = (value: Date, timeZone: string) =>
+  Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(value)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+const zonedDateKey = (value: Date, timeZone: string) => {
+  const parts = zonedParts(value, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+const zonedMinute = (value: Date, timeZone: string) => {
+  const parts = zonedParts(value, timeZone);
+  return Number(parts.hour) * 60 + Number(parts.minute);
+};
+const branchTime = (value: string | null, timeZone: string) =>
+  value
+    ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone })
+    : "Time unknown";
+const isCapacityUnreconciled = (item: AppointmentDetail) =>
+  ["scheduled", "confirmed"].includes(item.status) && item.capacity_units === null;
 const toLocalInput = (value: string | null) => {
   if (!value) return "";
   const date = new Date(value);
@@ -173,6 +209,71 @@ const assignedTechnicianNames = (dispatch?: DispatchBoardItem) => {
   ].filter((name): name is string => Boolean(name));
 };
 
+type CalendarLane = {
+  id: string;
+  label: string;
+  readiness: BranchCalendarTechnician["readiness"] | "UNASSIGNED";
+  readinessReasons: readonly string[];
+};
+
+const UNASSIGNED_LANE: CalendarLane = {
+  id: "__unassigned",
+  label: "Unassigned",
+  readiness: "UNASSIGNED",
+  readinessReasons: [],
+};
+
+function calendarLanes(
+  roster: readonly BranchCalendarTechnician[],
+  items: readonly AppointmentDetail[],
+  dispatchByAppointment: Map<string, DispatchBoardItem>,
+): CalendarLane[] {
+  const lanes = new Map<string, CalendarLane>();
+  for (const technician of roster) {
+    lanes.set(technician.employee_id, {
+      id: technician.employee_id,
+      label: technician.display_name,
+      readiness: technician.readiness,
+      readinessReasons: technician.readiness_reasons,
+    });
+  }
+  for (const item of items) {
+    const dispatch = dispatchByAppointment.get(item.id);
+    const assignment = dispatch ? activeDispatchAssignment(dispatch) : null;
+    if (assignment?.primary_employee_id && !lanes.has(assignment.primary_employee_id)) {
+      lanes.set(assignment.primary_employee_id, {
+        id: assignment.primary_employee_id,
+        label: assignment.primary_employee_name ?? "Assigned technician",
+        readiness: "READINESS_BLOCKED",
+        readinessReasons: ["outside_current_roster"],
+      });
+    }
+  }
+  return [UNASSIGNED_LANE, ...Array.from(lanes.values()).sort((a, b) => a.label.localeCompare(b.label))];
+}
+
+const appointmentLaneId = (item: AppointmentDetail, dispatchByAppointment: Map<string, DispatchBoardItem>) => {
+  const dispatch = dispatchByAppointment.get(item.id);
+  return (dispatch ? activeDispatchAssignment(dispatch)?.primary_employee_id : null) ?? UNASSIGNED_LANE.id;
+};
+
+function policyMinutes(policy: BranchSchedulingPolicy | undefined, day: Date) {
+  const dateKey = localDateValue(day);
+  const exception = policy?.exceptions.find((item) => item.exception_date === dateKey);
+  const dayOfWeek = (day.getDay() + 6) % 7;
+  const intervals = policy?.weekly_intervals.filter((item) => item.day_of_week === dayOfWeek) ?? [];
+  const normal = intervals.length
+    ? { start: Math.min(...intervals.map((item) => item.start_minute)), end: Math.max(...intervals.map((item) => item.end_minute)) }
+    : { start: START_HOUR * 60, end: END_HOUR * 60 };
+  if (!exception) return { ...normal, closed: false };
+  if (exception.is_closed) return { ...normal, closed: true };
+  return {
+    start: exception.start_minute ?? normal.start,
+    end: exception.end_minute ?? normal.end,
+    closed: false,
+  };
+}
+
 export function SchedulingRoute({
   initialPerspective = "schedule",
 }: {
@@ -203,7 +304,7 @@ export function SchedulingRoute({
       : "day",
   );
   const [branchId, setBranchId] = useState(
-    () => searchParams.get("branch") ?? "",
+    () => searchParams.get("branch") ?? activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? "",
   );
   const [status, setStatus] = useState<AppointmentStatus | "">(() =>
     statuses.includes(searchParams.get("status") as AppointmentStatus)
@@ -250,6 +351,8 @@ export function SchedulingRoute({
   const [booking, setBooking] = useState(false);
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
+  const branchPolicy = useBranchSchedulingPolicy(branchId || undefined);
+  const branchRoster = useBranchCalendarRoster(branchId || undefined, range.startAt, range.endAt);
   const graphAppointments = useAppointments(
     {
       ...CURRENT_CALENDAR_QUERY_RANGE,
@@ -302,12 +405,13 @@ export function SchedulingRoute({
     () =>
       Array.from(
         new Set(
-          (dispatch.data?.items ?? []).flatMap((item) =>
-            assignedTechnicianNames(item),
-          ),
+          [
+            ...(branchRoster.data?.technicians.map((item) => item.display_name) ?? []),
+            ...(dispatch.data?.items ?? []).flatMap((item) => assignedTechnicianNames(item)),
+          ],
         ),
       ).sort(),
-    [dispatch.data?.items],
+    [branchRoster.data?.technicians, dispatch.data?.items],
   );
   const serviceCategories = useMemo(
     () =>
@@ -351,6 +455,10 @@ export function SchedulingRoute({
       serviceCategory,
       technician,
     ],
+  );
+  const lanes = useMemo(
+    () => calendarLanes(branchRoster.data?.technicians ?? [], visible, dispatchByAppointment),
+    [branchRoster.data?.technicians, dispatchByAppointment, visible],
   );
   const issues = useMemo(
     () =>
@@ -637,9 +745,8 @@ export function SchedulingRoute({
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-content-muted">
-            Times are shown in this device&apos;s {displayTimeZone} timezone
-            until the Branch-timezone candidate is integrated. Appointment
-            source windows remain stored as authoritative instants.
+            Times are shown in {branchPolicy.data?.timezone ?? displayTimeZone}
+            {branchPolicy.data ? " Branch time" : " device time"}. Appointment source windows remain stored as authoritative instants.
           </p>
           <Button
             variant="outline"
@@ -733,8 +840,32 @@ export function SchedulingRoute({
           projection refreshes.
         </Alert>
       )}
+      {branchPolicy.isLoading && (
+        <Card className="p-8"><Spinner label="Checking Branch scheduling readiness" /></Card>
+      )}
+      {branchPolicy.isError && (
+        <Alert variant="danger" title="Branch scheduling readiness unavailable">
+          The operating calendar cannot be trusted until the selected Branch policy can be read.
+        </Alert>
+      )}
+      {branchPolicy.data?.readiness === "SCHEDULING_SETUP_REQUIRED" && (
+        <Alert
+          variant="warning"
+          title="SCHEDULING SETUP REQUIRED"
+          action={<Link className="font-semibold text-action-primary underline" to="/administration">Administration → Branch Scheduling Setup</Link>}
+        >
+          This Branch is not configured for live scheduling. A normal empty-day calendar is intentionally unavailable.
+        </Alert>
+      )}
+      {branchPolicy.data?.readiness === "SCHEDULING_READY" && branchRoster.isError && (
+        <Alert variant="danger" title="Technician roster unavailable">
+          Appointment evidence remains intact, but the office calendar cannot represent available technician lanes safely.
+        </Alert>
+      )}
       {!appointments.isLoading &&
         !appointments.isError &&
+        branchPolicy.data?.readiness === "SCHEDULING_READY" &&
+        !branchRoster.isError &&
         (view === "unassigned" ? (
           <NeedsSchedulingQueue
             jobs={jobs.data?.items ?? []}
@@ -759,6 +890,8 @@ export function SchedulingRoute({
           <DayCalendar
             date={date}
             items={visible}
+            lanes={lanes}
+            policy={branchPolicy.data}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
             onSelect={selectAppointment}
@@ -788,6 +921,8 @@ export function SchedulingRoute({
             date={date}
             workWeek={view === "work_week"}
             items={visible}
+            lanes={lanes}
+            policy={branchPolicy.data}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
             onSelect={selectAppointment}
@@ -817,7 +952,7 @@ export function SchedulingRoute({
         )}
         {currentSelection ? (
           <AppointmentPanel
-            key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
+            key={`${currentSelection.id}:${currentSelection.concurrency_version}:${currentSelection.status}:${currentSelection.capacity_units ?? "unreconciled"}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
             appointment={currentSelection}
             dispatchItem={selectedDispatch}
             job={
@@ -826,6 +961,7 @@ export function SchedulingRoute({
                 : undefined
             }
             canManage={canManage}
+            canAssignTechnician={canDispatchManage}
             returnTo={returnTo}
             onClose={() => setSelectedId(null)}
           />
@@ -856,50 +992,39 @@ export function SchedulingRoute({
 function DayCalendar({
   date,
   items,
+  lanes,
+  policy,
   dispatchByAppointment,
   jobsById,
   onSelect,
 }: {
   readonly date: string;
   readonly items: readonly AppointmentDetail[];
+  readonly lanes: readonly CalendarLane[];
+  readonly policy: BranchSchedulingPolicy;
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
 }) {
+  const selectedDay = new Date(`${date}T12:00:00`);
+  const operating = policyMinutes(policy, selectedDay);
+  const startMinuteOfDay = operating.start;
+  const visibleMinutes = Math.max(60, operating.end - operating.start);
   const now = new Date();
   const currentMinute =
-    localDateValue(now) === date
-      ? now.getHours() * 60 + now.getMinutes() - START_HOUR * 60
+    zonedDateKey(now, policy.timezone) === date
+      ? zonedMinute(now, policy.timezone) - startMinuteOfDay
       : null;
-  const lanes = useMemo(() => {
-    const names = Array.from(
-      new Set(
-        items.map(
-          (item) =>
-            primaryTechnicianName(dispatchByAppointment.get(item.id)) ??
-            "Unassigned",
-        ),
-      ),
-    ).sort((a, b) =>
-      a === "Unassigned" ? -1 : b === "Unassigned" ? 1 : a.localeCompare(b),
-    );
-    return names.length ? names : ["Unassigned"];
-  }, [dispatchByAppointment, items]);
-  if (!items.length)
-    return (
-      <Card className="p-8 text-center">
-        <Clock3 className="mx-auto text-content-muted" />
-        <h2 className="mt-3 text-xl font-semibold">
-          No scheduled appointments
-        </h2>
-        <p className="mt-2 text-content-muted">
-          This is a valid empty day for the selected Branch and filters.
-        </p>
-      </Card>
-    );
+  const hourCount = Math.ceil(visibleMinutes / 60);
   return (
     <>
+      {operating.closed && (
+        <Alert variant="warning" title="Branch closed by scheduling exception">
+          Existing Appointment evidence remains visible, but this date has no configured open capacity.
+        </Alert>
+      )}
       <section aria-label="Day agenda" className="space-y-2 md:hidden">
+        {!items.length && <Card className="p-5"><h2 className="font-semibold">No scheduled appointments</h2><p className="mt-1 text-sm text-content-muted">The Branch is scheduling-ready. Available technician lanes remain visible on desktop.</p></Card>}
         {items.map((item) => {
           const dispatch = dispatchByAppointment.get(item.id);
           const job = dispatch?.job_id
@@ -913,7 +1038,7 @@ function DayCalendar({
               key={item.id}
             >
               <span className="flex items-center justify-between gap-3">
-                <strong>{time(item.arrival_window_start_at)}</strong>
+                <strong>{branchTime(item.arrival_window_start_at, policy.timezone)}</strong>
                 <Badge>{appointmentState(item, dispatch, job)}</Badge>
               </span>
               <span className="mt-2 block font-semibold">
@@ -926,6 +1051,9 @@ function DayCalendar({
                 {job?.service_location_label ?? "Location context unavailable"}{" "}
                 · {primaryTechnicianName(dispatch) ?? "Unassigned"}
               </span>
+              {isCapacityUnreconciled(item) && (
+                <Badge variant="warning">IMPORTED / NOT YET CAPACITY-RECONCILED</Badge>
+              )}
             </button>
           );
         })}
@@ -952,22 +1080,25 @@ function DayCalendar({
             {lanes.map((lane) => (
               <div
                 className="border-l border-stroke p-3 font-semibold"
-                key={lane}
+                key={lane.id}
               >
                 <UserRound className="mr-2 inline" size={16} />
-                {lane}
+                {lane.label}
+                <span className="mt-1 block text-[11px] font-normal text-content-muted">
+                  {lane.readiness === "AVAILABLE" ? "Available roster" : lane.readiness === "UNASSIGNED" ? "Work awaiting assignment" : label(lane.readiness)}
+                </span>
               </div>
             ))}
           </div>
-          <div className="relative" style={{ height: `${MINUTES_VISIBLE}px` }}>
-            {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, index) => (
+          <div className="relative" style={{ height: `${visibleMinutes}px` }}>
+            {Array.from({ length: hourCount + 1 }, (_, index) => (
               <div
                 className="absolute inset-x-0 border-t border-stroke"
                 style={{ top: `${index * 60}px` }}
                 key={index}
               >
                 <span className="absolute left-2 -translate-y-1/2 bg-surface pr-2 text-xs text-content-muted">
-                  {new Date(2026, 0, 1, START_HOUR + index).toLocaleTimeString(
+                  {new Date(2026, 0, 1, 0, startMinuteOfDay + index * 60).toLocaleTimeString(
                     [],
                     { hour: "numeric" },
                   )}
@@ -975,12 +1106,11 @@ function DayCalendar({
               </div>
             ))}
             <div className="absolute bottom-2 left-2 text-[11px] text-content-muted">
-              Open space means unbooked time, not verified technician
-              availability.
+              Open space is capacity context; lane labels disclose roster availability authority.
             </div>
             {currentMinute !== null &&
               currentMinute >= 0 &&
-              currentMinute <= MINUTES_VISIBLE && (
+              currentMinute <= visibleMinutes && (
                 <div
                   aria-label="Current time"
                   className="pointer-events-none absolute right-0 z-10 border-t-2 border-status-danger"
@@ -993,15 +1123,12 @@ function DayCalendar({
               )}
             {items.map((item) => {
               const dispatch = dispatchByAppointment.get(item.id);
-              const lane = Math.max(
-                0,
-                lanes.indexOf(primaryTechnicianName(dispatch) ?? "Unassigned"),
-              );
+              const lane = Math.max(0, lanes.findIndex((candidate) => candidate.id === appointmentLaneId(item, dispatchByAppointment)));
               const start = item.arrival_window_start_at
                 ? new Date(item.arrival_window_start_at)
                 : null;
               const startMinutes = start
-                ? start.getHours() * 60 + start.getMinutes() - START_HOUR * 60
+                ? zonedMinute(start, policy.timezone) - startMinuteOfDay
                 : 0;
               const duration = Math.max(
                 45,
@@ -1018,13 +1145,13 @@ function DayCalendar({
               return (
                 <button
                   type="button"
-                  aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${primaryTechnicianName(dispatch) ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
+                  aria-label={`${item.appointment_number}, ${branchTime(item.arrival_window_start_at, policy.timezone)}, ${primaryTechnicianName(dispatch) ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
                   onClick={() => onSelect(item)}
                   key={item.id}
                   className="absolute overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm hover:bg-action-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                   style={{
                     top: `${Math.max(0, startMinutes)}px`,
-                    height: `${Math.min(duration, MINUTES_VISIBLE - Math.max(0, startMinutes))}px`,
+                    height: `${Math.max(24, Math.min(duration, visibleMinutes - Math.max(0, startMinutes)))}px`,
                     left: `calc(5rem + ${lane} * ((100% - 5rem) / ${lanes.length}) + .25rem)`,
                     width: `calc((100% - 5rem) / ${lanes.length} - .5rem)`,
                   }}
@@ -1037,9 +1164,14 @@ function DayCalendar({
                       "Customer context unavailable"}
                   </span>
                   <span className="block truncate text-xs text-content-muted">
-                    {time(item.arrival_window_start_at)} ·{" "}
+                    {branchTime(item.arrival_window_start_at, policy.timezone)} ·{" "}
                     {appointmentState(item, dispatch, job)}
                   </span>
+                  {isCapacityUnreconciled(item) && (
+                    <span className="block truncate text-[10px] font-semibold text-status-warning">
+                      IMPORTED / CAPACITY NOT RECONCILED
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1327,6 +1459,8 @@ function WeekCalendar({
   date,
   workWeek,
   items,
+  lanes,
+  policy,
   dispatchByAppointment,
   jobsById,
   onSelect,
@@ -1334,6 +1468,8 @@ function WeekCalendar({
   readonly date: string;
   readonly workWeek: boolean;
   readonly items: readonly AppointmentDetail[];
+  readonly lanes: readonly CalendarLane[];
+  readonly policy: BranchSchedulingPolicy;
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
@@ -1346,56 +1482,74 @@ function WeekCalendar({
     );
     return sunday;
   });
+  const jobVisitCounts = new Map<string, number>();
+  for (const item of items) {
+    const jobId = dispatchByAppointment.get(item.id)?.job_id;
+    if (jobId) jobVisitCounts.set(jobId, (jobVisitCounts.get(jobId) ?? 0) + 1);
+  }
   return (
     <section
       aria-label={workWeek ? "Work Week calendar" : "Week calendar"}
-      className={`grid gap-3 md:grid-cols-2 ${workWeek ? "xl:grid-cols-5" : "xl:grid-cols-7"}`}
+      className="overflow-x-auto rounded-xl border border-stroke bg-surface"
     >
-      {days.map((day) => {
-        const rows = items.filter(
-          (item) =>
-            item.arrival_window_start_at &&
-            new Date(item.arrival_window_start_at).toDateString() ===
-              day.toDateString(),
-        );
-        return (
-          <Card className="min-w-0 p-3" key={day.toISOString()}>
-            <h2 className="font-semibold">
+      <div className="min-w-[1100px]">
+        <div className="grid border-b border-stroke bg-surface-subtle" style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(9rem, 1fr))` }}>
+          <div className="p-3 text-xs font-semibold text-content-muted">Technician</div>
+          {days.map((day) => {
+            const operating = policyMinutes(policy, day);
+            return <div className="border-l border-stroke p-3" key={day.toISOString()}>
+              <h2 className="font-semibold">
               {day.toLocaleDateString([], {
                 weekday: "short",
                 month: "short",
                 day: "numeric",
               })}
-            </h2>
-            <div className="mt-3 space-y-2">
+              </h2>
+              <p className="text-[11px] text-content-muted">{operating.closed ? "Closed" : `${new Date(2026, 0, 1, 0, operating.start).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}–${new Date(2026, 0, 1, 0, operating.end).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}`}</p>
+            </div>;
+          })}
+        </div>
+        {lanes.map((lane) => (
+          <div className="grid border-b border-stroke last:border-b-0" style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(9rem, 1fr))` }} key={lane.id}>
+            <div className="p-3">
+              <strong className="block text-sm">{lane.label}</strong>
+              <span className="text-[11px] text-content-muted">{lane.readiness === "AVAILABLE" ? "Available roster" : label(lane.readiness)}</span>
+            </div>
+            {days.map((day) => {
+              const rows = items.filter((item) => item.arrival_window_start_at && zonedDateKey(new Date(item.arrival_window_start_at), policy.timezone) === localDateValue(day) && appointmentLaneId(item, dispatchByAppointment) === lane.id);
+              return <div className="min-h-28 space-y-1 border-l border-stroke p-2" key={`${lane.id}-${day.toISOString()}`}>
               {rows.map((item) => {
                 const dispatch = dispatchByAppointment.get(item.id);
                 const job = dispatch?.job_id
                   ? jobsById.get(dispatch.job_id)
                   : undefined;
+                const continuation = Boolean(dispatch?.job_id && (jobVisitCounts.get(dispatch.job_id) ?? 0) > 1);
                 return (
                   <button
-                    className="w-full rounded-lg border border-stroke p-2 text-left text-sm hover:border-action-primary"
+                    className="w-full rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left text-xs hover:border-action-primary"
                     onClick={() => onSelect(item)}
                     key={item.id}
+                    aria-label={`${lane.label}, ${item.appointment_number}, ${branchTime(item.arrival_window_start_at, policy.timezone)}`}
                   >
                     <strong className="block truncate">
-                      {time(item.arrival_window_start_at)} ·{" "}
+                      {branchTime(item.arrival_window_start_at, policy.timezone)} ·{" "}
                       {job?.job_number ?? item.appointment_number}
                     </strong>
-                    <span className="block truncate text-xs text-content-muted">
-                      {primaryTechnicianName(dispatch) ?? "Unassigned"}
+                    <span className="block truncate text-content-muted">
+                      {job?.customer_display_name ?? "Customer unavailable"}
                     </span>
+                    {continuation && <Badge>Continuation</Badge>}
+                    {isCapacityUnreconciled(item) && <Badge variant="warning">Capacity not reconciled</Badge>}
                   </button>
                 );
               })}
               {!rows.length && (
-                <p className="text-xs text-content-muted">No appointments</p>
+                <p className="text-[11px] text-content-muted">Open capacity</p>
               )}
-            </div>
-          </Card>
-        );
-      })}
+            </div>})}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1405,6 +1559,7 @@ function AppointmentPanel({
   dispatchItem,
   job,
   canManage,
+  canAssignTechnician,
   returnTo,
   onClose,
 }: {
@@ -1412,6 +1567,7 @@ function AppointmentPanel({
   readonly dispatchItem?: DispatchBoardItem;
   readonly job?: JobListItem;
   readonly canManage: boolean;
+  readonly canAssignTechnician: boolean;
   readonly returnTo: string;
   readonly onClose: () => void;
 }) {
@@ -1430,6 +1586,7 @@ function AppointmentPanel({
   );
   const [confirmMove, setConfirmMove] = useState(false);
   const canReschedule = ["scheduled", "confirmed"].includes(appointment.status);
+  const capacityReconciled = !isCapacityUnreconciled(appointment);
   const validWindow = Boolean(start && end && new Date(end) > new Date(start));
   const requestMove = (event: FormEvent) => {
     event.preventDefault();
@@ -1487,6 +1644,11 @@ function AppointmentPanel({
         <div>
           <dt className="text-content-muted">Technician</dt>
           <dd>{primaryTechnicianName(dispatchItem) ?? "Unassigned"}</dd>
+          {canAssignTechnician && dispatchItem && (
+            <dd className="text-xs text-content-muted">
+              Change the technician through the governed Dispatch assignment controls below.
+            </dd>
+          )}
         </div>
         <div>
           <dt className="text-content-muted">Operational state</dt>
@@ -1526,7 +1688,12 @@ function AppointmentPanel({
           This Appointment is {appointment.status.replaceAll("_", " ")}. Only scheduled or confirmed Appointments can be rescheduled; its history remains available from Appointment detail.
         </Alert>
       )}
-      {canManage && canReschedule && (
+      {canManage && canReschedule && !capacityReconciled && (
+        <Alert className="mt-5" variant="warning" title="IMPORTED / NOT YET CAPACITY-RECONCILED">
+          This source-backed Appointment remains visible, but Scheduling cannot safely move it until OM2C&apos;s canonical capacity reconciliation supplies reservation authority. No capacity is assumed or fabricated.
+        </Alert>
+      )}
+      {canManage && canReschedule && capacityReconciled && (
         <form
           className="mt-5 space-y-3 border-t border-stroke pt-4"
           onSubmit={requestMove}

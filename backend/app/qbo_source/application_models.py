@@ -90,7 +90,9 @@ class QboNativeApplicationRecord(Base):
     provider_version: Mapped[str | None] = mapped_column(String(80))
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     source_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disposition: Mapped[str] = mapped_column(String(32), nullable=False)
     reason_code: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -106,7 +108,9 @@ class QboNativeApplicationRecord(Base):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     applied_by_user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     applied_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -124,6 +128,7 @@ class QboNativeReviewItem(Base):
             name="ck_qbo_review_state",
         ),
         UniqueConstraint("application_record_id", name="uq_qbo_review_application"),
+        UniqueConstraint("company_id", "id", name="uq_qbo_review_item_company"),
         Index("ix_qbo_review_company_state", "company_id", "state", "source_family"),
     )
 
@@ -168,3 +173,64 @@ class QboNativeReviewItem(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     resolution_note: Mapped[str | None] = mapped_column(Text)
+
+
+class QboNativeReviewDecision(Base):
+    """Append-only governed decision for one QBO review item."""
+
+    __tablename__ = "qbo_native_review_decisions"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('BIND_EXISTING','MAP_ACCOUNT','MAP_CUSTOMER','MAP_VENDOR',"
+            "'CONFIRM_SOURCE_VERSION','HOLD_FOR_ACCOUNTANT','DEFER_EXTERNAL',"
+            "'REJECT_WITH_REASON')",
+            name="ck_qbo_review_decision_action",
+        ),
+        CheckConstraint(
+            "authority_class IN ('OWNER','ACCOUNTANT','EXTERNAL_EVIDENCE_REQUIRED')",
+            name="ck_qbo_review_decision_authority",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "review_item_id"],
+            ["qbo_native_review_items.company_id", "qbo_native_review_items.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_qbo_review_decision_company"),
+        Index(
+            "uq_qbo_review_decision_current",
+            "company_id",
+            "review_item_id",
+            unique=True,
+            postgresql_where=text("superseded_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    review_item_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    application_record_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("qbo_native_application_records.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    authority_class: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_native_type: Mapped[str | None] = mapped_column(String(80))
+    target_native_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_reference: Mapped[str | None] = mapped_column(String(240))
+    decision_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    supersedes_decision_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("qbo_native_review_decisions.id")
+    )
+    decided_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

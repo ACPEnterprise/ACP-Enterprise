@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
 import {
   getAppointment,
+  getBranchCalendarRoster,
   listAppointments,
   rescheduleAppointment,
 } from "./scheduling";
@@ -37,6 +38,14 @@ describe("Scheduling API", () => {
     expect(apiClient.post).toHaveBeenCalledWith(
       "/api/v1/scheduling/appointments/appointment-1/reschedule",
       input,
+    );
+  });
+  it("loads the Branch calendar roster through Scheduling read authority", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { technicians: [] } });
+    await getBranchCalendarRoster("branch-1", "2026-09-02T00:00:00Z", "2026-09-03T00:00:00Z");
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/scheduling/branches/branch-1/calendar-roster",
+      { params: { start_at: "2026-09-02T00:00:00Z", end_at: "2026-09-03T00:00:00Z" } },
     );
   });
   it("maps bounded date and Branch scope to the Scheduling query", async () => {

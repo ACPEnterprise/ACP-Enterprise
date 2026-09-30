@@ -386,6 +386,13 @@ class CustomerDetailMetadata(StrictSchema):
     updated_at: datetime
 
 
+class CustomerSourceLineageResponse(StrictSchema):
+    source_system: str
+    source_customer_id: str
+    branch_id: UUID
+    bound_at: datetime
+
+
 class CustomerDetailResponse(CustomerResponse):
     preferred_contact: ContactResponse | None
     contacts: list[ContactResponse]
@@ -393,6 +400,7 @@ class CustomerDetailResponse(CustomerResponse):
     active_service_locations: list[ServiceLocationResponse]
     inactive_service_locations: list[ServiceLocationResponse]
     note_history: list["CustomerNoteResponse"] = Field(default_factory=list)
+    source_lineage: list[CustomerSourceLineageResponse] = Field(default_factory=list)
     metadata: CustomerDetailMetadata
 
 

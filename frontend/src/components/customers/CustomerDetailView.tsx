@@ -111,6 +111,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             </div>
             <p className="mt-3 text-xs text-content-muted">{customer.customer_number || "Customer number unavailable"} · Native record created {customer.created_at ? new Date(customer.created_at).toLocaleString() : "date unavailable"} · updated {customer.updated_at ? new Date(customer.updated_at).toLocaleString() : "date unavailable"}</p>
             <p className="mt-1 text-xs text-content-muted">Marketing source: {formatCustomerSource(customer.source)}. Source provenance is shown only when admitted by Migration authority; this label is not migration-completeness evidence.</p>
+            {customer.source_lineage.length > 0 && <div className="mt-3 rounded-lg border border-stroke p-3"><p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Migration source lineage</p><ul className="mt-2 space-y-1 text-sm">{customer.source_lineage.map((identity) => <li key={`${identity.source_system}:${identity.source_customer_id}`}><span className="font-medium">{formatCustomerSource(identity.source_system)}</span> · provider Customer {identity.source_customer_id} · bound {identity.bound_at ? new Date(identity.bound_at).toLocaleString() : "date unavailable"}</li>)}</ul></div>}
           </div>
           {canManage && (!archived ? (
             <div className="grid w-full gap-3 sm:flex sm:w-auto">

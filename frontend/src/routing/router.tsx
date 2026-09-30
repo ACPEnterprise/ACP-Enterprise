@@ -7,6 +7,7 @@ import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuar
 import {
   accountsPayableHandle,
   financialReportsHandle,
+  qboMigrationHandle,
   businessEconomicsHandle,
   economicsAdministrationHandle,
   luminaryHandle,
@@ -31,6 +32,7 @@ import {
   paymentsHandle,
   payrollHandle,
   pipelineHandle,
+  marketingProviderConnectionsHandle,
   revenueCycleHandle,
   jobsHandle,
   liaHandle,
@@ -135,6 +137,14 @@ export const appRoutes: RouteObject[] = [
             path: "pipeline",
             handle: pipelineHandle,
             lazy: async () => ({ Component: (await import("../routes/PipelineRoute")).PipelineRoute }),
+          },
+          {
+            path: "marketing/provider-connections/google-ads",
+            handle: marketingProviderConnectionsHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/MarketingProviderConnectionsRoute"))
+                .MarketingProviderConnectionsRoute,
+            }),
           },
           { path: "service-agreements", handle: serviceAgreementsHandle, lazy: async () => ({ Component: (await import("../routes/ServiceAgreementsRoute")).ServiceAgreementsRoute }) },
           {
@@ -251,6 +261,11 @@ export const appRoutes: RouteObject[] = [
             path: "financial-reports",
             handle: financialReportsHandle,
             lazy: async () => ({ Component: (await import("../routes/FinancialReportsRoute")).FinancialReportsRoute }),
+          },
+          {
+            path: "accounting/quickbooks-migration",
+            handle: qboMigrationHandle,
+            lazy: async () => ({ Component: (await import("../routes/QboMigrationRoute")).QboMigrationRoute }),
           },
           {
             path: "business-economics",

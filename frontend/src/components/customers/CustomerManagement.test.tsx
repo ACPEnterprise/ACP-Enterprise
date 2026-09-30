@@ -206,9 +206,13 @@ describe("CustomerManagement", () => {
       ...cleanMajorityAdmission,
       data: {
         selected: 20,
+        processed: 20,
         admitted: 18,
         replayed: 0,
         quarantined: 2,
+        rejected: 0,
+        provider_unavailable: 0,
+        quarantine_records: [{ source_customer_id: "provider-2", reason_code: "deterministic_admission_review_required", reason: "The exact provider evidence requires Migration review." }],
         remaining_unexplained: 0,
       },
     } as never);
@@ -220,9 +224,12 @@ describe("CustomerManagement", () => {
 
     render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
 
-    expect(screen.getByText(/18 admitted/)).toBeInTheDocument();
-    expect(screen.getByText(/2 held for review/)).toBeInTheDocument();
-    expect(screen.getByText(/0 remaining unexplained/)).toBeInTheDocument();
+    expect(screen.getByText(/20 processed/)).toBeInTheDocument();
+    expect(screen.getByText(/18 created/)).toBeInTheDocument();
+    expect(screen.getByText(/2 held or quarantined/)).toBeInTheDocument();
+    expect(screen.getByText(/0 unexplained/)).toBeInTheDocument();
+    expect(screen.getByText("Provider Customer provider-2")).toBeInTheDocument();
+    expect(screen.getByText(/requires Migration review/)).toBeInTheDocument();
   });
 
   it("renders bounded refresh counts without claiming Customer admission", () => {

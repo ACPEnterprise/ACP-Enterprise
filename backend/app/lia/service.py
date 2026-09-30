@@ -88,6 +88,18 @@ ROUTES = {
     "timekeeping": "/employees",
 }
 
+ROUTE_PERMISSIONS = {
+    "luminary": "COMPANY_LUMINARY_READ",
+    "business-economics": "COMPANY_ECONOMICS_MEASUREMENT_READ",
+    "beacon": "COMPANY_BEACON_REVIEW",
+    "payroll": "COMPANY_PAYROLL_READ",
+    "accounting": "COMPANY_ACCOUNTING_READ",
+    "scheduling": "COMPANY_SCHEDULING_READ",
+    "dispatch": "COMPANY_DISPATCH_READ",
+    "price-book": "COMPANY_PRICE_BOOK_READ",
+    "communications": "COMPANY_COMMUNICATIONS_READ",
+}
+
 
 class LiaService:
     def __init__(self, retrieval: GovernedRetrievalService | None = None) -> None:
@@ -1098,12 +1110,7 @@ def _capability_navigation(question: str) -> tuple[NavigationSuggestion, ...]:
         ("payroll", "payroll"),
     ):
         if term in normalized:
-            return (
-                NavigationSuggestion(
-                    label=f"Open {domain.replace('-', ' ').title()}",
-                    internal_path=ROUTES[domain],
-                ),
-            )
+            return (_owner_navigation(domain),)
     return ()
 
 
@@ -1123,11 +1130,21 @@ def _action_navigation(risk: ActionRisk | None) -> tuple[NavigationSuggestion, .
     }.get(risk)
     if domain is None:
         return ()
-    return (
-        NavigationSuggestion(
-            label=f"Open {domain.replace('-', ' ').title()}",
-            internal_path=ROUTES[domain],
-        ),
+    return (_owner_navigation(domain, action_category="ACTION_GUIDANCE"),)
+
+
+def _owner_navigation(
+    domain: str,
+    *,
+    action_category: str = "OWNER_NAVIGATION",
+) -> NavigationSuggestion:
+    return NavigationSuggestion(
+        label=f"Open {domain.replace('-', ' ').title()}",
+        internal_path=ROUTES[domain],
+        required_permission=ROUTE_PERMISSIONS.get(domain),
+        available=True,
+        action_category=action_category,
+        source_identity=f"LIA.ROUTE.{domain}.v1",
     )
 
 

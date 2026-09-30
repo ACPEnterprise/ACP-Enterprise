@@ -47,9 +47,17 @@ export interface CustomerCleanMajorityAdmissionResult {
   classification: "CUSTOMER_CLEAN_MAJORITY_ADMITTED";
   source_system: "housecall_pro";
   selected: number;
+  processed: number;
   admitted: number;
   replayed: number;
   quarantined: number;
+  rejected: number;
+  provider_unavailable: number;
+  quarantine_records: Array<{
+    source_customer_id: string;
+    reason_code: string;
+    reason: string;
+  }>;
   remaining_unexplained: number;
   before_evidence_digest: string;
   after_evidence_digest: string;
@@ -254,6 +262,12 @@ function normalizeCustomerDetail(
     ...summary,
     properties: locations.map(normalizeProperty),
     contacts: recordArray(customer.contacts).map(normalizeContact),
+    source_lineage: recordArray(customer.source_lineage).map((identity) => ({
+      source_system: stringValue(identity.source_system),
+      source_customer_id: stringValue(identity.source_customer_id),
+      branch_id: stringValue(identity.branch_id),
+      bound_at: stringValue(identity.bound_at),
+    })),
     notes: notes.map((note) => ({
       id: stringValue(note.id),
       customer_id: stringValue(note.customer_id, summary.id),

@@ -344,6 +344,155 @@ export function LuminaryRoute() {
                 <p>{ownerEconomics.data.owner_health.cash_health.limitation}</p>
               </details>
             </section>
+            <section aria-labelledby="active-reasoning-title" className="rounded-lg border border-stroke p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="active-reasoning-title">What this evidence means</h3>
+                  <p className="text-sm text-content-muted">
+                    Luminary evaluates the decision boundary without estimating missing values.
+                  </p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                  {words(ownerEconomics.data.active_reasoning.contribution.state)} contribution
+                </span>
+              </div>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-md bg-surface-muted p-3">
+                  <h4 className="text-sm font-semibold">What ACP can conclude</h4>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    {ownerEconomics.data.active_reasoning.can_conclude.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-md bg-surface-muted p-3">
+                  <h4 className="text-sm font-semibold">What remains unknown</h4>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    {ownerEconomics.data.active_reasoning.cannot_conclude.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <p className="mt-3 text-sm">
+                Contribution evidence covers {ownerEconomics.data.active_reasoning.contribution.ready_job_count} of {ownerEconomics.data.active_reasoning.contribution.job_count} admitted Jobs ({(ownerEconomics.data.active_reasoning.contribution.job_population_coverage_basis_points / 100).toFixed(0)}% by Job population).
+              </p>
+              <p className="text-xs text-content-muted">{ownerEconomics.data.active_reasoning.required_burden.coverage_limitation}</p>
+              {ownerEconomics.data.active_reasoning.highest_value_next_action ? (
+                <div className="mt-4 rounded-lg border border-stroke p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Highest-value missing evidence</p>
+                  <p className="font-semibold">{words(ownerEconomics.data.active_reasoning.highest_value_next_action.gap)}</p>
+                  <p className="text-sm text-content-muted">{ownerEconomics.data.active_reasoning.highest_value_next_action.why_it_matters}</p>
+                  {ownerEconomics.data.active_reasoning.highest_value_next_action.affected_job_count != null ? <p className="mt-2 text-sm">Affects {ownerEconomics.data.active_reasoning.highest_value_next_action.affected_job_count} Job(s){ownerEconomics.data.active_reasoning.highest_value_next_action.affected_authoritative_revenue_minor != null ? ` representing ${minorMoney(ownerEconomics.data.active_reasoning.highest_value_next_action.affected_authoritative_revenue_minor, ownerEconomics.data.currency)} of authoritative invoiced population` : ""}.</p> : null}
+                  <p className="mt-2 text-sm"><span className="font-semibold">Who acts:</span> {words(ownerEconomics.data.active_reasoning.highest_value_next_action.responsible_party)}</p>
+                  <p className="text-sm"><span className="font-semibold">What becomes knowable:</span> {ownerEconomics.data.active_reasoning.highest_value_next_action.unlocks}</p>
+                  {ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path ? (
+                    <Link className="mt-2 inline-block text-sm font-semibold text-action-primary underline" to={ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path}>
+                      {ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path_label}
+                    </Link>
+                  ) : <p className="mt-2 text-sm text-content-muted">{ownerEconomics.data.active_reasoning.highest_value_next_action.ui_path_label}</p>}
+                </div>
+              ) : <p className="mt-3 text-sm text-content-muted">No missing evidence is currently ranked.</p>}
+              <details className="mt-4 text-sm">
+                <summary className="cursor-pointer font-medium">Ranked evidence gaps</summary>
+                <ol className="mt-2 space-y-2">
+                  {ownerEconomics.data.active_reasoning.ranked_evidence_gaps.map((gap) => (
+                    <li className="rounded-md bg-surface-muted p-3" key={gap.gap}>
+                      <p className="font-semibold">{gap.rank}. {words(gap.gap)} · {words(gap.responsible_party)}</p>
+                      <p className="text-content-muted">{gap.why_it_matters}</p>
+                      <p className="text-xs text-content-muted">Impact: {words(gap.decision_impact)} · Source: {gap.expected_source} · Unlocks: {gap.unlocks}</p>
+                      {gap.affected_job_count != null ? <p className="text-xs text-content-muted">Affected population: {gap.affected_job_count} Job(s){gap.affected_authoritative_revenue_minor != null ? ` · ${minorMoney(gap.affected_authoritative_revenue_minor, ownerEconomics.data.currency)} authoritative invoiced revenue` : ""}</p> : null}
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-2 text-xs text-content-muted">{ownerEconomics.data.active_reasoning.ranking_basis}</p>
+              </details>
+            </section>
+            <section aria-labelledby="completion-planner-title" className="rounded-lg border border-stroke p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="completion-planner-title">Complete the economics model</h3>
+                  <p className="text-sm text-content-muted">Luminary shows what is missing, who owns it, where it belongs, and what it unlocks. It cannot enter or estimate a value.</p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                  {ownerEconomics.data.economic_completion_planner.summary.complete_category_count} of {ownerEconomics.data.economic_completion_planner.summary.total_category_count} complete
+                </span>
+              </div>
+              {(ownerEconomics.data.economic_completion_planner.highest_value_next_completion ?? ownerEconomics.data.economic_completion_planner.ranked_completion_plan[0]) ? (() => {
+                const next = (ownerEconomics.data.economic_completion_planner.highest_value_next_completion ?? ownerEconomics.data.economic_completion_planner.ranked_completion_plan[0])!;
+                return (
+                  <div className="mt-4 rounded-lg border border-stroke bg-surface-muted p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Complete next</p>
+                    <p className="font-semibold">{next.label}</p>
+                    <p className="mt-1 text-sm"><span className="font-semibold">Who:</span> {next.responsible_parties.map(words).join(" / ")}</p>
+                    <p className="text-sm"><span className="font-semibold">Source:</span> {next.sources.join(" / ")}</p>
+                    <p className="text-sm"><span className="font-semibold">What it unlocks:</span> {next.unlocks.join("; ")}</p>
+                    {next.affected_job_count != null ? <p className="text-sm">Affected population: {next.affected_job_count} Job(s){next.affected_authoritative_revenue_minor != null ? ` · ${minorMoney(next.affected_authoritative_revenue_minor, ownerEconomics.data.currency)} authoritative invoiced revenue` : ""}</p> : null}
+                    {next.ui_path ? <Link className="mt-2 inline-block text-sm font-semibold text-action-primary underline" to={next.ui_path}>{next.ui_path_label}</Link> : <p className="mt-2 text-sm text-content-muted">{next.ui_path_label}</p>}
+                  </div>
+                );
+              })() : <p className="mt-3 text-sm">All evaluated Economics categories are complete for this period.</p>}
+              <Alert variant="warning" className="mt-3">
+                Temporary owner-confirmed amounts are not supported by the current canonical Economics authority. Luminary will not create one or treat a note as economic evidence.
+              </Alert>
+              <details className="mt-4 text-sm">
+                <summary className="cursor-pointer font-medium">Completion matrix</summary>
+                <ol className="mt-2 space-y-2">
+                  {ownerEconomics.data.economic_completion_planner.ranked_completion_plan.map((item) => (
+                    <li className="rounded-md bg-surface-muted p-3" key={item.category}>
+                      <p className="font-semibold">{item.rank}. {item.label} · {words(item.state)}</p>
+                      <p className="text-content-muted">Missing: {item.missing_dependencies.map(words).join(" · ")}</p>
+                      <p className="text-xs text-content-muted">Who: {item.responsible_parties.map(words).join(" / ")} · Source: {item.sources.join(" / ")}</p>
+                      <p className="text-xs text-content-muted">Unlocks: {item.unlocks.join("; ")}</p>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-2 text-xs text-content-muted">{ownerEconomics.data.economic_completion_planner.ranking_limit}</p>
+              </details>
+            </section>
+            <section aria-labelledby="driver-analysis-title" className="rounded-lg border border-stroke p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold" id="driver-analysis-title">What happened and what drove it</h3>
+                  <p className="text-sm text-content-muted">Materiality uses measured amounts and prior-period percentages—not an invented severity score.</p>
+                </div>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">{words(ownerEconomics.data.driver_analysis.state)}</span>
+              </div>
+              {ownerEconomics.data.driver_analysis.state === "AVAILABLE" ? (
+                <>
+                  <dl className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {ownerEconomics.data.driver_analysis.observed_changes.map((item) => (
+                      <div className="rounded-md bg-surface-muted p-3" key={item.metric}>
+                        <dt className="text-xs font-semibold uppercase tracking-wide">{words(item.metric)}</dt>
+                        <dd className="text-sm font-semibold">
+                          {item.unit === "minor_currency" ? signedMinorMoney(item.change, item.currency ?? "USD") : `${item.change > 0 ? "+" : ""}${item.change}`}
+                        </dd>
+                        <dd className="text-xs text-content-muted">{item.change_basis_points_of_prior == null ? "Prior-period percentage unavailable" : `${item.change_basis_points_of_prior > 0 ? "+" : ""}${(item.change_basis_points_of_prior / 100).toFixed(1)}% of prior period`}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div>
+                      <h4 className="text-sm font-semibold">Measured contribution drivers</h4>
+                      <ol className="mt-2 space-y-2">
+                        {ownerEconomics.data.driver_analysis.measured_drivers.map((driver) => (
+                          <li className="rounded-md bg-surface-muted p-3" key={driver.component}>
+                            <p className="font-semibold">{words(driver.component)}</p>
+                            <p className="text-sm">Contribution effect {signedMinorMoney(driver.contribution_effect_minor, ownerEconomics.data.currency ?? "USD")}</p>
+                            <p className="text-xs text-content-muted">Measured arithmetic effect · cause unproven</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold">Interpretation boundary</h4>
+                      {ownerEconomics.data.driver_analysis.possible_drivers.map((driver) => <p className="mt-2 text-sm" key={driver.driver}><span className="font-semibold">Possible:</span> {driver.reason}</p>)}
+                      {ownerEconomics.data.driver_analysis.unproven_causes.map((cause) => <p className="mt-2 text-sm text-content-muted" key={cause.cause}><span className="font-semibold">Unproven:</span> {cause.reason}</p>)}
+                      {ownerEconomics.data.driver_analysis.economic_health?.distance_from_break_even_basis_points != null ? (
+                        <p className="mt-3 text-sm font-semibold">Economic Health is {Math.abs(ownerEconomics.data.driver_analysis.economic_health.distance_from_break_even_basis_points / 100).toFixed(1)} percentage points {ownerEconomics.data.driver_analysis.economic_health.distance_from_break_even_basis_points >= 0 ? "above" : "below"} break-even.</p>
+                      ) : <p className="mt-3 text-sm text-content-muted">Distance from break-even remains unavailable until the same-period numerator and denominator are authoritative.</p>}
+                    </div>
+                  </div>
+                  {ownerEconomics.data.driver_analysis.cash_health ? <p className="mt-3 text-xs text-content-muted">{ownerEconomics.data.driver_analysis.cash_health.reason}</p> : null}
+                </>
+              ) : <Alert variant="warning">{ownerEconomics.data.driver_analysis.reason ?? "A comparable prior equal period is not available."}</Alert>}
+            </section>
             <section
               aria-labelledby="period-comparison-title"
               className="rounded-lg border border-stroke p-4"

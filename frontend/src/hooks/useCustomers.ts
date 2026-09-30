@@ -49,7 +49,6 @@ export function useCustomerDetail(customerId: string | null, enabled = true) {
 }
 
 export function useCustomerPopulationRefresh() {
-  const queryClient = useQueryClient();
   const { activeCompany } = useAuth();
   const idempotencyKey = useRef<string | null>(null);
   const branchId =
@@ -62,14 +61,12 @@ export function useCustomerPopulationRefresh() {
       idempotencyKey.current ??= `customer-population-refresh-${crypto.randomUUID()}`;
       return refreshCustomerPopulation(idempotencyKey.current, branchId);
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       idempotencyKey.current = null;
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["customers"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["administration", "migration-readiness"],
-        }),
-      ]);
+      // This command records source dispositions and its own receipt only.
+      // Native Customers and the sealed readiness projection do not change, so
+      // forcing either query to refetch can only place an unrelated failure
+      // beside a successful authoritative reconciliation result.
     },
   });
 }
