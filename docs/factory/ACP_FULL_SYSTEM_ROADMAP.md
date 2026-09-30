@@ -190,6 +190,42 @@ next dependency-safe engineering-owned item.
 - OM1-A/B/C filter OM1 items by preferred lane and continue independently when
   another item is human/provider/dependency gated.
 
+### Enterprise release packet contract
+
+Machine-domain integration and final Release are deliberately separate:
+
+- `OM2E` is the Operations integration authority.
+- `LPTP1E` is the Intelligence/Mobile integration authority.
+- `OM1-A`, `OM1-B`, and `OM1-C` are Release-side specialist and qualification
+  lanes.
+- `OM1E` is the sole final protected-composition and Beta-deployment authority.
+  It verifies immutable packets and cross-packet boundaries; it does not
+  rediscover or reimplement architecture already qualified by a machine-domain
+  Enterprise.
+
+Every machine Enterprise handoff to OM1E must be an immutable packet containing:
+
+- authority and branch;
+- immutable candidate SHA and base SHA;
+- ahead/behind counts against the stated base;
+- migrations and resulting Alembic head;
+- mutation-registry changes;
+- permission changes;
+- router, event, and shared-contract changes;
+- known overlaps with other current packets or protected work;
+- test and qualification evidence;
+- security result;
+- outstanding owner actions;
+- an explicit list of mutations not performed;
+- rollback and replay considerations; and
+- `READY_FOR_OM1E` with a truthful `YES` or `NO` value.
+
+OM1E rejects mutable branch-only handoffs, missing authority metadata, stale
+cumulative-history replay, and packets whose readiness assertion is not backed
+by the listed evidence. Protected mutation, shared schema upgrade, Beta cutover,
+and rollback remain serialized under OM1E even when packet inspection and
+isolated qualification run concurrently.
+
 When evidence changes a prerequisite, the discovering lane adds a stable item
 or graph edge and evidence reference in the same protected PR. Integration and
 Beta deployment update only their fields. Acceptance feedback advances or
