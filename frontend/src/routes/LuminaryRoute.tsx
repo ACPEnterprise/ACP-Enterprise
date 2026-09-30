@@ -427,7 +427,11 @@ export function LuminaryRoute() {
                     {next.ui_path ? <Link className="mt-2 inline-block text-sm font-semibold text-action-primary underline" to={next.ui_path}>{next.ui_path_label}</Link> : <p className="mt-2 text-sm text-content-muted">{next.ui_path_label}</p>}
                   </div>
                 );
-              })() : <p className="mt-3 text-sm">All evaluated Economics categories are complete for this period.</p>}
+              })() : ownerEconomics.data.economic_completion_planner.summary.complete_category_count === ownerEconomics.data.economic_completion_planner.summary.total_category_count ? (
+                <p className="mt-3 text-sm">All evaluated Economics categories are complete for this period.</p>
+              ) : (
+                <p className="mt-3 text-sm text-content-muted">No completion action can be ranked until an authoritative source population is available for this period.</p>
+              )}
               <Alert variant="warning" className="mt-3">
                 Temporary owner-confirmed amounts are not supported by the current canonical Economics authority. Luminary will not create one or treat a note as economic evidence.
               </Alert>
