@@ -5,6 +5,7 @@ import { createLiaService } from "../src/api/lia";
 import type { LiaResponse, LiaService } from "../src/api/lia";
 import { ACTIVE_SPEECH_RENDERER, spokenTextForResponse, twelveHatsAudioSchema, twelveHatsSpeech } from "../src/lia/speech";
 import { AppState } from "react-native";
+import { employeeActionDestination } from "../src/lia/actions";
 
 const response: LiaResponse = {
   request_id: "10000000-0000-4000-8000-000000000001", conversation_id: "20000000-0000-4000-8000-000000000001", classification: "KNOWN", authority: "ACP_AUTHORITATIVE", answer: "Your next assigned appointment is synthetic.", response_mode: "NORMAL", evidence: [{ domain: "employee-operations", label: "My authorized assigned work", authority: "EMPLOYEE.DAY.v1", observed_at: "2026-09-16T12:00:00Z", freshness: "CURRENT_QUERY", evidence_digest: "a".repeat(64), branch_ids: [], limitations: ["Only your active assignments are included."] }], limitations: [], navigation: [], completeness: "COMPLETE_FOR_EMPLOYEE_SAFE_ADAPTERS", freshness: "CURRENT_QUERY", provider: "deterministic-acp", provider_version: "v1", policy_version: "LIA.EMPLOYEE_SAFE.v1", evidence_digest: "a".repeat(64), authorization_version: 1, company_id: "30000000-0000-4000-8000-000000000001", branch_ids: [], source_systems: ["employee-operations"], missing_evidence: [], safe_next_action: "Open My Day", as_of: "2026-09-16T12:00:00Z", generated_at: "2026-09-16T12:00:00Z", temporal: null,
@@ -12,8 +13,17 @@ const response: LiaResponse = {
 function service() { return { ask: jest.fn(async () => response) } satisfies LiaService; }
 
 describe("employee-safe Mobile LIA", () => {
+  it("allows only canonical Employee destinations and rejects owner routes", () => {
+    const base = { label: "Open", internal_path: "/my-day", action_category: "EMPLOYEE_WORKFLOW", available: true } as const;
+    expect(employeeActionDestination(base)).toBe("my-day");
+    expect(employeeActionDestination({ ...base, internal_path: "/jobs/10000000-0000-4000-8000-000000000001" })).toBe("jobs");
+    expect(employeeActionDestination({ ...base, internal_path: "/financial-reports" })).toBeNull();
+    expect(employeeActionDestination({ ...base, action_category: "OWNER_WORKFLOW" })).toBeNull();
+    expect(employeeActionDestination({ ...base, available: false })).toBeNull();
+  });
   it("defaults to local speech and keeps the owned engine disabled", () => { expect(ACTIVE_SPEECH_RENDERER).toBe("DEVICE_LOCAL_FALLBACK"); expect(twelveHatsSpeech).toBeNull(); expect(spokenTextForResponse(response)).toContain(response.answer); expect(spokenTextForResponse(response)).toContain("The next safe step"); expect(twelveHatsAudioSchema.safeParse({ audio: "data", content_type: "audio/mpeg", duration_ms: 10, model_version: "v1", render_version: "v1", render_digest: "z".repeat(64) }).success).toBe(false); });
   it("uses only the employee-safe endpoint", async () => { const client = { request: jest.fn(async () => response) }; await createLiaService(client as never).ask("What is my next job?"); const calls = client.request.mock.calls as unknown[][]; expect(calls[0]?.[0]).toBe("/api/v1/lia/employee/ask"); expect(calls.some(([path]) => path === "/api/v1/lia/ask")).toBe(false); });
+  it("renders available canonical actions and safe unavailable reasons", async () => { const lia = service(); lia.ask.mockResolvedValueOnce({ ...response, navigation: [{ label: "Open My Day", internal_path: "/my-day", action_category: "EMPLOYEE_WORKFLOW", available: true }, { label: "Open owner data", internal_path: "/financial-reports", action_category: "OWNER_WORKFLOW", available: false, unavailable_reason: "Not available in Employee Mobile." }] }); const onAction = jest.fn(); render(<LiaScreen service={lia} onAction={onAction} />); fireEvent.changeText(screen.getByLabelText("Ask LIA a question"), "What's next?"); fireEvent.press(screen.getByLabelText("Send question to Employee-safe LIA")); expect(await screen.findByLabelText("Open Open My Day")).toBeOnTheScreen(); fireEvent.press(screen.getByLabelText("Open Open My Day")); expect(onAction).toHaveBeenCalled(); expect(await screen.findByText("Not available in Employee Mobile.")).toBeOnTheScreen(); });
   it("submits through the employee-safe service and preserves conversation continuity", async () => {
     const lia = service(); render(<LiaScreen service={lia} />);
     fireEvent.changeText(screen.getByLabelText("Ask LIA a question"), "What is my next job?"); fireEvent.press(screen.getByLabelText("Send question to Employee-safe LIA"));
