@@ -21,3 +21,5 @@ python scripts/admit_common_stock_seed.py '/protected/input/pricebook_materials_
 ```
 
 The admission records `opening_inventory_state=not_historically_reconstructed` and intentionally creates no opening quantities. The vendor cost basis is purchase cost before delivery/shipping and purchase-side sales tax. Planning cost remains an unactivated candidate (`highest_current_qualified_vendor_purchase_cost`) pending canonical Company policy and explicit owner approval.
+
+Company users with `COMPANY_INVENTORY_MANAGE` can use **Inventory → Common stock seed catalog** as the normal operator path. Preview parses the workbook without persistence and displays its digest, proposed count, and held rows. Admission requires a second explicit action, resubmits the same workbook, and fails if its digest differs from the preview. The admission, audit record, and past-tense Business Event commit atomically. Read-only users cannot access either endpoint or see the controls.

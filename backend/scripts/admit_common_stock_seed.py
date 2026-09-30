@@ -15,7 +15,9 @@ from app.inventory.common_stock_seed import (
 
 
 async def run() -> int:
-    parser = argparse.ArgumentParser(description="Inspect or admit the owner common-stock workbook")
+    parser = argparse.ArgumentParser(
+        description="Inspect or admit the owner common-stock workbook"
+    )
     parser.add_argument("workbook", type=Path)
     parser.add_argument("--admit", action="store_true")
     parser.add_argument("--company-id", type=UUID)
@@ -38,14 +40,16 @@ async def run() -> int:
     if args.admit:
         if args.company_id is None or args.actor_user_id is None:
             parser.error("--admit requires --company-id and --actor-user-id")
-        async with AsyncSessionFactory() as session:
+        async with AsyncSessionFactory() as session, session.begin():
             admitted, held = await common_stock_admission_service.admit(
                 session,
                 workbook=workbook,
                 company_id=args.company_id,
                 actor_user_id=args.actor_user_id,
             )
-        result.update({"mode": "admitted", "records_admitted": admitted, "records_held": held})
+        result.update(
+            {"mode": "admitted", "records_admitted": admitted, "records_held": held}
+        )
     print(json.dumps(result, sort_keys=True))
     return 0
 

@@ -1,10 +1,17 @@
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.inventory.common_stock_seed import (
+    CommonStockWorkbook,
+    common_stock_admission_service,
+    read_common_stock_workbook,
+)
 from app.inventory.costing import material_costing_service
 from app.inventory.errors import (
     InventoryConflict,
@@ -16,6 +23,9 @@ from app.inventory.schemas import (
     AdjustmentCreate,
     AdjustmentResponse,
     AllocationResponse,
+    CommonStockHeldRow,
+    CommonStockSeedAdmission,
+    CommonStockSeedPreview,
     CycleCountComplete,
     CycleCountEntryResponse,
     CycleCountRecord,
@@ -46,6 +56,7 @@ from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/inventory", tags=["Inventory"])
+MAX_COMMON_STOCK_WORKBOOK_BYTES = 25 * 1024 * 1024
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 ReadContext = Annotated[
     AuthorizationContext, Depends(require_permission(InventoryPermission.READ))
@@ -91,6 +102,87 @@ def translate(error: Exception) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(status_code=422, detail=failure.detail())
+
+
+def _read_common_stock_upload(
+    payload: bytes, source_filename: str
+) -> CommonStockWorkbook:
+    if not payload or len(payload) > MAX_COMMON_STOCK_WORKBOOK_BYTES:
+        raise InventoryValidation("Common stock workbook size is invalid")
+    if Path(source_filename).name != source_filename or not source_filename.endswith(
+        ".numbers"
+    ):
+        raise InventoryValidation("Common stock source must be a Numbers workbook")
+    try:
+        with NamedTemporaryFile(suffix=".numbers") as temporary:
+            temporary.write(payload)
+            temporary.flush()
+            workbook = read_common_stock_workbook(Path(temporary.name))
+    except (OSError, ValueError) as error:
+        raise InventoryValidation("Common stock workbook is invalid") from error
+    return CommonStockWorkbook(
+        source_path=Path(source_filename),
+        source_digest=workbook.source_digest,
+        columns=workbook.columns,
+        rows=workbook.rows,
+    )
+
+
+def _common_stock_preview(workbook: CommonStockWorkbook) -> CommonStockSeedPreview:
+    return CommonStockSeedPreview(
+        source_filename=workbook.source_path.name,
+        source_digest=workbook.source_digest,
+        source_rows_read=len(workbook.rows),
+        acp_materials_proposed=workbook.proposed_count,
+        rows_held=workbook.held_count,
+        held_rows=tuple(
+            CommonStockHeldRow(
+                source_row_number=row.source_row_number,
+                reason=row.hold_reason or "unknown",
+            )
+            for row in workbook.rows
+            if row.disposition == "held"
+        ),
+    )
+
+
+@router.post("/common-stock-seed/preview", response_model=CommonStockSeedPreview)
+async def preview_common_stock_seed(
+    context: ManageContext,
+    source_filename: Annotated[str, Query(min_length=1, max_length=240)],
+    payload: Annotated[bytes, Body(media_type="application/octet-stream")],
+) -> CommonStockSeedPreview:
+    del context
+    try:
+        return _common_stock_preview(
+            _read_common_stock_upload(payload, source_filename)
+        )
+    except (InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post("/common-stock-seed/admit", response_model=CommonStockSeedAdmission)
+async def admit_common_stock_seed(
+    context: ManageContext,
+    session: DatabaseSession,
+    source_filename: Annotated[str, Query(min_length=1, max_length=240)],
+    expected_source_digest: Annotated[str, Query(min_length=64, max_length=64)],
+    reason: Annotated[str, Query(min_length=3, max_length=500)],
+    payload: Annotated[bytes, Body(media_type="application/octet-stream")],
+) -> CommonStockSeedAdmission:
+    try:
+        workbook = _read_common_stock_upload(payload, source_filename)
+        if workbook.source_digest != expected_source_digest.lower():
+            raise InventoryConflict("Workbook changed after preview")
+        admitted, held = await common_stock_admission_service.admit_authorized(
+            session, workbook=workbook, context=context, reason=reason
+        )
+        preview = _common_stock_preview(workbook)
+        return CommonStockSeedAdmission(
+            **preview.model_dump(), records_admitted=admitted, records_held=held
+        )
+    except (InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
 
 
 @router.get("/overview", response_model=InventoryOverview)

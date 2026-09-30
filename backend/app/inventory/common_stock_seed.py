@@ -13,7 +13,12 @@ from numbers_parser import Document  # type: ignore[import-untyped]
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.events.schemas import BusinessEventCreate
+from app.events.service import BusinessEventService
+from app.events.types import EventType
 from app.inventory.models import InventoryItem, MaterialCatalogAdmission
+from app.platform.audit.service import AuditEntry, audit_service
+from app.platform.permissions.authorization import AuthorizationContext
 from app.purchasing.models import (
     OperationalVendor,
     VendorItemCrossReference,
@@ -142,6 +147,56 @@ def read_common_stock_workbook(path: Path) -> CommonStockWorkbook:
 
 
 class CommonStockAdmissionService:
+    async def admit_authorized(
+        self,
+        session: AsyncSession,
+        *,
+        workbook: CommonStockWorkbook,
+        context: AuthorizationContext,
+        reason: str,
+    ) -> tuple[int, int]:
+        async with session.begin():
+            admitted, held = await self.admit(
+                session,
+                workbook=workbook,
+                company_id=context.company.id,
+                actor_user_id=context.user.id,
+            )
+            audit_service.stage(
+                session,
+                AuditEntry(
+                    action="inventory.common_stock_seed.admit",
+                    resource_type="inventory_material_catalog_admission",
+                    actor_user_id=context.user.id,
+                    company_id=context.company.id,
+                    reason_code="owner_common_stock_seed",
+                    details={
+                        "source_digest": workbook.source_digest,
+                        "source_rows": len(workbook.rows),
+                        "records_admitted": admitted,
+                        "records_held": held,
+                        "reason": reason,
+                    },
+                ),
+            )
+            BusinessEventService.stage(
+                session,
+                BusinessEventCreate(
+                    event_type=EventType.INVENTORY_COMMON_STOCK_SEED_ADMITTED,
+                    entity_type="inventory_material_catalog",
+                    company_id=context.company.id,
+                    user_id=context.user.id,
+                    payload={
+                        "source_digest": workbook.source_digest,
+                        "source_rows": len(workbook.rows),
+                        "records_admitted": admitted,
+                        "records_held": held,
+                        "opening_inventory_state": "not_historically_reconstructed",
+                    },
+                ),
+            )
+        return admitted, held
+
     async def admit(
         self,
         session: AsyncSession,
@@ -270,7 +325,6 @@ class CommonStockAdmissionService:
                 )
             )
             admitted += 1
-        await session.commit()
         return admitted, held
 
 
