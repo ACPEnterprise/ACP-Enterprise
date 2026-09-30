@@ -6,10 +6,14 @@ from uuid import UUID
 
 import httpx
 import pytest
+from fastapi import FastAPI
+
 from app.beacon.active_recommendations import (
     ActiveRecommendationReasoner,
     CustomerAdmissionGapFact,
     LuminaryFindingFact,
+    PayrollReadinessGapFact,
+    ReadinessAdapterEvaluation,
     SchedulingGapFact,
     active_recommendation_service,
     recommendation_digest,
@@ -17,9 +21,8 @@ from app.beacon.active_recommendations import (
 from app.beacon.router import router
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import AnalyticsPermission
+from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from app.platform.permissions.dependencies import get_authorization_context
-from fastapi import FastAPI
 
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
 
@@ -48,9 +51,14 @@ def test_reasoner_separates_scheduling_fact_interpretation_and_human_action() ->
     assert item.priority_score == sum(
         factor.contribution for factor in item.priority_factors
     )
-    assert next(
-        factor for factor in item.priority_factors if factor.factor == "economic_materiality"
-    ).available is False
+    assert (
+        next(
+            factor
+            for factor in item.priority_factors
+            if factor.factor == "economic_materiality"
+        ).available
+        is False
+    )
 
 
 def test_reasoner_uses_exact_customer_population_run_without_identity_inference() -> (
@@ -116,6 +124,29 @@ def test_reasoner_preserves_canonical_luminary_gap_and_limitations() -> None:
         "Economic interpretation",
         "Owner economic decision",
     )
+
+
+def test_payroll_adapter_exposes_only_aggregate_readiness_blockers() -> None:
+    item = ActiveRecommendationReasoner().reason(
+        payroll=(
+            PayrollReadinessGapFact(
+                UUID("77777777-7777-4777-8777-777777777777"),
+                UUID("88888888-8888-4888-8888-888888888888"),
+                3,
+                8,
+                (("COMPENSATION_MISSING", 2), ("W4_MISSING", 1)),
+                "f" * 64,
+                NOW,
+            ),
+        ),
+        evaluated_at=NOW,
+    )[0]
+
+    assert "3 of 8 Employees" in item.measured_fact
+    assert "COMPENSATION_MISSING: 2" in item.measured_fact
+    assert item.responsibility == "ACCOUNTANT"
+    assert item.action_destination == "Payroll → First real Payroll readiness"
+    assert "tax values remain protected" in item.limitations[0]
 
 
 def test_measured_luminary_finding_recommends_investigation_not_employment_action() -> (
@@ -237,7 +268,20 @@ async def test_active_recommendation_api_is_read_only_and_evidence_explicit(
         evaluated_at=NOW,
     )[0]
     query = AsyncMock(return_value=(item,))
+    adapters = AsyncMock(
+        return_value=(
+            ReadinessAdapterEvaluation(
+                "SCHEDULING_DISPATCH",
+                "EVALUATED",
+                "Scheduling Branch calendar authority",
+                1,
+                NOW,
+                None,
+            ),
+        )
+    )
     monkeypatch.setattr(active_recommendation_service, "list", query)
+    monkeypatch.setattr(active_recommendation_service, "adapter_evaluations", adapters)
 
     context = object.__new__(AuthorizationContext)
     object.__setattr__(
@@ -251,7 +295,7 @@ async def test_active_recommendation_api_is_read_only_and_evidence_explicit(
     object.__setattr__(
         context,
         "effective_permissions",
-        (SimpleNamespace(code=AnalyticsPermission.READ),),
+        (SimpleNamespace(code=BeaconPermission.OWN),),
     )
 
     app = FastAPI()
@@ -273,6 +317,7 @@ async def test_active_recommendation_api_is_read_only_and_evidence_explicit(
     assert response.status_code == 200
     body = response.json()
     assert body["autonomous_action"] is False
+    assert body["readiness_adapters"][0]["state"] == "EVALUATED"
     assert body["items"][0]["measured_fact"] == item.measured_fact
     assert body["items"][0]["interpretation"] == item.interpretation
     assert body["items"][0]["recommended_human_action"] == (
@@ -281,3 +326,43 @@ async def test_active_recommendation_api_is_read_only_and_evidence_explicit(
     assert body["items"][0]["evidence"][0]["entity_type"] == (
         "branch_scheduling_calendar"
     )
+
+
+@pytest.mark.asyncio
+async def test_active_readiness_rejects_analytics_only_user() -> None:
+    context = object.__new__(AuthorizationContext)
+    object.__setattr__(
+        context,
+        "company",
+        SimpleNamespace(id=UUID("55555555-5555-4555-8555-555555555555")),
+    )
+    object.__setattr__(context, "active_branch", None)
+    object.__setattr__(context, "authorized_branches", ())
+    object.__setattr__(
+        context,
+        "membership",
+        SimpleNamespace(id=UUID("99999999-9999-4999-8999-999999999999")),
+    )
+    object.__setattr__(
+        context,
+        "user",
+        SimpleNamespace(id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")),
+    )
+    object.__setattr__(
+        context,
+        "effective_permissions",
+        (SimpleNamespace(code=AnalyticsPermission.READ),),
+    )
+    app = FastAPI()
+    app.include_router(router)
+
+    async def context_override() -> AuthorizationContext:
+        return context
+
+    app.dependency_overrides[get_authorization_context] = context_override
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/beacon/active-recommendations")
+
+    assert response.status_code == 403

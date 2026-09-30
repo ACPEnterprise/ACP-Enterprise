@@ -252,7 +252,8 @@ export function CommandCenterRoute() {
   const canReadDispatch = permissions.has("COMPANY_DISPATCH_READ");
   const canReadPayments = permissions.has("COMPANY_PAYMENT_READ");
   const canReadAnalytics = permissions.has("COMPANY_ANALYTICS_READ");
-  const recommendations = useActiveBeaconRecommendations(canReadAnalytics);
+  const canOwnBeacon = permissions.has("COMPANY_BEACON_OWN");
+  const recommendations = useActiveBeaconRecommendations(canOwnBeacon);
   const canReadEconomics = permissions.has(
     "COMPANY_ECONOMICS_MEASUREMENT_READ",
   );
@@ -339,12 +340,13 @@ export function CommandCenterRoute() {
         </label>
       </header>
 
-      {canReadAnalytics && (
+      {canOwnBeacon && (
         <BeaconReasoningPanel
           evaluatedAt={recommendations.data?.evaluated_at}
           isError={recommendations.isError}
           isPending={recommendations.isPending}
           items={recommendations.data?.items}
+          readinessAdapters={recommendations.data?.readiness_adapters}
         />
       )}
 

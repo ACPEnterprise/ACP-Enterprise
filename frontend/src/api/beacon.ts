@@ -191,6 +191,7 @@ export interface ActiveBeaconRecommendation {
   measured_fact: string;
   interpretation: string;
   recommended_human_action: string;
+  responsibility: "OWNER" | "ACCOUNTANT" | "SYSTEM";
   source_authority: string;
   evidence_as_of: string;
   coverage: string;
@@ -232,6 +233,14 @@ export interface ActiveBeaconRecommendationPage {
   evaluated_at: string;
   recommendation_digest: string;
   items: ActiveBeaconRecommendation[];
+  readiness_adapters: Array<{
+    domain: "CUSTOMERS" | "PAYROLL" | "QBO_ACCOUNTING" | "SCHEDULING_DISPATCH" | "MARKETING";
+    state: "EVALUATED" | "SOURCE_UNAVAILABLE" | "ADAPTER_GATED";
+    source_authority: string;
+    fact_count: number;
+    evaluated_at: string;
+    limitation: string | null;
+  }>;
   autonomous_action: false;
 }
 

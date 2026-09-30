@@ -92,6 +92,7 @@ class ActiveOwnerRecommendationResponse(BaseModel):
     measured_fact: str
     interpretation: str
     recommended_human_action: str
+    responsibility: str
     source_authority: str
     evidence_as_of: datetime
     coverage: str
@@ -111,12 +112,24 @@ class ActiveOwnerRecommendationResponse(BaseModel):
     expires_at: datetime
 
 
+class ReadinessAdapterEvaluationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    domain: str
+    state: str
+    source_authority: str
+    fact_count: int
+    evaluated_at: datetime
+    limitation: str | None
+
+
 class ActiveOwnerRecommendationPage(BaseModel):
     company_id: UUID
     branch_id: UUID | None
     evaluated_at: datetime
     recommendation_digest: str
     items: tuple[ActiveOwnerRecommendationResponse, ...]
+    readiness_adapters: tuple[ReadinessAdapterEvaluationResponse, ...]
     autonomous_action: bool
 
 

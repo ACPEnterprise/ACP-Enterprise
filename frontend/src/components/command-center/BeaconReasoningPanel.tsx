@@ -1,7 +1,10 @@
 import { Lightbulb } from "lucide-react";
 import { Link } from "react-router";
 
-import type { ActiveBeaconRecommendation } from "../../api/beacon";
+import type {
+  ActiveBeaconRecommendation,
+  ActiveBeaconRecommendationPage,
+} from "../../api/beacon";
 import { Alert, Badge, Card, CardContent, CardHeader, CardTitle, Spinner } from "../../ui";
 
 const windows = ["NOW", "TODAY", "THIS_WEEK", "WATCH"] as const;
@@ -18,11 +21,13 @@ export function BeaconReasoningPanel({
   isPending,
   isError,
   evaluatedAt,
+  readinessAdapters,
 }: {
   readonly items: readonly ActiveBeaconRecommendation[] | undefined;
   readonly isPending: boolean;
   readonly isError: boolean;
   readonly evaluatedAt?: string;
+  readonly readinessAdapters?: ActiveBeaconRecommendationPage["readiness_adapters"];
 }) {
   return (
     <Card className="bg-surface">
@@ -37,6 +42,32 @@ export function BeaconReasoningPanel({
         </p>
       </CardHeader>
       <CardContent>
+        {!!readinessAdapters?.length && (
+          <section className="mb-5" aria-labelledby="beacon-readiness-coverage">
+            <h3 className="text-sm font-semibold text-content" id="beacon-readiness-coverage">
+              Direct readiness coverage
+            </h3>
+            <ul className="mt-2 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-5">
+              {readinessAdapters.map((adapter) => (
+                <li className="rounded-md border border-stroke p-2" key={adapter.domain}>
+                  <p className="font-semibold text-content">
+                    {adapter.domain.replaceAll("_", " ")}
+                  </p>
+                  <p className="text-content-muted">
+                    {adapter.state === "EVALUATED"
+                      ? `Evaluated · ${adapter.fact_count} active gap${adapter.fact_count === 1 ? "" : "s"}`
+                      : adapter.state === "SOURCE_UNAVAILABLE"
+                        ? "Source evidence unavailable"
+                        : "Adapter gated"}
+                  </p>
+                  {adapter.limitation && (
+                    <p className="mt-1 text-content-muted">{adapter.limitation}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {isPending ? (
           <Spinner label="Evaluating management evidence" />
         ) : isError ? (
@@ -91,6 +122,12 @@ export function BeaconReasoningPanel({
                             <dt className="font-semibold text-content">Measured fact</dt>
                             <dd className="text-content-muted">
                               {recommendation.measured_fact}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="font-semibold text-content">Responsible role</dt>
+                            <dd className="text-content-muted">
+                              {recommendation.responsibility.toLowerCase()}
                             </dd>
                           </div>
                           <div>

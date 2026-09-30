@@ -29,6 +29,7 @@ const permissions = new Set([
   "COMPANY_JOB_READ",
   "COMPANY_DISPATCH_READ",
   "COMPANY_ANALYTICS_READ",
+  "COMPANY_BEACON_OWN",
   "COMPANY_ECONOMICS_MEASUREMENT_READ",
   "COMPANY_PAYMENT_READ",
 ]);
@@ -45,6 +46,7 @@ function arrange() {
       evaluated_at: "2026-09-22T12:00:00Z",
       recommendation_digest: "a".repeat(64),
       items: [],
+      readiness_adapters: [],
       autonomous_action: false,
     }),
   );

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customer_migration.models import CustomerPopulationRefreshRun
 from app.luminary.models import LuminaryFindingRecord
+from app.payroll.models import PayrollRunMemberRecord, PayrollRunRecord
 from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.models import (
@@ -23,6 +25,8 @@ from app.scheduling.models import (
 
 PriorityWindow = Literal["NOW", "TODAY", "THIS_WEEK", "WATCH"]
 RecommendationKind = Literal["EVIDENCE_GAP", "MEASURED_FINDING"]
+RecommendationResponsibility = Literal["OWNER", "ACCOUNTANT", "SYSTEM"]
+ReadinessAdapterState = Literal["EVALUATED", "SOURCE_UNAVAILABLE", "ADAPTER_GATED"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +65,7 @@ class ActiveOwnerRecommendation:
     measured_fact: str
     interpretation: str
     recommended_human_action: str
+    responsibility: RecommendationResponsibility
     source_authority: str
     evidence_as_of: datetime
     coverage: str
@@ -78,6 +83,16 @@ class ActiveOwnerRecommendation:
     evidence: tuple[RecommendationEvidence, ...]
     related_recommendations: tuple[RelatedRecommendation, ...]
     expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ReadinessAdapterEvaluation:
+    domain: str
+    state: ReadinessAdapterState
+    source_authority: str
+    fact_count: int
+    evaluated_at: datetime
+    limitation: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +116,17 @@ class CustomerAdmissionGapFact:
     unexplained_count: int
     evidence_digest: str
     completed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PayrollReadinessGapFact:
+    run_id: UUID
+    pay_period_id: UUID
+    blocked_employee_count: int
+    total_employee_count: int
+    blocker_counts: tuple[tuple[str, int], ...]
+    run_digest: str
+    assembled_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,12 +158,14 @@ class ActiveRecommendationReasoner:
         *,
         scheduling: tuple[SchedulingGapFact, ...] = (),
         customers: tuple[CustomerAdmissionGapFact, ...] = (),
+        payroll: tuple[PayrollReadinessGapFact, ...] = (),
         luminary: tuple[LuminaryFindingFact, ...] = (),
         evaluated_at: datetime,
     ) -> tuple[ActiveOwnerRecommendation, ...]:
         values = [
             *(self._scheduling(item, evaluated_at) for item in scheduling),
             *(self._customers(item, evaluated_at) for item in customers),
+            *(self._payroll(item, evaluated_at) for item in payroll),
             *(self._luminary(item, evaluated_at) for item in luminary),
         ]
         grouped = self._group(values)
@@ -222,7 +250,9 @@ class ActiveRecommendationReasoner:
                         ),
                     ),
                     evidence=tuple(
-                        dict.fromkeys(evidence for item in group for evidence in item.evidence)
+                        dict.fromkeys(
+                            evidence for item in group for evidence in item.evidence
+                        )
                     ),
                     related_recommendations=related,
                 )
@@ -337,6 +367,7 @@ class ActiveRecommendationReasoner:
                 "for this Branch."
             ),
             action="Configure and review the Branch scheduling calendar.",
+            responsibility="OWNER",
             source="Scheduling Branch calendar authority",
             as_of=fact.observed_at,
             coverage="One authorized Branch",
@@ -398,6 +429,7 @@ class ActiveRecommendationReasoner:
                 "for the unresolved source population."
             ),
             action="Review the exact unresolved Customer reconciliation queue.",
+            responsibility="SYSTEM",
             source="Customer population reconciliation authority",
             as_of=fact.completed_at,
             coverage=f"Latest Branch population run · {fact.total_count} source records",
@@ -428,6 +460,66 @@ class ActiveRecommendationReasoner:
                     fact.run_id,
                     fact.evidence_digest,
                     fact.completed_at,
+                ),
+            ),
+            evaluated_at=evaluated_at,
+        )
+
+    def _payroll(
+        self, fact: PayrollReadinessGapFact, evaluated_at: datetime
+    ) -> ActiveOwnerRecommendation:
+        blocked = ("First real Payroll readiness", "Accepted Payroll calculation")
+        score, window, factors = self._priority(
+            operational_blocker=True,
+            economic_materiality=False,
+            decisions_blocked=blocked,
+            owner_action_required=True,
+            explicit_urgency="TODAY",
+            evidence_quality="canonical Payroll run-member readiness",
+        )
+        blocker_summary = ", ".join(
+            f"{code}: {count}" for code, count in fact.blocker_counts[:5]
+        )
+        return self._build(
+            definition_id="evidence_gap.payroll_run_readiness",
+            root_issue_key=f"payroll-readiness:{fact.run_id}",
+            kind="EVIDENCE_GAP",
+            subject=fact.run_id,
+            title="Payroll readiness evidence is incomplete",
+            measured_fact=(
+                f"{fact.blocked_employee_count} of {fact.total_employee_count} Employees "
+                f"in the latest Payroll run are blocked. Aggregate blocker evidence: "
+                f"{blocker_summary or 'blocker details unavailable'}."
+            ),
+            interpretation=(
+                "The current Payroll run cannot proceed through its accepted calculation "
+                "and review workflow until Payroll authority resolves these blockers."
+            ),
+            action="Review the first real Payroll readiness blockers.",
+            responsibility="ACCOUNTANT",
+            source="Payroll run-member readiness authority",
+            as_of=fact.assembled_at,
+            coverage=f"Latest Payroll run · {fact.total_employee_count} Employees",
+            confidence="HIGH",
+            limitations=(
+                "Beacon exposes aggregate blocker codes only; compensation and tax values remain protected.",
+                "Beacon does not calculate, approve, or execute Payroll.",
+            ),
+            affected_capabilities=("Payroll", "Economic Health", "Labor burden"),
+            decisions_blocked=blocked,
+            window=window,
+            score=score,
+            priority_factors=factors,
+            reason=(
+                "Canonical Payroll admission evidence proves an operating blocker; no "
+                "employee performance conclusion or dollar impact is inferred."
+            ),
+            improves="Payroll calculation readiness and downstream labor evidence become reviewable.",
+            path="/payroll#first-real-payroll-readiness",
+            destination="Payroll → First real Payroll readiness",
+            evidence=(
+                RecommendationEvidence(
+                    "payroll_run", fact.run_id, fact.run_digest, fact.assembled_at
                 ),
             ),
             evaluated_at=evaluated_at,
@@ -465,15 +557,14 @@ class ActiveRecommendationReasoner:
         )
         return self._build(
             definition_id=f"luminary.{fact.finding_type}",
-            root_issue_key=(
-                f"luminary:{fact.finding_type}:{fact.finding_identity}"
-            ),
+            root_issue_key=(f"luminary:{fact.finding_type}:{fact.finding_identity}"),
             kind="EVIDENCE_GAP" if evidence_gap else "MEASURED_FINDING",
             subject=fact.finding_id,
             title=fact.title,
             measured_fact=fact.summary,
             interpretation=fact.explanation,
             action=action,
+            responsibility="OWNER",
             source="Accepted Luminary finding",
             as_of=fact.generated_at,
             coverage=f"{fact.period_start} through {fact.period_end}",
@@ -524,6 +615,7 @@ class ActiveRecommendationReasoner:
         measured_fact: str,
         interpretation: str,
         action: str,
+        responsibility: RecommendationResponsibility,
         source: str,
         as_of: datetime,
         coverage: str,
@@ -561,6 +653,7 @@ class ActiveRecommendationReasoner:
             measured_fact=measured_fact,
             interpretation=interpretation,
             recommended_human_action=action,
+            responsibility=responsibility,
             source_authority=source,
             evidence_as_of=as_of,
             coverage=coverage,
@@ -602,12 +695,132 @@ class ActiveRecommendationService:
             session, context.company.id, branch_ids, now
         )
         customers = await self._customers(session, context.company.id, branch_ids)
+        payroll = await self._payroll(session, context.company.id)
         luminary = await self._luminary(session, context.company.id, branch_ids)
         return self.reasoner.reason(
             scheduling=scheduling,
             customers=customers,
+            payroll=payroll,
             luminary=luminary,
             evaluated_at=now,
+        )
+
+    async def adapter_evaluations(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        evaluated_at: datetime,
+    ) -> tuple[ReadinessAdapterEvaluation, ...]:
+        branch_ids = (
+            frozenset({context.active_branch.id})
+            if context.active_branch
+            else context.authorized_branch_ids
+        )
+        scheduling = await self._scheduling(
+            session, context.company.id, branch_ids, evaluated_at
+        )
+        customers = await self._customers(session, context.company.id, branch_ids)
+        payroll = await self._payroll(session, context.company.id)
+        payroll_source_available = bool(
+            await session.scalar(
+                select(
+                    exists().where(PayrollRunRecord.company_id == context.company.id)
+                )
+            )
+        )
+        return (
+            ReadinessAdapterEvaluation(
+                "CUSTOMERS",
+                "EVALUATED",
+                "Customer population reconciliation authority",
+                len(customers),
+                evaluated_at,
+                None,
+            ),
+            ReadinessAdapterEvaluation(
+                "PAYROLL",
+                "EVALUATED" if payroll_source_available else "SOURCE_UNAVAILABLE",
+                "Payroll run-member readiness authority",
+                len(payroll),
+                evaluated_at,
+                None
+                if payroll_source_available
+                else "No canonical Payroll run-member population is available for direct evaluation.",
+            ),
+            ReadinessAdapterEvaluation(
+                "QBO_ACCOUNTING",
+                "ADAPTER_GATED",
+                "Sealed QBO and Accounting admission authority",
+                0,
+                evaluated_at,
+                "Current authority has safe source-evidence and connection projections but no Company-scoped canonical admission-count read model for Beacon.",
+            ),
+            ReadinessAdapterEvaluation(
+                "SCHEDULING_DISPATCH",
+                "EVALUATED",
+                "Scheduling Branch calendar authority",
+                len(scheduling),
+                evaluated_at,
+                None,
+            ),
+            ReadinessAdapterEvaluation(
+                "MARKETING",
+                "ADAPTER_GATED",
+                "Marketing connection readiness authority",
+                0,
+                evaluated_at,
+                "No accepted Company-scoped Marketing provider/OAuth readiness contract exists in current authority.",
+            ),
+        )
+
+    @staticmethod
+    async def _payroll(
+        session: AsyncSession, company_id: UUID
+    ) -> tuple[PayrollReadinessGapFact, ...]:
+        run = await session.scalar(
+            select(PayrollRunRecord)
+            .where(
+                PayrollRunRecord.company_id == company_id,
+                PayrollRunRecord.lifecycle.in_(
+                    ("assembled", "under_review", "reviewed", "approved")
+                ),
+            )
+            .order_by(PayrollRunRecord.assembled_at.desc(), PayrollRunRecord.id.desc())
+            .limit(1)
+        )
+        if run is None:
+            return ()
+        members = tuple(
+            (
+                await session.scalars(
+                    select(PayrollRunMemberRecord)
+                    .where(
+                        PayrollRunMemberRecord.company_id == company_id,
+                        PayrollRunMemberRecord.run_id == run.id,
+                    )
+                    .order_by(PayrollRunMemberRecord.employee_id)
+                )
+            ).all()
+        )
+        blocked_members = tuple(
+            item for item in members if item.disposition == "blocked"
+        )
+        if not blocked_members:
+            return ()
+        counts = Counter(
+            code for item in blocked_members for code in tuple(item.blocker_codes)
+        )
+        return (
+            PayrollReadinessGapFact(
+                run.id,
+                run.pay_period_id,
+                len(blocked_members),
+                len(members),
+                tuple(sorted(counts.items())),
+                run.run_digest,
+                run.assembled_at,
+            ),
         )
 
     @staticmethod

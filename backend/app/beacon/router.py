@@ -65,6 +65,7 @@ from app.beacon.schemas import (
     OperationalSignalDefinitionResponse,
     OperationalWorkflowQueueResponse,
     OperationalWorkflowSignalResponse,
+    ReadinessAdapterEvaluationResponse,
 )
 from app.beacon.service import SIGNAL_TTL, beacon_query_service
 from app.beacon.workflow import BeaconWorkflowCommand, beacon_workflow_service
@@ -109,13 +110,16 @@ BeaconOwnerOrAssigner = Annotated[
 )
 async def active_owner_recommendations(
     session: DatabaseSession,
-    context: BeaconReader,
+    context: BeaconOwner,
 ) -> ActiveOwnerRecommendationPage:
     evaluated_at = datetime.now(timezone.utc)
     items = await active_recommendation_service.list(
         session,
         context=context,
         evaluated_at=evaluated_at,
+    )
+    readiness_adapters = await active_recommendation_service.adapter_evaluations(
+        session, context=context, evaluated_at=evaluated_at
     )
     return ActiveOwnerRecommendationPage(
         company_id=context.company.id,
@@ -124,6 +128,10 @@ async def active_owner_recommendations(
         recommendation_digest=recommendation_digest(items),
         items=tuple(
             ActiveOwnerRecommendationResponse.model_validate(item) for item in items
+        ),
+        readiness_adapters=tuple(
+            ReadinessAdapterEvaluationResponse.model_validate(item)
+            for item in readiness_adapters
         ),
         autonomous_action=False,
     )
