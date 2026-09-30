@@ -177,6 +177,7 @@ class CleanMajorityAdmissionResult:
     admitted: int
     replayed: int
     quarantined: int
+    quarantine_records: tuple[tuple[str, str], ...]
     remaining_unexplained: int
     before_digest: str
     after_digest: str
@@ -184,6 +185,8 @@ class CleanMajorityAdmissionResult:
     def __post_init__(self) -> None:
         if self.selected != self.admitted + self.replayed + self.quarantined:
             raise ValueError("clean-majority Customer outcomes do not reconcile")
+        if self.quarantined != len(self.quarantine_records):
+            raise ValueError("clean-majority quarantine details do not reconcile")
 
 
 class CustomerPopulationReconciliationService:
@@ -491,6 +494,7 @@ class CustomerPopulationReconciliationService:
             )
 
         admitted = replayed = quarantined = 0
+        quarantine_records: list[tuple[str, str]] = []
         reviewed_artifacts: dict[UUID, ReviewedCustomerAdapterOutput] = {}
         for candidate in candidates:
             async with factory() as session:
@@ -553,6 +557,12 @@ class CustomerPopulationReconciliationService:
                         reason_code="source_aggregate_validation_required",
                     )
                     quarantined += 1
+                    quarantine_records.append(
+                        (
+                            candidate.source_customer_id,
+                            "source_aggregate_validation_required",
+                        )
+                    )
                     continue
             try:
                 result = await self.admit_exact(
@@ -570,6 +580,12 @@ class CustomerPopulationReconciliationService:
                     reason_code="deterministic_admission_review_required",
                 )
                 quarantined += 1
+                quarantine_records.append(
+                    (
+                        candidate.source_customer_id,
+                        "deterministic_admission_review_required",
+                    )
+                )
                 continue
             if result.replayed:
                 replayed += 1
@@ -585,6 +601,7 @@ class CustomerPopulationReconciliationService:
             admitted=admitted,
             replayed=replayed,
             quarantined=quarantined,
+            quarantine_records=tuple(quarantine_records),
             remaining_unexplained=after.counts.unexplained,
             before_digest=before.evidence_digest,
             after_digest=after.evidence_digest,

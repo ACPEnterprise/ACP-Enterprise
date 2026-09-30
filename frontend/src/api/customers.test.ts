@@ -113,6 +113,7 @@ describe("customer response normalization", () => {
       quarantined: 1,
       rejected: 0,
       provider_unavailable: 0,
+      quarantine_records: [{ source_customer_id: "provider-2", reason_code: "deterministic_admission_review_required", reason: "Review required." }],
       remaining_unexplained: 0,
       before_evidence_digest: "a".repeat(64),
       after_evidence_digest: "b".repeat(64),
