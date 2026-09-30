@@ -23,23 +23,27 @@ does not provision or mutate an Employee.
    returned; an empty result must be clearly distinguished from denied access.
 5. Ask about an assigned Job. Confirm the answer is assignment-scoped and does
    not expose unrelated Customer history, financial data, or other Employees.
-6. Ask about own clock/time status. Confirm the answer reflects authoritative
+6. If the response includes canonical available action metadata, open the
+   returned Employee destination and confirm the current permission-scoped
+   screen. If metadata is absent, confirm Mobile remains guidance-only and does
+   not guess a route from text.
+7. Ask about own clock/time status. Confirm the answer reflects authoritative
    timekeeping evidence and does not calculate Payroll.
-7. Ask for an unrelated Customer. Confirm the server returns a safe denied,
+8. Ask for an unrelated Customer. Confirm the server returns a safe denied,
    hidden, or incomplete response without revealing the record identity.
-8. Ask for owner Economics, Beacon recommendations, or Luminary findings.
+9. Ask for owner Economics, Beacon recommendations, or Luminary findings.
    Confirm employee-safe denial; the client must never retry through `/api/v1/lia/ask`.
-9. Expand supporting evidence. Confirm source, freshness, completeness, and
+10. Expand supporting evidence. Confirm source, freshness, completeness, and
    limitations remain visible without exposing protected payloads.
-10. Use Speak on an authorized answer. Confirm shared semantic speech content,
+11. Use Speak on an authorized answer. Confirm shared semantic speech content,
     calm local playback, Stop, replay, and no raw restricted fields.
-11. Disable network and submit a question. Confirm a truthful offline/network
+12. Disable network and submit a question. Confirm a truthful offline/network
     error and no fabricated answer.
-12. Restore network and retry. Confirm the answer is fetched from the server and
+13. Restore network and retry. Confirm the answer is fetched from the server and
     conversation continuity is preserved where supported.
-13. Background the app during playback. Confirm speech stops and no audio remains
+14. Background the app during playback. Confirm speech stops and no audio remains
     active behind the screen.
-14. Sign out. Confirm protected LIA state and playback are cleared.
+15. Sign out. Confirm protected LIA state and playback are cleared.
 
 ## Pass criteria
 
