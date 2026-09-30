@@ -5,8 +5,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from pydantic import ValidationError
-
 from app.core.config import Settings
 from app.marketing.google_ads import (
     GOOGLE_ADS_SCOPE,
@@ -32,6 +30,7 @@ from app.marketing.secret_custody import (
 from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
 from app.platform.permissions.codes import MarketingPermission
 from app.platform.provider_connections.models import ProviderConnectionBinding
+from pydantic import ValidationError
 
 NOW = datetime(2026, 9, 29, tzinfo=timezone.utc)
 BACKEND_ROOT = Path(__file__).resolve().parents[2]

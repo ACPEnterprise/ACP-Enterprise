@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-
 from app.marketing.oauth import (
     GoogleAdsOAuthError,
     GoogleAdsOAuthRuntime,

@@ -74,7 +74,7 @@ describe("owner reporting read routes", () => {
   it("renders Payroll Administration with reporting-read alone", () => {
     permissions.add("COMPANY_PAYROLL_REPORTING_READ");
     render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
-    expect(screen.getByRole("heading", { name: "Payroll" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Payroll Administration" })).toBeVisible();
   });
 
   it("renders Accounts Payable reporting with report-read alone", () => {

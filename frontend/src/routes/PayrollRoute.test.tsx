@@ -318,8 +318,9 @@ describe("PayrollRoute authorization", () => {
         <PayrollRoute />
       </MemoryRouter>,
     );
-    expect(screen.getAllByText("Marisol Rivera")).toHaveLength(5);
-    expect(screen.getAllByText("No time entries")).toHaveLength(2);
+    expect(screen.getAllByText("Marisol Rivera")).toHaveLength(4);
+    expect(screen.getByText("40.00")).toBeVisible();
+    expect(screen.queryByText("No time entries")).not.toBeInTheDocument();
     expect(screen.queryByText("Time Evidence Missing")).not.toBeInTheDocument();
     expect(screen.getAllByText("Not calculated")).toHaveLength(3);
     expect(
