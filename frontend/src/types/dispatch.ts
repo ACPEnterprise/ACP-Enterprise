@@ -110,3 +110,45 @@ export interface DispatchRecommendation {
   recommendation_digest: string;
   mutation_authority: "none";
 }
+
+export type GhostSlotClass =
+  | "PRIMARY_GHOST_SLOT"
+  | "ALTERNATE_GHOST_SLOT"
+  | "CONSTRAINED_OPTION"
+  | "UNAVAILABLE";
+
+export interface GhostSlot {
+  slot_class: GhostSlotClass;
+  employee_id: string | null;
+  start_at: string | null;
+  end_at: string | null;
+  facts: readonly string[];
+  why: readonly string[];
+  limitations: readonly string[];
+}
+
+export interface LiaDispatchReasoning {
+  reasoning_id: string;
+  contract_version: "lia.dispatch.reasoning.v1";
+  company_id: string;
+  branch_id: string;
+  conversation_id: string;
+  revision: number;
+  service_intent: string | null;
+  urgency: string | null;
+  customer_state: "RESOLVED" | "UNRESOLVED";
+  location_state: "RESOLVED" | "UNRESOLVED";
+  next_question: string | null;
+  facts: readonly string[];
+  interpretation: string;
+  recommendation: string;
+  why: readonly string[];
+  primary: GhostSlot;
+  alternates: readonly GhostSlot[];
+  limitations: readonly string[];
+  as_of: string;
+  expires_at: string;
+  supersedes_reasoning_id: string | null;
+  reasoning_digest: string;
+  mutation_authority: "none";
+}

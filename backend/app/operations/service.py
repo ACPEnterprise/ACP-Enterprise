@@ -1,8 +1,12 @@
 from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.dispatch.schemas import AssignmentItem
+from app.dispatch.service import DispatchService, dispatch_service
 from app.jobs.commands import CreateJobFromAppointment, LinkAppointment
 from app.jobs.errors import (
     JobInvalidTransitionError,
@@ -18,9 +22,11 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.models import Appointment
 from app.scheduling.service import (
     CreateAppointmentCommand,
+    RescheduleAppointmentCommand,
     SchedulingService,
     scheduling_service,
 )
+from app.scheduling.types import AppointmentRescheduleReason
 
 
 @dataclass(frozen=True)
@@ -28,6 +34,12 @@ class LaunchWorkflowResult:
     request_id: UUID
     appointment: Appointment
     job: Job
+
+
+@dataclass(frozen=True)
+class CalendarPlacementResult:
+    appointment: Appointment
+    assignment: AssignmentItem
 
 
 class OperationsService:
@@ -44,10 +56,54 @@ class OperationsService:
         scheduling: SchedulingService = scheduling_service,
         jobs: JobService = job_service,
         job_repository: type[JobRepository] = JobRepository,
+        dispatch: DispatchService = dispatch_service,
     ) -> None:
         self._scheduling = scheduling
         self._jobs = jobs
         self._job_repository = job_repository
+        self._dispatch = dispatch
+
+    async def place_calendar_appointment(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        request_id: UUID,
+        appointment_id: UUID,
+        employee_id: UUID,
+        expected_appointment_version: int,
+        expected_assignment_version: int | None,
+        arrival_window_start_at: datetime,
+        arrival_window_end_at: datetime,
+        expected_duration_minutes: int,
+        capacity_units: Decimal,
+        reason: str,
+    ) -> CalendarPlacementResult:
+        """Move and assign as one canonical Scheduling/Dispatch transaction."""
+        async with session.begin():
+            appointment = await self._scheduling.stage_reschedule_appointment(
+                session,
+                context=context,
+                command=RescheduleAppointmentCommand(
+                    appointment_id=appointment_id,
+                    expected_version=expected_appointment_version,
+                    arrival_window_start_at=arrival_window_start_at,
+                    arrival_window_end_at=arrival_window_end_at,
+                    expected_duration_minutes=expected_duration_minutes,
+                    capacity_units=capacity_units,
+                    reason_code=AppointmentRescheduleReason.OPERATIONAL_ADJUSTMENT,
+                ),
+            )
+            assignment = await self._dispatch.stage_assign_or_replace(
+                session,
+                context=context,
+                appointment_id=appointment_id,
+                employee_id=employee_id,
+                reason=reason,
+                idempotency_key=str(request_id),
+                expected_assignment_version=expected_assignment_version,
+            )
+        return CalendarPlacementResult(appointment=appointment, assignment=assignment)
 
     async def accept_service_request(
         self,

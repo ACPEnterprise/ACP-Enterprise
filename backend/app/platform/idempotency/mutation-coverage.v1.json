@@ -2113,6 +2113,16 @@
     {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "operations",
+      "mechanism": "caller-stable request identity, optimistic Appointment/assignment versions, and atomic domain transaction",
+      "method": "POST",
+      "operation_id": "place_calendar_appointment_api_v1_operations_appointments__appointment_id__calendar_placement_post",
+      "path": "/api/v1/operations/appointments/{appointment_id}/calendar-placement",
+      "reason": "One transaction validates capacity and technician eligibility before committing Scheduling and Dispatch audit evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operations",
       "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
       "operation_id": "accept_service_request_api_v1_operations_service_requests_post",
@@ -3408,6 +3418,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "4337a300d4f6adf28b8d8d71f593d12524b8f11a32f6058ea18d84fe9278abf0",
+  "fingerprint": "293611cc09cf0eef5089c213fa5a5550a2fad3cbece4f86011d657702f1047d1",
   "schema_version": "1"
 }

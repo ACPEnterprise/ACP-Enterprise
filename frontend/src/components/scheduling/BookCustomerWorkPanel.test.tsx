@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useCustomerDetail, useCustomerList } from "../../hooks/useCustomers";
 import { useCreateServiceRequest } from "../../hooks/useOperations";
+import { addCustomerProperty, createCustomer } from "../../api/customers";
 import { BookCustomerWorkPanel } from "./BookCustomerWorkPanel";
 
 const mutate = vi.hoisted(() => vi.fn());
@@ -15,6 +16,7 @@ vi.mock("../../auth", () => ({
 }));
 vi.mock("../../hooks/useCustomers");
 vi.mock("../../hooks/useOperations");
+vi.mock("../../api/customers", () => ({ createCustomer: vi.fn(), addCustomerProperty: vi.fn() }));
 
 describe("BookCustomerWorkPanel", () => {
   beforeEach(() => {
@@ -62,6 +64,26 @@ describe("BookCustomerWorkPanel", () => {
       }),
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
+  });
+
+  it("requires explicit confirmation before creating a new Customer and Location", async () => {
+    vi.mocked(createCustomer).mockResolvedValue({
+      customer: { id: "customer-new", display_name: "Jamie New" },
+      duplicate_warnings: [],
+    } as never);
+    vi.mocked(addCustomerProperty).mockResolvedValue({ id: "location-new" } as never);
+    render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "New Customer intake" }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Customer name/ }), "Jamie New");
+    await userEvent.type(screen.getByRole("textbox", { name: /Phone/ }), "5551234567");
+    await userEvent.type(screen.getByRole("textbox", { name: /Service address/ }), "20 Main St");
+    await userEvent.type(screen.getByRole("textbox", { name: /City/ }), "Albany");
+    await userEvent.type(screen.getByRole("textbox", { name: /State/ }), "NY");
+    await userEvent.type(screen.getByRole("textbox", { name: /Postal code/ }), "12207");
+    expect(createCustomer).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm Customer and Location" }));
+    expect(createCustomer).toHaveBeenCalledWith(expect.objectContaining({ first_name: "Jamie", last_name: "New", source: "csr_dispatch_intake" }));
+    expect(addCustomerProperty).toHaveBeenCalledWith("customer-new", expect.objectContaining({ address_line_1: "20 Main St", is_primary: true }));
   });
 
   it("fails closed when the customer arrival window ends before it starts", async () => {
