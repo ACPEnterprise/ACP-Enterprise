@@ -31,6 +31,7 @@ from app.platform.permissions.codes import MarketingPermission
 from app.platform.provider_connections.models import ProviderConnectionBinding
 
 NOW = datetime(2026, 9, 29, tzinfo=timezone.utc)
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_google_ads_adapter_surface_is_read_only() -> None:
@@ -175,8 +176,9 @@ def test_google_ads_scope_is_explicitly_broad() -> None:
 
 
 def test_migration_lineage_and_append_only_contract() -> None:
-    migration = Path(
-        "alembic/versions/rg7c9e1f3i5k7_google_ads_readonly_ingestion.py"
+    migration = (
+        BACKEND_ROOT
+        / "alembic/versions/rg7c9e1f3i5k7_google_ads_readonly_ingestion.py"
     ).read_text()
     assert 'down_revision: str | Sequence[str] | None = "q7s9u1w3y5a7"' in migration
     for table in (
@@ -189,6 +191,6 @@ def test_migration_lineage_and_append_only_contract() -> None:
 
 
 def test_no_live_google_client_dependency_or_endpoint() -> None:
-    requirements = Path("requirements.txt").read_text().lower()
+    requirements = (BACKEND_ROOT / "requirements.txt").read_text().lower()
     assert "google-ads" not in requirements
     assert not any("oauth" in route.path for route in router.routes)
