@@ -834,6 +834,19 @@ class SchedulingService:
             raise SchedulingValidationError("Arrival window must be timezone-aware.")
         if end <= start:
             raise SchedulingValidationError("Arrival window end must follow start.")
+        if any(
+            value.minute % 15 or value.second or value.microsecond
+            for value in (start, end)
+        ):
+            raise SchedulingValidationError(
+                "Arrival window must use 15-minute increments.",
+                SchedulingValidationFailure.SLOT_ALIGNMENT,
+            )
+        if expected_duration_minutes % 15:
+            raise SchedulingValidationError(
+                "Expected duration must use 15-minute increments.",
+                SchedulingValidationFailure.SLOT_ALIGNMENT,
+            )
         if expected_duration_minutes <= 0:
             raise SchedulingValidationError("Expected duration must be positive.")
         if capacity_units <= 0:
