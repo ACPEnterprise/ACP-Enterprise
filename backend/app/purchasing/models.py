@@ -70,6 +70,51 @@ class OperationalVendor(Base):
     )
 
 
+class VendorItemCrossReference(Base):
+    __tablename__ = "purchasing_vendor_item_cross_references"
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "vendor_id"], ["purchasing_operational_vendors.company_id", "purchasing_operational_vendors.id"], name="fk_vendor_item_xref_vendor", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "inventory_item_id"], ["inventory_items.company_id", "inventory_items.id"], name="fk_vendor_item_xref_item", ondelete="RESTRICT"),
+        CheckConstraint("match_state IN ('certified','review')", name="ck_vendor_item_xref_match_state"),
+        UniqueConstraint("company_id", "vendor_id", "vendor_sku", name="uq_vendor_item_xref_vendor_sku"),
+        UniqueConstraint("company_id", "id", name="uq_vendor_item_xref_company_id"),
+        Index("ix_vendor_item_xref_item", "company_id", "inventory_item_id", "vendor_id"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    vendor_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    inventory_item_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    vendor_sku: Mapped[str] = mapped_column(String(160), nullable=False)
+    match_state: Mapped[str] = mapped_column(String(20), nullable=False, default="certified")
+    certified_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    certified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class VendorPurchaseCostEvidence(Base):
+    __tablename__ = "purchasing_vendor_purchase_cost_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "vendor_item_cross_reference_id"], ["purchasing_vendor_item_cross_references.company_id", "purchasing_vendor_item_cross_references.id"], name="fk_vendor_cost_evidence_xref", ondelete="RESTRICT"),
+        CheckConstraint("purchase_cost >= 0", name="ck_vendor_cost_evidence_cost"),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_vendor_cost_evidence_currency"),
+        CheckConstraint("cost_basis = 'vendor_purchase_before_delivery_and_tax'", name="ck_vendor_cost_evidence_basis"),
+        UniqueConstraint("company_id", "evidence_digest", name="uq_vendor_cost_evidence_digest"),
+        Index("ix_vendor_cost_evidence_current", "company_id", "vendor_item_cross_reference_id", "observed_at"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    vendor_item_cross_reference_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_cost: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    cost_basis: Mapped[str] = mapped_column(String(64), nullable=False, default="vendor_purchase_before_delivery_and_tax")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class PurchaseOrder(Base):
     __tablename__ = "purchasing_purchase_orders"
     __table_args__ = (
