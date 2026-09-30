@@ -3333,7 +3333,7 @@
       "domain": "accounting",
       "mechanism": "Company-scoped sealed provider identity and version ledger with deterministic exact replay and independent conflict quarantine",
       "method": "POST",
-      "operation_id": "apply_qbo_native_clean_majority_api_v1_accounting_source_evidence_qbo_native_application_post",
+      "operation_id": "qbo_native_clean_majority_application_api_v1_accounting_source_evidence_qbo_native_application_post",
       "path": "/api/v1/accounting/source-evidence/qbo/native-application",
       "reason": "Clean-majority application binds each exact QBO provider version once, returns deterministic replay, and quarantines contradictory evidence without duplicating native authority.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
@@ -3367,6 +3367,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "51609123b03bbfb792a0289349c16d242c2c0230349f7a0049fac6b151a70d45",
+  "fingerprint": "5021771a7836d8899385be2315d8c3b57cae2bb2af3b4af89d48197d00f034bf",
   "schema_version": "1"
 }
