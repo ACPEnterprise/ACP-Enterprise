@@ -85,6 +85,7 @@ async def plan(
             login_email=data.login_email.get_secret_value(),
             role_ids=data.role_ids,
             additional_permission_ids=data.additional_permission_ids,
+            existing_employee_id=data.existing_employee_id,
         )
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
         raise _safe_error(error) from error
@@ -118,6 +119,7 @@ async def initiate(
                     data.login_email.get_secret_value() if data.login_email else None
                 ),
                 existing_user_id=data.existing_user_id,
+                existing_employee_id=data.existing_employee_id,
             ),
         )
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
