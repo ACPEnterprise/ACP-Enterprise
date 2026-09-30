@@ -1,8 +1,8 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 
 import { useScheduleExistingJob } from "../../hooks/useOperations";
-import { useWorkforceDirectory } from "../../hooks/useWorkforce";
+import { useWorkforceEligibility } from "../../hooks/useWorkforce";
 import { appointmentDetailPath, schedulingReturnPath } from "../../routing/paths";
 import type { JobDetail } from "../../types/jobs";
 import { Alert, Button, Field, Input, Select } from "../../ui";
@@ -19,18 +19,30 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   readonly returnTo?: string;
 }) {
   const schedule = useScheduleExistingJob(job.id);
-  const workforce = useWorkforceDirectory();
+  const workforceEligibility = useWorkforceEligibility();
+  const evaluateEligibility = workforceEligibility.mutate;
   const [startAt, setStartAt] = useState(() => localInput(new Date(Date.now() + 60 * 60 * 1000)));
   const [endAt, setEndAt] = useState(() => localInput(new Date(Date.now() + 3 * 60 * 60 * 1000)));
   const [duration, setDuration] = useState(120);
   const [employeeId, setEmployeeId] = useState("");
   const [lastAttempt, setLastAttempt] = useState<{ fingerprint: string; requestId: string } | null>(null);
+  const eligibilityRequest = useMemo(() => {
+    const start = new Date(startAt);
+    if (Number.isNaN(start.getTime()) || duration < 15) return null;
+    return {
+      branch_id: job.branch_id,
+      window_start_at: start.toISOString(),
+      window_end_at: new Date(start.getTime() + duration * 60 * 1000).toISOString(),
+      required_capability_codes: [],
+      required_language_codes: [],
+    };
+  }, [duration, job.branch_id, startAt]);
+  useEffect(() => {
+    if (canAssign && eligibilityRequest) evaluateEligibility(eligibilityRequest);
+  }, [canAssign, eligibilityRequest, evaluateEligibility]);
   const technicians = useMemo(
-    () => (workforce.data ?? []).filter((employee) =>
-      employee.technician && employee.employee_status === "active" &&
-      employee.readiness_state === "READY" &&
-      (!employee.home_branch_id || employee.home_branch_id === job.branch_id)),
-    [job.branch_id, workforce.data],
+    () => (workforceEligibility.data ?? []).filter((employee) => employee.eligible),
+    [workforceEligibility.data],
   );
   const book = () => {
     const start = new Date(startAt);
@@ -67,7 +79,7 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
       <Field label="Arrival window ends" required helperText={startAt && endAt && new Date(endAt) <= new Date(startAt) ? "Arrival window must end after it starts." : "Customer-facing arrival window; separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
       <Field label="Expected duration (minutes)" required helperText="The occupied technician interval is planned start plus this duration; it is not the full arrival window."><Input type="number" min={15} max={1440} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
       <Field label="Technician" helperText={canAssign ? "Leave Unassigned when Dispatch should decide later." : "Dispatch assignment requires additional authority."} className="sm:col-span-2">
-        <Select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} disabled={!canAssign || workforce.isLoading}>
+        <Select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} disabled={!canAssign || workforceEligibility.isPending}>
           <option value="">Unassigned / Needs Scheduling</option>
           {technicians.map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} — {employee.employee_number}</option>)}
         </Select>
