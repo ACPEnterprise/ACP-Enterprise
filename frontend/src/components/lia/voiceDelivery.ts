@@ -3,6 +3,30 @@ import type { SpokenResponseMode } from "./voiceSpeech";
 export type PauseIntent = "NATURAL" | "SHORT" | "DELIBERATE";
 export type QuestionContourIntent = "GENTLE_RISE" | "NEUTRAL";
 export type DeliveryCategory = "KNOWN" | "LIMITED" | "UNCERTAIN" | "BLOCKER";
+export type LiaDeliveryIntent =
+  | "CONCISE_ANSWER"
+  | "NEUTRAL_EXPLANATION"
+  | "CLARIFICATION"
+  | "QUESTION"
+  | "REASSURANCE"
+  | "WARNING"
+  | "OWNER_BRIEF"
+  | "STEP_BY_STEP";
+
+export interface LiaThoughtGroup {
+  readonly text: string;
+  readonly pauseAfterMs: number;
+  readonly relativeRate: number;
+  readonly pitch: number;
+  readonly emphasis: "NEUTRAL" | "SELECTIVE";
+}
+
+export interface LiaDeliveryPlan {
+  readonly version: "lia-delivery-plan.v1";
+  readonly intent: LiaDeliveryIntent;
+  readonly semanticText: string;
+  readonly groups: readonly LiaThoughtGroup[];
+}
 
 export interface LiaDeliveryStyle {
   readonly version: "lia-delivery-style.v1";
@@ -158,4 +182,108 @@ export function applyBrowserDeliveryStyle(
   utterance.pitch = style.platformMapping.pitch;
   utterance.volume = style.platformMapping.volume;
   utterance.voice = voice;
+}
+
+const intentRate: Record<LiaDeliveryIntent, number> = {
+  CONCISE_ANSWER: 0.98,
+  NEUTRAL_EXPLANATION: 0.94,
+  CLARIFICATION: 0.91,
+  QUESTION: 0.93,
+  REASSURANCE: 0.95,
+  WARNING: 0.89,
+  OWNER_BRIEF: 0.92,
+  STEP_BY_STEP: 0.9,
+};
+
+const bounded = (value: number, minimum: number, maximum: number) =>
+  Math.min(maximum, Math.max(minimum, value));
+
+const normalized = (value: string) => value.trim().replace(/\s+/g, " ");
+
+function boundaryPause(character: string, intent: LiaDeliveryIntent): number {
+  if (character === "?" || intent === "CLARIFICATION" || intent === "QUESTION") return 260;
+  if (character === "!" || intent === "WARNING") return 300;
+  if (character === ":" || character === ";" || character === "—") return 210;
+  return intent === "OWNER_BRIEF" || intent === "STEP_BY_STEP" ? 240 : 170;
+}
+
+function splitThoughtGroups(text: string): string[] {
+  const source = normalized(text);
+  if (!source) return [];
+  const groups: string[] = [];
+  let start = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1] ?? "";
+    const previous = source[index - 1] ?? "";
+    const hard = ".!?".includes(character) && /\s/.test(next) &&
+      !(character === "." && /\d/.test(previous) && /\d/.test(next));
+    const soft = ";:—".includes(character) && /\s/.test(next);
+    const comma = character === "," && /\s/.test(next) &&
+      source.slice(start, index).trim().split(/\s+/).length >= 9;
+    if (!hard && !soft && !comma) continue;
+    groups.push(source.slice(start, index + 1).trim());
+    start = index + 1;
+  }
+  const remainder = source.slice(start).trim();
+  if (remainder) groups.push(remainder);
+  return groups.filter(Boolean);
+}
+
+export function inferDeliveryIntent(
+  text: string,
+  style: LiaDeliveryStyle,
+): LiaDeliveryIntent {
+  const lower = text.toLocaleLowerCase();
+  if (/\b(first|second|third|next step|then)\b/.test(lower)) return "STEP_BY_STEP";
+  if (/\b(?:briefing|today\b|needs your attention\b)/.test(lower)) return "OWNER_BRIEF";
+  if (style.deliveryCategory === "BLOCKER" || /\b(warning|overdue|conflict|cannot|can't)\b/.test(lower)) return "WARNING";
+  if (text.trim().endsWith("?")) {
+    return /\b(which|what did you mean|do you mean|which one)\b/.test(lower)
+      ? "CLARIFICATION"
+      : "QUESTION";
+  }
+  if (/\b(ready|complete|all clear|on track)\b/.test(lower)) return "REASSURANCE";
+  if (style.responseMode === "BRIEF") return "CONCISE_ANSWER";
+  return "NEUTRAL_EXPLANATION";
+}
+
+export function createDeliveryPlan(
+  text: string,
+  style: LiaDeliveryStyle,
+  requestedIntent?: LiaDeliveryIntent,
+): LiaDeliveryPlan {
+  const semanticText = normalized(text);
+  const intent = requestedIntent ?? inferDeliveryIntent(semanticText, style);
+  const pieces = splitThoughtGroups(semanticText);
+  const groups = pieces.map((group, index): LiaThoughtGroup => {
+    const finalCharacter = group.at(-1) ?? ".";
+    const material = /(?:\$|%|\b(?:not|missing|unavailable|overdue|conflict|first|next)\b)/i.test(group);
+    const finalGroup = index === pieces.length - 1;
+    const question = finalCharacter === "?";
+    const rateAdjustment = material ? -0.025 : finalGroup ? -0.01 : 0.015;
+    return {
+      text: group,
+      pauseAfterMs: finalGroup ? 0 : boundaryPause(finalCharacter, intent),
+      relativeRate: bounded(intentRate[intent] + rateAdjustment, 0.86, 1),
+      pitch: question ? 1.035 : intent === "WARNING" ? 0.985 : finalGroup ? 0.995 : 1,
+      emphasis: material ? "SELECTIVE" : "NEUTRAL",
+    };
+  });
+  return { version: "lia-delivery-plan.v1", intent, semanticText, groups };
+}
+
+export function deliveryPlanPreservesSemantics(plan: LiaDeliveryPlan): boolean {
+  return normalized(plan.groups.map((group) => group.text).join(" ")) === plan.semanticText;
+}
+
+export function applyBrowserThoughtGroup(
+  utterance: SpeechSynthesisUtterance,
+  style: LiaDeliveryStyle,
+  group: LiaThoughtGroup,
+  voice: SpeechSynthesisVoice | null,
+): void {
+  applyBrowserDeliveryStyle(utterance, style, voice);
+  utterance.rate = group.relativeRate;
+  utterance.pitch = group.pitch;
 }

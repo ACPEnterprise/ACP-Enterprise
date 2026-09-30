@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  applyBrowserDeliveryStyle,
+  applyBrowserThoughtGroup,
+  createDeliveryPlan,
   liaDeliveryStyle,
   normalizeVoiceInventory,
   selectPreferredVoice,
@@ -106,6 +107,7 @@ export function useLiaVoice({
       : (window.localStorage.getItem(VOICE_PREFERENCE_KEY) ?? ""),
   );
   const lastDeliveryStyle = useRef<LiaDeliveryStyle>(liaDeliveryStyle("NORMAL"));
+  const speechRun = useRef(0);
 
   const supported =
     typeof window !== "undefined" &&
@@ -131,6 +133,7 @@ export function useLiaVoice({
   }, []);
 
   const stopSpeaking = useCallback(() => {
+    speechRun.current += 1;
     if (typeof window !== "undefined") window.speechSynthesis?.cancel();
     setState("INTERRUPTED");
   }, []);
@@ -149,6 +152,7 @@ export function useLiaVoice({
       return;
     }
     clearTimers();
+    speechRun.current += 1;
     window.speechSynthesis?.cancel();
     finalTranscript.current = "";
     setInterimTranscript("");
@@ -202,26 +206,20 @@ export function useLiaVoice({
   const speak = useCallback(
     (answer: string, style: LiaDeliveryStyle = liaDeliveryStyle("NORMAL")) => {
       if (!supported || !answer.trim()) return;
+      const run = speechRun.current + 1;
+      speechRun.current = run;
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(answer);
       const voices = voiceInventory.length
         ? voiceInventory
         : (window.speechSynthesis.getVoices?.() ?? []);
-      applyBrowserDeliveryStyle(
-        utterance,
-        style,
-        selectPreferredVoice(voices, {
-          reviewedVoiceIds: selectedVoiceId ? [selectedVoiceId] : [],
-          language: style.language,
-          requireLocal: true,
-        }),
-      );
-      utterance.onstart = () => setState("SPEAKING");
-      utterance.onerror = () => {
-        setError("The spoken response could not be played. The full answer remains visible.");
-        setState("ERROR");
-      };
-      utterance.onend = () => {
+      const selectedVoice = selectPreferredVoice(voices, {
+        reviewedVoiceIds: selectedVoiceId ? [selectedVoiceId] : [],
+        language: style.language,
+        requireLocal: true,
+      });
+      const plan = createDeliveryPlan(answer, style);
+      const finish = () => {
+        if (speechRun.current !== run) return;
         setState("IDLE");
         if (conversationModeRef.current) {
           startListening();
@@ -235,9 +233,35 @@ export function useLiaVoice({
           }, inactivityMs);
         }
       };
+      const speakGroup = (index: number) => {
+        if (speechRun.current !== run) return;
+        const group = plan.groups[index];
+        if (!group) {
+          finish();
+          return;
+        }
+        const utterance = new SpeechSynthesisUtterance(group.text);
+        applyBrowserThoughtGroup(utterance, style, group, selectedVoice);
+        utterance.onstart = () => setState("SPEAKING");
+        utterance.onerror = () => {
+          if (speechRun.current !== run) return;
+          speechRun.current += 1;
+          setError("The spoken response could not be played. The full answer remains visible.");
+          setState("ERROR");
+        };
+        utterance.onend = () => {
+          if (speechRun.current !== run) return;
+          if (index === plan.groups.length - 1) {
+            finish();
+            return;
+          }
+          window.setTimeout(() => speakGroup(index + 1), group.pauseAfterMs);
+        };
+        window.speechSynthesis.speak(utterance);
+      };
       setLastSpokenAnswer(answer);
       lastDeliveryStyle.current = style;
-      window.speechSynthesis.speak(utterance);
+      speakGroup(0);
     },
     [inactivityMs, selectedVoiceId, startListening, supported, voiceInventory],
   );
@@ -255,6 +279,7 @@ export function useLiaVoice({
   }, [startListening]);
 
   const endConversation = useCallback(() => {
+    speechRun.current += 1;
     conversationModeRef.current = false;
     setConversationMode(false);
     clearTimers();
@@ -266,6 +291,7 @@ export function useLiaVoice({
   }, [clearTimers]);
 
   const cancel = useCallback(() => {
+    speechRun.current += 1;
     conversationModeRef.current = false;
     setConversationMode(false);
     clearTimers();

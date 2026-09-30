@@ -6,11 +6,15 @@ from uuid import UUID
 
 import httpx
 import pytest
+from fastapi import FastAPI
+
 from app.beacon.active_recommendations import (
     ActiveRecommendationReasoner,
     CustomerAdmissionGapFact,
     LuminaryFindingFact,
+    MarketingReadinessGapFact,
     PayrollReadinessGapFact,
+    QboReadinessGapFact,
     ReadinessAdapterEvaluation,
     SchedulingGapFact,
     active_recommendation_service,
@@ -21,7 +25,6 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from app.platform.permissions.dependencies import get_authorization_context
-from fastapi import FastAPI
 
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
 
@@ -146,6 +149,57 @@ def test_payroll_adapter_exposes_only_aggregate_readiness_blockers() -> None:
     assert item.responsibility == "ACCOUNTANT"
     assert item.action_destination == "Payroll → First real Payroll readiness"
     assert "tax values remain protected" in item.limitations[0]
+
+
+def test_qbo_adapter_uses_canonical_dispositions_without_financial_inference() -> None:
+    item = ActiveRecommendationReasoner().reason(
+        qbo=(
+            QboReadinessGapFact(
+                UUID("55555555-5555-4555-8555-555555555555"),
+                100,
+                20,
+                60,
+                20,
+                18,
+                "d" * 64,
+                NOW,
+            ),
+        ),
+        evaluated_at=NOW,
+    )[0]
+
+    assert "20 quarantined" in item.measured_fact
+    assert "18 open review items" in item.measured_fact
+    assert item.responsibility == "ACCOUNTANT"
+    assert item.action_destination == (
+        "Accounting → QuickBooks Migration / Review Queue"
+    )
+    assert "no financial impact is inferred" in item.priority_reason
+
+
+def test_marketing_adapter_preserves_provider_readiness_without_performance_claim() -> (
+    None
+):
+    item = ActiveRecommendationReasoner().reason(
+        marketing=(
+            MarketingReadinessGapFact(
+                UUID("55555555-5555-4555-8555-555555555555"),
+                "configuration_required",
+                0,
+                False,
+                ("developer_token_not_configured",),
+                "e" * 64,
+                NOW,
+            ),
+        ),
+        evaluated_at=NOW,
+    )[0]
+
+    assert "0 accounts are bound" in item.measured_fact
+    assert "live ingestion is disabled" in item.measured_fact
+    assert item.responsibility == "OWNER"
+    assert item.action_destination == "Marketing → Provider Connections"
+    assert "no campaign performance" in item.priority_reason
 
 
 def test_measured_luminary_finding_recommends_investigation_not_employment_action() -> (
