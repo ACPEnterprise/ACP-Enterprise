@@ -16,6 +16,8 @@ import {
   reverseInventoryMaterialIssue,
   recordCycleCount,
   startCycleCount,
+  admitCommonStockSeed,
+  previewCommonStockSeed,
 } from "../api/inventory";
 import type {
   CycleCountRecord,
@@ -71,6 +73,11 @@ export function useInventoryMutations() {
     client.invalidateQueries({ queryKey: inventoryKeys.all });
   return {
     createItem: useMutation({ mutationFn: createInventoryItem, onSuccess: refresh }),
+    previewCommonStockSeed: useMutation({ mutationFn: previewCommonStockSeed }),
+    admitCommonStockSeed: useMutation({
+      mutationFn: admitCommonStockSeed,
+      onSuccess: refresh,
+    }),
     createLocation: useMutation({
       mutationFn: createInventoryLocation,
       onSuccess: refresh,
