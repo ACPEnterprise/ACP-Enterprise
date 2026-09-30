@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+import json
+from collections.abc import Mapping
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
+from app.database.session import AsyncSessionFactory
 from app.platform.auth.errors import RateLimitExceededError, RateLimitUnavailableError
 from app.platform.auth.rate_limit import AuthenticationRateLimiter
 from app.platform.permissions.authorization import AuthorizationContext
@@ -24,8 +28,18 @@ from .accounting_evidence_projection import (
     project_latest_qbo_workspace,
     unavailable_qbo_workspace,
 )
+from .bounded_evidence import (
+    BoundedEvidenceError,
+    latest_bounded_evidence,
+    load_bounded_envelopes,
+)
 from .callback import CALLBACK_PATH
 from .intuit import IntuitAuthenticationError, IntuitError, IntuitProtocolError
+from .native_application import (
+    FamilyDispositionCount,
+    QboApplicationError,
+    qbo_native_application_service,
+)
 from .production import (
     ProductionAgedReceivablesRequest,
     ProductionProfitAndLossRequest,
@@ -50,6 +64,19 @@ _ReportRead = Annotated[
     AuthorizationContext,
     Depends(require_permission(AccountingPermission.REPORT_READ)),
 ]
+_Reconcile = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AccountingPermission.RECONCILE)),
+]
+
+
+def get_qbo_application_session_factory() -> async_sessionmaker[AsyncSession]:
+    return AsyncSessionFactory
+
+
+_ApplicationFactory = Annotated[
+    async_sessionmaker[AsyncSession], Depends(get_qbo_application_session_factory)
+]
 
 AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize"
 CONNECTION_PATH = "/api/v1/integrations/qbo/connection"
@@ -65,6 +92,8 @@ PROFIT_AND_LOSS_PATH = "/api/v1/accounting/source-evidence/qbo/reports/profit-an
 AGED_RECEIVABLES_PATH = (
     "/api/v1/accounting/source-evidence/qbo/reports/aged-receivables"
 )
+NATIVE_APPLICATION_PATH = "/api/v1/accounting/source-evidence/qbo/native-application"
+NATIVE_REVIEW_PATH = f"{NATIVE_APPLICATION_PATH}/review-queue"
 _PRODUCTION_CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com"
     "/api/v1/integrations/qbo/production/oauth/callback"
@@ -75,6 +104,145 @@ _SAFE_HEADERS = {
     "Pragma": "no-cache",
     "Referrer-Policy": "no-referrer",
 }
+
+
+def _family_count_response(item: FamilyDispositionCount) -> dict[str, object]:
+    return {
+        "source_family": item.source_family,
+        "total_source": item.total,
+        "applied": item.applied,
+        "bound": item.bound,
+        "quarantined": item.quarantined,
+        "provider_unavailable": item.provider_unavailable,
+        "unsupported": item.unsupported,
+        "rejected": item.rejected,
+        "unexplained": item.unexplained,
+        "safe_majority_applied_percentage": item.safe_majority_applied_percentage,
+    }
+
+
+@router.post(NATIVE_APPLICATION_PATH, name="qbo-native-clean-majority-application")
+async def apply_qbo_native_clean_majority(
+    authorization: _Reconcile,
+    factory: _ApplicationFactory,
+) -> JSONResponse:
+    """Apply sealed QBO evidence only; never call or mutate QuickBooks."""
+    if (
+        not settings.qbo_production_acp_company_id
+        or settings.qbo_production_acp_company_id != authorization.company.id
+        or not settings.qbo_production_evidence_root
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "Sealed QBO Production evidence is unavailable."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        packet = latest_bounded_evidence(Path(settings.qbo_production_evidence_root))
+        if packet is None:
+            raise BoundedEvidenceError("bounded_source_unavailable")
+        catalog_dispositions = packet.manifest.get("catalog_dispositions", [])
+        if not isinstance(catalog_dispositions, list):
+            raise BoundedEvidenceError("bounded_catalog_dispositions_invalid")
+        acquired_at = datetime.fromisoformat(str(packet.manifest["ended_at"]))
+        for disposition in catalog_dispositions:
+            if not isinstance(disposition, Mapping):
+                raise BoundedEvidenceError("bounded_catalog_dispositions_invalid")
+            state = str(disposition.get("disposition", ""))
+            family = str(disposition.get("entity_kind", ""))
+            if "UNAVAILABLE" not in state or not family:
+                continue
+            encoded = json.dumps(
+                dict(disposition), sort_keys=True, separators=(",", ":")
+            ).encode()
+            await qbo_native_application_service.record_provider_unavailable(
+                factory,
+                context=authorization,
+                realm_id=str(packet.bounded_manifest["realm_id"]),
+                source_family=family,
+                reason_code="provider_family_unavailable",
+                explanation=(
+                    "QuickBooks did not provide this source family in the sealed "
+                    "bounded acquisition."
+                ),
+                evidence_digest=hashlib.sha256(encoded).hexdigest(),
+                acquired_at=acquired_at,
+            )
+        result = await qbo_native_application_service.apply_clean_majority(
+            factory,
+            context=authorization,
+            envelopes=load_bounded_envelopes(packet),
+        )
+    except (KeyError, OSError, ValueError, BoundedEvidenceError, QboApplicationError):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "Sealed QBO evidence could not be applied safely."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return JSONResponse(
+        content={
+            "classification": "QBO_NATIVE_CLEAN_MAJORITY_PROCESSED",
+            "source_run_id": packet.manifest.get("run_id"),
+            "source_manifest_sha256": packet.manifest_sha256,
+            "processed": result.processed,
+            "created": result.created,
+            "replayed": result.replayed,
+            "families": [
+                _family_count_response(item) for item in result.family_counts
+            ],
+            "qbo_write_performed": False,
+            "accounting_posting_performed": False,
+        },
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.get(NATIVE_APPLICATION_PATH, name="qbo-native-application-ledger")
+async def qbo_native_application_ledger(
+    authorization: _Reconcile,
+    factory: _ApplicationFactory,
+) -> JSONResponse:
+    counts = await qbo_native_application_service.family_counts(
+        factory, context=authorization
+    )
+    return JSONResponse(
+        content={"families": [_family_count_response(item) for item in counts]},
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.get(NATIVE_REVIEW_PATH, name="qbo-native-review-queue")
+async def qbo_native_review_queue(
+    authorization: _Reconcile,
+    factory: _ApplicationFactory,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> JSONResponse:
+    items = await qbo_native_application_service.open_review_items(
+        factory, context=authorization, limit=limit
+    )
+    return JSONResponse(
+        content={
+            "items": [
+                {
+                    "id": str(item.id),
+                    "source_family": item.source_family,
+                    "provider_record_id": item.provider_record_id,
+                    "reference_number": item.reference_number,
+                    "source_date": item.source_date,
+                    "source_amount": item.source_amount,
+                    "source_entity_names": item.source_entity_names,
+                    "candidate_native_ids": item.candidate_native_ids,
+                    "conflicting_fields": item.conflicting_fields,
+                    "exact_conflict": item.exact_conflict,
+                    "affected_dependents": item.affected_dependents,
+                    "allowed_actions": item.allowed_actions,
+                    "state": item.state,
+                }
+                for item in items
+            ]
+        },
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get(ACCOUNTING_EVIDENCE_PATH, name="qbo-accounting-source-evidence")

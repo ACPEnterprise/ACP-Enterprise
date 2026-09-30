@@ -1,5 +1,7 @@
 from logging.config import fileConfig
 
+from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 from app.accounts_payable import models as accounts_payable_models  # noqa: F401
 from app.beacon import models as beacon_models  # noqa: F401
@@ -57,6 +59,7 @@ from app.inventory import models as inventory_models  # noqa: F401
 from app.invoicing import models as invoicing_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.luminary import models as luminary_models  # noqa: F401
+from app.marketing import models as marketing_models  # noqa: F401
 from app.operational_assets import models as operational_asset_models  # noqa: F401
 from app.operational_measurement import (
     models as operational_measurement_models,  # noqa: F401
@@ -79,11 +82,15 @@ from app.platform.idempotency import models as idempotency_models  # noqa: F401
 from app.platform.notifications import models as notification_models  # noqa: F401
 from app.platform.onboarding import models as onboarding_models  # noqa: F401
 from app.platform.permissions import models as permission_models  # noqa: F401
+from app.platform.provider_connections import (
+    models as provider_connection_models,  # noqa: F401
+)
 from app.platform.users import identity_models  # noqa: F401
 from app.platform.users import models as user_models  # noqa: F401
 from app.price_book import models as price_book_models  # noqa: F401
 from app.procurement_matching import models as procurement_matching_models  # noqa: F401
 from app.purchasing import models as purchasing_models  # noqa: F401
+from app.qbo_source import application_models as qbo_application_models  # noqa: F401
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.service_agreements import models as service_agreement_models  # noqa: F401
 from app.tax_policy import models as tax_policy_models  # noqa: F401
@@ -94,7 +101,6 @@ from app.worker_control.transport.persistence import (
 )
 from app.worker_identity import models as worker_identity_models  # noqa: F401
 from app.workforce import models as workforce_models  # noqa: F401
-from sqlalchemy import engine_from_config, pool
 
 config = context.config
 

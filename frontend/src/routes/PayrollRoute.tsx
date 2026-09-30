@@ -7,6 +7,7 @@ import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup";
 import { PayrollCutoverReview } from "../components/payroll/PayrollCutoverReview";
+import { PayrollPolicySetup } from "../components/payroll/PayrollPolicySetup";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
 
@@ -109,11 +110,12 @@ export function PayrollRoute() {
         <Card><CardHeader><CardTitle>Checks to write</CardTitle><CardDescription>Paper-check evidence only</CardDescription></CardHeader><CardContent className="text-xl font-bold">{value.payment_counts.issued ?? 0}</CardContent></Card>
       </section>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
+      <PayrollPolicySetup />
       {canReadCutover && <PayrollCutoverReview />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
         {value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.
       </Alert>
-      <Card>
+      <Card id="pay-periods">
         <CardHeader>
           <CardTitle>Pay Periods</CardTitle>
           <CardDescription>Company-scoped, immutable Payroll calendar authority. Creating a period does not calculate or execute Payroll.</CardDescription>
@@ -143,7 +145,7 @@ export function PayrollRoute() {
           ) : <Alert variant="information">Pay-period administration requires Payroll policy management authority.</Alert>}
         </CardContent>
       </Card>
-      <Card>
+      <Card id="payroll-period-review">
         <CardHeader>
           <CardTitle>Current pay-period review</CardTitle>
           <CardDescription>Accepted time through compensation, withholding, and gross-pay readiness. This view does not calculate or transmit Payroll.</CardDescription>
@@ -173,6 +175,48 @@ export function PayrollRoute() {
           )}
           {periodOperations.data && (
             <div className="space-y-4">
+              {(() => {
+                const employees = periodOperations.data.employees;
+                const policyReady = periodOperations.data.policy_readiness === "READY";
+                const compensationReady = employees.length > 0 && employees.every((employee) => employee.compensation_readiness === "READY");
+                const withholdingReady = employees.length > 0 && employees.every((employee) => employee.withholding_readiness === "READY");
+                const timeReady = employees.length > 0 && employees.every((employee) => !employee.exception_codes.includes("TIME_EVIDENCE_MISSING"));
+                const employeeReady = employees.length > 0 && employees.every((employee) => employee.exception_codes.length === 0);
+                const checklist = [
+                  { label: "Approved Payroll policy", state: policyReady, owner: "Owner / Payroll admin", detail: policyReady ? "Approved policy governs this period." : `Policy is ${label(periodOperations.data.policy_readiness)}. Configure or approve it in Pay Period administration.`, href: "#pay-periods" },
+                  { label: "Canonical Employees", state: employees.length > 0, owner: "Owner / Workforce admin", detail: employees.length > 0 ? `${employees.length} Employee(s) are in the selected period.` : "No canonical Employees are available; do not create a synthetic payroll population.", href: "#payroll-period-review" },
+                  { label: "Compensation authority", state: compensationReady, owner: "Owner / Payroll admin", detail: compensationReady ? "Every included Employee has effective compensation." : "Open each Employee’s Payroll setup to enter and approve compensation.", href: "#payroll-period-review" },
+                  { label: "W-4, jurisdiction, and tax inputs", state: withholdingReady, owner: "Employee / Accountant", detail: withholdingReady ? "Required withholding and jurisdiction authority is approved." : "The Employee or accountant must provide W-4, work/residence jurisdiction, and withholding evidence.", href: "#payroll-period-review" },
+                  { label: "Deductions and opening/YTD evidence", state: value.history_ready && withholdingReady, owner: "Accountant", detail: value.history_ready && withholdingReady ? "Opening/YTD history and deduction authority are available." : "Accountant evidence is required for deductions and opening/YTD history; no value is inferred.", href: "#payroll-period-review" },
+                  { label: "Accepted time", state: timeReady, owner: "Manager / Timekeeper", detail: timeReady ? "Accepted time is present for the selected period." : "Resolve missing or unaccepted time in the linked Timecard before assembly.", href: "#payroll-period-review" },
+                  { label: "Ready to assemble", state: employeeReady && policyReady && value.history_ready, owner: "Payroll operator", detail: employeeReady && policyReady && value.history_ready ? "All visible prerequisites are satisfied; Assemble Payroll is available." : "Resolve the rows above before assembling. Payroll will fail closed while any blocker remains.", href: "#payroll-period-review" },
+                ];
+                return (
+                  <Card id="payroll-readiness-checklist">
+                    <CardHeader>
+                      <CardTitle>First real Payroll readiness</CardTitle>
+                      <CardDescription>One owner-facing checklist for the selected period. Evidence is read from canonical authority; nothing is inferred or entered by this screen.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[760px] text-left text-sm">
+                          <thead><tr className="text-content-muted"><th className="pb-2">Requirement</th><th>State</th><th>Who provides it</th><th>Next action</th></tr></thead>
+                          <tbody>
+                            {checklist.map((item) => (
+                              <tr className="border-t border-stroke align-top" key={item.label}>
+                                <td className="py-3 font-semibold">{item.label}</td>
+                                <td className="py-3">{item.state ? "READY" : "ACTION REQUIRED"}</td>
+                                <td className="py-3">{item.owner}</td>
+                                <td className="py-3"><span>{item.detail}</span>{!item.state && <Link className="ml-2 font-semibold text-action-primary underline" to={item.href}>Open setup</Link>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="font-semibold">
                   Pay period

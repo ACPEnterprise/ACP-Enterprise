@@ -150,8 +150,23 @@ export type PayrollInputDraft = {
   protected_values?: Record<string, unknown> | null; supersedes_authority_id?: string | null; audit_reason: string;
 };
 
+export interface PayrollPolicyStatus {
+  configured: boolean;
+  policy: { id: string; version: number; effective_start: string; effective_end: string | null; definition: Record<string, unknown> } | null;
+  drafts: Array<{ id: string; version: number; effective_start: string; reason: string }>;
+}
+
 export async function getPayrollOperationsSummary(): Promise<PayrollOperationsSummary> {
   return (await apiClient.get<PayrollOperationsSummary>("/api/v1/payroll/operations/summary")).data;
+}
+export async function getPayrollPolicy(): Promise<PayrollPolicyStatus> {
+  return (await apiClient.get<PayrollPolicyStatus>("/api/v1/payroll/operator/policy")).data;
+}
+export async function draftPayrollPolicy(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return (await apiClient.post("/api/v1/payroll/operator/policy/draft", body)).data;
+}
+export async function approvePayrollPolicy(policyId: string): Promise<Record<string, unknown>> {
+  return (await apiClient.post(`/api/v1/payroll/operator/policy/${policyId}/approve`)).data;
 }
 
 export async function listPayrollReports(): Promise<PayrollReportMetadata[]> {

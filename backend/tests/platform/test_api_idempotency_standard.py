@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.main import app
 from app.platform.contracts.manifest import platform_contract_manifest
 from app.platform.idempotency.contracts import (
@@ -95,7 +96,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 353
+    assert len(operations) == len(coverage) == 358
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -147,7 +148,7 @@ def test_append_only_classification_requires_concrete_replay_evidence() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.APPEND_ONLY
     )
-    assert len(append_only) == 6
+    assert len(append_only) == 8
     assert all(entry.replay_evidence for entry in append_only)
     for entry in append_only:
         for evidence_path in entry.replay_evidence:

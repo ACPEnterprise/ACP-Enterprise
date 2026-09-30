@@ -18,6 +18,8 @@
     {"classification":"IDEMPOTENCY_REQUIRED","domain":"payroll","mechanism":"Company-scoped paper-check evidence identity, replay key, and unique check number","method":"POST","operation_id":"issue_paper_check_api_v1_payroll_operator_runs__run_id__paper_checks_post","path":"/api/v1/payroll/operator/runs/{run_id}/paper-checks","reason":"Paper-check issuance records one append-only evidence row per replay identity without executing payment.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"IDEMPOTENCY_REQUIRED","domain":"payroll","mechanism":"Company-scoped void replay identity, locked original evidence, and append-only replacement row","method":"POST","operation_id":"void_paper_check_api_v1_payroll_operator_paper_checks__check_id__void_post","path":"/api/v1/payroll/operator/paper-checks/{check_id}/void","reason":"Void evidence is append-only; exact replay converges and contradictory reuse fails closed.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"IDEMPOTENCY_REQUIRED","domain":"payroll","mechanism":"Company-scoped reissue replay identity, voided predecessor linkage, and unique check number","method":"POST","operation_id":"reissue_paper_check_api_v1_payroll_operator_runs__run_id__paper_checks_reissue_post","path":"/api/v1/payroll/operator/runs/{run_id}/paper-checks/reissue","reason":"Reissue creates one successor evidence row linked to the voided check and never executes payment.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"EXPLICIT_EXEMPTION","domain":"payroll","mechanism":"Company-scoped versioned policy authority with unique policy version and audit evidence","method":"POST","operation_id":"draft_payroll_policy_api_v1_payroll_operator_policy_draft_post","path":"/api/v1/payroll/operator/policy/draft","reason":"Draft policy creation is an owner-input command without a replay key; duplicate policy versions are rejected by the authority uniqueness contract.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"payroll","mechanism":"Company-scoped policy row state transition and immutable approval evidence","method":"POST","operation_id":"approve_payroll_policy_api_v1_payroll_operator_policy__policy_id__approve_post","path":"/api/v1/payroll/operator/policy/{policy_id}/approve","reason":"Approval transitions one draft to approved authority and rejects repeat or contradictory transitions.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "factory_control",
@@ -3325,8 +3327,44 @@
       "path": "/api/v1/pipeline/{lead_id}/contacts",
       "reason": "Contact activity replay cannot increment attempts or advance lifecycle twice.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company-scoped sealed provider identity and version ledger with deterministic exact replay and independent conflict quarantine",
+      "method": "POST",
+      "operation_id": "qbo_native_clean_majority_application_api_v1_accounting_source_evidence_qbo_native_application_post",
+      "path": "/api/v1/accounting/source-evidence/qbo/native-application",
+      "reason": "Clean-majority application binds each exact QBO provider version once, returns deterministic replay, and quarantines contradictory evidence without duplicating native authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "marketing",
+      "mechanism": "Company-scoped confirmation key, canonical request digest, typed target, and append-only assignment",
+      "method": "POST",
+      "operation_id": "manual_confirmation_api_v1_marketing_attributions_manual_confirmation_post",
+      "path": "/api/v1/marketing/attributions/manual-confirmation",
+      "reason": "Exact replay returns the existing attribution; corrections append a superseding assignment and contradictory key reuse fails closed.",
+      "replay_evidence": [
+        "tests/marketing/test_marketing_foundation.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "marketing",
+      "mechanism": "Unique Company/provider-account/Branch owner binding",
+      "method": "POST",
+      "operation_id": "bind_google_ads_account_api_v1_marketing_google_ads_account_bindings_post",
+      "path": "/api/v1/marketing/google-ads/account-bindings",
+      "reason": "An explicitly selected Google Ads account is bound once per Company and Branch; duplicate submission fails closed.",
+      "replay_evidence": [
+        "tests/marketing/test_google_ads_readonly.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "3a6101839684b240b484f88107a22d9887fcfc68dd7e97f73ee100c998fb9a0f",
+  "fingerprint": "b39208599a75f7c57b5505d6fe1e5ea98107436e2299c7cb7130a93679dc54ee",
   "schema_version": "1"
 }
