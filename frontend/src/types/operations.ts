@@ -1,4 +1,6 @@
 import type { JobPriority } from "./jobs";
+import type { DispatchAssignment } from "./dispatch";
+import type { AppointmentDetail } from "./scheduling";
 
 export interface ServiceRequestCreateInput {
   request_id: string;
@@ -39,4 +41,21 @@ export interface ExistingJobScheduleResult {
   request_id: string;
   appointment: { id: string; appointment_number: string };
   job: { id: string; job_number: string };
+}
+
+export interface CalendarPlacementInput {
+  request_id: string;
+  expected_appointment_version: number;
+  expected_assignment_version: number | null;
+  employee_id: string;
+  arrival_window_start_at: string;
+  arrival_window_end_at: string;
+  expected_duration_minutes: number;
+  capacity_units: string;
+  reason: string;
+}
+
+export interface CalendarPlacementResult {
+  appointment: AppointmentDetail;
+  assignment: DispatchAssignment;
 }

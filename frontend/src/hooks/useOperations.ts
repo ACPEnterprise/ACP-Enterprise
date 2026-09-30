@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { assignPrimary } from "../api/dispatch";
-import { createServiceRequest, scheduleExistingJob } from "../api/operations";
+import { createServiceRequest, placeCalendarAppointment, scheduleExistingJob } from "../api/operations";
 import type { ExistingJobScheduleInput, ServiceRequestCreateInput } from "../types/operations";
 import { jobKeys } from "./useJobs";
 import { appointmentKeys } from "./useScheduling";
@@ -14,6 +14,20 @@ export function useCreateServiceRequest() {
       await Promise.all([
         client.invalidateQueries({ queryKey: appointmentKeys.lists() }),
         client.invalidateQueries({ queryKey: jobKeys.lists() }),
+        client.invalidateQueries({ queryKey: ["dispatch"] }),
+      ]);
+    },
+  });
+}
+
+export function useCalendarPlacement() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ appointmentId, input }: { appointmentId: string; input: Parameters<typeof placeCalendarAppointment>[1] }) =>
+      placeCalendarAppointment(appointmentId, input),
+    onSettled: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["appointments"] }),
         client.invalidateQueries({ queryKey: ["dispatch"] }),
       ]);
     },

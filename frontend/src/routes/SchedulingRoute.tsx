@@ -17,6 +17,7 @@ import { DispatchRecommendationPanel } from "../components/dispatch/DispatchReco
 import { activeDispatchAssignment } from "../components/dispatch/dispatchOperations";
 import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
 import { CalendarReadinessCard } from "../components/scheduling/CalendarReadinessCard";
+import { quarterHourDropMinute } from "../components/scheduling/calendarDragDrop";
 import {
   calendarIssues,
   CURRENT_CALENDAR_QUERY_RANGE,
@@ -35,6 +36,7 @@ import {
   operationalJobStatuses,
 } from "../components/dispatch/dispatchPresentation";
 import { useDispatchBoard } from "../hooks/useDispatch";
+import { useCalendarPlacement } from "../hooks/useOperations";
 import { useJobs } from "../hooks/useJobs";
 import {
   useBranchCalendarRoster,
@@ -349,6 +351,8 @@ export function SchedulingRoute({
     searchParams.get("appointment"),
   );
   const [booking, setBooking] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
+  const calendarPlacement = useCalendarPlacement();
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
   const branchPolicy = useBranchSchedulingPolicy(branchId || undefined);
@@ -513,6 +517,56 @@ export function SchedulingRoute({
   const selectAppointment = (appointment: AppointmentDetail) =>
     setSelectedId(appointment.id);
 
+  const moveAppointment = async (
+    appointment: AppointmentDetail,
+    employeeId: string,
+    startMinute: number,
+  ) => {
+    setDropError(null);
+    if (isCapacityUnreconciled(appointment)) {
+      setDropError("Imported Appointment has no reconciled capacity reservation and cannot be moved.");
+      return;
+    }
+    const currentStart = appointment.arrival_window_start_at
+      ? new Date(appointment.arrival_window_start_at)
+      : null;
+    const currentEnd = appointment.arrival_window_end_at
+      ? new Date(appointment.arrival_window_end_at)
+      : null;
+    if (!currentStart || !currentEnd) {
+      setDropError("Appointment has no authoritative arrival window.");
+      return;
+    }
+    const startAt = new Date(`${date}T00:00:00`);
+    startAt.setMinutes(startMinute);
+    const endAt = new Date(startAt.getTime() + (currentEnd.getTime() - currentStart.getTime()));
+    try {
+      if (employeeId === UNASSIGNED_LANE.id) {
+        setDropError("Use the accessible Release assignment control to move work back to Unassigned.");
+        return;
+      }
+      const dispatchItem = dispatchByAppointment.get(appointment.id);
+      const assignment = dispatchItem ? activeDispatchAssignment(dispatchItem) : null;
+      const placed = await calendarPlacement.mutateAsync({
+        appointmentId: appointment.id,
+        input: {
+          request_id: crypto.randomUUID(),
+          expected_appointment_version: appointment.concurrency_version,
+          expected_assignment_version: assignment?.version ?? null,
+          employee_id: employeeId,
+          arrival_window_start_at: startAt.toISOString(),
+          arrival_window_end_at: endAt.toISOString(),
+          expected_duration_minutes: appointment.expected_duration_minutes ?? 60,
+          capacity_units: appointment.capacity_units ?? "1.00",
+          reason: "Calendar drag/drop",
+        },
+      });
+      setSelectedId(placed.appointment.id);
+    } catch (error) {
+      setDropError(schedulingMutationRecovery(error, "appointment move").message);
+    }
+  };
+
   if (!activeCompany)
     return (
       <Alert variant="danger" title="Company scope unavailable">
@@ -574,6 +628,7 @@ export function SchedulingRoute({
           returnTo={returnTo}
         />
       )}
+      {dropError && <Alert variant="danger" title="Calendar move not saved">{dropError} The board has refreshed authoritative state.</Alert>}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto">
@@ -895,6 +950,8 @@ export function SchedulingRoute({
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
             onSelect={selectAppointment}
+            canManage={canManage && canDispatchManage}
+            onMove={moveAppointment}
           />
         ) : view === "day" ? (
           <DispatchTimeline
@@ -997,6 +1054,8 @@ function DayCalendar({
   dispatchByAppointment,
   jobsById,
   onSelect,
+  canManage,
+  onMove,
 }: {
   readonly date: string;
   readonly items: readonly AppointmentDetail[];
@@ -1005,6 +1064,8 @@ function DayCalendar({
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
+  readonly canManage: boolean;
+  readonly onMove: (item: AppointmentDetail, employeeId: string, startMinute: number) => Promise<void>;
 }) {
   const selectedDay = new Date(`${date}T12:00:00`);
   const operating = policyMinutes(policy, selectedDay);
@@ -1091,6 +1152,30 @@ function DayCalendar({
             ))}
           </div>
           <div className="relative" style={{ height: `${visibleMinutes}px` }}>
+            {canManage && lanes.map((lane, laneIndex) => (
+              <div
+                key={`drop-${lane.id}`}
+                aria-label={`Drop Appointment on ${lane.label}`}
+                className="absolute inset-y-0 z-[1]"
+                style={{
+                  left: `calc(5rem + ${laneIndex} * ((100% - 5rem) / ${lanes.length}))`,
+                  width: `calc((100% - 5rem) / ${lanes.length})`,
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const appointment = items.find((item) => item.id === event.dataTransfer.getData("text/appointment-id"));
+                  if (!appointment) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const quarterHour = quarterHourDropMinute(
+                    startMinuteOfDay,
+                    visibleMinutes,
+                    event.clientY - rect.top,
+                  );
+                  void onMove(appointment, lane.id, quarterHour);
+                }}
+              />
+            ))}
             {Array.from({ length: hourCount + 1 }, (_, index) => (
               <div
                 className="absolute inset-x-0 border-t border-stroke"
@@ -1147,8 +1232,13 @@ function DayCalendar({
                   type="button"
                   aria-label={`${item.appointment_number}, ${branchTime(item.arrival_window_start_at, policy.timezone)}, ${primaryTechnicianName(dispatch) ?? "unassigned"}, ${appointmentState(item, dispatch, job)}`}
                   onClick={() => onSelect(item)}
+                  draggable={canManage && !isCapacityUnreconciled(item)}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("text/appointment-id", item.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
                   key={item.id}
-                  className="absolute overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm hover:bg-action-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+                  className="absolute z-[2] overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm hover:bg-action-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                   style={{
                     top: `${Math.max(0, startMinutes)}px`,
                     height: `${Math.max(24, Math.min(duration, visibleMinutes - Math.max(0, startMinutes)))}px`,
