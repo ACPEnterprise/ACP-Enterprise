@@ -8,6 +8,15 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customer_migration.models import (
     CustomerMigrationCandidate,
@@ -57,18 +66,10 @@ from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
-from fastapi import FastAPI
 from scripts.customer_population_reconciliation import (
     execute_action as execute_reconciliation_action,
 )
 from scripts.customer_population_reconciliation import parser as reconciliation_parser
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 HAMMER_PROVIDER_ID = "147405829"
 
@@ -847,6 +848,47 @@ async def test_clean_majority_admits_safe_customer_and_quarantines_only_conflict
     assert replay.selected == 0
     assert replay.admitted == replay.replayed == replay.quarantined == 0
     assert replay.remaining_unexplained == 0
+
+
+@pytest.mark.asyncio
+async def test_clean_majority_quarantines_staged_integrity_failure_without_http_500(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory, name="Staged Integrity Failure")
+    provider_id = "staged-integrity-provider"
+    artifact = await stage_hammer(factory, context, provider_id=provider_id)
+    async with factory() as session, session.begin():
+        candidate = await session.scalar(
+            select(CustomerMigrationCandidate)
+            .join(CustomerMigrationSourceRow)
+            .where(
+                CustomerMigrationSourceRow.artifact_id == artifact.id,
+                CustomerMigrationCandidate.entity_type == "contact",
+            )
+        )
+        assert candidate is not None
+        candidate.payload_sha256 = "0" * 64
+
+    result = await CustomerPopulationReconciliationService().admit_clean_majority(
+        factory, context=context
+    )
+
+    assert result.selected == result.quarantined == 1
+    assert result.admitted == result.replayed == result.remaining_unexplained == 0
+    assert result.quarantine_records == (
+        (provider_id, "deterministic_admission_review_required"),
+    )
+    async with factory() as session:
+        command = await session.scalar(
+            select(CustomerPopulationReconciliationCommand).where(
+                CustomerPopulationReconciliationCommand.company_id == context.company.id
+            )
+        )
+        assert command is not None
+        assert command.status == "failed"
+        assert command.error_code == "CustomerAdapterImportError"
+        assert command.completed_at is not None
 
 
 @pytest.mark.asyncio

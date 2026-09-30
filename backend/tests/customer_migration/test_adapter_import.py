@@ -6,6 +6,14 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customer_migration.adapter_import import (
     BOUNDARY_VERSION,
@@ -46,13 +54,6 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 def digest(value: str) -> str:
@@ -509,6 +510,136 @@ async def test_rejects_tampered_review_and_staging_candidate(database) -> None:
         )
         assert candidate is not None
         candidate.payload_sha256 = "0" * 64
+    with pytest.raises(CustomerAdapterImportError, match="staged candidates"):
+        await CustomerAdapterImportService().run(
+            factory,
+            context=context,
+            reviewed=reviewed,
+            boundary=boundary(reviewed),
+        )
+
+
+@pytest.mark.asyncio
+async def test_accepts_immutable_staging_that_predates_additive_schema_defaults(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory)
+    reviewed = review_adapter_output(mock_output(1), source_system="synthetic")
+    await stage_reviewed(factory, context, reviewed)
+
+    async with factory() as session, session.begin():
+        candidates = (
+            await session.scalars(
+                select(CustomerMigrationCandidate)
+                .join(CustomerMigrationSourceRow)
+                .join(CustomerMigrationSourceArtifact)
+                .where(CustomerMigrationSourceArtifact.company_id == context.company.id)
+            )
+        ).all()
+        for candidate in candidates:
+            payload = dict(candidate.payload)
+            if candidate.entity_type == "contact":
+                payload.pop("can_approve_work")
+                payload.pop("relationship_or_role")
+            elif candidate.entity_type in {"service_location", "billing_address"}:
+                payload.pop("is_primary")
+                payload.pop("gate_access_instructions")
+                payload.pop("property_type")
+                payload.pop("sewer_septic")
+                payload.pop("water_shutoff_location")
+            candidate.payload = payload
+            candidate.payload_sha256 = hashlib.sha256(
+                json.dumps(payload, sort_keys=True).encode()
+            ).hexdigest()
+
+    report = await CustomerAdapterImportService().run(
+        factory,
+        context=context,
+        reviewed=reviewed,
+        boundary=boundary(reviewed),
+    )
+
+    assert report.accepted == 1
+
+
+@pytest.mark.asyncio
+async def test_rejects_schema_evolution_candidate_with_changed_staged_value(
+    database,
+) -> None:
+    _, factory = database
+    context = await seed_context(factory)
+    reviewed = review_adapter_output(mock_output(1), source_system="synthetic")
+    await stage_reviewed(factory, context, reviewed)
+
+    async with factory() as session, session.begin():
+        candidate = await session.scalar(
+            select(CustomerMigrationCandidate)
+            .where(CustomerMigrationCandidate.entity_type == "contact")
+            .join(CustomerMigrationSourceRow)
+            .join(CustomerMigrationSourceArtifact)
+            .where(CustomerMigrationSourceArtifact.company_id == context.company.id)
+        )
+        assert candidate is not None
+        payload = {**candidate.payload, "first_name": "Contradictory"}
+        candidate.payload = payload
+        candidate.payload_sha256 = hashlib.sha256(
+            json.dumps(payload, sort_keys=True).encode()
+        ).hexdigest()
+
+    with pytest.raises(CustomerAdapterImportError, match="staged candidates"):
+        await CustomerAdapterImportService().run(
+            factory,
+            context=context,
+            reviewed=reviewed,
+            boundary=boundary(reviewed),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("missing_field", "replacement"),
+    (("first_name", None), ("can_approve_work", True)),
+)
+async def test_rejects_schema_evolution_candidate_with_unsafe_missing_field(
+    database, missing_field: str, replacement: bool | None
+) -> None:
+    _, factory = database
+    context = await seed_context(factory)
+    output = mock_output(1)
+    if replacement is not None:
+        record = output.records[0]
+        assert record.contact is not None
+        output = replace(
+            output,
+            records=(
+                replace(
+                    record,
+                    contact=record.contact.model_copy(
+                        update={"can_approve_work": replacement}
+                    ),
+                ),
+            ),
+        )
+    reviewed = review_adapter_output(output, source_system="synthetic")
+    await stage_reviewed(factory, context, reviewed)
+
+    async with factory() as session, session.begin():
+        candidate = await session.scalar(
+            select(CustomerMigrationCandidate)
+            .where(CustomerMigrationCandidate.entity_type == "contact")
+            .join(CustomerMigrationSourceRow)
+            .join(CustomerMigrationSourceArtifact)
+            .where(CustomerMigrationSourceArtifact.company_id == context.company.id)
+        )
+        assert candidate is not None
+        payload = dict(candidate.payload)
+        payload.pop(missing_field)
+        candidate.payload = payload
+        candidate.payload_sha256 = hashlib.sha256(
+            json.dumps(payload, sort_keys=True).encode()
+        ).hexdigest()
+
     with pytest.raises(CustomerAdapterImportError, match="staged candidates"):
         await CustomerAdapterImportService().run(
             factory,
