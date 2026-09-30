@@ -31,6 +31,7 @@ from app.platform.permissions.codes import (
     AssetPermission,
     CommunicationsPermission,
     EconomicsPolicyPermission,
+    EstimatePermission,
     InvoicePermission,
     PaymentPermission,
     WorkforcePermission,
@@ -45,6 +46,7 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 from .break_even_readiness import break_even_input_contract
 from .capability_readiness import capability_readiness_matrix
 from .cash_operational_service import CashOperationalEconomicsService
+from .conversion_readiness import ConversionReadinessService
 from .operational_sources import OperationalSourceEconomicsService
 from .owner_intelligence import (
     OwnerIntelligenceQuery,
@@ -90,6 +92,15 @@ OperationalSourceReader = Annotated[
         )
     ),
 ]
+ConversionReader = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            EconomicsPolicyPermission.MEASUREMENT_READ,
+            EstimatePermission.READ,
+        )
+    ),
+]
 
 
 @router.get("/capabilities", response_model=dict[str, object])
@@ -100,6 +111,27 @@ async def economics_capabilities(context: Reader) -> dict[str, object]:
         "company_id": str(context.company.id),
         "branch_id": str(context.active_branch.id) if context.active_branch else None,
     }
+
+
+@router.get("/conversion-readiness", response_model=dict[str, object])
+async def conversion_readiness(
+    session: Session,
+    context: ConversionReader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    try:
+        return await ConversionReadinessService().project(
+            session, context=context, period_start=start, period_end=end
+        )
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Conversion readiness request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()) from error
 
 
 @router.get("/measurement-foundation", response_model=dict[str, object])
