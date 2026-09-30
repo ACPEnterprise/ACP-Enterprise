@@ -3347,9 +3347,7 @@
       "path": "/api/v1/marketing/attributions/manual-confirmation",
       "reason": "Exact replay returns the existing attribution; corrections append a superseding assignment and contradictory key reuse fails closed.",
       "replay_evidence": [
-        "marketing_attribution_assignments.idempotency_key",
-        "marketing_attribution_assignments.request_digest",
-        "marketing_attribution_assignments.supersedes_assignment_id"
+        "tests/marketing/test_marketing_foundation.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
@@ -3367,6 +3365,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "5021771a7836d8899385be2315d8c3b57cae2bb2af3b4af89d48197d00f034bf",
+  "fingerprint": "b39208599a75f7c57b5505d6fe1e5ea98107436e2299c7cb7130a93679dc54ee",
   "schema_version": "1"
 }
