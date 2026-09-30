@@ -19,6 +19,7 @@ from app.customer_migration.adapter_import_repository import (
     CustomerAdapterImportRepository,
 )
 from app.customer_migration.models import (
+    CustomerMigrationCandidate,
     CustomerMigrationException,
     CustomerMigrationProgress,
     CustomerMigrationRun,
@@ -483,12 +484,55 @@ class CustomerAdapterImportService:
             candidates = await self.repository.list_staged_candidates(
                 session, source_row_id=source_row.id
             )
-            actual = {
-                (item.entity_type, item.ordinal): item.payload_sha256
-                for item in candidates
-            }
-            if actual != self.policy.candidate_hashes(aggregate):
+            if not self._staged_candidates_match_reviewed_aggregate(
+                candidates, aggregate
+            ):
                 raise ValueError("staged candidates do not match reviewed aggregate")
+
+    @staticmethod
+    def _staged_candidates_match_reviewed_aggregate(
+        candidates: Sequence[CustomerMigrationCandidate],
+        aggregate: ReviewedCustomerAggregate,
+    ) -> bool:
+        """Verify immutable staged values while allowing additive schema defaults.
+
+        Staged payloads can predate optional fields added to current create schemas.
+        Their stored bytes remain authoritative: the stored digest must still match,
+        and every staged field must deserialize to the identical value.  Only fields
+        absent from the historical payload may receive current schema defaults.
+        """
+
+        reviewed_models: dict[
+            tuple[str, int], CustomerCreate | ContactCreate | ServiceLocationCreate
+        ] = {("customer", 0): aggregate.customer}
+        if aggregate.contact is not None:
+            reviewed_models[("contact", 0)] = aggregate.contact
+        reviewed_models.update(
+            {
+                ("service_location", ordinal): location
+                for ordinal, location in enumerate(aggregate.service_locations)
+            }
+        )
+        if aggregate.billing_address is not None:
+            reviewed_models[("billing_address", 0)] = aggregate.billing_address
+
+        staged = {(item.entity_type, item.ordinal): item for item in candidates}
+        if len(staged) != len(candidates) or staged.keys() != reviewed_models.keys():
+            return False
+        for identity, candidate in staged.items():
+            stored_payload = candidate.payload
+            stored_digest = hashlib.sha256(
+                json.dumps(stored_payload, sort_keys=True).encode()
+            ).hexdigest()
+            if stored_digest != candidate.payload_sha256:
+                return False
+            reviewed_payload = reviewed_models[identity].model_dump(mode="json")
+            if any(
+                key not in reviewed_payload or reviewed_payload[key] != value
+                for key, value in stored_payload.items()
+            ):
+                return False
+        return True
 
     async def _create_run(
         self,

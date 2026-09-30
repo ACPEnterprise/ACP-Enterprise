@@ -21,6 +21,7 @@ from app.customer_migration.adapter_import import (
     BOUNDARY_VERSION,
     REVIEW_VERSION,
     ApprovedCustomerImportBoundary,
+    CustomerAdapterImportError,
     ExpectedCustomerImportCounts,
     ReviewedCustomerAdapterOutput,
     ReviewedCustomerAggregate,
@@ -571,7 +572,7 @@ class CustomerPopulationReconciliationService:
                     command=command,
                     _reviewed=reviewed,
                 )
-            except CustomerPopulationReconciliationError:
+            except (CustomerAdapterImportError, CustomerPopulationReconciliationError):
                 await self.hold_exact(
                     factory,
                     context=context,
@@ -1295,6 +1296,7 @@ class CustomerPopulationReconciliationService:
                 if receipt is not None and receipt.status != "completed":
                     receipt.status = "failed"
                     receipt.error_code = type(error).__name__[:80]
+                    receipt.completed_at = datetime.now(timezone.utc)
             raise
 
 
