@@ -33,6 +33,7 @@ from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import MarketingPermission
 
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 NOW = datetime(2026, 9, 28, 15, 0, tzinfo=timezone.utc)
 
 
@@ -190,8 +191,9 @@ def test_provider_snapshot_revision_and_append_only_migration_contract() -> None
         item.name for item in MarketingProviderSnapshot.__table__.constraints
     }
     assert "uq_marketing_snapshots_revision" in unique_names
-    migration = Path(
-        "alembic/versions/qf6b8d0e2h4j6_create_marketing_attribution_foundation.py"
+    migration = (
+        BACKEND_ROOT
+        / "alembic/versions/qf6b8d0e2h4j6_create_marketing_attribution_foundation.py"
     ).read_text()
     for table in (
         "marketing_touches",
