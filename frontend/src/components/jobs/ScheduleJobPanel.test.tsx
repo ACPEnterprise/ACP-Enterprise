@@ -87,6 +87,15 @@ describe("ScheduleJobPanel", () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it("prevents an off-grid office time before submitting", async () => {
+    renderPanel();
+    await userEvent.clear(screen.getByLabelText(/^Arrival window starts/));
+    await userEvent.type(screen.getByLabelText(/^Arrival window starts/), "2026-09-14T09:50");
+    expect(screen.getByText(/choose :00, :15, :30, or :45/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Book Appointment" })).toBeDisabled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it("books Needs Scheduling without claiming technician capacity", async () => {
     renderPanel();
     await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));

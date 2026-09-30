@@ -30,6 +30,7 @@ from app.scheduling.errors import (
     SchedulingConflictError,
     SchedulingNotFoundError,
     SchedulingValidationError,
+    SchedulingValidationFailure,
     SchedulingVersionConflictError,
 )
 from app.scheduling.models import (
@@ -69,6 +70,26 @@ FIRST_START = datetime.combine(
     time(hour=10),
     tzinfo=BUSINESS_TIMEZONE,
 ).astimezone(timezone.utc)
+
+
+def test_office_appointment_windows_require_fifteen_minute_grid() -> None:
+    with pytest.raises(SchedulingValidationError) as error:
+        SchedulingService._validate_window(
+            FIRST_START + timedelta(minutes=5),
+            FIRST_START + timedelta(hours=1),
+            60,
+            Decimal("1.00"),
+        )
+    assert error.value.failure == SchedulingValidationFailure.SLOT_ALIGNMENT
+
+    with pytest.raises(SchedulingValidationError) as error:
+        SchedulingService._validate_window(
+            FIRST_START,
+            FIRST_START + timedelta(hours=1),
+            50,
+            Decimal("1.00"),
+        )
+    assert error.value.failure == SchedulingValidationFailure.SLOT_ALIGNMENT
 
 
 @dataclass(frozen=True)

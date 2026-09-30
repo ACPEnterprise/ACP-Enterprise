@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useAuth } from "../../auth";
 import { useCustomerDetail, useCustomerList } from "../../hooks/useCustomers";
 import { useCreateServiceRequest } from "../../hooks/useOperations";
+import { addCustomerProperty, createCustomer } from "../../api/customers";
 import { appointmentDetailPath, jobDetailPath, schedulingReturnPath, withSchedulingReturn } from "../../routing/paths";
 import type { JobPriority } from "../../types/jobs";
 import type { ServiceRequestCreateInput } from "../../types/operations";
@@ -27,6 +28,7 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
   const { activeCompany } = useAuth();
   const create = useCreateServiceRequest();
   const [customerSearch, setCustomerSearch] = useState("");
+  const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
   const [customerId, setCustomerId] = useState("");
   const customer = useCustomerDetail(customerId || null);
   const customers = useCustomerList(customerSearch, 25, 0);
@@ -41,6 +43,62 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
   const [problem, setProblem] = useState("");
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const [pendingRequest, setPendingRequest] = useState<{ fingerprint: string; input: ServiceRequestCreateInput } | null>(null);
+  const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", address: "", city: "", state: "", postalCode: "" });
+  const [intakePending, setIntakePending] = useState(false);
+  const [intakeError, setIntakeError] = useState<string | null>(null);
+  const [duplicateWarnings, setDuplicateWarnings] = useState(0);
+  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; displayName: string } | null>(null);
+  const confirmIntake = async () => {
+    setIntakePending(true);
+    setIntakeError(null);
+    try {
+      const [firstName, ...last] = newCustomer.name.trim().split(/\s+/);
+      const created = createdCustomer ? null : await createCustomer({
+        customer_type: "residential",
+        first_name: firstName || null,
+        last_name: last.join(" ") || null,
+        business_name: null,
+        primary_phone: newCustomer.phone.trim(),
+        secondary_phone: null,
+        email: newCustomer.email.trim() || null,
+        preferred_contact_method: newCustomer.email.trim() ? "email" : "phone",
+        status: "prospect",
+        source: "csr_dispatch_intake",
+        is_vip: false,
+        internal_notes: null,
+      });
+      const resolvedCustomer = created
+        ? { id: created.customer.id, displayName: created.customer.display_name ?? newCustomer.name }
+        : createdCustomer;
+      if (!resolvedCustomer) throw new Error("Customer identity was not preserved.");
+      if (created) {
+        setCreatedCustomer(resolvedCustomer);
+        setDuplicateWarnings(created.duplicate_warnings.length);
+      }
+      const location = await addCustomerProperty(resolvedCustomer.id, {
+        address_line_1: newCustomer.address.trim(),
+        address_line_2: null,
+        city: newCustomer.city.trim(),
+        state: newCustomer.state.trim(),
+        postal_code: newCustomer.postalCode.trim(),
+        property_type: "unknown",
+        gate_access_instructions: null,
+        water_shutoff_location: null,
+        sewer_septic: "unknown",
+        property_notes: null,
+        is_primary: true,
+      });
+      setCustomerId(resolvedCustomer.id);
+      setCustomerSearch(resolvedCustomer.displayName);
+      setLocationId(location.id);
+      setCreatedCustomer(null);
+      setCustomerMode("existing");
+    } catch (error) {
+      setIntakeError(error instanceof Error ? error.message : "Customer intake failed.");
+    } finally {
+      setIntakePending(false);
+    }
+  };
 
   const selectedCustomer = customers.data?.items.find((item) => item.id === customerId);
   const selectedLocation = customer.data?.properties.find((item) => item.id === locationId);
@@ -106,6 +164,26 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
         </Alert>
       )}
       <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={review}>
+        <div className="flex gap-2 md:col-span-2" aria-label="Customer resolution state">
+          <Button type="button" variant={customerMode === "existing" ? "primary" : "outline"} onClick={() => setCustomerMode("existing")}>Existing Customer</Button>
+          <Button type="button" variant={customerMode === "new" ? "primary" : "outline"} onClick={() => setCustomerMode("new")}>New Customer intake</Button>
+        </div>
+        {customerMode === "new" && (
+          <section className="grid gap-4 rounded-lg border border-stroke bg-surface-subtle p-4 md:col-span-2 md:grid-cols-2" aria-label="Compact Customer intake">
+            <Alert className="md:col-span-2" title="Confirmation required">No Customer or Location is created until you select Confirm Customer and Location.</Alert>
+            <Field label="Customer name" required><Input value={newCustomer.name} onChange={(event) => setNewCustomer((value) => ({ ...value, name: event.target.value }))} /></Field>
+            <Field label="Phone" required><Input type="tel" value={newCustomer.phone} onChange={(event) => setNewCustomer((value) => ({ ...value, phone: event.target.value }))} /></Field>
+            <Field label="Email"><Input type="email" value={newCustomer.email} onChange={(event) => setNewCustomer((value) => ({ ...value, email: event.target.value }))} /></Field>
+            <Field label="Service address" required><Input value={newCustomer.address} onChange={(event) => setNewCustomer((value) => ({ ...value, address: event.target.value }))} /></Field>
+            <Field label="City" required><Input value={newCustomer.city} onChange={(event) => setNewCustomer((value) => ({ ...value, city: event.target.value }))} /></Field>
+            <Field label="State" required><Input value={newCustomer.state} onChange={(event) => setNewCustomer((value) => ({ ...value, state: event.target.value }))} /></Field>
+            <Field label="Postal code" required><Input value={newCustomer.postalCode} onChange={(event) => setNewCustomer((value) => ({ ...value, postalCode: event.target.value }))} /></Field>
+            <div className="flex items-end"><Button type="button" disabled={intakePending || !newCustomer.name.trim() || !newCustomer.phone.trim() || !newCustomer.address.trim() || !newCustomer.city.trim() || !newCustomer.state.trim() || !newCustomer.postalCode.trim()} onClick={() => void confirmIntake()}>Confirm Customer and Location</Button></div>
+            {intakeError && <Alert className="md:col-span-2" variant="danger" title="Customer intake not saved">{intakeError}</Alert>}
+            {duplicateWarnings > 0 ? <Alert className="md:col-span-2" variant="warning" title="Potential duplicate Customer">Review the existing Customer matches before proceeding. The authoritative Customer response preserved the duplicate warning.</Alert> : null}
+          </section>
+        )}
+        {customerMode === "existing" && <>
         <Field label="Find Customer" helperText={customers.isError ? "Customer search is unavailable." : "Search is bounded to 25 authorized Customers."}>
           <Input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Name or customer number" />
         </Field>
@@ -121,6 +199,7 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
             {(customer.data?.properties ?? []).map((item) => <option value={item.id} key={item.id}>{item.address_line_1}, {item.city}</option>)}
           </Select>
         </Field>
+        </>}
         <Field label="Branch" required>
           <Select value={branchId} onChange={(event) => setBranchId(event.target.value)} required>
             <option value="">Select Branch</option>
