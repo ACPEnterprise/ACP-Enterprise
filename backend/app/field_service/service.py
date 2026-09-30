@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import date, datetime, time, timezone
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -28,8 +28,8 @@ from app.field_service.models import (
     FieldCompletionRequirementSnapshot,
     FieldCustomerApproval,
     FieldInvoiceHandoff,
-    FieldNonBillableDisposition,
     FieldJobActivityEvent,
+    FieldNonBillableDisposition,
     FieldWorkNote,
 )
 from app.field_service.schemas import (
@@ -231,7 +231,13 @@ class FieldService:
             appointment_id=appointment.id,
             job_version=job.concurrency_version,
             appointment_version=appointment.concurrency_version,
-            active_activity=(latest_activity.activity if latest_activity and latest_activity.action != "finish_visit" else None),
+            active_activity=(
+                cast(Literal["working", "parts_run"], latest_activity.activity)
+                if latest_activity
+                and latest_activity.action != "finish_visit"
+                and latest_activity.activity in {"working", "parts_run"}
+                else None
+            ),
             visit_finished=latest_activity is not None and latest_activity.action == "finish_visit",
             work_summary_recorded=summary is not None,
             customer_disposition=approval.disposition if approval else None,
