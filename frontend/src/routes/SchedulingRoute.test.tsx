@@ -513,6 +513,52 @@ describe("SchedulingRoute", () => {
     expect(screen.queryByRole("button", { name: "Review new time" })).not.toBeInTheDocument();
   });
 
+  it("enables normal rescheduling when canonical reconciliation supplies capacity authority", async () => {
+    permissions.add("COMPANY_SCHEDULING_MANAGE");
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{ ...appointment, capacity_units: null }],
+        total_count: 1,
+        page: 1,
+        page_size: 100,
+      },
+    } as never);
+    const rendered = render(
+      <MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /APT-000001/ })[0],
+    );
+    expect(
+      screen.getAllByText("IMPORTED / NOT YET CAPACITY-RECONCILED").length,
+    ).toBeGreaterThan(0);
+
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{ ...appointment, capacity_units: "1.00", concurrency_version: 3 }],
+        total_count: 1,
+        page: 1,
+        page_size: 100,
+      },
+    } as never);
+    rendered.rerender(
+      <MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByText("IMPORTED / NOT YET CAPACITY-RECONCILED"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review new time" })).toBeVisible();
+  });
+
   it("reconciles selected appointment detail after the authoritative calendar refreshes", async () => {
     permissions.add("COMPANY_SCHEDULING_MANAGE");
     vi.mocked(useAppointments).mockReturnValue({
@@ -795,5 +841,69 @@ describe("SchedulingRoute", () => {
     expect(
       screen.getByRole("button", { name: /APT-000001.*EN ROUTE/i }),
     ).toBeVisible();
+  });
+
+  it("moves canonical Dispatch reassignment from Unassigned to Michael Brian without reloading", () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    const rendered = render(
+      <MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByText("Unassigned").length).toBeGreaterThan(0);
+
+    vi.mocked(useDispatchBoard).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        total_count: 1,
+        items: [
+          {
+            appointment_id: appointment.id,
+            appointment_number: appointment.appointment_number,
+            job_id: "job-1",
+            branch_id: "branch-1",
+            status: "scheduled",
+            window_start_at: appointment.arrival_window_start_at,
+            window_end_at: appointment.arrival_window_end_at,
+            assignment: {
+              id: "assignment-michael",
+              appointment_id: appointment.id,
+              appointment_number: appointment.appointment_number,
+              job_id: "job-1",
+              company_id: "company-1",
+              branch_id: "branch-1",
+              primary_employee_id: "michael-brian",
+              primary_employee_name: "Michael Brian",
+              status: "assigned",
+              arrival_state: "pending",
+              active_exception_code: null,
+              assignment_reason: "Office assignment",
+              window_start_at: appointment.arrival_window_start_at,
+              window_end_at: appointment.arrival_window_end_at,
+              effective_at: appointment.arrival_window_start_at,
+              released_at: null,
+              version: 1,
+              crew_members: [],
+            },
+          },
+        ],
+      },
+    } as never);
+    rendered.rerender(
+      <MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByText("Michael Brian").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /APT-000001.*Michael Brian/i })
+        .length,
+    ).toBeGreaterThan(0);
   });
 });
