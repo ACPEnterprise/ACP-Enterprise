@@ -4,6 +4,8 @@ import type {
   ServiceRequestResult,
   ExistingJobScheduleInput,
   ExistingJobScheduleResult,
+  CalendarPlacementInput,
+  CalendarPlacementResult,
 } from "../types/operations";
 
 export async function createServiceRequest(
@@ -12,6 +14,18 @@ export async function createServiceRequest(
   return (
     await apiClient.post<ServiceRequestResult>(
       "/api/v1/operations/service-requests",
+      input,
+    )
+  ).data;
+}
+
+export async function placeCalendarAppointment(
+  appointmentId: string,
+  input: CalendarPlacementInput,
+): Promise<CalendarPlacementResult> {
+  return (
+    await apiClient.post<CalendarPlacementResult>(
+      `/api/v1/operations/appointments/${appointmentId}/calendar-placement`,
       input,
     )
   ).data;

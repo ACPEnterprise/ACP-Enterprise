@@ -109,7 +109,7 @@ def test_required_operations_expose_an_accepted_request_identity() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
     )
-    assert len(required) == 151
+    assert len(required) == 152
     for entry in required:
         operation = operations[entry.identity]
         schema = (
