@@ -7,6 +7,14 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.accounts_payable.models import AccountingVendor, VendorSourceMapping
 from app.core.config import settings
 from app.platform.branch.models import Branch
@@ -24,13 +32,6 @@ from app.qbo_source.contracts import QboSourceEnvelope, SnapshotIdentity
 from app.qbo_source.native_application import (
     QboApplicationError,
     QboNativeApplicationService,
-)
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
 )
 
 
