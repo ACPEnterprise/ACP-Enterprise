@@ -952,7 +952,7 @@ export function SchedulingRoute({
         )}
         {currentSelection ? (
           <AppointmentPanel
-            key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
+            key={`${currentSelection.id}:${currentSelection.concurrency_version}:${currentSelection.status}:${currentSelection.capacity_units ?? "unreconciled"}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
             appointment={currentSelection}
             dispatchItem={selectedDispatch}
             job={
