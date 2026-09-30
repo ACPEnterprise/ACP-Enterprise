@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useScheduleExistingJob } from "../../hooks/useOperations";
-import { useWorkforceDirectory } from "../../hooks/useWorkforce";
+import { useWorkforceEligibility } from "../../hooks/useWorkforce";
 import type { JobDetail } from "../../types/jobs";
 import { ScheduleJobPanel } from "./ScheduleJobPanel";
 
@@ -28,10 +28,10 @@ describe("ScheduleJobPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useScheduleExistingJob).mockReturnValue({ mutate, isPending: false, isSuccess: false, error: null } as never);
-    vi.mocked(useWorkforceDirectory).mockReturnValue({ isLoading: false, data: [
-      { employee_id: "employee-beta", employee_number: "SYN-BETA", display_name: "Synthetic Beta Employee", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-main" },
-      { employee_id: "employee-blocked", employee_number: "BLOCKED", display_name: "Blocked Technician", employee_status: "active", technician: true, readiness_state: "BLOCKED", home_branch_id: "branch-main" },
-      { employee_id: "employee-other", employee_number: "OTHER", display_name: "Other Branch", employee_status: "active", technician: true, readiness_state: "READY", home_branch_id: "branch-other" },
+    vi.mocked(useWorkforceEligibility).mockReturnValue({ isPending: false, mutate: vi.fn(), data: [
+      { employee_id: "employee-real", employee_number: "SYN-BETA-0005", display_name: "Michael Brian", eligible: true },
+      { employee_id: "employee-blocked", employee_number: "BLOCKED", display_name: "Blocked Technician", eligible: false },
+      { employee_id: "employee-other", employee_number: "OTHER", display_name: "Other Branch", eligible: false },
     ] } as never);
   });
 
@@ -39,7 +39,7 @@ describe("ScheduleJobPanel", () => {
     renderPanel();
     expect(screen.getByRole("heading", { name: "Schedule Job" })).toBeVisible();
     expect(screen.getByRole("option", { name: "Unassigned / Needs Scheduling" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "Synthetic Beta Employee — SYN-BETA" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Michael Brian — SYN-BETA-0005" })).toBeVisible();
     expect(screen.queryByRole("option", { name: /Blocked Technician/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Other Branch/ })).not.toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText(/^Arrival window starts/));
@@ -48,7 +48,7 @@ describe("ScheduleJobPanel", () => {
     await userEvent.type(screen.getByLabelText(/^Arrival window ends/), "2026-09-14T12:00");
     await userEvent.clear(screen.getByLabelText(/^Expected duration \(minutes\)/));
     await userEvent.type(screen.getByLabelText(/^Expected duration \(minutes\)/), "90");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Technician" }), "employee-beta");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Technician" }), "employee-real");
     await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       expected_job_version: 3,
@@ -58,9 +58,22 @@ describe("ScheduleJobPanel", () => {
       arrival_window_start_at: new Date("2026-09-14T09:00").toISOString(),
       arrival_window_end_at: new Date("2026-09-14T12:00").toISOString(),
       expected_duration_minutes: 90,
-      employee_id: "employee-beta",
+      employee_id: "employee-real",
       reserve_capacity: true,
     }), expect.any(Object));
+  });
+
+  it("queries canonical window eligibility instead of legacy capability-profile flags", async () => {
+    const evaluate = vi.fn();
+    vi.mocked(useWorkforceEligibility).mockReturnValue({ isPending: false, mutate: evaluate, data: [] } as never);
+    renderPanel();
+    expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      branch_id: "branch-main",
+      required_capability_codes: [],
+      required_language_codes: [],
+    }));
+    const request = evaluate.mock.calls[0][0];
+    expect(new Date(request.window_end_at).getTime() - new Date(request.window_start_at).getTime()).toBe(120 * 60 * 1000);
   });
 
   it("rejects an inverted arrival window without changing work duration semantics", async () => {
