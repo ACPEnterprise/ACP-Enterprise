@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -76,6 +77,46 @@ class InventoryItem(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class MaterialCatalogAdmission(Base):
+    """Immutable source-row admission evidence; it never represents stock quantity."""
+
+    __tablename__ = "inventory_material_catalog_admissions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "inventory_item_id"],
+            ["inventory_items.company_id", "inventory_items.id"],
+            name="fk_material_admissions_item",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "disposition IN ('admitted','held')",
+            name="ck_material_admissions_disposition",
+        ),
+        CheckConstraint(
+            "opening_inventory_state = 'not_historically_reconstructed'",
+            name="ck_material_admissions_opening_state",
+        ),
+        UniqueConstraint(
+            "company_id", "source_digest", "source_row_number",
+            name="uq_material_admissions_source_row",
+        ),
+        Index("ix_material_admissions_source", "company_id", "source_digest", "disposition"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    inventory_item_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_filename: Mapped[str] = mapped_column(String(240), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    row_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    disposition: Mapped[str] = mapped_column(String(20), nullable=False)
+    hold_reason: Mapped[str | None] = mapped_column(String(120))
+    opening_inventory_state: Mapped[str] = mapped_column(String(48), nullable=False, default="not_historically_reconstructed")
+    admitted_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    admitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class StockLocation(Base):
