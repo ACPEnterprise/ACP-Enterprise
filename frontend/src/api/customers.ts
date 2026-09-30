@@ -47,9 +47,12 @@ export interface CustomerCleanMajorityAdmissionResult {
   classification: "CUSTOMER_CLEAN_MAJORITY_ADMITTED";
   source_system: "housecall_pro";
   selected: number;
+  processed: number;
   admitted: number;
   replayed: number;
   quarantined: number;
+  rejected: number;
+  provider_unavailable: number;
   remaining_unexplained: number;
   before_evidence_digest: string;
   after_evidence_digest: string;

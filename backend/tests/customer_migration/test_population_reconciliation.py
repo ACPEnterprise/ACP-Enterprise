@@ -430,7 +430,10 @@ async def test_http_clean_majority_admits_exact_rows_and_is_replay_safe(database
 
     assert first.status_code == replay.status_code == 200
     assert first.json()["selected"] == first.json()["admitted"] == 1
+    assert first.json()["processed"] == 1
     assert first.json()["quarantined"] == 0
+    assert first.json()["rejected"] == 0
+    assert first.json()["provider_unavailable"] == 0
     assert first.json()["remaining_unexplained"] == 0
     assert first.json()["customer_admission_performed"] is True
     assert first.headers["Cache-Control"] == "private, no-store"
