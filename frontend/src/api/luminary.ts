@@ -139,6 +139,7 @@ export interface LuminaryOwnerEconomics {
       complete_category_count: number;
       partial_category_count: number;
       missing_category_count: number;
+      unavailable_category_count: number;
       total_category_count: number;
     };
     categories: EconomicCompletionCategory[];
@@ -338,7 +339,8 @@ export interface EconomicCompletionCategory {
   unlocks: string[];
   priority_tier: number;
   rank?: number;
-  state: "COMPLETE" | "PARTIAL" | "MISSING";
+  state: "COMPLETE" | "PARTIAL" | "MISSING" | "UNAVAILABLE";
+  state_reason: string | null;
   missing_dependencies: string[];
   affected_job_count: number | null;
   affected_authoritative_revenue_minor: number | null;

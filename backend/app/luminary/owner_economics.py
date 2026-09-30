@@ -1025,13 +1025,29 @@ def _economic_completion_planner(
     )
     gaps = {str(item.get("gap")): item for item in gap_rows}
     period = _mapping(workspace.get("period"))
+    contribution = _mapping(active_reasoning.get("contribution"))
+    no_admitted_job_population = (
+        contribution.get("state") == "UNAVAILABLE"
+        and contribution.get("job_count") == 0
+    )
     categories: list[dict[str, object]] = []
     for spec in _COMPLETION_CATEGORIES:
         dependencies = cast(tuple[str, ...], spec["dependencies"])
         missing = [value for value in dependencies if value in gaps]
         dependency_rows = [gaps[value] for value in missing]
+        depends_on_job_variable_evidence = "VARIABLE_COST" in str(
+            spec["economic_role"]
+        )
         state = (
-            "COMPLETE"
+            "UNAVAILABLE"
+            if no_admitted_job_population
+            and depends_on_job_variable_evidence
+            and not missing
+            else "MISSING"
+            if no_admitted_job_population
+            and depends_on_job_variable_evidence
+            and missing
+            else "COMPLETE"
             if not missing
             else "PARTIAL"
             if len(missing) < len(dependencies)
@@ -1061,6 +1077,11 @@ def _economic_completion_planner(
                 ),
                 "unlocks": list(cast(tuple[str, ...], spec["unlocks"])),
                 "state": state,
+                "state_reason": (
+                    "No admitted Job Economics population exists for this period."
+                    if state == "UNAVAILABLE"
+                    else None
+                ),
                 "missing_dependencies": missing,
                 "affected_job_count": max(affected_counts) if affected_counts else None,
                 "affected_authoritative_revenue_minor": max(affected_revenues)
@@ -1079,7 +1100,11 @@ def _economic_completion_planner(
             }
         )
 
-    incomplete = [item for item in categories if item["state"] != "COMPLETE"]
+    incomplete = [
+        item
+        for item in categories
+        if item["state"] in {"MISSING", "PARTIAL"}
+    ]
     ranked = sorted(
         incomplete,
         key=lambda item: (
@@ -1132,12 +1157,17 @@ def _economic_completion_planner(
         "read_only": True,
         "period": period,
         "summary": {
-            "complete_category_count": len(categories) - len(incomplete),
+            "complete_category_count": sum(
+                item["state"] == "COMPLETE" for item in categories
+            ),
             "partial_category_count": sum(
                 item["state"] == "PARTIAL" for item in categories
             ),
             "missing_category_count": sum(
                 item["state"] == "MISSING" for item in categories
+            ),
+            "unavailable_category_count": sum(
+                item["state"] == "UNAVAILABLE" for item in categories
             ),
             "total_category_count": len(categories),
         },

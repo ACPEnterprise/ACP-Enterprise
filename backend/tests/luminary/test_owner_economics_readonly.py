@@ -250,6 +250,7 @@ def test_completion_planner_projects_explicit_categories_and_unlock_graph() -> N
         "complete_category_count": 3,
         "partial_category_count": 1,
         "missing_category_count": 8,
+        "unavailable_category_count": 0,
         "total_category_count": 12,
     }
     categories = {item["category"]: item for item in planner["categories"]}
@@ -281,6 +282,38 @@ def test_completion_planner_does_not_invent_owner_confirmed_value_authority() ->
             "end": "2026-08-31",
         }
         assert "value" not in category["owner_confirmed"]
+
+
+def test_completion_planner_does_not_call_absent_job_evidence_complete() -> None:
+    value = workspace(quality="unavailable")
+    value["jobs"] = []
+    value["service_categories"] = []
+    value["source_result_count"] = 0
+    value["totals"] = {
+        "revenue": None,
+        "labor": None,
+        "materials": None,
+        "equipment": None,
+        "truck": None,
+        "gross_profit": None,
+        "overhead": None,
+    }
+
+    planner = project(value)["economic_completion_planner"]
+    categories = {item["category"]: item for item in planner["categories"]}
+
+    assert categories["MATERIAL_AND_JOB_VARIABLE_COST"]["state"] == "UNAVAILABLE"
+    assert categories["MERCHANT_FEES"]["state"] == "UNAVAILABLE"
+    assert (
+        categories["PERMITS_SUBCONTRACTORS_DISPOSAL_AND_RENTALS"]["state"]
+        == "UNAVAILABLE"
+    )
+    assert planner["summary"]["unavailable_category_count"] == 3
+    assert planner["summary"]["complete_category_count"] == 0
+    assert all(
+        item["category"] != "MATERIAL_AND_JOB_VARIABLE_COST"
+        for item in planner["ranked_completion_plan"]
+    )
 
 
 def test_completion_plan_uses_authoritative_population_not_missing_value() -> None:
