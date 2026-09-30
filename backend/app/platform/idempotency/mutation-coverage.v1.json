@@ -3329,6 +3329,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company-scoped sealed provider identity and version ledger with deterministic exact replay and independent conflict quarantine",
+      "method": "POST",
+      "operation_id": "apply_qbo_native_clean_majority_api_v1_accounting_source_evidence_qbo_native_application_post",
+      "path": "/api/v1/accounting/source-evidence/qbo/native-application",
+      "reason": "Clean-majority application binds each exact QBO provider version once, returns deterministic replay, and quarantines contradictory evidence without duplicating native authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "marketing",
       "mechanism": "Company-scoped confirmation key, canonical request digest, typed target, and append-only assignment",
@@ -3357,6 +3367,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "d108842e9e8cda7987f6d0fc7d223f412678b7a26ff9a56d7a68aa46a407b2d0",
+  "fingerprint": "51609123b03bbfb792a0289349c16d242c2c0230349f7a0049fac6b151a70d45",
   "schema_version": "1"
 }
