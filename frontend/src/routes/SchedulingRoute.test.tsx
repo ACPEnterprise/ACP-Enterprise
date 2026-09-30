@@ -34,7 +34,7 @@ const appointment = {
   status: "scheduled",
   arrival_window_start_at: "2026-08-13T13:00:00Z",
   arrival_window_end_at: "2026-08-13T15:00:00Z",
-  capacity_units: null,
+  capacity_units: "1.00",
 };
 const expectedLocalInput = (value: string) => {
   const date = new Date(value);
@@ -105,6 +105,17 @@ describe("SchedulingRoute", () => {
     expect(useAppointments).toHaveBeenCalledWith(expect.any(Object), false);
   });
 
+  it("denies a FIELD_TECH profile the company-wide office Calendar", () => {
+    permissions = new Set([
+      "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+      "COMPANY_JOB_EXECUTE",
+    ]);
+    vi.mocked(useAppointments).mockReturnValue({ isLoading: false } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getByText(/not authorized to view Scheduling/i)).toBeVisible();
+    expect(useAppointments).toHaveBeenCalledWith(expect.any(Object), false);
+  });
+
   it("shows authoritative appointments and links to detail", () => {
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
@@ -124,6 +135,8 @@ describe("SchedulingRoute", () => {
     expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(
       2,
     );
+    const block = within(screen.getByRole("region", { name: "Day calendar" })).getByRole("button", { name: /APT-000001/ });
+    expect(block).toHaveStyle({ top: "120px", height: "120px" });
   });
 
   it("shows current time on today's Schedule and Dispatch timelines", () => {
@@ -455,7 +468,6 @@ describe("SchedulingRoute", () => {
     expect(
       screen.getAllByText("Customer context unavailable").at(-1),
     ).toBeVisible();
-    expect(screen.getByText("Imported schedule without capacity reservation")).toBeVisible();
     await userEvent.clear(screen.getByLabelText("New start"));
     await userEvent.type(
       screen.getByLabelText("New start"),
@@ -488,6 +500,17 @@ describe("SchedulingRoute", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("labels imported capacity-unreconciled Appointments and blocks unsafe moves", async () => {
+    permissions.add("COMPANY_SCHEDULING_MANAGE");
+    const imported = { ...appointment, capacity_units: null };
+    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [imported], total_count: 1, page: 1, page_size: 100 } } as never);
+    render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getAllByText(/IMPORTED \/.*CAPACITY.*RECONCILED/i).length).toBeGreaterThan(0);
+    await userEvent.click(screen.getAllByRole("button", { name: /APT-000001/ })[0]);
+    expect(screen.getAllByText("IMPORTED / NOT YET CAPACITY-RECONCILED").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Review new time" })).not.toBeInTheDocument();
   });
 
   it("reconciles selected appointment detail after the authoritative calendar refreshes", async () => {

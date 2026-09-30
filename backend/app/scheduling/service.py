@@ -516,33 +516,20 @@ class SchedulingService:
                 appointment_id=appointment.id,
                 for_update=True,
             )
-            reconciled_imported_schedule = reservation is None
             if reservation is None:
-                reservation = await self._repository.create_capacity_reservation(
-                    session,
-                    capacity_context=decision.context,
-                    reservation=AppointmentCapacityReservation(
-                        company_id=context.company.id,
-                        branch_id=appointment.branch_id,
-                        appointment_id=appointment.id,
-                        reserved_start_at=decision.reservation_start_at,
-                        reserved_end_at=decision.reservation_end_at,
-                        capacity_units=command.capacity_units,
-                        created_at=now,
-                        updated_at=now,
-                    ),
+                raise SchedulingConflictError(
+                    "Scheduled Appointment has no capacity reservation."
                 )
             appointment.capacity_reservation = reservation
             previous_start = appointment.arrival_window_start_at
             previous_end = appointment.arrival_window_end_at
-            if not reconciled_imported_schedule:
-                self._repository.move_capacity_reservation(
-                    reservation,
-                    reserved_start_at=decision.reservation_start_at,
-                    reserved_end_at=decision.reservation_end_at,
-                    capacity_units=command.capacity_units,
-                    updated_at=now,
-                )
+            self._repository.move_capacity_reservation(
+                reservation,
+                reserved_start_at=decision.reservation_start_at,
+                reserved_end_at=decision.reservation_end_at,
+                capacity_units=command.capacity_units,
+                updated_at=now,
+            )
             self._repository.reschedule_appointment(
                 appointment,
                 arrival_window_start_at=command.arrival_window_start_at,
@@ -567,11 +554,6 @@ class SchedulingService:
                     "arrival_window_start_at": command.arrival_window_start_at.isoformat(),
                     "arrival_window_end_at": command.arrival_window_end_at.isoformat(),
                     "reason_code": reason_code,
-                    "capacity_reservation_transition": (
-                        "CREATED_FROM_CONFIRMED_RESCHEDULE"
-                        if reconciled_imported_schedule
-                        else "MOVED_EXISTING"
-                    ),
                     "schema_version": 1,
                 },
             )
