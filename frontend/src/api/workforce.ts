@@ -72,6 +72,11 @@ export interface RealRosterReadinessItem {
   display_name: string;
   operating_role: "ADMIN" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECH";
   field_tech: boolean;
+  source_employee_id: string | null;
+  source_login_email: string | null;
+  source_admission: "SAFE_CREATE" | "ALREADY_ACTIVE" | "OWNER_IDENTITY_DECISION_REQUIRED";
+  source_onboarding_state: "READY_TO_ONBOARD" | "ALREADY_BOUND" | "OWNER_DECISION_REQUIRED" | "SOURCE_EVIDENCE_MISSING" | "SOURCE_EVIDENCE_CONFLICT";
+  source_candidate_employee_id: string | null;
   employee_id: string | null;
   employee_display_name: string | null;
   user_state: string;
@@ -92,6 +97,32 @@ export interface RealRosterReadinessItem {
   readiness_window_end_at: string | null;
   readiness_source: string | null;
   blockers: string[];
+}
+
+export interface RealRosterOnboardingPreview {
+  roster_key: string;
+  display_name: string;
+  first_name: string;
+  last_name: string;
+  operating_role: "ADMIN" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECH";
+  required_role_codes: string[];
+  source_employee_id: string;
+  source_login_email: string;
+  source_branch_id: string;
+  source_branch_code: string;
+  source_candidate_employee_id: string;
+  source_disposition: string;
+  safe_to_apply: boolean;
+  blockers: string[];
+}
+
+export interface RealRosterOnboardingResult {
+  id: string;
+  employee_id: string;
+  membership_id: string;
+  branch_id: string;
+  masked_login: string;
+  status: string;
 }
 
 export interface RealRosterSourceEvidence {
@@ -289,6 +320,32 @@ export async function evaluateWorkforceEligibility(payload: WorkforceEligibility
 
 export async function getRealRosterReadiness(): Promise<RealRosterReadiness> {
   return (await apiClient.get<RealRosterReadiness>("/api/v1/workforce/real-roster")).data;
+}
+
+export async function getRealRosterOnboardingPreview(
+  rosterKey: string,
+): Promise<RealRosterOnboardingPreview> {
+  return (
+    await apiClient.get<RealRosterOnboardingPreview>(
+      `/api/v1/workforce/real-roster/${encodeURIComponent(rosterKey)}/onboarding`,
+    )
+  ).data;
+}
+
+export async function onboardRealRosterEmployee(
+  rosterKey: string,
+  input: {
+    confirmed_source_employee_id: string;
+    confirmed_login_email: string;
+    confirm_access_profile: boolean;
+  },
+): Promise<RealRosterOnboardingResult> {
+  return (
+    await apiClient.post<RealRosterOnboardingResult>(
+      `/api/v1/workforce/real-roster/${encodeURIComponent(rosterKey)}/onboarding`,
+      input,
+    )
+  ).data;
 }
 
 export async function getSourceCertificationLedger(): Promise<SourceCertificationLedger> {
