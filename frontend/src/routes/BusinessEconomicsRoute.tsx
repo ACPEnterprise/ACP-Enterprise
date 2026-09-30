@@ -28,8 +28,8 @@ import {
 
 const today = new Date().toISOString().slice(0, 10);
 const monthStart = `${today.slice(0, 7)}-01`;
-const money = (minor: number | null | undefined, currency = "USD") =>
-  minor == null
+const money = (minor: number | null | undefined, currency: string | null) =>
+  minor == null || !currency
     ? "Unavailable"
     : new Intl.NumberFormat(undefined, { style: "currency", currency }).format(
         minor / 100,
@@ -49,7 +49,7 @@ function RollupTable({
 }: {
   title: string;
   rows: EconomicsRollup[];
-  currency: string;
+  currency: string | null;
 }) {
   return (
     <Card>
@@ -114,7 +114,7 @@ function JobTable({
   onSelect,
 }: {
   jobs: EconomicsJob[];
-  currency: string;
+  currency: string | null;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -269,7 +269,8 @@ export function BusinessEconomicsRoute() {
       </Alert>
     );
   const value = workspace.data;
-  const currency = value.currency ?? "USD";
+  const currency = value.currency;
+  const invalidPeriod = !start || !end || start > end;
   const directCost = value.totals
     ? value.totals.labor +
       value.totals.materials +
@@ -297,6 +298,7 @@ export function BusinessEconomicsRoute() {
             className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
             onSubmit={(event) => {
               event.preventDefault();
+              if (invalidPeriod) return;
               setScope({ start, end });
               setSelected(null);
             }}
@@ -315,6 +317,16 @@ export function BusinessEconomicsRoute() {
             />
             <Button type="submit">Compare period</Button>
           </form>
+          {invalidPeriod ? (
+            <p className="mt-3 text-sm text-status-danger" role="alert">
+              Choose a start date on or before the end date. No Economics comparison was requested.
+            </p>
+          ) : null}
+          {!currency ? (
+            <Alert variant="warning">
+              Currency authority is unavailable. ACP will not label these monetary results with an assumed currency.
+            </Alert>
+          ) : null}
         </CardContent>
       </Card>
       <Card>

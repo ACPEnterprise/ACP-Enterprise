@@ -20,10 +20,12 @@ from app.events.models import BusinessEvent
 
 
 class RevenueTrendDailyValues(TypedDict):
-    booked_revenue: Decimal
-    cash_collected: Decimal
+    booked_revenue: Decimal | None
+    cash_collected: Decimal | None
     booked_event_count: int
     payment_event_count: int
+    excluded_booked_event_count: int
+    excluded_payment_event_count: int
 
 
 class AnalyticsService:
@@ -36,7 +38,7 @@ class AnalyticsService:
     def _decimal_from_payload(
         payload: dict[str, Any],
         field_names: tuple[str, ...],
-    ) -> Decimal:
+    ) -> Decimal | None:
         for field_name in field_names:
             raw_value = payload.get(field_name)
 
@@ -44,11 +46,18 @@ class AnalyticsService:
                 continue
 
             try:
-                return Decimal(str(raw_value))
+                parsed = Decimal(str(raw_value))
+                return parsed if parsed.is_finite() else None
             except (InvalidOperation, TypeError, ValueError):
                 continue
 
-        return Decimal("0.00")
+        return None
+
+    @staticmethod
+    def _completeness(observed: int, excluded: int) -> str:
+        if observed == 0:
+            return "NO_EVENTS"
+        return "PARTIAL" if excluded else "COMPLETE"
 
     @staticmethod
     def _business_zone() -> ZoneInfo:
@@ -133,23 +142,37 @@ class AnalyticsService:
 
         payment_count = 0
         estimate_count = 0
+        observed_payment_count = 0
+        observed_estimate_count = 0
+        excluded_payment_count = 0
+        excluded_estimate_count = 0
         customer_count = 0
         appointment_count = 0
 
         for event in events:
             if event.event_type == cls.PAYMENT_RECEIVED:
-                payment_count += 1
-                cash_collected += cls._decimal_from_payload(
+                observed_payment_count += 1
+                amount = cls._decimal_from_payload(
                     event.payload,
                     ("amount", "payment_amount", "total"),
                 )
+                if amount is None:
+                    excluded_payment_count += 1
+                else:
+                    payment_count += 1
+                    cash_collected += amount
 
             elif event.event_type == cls.ESTIMATE_APPROVED:
-                estimate_count += 1
-                booked_revenue += cls._decimal_from_payload(
+                observed_estimate_count += 1
+                amount = cls._decimal_from_payload(
                     event.payload,
                     ("amount", "approved_amount", "estimate_total", "total"),
                 )
+                if amount is None:
+                    excluded_estimate_count += 1
+                else:
+                    estimate_count += 1
+                    booked_revenue += amount
 
             elif event.event_type == cls.CUSTOMER_CREATED:
                 customer_count += 1
@@ -173,13 +196,27 @@ class AnalyticsService:
             timezone=settings.business_timezone,
             cash_collected=MetricValue(
                 name="Cash Collected Today",
-                value=cash_collected,
+                value=None
+                if excluded_payment_count and not payment_count
+                else cash_collected,
                 event_count=payment_count,
+                observed_event_count=observed_payment_count,
+                excluded_event_count=excluded_payment_count,
+                completeness=cls._completeness(
+                    observed_payment_count, excluded_payment_count
+                ),
             ),
             booked_revenue=MetricValue(
                 name="Booked Revenue Today",
-                value=booked_revenue,
+                value=None
+                if excluded_estimate_count and not estimate_count
+                else booked_revenue,
                 event_count=estimate_count,
+                observed_event_count=observed_estimate_count,
+                excluded_event_count=excluded_estimate_count,
+                completeness=cls._completeness(
+                    observed_estimate_count, excluded_estimate_count
+                ),
             ),
             new_customers=CountMetric(
                 name="New Customers Today",
@@ -231,6 +268,8 @@ class AnalyticsService:
                 "cash_collected": Decimal("0.00"),
                 "booked_event_count": 0,
                 "payment_event_count": 0,
+                "excluded_booked_event_count": 0,
+                "excluded_payment_event_count": 0,
             }
 
         for event in events:
@@ -241,18 +280,34 @@ class AnalyticsService:
                 continue
 
             if event.event_type == cls.ESTIMATE_APPROVED:
-                values["booked_revenue"] += cls._decimal_from_payload(
+                amount = cls._decimal_from_payload(
                     event.payload,
                     ("amount", "approved_amount", "estimate_total", "total"),
                 )
-                values["booked_event_count"] += 1
+                if amount is None:
+                    values["excluded_booked_event_count"] += 1
+                    if not values["booked_event_count"]:
+                        values["booked_revenue"] = None
+                else:
+                    values["booked_revenue"] = (
+                        values["booked_revenue"] or Decimal()
+                    ) + amount
+                    values["booked_event_count"] += 1
 
             elif event.event_type == cls.PAYMENT_RECEIVED:
-                values["cash_collected"] += cls._decimal_from_payload(
+                amount = cls._decimal_from_payload(
                     event.payload,
                     ("amount", "payment_amount", "total"),
                 )
-                values["payment_event_count"] += 1
+                if amount is None:
+                    values["excluded_payment_event_count"] += 1
+                    if not values["payment_event_count"]:
+                        values["cash_collected"] = None
+                else:
+                    values["cash_collected"] = (
+                        values["cash_collected"] or Decimal()
+                    ) + amount
+                    values["payment_event_count"] += 1
 
         points = [
             RevenueTrendPoint(
@@ -261,14 +316,29 @@ class AnalyticsService:
                 cash_collected=values["cash_collected"],
                 booked_event_count=values["booked_event_count"],
                 payment_event_count=values["payment_event_count"],
+                excluded_booked_event_count=values["excluded_booked_event_count"],
+                excluded_payment_event_count=values["excluded_payment_event_count"],
             )
             for day, values in daily_values.items()
         ]
 
+        excluded_event_count = sum(
+            value["excluded_booked_event_count"] + value["excluded_payment_event_count"]
+            for value in daily_values.values()
+        )
+        observed_event_count = sum(
+            value["booked_event_count"]
+            + value["payment_event_count"]
+            + value["excluded_booked_event_count"]
+            + value["excluded_payment_event_count"]
+            for value in daily_values.values()
+        )
         return RevenueTrendResponse(
             period_start=period_start,
             period_end=period_end,
             timezone=settings.business_timezone,
             days=days,
+            completeness=cls._completeness(observed_event_count, excluded_event_count),
+            excluded_event_count=excluded_event_count,
             points=points,
         )

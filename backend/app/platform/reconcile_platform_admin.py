@@ -26,7 +26,7 @@ async def run(arguments: argparse.Namespace) -> None:
     # Standalone administration commands do not import the FastAPI application,
     # so load its model registry before flushing cross-domain audit/authority rows.
     # The normal web process has already performed this registration.
-    from app import main as _application  # noqa: F401, PLC0415
+    from app import main as _application  # noqa: F401
 
     async with AsyncSessionFactory() as session, session.begin():
         result = await reconcile_canonical_platform_administrator(

@@ -6,7 +6,7 @@ import { BeaconPanel } from "./BeaconPanel";
 import { attentionWindow } from "./beaconAttention";
 
 const signal: BeaconSignal = {
-  id: "signal-id",
+  id: "11111111-1111-4111-8111-111111111111",
   condition_key: "condition-id",
   evidence_digest: "a".repeat(64),
   definition_id: "revenue.past_due_invoices",
@@ -125,10 +125,20 @@ describe("BeaconPanel", () => {
     expect(screen.getByText("Important severity")).toBeInTheDocument();
     expect(screen.getByText("First for owner attention")).toBeInTheDocument();
     expect(screen.getByText("partial completeness")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Measured facts" })).toBeInTheDocument();
+    expect(screen.getByText(/^Interpretation:/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Recommended human action" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/does not execute this action/)).toBeInTheDocument();
     expect(screen.getByText(/intentionally bounded/)).toBeInTheDocument();
     expect(screen.getByText("Open source workflow")).toHaveAttribute(
       "href",
       "/invoices/invoice-1",
+    );
+    expect(screen.getByRole("link", { name: "Ask LIA why" })).toHaveAttribute(
+      "href",
+      "/lia?contextDomain=beacon&contextId=11111111-1111-4111-8111-111111111111",
     );
     expect(
       screen.getByText(/measured ranking factors contribute 37 points/),
@@ -159,6 +169,11 @@ describe("BeaconPanel", () => {
     expect(queue).toHaveTextContent(signal.title);
     expect(queue).toHaveTextContent(lowerPriority.title);
     expect(screen.getByText(/Priority 2 · operations · jobs/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Attention category"), {
+      target: { value: "revenue" },
+    });
+    expect(queue).toHaveTextContent(signal.title);
+    expect(queue).not.toHaveTextContent(lowerPriority.title);
   });
 
   it("renders an honest empty state", () => {
@@ -169,6 +184,40 @@ describe("BeaconPanel", () => {
       />,
     );
     expect(screen.getByText("No active Beacon signals")).toBeInTheDocument();
+    expect(screen.queryByText(/all systems operational/i)).not.toBeInTheDocument();
+  });
+
+  it("distinguishes evaluated recommendation families from gated families", () => {
+    render(
+      <BeaconPanel
+        {...panelProps}
+        signals={[]}
+        recommendationCoverage={[
+          {
+            family: "scheduling_dispatch",
+            source_authority: "Scheduling and Dispatch",
+            contract: "appointment authority",
+            status: "ACTIVE",
+            responsibility: "OFFICE",
+            clearing_condition: "Record the authoritative outcome.",
+            limitation: null,
+          },
+          {
+            family: "economics_luminary",
+            source_authority: "Business Economics and Luminary",
+            contract: "immutable economics result",
+            status: "ADAPTER_GATED",
+            responsibility: "OWNER",
+            clearing_condition: "Admit the adapter.",
+            limitation: "Beacon does not recalculate Economics.",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/1 active · 1 not yet evaluable/)).toBeInTheDocument();
+    expect(screen.getByText(/No signal means only/)).toBeInTheDocument();
+    expect(screen.getByText(/Beacon does not recalculate Economics/)).toBeInTheDocument();
     expect(screen.queryByText(/all systems operational/i)).not.toBeInTheDocument();
   });
 

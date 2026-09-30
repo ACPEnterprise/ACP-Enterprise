@@ -37,5 +37,11 @@ describe("LIA voice intent safety", () => {
       kind: "MUTATION_REQUEST",
       action: "ACCOUNTING_POST",
     });
+    expect(classifyVoiceIntent("What did they pay us last time?")).toEqual({
+      kind: "QUESTION",
+    });
+    expect(classifyVoiceIntent("How much did we collect last month?")).toEqual({
+      kind: "QUESTION",
+    });
   });
 });

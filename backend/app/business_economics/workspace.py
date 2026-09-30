@@ -577,14 +577,47 @@ class EconomicsWorkspaceService:
                 "state": "unavailable",
                 "reason": "Both comparable periods require complete admitted Job populations.",
             }
+        current_other_direct = current_totals["equipment"] + current_totals["truck"]
+        prior_other_direct = prior_totals["equipment"] + prior_totals["truck"]
         return {
             "state": "available",
+            "current": {
+                "revenue_minor": current_totals["revenue"],
+                "contribution_minor": current_totals["gross_profit"],
+                "labor_minor": current_totals["labor"],
+                "materials_minor": current_totals["materials"],
+                "other_direct_cost_minor": current_other_direct,
+            },
+            "prior": {
+                "revenue_minor": prior_totals["revenue"],
+                "contribution_minor": prior_totals["gross_profit"],
+                "labor_minor": prior_totals["labor"],
+                "materials_minor": prior_totals["materials"],
+                "other_direct_cost_minor": prior_other_direct,
+            },
             "revenue_change_minor": current_totals["revenue"] - prior_totals["revenue"],
             "contribution_change_minor": current_totals["gross_profit"]
             - prior_totals["gross_profit"],
             "labor_change_minor": current_totals["labor"] - prior_totals["labor"],
             "materials_change_minor": current_totals["materials"]
             - prior_totals["materials"],
+            "other_direct_cost_change_minor": current_other_direct - prior_other_direct,
+            "evidence_references": {
+                "current": [
+                    {
+                        "result_id": row["result_id"],
+                        "result_digest": row["result_digest"],
+                    }
+                    for row in current["jobs"]
+                ],
+                "prior": [
+                    {
+                        "result_id": row["result_id"],
+                        "result_digest": row["result_digest"],
+                    }
+                    for row in prior["jobs"]
+                ],
+            },
             "explanation": "Change is the deterministic difference between equal-length admitted periods.",
         }
 

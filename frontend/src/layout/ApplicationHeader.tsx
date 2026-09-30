@@ -64,10 +64,10 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
           <span
             className="hidden items-center gap-ui-1 rounded-[var(--radius-round)] border border-stroke px-ui-3 py-ui-2 text-caption font-semibold text-content-secondary sm:inline-flex"
             role="status"
-            title="The authenticated Command Center interface is available. This does not describe providers or workers."
+            title="Your authenticated ACP session is active. Individual product and provider readiness is shown within each workspace."
           >
             <CircleCheck aria-hidden="true" className="size-4 text-status-success" />
-            Command Center Online
+            Authenticated session
           </span>
           <div className="hidden sm:contents">
             <IconButton icon={<Search />} label="Global search is not yet available" variant="ghost" disabled />

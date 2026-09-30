@@ -125,7 +125,7 @@ describe("Economics policy administration", () => {
     ).toHaveAttribute("href", "/luminary");
     expect(screen.getByRole("link", { name: "Ask LIA" })).toHaveAttribute(
       "href",
-      "/lia",
+      "/lia?contextDomain=business-economics",
     );
     expect(screen.getByLabelText("Economics readiness")).toHaveClass(
       "sm:grid-cols-2",

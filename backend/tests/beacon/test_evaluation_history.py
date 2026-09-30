@@ -135,6 +135,13 @@ async def test_evaluation_history_is_idempotent_versioned_and_resolution_safe(
         EvaluationDisposition.STILL_ACTIVE,
         EvaluationDisposition.EXPIRED,
     }.issubset({item.disposition for item in deltas})
+    assert await beacon_evaluation_history_service.has_completed_run(
+        session,
+        company_id=company_id,
+        branch_id=None,
+        since=NOW - timedelta(seconds=1),
+        until=NOW + timedelta(hours=3),
+    )
 
 
 @pytest.mark.asyncio

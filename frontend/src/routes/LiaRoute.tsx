@@ -4,13 +4,14 @@ import { Bot, ChevronDown, ShieldCheck, Sparkles } from "lucide-react";
 
 import { LiaVoicePanel } from "../components/lia/LiaVoicePanel";
 import { matchingAuthorizedNavigation } from "../components/lia/voiceIntent";
+import { getOperatorApiError } from "../api/errors";
 import {
   useAskLia,
   useLiaFoundationReadiness,
   useLiaReadiness,
   useOwnerBriefing,
 } from "../hooks/useLia";
-import type { LiaResponse } from "../types/lia";
+import type { LiaResponse, LiaTemporalContext } from "../types/lia";
 import {
   Alert,
   Button,
@@ -24,7 +25,8 @@ import {
 } from "../ui";
 
 const prompts = [
-  "How are we doing today?",
+  "How are we doing?",
+  "What is scheduled today?",
   "What changed versus the prior period?",
   "Which Jobs are strongest and which are losing money?",
   "What is driving margin movement?",
@@ -35,6 +37,26 @@ const prompts = [
   "Where is financial evidence incomplete?",
   "What should I inspect next?",
 ];
+
+const contextualDomains = new Set([
+  "customers",
+  "jobs",
+  "scheduling",
+  "estimates",
+  "invoicing",
+  "payments",
+  "purchasing",
+  "inventory",
+  "assets",
+  "workforce",
+  "payroll",
+  "dispatch",
+  "accounting",
+  "business-economics",
+  "luminary",
+  "beacon",
+  "price-book",
+]);
 
 const tone = (classification: LiaResponse["classification"]) =>
   classification === "KNOWN" || classification === "DERIVED"
@@ -133,33 +155,16 @@ export function LiaRoute() {
   const [searchParams] = useSearchParams();
   const contextDomain = searchParams.get("contextDomain");
   const contextId = searchParams.get("contextId");
-  const contextualDomains = new Set([
-    "customers",
-    "jobs",
-    "scheduling",
-    "estimates",
-    "invoicing",
-    "payments",
-    "purchasing",
-    "inventory",
-    "assets",
-    "workforce",
-    "payroll",
-    "dispatch",
-    "accounting",
-    "luminary",
-    "beacon",
-    "price-book",
-  ]);
   const validContextId =
     !contextId ||
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       contextId,
     );
-  const context =
+  const invalidContext =
     contextDomain !== null &&
-    contextualDomains.has(contextDomain) &&
-    validContextId
+    (!contextualDomains.has(contextDomain) || !validContextId);
+  const context =
+    contextDomain !== null && contextualDomains.has(contextDomain) && validContextId
       ? {
           domain: contextDomain,
           ...(contextId ? { entity_id: contextId } : {}),
@@ -180,44 +185,63 @@ export function LiaRoute() {
         payroll: "Payroll",
         dispatch: "Dispatch",
         accounting: "Financial Reports",
+        "business-economics": "Business Economics",
         luminary: "Luminary",
         beacon: "Beacon",
         "price-book": "Price Book",
       }[context.domain]
     : undefined;
+  const routeContextKey = context
+    ? `${context.domain}:${context.entity_id ?? ""}`
+    : "";
   const readiness = useLiaReadiness();
   const foundation = useLiaFoundationReadiness();
   const briefing = useOwnerBriefing();
   const ask = useAskLia();
+  const askError = ask.isError
+    ? getOperatorApiError(ask.error, "LIA request")
+    : undefined;
   const [question, setQuestion] = useState("");
   const pendingNavigation = useRef<string | undefined>(undefined);
   const [conversationId, setConversationId] = useState<string>();
   const [conversationContext, setConversationContext] = useState<{
-    domain: string;
+    domain?: string;
     entity_id?: string;
   }>();
+  const [conversationRouteKey, setConversationRouteKey] = useState(routeContextKey);
   const [continuation, setContinuation] = useState<{
     authorization_version: number;
     evidence_digest: string;
     as_of: string;
     topic_domains: string[];
+    temporal?: LiaTemporalContext | null;
   }>();
   const preserveContinuation = (result: LiaResponse) => {
     setConversationId(result.conversation_id);
-    if (result.subject_domain) {
-      setConversationContext({
+    setConversationRouteKey(routeContextKey);
+    setConversationContext(
+      result.subject_domain
+        ? {
         domain: result.subject_domain,
         ...(result.subject_id ? { entity_id: result.subject_id } : {}),
-      });
-      setContinuation({
-        authorization_version: result.authorization_version,
-        evidence_digest: result.evidence_digest,
-        as_of: result.as_of,
-        topic_domains: result.source_systems,
-      });
-    }
+          }
+        : {},
+    );
+    setContinuation({
+      authorization_version: result.authorization_version,
+      evidence_digest: result.evidence_digest,
+      as_of: result.as_of,
+      topic_domains: result.source_systems,
+      temporal: result.temporal,
+    });
   };
-  const activeContext = context ?? conversationContext;
+  const conversationMatchesRoute = conversationRouteKey === routeContextKey;
+  const activeContext =
+    conversationMatchesRoute && conversationContext ? conversationContext : context;
+  const activeConversationId = conversationMatchesRoute
+    ? conversationId
+    : undefined;
+  const activeContinuation = conversationMatchesRoute ? continuation : undefined;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const value = question.trim();
@@ -226,8 +250,10 @@ export function LiaRoute() {
     ask.mutate(
       {
         question: value,
-        conversation_id: conversationId,
-        context: activeContext ? { ...activeContext, ...continuation } : undefined,
+        conversation_id: activeConversationId,
+        context: activeContext
+          ? { ...activeContext, ...activeContinuation }
+          : undefined,
       },
       { onSuccess: preserveContinuation },
     );
@@ -238,8 +264,10 @@ export function LiaRoute() {
     ask.mutate(
       {
         question: value,
-        conversation_id: conversationId,
-        context: activeContext ? { ...activeContext, ...continuation } : undefined,
+        conversation_id: activeConversationId,
+        context: activeContext
+          ? { ...activeContext, ...activeContinuation }
+          : undefined,
       },
       { onSuccess: preserveContinuation },
     );
@@ -318,6 +346,13 @@ export function LiaRoute() {
         <Alert variant="success" title="Entity context ready">
           LIA will retrieve only the server-authorized minimum-necessary{" "}
           {contextLabel} context. The entity identifier does not grant access.
+        </Alert>
+      ) : null}
+      {invalidContext ? (
+        <Alert variant="warning" title="Record context unavailable">
+          This link does not contain a supported safe record context. LIA did not
+          use the supplied record identifier; open the authoritative record and
+          choose Ask LIA again.
         </Alert>
       ) : null}
       {foundation.data ? (
@@ -439,9 +474,9 @@ export function LiaRoute() {
         onSubmit={askPrompt}
       />
       {ask.data ? <Answer result={ask.data} /> : null}
-      {ask.isError ? (
-        <Alert variant="danger" title="LIA request unavailable">
-          The request failed safely. No answer was inferred.
+      {askError ? (
+        <Alert variant="danger" title={askError.title}>
+          {askError.message} No answer was inferred.
         </Alert>
       ) : null}
       <form

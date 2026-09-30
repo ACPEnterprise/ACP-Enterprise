@@ -2081,6 +2081,16 @@
     {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "lia",
+      "mechanism": "assignment-scoped governed retrieval with no durable business mutation",
+      "method": "POST",
+      "operation_id": "employee_ask_api_v1_lia_employee_ask_post",
+      "path": "/api/v1/lia/employee/ask",
+      "reason": "Employee-safe LIA re-resolves current Company, Branch, assignment, and permission scope for a non-authoritative response and persists no business truth.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "lia",
       "mechanism": "ephemeral non-authoritative telemetry with no durable receipt",
       "method": "POST",
       "operation_id": "feedback_api_v1_lia_feedback_post",
@@ -3317,6 +3327,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "74ef7e87382dbc07d252e9809e0dca402162bd18c771ecc17b39311ff6511db9",
+  "fingerprint": "3a6101839684b240b484f88107a22d9887fcfc68dd7e97f73ee100c998fb9a0f",
   "schema_version": "1"
 }

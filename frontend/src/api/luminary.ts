@@ -78,8 +78,32 @@ export interface LuminaryOwnerEconomics {
   company_id: string;
   branch_id: string | null;
   period: { start: string; end: string };
+  prior_period: { start: string; end: string } | null;
+  generated_at: string;
+  currency: string | null;
   readiness: string;
   confidence: { score_percent: number; method: string };
+  owner_health: {
+    revenue_production: OwnerHealthMoneyMeasure & { basis: string };
+    economic_contribution: OwnerHealthMoneyMeasure & { formula: string };
+    required_economic_burden: OwnerHealthMoneyMeasure & {
+      missing_components: string[];
+      policy_state: string;
+    };
+    economic_health: {
+      value_basis_points: number | null;
+      classification: EvidenceClassification;
+      break_even_basis_points: 10000;
+      status: string;
+      formula: string;
+      limitation: string | null;
+    };
+    cash_health: {
+      classification: "UNAVAILABLE";
+      separate_from_economic_health: true;
+      limitation: string;
+    };
+  };
   job_economics: Array<{
     job_id: string;
     job_number: string;
@@ -137,6 +161,73 @@ export interface LuminaryOwnerEconomics {
     owner_decision_required: string;
     status: string;
   }>;
+  facts: Array<{
+    family: string;
+    metric: string;
+    value: number | null;
+    units: string;
+    currency: string | null;
+    authority: string;
+    prerequisite_completeness: string;
+    as_of: string;
+  }>;
+  evidence_priority_queue: Array<{
+    prerequisite: string;
+    affected_job_count: number;
+    responsible_domain: string;
+    next_safe_step: string;
+    economic_unlock: string;
+  }>;
+  trend_support: {
+    state: string;
+    authority: string;
+    mixed_authority_periods: string;
+    comparison: null | {
+      state: string;
+      basis?: string;
+      currency?: string | null;
+      reason?: string;
+      explanation?: string;
+      revenue_change_minor?: number;
+      contribution_change_minor?: number;
+      labor_change_minor?: number;
+      materials_change_minor?: number;
+      invoiced_revenue_change_minor?: number;
+      current_reference_count?: number;
+      prior_reference_count?: number;
+    };
+  };
+  delta_explanation: {
+    state: string;
+    authority?: string;
+    classification?: string;
+    headline?: string;
+    explanation?: string;
+    reason?: string;
+    period: { start: string; end: string };
+    prior_period: { start: string; end: string } | null;
+    scope: { company_id: string; branch_id: string | null };
+    as_of: string;
+    freshness: string;
+    currency?: string | null;
+    causality_boundary: string;
+    contribution_change_minor?: number;
+    contribution_margin_change_basis_points?: number | null;
+    explained_change_minor?: number;
+    unexplained_change_minor: number | null;
+    components: Array<{
+      component: string;
+      change_minor: number;
+      contribution_effect_minor: number | null;
+      classification: string;
+      authority: string;
+    }>;
+    evidence_references?: {
+      current?: Array<{ result_id: string; result_digest: string }>;
+      prior?: Array<{ result_id: string; result_digest: string }>;
+    };
+    missing_evidence?: string[];
+  };
   market_evidence: { state: string; reason: string };
   scenario: null | {
     state: string;
@@ -148,6 +239,14 @@ export interface LuminaryOwnerEconomics {
   };
   mutation_authority: "none";
   packet_digest: string;
+}
+
+type EvidenceClassification = "MEASURED" | "AUTHORITATIVE" | "OWNER_CONFIRMED" | "UNAVAILABLE";
+interface OwnerHealthMoneyMeasure {
+  value_minor: number | null;
+  classification: EvidenceClassification;
+  currency: string | null;
+  limitation: string | null;
 }
 export async function getLuminaryBriefing(start: string, end: string) {
   return (

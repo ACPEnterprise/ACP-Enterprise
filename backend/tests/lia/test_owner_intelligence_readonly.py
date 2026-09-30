@@ -127,6 +127,7 @@ async def test_authorized_employee_name_resolves_to_bounded_context(
         "context": resolver.await_args.kwargs["context"],
         "domains": {"workforce"},
         "entity_id": employee_id,
+        "entity_domain": "workforce",
     }
     assert response.subject_domain == "workforce"
     assert response.subject_id == employee_id

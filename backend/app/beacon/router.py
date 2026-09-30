@@ -402,13 +402,30 @@ async def morning_brief(
     queue = await beacon_query_service.get_attention_queue(
         session, context=context, now=evaluated_at
     )
+    branch_id = context.active_branch.id if context.active_branch else None
+    since = evaluated_at - timedelta(days=1)
+    historical_deltas = await beacon_evaluation_history_service.deltas(
+        session,
+        company_id=context.company.id,
+        branch_id=branch_id,
+        since=since,
+        until=evaluated_at,
+    )
+    history_available = await beacon_evaluation_history_service.has_completed_run(
+        session,
+        company_id=context.company.id,
+        branch_id=branch_id,
+        since=since,
+        until=evaluated_at,
+    )
     return BeaconMorningBriefResponse.model_validate(
         build_morning_brief(
             company_id=context.company.id,
-            branch_id=context.active_branch.id if context.active_branch else None,
+            branch_id=branch_id,
             active=queue.active,
             snoozed=queue.snoozed,
             evaluated_at=evaluated_at,
+            historical_deltas=historical_deltas if history_available else None,
         ),
         from_attributes=True,
     )

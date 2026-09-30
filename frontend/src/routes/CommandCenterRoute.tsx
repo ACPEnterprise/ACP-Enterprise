@@ -14,8 +14,14 @@ import { Link } from "react-router";
 
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
+import { BeaconPanel } from "../components/command-center/BeaconPanel";
 import { JobsEvidenceGraph } from "../components/command-center/JobsEvidenceGraph";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import {
+  useBeaconLifecycleActions,
+  useBeaconSignals,
+  useBeaconWorkflowActions,
+} from "../hooks/useBeaconSignals";
 import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics";
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
@@ -229,7 +235,7 @@ function groupEmployeeItems(items: readonly DispatchBoardItem[]) {
 }
 
 export function CommandCenterRoute() {
-  const { activeCompany } = useAuth();
+  const { activeCompany, user } = useAuth();
   const permissions = useEffectivePermissions();
   const [branchId, setBranchId] = useState("");
   const [rangeKey, setRangeKey] = useState<RangeKey>("month");
@@ -280,6 +286,9 @@ export function CommandCenterRoute() {
     canReadDispatch,
   );
   const analytics = useAnalyticsSummary(canReadAnalytics && !branchId);
+  const beacon = useBeaconSignals(canReadAnalytics);
+  const beaconLifecycle = useBeaconLifecycleActions();
+  const beaconWorkflow = useBeaconWorkflowActions();
   const economics = useEconomicsMeasurementFoundation(canReadEconomics);
   const money = useMoneyPosition(
     today,
@@ -315,8 +324,8 @@ export function CommandCenterRoute() {
             Command Center
           </h1>
           <p className="mt-2 max-w-3xl text-content-muted">
-            Money first, operations second, every authoritative aggregate
-            connected to its evidence.
+            Owner attention first, with every measured fact and recommendation
+            connected to authoritative evidence.
           </p>
         </div>
         <label className="grid min-w-56 gap-1 text-sm font-semibold text-content">
@@ -335,6 +344,41 @@ export function CommandCenterRoute() {
           </Select>
         </label>
       </header>
+
+      {canReadAnalytics ? (
+        <BeaconPanel
+          signals={beacon.data?.items}
+          snoozedSignals={beacon.data?.snoozed_items}
+          recommendationCoverage={beacon.data?.recommendation_coverage}
+          canReview={beacon.data?.lifecycle_commands_available ?? false}
+          canOwn={permissions.has("COMPANY_BEACON_OWN")}
+          canAssign={permissions.has("COMPANY_BEACON_ASSIGN")}
+          currentUserId={user?.id ?? null}
+          evaluatedAt={beacon.data?.evaluated_at ?? null}
+          loading={beacon.isLoading}
+          error={beacon.isError}
+          lifecycleError={beaconLifecycle.isError}
+          lifecyclePending={beaconLifecycle.isPending}
+          workflowError={beaconWorkflow.isError}
+          workflowPending={beaconWorkflow.isPending}
+          onLifecycleAction={(signal, action, snoozeUntil) =>
+            beaconLifecycle.mutate({ signal, action, snoozeUntil })
+          }
+          onWorkflowAction={(signal, action, expectedVersion, ownerUserId) =>
+            beaconWorkflow.mutate({
+              signal,
+              action,
+              expectedVersion,
+              ownerUserId,
+            })
+          }
+          retry={() => void beacon.refetch()}
+        />
+      ) : (
+        <Alert variant="information" title="Beacon access unavailable">
+          Analytics read permission is required to view Beacon evidence.
+        </Alert>
+      )}
 
       <Panel
         title="Money / Cash Position"

@@ -226,7 +226,11 @@ export function useLiaVoice({
         if (conversationModeRef.current) {
           startListening();
           inactivityTimer.current = window.setTimeout(() => {
+            conversationModeRef.current = false;
             setConversationMode(false);
+            recognition.current?.abort();
+            recognition.current = undefined;
+            setInterimTranscript("");
             setState("IDLE");
           }, inactivityMs);
         }
@@ -262,11 +266,16 @@ export function useLiaVoice({
   }, [clearTimers]);
 
   const cancel = useCallback(() => {
+    conversationModeRef.current = false;
+    setConversationMode(false);
+    clearTimers();
     recognition.current?.abort();
     recognition.current = undefined;
+    window.speechSynthesis?.cancel();
     setInterimTranscript("");
+    setError(undefined);
     setState("IDLE");
-  }, []);
+  }, [clearTimers]);
 
   const replay = useCallback(() => {
     if (lastSpokenAnswer) speak(lastSpokenAnswer, lastDeliveryStyle.current);

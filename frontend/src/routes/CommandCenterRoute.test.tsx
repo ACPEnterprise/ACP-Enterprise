@@ -6,6 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import {
+  useBeaconLifecycleActions,
+  useBeaconSignals,
+  useBeaconWorkflowActions,
+} from "../hooks/useBeaconSignals";
 import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics";
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
@@ -16,6 +21,7 @@ import { CommandCenterRoute } from "./CommandCenterRoute";
 vi.mock("../auth/useAuth");
 vi.mock("../auth/usePermissions");
 vi.mock("../hooks/useAnalyticsSummary");
+vi.mock("../hooks/useBeaconSignals");
 vi.mock("../hooks/useBusinessEconomics");
 vi.mock("../hooks/useDispatch");
 vi.mock("../hooks/useInvoices");
@@ -37,6 +43,7 @@ function queryResult<T>(data: T) {
 
 function arrange() {
   vi.mocked(useAuth).mockReturnValue({
+    user: { id: "owner-1" },
     activeCompany: {
       id: "company-1",
       name: "All County Plumbing & Leak",
@@ -50,6 +57,45 @@ function arrange() {
     },
   } as ReturnType<typeof useAuth>);
   vi.mocked(useEffectivePermissions).mockReturnValue(permissions);
+  vi.mocked(useBeaconSignals).mockReturnValue(
+    queryResult({
+      items: [],
+      snoozed_items: [],
+      evaluated_at: "2026-09-22T12:00:00Z",
+      expires_at: "2026-09-22T12:15:00Z",
+      lifecycle_commands_available: false,
+      recommendation_coverage: [
+        {
+          family: "scheduling_dispatch",
+          source_authority: "Scheduling and Dispatch",
+          contract: "BeaconSnapshot.overdue_appointments/v1",
+          status: "ACTIVE",
+          responsibility: "OFFICE",
+          clearing_condition: "Record the authoritative outcome.",
+          limitation: null,
+        },
+        {
+          family: "economics_luminary",
+          source_authority: "Business Economics and Luminary",
+          contract: "immutable economics result",
+          status: "ADAPTER_GATED",
+          responsibility: "OWNER",
+          clearing_condition: "Admit the Economics adapter.",
+          limitation: "Beacon does not recalculate Economics.",
+        },
+      ],
+    }),
+  );
+  vi.mocked(useBeaconLifecycleActions).mockReturnValue({
+    isError: false,
+    isPending: false,
+    mutate: vi.fn(),
+  } as never);
+  vi.mocked(useBeaconWorkflowActions).mockReturnValue({
+    isError: false,
+    isPending: false,
+    mutate: vi.fn(),
+  } as never);
   vi.mocked(useReceivablesSummary).mockReturnValue(
     queryResult({
       as_of: "2026-09-22",
@@ -276,6 +322,8 @@ describe("CommandCenterRoute", () => {
     expect(
       screen.getByRole("heading", { name: "Command Center" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Beacon" })).toBeInTheDocument();
+    expect(screen.getByText(/1 active · 1 not yet evaluable/)).toBeInTheDocument();
     const moneyPanel = screen
       .getByRole("heading", { name: "Money / Cash Position" })
       .closest("article");
@@ -391,6 +439,7 @@ describe("CommandCenterRoute", () => {
       false,
     );
     expect(useAnalyticsSummary).toHaveBeenCalledWith(false);
+    expect(useBeaconSignals).toHaveBeenCalledWith(false);
     expect(useEconomicsMeasurementFoundation).toHaveBeenCalledWith(false);
     expect(useMoneyPosition).toHaveBeenCalledWith(
       expect.any(String),

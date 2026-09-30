@@ -168,7 +168,9 @@ PIPELINE_DEFINITIONS = tuple(
         code=code,
         name=code.replace("_", " ").title(),
         resource="pipeline_lead",
-        action=code.removeprefix("COMPANY_PIPELINE_LEAD_").removeprefix("COMPANY_PIPELINE_").lower(),
+        action=code.removeprefix("COMPANY_PIPELINE_LEAD_")
+        .removeprefix("COMPANY_PIPELINE_")
+        .lower(),
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(PipelinePermission.ALL)
@@ -302,7 +304,7 @@ EMPLOYEE_OPERATIONS_DEFINITIONS = tuple(
         code=code,
         name=code.replace("_", " ").title(),
         resource="employee_operations",
-        action="own_day_read",
+        action=code.removeprefix("COMPANY_EMPLOYEE_OPERATIONS_").lower(),
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(EmployeeOperationsPermission.ALL)
