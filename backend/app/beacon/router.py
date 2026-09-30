@@ -5,6 +5,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.beacon.active_recommendations import (
+    active_recommendation_service,
+    recommendation_digest,
+)
 from app.beacon.adapter_registry import CROSS_DOMAIN_ADAPTER_REGISTRY
 from app.beacon.briefing import build_morning_brief
 from app.beacon.catalog import (
@@ -29,6 +33,8 @@ from app.beacon.lifecycle import (
 )
 from app.beacon.quality import EVIDENCE_QUALITY_SERVICE
 from app.beacon.schemas import (
+    ActiveOwnerRecommendationPage,
+    ActiveOwnerRecommendationResponse,
     BeaconEvaluationDeltaResponse,
     BeaconEvaluationRecordResponse,
     BeaconIntelligencePacketResponse,
@@ -59,6 +65,7 @@ from app.beacon.schemas import (
     OperationalSignalDefinitionResponse,
     OperationalWorkflowQueueResponse,
     OperationalWorkflowSignalResponse,
+    ReadinessAdapterEvaluationResponse,
 )
 from app.beacon.service import SIGNAL_TTL, beacon_query_service
 from app.beacon.workflow import BeaconWorkflowCommand, beacon_workflow_service
@@ -94,6 +101,40 @@ BeaconOwnerOrAssigner = Annotated[
     AuthorizationContext,
     Depends(require_any_permission(BeaconPermission.OWN, BeaconPermission.ASSIGN)),
 ]
+
+
+@router.get(
+    "/active-recommendations",
+    response_model=ActiveOwnerRecommendationPage,
+    summary="Explain active owner recommendations from canonical evidence",
+)
+async def active_owner_recommendations(
+    session: DatabaseSession,
+    context: BeaconOwner,
+) -> ActiveOwnerRecommendationPage:
+    evaluated_at = datetime.now(timezone.utc)
+    items = await active_recommendation_service.list(
+        session,
+        context=context,
+        evaluated_at=evaluated_at,
+    )
+    readiness_adapters = await active_recommendation_service.adapter_evaluations(
+        session, context=context, evaluated_at=evaluated_at
+    )
+    return ActiveOwnerRecommendationPage(
+        company_id=context.company.id,
+        branch_id=context.active_branch.id if context.active_branch else None,
+        evaluated_at=evaluated_at,
+        recommendation_digest=recommendation_digest(items),
+        items=tuple(
+            ActiveOwnerRecommendationResponse.model_validate(item) for item in items
+        ),
+        readiness_adapters=tuple(
+            ReadinessAdapterEvaluationResponse.model_validate(item)
+            for item in readiness_adapters
+        ),
+        autonomous_action=False,
+    )
 
 
 @router.get(

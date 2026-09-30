@@ -241,7 +241,14 @@ class EmployeeSafeLiaService:
                 "This answer is limited to your currently authorized assigned-work projection.",
             ),
             navigation=(
-                NavigationSuggestion(label="Open My Day", internal_path="/my-day"),
+                NavigationSuggestion(
+                    label="Open My Day",
+                    internal_path="/my-day",
+                    required_permission="COMPANY_EMPLOYEE_OPERATIONS_OWN_LIA_READ",
+                    action_category="EMPLOYEE_WORKFLOW",
+                    entity_type="employee_day",
+                    source_identity=EMPLOYEE_DAY_AUTHORITY,
+                ),
             ),
         )
 
@@ -344,7 +351,13 @@ class EmployeeSafeLiaService:
             limitations=("The current assignment was revalidated for this request.",),
             navigation=(
                 NavigationSuggestion(
-                    label="Open assigned Job", internal_path=f"/jobs/{job_id}"
+                    label="Open assigned Job",
+                    internal_path=f"/jobs/{job_id}",
+                    required_permission=JobPermission.READ,
+                    action_category="EMPLOYEE_WORKFLOW",
+                    entity_type="job",
+                    entity_id=job_id,
+                    source_identity="FIELD.ASSIGNED_JOB.v1",
                 ),
             ),
         )
