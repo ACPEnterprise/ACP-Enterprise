@@ -514,6 +514,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
             TimekeepingPermission.CORRECT,
             TimekeepingPermission.APPROVE,
             TimekeepingPermission.ADMIN_READ,
+            TimekeepingPermission.PAY_PERIOD_MANAGE,
         },
         manager=True,
     )
@@ -912,6 +913,7 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
             TimekeepingPermission.CORRECT,
             TimekeepingPermission.APPROVE,
             TimekeepingPermission.ADMIN_READ,
+            TimekeepingPermission.PAY_PERIOD_MANAGE,
         },
         manager=True,
     )
