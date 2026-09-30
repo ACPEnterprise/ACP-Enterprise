@@ -1,7 +1,7 @@
 """create field Job activity and continuation authority
 
 Revision ID: sh8d0f2g4j6l8
-Revises: rg7c9e1f3i5k7
+Revises: r8t0v2x4z6b8
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "sh8d0f2g4j6l8"
-down_revision: str | Sequence[str] | None = "rg7c9e1f3i5k7"
+down_revision: str | Sequence[str] | None = "r8t0v2x4z6b8"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 U = postgresql.UUID(as_uuid=True)
