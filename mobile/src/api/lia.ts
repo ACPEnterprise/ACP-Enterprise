@@ -10,7 +10,7 @@ const evidenceSchema = z.object({
   limitations: z.array(z.string()).optional().default([]), period_start: z.string().nullable().optional(),
   period_end: z.string().nullable().optional(), period_label: z.string().nullable().optional(), timezone: z.string().nullable().optional(),
 });
-const navigationSchema = z.object({ label: z.string(), internal_path: z.string() });
+const navigationSchema = z.object({ label: z.string(), internal_path: z.string(), required_permission: z.string().nullable().optional(), available: z.boolean().default(true), unavailable_reason: z.string().nullable().optional(), entity_type: z.string().nullable().optional(), entity_id: z.string().uuid().nullable().optional(), action_category: z.string().default("NAVIGATION"), source_identity: z.string().nullable().optional() });
 export const liaResponseSchema = z.object({
   request_id: z.string().uuid(), conversation_id: z.string().uuid(),
   classification: z.enum(["KNOWN", "DERIVED", "INCOMPLETE", "STALE", "CONFLICTING", "UNAVAILABLE", "UNAUTHORIZED", "POLICY_REQUIRED", "EXTERNAL_GATE"]),
@@ -25,6 +25,7 @@ export const liaResponseSchema = z.object({
   safe_next_action: z.string().nullable().optional(), as_of: z.string(), generated_at: z.string(), temporal: z.unknown().nullable().optional(),
 });
 export type LiaResponse = z.infer<typeof liaResponseSchema>;
+export type LiaNavigation = z.infer<typeof navigationSchema>;
 export type LiaContext = { domain?: string; entity_id?: string; authorization_version?: number; evidence_digest?: string };
 export interface LiaService { ask(question: string, conversationId?: string, context?: LiaContext): Promise<LiaResponse>; }
 export function createLiaService(client: ApiClient): LiaService {
