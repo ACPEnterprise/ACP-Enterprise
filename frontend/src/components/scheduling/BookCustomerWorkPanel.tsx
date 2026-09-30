@@ -47,12 +47,13 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
   const [intakePending, setIntakePending] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
   const [duplicateWarnings, setDuplicateWarnings] = useState(0);
+  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; displayName: string } | null>(null);
   const confirmIntake = async () => {
     setIntakePending(true);
     setIntakeError(null);
     try {
       const [firstName, ...last] = newCustomer.name.trim().split(/\s+/);
-      const created = await createCustomer({
+      const created = createdCustomer ? null : await createCustomer({
         customer_type: "residential",
         first_name: firstName || null,
         last_name: last.join(" ") || null,
@@ -66,7 +67,15 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
         is_vip: false,
         internal_notes: null,
       });
-      const location = await addCustomerProperty(created.customer.id, {
+      const resolvedCustomer = created
+        ? { id: created.customer.id, displayName: created.customer.display_name ?? newCustomer.name }
+        : createdCustomer;
+      if (!resolvedCustomer) throw new Error("Customer identity was not preserved.");
+      if (created) {
+        setCreatedCustomer(resolvedCustomer);
+        setDuplicateWarnings(created.duplicate_warnings.length);
+      }
+      const location = await addCustomerProperty(resolvedCustomer.id, {
         address_line_1: newCustomer.address.trim(),
         address_line_2: null,
         city: newCustomer.city.trim(),
@@ -79,10 +88,10 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
         property_notes: null,
         is_primary: true,
       });
-      setCustomerId(created.customer.id);
-      setCustomerSearch(created.customer.display_name ?? newCustomer.name);
+      setCustomerId(resolvedCustomer.id);
+      setCustomerSearch(resolvedCustomer.displayName);
       setLocationId(location.id);
-      setDuplicateWarnings(created.duplicate_warnings.length);
+      setCreatedCustomer(null);
       setCustomerMode("existing");
     } catch (error) {
       setIntakeError(error instanceof Error ? error.message : "Customer intake failed.");
