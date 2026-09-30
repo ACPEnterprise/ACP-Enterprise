@@ -90,7 +90,9 @@ class QboNativeApplicationRecord(Base):
     provider_version: Mapped[str | None] = mapped_column(String(80))
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     source_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disposition: Mapped[str] = mapped_column(String(32), nullable=False)
     reason_code: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -106,7 +108,9 @@ class QboNativeApplicationRecord(Base):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     applied_by_user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     applied_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -222,7 +226,9 @@ class QboNativeReviewDecision(Base):
         PGUUID(as_uuid=True), ForeignKey("qbo_native_review_decisions.id")
     )
     decided_by_user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     decided_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now

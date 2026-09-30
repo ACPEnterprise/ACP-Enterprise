@@ -236,7 +236,10 @@ def translate_scheduling_error(error: SchedulingError) -> HTTPException:
         }
         code, message = validation_failures.get(
             error.failure,
-            (FailureCode.VALIDATION, "Scheduling request violates domain validation rules."),
+            (
+                FailureCode.VALIDATION,
+                "Scheduling request violates domain validation rules.",
+            ),
         )
         failure = SafeFailure(
             code,

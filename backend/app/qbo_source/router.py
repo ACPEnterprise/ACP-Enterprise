@@ -113,6 +113,8 @@ class QboReviewDecisionRequest(BaseModel):
     target_native_id: UUID | None = None
     evidence_reference: str | None = Field(default=None, max_length=240)
     supersedes_decision_id: UUID | None = None
+
+
 _PRODUCTION_CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com"
     "/api/v1/integrations/qbo/production/oauth/callback"
@@ -140,19 +142,29 @@ def _family_count_response(item: FamilyDispositionCount) -> dict[str, object]:
     }
 
 
-def _sealed_evidence_readiness(authorization: AuthorizationContext) -> dict[str, object]:
+def _sealed_evidence_readiness(
+    authorization: AuthorizationContext,
+) -> dict[str, object]:
     if (
         not settings.qbo_production_acp_company_id
         or settings.qbo_production_acp_company_id != authorization.company.id
         or not settings.qbo_production_evidence_root
     ):
-        return {"available": False, "reason": "Production source custody is not configured for this Company."}
+        return {
+            "available": False,
+            "reason": "Production source custody is not configured for this Company.",
+        }
     try:
         packet = latest_bounded_evidence(Path(settings.qbo_production_evidence_root))
         if packet is None:
-            return {"available": False, "reason": "No complete sealed QuickBooks acquisition is available."}
+            return {
+                "available": False,
+                "reason": "No complete sealed QuickBooks acquisition is available.",
+            }
         envelopes = load_bounded_envelopes(packet)
-        families = Counter(envelope.native_entity_type.lower() for _, envelope in envelopes)
+        families = Counter(
+            envelope.native_entity_type.lower() for _, envelope in envelopes
+        )
         return {
             "available": True,
             "reason": None,
@@ -166,7 +178,10 @@ def _sealed_evidence_readiness(authorization: AuthorizationContext) -> dict[str,
             ],
         }
     except (KeyError, OSError, ValueError, BoundedEvidenceError):
-        return {"available": False, "reason": "Sealed QuickBooks evidence failed custody or digest validation."}
+        return {
+            "available": False,
+            "reason": "Sealed QuickBooks evidence failed custody or digest validation.",
+        }
 
 
 @router.post(NATIVE_APPLICATION_PATH, name="qbo-native-clean-majority-application")
@@ -235,9 +250,7 @@ async def apply_qbo_native_clean_majority(
             "processed": result.processed,
             "created": result.created,
             "replayed": result.replayed,
-            "families": [
-                _family_count_response(item) for item in result.family_counts
-            ],
+            "families": [_family_count_response(item) for item in result.family_counts],
             "qbo_write_performed": False,
             "accounting_posting_performed": False,
         },
@@ -303,8 +316,7 @@ async def qbo_native_review_queue(
             for decision in (
                 await session.scalars(
                     select(QboNativeReviewDecision).where(
-                        QboNativeReviewDecision.company_id
-                        == authorization.company.id,
+                        QboNativeReviewDecision.company_id == authorization.company.id,
                         QboNativeReviewDecision.review_item_id.in_(
                             [item.id for item in items]
                         ),
@@ -385,7 +397,9 @@ async def decide_qbo_native_review(
             ),
         )
     except QboApplicationError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
     re_evaluated = 0
     if settings.qbo_production_evidence_root:
         async with factory() as session:
@@ -408,11 +422,19 @@ async def decide_qbo_native_review(
                         if value[1].native_id in dependent_ids
                     )
                     if bounded:
-                        replay = await qbo_native_application_service.apply_clean_majority(
-                            factory, context=authorization, envelopes=bounded
+                        replay = (
+                            await qbo_native_application_service.apply_clean_majority(
+                                factory, context=authorization, envelopes=bounded
+                            )
                         )
                         re_evaluated = replay.processed
-            except (KeyError, OSError, ValueError, BoundedEvidenceError, QboApplicationError):
+            except (
+                KeyError,
+                OSError,
+                ValueError,
+                BoundedEvidenceError,
+                QboApplicationError,
+            ):
                 re_evaluated = 0
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,

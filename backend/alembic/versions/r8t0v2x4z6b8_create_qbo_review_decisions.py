@@ -27,7 +27,9 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("review_item_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("application_record_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column(
+            "application_record_id", postgresql.UUID(as_uuid=True), nullable=False
+        ),
         sa.Column("action", sa.String(length=40), nullable=False),
         sa.Column("authority_class", sa.String(length=32), nullable=False),
         sa.Column("target_native_type", sa.String(length=80), nullable=True),
@@ -35,7 +37,9 @@ def upgrade() -> None:
         sa.Column("reason", sa.Text(), nullable=False),
         sa.Column("evidence_reference", sa.String(length=240), nullable=True),
         sa.Column("decision_digest", sa.String(length=64), nullable=False),
-        sa.Column("supersedes_decision_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column(
+            "supersedes_decision_id", postgresql.UUID(as_uuid=True), nullable=True
+        ),
         sa.Column("decided_by_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("superseded_at", sa.DateTime(timezone=True), nullable=True),
@@ -55,10 +59,16 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["application_record_id"], ["qbo_native_application_records.id"], ondelete="RESTRICT"
+            ["application_record_id"],
+            ["qbo_native_application_records.id"],
+            ondelete="RESTRICT",
         ),
-        sa.ForeignKeyConstraint(["supersedes_decision_id"], ["qbo_native_review_decisions.id"]),
-        sa.ForeignKeyConstraint(["decided_by_user_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["supersedes_decision_id"], ["qbo_native_review_decisions.id"]
+        ),
+        sa.ForeignKeyConstraint(
+            ["decided_by_user_id"], ["users.id"], ondelete="RESTRICT"
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("id", "company_id", name="uq_qbo_review_decision_company"),
     )
@@ -72,6 +82,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("uq_qbo_review_decision_current", table_name="qbo_native_review_decisions")
+    op.drop_index(
+        "uq_qbo_review_decision_current", table_name="qbo_native_review_decisions"
+    )
     op.drop_table("qbo_native_review_decisions")
-    op.drop_constraint("uq_qbo_review_item_company", "qbo_native_review_items", type_="unique")
+    op.drop_constraint(
+        "uq_qbo_review_item_company", "qbo_native_review_items", type_="unique"
+    )

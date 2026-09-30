@@ -75,7 +75,11 @@ class FamilyDispositionCount:
 
     @property
     def safe_majority_applied_percentage(self) -> float:
-        return round(((self.applied + self.bound) / self.total * 100), 2) if self.total else 0
+        return (
+            round(((self.applied + self.bound) / self.total * 100), 2)
+            if self.total
+            else 0
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,7 +259,9 @@ class QboNativeApplicationService:
         if authority == "ACCOUNTANT" and not context.has_permission(
             AccountingPermission.FINANCE_APPROVE
         ):
-            raise QboApplicationError("Accounting finance approval authority is required")
+            raise QboApplicationError(
+                "Accounting finance approval authority is required"
+            )
         reason = command.reason.strip()
         if len(reason) < 4:
             raise QboApplicationError("a durable review reason is required")
@@ -297,7 +303,10 @@ class QboNativeApplicationService:
                 if command.target_native_id is None:
                     raise QboApplicationError("an exact native target is required")
                 target_type = await self._validate_exact_target(
-                    session, context.company.id, item.source_family, command.target_native_id
+                    session,
+                    context.company.id,
+                    item.source_family,
+                    command.target_native_id,
                 )
 
             digest = _digest(
@@ -324,7 +333,9 @@ class QboNativeApplicationService:
                 reason=reason,
                 evidence_reference=(command.evidence_reference or "").strip() or None,
                 decision_digest=digest,
-                supersedes_decision_id=current_decision.id if current_decision else None,
+                supersedes_decision_id=current_decision.id
+                if current_decision
+                else None,
                 decided_by_user_id=context.user.id,
             )
             session.add(decision)
@@ -387,9 +398,7 @@ class QboNativeApplicationService:
             item.resolved_at = (
                 datetime.now(timezone.utc) if item.state != "OPEN" else None
             )
-            item.resolved_by_user_id = (
-                context.user.id if item.state != "OPEN" else None
-            )
+            item.resolved_by_user_id = context.user.id if item.state != "OPEN" else None
             item.resolution_note = reason
             AuditService.stage(
                 session,
@@ -399,9 +408,14 @@ class QboNativeApplicationService:
                     resource_id=item.id,
                     actor_user_id=context.user.id,
                     company_id=context.company.id,
-                    branch_id=context.active_branch.id if context.active_branch else None,
+                    branch_id=context.active_branch.id
+                    if context.active_branch
+                    else None,
                     reason_code=action.lower(),
-                    details={"decision_id": str(decision.id), "authority_class": authority},
+                    details={
+                        "decision_id": str(decision.id),
+                        "authority_class": authority,
+                    },
                 ),
             )
             BusinessEventService.stage(
@@ -411,7 +425,9 @@ class QboNativeApplicationService:
                     entity_type="qbo_native_review_item",
                     entity_id=item.id,
                     company_id=context.company.id,
-                    branch_id=context.active_branch.id if context.active_branch else None,
+                    branch_id=context.active_branch.id
+                    if context.active_branch
+                    else None,
                     user_id=context.user.id,
                     payload={"decision_id": str(decision.id), "action": action},
                 ),
@@ -438,7 +454,9 @@ class QboNativeApplicationService:
             select(model).where(model.id == target_id, model.company_id == company_id)
         )
         if target is None:
-            raise QboApplicationError("exact native target was not found in this Company")
+            raise QboApplicationError(
+                "exact native target was not found in this Company"
+            )
         return native_type
 
     async def _supersede_disposition(
@@ -475,7 +493,12 @@ class QboNativeApplicationService:
                 provider_version=current.provider_version,
                 source_digest=current.source_digest,
                 evidence_digest=_digest(
-                    {"predecessor": current.evidence_digest, "disposition": disposition.value, "reason": reason_code, "native_id": native_id}
+                    {
+                        "predecessor": current.evidence_digest,
+                        "disposition": disposition.value,
+                        "reason": reason_code,
+                        "native_id": native_id,
+                    }
                 ),
                 acquired_at=current.acquired_at,
                 source_as_of=current.source_as_of,
@@ -529,7 +552,11 @@ class QboNativeApplicationService:
                 "provider_version_content_conflict",
                 "The same QuickBooks source version has contradictory content.",
                 conflicting_fields=("provider_version", "source_digest"),
-                allowed_actions=("CONFIRM_SOURCE_VERSION", "HOLD_FOR_ACCOUNTANT", "REJECT_WITH_REASON"),
+                allowed_actions=(
+                    "CONFIRM_SOURCE_VERSION",
+                    "HOLD_FOR_ACCOUNTANT",
+                    "REJECT_WITH_REASON",
+                ),
             )
         else:
             resolution = await self._resolve(session, context.company.id, envelope)
@@ -603,7 +630,10 @@ class QboNativeApplicationService:
                     exact_conflict=resolution.explanation,
                     affected_dependents=list(envelope.relationship_ids),
                     allowed_actions=list(
-                        resolution.allowed_actions or _REVIEW_ACTIONS.get(family, ("DEFER_EXTERNAL", "REJECT_WITH_REASON"))
+                        resolution.allowed_actions
+                        or _REVIEW_ACTIONS.get(
+                            family, ("DEFER_EXTERNAL", "REJECT_WITH_REASON")
+                        )
                     ),
                 )
             )
@@ -624,8 +654,16 @@ class QboNativeApplicationService:
                 )
             )
             if identity:
-                return _bound("accounting_account", identity.account_id, "exact_qbo_account_source_identity")
-            return _quarantine(family, "account_mapping_required", "No approved native account mapping exists for this QuickBooks account.")
+                return _bound(
+                    "accounting_account",
+                    identity.account_id,
+                    "exact_qbo_account_source_identity",
+                )
+            return _quarantine(
+                family,
+                "account_mapping_required",
+                "No approved native account mapping exists for this QuickBooks account.",
+            )
         if family == "customer":
             identity = await session.scalar(
                 select(CustomerSourceIdentity).where(
@@ -635,8 +673,16 @@ class QboNativeApplicationService:
                 )
             )
             if identity:
-                return _bound("customer", identity.customer_id, "exact_qbo_customer_source_identity")
-            return _quarantine(family, "customer_identity_review_required", "No exact native Customer binding exists; name-only matching is prohibited.")
+                return _bound(
+                    "customer",
+                    identity.customer_id,
+                    "exact_qbo_customer_source_identity",
+                )
+            return _quarantine(
+                family,
+                "customer_identity_review_required",
+                "No exact native Customer binding exists; name-only matching is prohibited.",
+            )
         if family == "vendor":
             identity = await session.scalar(
                 select(VendorSourceMapping).where(
@@ -647,8 +693,14 @@ class QboNativeApplicationService:
                 )
             )
             if identity:
-                return _bound("ap_vendor", identity.vendor_id, "exact_qbo_vendor_source_identity")
-            return _quarantine(family, "vendor_identity_review_required", "No exact native Vendor binding exists; name-only matching is prohibited.")
+                return _bound(
+                    "ap_vendor", identity.vendor_id, "exact_qbo_vendor_source_identity"
+                )
+            return _quarantine(
+                family,
+                "vendor_identity_review_required",
+                "No exact native Vendor binding exists; name-only matching is prohibited.",
+            )
         if family == "bill":
             bill = await session.scalar(
                 select(VendorBill).where(
@@ -659,7 +711,11 @@ class QboNativeApplicationService:
             )
             if bill:
                 return _bound("ap_bill", bill.id, "exact_qbo_bill_source_identity")
-            return _quarantine(family, "bill_dependencies_required", "Native bill admission requires an exact Vendor binding and approved account classifications.")
+            return _quarantine(
+                family,
+                "bill_dependencies_required",
+                "Native bill admission requires an exact Vendor binding and approved account classifications.",
+            )
         if family == "journal_entry":
             posting = await session.scalar(
                 select(PostingSource).where(
@@ -670,8 +726,16 @@ class QboNativeApplicationService:
                 )
             )
             if posting:
-                return _bound("accounting_journal", posting.journal_id, "exact_qbo_posting_source_identity")
-            return _quarantine(family, "journal_semantics_and_account_mapping_required", "Journal admission requires approved line semantics and exact account mappings.")
+                return _bound(
+                    "accounting_journal",
+                    posting.journal_id,
+                    "exact_qbo_posting_source_identity",
+                )
+            return _quarantine(
+                family,
+                "journal_semantics_and_account_mapping_required",
+                "Journal admission requires approved line semantics and exact account mappings.",
+            )
         if family in {"invoice", "payment", "purchase", "deposit", "transfer"}:
             return _quarantine(
                 family,
@@ -725,7 +789,9 @@ class QboNativeApplicationService:
                 applied=counts[ApplicationDisposition.APPLIED.value],
                 bound=counts[ApplicationDisposition.BOUND.value],
                 quarantined=counts[ApplicationDisposition.QUARANTINED.value],
-                provider_unavailable=counts[ApplicationDisposition.PROVIDER_UNAVAILABLE.value],
+                provider_unavailable=counts[
+                    ApplicationDisposition.PROVIDER_UNAVAILABLE.value
+                ],
                 unsupported=counts[ApplicationDisposition.UNSUPPORTED.value],
                 rejected=counts[ApplicationDisposition.REJECTED_WITH_REASON.value],
             )
@@ -797,7 +863,9 @@ def _quarantine(family: str, reason: str, explanation: str) -> NativeResolution:
         ApplicationDisposition.QUARANTINED,
         reason,
         explanation,
-        allowed_actions=_REVIEW_ACTIONS.get(family, ("DEFER_EXTERNAL", "REJECT_WITH_REASON")),
+        allowed_actions=_REVIEW_ACTIONS.get(
+            family, ("DEFER_EXTERNAL", "REJECT_WITH_REASON")
+        ),
     )
 
 
@@ -831,7 +899,11 @@ def _optional_display(value: Mapping[str, object], key: str) -> str | None:
 
 def _display_list(value: Mapping[str, object], key: str) -> list[str]:
     item = value.get(key)
-    return [part for part in item if isinstance(part, str)] if isinstance(item, list) else []
+    return (
+        [part for part in item if isinstance(part, str)]
+        if isinstance(item, list)
+        else []
+    )
 
 
 qbo_native_application_service = QboNativeApplicationService()

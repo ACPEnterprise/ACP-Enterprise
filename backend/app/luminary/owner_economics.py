@@ -838,7 +838,10 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "ui_path_label": "Business Economics -> Policy administration",
         "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
         "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
-        "unlocks": ("office and administrative burden", "stronger break-even authority"),
+        "unlocks": (
+            "office and administrative burden",
+            "stronger break-even authority",
+        ),
         "priority_tier": 2,
     },
     {
@@ -852,7 +855,10 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "ui_path_label": "Business Economics -> Policy administration",
         "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
         "blocked_decisions": ("BREAK_EVEN_EVALUATION",),
-        "unlocks": ("owner compensation burden", "non-understated break-even evaluation"),
+        "unlocks": (
+            "owner compensation burden",
+            "non-understated break-even evaluation",
+        ),
         "priority_tier": 2,
     },
     {
@@ -868,8 +874,15 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "ui_path": "/purchasing",
         "ui_path_label": "Purchasing -> Material and receipt review",
         "blocked_calculations": ("ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"),
-        "blocked_decisions": ("JOB_PROFITABILITY_CONFIDENCE", "PRICE_BOOK_INTELLIGENCE"),
-        "unlocks": ("actual material cost", "Job contribution confidence", "Price Book intelligence"),
+        "blocked_decisions": (
+            "JOB_PROFITABILITY_CONFIDENCE",
+            "PRICE_BOOK_INTELLIGENCE",
+        ),
+        "unlocks": (
+            "actual material cost",
+            "Job contribution confidence",
+            "Price Book intelligence",
+        ),
         "priority_tier": 1,
     },
     {
@@ -883,7 +896,10 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "ui_path_label": "Assets -> Fleet evidence",
         "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
         "blocked_decisions": ("BREAK_EVEN_EVALUATION", "FIELD_CAPACITY_ECONOMICS"),
-        "unlocks": ("fleet and fixed field burden", "stronger field-capacity economics"),
+        "unlocks": (
+            "fleet and fixed field burden",
+            "stronger field-capacity economics",
+        ),
         "priority_tier": 2,
     },
     {
@@ -938,7 +954,10 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "ui_path": "",
         "ui_path_label": "Unavailable — no authoritative Marketing input route",
         "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
-        "blocked_decisions": ("MARKETING_ACQUISITION_ECONOMICS", "BREAK_EVEN_EVALUATION"),
+        "blocked_decisions": (
+            "MARKETING_ACQUISITION_ECONOMICS",
+            "BREAK_EVEN_EVALUATION",
+        ),
         "unlocks": ("marketing burden", "marketing acquisition economics"),
         "priority_tier": 3,
     },
@@ -953,7 +972,10 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "ui_path_label": "Payments -> Settlement evidence",
         "blocked_calculations": ("ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"),
         "blocked_decisions": ("JOB_PROFITABILITY_CONFIDENCE", "PAYMENT_ECONOMICS"),
-        "unlocks": ("complete payment-variable cost", "stronger contribution authority"),
+        "unlocks": (
+            "complete payment-variable cost",
+            "stronger contribution authority",
+        ),
         "priority_tier": 2,
     },
     {
@@ -966,8 +988,14 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "ui_path": "/accounts-payable",
         "ui_path_label": "Accounts Payable -> Vendor obligation review",
         "blocked_calculations": ("ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"),
-        "blocked_decisions": ("JOB_PROFITABILITY_CONFIDENCE", "PRICE_BOOK_INTELLIGENCE"),
-        "unlocks": ("complete other direct Job cost", "stronger contribution authority"),
+        "blocked_decisions": (
+            "JOB_PROFITABILITY_CONFIDENCE",
+            "PRICE_BOOK_INTELLIGENCE",
+        ),
+        "unlocks": (
+            "complete other direct Job cost",
+            "stronger contribution authority",
+        ),
         "priority_tier": 2,
     },
     {
@@ -1002,7 +1030,13 @@ def _economic_completion_planner(
         dependencies = cast(tuple[str, ...], spec["dependencies"])
         missing = [value for value in dependencies if value in gaps]
         dependency_rows = [gaps[value] for value in missing]
-        state = "COMPLETE" if not missing else "PARTIAL" if len(missing) < len(dependencies) else "MISSING"
+        state = (
+            "COMPLETE"
+            if not missing
+            else "PARTIAL"
+            if len(missing) < len(dependencies)
+            else "MISSING"
+        )
         affected_counts = [
             cast(int, item["affected_job_count"])
             for item in dependency_rows
@@ -1019,14 +1053,22 @@ def _economic_completion_planner(
                 "dependencies": list(dependencies),
                 "sources": list(cast(tuple[str, ...], spec["sources"])),
                 "responsible_parties": list(cast(tuple[str, ...], spec["parties"])),
-                "blocked_calculations": list(cast(tuple[str, ...], spec["blocked_calculations"])),
-                "blocked_decisions": list(cast(tuple[str, ...], spec["blocked_decisions"])),
+                "blocked_calculations": list(
+                    cast(tuple[str, ...], spec["blocked_calculations"])
+                ),
+                "blocked_decisions": list(
+                    cast(tuple[str, ...], spec["blocked_decisions"])
+                ),
                 "unlocks": list(cast(tuple[str, ...], spec["unlocks"])),
                 "state": state,
                 "missing_dependencies": missing,
                 "affected_job_count": max(affected_counts) if affected_counts else None,
-                "affected_authoritative_revenue_minor": max(affected_revenues) if affected_revenues else None,
-                "evidence_freshness": str(workspace.get("quality_state", "unavailable")),
+                "affected_authoritative_revenue_minor": max(affected_revenues)
+                if affected_revenues
+                else None,
+                "evidence_freshness": str(
+                    workspace.get("quality_state", "unavailable")
+                ),
                 "normal_workflow_available": bool(spec["ui_path"]),
                 "owner_confirmed": {
                     "supported": False,
@@ -1054,14 +1096,26 @@ def _economic_completion_planner(
         item["rank"] = rank
 
     calculation_nodes = sorted(
-        {value for item in categories for value in cast(list[str], item["blocked_calculations"])}
+        {
+            value
+            for item in categories
+            for value in cast(list[str], item["blocked_calculations"])
+        }
     )
     decision_nodes = sorted(
-        {value for item in categories for value in cast(list[str], item["blocked_decisions"])}
+        {
+            value
+            for item in categories
+            for value in cast(list[str], item["blocked_decisions"])
+        }
     )
     edges = sorted(
         [
-            {"from": str(item["category"]), "to": target, "relationship": "UNLOCKS_CALCULATION"}
+            {
+                "from": str(item["category"]),
+                "to": target,
+                "relationship": "UNLOCKS_CALCULATION",
+            }
             for item in categories
             for target in cast(list[str], item["blocked_calculations"])
         ]
@@ -1079,8 +1133,12 @@ def _economic_completion_planner(
         "period": period,
         "summary": {
             "complete_category_count": len(categories) - len(incomplete),
-            "partial_category_count": sum(item["state"] == "PARTIAL" for item in categories),
-            "missing_category_count": sum(item["state"] == "MISSING" for item in categories),
+            "partial_category_count": sum(
+                item["state"] == "PARTIAL" for item in categories
+            ),
+            "missing_category_count": sum(
+                item["state"] == "MISSING" for item in categories
+            ),
             "total_category_count": len(categories),
         },
         "categories": categories,

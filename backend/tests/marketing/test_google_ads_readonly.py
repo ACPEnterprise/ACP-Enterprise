@@ -227,8 +227,7 @@ def test_google_ads_scope_is_explicitly_broad() -> None:
 
 def test_migration_lineage_and_append_only_contract() -> None:
     migration = (
-        BACKEND_ROOT
-        / "alembic/versions/rg7c9e1f3i5k7_google_ads_readonly_ingestion.py"
+        BACKEND_ROOT / "alembic/versions/rg7c9e1f3i5k7_google_ads_readonly_ingestion.py"
     ).read_text()
     assert 'down_revision: str | Sequence[str] | None = "q7s9u1w3y5a7"' in migration
     for table in (

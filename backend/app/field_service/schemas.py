@@ -98,7 +98,9 @@ class FieldActivityInput(FieldSchema):
     activity: Literal["working", "parts_run"] | None = None
     expected_job_version: int = Field(ge=1)
     expected_appointment_version: int = Field(ge=1)
-    idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
+    )
 
 
 class FieldActivityOut(FieldSchema):
@@ -113,11 +115,21 @@ class FieldActivityOut(FieldSchema):
 
 
 class FieldContinuationInput(FieldSchema):
-    reason: Literal["parts_material", "additional_labor", "return_visit", "multi_day_planned", "inspection_permit", "customer_availability", "other"]
+    reason: Literal[
+        "parts_material",
+        "additional_labor",
+        "return_visit",
+        "multi_day_planned",
+        "inspection_permit",
+        "customer_availability",
+        "other",
+    ]
     requested_return_date: date | None = None
     needs_scheduling: bool = True
     note: str | None = Field(default=None, max_length=2000)
-    idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
+    )
 
 
 class FieldContinuationOut(FieldSchema):

@@ -155,7 +155,9 @@ def evidence(envelope_value: QboSourceEnvelope) -> tuple[str, QboSourceEnvelope]
 
 
 @pytest.mark.asyncio
-async def test_clean_majority_binds_exact_and_quarantines_only_conflicts(database) -> None:
+async def test_clean_majority_binds_exact_and_quarantines_only_conflicts(
+    database,
+) -> None:
     factory = database
     context = await seed_context(factory, name="QBO Clean Majority")
     realm = "all-county-production"
@@ -212,20 +214,28 @@ async def test_clean_majority_binds_exact_and_quarantines_only_conflicts(databas
     assert replay.created == 0
     assert replay.replayed == 3
     async with factory() as session:
-        assert await session.scalar(
-            select(func.count()).select_from(QboNativeApplicationRecord).where(
-                QboNativeApplicationRecord.company_id == context.company.id
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(QboNativeApplicationRecord)
+                .where(QboNativeApplicationRecord.company_id == context.company.id)
             )
-        ) == 3
-        assert await session.scalar(
-            select(func.count()).select_from(QboNativeReviewItem).where(
-                QboNativeReviewItem.company_id == context.company.id
+            == 3
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(QboNativeReviewItem)
+                .where(QboNativeReviewItem.company_id == context.company.id)
             )
-        ) == 1
+            == 1
+        )
 
 
 @pytest.mark.asyncio
-async def test_review_decision_binds_exact_vendor_and_preserves_history(database) -> None:
+async def test_review_decision_binds_exact_vendor_and_preserves_history(
+    database,
+) -> None:
     factory = database
     context = await seed_context(factory, name="QBO Review Decisions")
     service = QboNativeApplicationService()
@@ -260,20 +270,28 @@ async def test_review_decision_binds_exact_vendor_and_preserves_history(database
         ),
     )
     assert decision.authority_class == "OWNER"
-    counts = {item.source_family: item for item in await service.family_counts(factory, context=context)}
+    counts = {
+        item.source_family: item
+        for item in await service.family_counts(factory, context=context)
+    }
     assert counts["vendor"].bound == 1
     assert counts["vendor"].quarantined == 0
     assert await service.open_review_items(factory, context=context) == ()
     async with factory() as session:
-        assert await session.scalar(
-            select(func.count()).select_from(QboNativeReviewDecision).where(
-                QboNativeReviewDecision.company_id == context.company.id
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(QboNativeReviewDecision)
+                .where(QboNativeReviewDecision.company_id == context.company.id)
             )
-        ) == 1
+            == 1
+        )
 
 
 @pytest.mark.asyncio
-async def test_review_decision_supersession_is_explicit_and_stale_replay_fails(database) -> None:
+async def test_review_decision_supersession_is_explicit_and_stale_replay_fails(
+    database,
+) -> None:
     factory = database
     context = await seed_context(factory, name="QBO Review Supersession")
     service = QboNativeApplicationService()
@@ -321,7 +339,9 @@ async def test_review_decision_supersession_is_explicit_and_stale_replay_fails(d
 
 
 @pytest.mark.asyncio
-async def test_review_decision_authority_and_company_isolation_fail_closed(database) -> None:
+async def test_review_decision_authority_and_company_isolation_fail_closed(
+    database,
+) -> None:
     factory = database
     owner = await seed_context(factory, name="QBO Review Owner")
     foreign = await seed_context(factory, name="QBO Review Foreign")
@@ -355,7 +375,9 @@ async def test_review_decision_authority_and_company_isolation_fail_closed(datab
 
 
 @pytest.mark.asyncio
-async def test_same_provider_version_with_changed_content_is_quarantined(database) -> None:
+async def test_same_provider_version_with_changed_content_is_quarantined(
+    database,
+) -> None:
     factory = database
     context = await seed_context(factory, name="QBO Version Conflict")
     service = QboNativeApplicationService()

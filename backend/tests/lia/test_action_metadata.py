@@ -22,7 +22,9 @@ def test_navigation_suggestion_carries_server_owned_action_metadata() -> None:
     assert action.entity_id == entity_id
 
 
-def test_navigation_suggestion_can_explain_unavailable_action_without_destination_use() -> None:
+def test_navigation_suggestion_can_explain_unavailable_action_without_destination_use() -> (
+    None
+):
     action = NavigationSuggestion(
         label="Open Payroll readiness",
         internal_path="/payroll",

@@ -270,9 +270,10 @@ def test_completion_planner_projects_explicit_categories_and_unlock_graph() -> N
 def test_completion_planner_does_not_invent_owner_confirmed_value_authority() -> None:
     planner = project(workspace())["economic_completion_planner"]
     assert planner["owner_confirmed_authority"]["found"] is False
-    assert "effective-dated" in planner["owner_confirmed_authority"][
-        "required_future_contract"
-    ]
+    assert (
+        "effective-dated"
+        in planner["owner_confirmed_authority"]["required_future_contract"]
+    )
     for category in planner["categories"]:
         assert category["owner_confirmed"]["supported"] is False
         assert category["owner_confirmed"]["effective_period"] == {

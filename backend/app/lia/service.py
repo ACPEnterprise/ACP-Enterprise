@@ -1110,9 +1110,7 @@ def _capability_navigation(question: str) -> tuple[NavigationSuggestion, ...]:
         ("payroll", "payroll"),
     ):
         if term in normalized:
-            return (
-                _owner_navigation(domain),
-            )
+            return (_owner_navigation(domain),)
     return ()
 
 
@@ -1132,9 +1130,7 @@ def _action_navigation(risk: ActionRisk | None) -> tuple[NavigationSuggestion, .
     }.get(risk)
     if domain is None:
         return ()
-    return (
-        _owner_navigation(domain, action_category="ACTION_GUIDANCE"),
-    )
+    return (_owner_navigation(domain, action_category="ACTION_GUIDANCE"),)
 
 
 def _owner_navigation(
