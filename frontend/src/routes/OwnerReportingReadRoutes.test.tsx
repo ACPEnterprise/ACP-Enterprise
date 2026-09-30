@@ -16,6 +16,11 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),
 }));
 vi.mock("../hooks/usePayroll", () => ({
+  usePayrollPolicy: () => ({ isPending: false, isError: false, data: undefined }),
+  usePayrollPolicyActions: () => ({
+    draft: { mutateAsync: vi.fn(), isPending: false },
+    approve: { mutateAsync: vi.fn(), isPending: false },
+  }),
   usePayrollOperationsSummary: () => ({
     isPending: false,
     isError: false,
