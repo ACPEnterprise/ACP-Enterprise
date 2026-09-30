@@ -29,6 +29,7 @@ from app.field_service.models import (
     FieldCustomerApproval,
     FieldInvoiceHandoff,
     FieldNonBillableDisposition,
+    FieldJobActivityEvent,
     FieldWorkNote,
 )
 from app.field_service.schemas import (
@@ -161,6 +162,20 @@ class FieldService:
         self, session: AsyncSession, *, context: AuthorizationContext, job_id: UUID
     ) -> FieldJobState:
         assignment = await self._assigned_job(session, context, job_id)
+        job = await session.scalar(select(Job).where(Job.company_id == context.company.id, Job.id == job_id))
+        appointment = await session.scalar(select(Appointment).where(Appointment.company_id == context.company.id, Appointment.id == assignment.appointment_id))
+        if job is None or appointment is None:
+            raise FieldServiceNotFound("Assigned Job visit authority was not found.")
+        latest_activity = await session.scalar(
+            select(FieldJobActivityEvent)
+            .where(
+                FieldJobActivityEvent.company_id == context.company.id,
+                FieldJobActivityEvent.employee_id == (await self._employee(session, context)).id,
+                FieldJobActivityEvent.appointment_id == appointment.id,
+            )
+            .order_by(FieldJobActivityEvent.occurred_at.desc(), FieldJobActivityEvent.id.desc())
+            .limit(1)
+        )
         summary = await session.scalar(
             select(FieldWorkNote.id)
             .where(
@@ -213,6 +228,11 @@ class FieldService:
         return FieldJobState(
             job_id=job_id,
             assignment_id=assignment.id,
+            appointment_id=appointment.id,
+            job_version=job.concurrency_version,
+            appointment_version=appointment.concurrency_version,
+            active_activity=(latest_activity.activity if latest_activity and latest_activity.action != "finish_visit" else None),
+            visit_finished=latest_activity is not None and latest_activity.action == "finish_visit",
             work_summary_recorded=summary is not None,
             customer_disposition=approval.disposition if approval else None,
             completion_ready=not missing
