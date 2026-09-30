@@ -16,7 +16,11 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),
 }));
 vi.mock("../hooks/usePayroll", () => ({
-  usePayrollPolicy: () => ({ isPending: false, isError: false, data: undefined }),
+  usePayrollPolicy: () => ({
+    isPending: false,
+    isError: false,
+    data: { configured: false, policy: null, drafts: [] },
+  }),
   usePayrollPolicyActions: () => ({
     draft: { mutateAsync: vi.fn(), isPending: false },
     approve: { mutateAsync: vi.fn(), isPending: false },
@@ -48,11 +52,6 @@ vi.mock("../hooks/usePayroll", () => ({
     issuePaperCheck: { mutateAsync: vi.fn(), isPending: false },
     voidPaperCheck: { mutateAsync: vi.fn(), isPending: false },
     reissuePaperCheck: { mutateAsync: vi.fn(), isPending: false },
-  }),
-  usePayrollPolicy: () => ({ isPending: false, isError: false, data: { configured: false, policy: null, drafts: [] } }),
-  usePayrollPolicyActions: () => ({
-    draft: { isPending: false, mutateAsync: vi.fn() },
-    approve: { isPending: false, mutateAsync: vi.fn() },
   }),
 }));
 vi.mock("../hooks/useWorkdayTime", () => ({
