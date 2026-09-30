@@ -52,6 +52,87 @@ class CrossDomainAdapterRegistryResponse(BaseModel):
     registrations: tuple[CrossDomainAdapterRegistrationResponse, ...]
 
 
+class ActiveRecommendationEvidenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    entity_type: str
+    entity_id: UUID
+    digest: str | None
+    as_of: datetime
+
+
+class RecommendationPriorityFactorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    factor: str
+    available: bool
+    contribution: int
+    explanation: str
+
+
+class RelatedRecommendationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    recommendation_id: UUID
+    title: str
+    measured_fact: str
+    interpretation: str
+    evidence_digest: str | None
+
+
+class ActiveOwnerRecommendationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    recommendation_id: UUID
+    definition_id: str
+    definition_version: int
+    root_issue_key: str
+    kind: str
+    title: str
+    measured_fact: str
+    interpretation: str
+    recommended_human_action: str
+    responsibility: str
+    source_authority: str
+    evidence_as_of: datetime
+    coverage: str
+    confidence: str
+    limitations: tuple[str, ...]
+    affected_capabilities: tuple[str, ...]
+    decisions_blocked: tuple[str, ...]
+    priority_window: str
+    priority_score: int
+    priority_reason: str
+    priority_factors: tuple[RecommendationPriorityFactorResponse, ...]
+    improves_if_resolved: str
+    drilldown_path: str
+    action_destination: str
+    evidence: tuple[ActiveRecommendationEvidenceResponse, ...]
+    related_recommendations: tuple[RelatedRecommendationResponse, ...]
+    expires_at: datetime
+
+
+class ReadinessAdapterEvaluationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    domain: str
+    state: str
+    source_authority: str
+    fact_count: int
+    evaluated_at: datetime
+    limitation: str | None
+
+
+class ActiveOwnerRecommendationPage(BaseModel):
+    company_id: UUID
+    branch_id: UUID | None
+    evaluated_at: datetime
+    recommendation_digest: str
+    items: tuple[ActiveOwnerRecommendationResponse, ...]
+    readiness_adapters: tuple[ReadinessAdapterEvaluationResponse, ...]
+    autonomous_action: bool
+
+
 class BeaconEvaluationRecordResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

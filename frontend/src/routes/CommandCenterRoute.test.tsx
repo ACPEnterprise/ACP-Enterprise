@@ -7,6 +7,7 @@ import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
+  useActiveBeaconRecommendations,
   useBeaconLifecycleActions,
   useBeaconSignals,
   useBeaconWorkflowActions,
@@ -33,6 +34,7 @@ const permissions = new Set([
   "COMPANY_JOB_READ",
   "COMPANY_DISPATCH_READ",
   "COMPANY_ANALYTICS_READ",
+  "COMPANY_BEACON_OWN",
   "COMPANY_ECONOMICS_MEASUREMENT_READ",
   "COMPANY_PAYMENT_READ",
 ]);
@@ -42,6 +44,17 @@ function queryResult<T>(data: T) {
 }
 
 function arrange() {
+  vi.mocked(useActiveBeaconRecommendations).mockReturnValue(
+    queryResult({
+      company_id: "company-1",
+      branch_id: null,
+      evaluated_at: "2026-09-22T12:00:00Z",
+      recommendation_digest: "a".repeat(64),
+      items: [],
+      readiness_adapters: [],
+      autonomous_action: false,
+    }),
+  );
   vi.mocked(useAuth).mockReturnValue({
     user: { id: "owner-1" },
     activeCompany: {

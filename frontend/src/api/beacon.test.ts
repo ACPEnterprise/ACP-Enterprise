@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getActiveBeaconRecommendations,
   getBeaconSignals,
   getBeaconLifecycleHistory,
   getBeaconWorkflowHistory,
@@ -20,6 +21,13 @@ beforeEach(() => {
 });
 
 describe("Beacon lifecycle API", () => {
+  it("loads active recommendation reasoning through the authenticated client", async () => {
+    await getActiveBeaconRecommendations();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/beacon/active-recommendations",
+    );
+  });
+
   it("uses the accepted operational workflow projection for the active queue", async () => {
     vi.mocked(apiClient.get)
       .mockResolvedValueOnce({

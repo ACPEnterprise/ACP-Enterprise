@@ -103,6 +103,13 @@ class EvidenceReference(LiaSchema):
 class NavigationSuggestion(LiaSchema):
     label: str
     internal_path: str
+    required_permission: str | None = None
+    available: bool = True
+    unavailable_reason: str | None = None
+    entity_type: str | None = None
+    entity_id: UUID | None = None
+    action_category: str = "NAVIGATION"
+    source_identity: str | None = None
 
 
 class ActionProposal(LiaSchema):

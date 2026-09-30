@@ -84,6 +84,132 @@ vi.mock("../hooks/useLuminary", () => ({
           limitation: "Cash Health is a separate Accounting authority and is not inferred here.",
         },
       },
+      active_reasoning: {
+        contribution: {
+          state: "PARTIAL", value_minor: null,
+          job_population_coverage_basis_points: 0,
+          coverage_basis: "jobs_with_complete_admitted_variable_costs",
+          ready_job_count: 0, job_count: 1,
+        },
+        required_burden: {
+          state: "UNAVAILABLE", value_minor: null, coverage_basis_points: null,
+          coverage_limitation: "Category coverage is not converted to a percentage without category-level authoritative values.",
+        },
+        economic_health: { state: "UNAVAILABLE", status: "UNAVAILABLE", value_basis_points: null },
+        can_conclude: ["Revenue Production at its explicitly labeled authority and basis."],
+        cannot_conclude: ["ACP cannot state whether the business is above or below break-even."],
+        ranked_evidence_gaps: [{
+          rank: 1, gap: "certified_direct_wage_cost", evidence_state: "UNAVAILABLE",
+          decision_impact: "BLOCKS_CONTRIBUTION_AND_HEALTH", priority_tier: 1,
+          affected_job_count: 1, affected_authoritative_revenue_minor: 12550,
+          affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
+          expected_source: "Payroll / Business Economics", responsible_party: "OWNER",
+          ui_path: "/payroll", ui_path_label: "Payroll -> First real Payroll readiness",
+          why_it_matters: "Economic Contribution cannot subtract authoritative Job-variable labor cost.",
+          unlocks: "direct labor cost and Job Economic Contribution",
+          evidence_freshness: "partial", normal_workflow_available: true,
+          owner_decision_dependency: true,
+        }],
+        highest_value_next_action: {
+          rank: 1, gap: "certified_direct_wage_cost", evidence_state: "UNAVAILABLE",
+          decision_impact: "BLOCKS_CONTRIBUTION_AND_HEALTH", priority_tier: 1,
+          affected_job_count: 1, affected_authoritative_revenue_minor: 12550,
+          affected_calculations: ["ECONOMIC_CONTRIBUTION", "ECONOMIC_HEALTH"],
+          expected_source: "Payroll / Business Economics", responsible_party: "OWNER",
+          ui_path: "/payroll", ui_path_label: "Payroll -> First real Payroll readiness",
+          why_it_matters: "Economic Contribution cannot subtract authoritative Job-variable labor cost.",
+          unlocks: "direct labor cost and Job Economic Contribution",
+          evidence_freshness: "partial", normal_workflow_available: true,
+          owner_decision_dependency: true,
+        },
+        ranking_basis: "Decision dependency first, then affected authoritative Job population; missing values are never estimated.",
+        causality_semantics: {},
+      },
+      economic_completion_planner: {
+        contract_version: "luminary.economic-completion-planner.v1",
+        read_only: true,
+        period: { start: "2026-09-01", end: "2026-09-15" },
+        summary: {
+          complete_category_count: 3,
+          partial_category_count: 1,
+          missing_category_count: 8,
+          total_category_count: 12,
+        },
+        categories: [],
+        ranked_completion_plan: [{
+          category: "FIELD_LABOR_AND_PAYROLL_BURDEN",
+          label: "Field labor and Payroll burden",
+          economic_role: "VARIABLE_COST_AND_REQUIRED_BURDEN",
+          dependencies: ["certified_direct_wage_cost", "field_capacity_burden"],
+          sources: ["Payroll", "Timekeeping", "Workforce"],
+          responsible_parties: ["OWNER", "ACCOUNTANT", "SYSTEM"],
+          ui_path: "/payroll",
+          ui_path_label: "Payroll -> First real Payroll readiness",
+          blocked_calculations: ["ECONOMIC_CONTRIBUTION", "REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"],
+          blocked_decisions: ["JOB_PROFITABILITY_CONFIDENCE", "BREAK_EVEN_EVALUATION"],
+          unlocks: ["authoritative Job-variable labor cost", "stronger break-even authority"],
+          priority_tier: 1,
+          rank: 1,
+          state: "PARTIAL",
+          missing_dependencies: ["field_capacity_burden"],
+          affected_job_count: 1,
+          affected_authoritative_revenue_minor: 12550,
+          evidence_freshness: "partial",
+          normal_workflow_available: true,
+          owner_confirmed: {
+            supported: false,
+            reason: "No canonical owner-confirmed value authority.",
+            effective_period: { start: "2026-09-01", end: "2026-09-15" },
+            supersession_behavior: "UNAVAILABLE_UNTIL_CANONICAL_AUTHORITY_EXISTS",
+          },
+        }],
+        highest_value_next_completion: null,
+        ranking_basis: ["business decisions blocked"],
+        ranking_limit: "No missing dollar value or industry estimate is used.",
+        owner_confirmed_authority: {
+          found: false,
+          reason: "No canonical owner-confirmed value authority exists.",
+          required_future_contract: "An owning-domain authority is required.",
+        },
+        decision_unlock_graph: {
+          category_nodes: [], calculation_nodes: [], decision_nodes: [], edges: [],
+        },
+      },
+      driver_analysis: {
+        state: "AVAILABLE",
+        observed_changes: [
+          {
+            metric: "revenue_production", classification: "OBSERVED_CHANGE",
+            current: 12550, prior: 10050, change: 2500,
+            change_basis_points_of_prior: 2487, unit: "minor_currency", currency: "USD",
+          },
+          {
+            metric: "job_count", classification: "OBSERVED_CHANGE",
+            current: 2, prior: 1, change: 1,
+            change_basis_points_of_prior: 10000, unit: "count", currency: null,
+          },
+        ],
+        measured_drivers: [{
+          component: "revenue_production", classification: "MEASURED_DRIVER",
+          contribution_effect_minor: 2500,
+          materiality_basis: "absolute_arithmetic_contribution_effect",
+          causality: "UNPROVEN",
+        }],
+        possible_drivers: [{
+          driver: "job_mix", classification: "POSSIBLE_DRIVER",
+          reason: "Job count changed; service-mix evidence must be inspected before attributing cause.",
+        }],
+        unproven_causes: [{
+          cause: "why_measured_components_changed", classification: "UNPROVEN_CAUSE",
+          reason: "Arithmetic period movement does not establish operational causation.",
+        }],
+        unknown_components: ["certified_direct_wage_cost"],
+        economic_health: { value_basis_points: null, distance_from_break_even_basis_points: null },
+        cash_health: {
+          state: "SEPARATE_AUTHORITY", ar_and_collections_included: false,
+          reason: "AR and collections belong to Cash Health and are not used to explain Economic Health.",
+        },
+      },
       facts: [
         {
           family: "REVENUE", metric: "invoiced_revenue", value: 12550,
@@ -287,7 +413,7 @@ describe("Luminary workspace recovery", () => {
     expect(
       screen.getByText("Can I trust the profitability answer?"),
     ).toBeVisible();
-    expect(screen.getByText("AVAILABLE")).toBeVisible();
+    expect(screen.getAllByText("AVAILABLE").length).toBeGreaterThan(0);
     expect(screen.getByText("POLICY REQUIRED")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
@@ -302,10 +428,23 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("Where the business stands")).toBeVisible();
     expect(screen.getByText("Revenue production")).toBeVisible();
     expect(screen.getByText("Economic health")).toBeVisible();
+    expect(screen.getByText("What this evidence means")).toBeVisible();
+    expect(screen.getByText("Complete the economics model")).toBeVisible();
+    expect(screen.getByText("Complete next")).toBeVisible();
+    expect(screen.getByText("Field labor and Payroll burden")).toBeVisible();
+    expect(screen.getByText(/Temporary owner-confirmed amounts are not supported/)).toBeVisible();
+    expect(screen.getByText(/No missing dollar value or industry estimate/)).toBeInTheDocument();
+    expect(screen.getByText("Highest-value missing evidence")).toBeVisible();
+    expect(screen.getAllByRole("link", { name: "Payroll -> First real Payroll readiness" })[0]).toHaveAttribute("href", "/payroll");
+    expect(screen.getByText(/covers 0 of 1 admitted Jobs/)).toBeVisible();
+    expect(screen.getByText("What happened and what drove it")).toBeVisible();
+    expect(screen.getAllByText("+$25.00").length).toBeGreaterThan(0);
+    expect(screen.getByText(/cause unproven/)).toBeVisible();
+    expect(screen.getByText(/AR and collections belong to Cash Health/)).toBeVisible();
     expect(screen.getByText(/owner compensation · trucks and fixed costs/)).toBeInTheDocument();
     expect(screen.getByText(/Cash Health is a separate Accounting authority/)).toBeInTheDocument();
     expect(screen.getByText("What changed from the prior equal period")).toBeVisible();
-    expect(screen.getByText("+$25.00")).toBeVisible();
+    expect(screen.getAllByText("+$25.00").length).toBeGreaterThan(0);
     expect(screen.getByText("Why the measured economics changed")).toBeVisible();
     expect(screen.getByText(/cannot explain contribution change/)).toBeVisible();
     expect(screen.getByText(/not operational cause/)).toBeVisible();
