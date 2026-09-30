@@ -1,7 +1,9 @@
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customer_migration.models import CustomerSourceIdentity
 from app.customers.errors import CustomerNotFoundError
 from app.customers.models import CustomerContact, ServiceLocation
 from app.customers.repository import CustomerRepository
@@ -11,6 +13,7 @@ from app.customers.schemas import (
     CustomerDetailResponse,
     CustomerNoteResponse,
     CustomerResponse,
+    CustomerSourceLineageResponse,
     CustomerStatus,
     CustomerType,
     PreferredContactMethod,
@@ -49,6 +52,21 @@ class CustomerDetailService:
         location_responses = [
             ServiceLocationResponse.model_validate(location) for location in locations
         ]
+        source_lineage = tuple(
+            (
+                await session.scalars(
+                    select(CustomerSourceIdentity)
+                    .where(
+                        CustomerSourceIdentity.company_id == context.company.id,
+                        CustomerSourceIdentity.customer_id == customer.id,
+                    )
+                    .order_by(
+                        CustomerSourceIdentity.created_at,
+                        CustomerSourceIdentity.id,
+                    )
+                )
+            ).all()
+        )
         return CustomerDetailResponse(
             **customer_response.model_dump(),
             preferred_contact=(
@@ -79,6 +97,15 @@ class CustomerDetailService:
                     key=lambda note: (note.created_at, note.id),
                     reverse=True,
                 )
+            ],
+            source_lineage=[
+                CustomerSourceLineageResponse(
+                    source_system=identity.source_system,
+                    source_customer_id=identity.source_customer_id,
+                    branch_id=identity.branch_id,
+                    bound_at=identity.created_at,
+                )
+                for identity in source_lineage
             ],
             metadata=CustomerDetailMetadata(
                 company_id=customer.company_id,

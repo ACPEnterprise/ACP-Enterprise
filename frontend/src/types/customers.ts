@@ -177,6 +177,12 @@ export interface CustomerDetail extends CustomerSummary {
   contacts: CustomerContact[];
   notes: CustomerNote[];
   consents?: CustomerConsent[];
+  source_lineage: Array<{
+    source_system: string;
+    source_customer_id: string;
+    branch_id: string;
+    bound_at: string;
+  }>;
 }
 
 export interface DuplicateMatch extends CustomerSummary {

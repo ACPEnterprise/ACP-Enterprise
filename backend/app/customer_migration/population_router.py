@@ -76,6 +76,12 @@ class CleanMajorityAdmissionRequest(StrictSchema):
     limit: int = 5000
 
 
+class QuarantinedCustomerResponse(StrictSchema):
+    source_customer_id: str
+    reason_code: str
+    reason: str
+
+
 class CleanMajorityAdmissionResponse(StrictSchema):
     classification: Literal["CUSTOMER_CLEAN_MAJORITY_ADMITTED"]
     source_system: Literal["housecall_pro"]
@@ -86,6 +92,7 @@ class CleanMajorityAdmissionResponse(StrictSchema):
     quarantined: int
     rejected: Literal[0] = 0
     provider_unavailable: Literal[0] = 0
+    quarantine_records: list[QuarantinedCustomerResponse]
     remaining_unexplained: int
     before_evidence_digest: str
     after_evidence_digest: str
@@ -177,6 +184,18 @@ async def admit_customer_clean_majority(
         admitted=result.admitted,
         replayed=result.replayed,
         quarantined=result.quarantined,
+        quarantine_records=[
+            QuarantinedCustomerResponse(
+                source_customer_id=source_customer_id,
+                reason_code=reason_code,
+                reason=(
+                    "The accepted source aggregate did not pass deterministic Customer, Contact, or Location validation."
+                    if reason_code == "source_aggregate_validation_required"
+                    else "The exact-provider admission conflicted with current native or source evidence and requires Migration review."
+                ),
+            )
+            for source_customer_id, reason_code in result.quarantine_records
+        ],
         remaining_unexplained=result.remaining_unexplained,
         before_evidence_digest=result.before_digest,
         after_evidence_digest=result.after_digest,

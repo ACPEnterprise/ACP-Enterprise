@@ -36,6 +36,7 @@ const customer: CustomerDetail = {
   properties: [],
   contacts: [],
   notes: [],
+  source_lineage: [],
 };
 
 const mutation = (mutate = vi.fn(), isPending = false) => ({
@@ -102,6 +103,30 @@ describe("CustomerDetailView", () => {
     expect(screen.getByText(/Marketing source: referral/)).toBeInTheDocument();
     expect(screen.getByText("History completeness")).toBeInTheDocument();
     expect(screen.getByText(/Missing or source-only history is not treated as none or zero/)).toBeInTheDocument();
+  });
+
+  it("shows exact migration source lineage without conflating it with marketing source", () => {
+    vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        ...customer,
+        first_name: "Hammer",
+        last_name: "Haag",
+        source_lineage: [{
+          source_system: "housecall_pro",
+          source_customer_id: "147405829",
+          branch_id: "branch-1",
+          bound_at: "2026-09-29T12:00:00Z",
+        }],
+      },
+    } as never);
+
+    render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
+
+    expect(screen.getByText("Migration source lineage")).toBeInTheDocument();
+    expect(screen.getByText(/provider Customer 147405829/)).toBeInTheDocument();
+    expect(screen.getByText(/Marketing source: referral/)).toBeInTheDocument();
   });
 
   it("pages authoritative history instead of silently stopping at the first page", async () => {
