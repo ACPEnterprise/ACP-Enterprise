@@ -48,6 +48,15 @@ describe("permission-driven field product contracts", () => {
     expect(screen.getByText(/Completed history is unavailable/i)).toBeOnTheScreen();
   });
 
+  it("opens a canonical assigned-job action in Job Workspace after itinerary reconciliation", async () => {
+    const item = { appointment_id: "30000000-0000-4000-8000-000000000001", appointment_number: "APT-1", job_id: "40000000-0000-4000-8000-000000000001", job_number: "JOB-1", job_status: "ready", job_version: 1, customer_display_name: "Synthetic Customer", service_location_label: "Synthetic Site", window_start_at: "2026-09-02T12:00:00Z", window_end_at: "2026-09-02T13:00:00Z", assignment_status: "assigned", assignment_version: 1, arrival_state: "pending" as const, field_execution_enabled: true };
+    const onOpenJob = jest.fn();
+    const service = { itinerary: jest.fn(async (date: string) => ({ service_date: date, technician_display_name: "Synthetic", items: [item] })), state: jest.fn(), arrival: jest.fn(), transition: jest.fn(), workSummary: jest.fn(), customerDisposition: jest.fn(), note: jest.fn(), approval: jest.fn(), refreshHandoff: jest.fn() };
+    const network = { isConnected: jest.fn(async () => true), subscribe: jest.fn(() => () => undefined) };
+    render(<JobsScreen service={service} network={network} openJobId={item.job_id} onOpenJob={onOpenJob} />);
+    await waitFor(() => expect(onOpenJob).toHaveBeenCalledWith(item, "2026-09-02"));
+  });
+
   it("uses assignment-scoped successor projections without client identity scope", async () => {
     const request = jest.fn()
       .mockResolvedValueOnce({ job_id: "40000000-0000-4000-8000-000000000001", history_limit: 10, attachment_upload_state: "source_required", items: [] })

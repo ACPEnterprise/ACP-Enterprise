@@ -112,6 +112,57 @@ class NavigationSuggestion(LiaSchema):
     source_identity: str | None = None
 
 
+class SpeechInterpretation(LiaSchema):
+    """Transient, bounded speech understanding; never canonical business truth."""
+
+    state: str = Field(pattern="^(CONFIDENT|CONFIRM_RECOMMENDED|UNCERTAIN)$")
+    heard_text: str = Field(min_length=1, max_length=500)
+    evidence_digest: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
+    possible_meaning: str | None = Field(default=None, max_length=500)
+    suggested_confirmation: str | None = Field(default=None, max_length=500)
+    source_language: str = Field(min_length=2, max_length=32)
+    interpreted_language: str | None = Field(default=None, max_length=32)
+    translation_state: str = Field(
+        default="NOT_TRANSLATED", pattern="^(NOT_TRANSLATED|TRANSLATED|UNAVAILABLE)$"
+    )
+    translation_provenance: str | None = Field(default=None, max_length=500)
+    as_of: datetime
+    confirmed: bool = False
+    owning_fact_type: str = Field(min_length=1, max_length=100)
+    context: dict[str, str] = Field(default_factory=dict)
+
+
+class CustomerIntakeBranch(LiaSchema):
+    """Canonical Customer match state consumed by CSR/Dispatch surfaces."""
+
+    state: str = Field(pattern="^(EXISTING|NEW_CUSTOMER_INTAKE_REQUIRED|AMBIGUOUS)$")
+    customer_id: UUID | None = None
+    location_id: UUID | None = None
+    missing_fields: tuple[str, ...] = ()
+    next_questions: tuple[str, ...] = ()
+    limitations: tuple[str, ...] = ()
+
+
+class CsrDispatchCopilot(LiaSchema):
+    """Server-owned, non-mutating CSR guidance contract."""
+
+    contract_version: str = "lia.csr.dispatch.copilot.v1"
+    suggested_question: str | None = None
+    customer_branch: CustomerIntakeBranch
+    speech_interpretations: tuple[SpeechInterpretation, ...] = ()
+    clarification_required: bool = False
+    translation_available: bool = False
+    recommendation_state: str = Field(
+        default="PROVISIONAL", pattern="^(CURRENT|PROVISIONAL|UNAVAILABLE|EXPIRED)$"
+    )
+    primary_ghost_slot: dict[str, object] | None = None
+    alternates: tuple[dict[str, object], ...] = ()
+    constrained_options: tuple[dict[str, object], ...] = ()
+    action_metadata: tuple[NavigationSuggestion, ...] = ()
+    limitations: tuple[str, ...] = ()
+    mutation_authority: str = "none"
+
+
 class ActionProposal(LiaSchema):
     proposal_id: UUID
     action: str
@@ -131,6 +182,7 @@ class LiaResponse(LiaSchema):
     evidence: tuple[EvidenceReference, ...] = ()
     limitations: tuple[str, ...] = ()
     navigation: tuple[NavigationSuggestion, ...] = ()
+    csr_dispatch: CsrDispatchCopilot | None = None
     proposals: tuple[ActionProposal, ...] = ()
     completeness: str
     freshness: str
