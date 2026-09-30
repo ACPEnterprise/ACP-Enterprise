@@ -526,7 +526,19 @@ class CustomerAdapterImportService:
             ).hexdigest()
             if stored_digest != candidate.payload_sha256:
                 return False
-            reviewed_payload = reviewed_models[identity].model_dump(mode="json")
+            reviewed_model = reviewed_models[identity]
+            reviewed_payload = reviewed_model.model_dump(mode="json")
+            reviewed_python = reviewed_model.model_dump(mode="python")
+            missing_fields = reviewed_payload.keys() - stored_payload.keys()
+            for field_name in missing_fields:
+                field = type(reviewed_model).model_fields.get(field_name)
+                if (
+                    field is None
+                    or field.is_required()
+                    or reviewed_python[field_name]
+                    != field.get_default(call_default_factory=True)
+                ):
+                    return False
             if any(
                 key not in reviewed_payload or reviewed_payload[key] != value
                 for key, value in stored_payload.items()
