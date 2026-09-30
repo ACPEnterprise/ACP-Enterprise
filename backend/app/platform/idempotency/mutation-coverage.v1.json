@@ -448,7 +448,7 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "IDEMPOTENCY_REQUIRED",
+      "classification": "NATURALLY_IDEMPOTENT",
       "domain": "accounting",
       "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
@@ -3393,8 +3393,21 @@
         "tests/marketing/test_google_ads_readonly.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "accounting",
+      "mechanism": "Review-item lock, immutable decision evidence, and explicit supersession identity",
+      "method": "POST",
+      "operation_id": "qbo_native_review_decision_api_v1_accounting_source_evidence_qbo_native_application_review_queue__review_item_id__decisions_post",
+      "path": "/api/v1/accounting/source-evidence/qbo/native-application/review-queue/{review_item_id}/decisions",
+      "reason": "Accountant or owner review decisions are append-only; contradictory reuse fails closed and supersession is explicit.",
+      "replay_evidence": [
+        "tests/qbo_source/test_native_application.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "948015925f21f783dfb0b85d0a9a1beed1de188b607bfd90e5fab36f89c9de4e",
+  "fingerprint": "4337a300d4f6adf28b8d8d71f593d12524b8f11a32f6058ea18d84fe9278abf0",
   "schema_version": "1"
 }
