@@ -1,6 +1,11 @@
 export interface FieldJobState {
   readonly job_id: string;
   readonly assignment_id: string;
+  readonly appointment_id: string;
+  readonly job_version: number;
+  readonly appointment_version: number;
+  readonly active_activity: "working" | "parts_run" | null;
+  readonly visit_finished: boolean;
   readonly work_summary_recorded: boolean;
   readonly customer_disposition: "approved" | "unavailable" | "refused" | null;
   readonly completion_ready: boolean;

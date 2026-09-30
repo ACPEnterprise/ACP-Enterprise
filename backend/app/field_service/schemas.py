@@ -77,6 +77,11 @@ class NonBillableInput(FieldSchema):
 class FieldJobState(FieldSchema):
     job_id: UUID
     assignment_id: UUID
+    appointment_id: UUID
+    job_version: int
+    appointment_version: int
+    active_activity: Literal["working", "parts_run"] | None = None
+    visit_finished: bool = False
     work_summary_recorded: bool
     customer_disposition: str | None
     completion_ready: bool
@@ -86,6 +91,44 @@ class FieldJobState(FieldSchema):
     non_billable_reason: str | None
     invoice_handoff_status: str | None
     invoice_id: UUID | None
+
+
+class FieldActivityInput(FieldSchema):
+    action: Literal["start", "change", "finish_visit"]
+    activity: Literal["working", "parts_run"] | None = None
+    expected_job_version: int = Field(ge=1)
+    expected_appointment_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+
+
+class FieldActivityOut(FieldSchema):
+    id: UUID
+    job_id: UUID
+    appointment_id: UUID
+    employee_id: UUID
+    action: str
+    activity: str | None
+    occurred_at: datetime
+    evidence_digest: str
+
+
+class FieldContinuationInput(FieldSchema):
+    reason: Literal["parts_material", "additional_labor", "return_visit", "multi_day_planned", "inspection_permit", "customer_availability", "other"]
+    requested_return_date: date | None = None
+    needs_scheduling: bool = True
+    note: str | None = Field(default=None, max_length=2000)
+    idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+
+
+class FieldContinuationOut(FieldSchema):
+    id: UUID
+    job_id: UUID
+    appointment_id: UUID
+    employee_id: UUID
+    reason: str
+    requested_return_date: date | None
+    needs_scheduling: bool
+    created_at: datetime
 
 
 class FieldContact(FieldSchema):
