@@ -125,6 +125,8 @@ const branchTime = (value: string | null, timeZone: string) =>
   value
     ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone })
     : "Time unknown";
+const isCapacityUnreconciled = (item: AppointmentDetail) =>
+  ["scheduled", "confirmed"].includes(item.status) && item.capacity_units === null;
 const toLocalInput = (value: string | null) => {
   if (!value) return "";
   const date = new Date(value);
@@ -1049,6 +1051,9 @@ function DayCalendar({
                 {job?.service_location_label ?? "Location context unavailable"}{" "}
                 · {primaryTechnicianName(dispatch) ?? "Unassigned"}
               </span>
+              {isCapacityUnreconciled(item) && (
+                <Badge variant="warning">IMPORTED / NOT YET CAPACITY-RECONCILED</Badge>
+              )}
             </button>
           );
         })}
@@ -1162,6 +1167,11 @@ function DayCalendar({
                     {branchTime(item.arrival_window_start_at, policy.timezone)} ·{" "}
                     {appointmentState(item, dispatch, job)}
                   </span>
+                  {isCapacityUnreconciled(item) && (
+                    <span className="block truncate text-[10px] font-semibold text-status-warning">
+                      IMPORTED / CAPACITY NOT RECONCILED
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1529,6 +1539,7 @@ function WeekCalendar({
                       {job?.customer_display_name ?? "Customer unavailable"}
                     </span>
                     {continuation && <Badge>Continuation</Badge>}
+                    {isCapacityUnreconciled(item) && <Badge variant="warning">Capacity not reconciled</Badge>}
                   </button>
                 );
               })}
@@ -1575,6 +1586,7 @@ function AppointmentPanel({
   );
   const [confirmMove, setConfirmMove] = useState(false);
   const canReschedule = ["scheduled", "confirmed"].includes(appointment.status);
+  const capacityReconciled = !isCapacityUnreconciled(appointment);
   const validWindow = Boolean(start && end && new Date(end) > new Date(start));
   const requestMove = (event: FormEvent) => {
     event.preventDefault();
@@ -1676,7 +1688,12 @@ function AppointmentPanel({
           This Appointment is {appointment.status.replaceAll("_", " ")}. Only scheduled or confirmed Appointments can be rescheduled; its history remains available from Appointment detail.
         </Alert>
       )}
-      {canManage && canReschedule && (
+      {canManage && canReschedule && !capacityReconciled && (
+        <Alert className="mt-5" variant="warning" title="IMPORTED / NOT YET CAPACITY-RECONCILED">
+          This source-backed Appointment remains visible, but Scheduling cannot safely move it until OM2C&apos;s canonical capacity reconciliation supplies reservation authority. No capacity is assumed or fabricated.
+        </Alert>
+      )}
+      {canManage && canReschedule && capacityReconciled && (
         <form
           className="mt-5 space-y-3 border-t border-stroke pt-4"
           onSubmit={requestMove}
@@ -1686,11 +1703,6 @@ function AppointmentPanel({
             Uses the authoritative Scheduling conflict, capacity, Branch,
             version, audit, and Event contract.
           </p>
-          {appointment.capacity_units === null && (
-            <Alert variant="warning" title="Imported schedule without capacity reservation">
-              The source Appointment remains visible as historical schedule evidence. Confirming a new time will validate current Branch capacity and create a governed reservation for the new interval; it will not rewrite the imported source history.
-            </Alert>
-          )}
           <label className="block text-sm font-medium">
             New start
             <Input
