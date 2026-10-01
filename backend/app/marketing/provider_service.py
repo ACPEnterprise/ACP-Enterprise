@@ -1,4 +1,6 @@
-from sqlalchemy import desc, func, select
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -12,11 +14,13 @@ from app.platform.provider_connections.models import ProviderConnectionBinding
 from app.platform.secrets import SecretProviderError
 
 from .models import (
+    MarketingPerformanceObservation,
     MarketingProviderAccount,
     MarketingProviderAccountBinding,
     MarketingProviderCoverageManifest,
     MarketingProviderReconciliationFinding,
     MarketingProviderSyncRun,
+    MarketingSearchTermObservation,
 )
 from .oauth import GoogleAdsOAuthError, build_google_ads_oauth_runtime
 from .schemas import (
@@ -24,6 +28,9 @@ from .schemas import (
     GoogleAdsAccountBindingResponse,
     GoogleAdsAccountBindingSummary,
     GoogleAdsConnectionReadinessResponse,
+    MarketingBranchMappingReadiness,
+    MarketingEvidencePeriod,
+    MarketingReadinessProjection,
     ProviderCoverageResponse,
     ProviderSyncStatusResponse,
     ReconciliationFindingResponse,
@@ -34,7 +41,302 @@ class ProviderBindingError(ValueError):
     pass
 
 
+def marketing_spend_availability(
+    *,
+    spend_count: int,
+    performance_count: int,
+    evidence_as_of: datetime | None,
+    evaluated_at: datetime,
+) -> str:
+    if spend_count == 0:
+        return "UNAVAILABLE"
+    if evidence_as_of and evidence_as_of < evaluated_at - timedelta(hours=72):
+        return "STALE"
+    if spend_count < performance_count:
+        return "PARTIAL"
+    return "AVAILABLE"
+
+
+def owner_readiness_state(
+    *,
+    configuration_blocked: bool,
+    connected: bool,
+    account_bound: bool,
+    ingestion_enabled: bool,
+    last_successful_sync_at: datetime | None,
+    provider_error: bool,
+    unresolved_findings: int,
+) -> str:
+    if configuration_blocked:
+        return "CONFIGURATION_REQUIRED"
+    if not connected:
+        return "READY_TO_AUTHORIZE"
+    if not account_bound:
+        return "AUTHORIZED_ACCOUNT_SELECTION_REQUIRED"
+    if provider_error or unresolved_findings:
+        return "DEGRADED"
+    if not ingestion_enabled or last_successful_sync_at is None:
+        return "CONNECTED_NOT_INGESTING"
+    return "INGESTING"
+
+
 class MarketingProviderService:
+    async def readiness_projection(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        evaluated_at: datetime | None = None,
+    ) -> MarketingReadinessProjection:
+        now = evaluated_at or datetime.now(timezone.utc)
+        runtime = await self.google_ads_connection_readiness(session, context=context)
+        mappings = await self.google_ads_account_bindings(session, context=context)
+        account_ids = tuple(mapping.provider_account_id for mapping in mappings)
+        enabled = any(mapping.ingestion_enabled for mapping in mappings)
+        latest_run = None
+        last_successful_sync_at = None
+        if account_ids:
+            latest_run = await session.scalar(
+                select(MarketingProviderSyncRun)
+                .where(
+                    MarketingProviderSyncRun.company_id == context.company.id,
+                    MarketingProviderSyncRun.provider_account_id.in_(account_ids),
+                )
+                .order_by(desc(MarketingProviderSyncRun.started_at))
+                .limit(1)
+            )
+            last_successful_sync_at = await session.scalar(
+                select(func.max(MarketingProviderSyncRun.completed_at)).where(
+                    MarketingProviderSyncRun.company_id == context.company.id,
+                    MarketingProviderSyncRun.provider_account_id.in_(account_ids),
+                    MarketingProviderSyncRun.status.in_(
+                        ("completed", "completed_with_exceptions")
+                    ),
+                )
+            )
+        evidence = None
+        performance_count = spend_count = search_count = 0
+        if account_ids:
+            interval = (
+                await session.execute(
+                    select(
+                        func.min(MarketingPerformanceObservation.interval_start),
+                        func.max(MarketingPerformanceObservation.interval_end),
+                        func.max(MarketingPerformanceObservation.provider_as_of),
+                        func.count(MarketingPerformanceObservation.id),
+                        func.sum(
+                            case(
+                                (
+                                    MarketingPerformanceObservation.cost_micros.is_not(
+                                        None
+                                    ),
+                                    1,
+                                ),
+                                else_=0,
+                            )
+                        ),
+                    ).where(
+                        MarketingPerformanceObservation.company_id
+                        == context.company.id,
+                        MarketingPerformanceObservation.provider_account_id.in_(
+                            account_ids
+                        ),
+                        or_(
+                            MarketingPerformanceObservation.branch_id.is_(None),
+                            MarketingPerformanceObservation.branch_id.in_(
+                                context.authorized_branch_ids
+                            ),
+                        ),
+                    )
+                )
+            ).one()
+            interval_start, interval_end, provider_as_of = interval[:3]
+            performance_count, spend_count = (
+                int(interval[3] or 0),
+                int(interval[4] or 0),
+            )
+            if interval_start and interval_end and provider_as_of:
+                evidence = MarketingEvidencePeriod(
+                    interval_start=interval_start,
+                    interval_end=interval_end,
+                    as_of=provider_as_of,
+                )
+            if evidence is None:
+                coverage_interval = (
+                    await session.execute(
+                        select(
+                            func.min(MarketingProviderCoverageManifest.interval_start),
+                            func.max(MarketingProviderCoverageManifest.interval_end),
+                            func.max(MarketingProviderCoverageManifest.as_of),
+                        ).where(
+                            MarketingProviderCoverageManifest.company_id
+                            == context.company.id,
+                            MarketingProviderCoverageManifest.provider_account_id.in_(
+                                account_ids
+                            ),
+                            or_(
+                                MarketingProviderCoverageManifest.branch_id.is_(None),
+                                MarketingProviderCoverageManifest.branch_id.in_(
+                                    context.authorized_branch_ids
+                                ),
+                            ),
+                        )
+                    )
+                ).one()
+                coverage_start, coverage_end, coverage_as_of = coverage_interval
+                if coverage_start and coverage_end and coverage_as_of:
+                    evidence = MarketingEvidencePeriod(
+                        interval_start=coverage_start,
+                        interval_end=coverage_end,
+                        as_of=coverage_as_of,
+                    )
+            search_count = int(
+                await session.scalar(
+                    select(func.count(MarketingSearchTermObservation.id)).where(
+                        MarketingSearchTermObservation.company_id == context.company.id,
+                        MarketingSearchTermObservation.provider_account_id.in_(
+                            account_ids
+                        ),
+                        or_(
+                            MarketingSearchTermObservation.branch_id.is_(None),
+                            MarketingSearchTermObservation.branch_id.in_(
+                                context.authorized_branch_ids
+                            ),
+                        ),
+                    )
+                )
+                or 0
+            )
+        unresolved = int(
+            await session.scalar(
+                select(func.count(MarketingProviderReconciliationFinding.id)).where(
+                    MarketingProviderReconciliationFinding.company_id
+                    == context.company.id,
+                    or_(
+                        MarketingProviderReconciliationFinding.branch_id.is_(None),
+                        MarketingProviderReconciliationFinding.branch_id.in_(
+                            context.authorized_branch_ids
+                        ),
+                    ),
+                    MarketingProviderReconciliationFinding.state.in_(
+                        ("open", "not_available")
+                    ),
+                )
+            )
+            or 0
+        )
+        provider_error = runtime.connection_status == "revoked_or_error" or (
+            latest_run is not None and latest_run.status == "failed"
+        )
+        spend_availability = marketing_spend_availability(
+            spend_count=spend_count,
+            performance_count=performance_count,
+            evidence_as_of=evidence.as_of if evidence else None,
+            evaluated_at=now,
+        )
+        connected = runtime.connection_status == "connected"
+        configuration_blocked = bool(
+            set(runtime.blockers) - {"live_ingestion_disabled"}
+        ) or (not connected and "live_ingestion_disabled" in runtime.blockers)
+        owner_state = owner_readiness_state(
+            configuration_blocked=configuration_blocked,
+            connected=connected,
+            account_bound=bool(mappings),
+            ingestion_enabled=enabled,
+            last_successful_sync_at=last_successful_sync_at,
+            provider_error=provider_error,
+            unresolved_findings=unresolved,
+        )
+        guidance = {
+            "CONFIGURATION_REQUIRED": (
+                "Ask a platform administrator to complete the named Google Ads runtime configuration checks.",
+                "Return here and refresh readiness; do not enter credentials in Marketing.",
+            ),
+            "READY_TO_AUTHORIZE": (
+                "Select Connect Google Ads and complete Google authorization as the owner.",
+                "Authorization discovers access only; it does not bind or ingest every visible account.",
+            ),
+            "AUTHORIZED_ACCOUNT_SELECTION_REQUIRED": (
+                "Review the exact accessible Google Ads accounts.",
+                "Select the All County account, map its Branch, and explicitly confirm read-only ingestion.",
+            ),
+            "CONNECTED_NOT_INGESTING": (
+                "Enable ingestion for the owner-selected account and choose a bounded history period.",
+                "Start the read-only sync, then review reconciliation and evidence coverage.",
+            ),
+            "INGESTING": (
+                "Review the current evidence period, coverage, and reconciliation findings.",
+            ),
+            "DEGRADED": (
+                "Review provider availability, the latest sync, and unresolved reconciliation findings.",
+                "Resolve the named evidence gap before relying on Marketing spend.",
+            ),
+        }[owner_state]
+        missing = list(runtime.blockers)
+        if not mappings:
+            missing.append("owner_selected_account_binding")
+        if not enabled:
+            missing.append("ingestion_activation")
+        if spend_availability in {"UNAVAILABLE", "PARTIAL", "STALE"}:
+            missing.append(f"spend_evidence_{spend_availability.lower()}")
+        if unresolved:
+            missing.append("unresolved_reconciliation_findings")
+        return MarketingReadinessProjection(
+            company_id=context.company.id,
+            as_of=now,
+            owner_state=owner_state,
+            owner_guidance=guidance,
+            provider_configured=all(
+                (
+                    runtime.oauth_client_configured,
+                    runtime.callback_configured,
+                    runtime.developer_token_configured,
+                )
+            ),
+            oauth_runtime_ready=all(
+                (
+                    runtime.oauth_client_configured,
+                    runtime.callback_configured,
+                    runtime.developer_token_configured,
+                    runtime.environment_safe_secret_custody,
+                )
+            ),
+            secret_custody_ready=runtime.environment_safe_secret_custody,
+            connection_state=runtime.connection_status,
+            account_discovery_state=(
+                "COMPLETED_BY_BINDING_EVIDENCE"
+                if mappings
+                else "REQUIRED"
+                if runtime.connection_status == "connected"
+                else "NOT_AVAILABLE"
+            ),
+            account_bound=bool(mappings),
+            branch_mappings=tuple(
+                MarketingBranchMappingReadiness(
+                    branch_id=mapping.branch_id,
+                    provider_account_id=mapping.provider_account_id,
+                    ingestion_enabled=mapping.ingestion_enabled,
+                )
+                for mapping in mappings
+            ),
+            ingestion_enabled=enabled,
+            last_successful_sync_at=last_successful_sync_at,
+            current_evidence_period=evidence,
+            spend_evidence_availability=spend_availability,
+            spend_evidence_available=spend_count > 0,
+            campaign_evidence_available=performance_count > 0,
+            search_term_evidence_available=search_count > 0,
+            unresolved_reconciliation_findings=unresolved,
+            provider_unavailable=runtime.connection_status
+            in {
+                "not_configured",
+                "configuration_required",
+                "revoked_or_error",
+            },
+            provider_error=provider_error,
+            missing_components=tuple(dict.fromkeys(missing)),
+        )
+
     async def google_ads_connection_readiness(
         self, session: AsyncSession, *, context: AuthorizationContext
     ) -> GoogleAdsConnectionReadinessResponse:
