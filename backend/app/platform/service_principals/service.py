@@ -14,7 +14,7 @@ from app.platform.auth.models import AuthenticationSession
 from app.platform.auth.services import access_token_service, password_service
 from app.platform.company.membership_models import Membership
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import WorkerIdentityPermission
+from app.platform.permissions.codes import ReleasePrincipalPermission
 from app.platform.permissions.models import (
     MembershipRole,
     Permission,
@@ -55,8 +55,9 @@ class PrincipalSessionResult:
 class AcceptanceServicePrincipalService:
     @staticmethod
     def _require_platform_authority(context: AuthorizationContext) -> None:
-        if context.membership.status != "active" or not context.has_permission(
-            WorkerIdentityPermission.MANAGE
+        if (
+            context.membership.status != "active"
+            or context.permission_codes != {ReleasePrincipalPermission.MANAGE}
         ):
             raise PermissionError("Platform service-principal authority is required.")
 
