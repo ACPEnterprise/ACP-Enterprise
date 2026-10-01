@@ -18,12 +18,69 @@ from app.beacon.active_recommendations import (
 )
 from app.beacon.router import router
 from app.database.session import get_database_session
+from app.marketing.provider_service import marketing_provider_service
+from app.marketing.schemas import MarketingReadinessProjection
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from fastapi import FastAPI
 
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_marketing_readiness_adapter_is_evaluated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = type(active_recommendation_service)()
+    monkeypatch.setattr(service, "_scheduling", AsyncMock(return_value=()))
+    monkeypatch.setattr(service, "_customers", AsyncMock(return_value=()))
+    monkeypatch.setattr(service, "_payroll", AsyncMock(return_value=()))
+    projection = MarketingReadinessProjection(
+        company_id=UUID("55555555-5555-4555-8555-555555555555"),
+        as_of=NOW,
+        owner_state="READY_TO_AUTHORIZE",
+        owner_guidance=("Authorize Google Ads.",),
+        provider_configured=True,
+        oauth_runtime_ready=True,
+        secret_custody_ready=True,
+        connection_state="ready_to_connect",
+        account_discovery_state="NOT_AVAILABLE",
+        account_bound=False,
+        branch_mappings=(),
+        ingestion_enabled=False,
+        last_successful_sync_at=None,
+        current_evidence_period=None,
+        spend_evidence_availability="UNAVAILABLE",
+        spend_evidence_available=False,
+        campaign_evidence_available=False,
+        search_term_evidence_available=False,
+        unresolved_reconciliation_findings=0,
+        provider_unavailable=False,
+        provider_error=False,
+        missing_components=("owner_selected_account_binding",),
+    )
+    monkeypatch.setattr(
+        marketing_provider_service,
+        "readiness_projection",
+        AsyncMock(return_value=projection),
+    )
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=projection.company_id),
+        active_branch=None,
+        authorized_branch_ids=frozenset(),
+    )
+    session = AsyncMock()
+    session.scalar.return_value = False
+    evaluations = await service.adapter_evaluations(
+        session, context=context, evaluated_at=NOW  # type: ignore[arg-type]
+    )
+    marketing = next(item for item in evaluations if item.domain == "MARKETING")
+    assert marketing.state == "EVALUATED"
+    assert marketing.source_authority == (
+        "MarketingReadinessProjection/marketing-readiness.v1"
+    )
+    assert "owner_selected_account_binding" in (marketing.limitation or "")
 
 
 def test_reasoner_separates_scheduling_fact_interpretation_and_human_action() -> None:

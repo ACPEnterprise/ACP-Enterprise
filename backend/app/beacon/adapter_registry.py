@@ -153,6 +153,15 @@ CROSS_DOMAIN_ADAPTER_REGISTRY = (
         "Assign eligible capacity or resolve the authoritative scheduling conflict.",
         "No employee ranking, hiring recommendation, or autonomous reassignment.",
     ),
+    CrossDomainAdapterRegistration(
+        "marketing_readiness",
+        "Marketing",
+        "MarketingReadinessProjection/marketing-readiness.v1",
+        AdapterStatus.ACTIVE,
+        AttentionResponsibility.OWNER,
+        "Complete the exact owner guidance exposed by canonical Marketing readiness.",
+        "Readiness and evidence availability only; Beacon does not calculate ROI or mutate providers.",
+    ),
 )
 
 

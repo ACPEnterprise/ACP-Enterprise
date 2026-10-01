@@ -13,6 +13,7 @@ describe("Google Ads owner workspace API", () => {
     await getGoogleAdsOwnerWorkspace();
 
     expect(get.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/marketing/readiness",
       "/api/v1/marketing/google-ads/connection-readiness",
       "/api/v1/marketing/google-ads/account-bindings",
       "/api/v1/marketing/google-ads/sync-status",

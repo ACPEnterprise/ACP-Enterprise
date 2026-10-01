@@ -18,6 +18,12 @@ describe("MarketingProviderConnectionsRoute", () => {
       isError: false,
       refetch: vi.fn(),
       data: {
+        projection: {
+          projection_version: "marketing-readiness.v1", company_id: "company-1", provider_family: "google_ads", as_of: "2026-09-30T12:00:00Z",
+          owner_state: "CONFIGURATION_REQUIRED", owner_guidance: ["Ask a platform administrator to configure Google Ads."],
+          account_discovery_state: "NOT_AVAILABLE", account_bound: false, ingestion_enabled: false,
+          spend_evidence_availability: "UNAVAILABLE", last_successful_sync_at: null,
+        },
         readiness: {
           connection_status: "configuration_required",
           environment: "beta",
@@ -42,6 +48,8 @@ describe("MarketingProviderConnectionsRoute", () => {
     expect(screen.getByRole("button", { name: /connect google ads/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /start read-only sync/i })).toBeDisabled();
     expect(screen.getByText(/No authorization request has been started/i)).toBeInTheDocument();
+    expect(screen.getByText("CONFIGURATION REQUIRED")).toBeInTheDocument();
+    expect(screen.getByText(/Ask a platform administrator/i)).toBeInTheDocument();
     expect(screen.queryByText(/refresh.token|client.secret/i)).not.toBeInTheDocument();
   });
 });
