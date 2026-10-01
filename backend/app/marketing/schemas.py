@@ -172,3 +172,42 @@ class ReconciliationFindingResponse(MarketingSchema):
     state: str
     missing_components: list[str]
     observed_at: datetime
+
+
+class MarketingEvidencePeriod(MarketingSchema):
+    interval_start: datetime
+    interval_end: datetime
+    as_of: datetime
+
+
+class MarketingBranchMappingReadiness(MarketingSchema):
+    branch_id: UUID
+    provider_account_id: UUID
+    ingestion_enabled: bool
+
+
+class MarketingReadinessProjection(MarketingSchema):
+    projection_version: str = "marketing-readiness.v1"
+    company_id: UUID
+    provider_family: str = "google_ads"
+    as_of: datetime
+    owner_state: str
+    owner_guidance: tuple[str, ...]
+    provider_configured: bool
+    oauth_runtime_ready: bool
+    secret_custody_ready: bool
+    connection_state: str
+    account_discovery_state: str
+    account_bound: bool
+    branch_mappings: tuple[MarketingBranchMappingReadiness, ...]
+    ingestion_enabled: bool
+    last_successful_sync_at: datetime | None
+    current_evidence_period: MarketingEvidencePeriod | None
+    spend_evidence_availability: str
+    spend_evidence_available: bool
+    campaign_evidence_available: bool
+    search_term_evidence_available: bool
+    unresolved_reconciliation_findings: int
+    provider_unavailable: bool
+    provider_error: bool
+    missing_components: tuple[str, ...]

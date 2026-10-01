@@ -31,6 +31,7 @@ from .schemas import (
     GoogleAdsConnectionReadinessResponse,
     GoogleAdsOAuthStartResponse,
     ManualAttributionConfirmation,
+    MarketingReadinessProjection,
     ProviderCoverageResponse,
     ProviderSyncStatusResponse,
     ReconciliationFindingResponse,
@@ -55,6 +56,15 @@ ProviderAdminContext = Annotated[
     Depends(require_permission(MarketingPermission.PROVIDER_ADMIN)),
 ]
 OAUTH_COOKIE = "th_google_ads_oauth_nonce"
+
+
+@router.get("/readiness", response_model=MarketingReadinessProjection)
+async def marketing_readiness(
+    context: ReadContext, session: DatabaseSession
+) -> MarketingReadinessProjection:
+    return await marketing_provider_service.readiness_projection(
+        session, context=context
+    )
 
 
 @router.post("/google-ads/oauth/authorize", response_model=GoogleAdsOAuthStartResponse)
