@@ -26,6 +26,7 @@ vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
 vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
 vi.mock("../routes/DispatchRoute", () => ({ DispatchRoute: () => <div>Dispatch route content</div> }));
+vi.mock("../routes/SchedulingRoute", () => ({ SchedulingRoute: () => <div>Service Board route content</div> }));
 vi.mock("../routes/TechnicianRoute", () => ({ TechnicianRoute: () => <div>Technician route content</div> }));
 vi.mock("../features/engineering-mobile/MobileEngineeringListPage", () => ({ MobileEngineeringListPage: () => <div>Engineering route content</div> }));
 vi.mock("../features/engineering-mobile/MobileEngineeringDetailPage", () => ({ MobileEngineeringDetailPage: () => <div>Engineering detail route content</div> }));
@@ -151,9 +152,16 @@ describe("application routing", () => {
     expect(router.state.location.pathname).toBe("/appointments/appointment-1");
   });
 
-  it("loads Dispatch directly through the protected application shell", async () => {
-    renderRoute("/dispatch");
-    expect(await screen.findByText("Dispatch route content")).toBeInTheDocument();
+  it("preserves Dispatch deep links by redirecting them to the unified Service Board", async () => {
+    const router = renderRoute("/dispatch?date=2026-09-30", {
+      ...authenticatedContext,
+      permissionCodes: ["COMPANY_SCHEDULING_READ"],
+    });
+    expect(await screen.findByText("Service Board route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/scheduling");
+    expect(router.state.location.search).toContain("date=2026-09-30");
+    expect(router.state.location.search).toContain("view=day");
+    expect(router.state.location.search).toContain("perspective=dispatch");
     expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("aria-current", "page");
   });
 
@@ -213,7 +221,7 @@ describe("application routing", () => {
     expect(screen.getByRole("complementary", { name: "Mobile application navigation" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Customers" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "Jobs" })).toHaveLength(2);
-    expect(screen.getAllByRole("link", { name: "Dispatch" })).toHaveLength(2);
+    expect(screen.queryByRole("link", { name: "Dispatch" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Engineering Factory" })).toHaveLength(2);
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mobile application navigation" })).not.toBeInTheDocument());

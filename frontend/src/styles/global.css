@@ -31,6 +31,7 @@ body {
  */
 .twelve-hats-panel-outline {
   border-color: var(--semantic-panel-outline);
+  border-width: 2px;
 }
 
 .twelve-hats-panel-outline[data-panel-tone="neutral"] {

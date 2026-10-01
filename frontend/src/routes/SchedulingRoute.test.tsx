@@ -128,7 +128,7 @@ describe("SchedulingRoute", () => {
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("heading", { name: "Schedule & Dispatch" }),
+      screen.getByRole("heading", { name: "Service Board" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Day agenda" })).toBeVisible();
@@ -406,7 +406,7 @@ describe("SchedulingRoute", () => {
     ).toBeVisible();
   });
 
-  it("restores a direct-linked operating scope instead of resetting the CSR workspace", () => {
+  it("restores a direct-linked operating scope instead of resetting the CSR workspace", async () => {
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -431,6 +431,7 @@ describe("SchedulingRoute", () => {
     );
     expect(screen.getByLabelText("Technician")).toHaveValue("__unassigned");
     expect(screen.getByLabelText("Search schedule")).toHaveValue("Taylor");
+    await userEvent.click(screen.getByRole("button", { name: "Unassigned" }));
     expect(screen.getByLabelText("Queue Job status")).toHaveValue("ready");
     expect(screen.getByLabelText("Queue priority")).toHaveValue("emergency");
     expect(screen.getByLabelText("Queue state")).toHaveValue(
@@ -731,7 +732,7 @@ describe("SchedulingRoute", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows unscheduled Jobs as a distinct office queue", () => {
+  it("opens unscheduled Jobs from the compact attention indicator", async () => {
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -759,9 +760,10 @@ describe("SchedulingRoute", () => {
         <SchedulingRoute />
       </MemoryRouter>,
     );
-    expect(
-      screen.getByRole("heading", { name: "Needs Scheduling work queue" }),
-    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Needs Scheduling 1" }),
+    );
+    expect(screen.getByRole("heading", { name: "Needs Scheduling work queue" })).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Open Job to schedule" }),
     ).toHaveAttribute(
