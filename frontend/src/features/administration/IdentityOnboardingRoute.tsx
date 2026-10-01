@@ -84,7 +84,7 @@ export function IdentityOnboardingRoute() {
       setRosterPreview(preview);
       setFirstName(preview.first_name);
       setLastName(preview.last_name);
-      setEmail(preview.source_login_email);
+      setEmail(preview.proposed_login_email);
       setProfileLabel(preview.operating_role);
       setBranchId(preview.source_branch_id);
     }).catch(() => {
@@ -144,7 +144,7 @@ export function IdentityOnboardingRoute() {
       if (rosterKey && rosterPreview) {
         const created = await onboardRealRosterEmployee(rosterKey, {
           confirmed_source_employee_id: rosterPreview.source_employee_id,
-          confirmed_login_email: rosterPreview.source_login_email,
+          confirmed_login_email: email.trim(),
           confirm_access_profile: confirmAccessProfile,
         });
         setOnboarding(created);
@@ -233,7 +233,7 @@ export function IdentityOnboardingRoute() {
             <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
             <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
           </div>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input aria-label="Email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required /><span className="text-body-xs text-content-muted">The provider email remains preserved above. An owner may enter a different verified current login email without rewriting source evidence.</span></label>
           <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Role</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} disabled={Boolean(rosterPreview)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profile.label.replaceAll("_", " ")}</option>)}</select><span className="text-body-xs text-content-muted">Field Tech includes ACP Employee Mobile access. Dispatch eligibility is confirmed separately for an exact appointment window. Office roles do not receive field capability.</span></label>
           <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => setBranchId(event.target.value)} disabled={Boolean(rosterPreview)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
           {rosterPreview && <label className="flex items-start gap-ui-3 rounded-lg border border-stroke p-ui-3 text-body-s"><input className="mt-1" type="checkbox" checked={confirmAccessProfile} onChange={(event) => setConfirmAccessProfile(event.target.checked)} /><span>I confirm the <strong>{rosterPreview.operating_role.replaceAll("_", " ")}</strong> access profile ({rosterPreview.required_role_codes.join(", ")}) for this exact source Employee.</span></label>}

@@ -157,7 +157,10 @@ class RealRosterReadinessItem(WorkforceSchema):
     source_employee_id: str | None
     source_login_email: str | None
     source_admission: Literal[
-        "SAFE_CREATE", "ALREADY_ACTIVE", "OWNER_IDENTITY_DECISION_REQUIRED"
+        "SAFE_CREATE",
+        "ALREADY_ACTIVE",
+        "OWNER_IDENTITY_DECISION_REQUIRED",
+        "HISTORICAL_TERMINATED",
     ]
     source_onboarding_state: Literal[
         "READY_TO_ONBOARD",
@@ -213,6 +216,7 @@ class RealRosterOnboardingPreview(WorkforceSchema):
     required_role_codes: tuple[str, ...]
     source_employee_id: str
     source_login_email: str
+    proposed_login_email: str
     source_branch_id: UUID
     source_branch_code: str
     source_candidate_employee_id: UUID
