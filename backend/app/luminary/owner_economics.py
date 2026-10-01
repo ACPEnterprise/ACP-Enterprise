@@ -783,8 +783,8 @@ _GAP_GUIDANCE: Final[dict[str, dict[str, str]]] = {
         "why": "Economic Health cannot include authoritative marketing burden yet.",
         "source": "Marketing Economics / Accounting",
         "party": "PROVIDER",
-        "path": "",
-        "path_label": "Unavailable — no authoritative Marketing input route",
+        "path": "/marketing/provider-connections/google-ads",
+        "path_label": "Marketing -> Provider Connections",
         "unlocks": "marketing burden and service-acquisition context",
     },
     "other_admitted_fixed_or_semi_fixed_burden": {
@@ -951,8 +951,8 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
         "dependencies": ("marketing",),
         "sources": ("Marketing", "Accounting"),
         "parties": ("PROVIDER", "ACCOUNTANT"),
-        "ui_path": "",
-        "ui_path_label": "Unavailable — no authoritative Marketing input route",
+        "ui_path": "/marketing/provider-connections/google-ads",
+        "ui_path_label": "Marketing -> Provider Connections",
         "blocked_calculations": ("REQUIRED_ECONOMIC_BURDEN", "ECONOMIC_HEALTH"),
         "blocked_decisions": (
             "MARKETING_ACQUISITION_ECONOMICS",
@@ -1018,6 +1018,7 @@ _COMPLETION_CATEGORIES: Final[tuple[dict[str, object], ...]] = (
 def _economic_completion_planner(
     workspace: dict[str, object],
     active_reasoning: dict[str, object],
+    source_completeness: dict[str, object],
 ) -> dict[str, object]:
     """Project the explicit evidence-to-decision graph without accepting inputs."""
     gap_rows = cast(
@@ -1025,13 +1026,27 @@ def _economic_completion_planner(
     )
     gaps = {str(item.get("gap")): item for item in gap_rows}
     period = _mapping(workspace.get("period"))
+    contribution = _mapping(active_reasoning.get("contribution"))
+    no_admitted_job_population = (
+        contribution.get("state") == "UNAVAILABLE"
+        and contribution.get("job_count") == 0
+    )
     categories: list[dict[str, object]] = []
     for spec in _COMPLETION_CATEGORIES:
         dependencies = cast(tuple[str, ...], spec["dependencies"])
         missing = [value for value in dependencies if value in gaps]
         dependency_rows = [gaps[value] for value in missing]
+        depends_on_job_variable_evidence = "VARIABLE_COST" in str(spec["economic_role"])
         state = (
-            "COMPLETE"
+            "UNAVAILABLE"
+            if no_admitted_job_population
+            and depends_on_job_variable_evidence
+            and not missing
+            else "MISSING"
+            if no_admitted_job_population
+            and depends_on_job_variable_evidence
+            and missing
+            else "COMPLETE"
             if not missing
             else "PARTIAL"
             if len(missing) < len(dependencies)
@@ -1061,6 +1076,11 @@ def _economic_completion_planner(
                 ),
                 "unlocks": list(cast(tuple[str, ...], spec["unlocks"])),
                 "state": state,
+                "state_reason": (
+                    "No admitted Job Economics population exists for this period."
+                    if state == "UNAVAILABLE"
+                    else None
+                ),
                 "missing_dependencies": missing,
                 "affected_job_count": max(affected_counts) if affected_counts else None,
                 "affected_authoritative_revenue_minor": max(affected_revenues)
@@ -1079,7 +1099,9 @@ def _economic_completion_planner(
             }
         )
 
-    incomplete = [item for item in categories if item["state"] != "COMPLETE"]
+    incomplete = [
+        item for item in categories if item["state"] in {"MISSING", "PARTIAL"}
+    ]
     ranked = sorted(
         incomplete,
         key=lambda item: (
@@ -1127,17 +1149,23 @@ def _economic_completion_planner(
         ],
         key=lambda item: (item["from"], item["to"], item["relationship"]),
     )
+    owner_action_map = _owner_action_map(categories, source_completeness)
     return {
         "contract_version": "luminary.economic-completion-planner.v1",
         "read_only": True,
         "period": period,
         "summary": {
-            "complete_category_count": len(categories) - len(incomplete),
+            "complete_category_count": sum(
+                item["state"] == "COMPLETE" for item in categories
+            ),
             "partial_category_count": sum(
                 item["state"] == "PARTIAL" for item in categories
             ),
             "missing_category_count": sum(
                 item["state"] == "MISSING" for item in categories
+            ),
+            "unavailable_category_count": sum(
+                item["state"] == "UNAVAILABLE" for item in categories
             ),
             "total_category_count": len(categories),
         },
@@ -1164,6 +1192,215 @@ def _economic_completion_planner(
             "decision_nodes": decision_nodes,
             "edges": edges,
         },
+        "owner_action_map": owner_action_map,
+    }
+
+
+def _owner_action_map(
+    categories: list[dict[str, object]],
+    source_completeness: dict[str, object],
+) -> dict[str, object]:
+    """Compose canonical readiness into an owner sequence without deadlines."""
+    category_by_key = {str(item["category"]): item for item in categories}
+    raw_sources = source_completeness.get("sources")
+    source_rows = (
+        [item for item in raw_sources if isinstance(item, dict)]
+        if isinstance(raw_sources, (list, tuple))
+        else []
+    )
+    sources = {str(item.get("source")): item for item in source_rows}
+
+    def category_state(*keys: str) -> str:
+        states = [str(category_by_key[key]["state"]) for key in keys]
+        if all(state == "COMPLETE" for state in states):
+            return "COMPLETE"
+        if any(state == "MISSING" for state in states):
+            return "INCOMPLETE"
+        if any(state == "PARTIAL" for state in states):
+            return "PARTIAL"
+        return "UNAVAILABLE"
+
+    def missing(*keys: str) -> list[str]:
+        return sorted(
+            {
+                str(value)
+                for key in keys
+                for value in cast(
+                    list[object], category_by_key[key]["missing_dependencies"]
+                )
+            }
+        )
+
+    specs: list[dict[str, object]] = [
+        {
+            "action": "COMPLETE_PAYROLL_ECONOMIC_EVIDENCE",
+            "label": "Payroll and labor burden",
+            "state": category_state(
+                "FIELD_LABOR_AND_PAYROLL_BURDEN", "OFFICE_AND_ADMIN_PAYROLL"
+            ),
+            "what_is_missing": missing(
+                "FIELD_LABOR_AND_PAYROLL_BURDEN", "OFFICE_AND_ADMIN_PAYROLL"
+            ),
+            "source_state": str(
+                sources.get("direct_labor", {}).get("state", "UNAVAILABLE")
+            ),
+            "responsible_parties": ["OWNER", "EMPLOYEE", "ACCOUNTANT", "SYSTEM"],
+            "ui_path": "/payroll",
+            "ui_path_label": "Payroll -> readiness and pay-period review",
+            "why_it_matters": "Accepted time and certified Payroll cost are required before labor can support contribution and burden conclusions.",
+            "unlocks": [
+                "authoritative Job-variable labor cost",
+                "field and office Payroll burden",
+                "stronger Economic Contribution and break-even authority",
+            ],
+            "dependency_order": 1,
+        },
+        {
+            "action": "COMPLETE_JOB_MATERIAL_COST_EVIDENCE",
+            "label": "Materials and Job cost",
+            "state": category_state("MATERIAL_AND_JOB_VARIABLE_COST"),
+            "what_is_missing": missing("MATERIAL_AND_JOB_VARIABLE_COST"),
+            "source_state": str(
+                sources.get("materials", {}).get("state", "UNAVAILABLE")
+            ),
+            "responsible_parties": ["OWNER", "ACCOUNTANT", "SYSTEM"],
+            "ui_path": "/inventory",
+            "ui_path_label": "Inventory -> Job material and cost readiness",
+            "why_it_matters": "A catalog identifies materials; it does not prove which material a Job consumed or its authoritative cost.",
+            "unlocks": [
+                "actual Job material cost",
+                "stronger Job contribution coverage",
+                "Price Book cost intelligence",
+            ],
+            "dependency_order": 2,
+            "evidence_chain": {
+                "material_catalog": "SEPARATE_AUTHORITY_NOT_PROOF_OF_JOB_COST",
+                "job_material_attribution": str(
+                    sources.get("procurement_inventory_provenance", {}).get(
+                        "state", "UNAVAILABLE"
+                    )
+                ),
+                "actual_job_cost": str(
+                    sources.get("materials", {}).get("state", "UNAVAILABLE")
+                ),
+            },
+        },
+        {
+            "action": "RECONCILE_ACCOUNTING_EVIDENCE",
+            "label": "QuickBooks and Accounting reconciliation",
+            "state": (
+                "COMPLETE"
+                if sources.get("accounting_evidence", {}).get("state") == "AVAILABLE"
+                else "INCOMPLETE"
+                if sources.get("accounting_evidence", {}).get("state")
+                in {"PARTIAL", "POLICY_REQUIRED"}
+                else "UNAVAILABLE"
+            ),
+            "what_is_missing": ["reconciled_accounting_evidence"],
+            "source_state": str(
+                sources.get("accounting_evidence", {}).get("state", "UNAVAILABLE")
+            ),
+            "responsible_parties": ["ACCOUNTANT", "OWNER", "SYSTEM"],
+            "ui_path": "/accounting/quickbooks-migration",
+            "ui_path_label": "Accounting -> QuickBooks migration and reconciliation",
+            "why_it_matters": "An available QuickBooks workspace proves source custody, not reconciled native Accounting authority.",
+            "unlocks": [
+                "admitted Accounting support for burden evidence",
+                "authoritative financial comparisons where reporting admits them",
+            ],
+            "dependency_order": 3,
+            "evidence_chain": {
+                "qbo_workspace": "SOURCE_ACQUISITION_AND_APPLICATION_READINESS_ONLY",
+                "reconciled_accounting": str(
+                    sources.get("accounting_evidence", {}).get("state", "UNAVAILABLE")
+                ),
+            },
+        },
+        {
+            "action": "CONFIRM_OWNER_COMPENSATION_AUTHORITY",
+            "label": "Owner compensation",
+            "state": category_state("OWNER_COMPENSATION"),
+            "what_is_missing": missing("OWNER_COMPENSATION"),
+            "source_state": category_state("OWNER_COMPENSATION"),
+            "responsible_parties": ["OWNER", "ACCOUNTANT"],
+            "ui_path": "/business-economics/administration",
+            "ui_path_label": "Business Economics -> Policy administration",
+            "why_it_matters": "Break-even is understated when approved owner compensation is outside Required Economic Burden.",
+            "unlocks": ["owner compensation burden", "stronger break-even authority"],
+            "dependency_order": 4,
+        },
+        {
+            "action": "COMPLETE_FIXED_BURDEN_AUTHORITY",
+            "label": "Fixed and semi-fixed burden",
+            "state": category_state(
+                "VEHICLES_AND_FIELD_FIXED_COST",
+                "RENT_AND_UTILITIES",
+                "INSURANCE",
+                "SOFTWARE_PROFESSIONAL_AND_LICENSES",
+                "OTHER_FIXED_OR_SEMI_FIXED_BURDEN",
+            ),
+            "what_is_missing": missing(
+                "VEHICLES_AND_FIELD_FIXED_COST",
+                "RENT_AND_UTILITIES",
+                "INSURANCE",
+                "SOFTWARE_PROFESSIONAL_AND_LICENSES",
+                "OTHER_FIXED_OR_SEMI_FIXED_BURDEN",
+            ),
+            "source_state": str(
+                sources.get("overhead_allocation", {}).get("state", "UNAVAILABLE")
+            ),
+            "responsible_parties": ["OWNER", "ACCOUNTANT"],
+            "ui_path": "/business-economics/administration",
+            "ui_path_label": "Business Economics -> Policy administration",
+            "why_it_matters": "Required Economic Burden needs approved same-period pools, sources, and allocation authority.",
+            "unlocks": ["Required Economic Burden", "authoritative Economic Health"],
+            "dependency_order": 5,
+        },
+        {
+            "action": "ADMIT_MARKETING_SPEND_EVIDENCE",
+            "label": "Marketing spend",
+            "state": category_state("MARKETING_SPEND"),
+            "what_is_missing": missing("MARKETING_SPEND"),
+            "source_state": "NOT_ADMITTED_TO_ECONOMICS",
+            "responsible_parties": ["OWNER", "PROVIDER", "ACCOUNTANT"],
+            "ui_path": "/marketing/provider-connections/google-ads",
+            "ui_path_label": "Marketing -> Provider Connections",
+            "why_it_matters": "Provider connection and spend ingestion must be admitted before marketing burden or acquisition economics can be stated.",
+            "unlocks": ["marketing burden", "marketing acquisition economics"],
+            "dependency_order": 6,
+            "evidence_chain": {
+                "provider_connection": "SEPARATE_READINESS_CONTRACT",
+                "economics_admission": "NOT_ADMITTED_TO_ECONOMICS",
+            },
+        },
+    ]
+    actions = [item for item in specs if item["state"] != "COMPLETE"]
+    for item in actions:
+        parties = cast(list[str], item["responsible_parties"])
+        item["sequence_bucket"] = (
+            "NOW"
+            if "OWNER" in parties and item["ui_path"]
+            else "COORDINATE"
+            if any(value in parties for value in ("EMPLOYEE", "ACCOUNTANT"))
+            else "AFTER_PREREQUISITES"
+        )
+    actions.sort(
+        key=lambda item: (cast(int, item["dependency_order"]), str(item["action"]))
+    )
+    return {
+        "contract_version": "luminary.owner-economic-action-map.v1",
+        "evaluations": specs,
+        "actions": actions,
+        "top_action": actions[0] if actions else None,
+        "sequence_semantics": {
+            "NOW": "An authorized owner can open the canonical workflow now; this is not a fabricated deadline.",
+            "COORDINATE": "Another authorized human must supply or certify evidence.",
+            "AFTER_PREREQUISITES": "The system or provider can proceed only after upstream evidence exists.",
+        },
+        "limitations": [
+            "Ordering follows explicit calculation dependencies, not invented urgency or dollar impact.",
+            "No source workspace is treated as admitted Economics evidence merely because it is reachable.",
+        ],
     }
 
 
@@ -1910,7 +2147,7 @@ def project_owner_economics(
         "owner_health": owner_health,
         "active_reasoning": active_reasoning,
         "economic_completion_planner": _economic_completion_planner(
-            workspace, active_reasoning
+            workspace, active_reasoning, completeness
         ),
         "driver_analysis": _driver_analysis(workspace, active_reasoning, owner_health),
         "evidence_priority_queue": evidence_priority_queue,

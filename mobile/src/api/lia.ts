@@ -11,12 +11,27 @@ const evidenceSchema = z.object({
   period_end: z.string().nullable().optional(), period_label: z.string().nullable().optional(), timezone: z.string().nullable().optional(),
 });
 const navigationSchema = z.object({ label: z.string(), internal_path: z.string(), required_permission: z.string().nullable().optional(), available: z.boolean().default(true), unavailable_reason: z.string().nullable().optional(), entity_type: z.string().nullable().optional(), entity_id: z.string().uuid().nullable().optional(), action_category: z.string().default("NAVIGATION"), source_identity: z.string().nullable().optional() });
+const speechInterpretationSchema = z.object({
+  state: z.enum(["CONFIDENT", "CONFIRM_RECOMMENDED", "UNCERTAIN"]),
+  heard_text: z.string().min(1).max(500), evidence_digest: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
+  possible_meaning: z.string().max(500).nullable().optional(), suggested_confirmation: z.string().max(500).nullable().optional(),
+  source_language: z.string().min(2).max(32), interpreted_language: z.string().max(32).nullable().optional(),
+  translation_state: z.enum(["NOT_TRANSLATED", "TRANSLATED", "UNAVAILABLE"]).default("NOT_TRANSLATED"),
+  translation_provenance: z.string().max(500).nullable().optional(), as_of: z.string(), confirmed: z.boolean().default(false),
+  owning_fact_type: z.string().min(1).max(100), context: z.record(z.string(), z.string()).default({}),
+});
+const csrDispatchSchema = z.object({
+  contract_version: z.string(), reasoning_id: z.string().uuid(), reasoning_revision: z.number().int().positive(), reasoning_digest: z.string().regex(/^[a-f0-9]{64}$/), supersedes_reasoning_id: z.string().uuid().nullable().optional(), suggested_question: z.string().nullable().optional(),
+  customer_branch: z.object({ state: z.enum(["EXISTING", "NEW_CUSTOMER_INTAKE_REQUIRED", "AMBIGUOUS"]), customer_id: z.string().uuid().nullable().optional(), location_id: z.string().uuid().nullable().optional(), missing_fields: z.array(z.string()).default([]), next_questions: z.array(z.string()).default([]), limitations: z.array(z.string()).default([]) }),
+  speech_interpretations: z.array(speechInterpretationSchema).default([]), clarification_required: z.boolean().default(false), translation_available: z.boolean().default(false),
+  recommendation_state: z.enum(["CURRENT", "PROVISIONAL", "UNAVAILABLE", "EXPIRED"]).default("PROVISIONAL"), primary_ghost_slot: z.record(z.string(), z.unknown()).nullable().optional(), alternates: z.array(z.record(z.string(), z.unknown())).default([]), constrained_options: z.array(z.record(z.string(), z.unknown())).default([]), facts: z.array(z.string()).default([]), interpretation: z.string(), recommendation: z.string(), why: z.array(z.string()).default([]), as_of: z.string(), expires_at: z.string(), action_metadata: z.array(navigationSchema).default([]), limitations: z.array(z.string()).default([]), mutation_authority: z.literal("none").default("none"),
+});
 export const liaResponseSchema = z.object({
   request_id: z.string().uuid(), conversation_id: z.string().uuid(),
   classification: z.enum(["KNOWN", "DERIVED", "INCOMPLETE", "STALE", "CONFLICTING", "UNAVAILABLE", "UNAUTHORIZED", "POLICY_REQUIRED", "EXTERNAL_GATE"]),
   authority: z.enum(["ACP_AUTHORITATIVE", "SOURCE_BACKED", "PARTIAL", "INSUFFICIENT_EVIDENCE"]),
   response_mode: z.enum(["BRIEF", "NORMAL", "DETAILED", "EVIDENCE"]),
-  answer: z.string(), evidence: z.array(evidenceSchema).default([]), limitations: z.array(z.string()).default([]),
+  answer: z.string(), evidence: z.array(evidenceSchema).default([]), limitations: z.array(z.string()).default([]), csr_dispatch: csrDispatchSchema.nullable().optional(),
   navigation: z.array(navigationSchema).default([]), completeness: z.string(), freshness: z.string(),
   provider: z.string(), provider_version: z.string(), policy_version: z.string(), evidence_digest: z.string(),
   authorization_version: z.number(), company_id: z.string().uuid(), branch_ids: z.array(z.string().uuid()).default([]),

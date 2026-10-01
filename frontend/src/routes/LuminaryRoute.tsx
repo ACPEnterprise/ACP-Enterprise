@@ -427,10 +427,41 @@ export function LuminaryRoute() {
                     {next.ui_path ? <Link className="mt-2 inline-block text-sm font-semibold text-action-primary underline" to={next.ui_path}>{next.ui_path_label}</Link> : <p className="mt-2 text-sm text-content-muted">{next.ui_path_label}</p>}
                   </div>
                 );
-              })() : <p className="mt-3 text-sm">All evaluated Economics categories are complete for this period.</p>}
+              })() : ownerEconomics.data.economic_completion_planner.summary.complete_category_count === ownerEconomics.data.economic_completion_planner.summary.total_category_count ? (
+                <p className="mt-3 text-sm">All evaluated Economics categories are complete for this period.</p>
+              ) : (
+                <p className="mt-3 text-sm text-content-muted">No completion action can be ranked until an authoritative source population is available for this period.</p>
+              )}
               <Alert variant="warning" className="mt-3">
                 Temporary owner-confirmed amounts are not supported by the current canonical Economics authority. Luminary will not create one or treat a note as economic evidence.
               </Alert>
+              {ownerEconomics.data.economic_completion_planner.owner_action_map.top_action ? (
+                <section aria-labelledby="owner-action-map-title" className="mt-4 rounded-lg border border-stroke p-3">
+                  <h4 className="font-semibold" id="owner-action-map-title">What Michael should complete next</h4>
+                  <p className="mt-1 text-xs text-content-muted">The sequence follows explicit calculation dependencies. “Now” means the authorized workflow can be opened now—not that Luminary invented a deadline.</p>
+                  <ol className="mt-3 space-y-3">
+                    {ownerEconomics.data.economic_completion_planner.owner_action_map.actions.map((action, index) => (
+                      <li className="rounded-md bg-surface-muted p-3" key={action.action}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-semibold">{index + 1}. {action.label}</p>
+                          <span className="rounded-full bg-surface px-2 py-1 text-xs font-semibold">{words(action.sequence_bucket ?? action.state)}</span>
+                        </div>
+                        <p className="mt-1 text-sm">{action.why_it_matters}</p>
+                        <p className="mt-2 text-xs text-content-muted"><span className="font-semibold">Who:</span> {action.responsible_parties.map(words).join(" / ")} · <span className="font-semibold">Current evidence:</span> {words(action.source_state)}</p>
+                        <p className="text-xs text-content-muted"><span className="font-semibold">What becomes knowable:</span> {action.unlocks.join("; ")}</p>
+                        <Link className="mt-2 inline-block text-sm font-semibold text-action-primary underline" to={action.ui_path}>{action.ui_path_label}</Link>
+                        {action.evidence_chain ? (
+                          <details className="mt-2 text-xs text-content-muted">
+                            <summary className="cursor-pointer font-medium">Authority boundary</summary>
+                            {Object.entries(action.evidence_chain).map(([key, value]) => <p key={key}>{words(key)}: {words(value)}</p>)}
+                          </details>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="mt-3 text-xs text-content-muted">{ownerEconomics.data.economic_completion_planner.owner_action_map.limitations.join(" ")}</p>
+                </section>
+              ) : null}
               <details className="mt-4 text-sm">
                 <summary className="cursor-pointer font-medium">Completion matrix</summary>
                 <ol className="mt-2 space-y-2">
