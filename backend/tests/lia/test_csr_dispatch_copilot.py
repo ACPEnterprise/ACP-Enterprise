@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+import pytest
 from app.lia.contracts import SpeechInterpretation
 from app.lia.csr_dispatch_copilot import CustomerMatch, compose_csr_dispatch_copilot
 from app.lia.dispatch_reasoning import GhostSlot, GhostSlotClass, LiaDispatchReasoning
@@ -36,16 +37,16 @@ def _reasoning() -> LiaDispatchReasoning:
         customer_state="RESOLVED",
         location_state="RESOLVED",
         next_question=None,
-        facts=(),
-        interpretation="supported",
-        recommendation="review",
-        why=(),
+        facts=("SERVICE INTENT: Drain Cleaning", "LOCATION: canonical"),
+        interpretation="Canonical Dispatch evidence supports an eligible option.",
+        recommendation="Offer the primary slot for human review.",
+        why=("Canonical availability is known.",),
         primary=slot,
         alternates=(),
         limitations=(),
         evidence=(),
         as_of=NOW,
-        expires_at=NOW,
+        expires_at=NOW + timedelta(minutes=5),
         supersedes_reasoning_id=None,
         reasoning_digest="a" * 64,
     )
@@ -69,10 +70,15 @@ def test_existing_customer_context_makes_recommendation_current() -> None:
     result = compose_csr_dispatch_copilot(
         _reasoning(),
         customer_match=CustomerMatch("EXISTING", CUSTOMER, LOCATION),
+        evaluated_at=NOW,
     )
     assert result.customer_branch.state == "EXISTING"
     assert result.recommendation_state == "CURRENT"
     assert result.primary_ghost_slot is not None
+    assert result.facts[0] == "SERVICE INTENT: Drain Cleaning"
+    assert result.interpretation.startswith("Canonical Dispatch")
+    assert result.as_of == NOW
+    assert result.expires_at == NOW + timedelta(minutes=5)
     assert result.mutation_authority == "none"
 
 
@@ -84,6 +90,7 @@ def test_new_customer_requires_canonical_intake_and_keeps_recommendation_provisi
             missing_fields=("service_address",),
             next_questions=("What is the service address?",),
         ),
+        evaluated_at=NOW,
     )
     assert result.customer_branch.state == "NEW_CUSTOMER_INTAKE_REQUIRED"
     assert result.recommendation_state == "PROVISIONAL"
@@ -94,6 +101,7 @@ def test_unconfirmed_speech_is_clarification_and_not_canonical_fact() -> None:
     result = compose_csr_dispatch_copilot(
         _reasoning(),
         customer_match=CustomerMatch("EXISTING", CUSTOMER, LOCATION),
+        evaluated_at=NOW,
         speech=(_speech(state="CONFIRM_RECOMMENDED"),),
     )
     assert result.clarification_required is True
@@ -106,9 +114,66 @@ def test_confirmed_non_confident_speech_is_rejected() -> None:
         compose_csr_dispatch_copilot(
             _reasoning(),
             customer_match=CustomerMatch("EXISTING", CUSTOMER, LOCATION),
+            evaluated_at=NOW,
             speech=(_speech(state="UNCERTAIN", confirmed=True),),
         )
     except ValueError as error:
         assert "CONFIDENT" in str(error)
     else:
         raise AssertionError("unconfirmed speech must not enter canonical authority")
+
+
+def test_ambiguous_customer_never_becomes_current_and_asks_disambiguation() -> None:
+    result = compose_csr_dispatch_copilot(
+        _reasoning(),
+        customer_match=CustomerMatch(
+            "AMBIGUOUS",
+            next_questions=("Which service address is this for?",),
+            limitations=("Multiple canonical Customer/Location matches exist.",),
+        ),
+        evaluated_at=NOW,
+    )
+
+    assert result.customer_branch.state == "AMBIGUOUS"
+    assert result.recommendation_state == "PROVISIONAL"
+    assert result.suggested_question == "Which service address is this for?"
+    assert result.primary_ghost_slot is not None
+    assert "provisional" in " ".join(result.limitations).lower()
+
+
+def test_expired_reasoning_removes_every_ghost_slot() -> None:
+    result = compose_csr_dispatch_copilot(
+        _reasoning(),
+        customer_match=CustomerMatch("EXISTING", CUSTOMER, LOCATION),
+        evaluated_at=NOW + timedelta(minutes=5),
+    )
+
+    assert result.recommendation_state == "EXPIRED"
+    assert result.primary_ghost_slot is None
+    assert result.alternates == ()
+    assert result.constrained_options == ()
+    assert "refresh" in " ".join(result.limitations).lower()
+
+
+@pytest.mark.parametrize(
+    "fact_type",
+    ("SERVICE_ADDRESS", "CALLER_NAME", "SERVICE_SYMPTOM", "URGENCY"),
+)
+def test_low_confidence_critical_speech_requires_confirmation(
+    fact_type: str,
+) -> None:
+    uncertain = _speech(state="UNCERTAIN").model_copy(
+        update={"owning_fact_type": fact_type}
+    )
+    result = compose_csr_dispatch_copilot(
+        _reasoning(),
+        customer_match=CustomerMatch("EXISTING", CUSTOMER, LOCATION),
+        evaluated_at=NOW,
+        speech=(uncertain,),
+    )
+
+    assert result.clarification_required is True
+    assert result.recommendation_state == "PROVISIONAL"
+    assert result.suggested_question == (
+        "Please confirm that water backs up into the tub."
+    )

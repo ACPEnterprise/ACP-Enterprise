@@ -147,6 +147,10 @@ class CsrDispatchCopilot(LiaSchema):
     """Server-owned, non-mutating CSR guidance contract."""
 
     contract_version: str = "lia.csr.dispatch.copilot.v1"
+    reasoning_id: UUID
+    reasoning_revision: int = Field(ge=1)
+    reasoning_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    supersedes_reasoning_id: UUID | None = None
     suggested_question: str | None = None
     customer_branch: CustomerIntakeBranch
     speech_interpretations: tuple[SpeechInterpretation, ...] = ()
@@ -158,6 +162,12 @@ class CsrDispatchCopilot(LiaSchema):
     primary_ghost_slot: dict[str, object] | None = None
     alternates: tuple[dict[str, object], ...] = ()
     constrained_options: tuple[dict[str, object], ...] = ()
+    facts: tuple[str, ...] = ()
+    interpretation: str
+    recommendation: str
+    why: tuple[str, ...] = ()
+    as_of: datetime
+    expires_at: datetime
     action_metadata: tuple[NavigationSuggestion, ...] = ()
     limitations: tuple[str, ...] = ()
     mutation_authority: str = "none"
