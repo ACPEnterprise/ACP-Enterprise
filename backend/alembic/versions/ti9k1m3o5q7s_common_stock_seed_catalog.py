@@ -1,7 +1,7 @@
 """Common stock seed catalog and vendor purchase-cost evidence.
 
 Revision ID: ti9k1m3o5q7s
-Revises: sh8d0f2g4j6l8
+Revises: sp9e1g3i5k7m9
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "ti9k1m3o5q7s"
-down_revision: str | Sequence[str] | None = "sh8d0f2g4j6l8"
+down_revision: str | Sequence[str] | None = "sp9e1g3i5k7m9"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
