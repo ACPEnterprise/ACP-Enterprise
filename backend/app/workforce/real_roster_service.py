@@ -67,7 +67,11 @@ class RealRosterService:
             raise RealRosterConflict(
                 "Roster identity requires its recorded owner disposition."
             )
-        if person.source_employee_id is None or person.source_login_email is None:
+        if (
+            person.source_employee_id is None
+            or person.source_login_email is None
+            or person.owner_login_email is None
+        ):
             raise RealRosterConflict("Source Employee identity is incomplete.")
         source = await session.scalar(
             select(HcpEmployeeSourceCrosswalk)
@@ -148,6 +152,7 @@ class RealRosterService:
             required_role_codes=tuple(sorted(person.required_role_codes)),
             source_employee_id=person.source_employee_id,
             source_login_email=person.source_login_email,
+            proposed_login_email=person.owner_login_email,
             source_branch_id=source.branch_id,
             source_branch_code=branch.code,
             source_candidate_employee_id=employee.id,
@@ -177,8 +182,6 @@ class RealRosterService:
             raise RealRosterConflict("Source Employee onboarding is not ready.")
         if (
             command.confirmed_source_employee_id != preview.source_employee_id
-            or normalize_email(command.confirmed_login_email)
-            != normalize_email(preview.source_login_email)
             or not command.confirm_access_profile
         ):
             raise RealRosterConflict(
@@ -198,9 +201,10 @@ class RealRosterService:
             raise RealRosterConflict(
                 "Canonical Employee access profile is unavailable."
             )
+        confirmed_login_email = normalize_email(command.confirmed_login_email)
         existing_user = await session.scalar(
             select(User).where(
-                User.normalized_email == normalize_email(preview.source_login_email)
+                User.normalized_email == confirmed_login_email
             )
         )
         role_ids = tuple(sorted((role.id for role in roles), key=str))
@@ -228,7 +232,7 @@ class RealRosterService:
                     login_email=(
                         None
                         if existing_user_id is not None
-                        else preview.source_login_email
+                        else confirmed_login_email
                     ),
                     existing_user_id=existing_user_id,
                     existing_employee_id=preview.source_candidate_employee_id,

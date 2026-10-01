@@ -13,6 +13,7 @@ class RealRosterAdmission(StrEnum):
     SAFE_CREATE = "SAFE_CREATE"
     ALREADY_ACTIVE = "ALREADY_ACTIVE"
     OWNER_IDENTITY_DECISION_REQUIRED = "OWNER_IDENTITY_DECISION_REQUIRED"
+    HISTORICAL_TERMINATED = "HISTORICAL_TERMINATED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,7 @@ class RealRosterPerson:
     role: RealRosterRole
     source_employee_id: str | None
     source_login_email: str | None
+    owner_login_email: str | None
     admission: RealRosterAdmission
 
     @property
@@ -45,12 +47,14 @@ REAL_ALL_COUNTY_ROSTER = (
         RealRosterRole.ADMIN,
         "pro_622e39dd3a544e4cb4fb8782ac767287",
         "allcountyleak@gmail.com",
+        "allcountyleak@gmail.com",
         RealRosterAdmission.SAFE_CREATE,
     ),
     RealRosterPerson(
         "lianne-hernandez",
         "Lianne Hernandez",
         RealRosterRole.OFFICE_MANAGER,
+        None,
         None,
         None,
         RealRosterAdmission.ALREADY_ACTIVE,
@@ -61,6 +65,7 @@ REAL_ALL_COUNTY_ROSTER = (
         RealRosterRole.OFFICE_STAFF,
         "pro_10853bfb63874a0b9d17cab14d1da20b",
         "alexallcountyleaks@gmail.com",
+        "alexallcountyplumbingandleak@gmail.com",
         RealRosterAdmission.OWNER_IDENTITY_DECISION_REQUIRED,
     ),
     RealRosterPerson(
@@ -68,6 +73,7 @@ REAL_ALL_COUNTY_ROSTER = (
         "Melvin Santiago",
         RealRosterRole.FIELD_TECH,
         "pro_23be6c33b14a4127bd737529180a56a1",
+        "koqui360@gmail.com",
         "koqui360@gmail.com",
         RealRosterAdmission.SAFE_CREATE,
     ),
@@ -77,13 +83,15 @@ REAL_ALL_COUNTY_ROSTER = (
         RealRosterRole.FIELD_TECH,
         "pro_4f1d81e3d31b4ffa9072dd6a32906586",
         "ajjmari3516@gmail.com",
-        RealRosterAdmission.SAFE_CREATE,
+        None,
+        RealRosterAdmission.HISTORICAL_TERMINATED,
     ),
     RealRosterPerson(
         "dareis-montgomery",
         "Dareis Montgomery",
         RealRosterRole.FIELD_TECH,
         "pro_2edf25dd14494b1885a50fa134b44fd8",
+        "dareismontgomery37@gmail.com",
         "dareismontgomery37@gmail.com",
         RealRosterAdmission.SAFE_CREATE,
     ),
@@ -93,6 +101,7 @@ REAL_ALL_COUNTY_ROSTER = (
         RealRosterRole.FIELD_TECH,
         "pro_0ff2024a6baa4475a883f76d6cbcc58b",
         "dakotawilcox23@gmail.com",
+        "dakotawilcox23@gmail.com",
         RealRosterAdmission.SAFE_CREATE,
     ),
     RealRosterPerson(
@@ -100,6 +109,7 @@ REAL_ALL_COUNTY_ROSTER = (
         "Jason Calci",
         RealRosterRole.FIELD_TECH,
         "pro_6b2b2b7177a54187a690cb198a6dbda5",
+        "jasoncalci27@gmail.com",
         "jasoncalci27@gmail.com",
         RealRosterAdmission.SAFE_CREATE,
     ),
