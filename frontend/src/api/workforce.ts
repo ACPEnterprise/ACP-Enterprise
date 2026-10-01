@@ -74,7 +74,7 @@ export interface RealRosterReadinessItem {
   field_tech: boolean;
   source_employee_id: string | null;
   source_login_email: string | null;
-  source_admission: "SAFE_CREATE" | "ALREADY_ACTIVE" | "OWNER_IDENTITY_DECISION_REQUIRED";
+  source_admission: "SAFE_CREATE" | "ALREADY_ACTIVE" | "OWNER_IDENTITY_DECISION_REQUIRED" | "HISTORICAL_TERMINATED";
   source_onboarding_state: "READY_TO_ONBOARD" | "ALREADY_BOUND" | "OWNER_DECISION_REQUIRED" | "SOURCE_EVIDENCE_MISSING" | "SOURCE_EVIDENCE_CONFLICT";
   source_candidate_employee_id: string | null;
   employee_id: string | null;
@@ -108,6 +108,7 @@ export interface RealRosterOnboardingPreview {
   required_role_codes: string[];
   source_employee_id: string;
   source_login_email: string;
+  proposed_login_email: string;
   source_branch_id: string;
   source_branch_code: string;
   source_candidate_employee_id: string;

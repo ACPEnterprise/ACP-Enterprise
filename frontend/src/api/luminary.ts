@@ -139,6 +139,7 @@ export interface LuminaryOwnerEconomics {
       complete_category_count: number;
       partial_category_count: number;
       missing_category_count: number;
+      unavailable_category_count: number;
       total_category_count: number;
     };
     categories: EconomicCompletionCategory[];
@@ -156,6 +157,14 @@ export interface LuminaryOwnerEconomics {
       calculation_nodes: string[];
       decision_nodes: string[];
       edges: Array<{ from: string; to: string; relationship: string }>;
+    };
+    owner_action_map: {
+      contract_version: "luminary.owner-economic-action-map.v1";
+      evaluations: OwnerEconomicAction[];
+      actions: OwnerEconomicAction[];
+      top_action: OwnerEconomicAction | null;
+      sequence_semantics: Record<string, string>;
+      limitations: string[];
     };
   };
   driver_analysis: {
@@ -338,7 +347,8 @@ export interface EconomicCompletionCategory {
   unlocks: string[];
   priority_tier: number;
   rank?: number;
-  state: "COMPLETE" | "PARTIAL" | "MISSING";
+  state: "COMPLETE" | "PARTIAL" | "MISSING" | "UNAVAILABLE";
+  state_reason: string | null;
   missing_dependencies: string[];
   affected_job_count: number | null;
   affected_authoritative_revenue_minor: number | null;
@@ -350,6 +360,22 @@ export interface EconomicCompletionCategory {
     effective_period: { start?: string; end?: string };
     supersession_behavior: string;
   };
+}
+
+export interface OwnerEconomicAction {
+  action: string;
+  label: string;
+  state: "COMPLETE" | "PARTIAL" | "INCOMPLETE" | "UNAVAILABLE";
+  what_is_missing: string[];
+  source_state: string;
+  responsible_parties: string[];
+  ui_path: string;
+  ui_path_label: string;
+  why_it_matters: string;
+  unlocks: string[];
+  dependency_order: number;
+  sequence_bucket?: "NOW" | "COORDINATE" | "AFTER_PREREQUISITES";
+  evidence_chain?: Record<string, string>;
 }
 
 interface EvidenceGapReasoning {

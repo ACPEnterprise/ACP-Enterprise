@@ -1,5 +1,7 @@
 import hashlib
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -32,6 +34,13 @@ from app.workforce.query import WorkforceEligibilityQuery
 from app.workforce.query_service import workforce_eligibility_service
 
 ACTIVE = ("proposed", "assigned", "acknowledged", "reconciliation_required")
+
+
+@asynccontextmanager
+async def _caller_transaction(session: AsyncSession) -> AsyncIterator[None]:
+    if not session.in_transaction():
+        raise DispatchValidation("Caller-owned transaction is not active.")
+    yield
 
 
 class DispatchService:
@@ -252,6 +261,7 @@ class DispatchService:
         reason: str,
         idempotency_key: str,
         expected_version: int | None = None,
+        _caller_owns_transaction: bool = False,
     ) -> AssignmentItem:
         request_digest = self._command_digest(
             "assign",
@@ -260,7 +270,8 @@ class DispatchService:
             reason=reason,
             expected_version=expected_version,
         )
-        async with session.begin():
+        transaction = _caller_transaction(session) if _caller_owns_transaction else session.begin()
+        async with transaction:
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
             )
@@ -366,6 +377,7 @@ class DispatchService:
         reason: str,
         idempotency_key: str,
         expected_version: int,
+        _caller_owns_transaction: bool = False,
     ) -> AssignmentItem:
         request_digest = self._command_digest(
             "replace",
@@ -374,7 +386,8 @@ class DispatchService:
             reason=reason,
             expected_version=expected_version,
         )
-        async with session.begin():
+        transaction = _caller_transaction(session) if _caller_owns_transaction else session.begin()
+        async with transaction:
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
             )
@@ -425,6 +438,45 @@ class DispatchService:
             )
             await session.flush()
             return await self._item(session, assignment, appointment.appointment_number)
+
+    async def stage_assign_or_replace(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        appointment_id: UUID,
+        employee_id: UUID,
+        reason: str,
+        idempotency_key: str,
+        expected_assignment_version: int | None,
+    ) -> AssignmentItem:
+        """Assign within a caller-owned cross-domain transaction."""
+        existing = await self._get_assignment(
+            session, context.company.id, appointment_id, lock=True
+        )
+        if existing is not None and existing.status in ACTIVE:
+            if expected_assignment_version is None:
+                raise DispatchConflict("Assignment version is required for replacement.")
+            return await self.replace(
+                session,
+                context=context,
+                appointment_id=appointment_id,
+                employee_id=employee_id,
+                reason=reason,
+                idempotency_key=idempotency_key,
+                expected_version=expected_assignment_version,
+                _caller_owns_transaction=True,
+            )
+        return await self.assign(
+            session,
+            context=context,
+            appointment_id=appointment_id,
+            employee_id=employee_id,
+            reason=reason,
+            idempotency_key=idempotency_key,
+            expected_version=expected_assignment_version,
+            _caller_owns_transaction=True,
+        )
 
     async def release(
         self,

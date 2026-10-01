@@ -143,11 +143,18 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
             item.admission is RealRosterAdmission.SAFE_CREATE
             for item in REAL_ALL_COUNTY_ROSTER
         )
-        == 6
+        == 5
     )
     assert (
         sum(
             item.admission is RealRosterAdmission.ALREADY_ACTIVE
+            for item in REAL_ALL_COUNTY_ROSTER
+        )
+        == 1
+    )
+    assert (
+        sum(
+            item.admission is RealRosterAdmission.HISTORICAL_TERMINATED
             for item in REAL_ALL_COUNTY_ROSTER
         )
         == 1
@@ -166,11 +173,15 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
     } == {
         "pro_622e39dd3a544e4cb4fb8782ac767287": "allcountyleak@gmail.com",
         "pro_23be6c33b14a4127bd737529180a56a1": "koqui360@gmail.com",
-        "pro_4f1d81e3d31b4ffa9072dd6a32906586": "ajjmari3516@gmail.com",
         "pro_2edf25dd14494b1885a50fa134b44fd8": "dareismontgomery37@gmail.com",
         "pro_0ff2024a6baa4475a883f76d6cbcc58b": "dakotawilcox23@gmail.com",
         "pro_6b2b2b7177a54187a690cb198a6dbda5": "jasoncalci27@gmail.com",
     }
+    alex = next(item for item in REAL_ALL_COUNTY_ROSTER if item.key == "alex-donahue")
+    assert alex.source_login_email == "alexallcountyleaks@gmail.com"
+    assert alex.owner_login_email == "alexallcountyplumbingandleak@gmail.com"
+    adam = next(item for item in REAL_ALL_COUNTY_ROSTER if item.key == "adam-mari")
+    assert adam.owner_login_email is None
 
 
 def test_roster_role_contracts_compose_existing_canonical_roles() -> None:
@@ -253,6 +264,7 @@ async def test_safe_source_preview_is_exact_and_uses_existing_employee() -> None
     assert preview.safe_to_apply
     assert preview.source_employee_id == "pro_23be6c33b14a4127bd737529180a56a1"
     assert preview.source_login_email == "koqui360@gmail.com"
+    assert preview.proposed_login_email == "koqui360@gmail.com"
     assert preview.source_candidate_employee_id == employee_id
     assert preview.required_role_codes == ("ACP_EMPLOYEE_MOBILE", "TECHNICIAN")
 

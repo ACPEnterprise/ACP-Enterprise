@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -27,6 +27,51 @@ def service_request() -> ServiceRequestCreate:
         priority=JobPriority.HIGH,
         customer_reported_problem="No cooling",
     )
+
+
+@pytest.mark.asyncio
+async def test_calendar_placement_stages_schedule_and_dispatch_in_one_transaction() -> None:
+    data = service_request()
+    appointment_id = uuid4()
+    employee_id = uuid4()
+    appointment = SimpleNamespace(id=appointment_id)
+    assignment = SimpleNamespace(id=uuid4())
+    scheduling = SimpleNamespace(
+        stage_reschedule_appointment=AsyncMock(return_value=appointment)
+    )
+    dispatch = SimpleNamespace(
+        stage_assign_or_replace=AsyncMock(return_value=assignment)
+    )
+    transaction = AsyncMock()
+    session = SimpleNamespace(begin=MagicMock(return_value=transaction))
+    service = OperationsService(scheduling=scheduling, dispatch=dispatch)
+
+    result = await service.place_calendar_appointment(
+        session,
+        context=SimpleNamespace(),
+        request_id=data.request_id,
+        appointment_id=appointment_id,
+        employee_id=employee_id,
+        expected_appointment_version=3,
+        expected_assignment_version=2,
+        arrival_window_start_at=data.arrival_window_start_at,
+        arrival_window_end_at=data.arrival_window_end_at,
+        expected_duration_minutes=data.expected_duration_minutes,
+        capacity_units=data.capacity_units,
+        reason="Calendar drag/drop",
+    )
+
+    assert result.appointment is appointment
+    assert result.assignment is assignment
+    assert scheduling.stage_reschedule_appointment.await_count == 1
+    assert dispatch.stage_assign_or_replace.await_args.kwargs == {
+        "context": ANY,
+        "appointment_id": appointment_id,
+        "employee_id": employee_id,
+        "reason": "Calendar drag/drop",
+        "idempotency_key": str(data.request_id),
+        "expected_assignment_version": 2,
+    }
 
 
 @pytest.mark.asyncio

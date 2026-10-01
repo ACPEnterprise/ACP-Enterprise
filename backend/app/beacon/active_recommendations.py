@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customer_migration.models import CustomerPopulationRefreshRun
 from app.luminary.models import LuminaryFindingRecord
+from app.marketing.provider_service import marketing_provider_service
 from app.payroll.models import PayrollRunMemberRecord, PayrollRunRecord
 from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
@@ -729,6 +730,9 @@ class ActiveRecommendationService:
                 )
             )
         )
+        marketing = await marketing_provider_service.readiness_projection(
+            session, context=context, evaluated_at=evaluated_at
+        )
         return (
             ReadinessAdapterEvaluation(
                 "CUSTOMERS",
@@ -766,11 +770,14 @@ class ActiveRecommendationService:
             ),
             ReadinessAdapterEvaluation(
                 "MARKETING",
-                "ADAPTER_GATED",
-                "Marketing connection readiness authority",
-                0,
+                "EVALUATED",
+                "MarketingReadinessProjection/marketing-readiness.v1",
+                marketing.unresolved_reconciliation_findings,
                 evaluated_at,
-                "No accepted Company-scoped Marketing provider/OAuth readiness contract exists in current authority.",
+                None
+                if marketing.owner_state == "INGESTING"
+                else "; ".join(marketing.missing_components)
+                or "Marketing provider evidence is not yet ingesting.",
             ),
         )
 

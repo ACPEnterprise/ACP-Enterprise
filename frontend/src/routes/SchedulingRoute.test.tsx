@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
+import { useCalendarPlacement } from "../hooks/useOperations";
 import {
   useBranchCalendarRoster,
   useBranchSchedulingPolicy,
@@ -15,6 +16,7 @@ import { SchedulingRoute } from "./SchedulingRoute";
 
 let permissions = new Set(["COMPANY_SCHEDULING_READ"]);
 const rescheduleMutate = vi.hoisted(() => vi.fn());
+const placementMutateAsync = vi.hoisted(() => vi.fn());
 vi.mock("../auth", () => ({
   useAuth: () => ({
     activeCompany: { branches: [{ id: "branch-1", name: "Main Branch" }] },
@@ -24,6 +26,7 @@ vi.mock("../auth", () => ({
 vi.mock("../hooks/useScheduling");
 vi.mock("../hooks/useDispatch");
 vi.mock("../hooks/useJobs");
+vi.mock("../hooks/useOperations", () => ({ useCalendarPlacement: vi.fn() }));
 
 const appointment = {
   id: "appointment-1",
@@ -66,6 +69,7 @@ describe("SchedulingRoute", () => {
       isSuccess: false,
       mutate: rescheduleMutate,
     } as never);
+    vi.mocked(useCalendarPlacement).mockReturnValue({ mutateAsync: placementMutateAsync } as never);
     vi.mocked(useBranchSchedulingPolicy).mockReturnValue({
       isLoading: false,
       isError: false,

@@ -5,10 +5,14 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.dispatch.errors import DispatchError
+from app.dispatch.router import dispatch_http
 from app.jobs.errors import JobError
 from app.jobs.router import translate_job_error
 from app.jobs.schemas import JobMutationResponse
 from app.operations.schemas import (
+    CalendarPlacementCreate,
+    CalendarPlacementResponse,
     ExistingJobScheduleCreate,
     ExistingJobScheduleResponse,
     ServiceRequestCreate,
@@ -16,7 +20,11 @@ from app.operations.schemas import (
 )
 from app.operations.service import operations_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import JobPermission, SchedulingPermission
+from app.platform.permissions.codes import (
+    DispatchPermission,
+    JobPermission,
+    SchedulingPermission,
+)
 from app.platform.permissions.dependencies import require_permission
 from app.scheduling.errors import SchedulingError
 from app.scheduling.router import appointment_response, translate_scheduling_error
@@ -32,6 +40,41 @@ JobsManageContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(JobPermission.MANAGE)),
 ]
+DispatchManageContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(DispatchPermission.MANAGE)),
+]
+
+
+@router.post(
+    "/appointments/{appointment_id}/calendar-placement",
+    response_model=CalendarPlacementResponse,
+    summary="Atomically move and assign a calendar Appointment",
+)
+async def place_calendar_appointment(
+    appointment_id: UUID,
+    data: CalendarPlacementCreate,
+    scheduling_context: SchedulingManageContext,
+    dispatch_context: DispatchManageContext,
+    session: DatabaseSession,
+) -> CalendarPlacementResponse:
+    context = scheduling_context
+    assert context.company.id == dispatch_context.company.id
+    try:
+        result = await operations_service.place_calendar_appointment(
+            session,
+            context=context,
+            appointment_id=appointment_id,
+            **data.model_dump(),
+        )
+    except SchedulingError as error:
+        raise translate_scheduling_error(error) from error
+    except DispatchError as error:
+        raise dispatch_http(error) from error
+    return CalendarPlacementResponse(
+        appointment=appointment_response(result.appointment),
+        assignment=result.assignment,
+    )
 
 
 @router.post(

@@ -250,13 +250,17 @@ def test_completion_planner_projects_explicit_categories_and_unlock_graph() -> N
         "complete_category_count": 3,
         "partial_category_count": 1,
         "missing_category_count": 8,
+        "unavailable_category_count": 0,
         "total_category_count": 12,
     }
     categories = {item["category"]: item for item in planner["categories"]}
     assert categories["FIELD_LABOR_AND_PAYROLL_BURDEN"]["state"] == "PARTIAL"
     assert categories["MATERIAL_AND_JOB_VARIABLE_COST"]["state"] == "COMPLETE"
     assert categories["OWNER_COMPENSATION"]["state"] == "MISSING"
-    assert categories["MARKETING_SPEND"]["normal_workflow_available"] is False
+    assert categories["MARKETING_SPEND"]["normal_workflow_available"] is True
+    assert categories["MARKETING_SPEND"]["ui_path"] == (
+        "/marketing/provider-connections/google-ads"
+    )
     assert planner["highest_value_next_completion"]["category"] == (
         "FIELD_LABOR_AND_PAYROLL_BURDEN"
     )
@@ -281,6 +285,85 @@ def test_completion_planner_does_not_invent_owner_confirmed_value_authority() ->
             "end": "2026-08-31",
         }
         assert "value" not in category["owner_confirmed"]
+
+
+def test_owner_action_map_preserves_source_authority_and_dependency_order() -> None:
+    action_map = project(workspace())["economic_completion_planner"]["owner_action_map"]
+    actions = {item["action"]: item for item in action_map["actions"]}
+    evaluations = {item["action"]: item for item in action_map["evaluations"]}
+
+    assert action_map["top_action"]["action"] == ("COMPLETE_PAYROLL_ECONOMIC_EVIDENCE")
+    assert actions["COMPLETE_PAYROLL_ECONOMIC_EVIDENCE"]["ui_path"] == "/payroll"
+    assert actions["COMPLETE_PAYROLL_ECONOMIC_EVIDENCE"]["responsible_parties"] == [
+        "OWNER",
+        "EMPLOYEE",
+        "ACCOUNTANT",
+        "SYSTEM",
+    ]
+    material = evaluations["COMPLETE_JOB_MATERIAL_COST_EVIDENCE"]
+    assert material["evidence_chain"] == {
+        "material_catalog": "SEPARATE_AUTHORITY_NOT_PROOF_OF_JOB_COST",
+        "job_material_attribution": "PARTIAL",
+        "actual_job_cost": "AVAILABLE",
+    }
+    accounting = actions["RECONCILE_ACCOUNTING_EVIDENCE"]
+    assert accounting["ui_path"] == "/accounting/quickbooks-migration"
+    assert accounting["evidence_chain"]["qbo_workspace"] == (
+        "SOURCE_ACQUISITION_AND_APPLICATION_READINESS_ONLY"
+    )
+    assert accounting["evidence_chain"]["reconciled_accounting"] == "PARTIAL"
+    marketing = actions["ADMIT_MARKETING_SPEND_EVIDENCE"]
+    assert marketing["ui_path"] == "/marketing/provider-connections/google-ads"
+    assert marketing["source_state"] == "NOT_ADMITTED_TO_ECONOMICS"
+    assert all(item["sequence_bucket"] == "NOW" for item in action_map["actions"])
+    assert "not invented urgency" in action_map["limitations"][0]
+
+
+def test_owner_action_map_removes_completed_categories_without_faking_qbo_completion() -> (
+    None
+):
+    value = workspace()
+    value["fully_allocated_available"] = True
+    value["totals"]["overhead"] = 100_000
+    action_map = project(value)["economic_completion_planner"]["owner_action_map"]
+    action_keys = {item["action"] for item in action_map["actions"]}
+
+    assert "COMPLETE_PAYROLL_ECONOMIC_EVIDENCE" not in action_keys
+    assert "COMPLETE_FIXED_BURDEN_AUTHORITY" not in action_keys
+    assert "RECONCILE_ACCOUNTING_EVIDENCE" in action_keys
+    assert action_map["top_action"]["action"] == "RECONCILE_ACCOUNTING_EVIDENCE"
+
+
+def test_completion_planner_does_not_call_absent_job_evidence_complete() -> None:
+    value = workspace(quality="unavailable")
+    value["jobs"] = []
+    value["service_categories"] = []
+    value["source_result_count"] = 0
+    value["totals"] = {
+        "revenue": None,
+        "labor": None,
+        "materials": None,
+        "equipment": None,
+        "truck": None,
+        "gross_profit": None,
+        "overhead": None,
+    }
+
+    planner = project(value)["economic_completion_planner"]
+    categories = {item["category"]: item for item in planner["categories"]}
+
+    assert categories["MATERIAL_AND_JOB_VARIABLE_COST"]["state"] == "UNAVAILABLE"
+    assert categories["MERCHANT_FEES"]["state"] == "UNAVAILABLE"
+    assert (
+        categories["PERMITS_SUBCONTRACTORS_DISPOSAL_AND_RENTALS"]["state"]
+        == "UNAVAILABLE"
+    )
+    assert planner["summary"]["unavailable_category_count"] == 3
+    assert planner["summary"]["complete_category_count"] == 0
+    assert all(
+        item["category"] != "MATERIAL_AND_JOB_VARIABLE_COST"
+        for item in planner["ranked_completion_plan"]
+    )
 
 
 def test_completion_plan_uses_authoritative_population_not_missing_value() -> None:
