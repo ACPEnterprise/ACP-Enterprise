@@ -176,6 +176,63 @@ vi.mock("../hooks/useLuminary", () => ({
         decision_unlock_graph: {
           category_nodes: [], calculation_nodes: [], decision_nodes: [], edges: [],
         },
+        owner_action_map: {
+          contract_version: "luminary.owner-economic-action-map.v1",
+          evaluations: [],
+          actions: [
+            {
+              action: "COMPLETE_PAYROLL_ECONOMIC_EVIDENCE",
+              label: "Complete Payroll economic evidence",
+              state: "PARTIAL",
+              what_is_missing: ["accepted time", "certified Payroll cost"],
+              source_state: "PARTIAL",
+              responsible_parties: ["OWNER", "EMPLOYEE", "ACCOUNTANT", "SYSTEM"],
+              ui_path: "/payroll",
+              ui_path_label: "Payroll -> First real Payroll readiness",
+              why_it_matters: "Accepted time and certified Payroll cost are required before labor burden is authoritative.",
+              unlocks: ["Job labor cost", "stronger break-even authority"],
+              dependency_order: 1,
+              sequence_bucket: "NOW",
+            },
+            {
+              action: "COMPLETE_JOB_MATERIAL_COST_EVIDENCE",
+              label: "Attribute actual material cost to Jobs",
+              state: "INCOMPLETE",
+              what_is_missing: ["Job material attribution"],
+              source_state: "INCOMPLETE",
+              responsible_parties: ["OWNER", "SYSTEM"],
+              ui_path: "/inventory",
+              ui_path_label: "Inventory -> Job material evidence",
+              why_it_matters: "A material catalog does not establish actual Job cost.",
+              unlocks: ["authoritative Job contribution"],
+              dependency_order: 2,
+              sequence_bucket: "NOW",
+              evidence_chain: {
+                material_catalog: "SEPARATE_AUTHORITY_NOT_PROOF_OF_JOB_COST",
+                job_material_attribution: "INCOMPLETE",
+                actual_job_cost: "UNAVAILABLE",
+              },
+            },
+          ],
+          top_action: {
+            action: "COMPLETE_PAYROLL_ECONOMIC_EVIDENCE",
+            label: "Complete Payroll economic evidence",
+            state: "PARTIAL",
+            what_is_missing: ["accepted time", "certified Payroll cost"],
+            source_state: "PARTIAL",
+            responsible_parties: ["OWNER", "EMPLOYEE", "ACCOUNTANT", "SYSTEM"],
+            ui_path: "/payroll",
+            ui_path_label: "Payroll -> First real Payroll readiness",
+            why_it_matters: "Accepted time and certified Payroll cost are required before labor burden is authoritative.",
+            unlocks: ["Job labor cost", "stronger break-even authority"],
+            dependency_order: 1,
+            sequence_bucket: "NOW",
+          },
+          sequence_semantics: {
+            NOW: "The normal workflow can be opened now; this is not an invented deadline.",
+          },
+          limitations: ["No urgency or missing dollar amount is inferred."],
+        },
       },
       driver_analysis: {
         state: "AVAILABLE",
@@ -432,6 +489,10 @@ describe("Luminary workspace recovery", () => {
     expect(screen.getByText("Economic health")).toBeVisible();
     expect(screen.getByText("What this evidence means")).toBeVisible();
     expect(screen.getByText("Complete the economics model")).toBeVisible();
+    expect(screen.getByText("What Michael should complete next")).toBeVisible();
+    expect(screen.getByText("1. Complete Payroll economic evidence")).toBeVisible();
+    expect(screen.getByText("2. Attribute actual material cost to Jobs")).toBeVisible();
+    expect(screen.getByText(/material catalog does not establish actual Job cost/i)).toBeVisible();
     expect(screen.getByText("Complete next")).toBeVisible();
     expect(screen.getByText("Field labor and Payroll burden")).toBeVisible();
     expect(screen.getByText(/Temporary owner-confirmed amounts are not supported/)).toBeVisible();

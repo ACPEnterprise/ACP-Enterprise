@@ -158,6 +158,14 @@ export interface LuminaryOwnerEconomics {
       decision_nodes: string[];
       edges: Array<{ from: string; to: string; relationship: string }>;
     };
+    owner_action_map: {
+      contract_version: "luminary.owner-economic-action-map.v1";
+      evaluations: OwnerEconomicAction[];
+      actions: OwnerEconomicAction[];
+      top_action: OwnerEconomicAction | null;
+      sequence_semantics: Record<string, string>;
+      limitations: string[];
+    };
   };
   driver_analysis: {
     state: string;
@@ -352,6 +360,22 @@ export interface EconomicCompletionCategory {
     effective_period: { start?: string; end?: string };
     supersession_behavior: string;
   };
+}
+
+export interface OwnerEconomicAction {
+  action: string;
+  label: string;
+  state: "COMPLETE" | "PARTIAL" | "INCOMPLETE" | "UNAVAILABLE";
+  what_is_missing: string[];
+  source_state: string;
+  responsible_parties: string[];
+  ui_path: string;
+  ui_path_label: string;
+  why_it_matters: string;
+  unlocks: string[];
+  dependency_order: number;
+  sequence_bucket?: "NOW" | "COORDINATE" | "AFTER_PREREQUISITES";
+  evidence_chain?: Record<string, string>;
 }
 
 interface EvidenceGapReasoning {
