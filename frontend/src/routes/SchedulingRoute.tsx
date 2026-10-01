@@ -27,6 +27,7 @@ import {
   type QueueAssignmentFilter,
   type QueueSort,
 } from "../components/scheduling/NeedsSchedulingQueue";
+import { needsSchedulingAttentionCount } from "../components/scheduling/needsSchedulingAttention";
 import { schedulingMutationRecovery } from "../components/scheduling/schedulingRecovery";
 import {
   dayRange,
@@ -503,6 +504,16 @@ export function SchedulingRoute({
     view,
   ]);
   const returnTo = `${schedulingPath()}?${routeState.toString()}`;
+  const needsSchedulingCount = needsSchedulingAttentionCount({
+    jobs: jobs.data?.items ?? [],
+    appointments: visible,
+    dispatchByAppointment,
+    jobsById,
+    search,
+    serviceCategory,
+    jobStatus: queueJobStatus,
+    priority: queuePriority,
+  });
 
   useEffect(() => {
     if (searchParams.toString() !== routeState.toString()) {
@@ -543,7 +554,7 @@ export function SchedulingRoute({
             Office operations
           </p>
           <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-            Schedule & Dispatch
+            Service Board
           </h1>
           <p className="mt-2 text-content-muted">
             See when work happens, who owns it, and what still needs scheduling
@@ -560,14 +571,32 @@ export function SchedulingRoute({
           >
             Create or open Job
           </Link>
-          <Link
-            className="inline-flex min-h-11 items-center rounded-lg bg-action-primary px-4 font-semibold text-white"
-            to="/dispatch"
-          >
-            Open Dispatch
-          </Link>
         </div>
       </header>
+      <section
+        aria-label="Service Board attention"
+        className="flex flex-wrap items-center gap-2"
+      >
+        {needsSchedulingCount > 0 && (
+          <Button
+            variant="outline"
+            className="rounded-full border-2 border-[#C01529]"
+            onClick={() => {
+              setQueueAssignment("needs_attention");
+              setView("unassigned");
+            }}
+          >
+            Needs Scheduling {needsSchedulingCount}
+          </Button>
+        )}
+        <CalendarReadinessCard
+          appointments={graphAppointments.data?.items ?? []}
+          appointmentTotal={graphAppointments.data?.total_count ?? 0}
+          jobs={jobs.data?.items ?? []}
+          jobTotal={jobs.data?.total_count ?? 0}
+          unavailable={!canReadJobs || graphAppointments.isError || jobs.isError}
+        />
+      </section>
       {booking && (
         <BookCustomerWorkPanel
           onClose={() => setBooking(false)}
@@ -762,13 +791,6 @@ export function SchedulingRoute({
           </Button>
         </div>
       </Card>
-      <CalendarReadinessCard
-        appointments={graphAppointments.data?.items ?? []}
-        appointmentTotal={graphAppointments.data?.total_count ?? 0}
-        jobs={jobs.data?.items ?? []}
-        jobTotal={jobs.data?.total_count ?? 0}
-        unavailable={!canReadJobs || graphAppointments.isError || jobs.isError}
-      />
       {issues.length > 0 && (
         <Alert
           variant="warning"
@@ -929,27 +951,6 @@ export function SchedulingRoute({
           />
         ))}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        {view !== "unassigned" && (
-          <NeedsSchedulingQueue
-            jobs={jobs.data?.items ?? []}
-            appointments={visible}
-            dispatchByAppointment={dispatchByAppointment}
-            jobsById={jobsById}
-            branches={activeCompany.branches}
-            search={search}
-            serviceCategory={serviceCategory}
-            jobStatus={queueJobStatus}
-            priority={queuePriority}
-            assignmentFilter={queueAssignment}
-            sort={queueSort}
-            returnTo={returnTo}
-            onJobStatusChange={setQueueJobStatus}
-            onPriorityChange={setQueuePriority}
-            onAssignmentFilterChange={setQueueAssignment}
-            onSortChange={setQueueSort}
-            onSelect={selectAppointment}
-          />
-        )}
         {currentSelection ? (
           <AppointmentPanel
             key={`${currentSelection.id}:${currentSelection.concurrency_version}:${currentSelection.status}:${currentSelection.capacity_units ?? "unreconciled"}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}

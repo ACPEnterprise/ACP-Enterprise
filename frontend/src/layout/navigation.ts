@@ -99,9 +99,10 @@ export const navigationCatalog = [
   {
     id: "dispatch",
     label: "Dispatch",
-    path: "/dispatch",
+    path: "/scheduling?view=day&perspective=dispatch",
     icon: ClipboardList,
     availability: "available",
+    requiredPermission: "COMPANY_SCHEDULING_READ",
   },
   {
     id: "scheduling",
@@ -380,7 +381,6 @@ export const navigationGroups = [
       item("my-schedule"),
       item("workday"),
       item("my-jobs"),
-      item("scheduling"),
       item("jobs"),
       item("dispatch"),
       item("estimates"),

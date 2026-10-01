@@ -47,6 +47,7 @@ import {
 } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 import { RouteLoading } from "./RouteLoading";
+import { ServiceBoardRedirect } from "./ServiceBoardRedirect";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -200,10 +201,7 @@ export const appRoutes: RouteObject[] = [
           {
             path: "dispatch",
             handle: dispatchHandle,
-            lazy: async () => ({
-              Component: (await import("../routes/DispatchRoute"))
-                .DispatchRoute,
-            }),
+            Component: ServiceBoardRedirect,
           },
           {
             path: "estimates",
