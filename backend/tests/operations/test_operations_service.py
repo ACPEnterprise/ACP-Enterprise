@@ -5,7 +5,6 @@ from unittest.mock import ANY, AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-
 from app.jobs.types import JobPriority
 from app.main import app
 from app.operations.schemas import ServiceRequestCreate

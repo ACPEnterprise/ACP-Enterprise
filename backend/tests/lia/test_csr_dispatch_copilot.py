@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
-
 from app.lia.contracts import SpeechInterpretation
 from app.lia.csr_dispatch_copilot import CustomerMatch, compose_csr_dispatch_copilot
 from app.lia.dispatch_reasoning import GhostSlot, GhostSlotClass, LiaDispatchReasoning

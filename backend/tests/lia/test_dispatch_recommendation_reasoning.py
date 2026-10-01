@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
-
 from app.dispatch.intelligence import (
     ConstraintEvidence,
     ConstraintResult,
