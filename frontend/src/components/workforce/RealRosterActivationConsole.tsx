@@ -14,7 +14,7 @@ const profileDescriptions: Record<string, string> = {
   FIELD_TECH: "Technician plus ACP Employee Mobile. Assigned work and own time only; no office, Accounting, or Payroll authority.",
 };
 
-const label = (value: string) => value.replaceAll("_", " ");
+const label = (value: string | null | undefined) => value?.replaceAll("_", " ") ?? "UNAVAILABLE";
 const formatTime = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
 
 export function RealRosterActivationConsole() {
