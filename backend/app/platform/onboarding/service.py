@@ -70,6 +70,7 @@ class OnboardingCommand:
     additional_permission_ids: tuple[UUID, ...] = ()
     login_email: str | None = field(default=None, repr=False)
     existing_user_id: UUID | None = None
+    existing_employee_id: UUID | None = None
 
 
 @dataclass(frozen=True)
