@@ -8,11 +8,12 @@ import { ApiFailure } from "../api/types";
 function dateKey(offset: number) { const value = new Date(); value.setHours(12, 0, 0, 0); value.setDate(value.getDate() + offset); return value.toISOString().slice(0, 10); }
 function window(value: string) { return new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
 
-export function JobsScreen({ service, network, onOpenJob, showReadiness = false }: { service: FieldService; network: NetworkMonitor; onOpenJob?(item: ItineraryItem, serviceDate: string): void; showReadiness?: boolean }) {
+export function JobsScreen({ service, network, onOpenJob, openJobId, showReadiness = false }: { service: FieldService; network: NetworkMonitor; onOpenJob?(item: ItineraryItem, serviceDate: string): void; openJobId?: string | null; showReadiness?: boolean }) {
   const [items, setItems] = useState<ItineraryItem[]>([]); const [state, setState] = useState<"loading" | "live" | "stale" | "offline" | "error">("loading");
   const [history, setHistory] = useState<FieldHistory | null>(null);
   const [readiness, setReadiness] = useState<FieldReadiness | null>(null);
   const itemsRef = useRef<ItineraryItem[]>([]);
+  const openedTargetRef = useRef<string | null>(null);
   const refresh = useCallback(async () => {
     if (!(await network.isConnected())) { setState(itemsRef.current.length ? "stale" : "offline"); return; }
     setState("loading");
@@ -21,6 +22,11 @@ export function JobsScreen({ service, network, onOpenJob, showReadiness = false 
   }, [network, service, showReadiness]);
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
   useEffect(() => network.subscribe((connected) => { if (connected) void refresh(); else setState(itemsRef.current.length ? "stale" : "offline"); }), [network, refresh]);
+  useEffect(() => {
+    if (!openJobId || state !== "live" || openedTargetRef.current === openJobId) return;
+    const match = items.find((item) => item.job_id === openJobId || item.appointment_id === openJobId);
+    if (match && onOpenJob) { openedTargetRef.current = openJobId; onOpenJob(match, match.window_start_at.slice(0, 10)); }
+  }, [items, onOpenJob, openJobId, state]);
   return <ScrollView style={styles.safe} contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={state === "loading"} onRefresh={() => void refresh()} accessibilityLabel="Refresh assigned Jobs" />}>
     <Text accessibilityRole="header" style={styles.title}>Jobs</Text><Text style={styles.boundary}>Today and the next two service days · assigned work only</Text>
     {state !== "live" && <Text accessibilityRole="alert" style={styles.stale}>{state === "stale" ? "LAST CONFIRMED — STALE. Job actions are disabled." : state === "offline" ? "You're offline. Connect to load assigned Jobs." : state === "error" ? "Assigned Jobs are unavailable." : "Loading assigned Jobs…"}</Text>}
