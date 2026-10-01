@@ -182,6 +182,7 @@ def command(
     existing_user_id: UUID | None = None,
     role_ids: tuple[UUID, ...] = (),
     additional_permission_ids: tuple[UUID, ...] = (),
+    existing_employee_id: UUID | None = None,
 ) -> OnboardingCommand:
     return OnboardingCommand(
         request_key=request_key,
@@ -196,6 +197,7 @@ def command(
         additional_permission_ids=additional_permission_ids,
         login_email=email,
         existing_user_id=existing_user_id,
+        existing_employee_id=existing_employee_id,
     )
 
 
@@ -257,6 +259,77 @@ async def test_onboarding_plan_detects_new_and_duplicate_identity_without_mutati
         assert not duplicate.safe_to_apply
         assert duplicate.blockers == ("employee_identity_already_exists",)
         assert created.employee_id is not None
+
+
+@pytest.mark.asyncio
+async def test_source_employee_onboarding_reuses_employee_and_invitation_on_replay(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    source_employee = Employee(
+        company_id=context.company.id,
+        home_branch_id=context.active_branch.id,
+        employee_number=f"HCP-{uuid4().hex[:12].upper()}",
+        first_name="Synthetic",
+        last_name="Employee",
+        display_name="Synthetic Employee",
+        employee_type="employee",
+        status="inactive",
+    )
+    role = Role(
+        company_id=context.company.id,
+        code=f"SOURCE_ROLE_{uuid4().hex[:10].upper()}",
+        name="Source Employee role",
+        status="active",
+        is_system=True,
+    )
+    async with factory() as setup, setup.begin():
+        setup.add_all([source_employee, role])
+    email = f"source-{uuid4()}@example.test"
+    async with factory() as session:
+        plan = await service.plan(
+            session,
+            context=context,
+            branch_id=context.active_branch.id,
+            login_email=email,
+            role_ids=(role.id,),
+            additional_permission_ids=(),
+            existing_employee_id=source_employee.id,
+        )
+        assert plan.classification == "SOURCE_EMPLOYEE_CANDIDATE"
+        assert plan.employee_action == "ACTIVATE_SOURCE_EMPLOYEE"
+        assert plan.safe_to_apply
+        await session.rollback()
+
+        source_command = command(
+            context,
+            request_key=f"source-employee-{uuid4()}",
+            email=email,
+            role_ids=(role.id,),
+            existing_employee_id=source_employee.id,
+        )
+        created = await service.initiate(
+            session, context=context, command=source_command
+        )
+        replay = await service.initiate(
+            session, context=context, command=source_command
+        )
+        assert replay.id == created.id
+        assert created.employee_id == source_employee.id
+        persisted = await session.get(Employee, source_employee.id)
+        assert persisted is not None
+        assert persisted.status == "active"
+        assert persisted.membership_id == created.membership_id
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(IdentityOnboardingInvitation)
+                .where(IdentityOnboardingInvitation.onboarding_request_id == created.id)
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio

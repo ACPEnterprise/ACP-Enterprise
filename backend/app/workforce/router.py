@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.onboarding.schemas import OnboardingView
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission, WorkforcePermission
 from app.platform.permissions.dependencies import require_permission
@@ -44,6 +45,8 @@ from app.workforce.schemas import (
     FunctionalAccessRevokeRequest,
     LanguageEvidenceRequest,
     RealRosterBindingRequest,
+    RealRosterOnboardingPreview,
+    RealRosterOnboardingRequest,
     RealRosterReadiness,
     SourceCertificationDecisionRequest,
     SourceCertificationLedger,
@@ -75,6 +78,10 @@ CapabilityManageContext = Annotated[
 CertificationManageContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(WorkforcePermission.CERTIFICATION_MANAGE)),
+]
+RosterOnboardingContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AdministrationPermission.IDENTITY_ONBOARDING_MANAGE)),
 ]
 AvailabilityManageContext = Annotated[
     AuthorizationContext,
@@ -216,6 +223,46 @@ async def bind_real_roster_employee(
         )
     except RealRosterConflict as error:
         raise _workforce_conflict(error) from error
+
+
+@router.get(
+    "/real-roster/{roster_key}/onboarding",
+    response_model=RealRosterOnboardingPreview,
+)
+async def real_roster_onboarding_preview(
+    roster_key: str,
+    context: RosterOnboardingContext,
+    session: Session,
+) -> RealRosterOnboardingPreview:
+    try:
+        return await real_roster_service.onboarding_preview(
+            session, context=context, roster_key=roster_key
+        )
+    except RealRosterConflict as error:
+        raise _workforce_conflict(error) from error
+
+
+@router.post(
+    "/real-roster/{roster_key}/onboarding",
+    response_model=OnboardingView,
+    status_code=status.HTTP_201_CREATED,
+)
+async def onboard_real_roster_employee(
+    roster_key: str,
+    data: RealRosterOnboardingRequest,
+    context: RosterOnboardingContext,
+    session: Session,
+) -> OnboardingView:
+    try:
+        record = await real_roster_service.onboard_source_employee(
+            session,
+            context=context,
+            roster_key=roster_key,
+            command=data,
+        )
+    except RealRosterConflict as error:
+        raise _workforce_conflict(error) from error
+    return OnboardingView.model_validate(record)
 
 
 @router.get("/source-certifications", response_model=SourceCertificationLedger)

@@ -14,7 +14,7 @@ const profileDescriptions: Record<string, string> = {
   FIELD_TECH: "Technician plus ACP Employee Mobile. Assigned work and own time only; no office, Accounting, or Payroll authority.",
 };
 
-const label = (value: string) => value.replaceAll("_", " ");
+const label = (value: string | null | undefined) => value?.replaceAll("_", " ") ?? "UNAVAILABLE";
 const formatTime = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
 
 export function RealRosterActivationConsole() {
@@ -39,7 +39,7 @@ export function RealRosterActivationConsole() {
 
   return <Card className="p-4 sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="text-lg font-semibold">Real employee activation</h3><p className="mt-1 text-sm text-content-muted">Review all eight owner-confirmed people. Every binding requires one exact Employee selection; ACP never matches by name or email.</p></div>
+      <div><h3 className="text-lg font-semibold">Real employee activation</h3><p className="mt-1 text-sm text-content-muted">Review all eight owner-confirmed people. Safe source rows retain their exact HCP identity and login email; ACP never matches by name or email.</p></div>
       <Link className="rounded-lg bg-action-primary px-4 py-2 font-semibold text-white" to="/administration/identity-onboarding">Onboard missing employee</Link>
     </div>
     <div className="mt-4 grid gap-2 sm:grid-cols-4">
@@ -57,9 +57,8 @@ export function RealRosterActivationConsole() {
       <div className="mt-3 grid gap-2 sm:grid-cols-3"><label className="text-sm">Start<Input className="mt-1" type="datetime-local" value={fieldWindowStart} onChange={(event) => setFieldWindowStart(event.target.value)} /></label><label className="text-sm">End<Input className="mt-1" type="datetime-local" value={fieldWindowEnd} onChange={(event) => setFieldWindowEnd(event.target.value)} /></label><label className="text-sm">Owner reason<Input className="mt-1" value={readinessReason} onChange={(event) => setReadinessReason(event.target.value)} placeholder="Confirmed operating window" /></label></div>
     </section>}
     <div className="mt-4 space-y-3">{items.map((person) => {
-      const onboardingProfile = person.operating_role === "FIELD_TECH" ? "FIELD_TECH" : person.operating_role;
       return <article key={person.roster_key} className="rounded-xl border border-stroke p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2"><div><h4 className="font-semibold">{person.display_name}</h4><p className="text-sm text-content-muted">Source: owner-confirmed roster · {label(person.operating_role)}</p></div><Badge variant={person.blockers.length === 0 ? "success" : "neutral"}>{person.blockers.length === 0 ? "Identity and access ready" : `${person.blockers.length} identity/access actions`}</Badge></div>
+        <div className="flex flex-wrap items-start justify-between gap-2"><div><h4 className="font-semibold">{person.display_name}</h4><p className="text-sm text-content-muted">Source: owner-confirmed roster · {label(person.operating_role)}</p>{person.source_employee_id && <p className="text-xs text-content-muted">HCP {person.source_employee_id} · {person.source_login_email}</p>}</div><Badge variant={person.blockers.length === 0 ? "success" : "neutral"}>{person.blockers.length === 0 ? "Identity and access ready" : label(person.source_onboarding_state)}</Badge></div>
         <p className="mt-2 rounded-lg bg-surface-subtle p-2 text-xs text-content-muted">{profileDescriptions[person.operating_role]}</p>
         {person.employee_id ? <>
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -72,7 +71,9 @@ export function RealRosterActivationConsole() {
           <p className="text-sm font-semibold">Exact identity certification</p><p className="mt-1 text-xs text-content-muted">Select only an Employee whose authoritative identity the owner has independently verified. The list is not a match recommendation.</p>
           {deferred.has(person.roster_key) ? <Alert variant="warning">Deferred in this browser review only. No identity decision was persisted.</Alert> : canManage && <div className="mt-2 flex flex-wrap gap-2"><select aria-label={`Exact ACP Employee for ${person.display_name}`} className="min-h-11 min-w-64 rounded-md border border-stroke bg-surface px-3" value={selections[person.roster_key] ?? ""} onChange={(event) => setSelections((current) => ({...current, [person.roster_key]: event.target.value}))}><option value="">Select exact verified Employee</option>{(roster.query.data?.binding_candidates ?? []).map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} · {employee.employee_number}</option>)}</select><Button disabled={!selections[person.roster_key] || roster.bind.isPending} onClick={() => roster.bind.mutate({rosterKey: person.roster_key, employeeId: selections[person.roster_key]})}>Confirm exact identity</Button><Button variant="outline" onClick={() => setSelections((current) => ({...current, [person.roster_key]: ""}))}>Not same person</Button><Button variant="outline" onClick={() => setDeferred((current) => new Set(current).add(person.roster_key))}>Defer</Button></div>}
           {(roster.query.data?.binding_candidates?.length ?? 0) === 0 && <Alert variant="warning">No eligible real MAIN Branch Employee is available to bind. Create the canonical Employee, then return here to confirm the exact identity.</Alert>}
-          <Link className="mt-3 inline-block text-sm font-semibold text-action-primary" to={`/administration/identity-onboarding?name=${encodeURIComponent(person.display_name)}&profile=${onboardingProfile}&branch=MAIN`}>Create real Employee</Link>
+          {person.source_onboarding_state === "READY_TO_ONBOARD" && <Link className="mt-3 inline-block text-sm font-semibold text-action-primary" to={`/administration/identity-onboarding?roster=${encodeURIComponent(person.roster_key)}`}>Review source &amp; send invite</Link>}
+          {person.source_onboarding_state === "OWNER_DECISION_REQUIRED" && <Alert className="mt-3" variant="warning">One owner identity decision is required. Do not bind either Alex candidate automatically.</Alert>}
+          {(person.source_onboarding_state === "SOURCE_EVIDENCE_MISSING" || person.source_onboarding_state === "SOURCE_EVIDENCE_CONFLICT") && <Alert className="mt-3" variant="danger">Preserved source evidence is not safe to apply. No Employee or invitation can be created from this row.</Alert>}
         </div>}
         {person.blockers.length > 0 && <ReadinessBlockers blockers={person.blockers} />}
       </article>;

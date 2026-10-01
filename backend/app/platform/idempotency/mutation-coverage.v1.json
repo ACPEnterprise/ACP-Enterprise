@@ -3279,6 +3279,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Exact HCP provider identity, deterministic onboarding request key, unique Employee/User/Membership constraints, single pending invitation, and convergent roster binding",
+      "method": "POST",
+      "operation_id": "onboard_real_roster_employee_api_v1_workforce_real_roster__roster_key__onboarding_post",
+      "path": "/api/v1/workforce/real-roster/{roster_key}/onboarding",
+      "reason": "Source-backed Employee activation creates or reuses one canonical login and one invitation while exact replay completes the same roster binding.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "field_purchase",
       "mechanism": "Company-scoped command key, canonical evidence digest, assignment binding, and unique receipt artifact",
@@ -3408,6 +3418,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "4337a300d4f6adf28b8d8d71f593d12524b8f11a32f6058ea18d84fe9278abf0",
+  "fingerprint": "4bc92b150cc9e5b0fe783ebe4224fffdcad2af089c550bd93a08637bebc7543f",
   "schema_version": "1"
 }

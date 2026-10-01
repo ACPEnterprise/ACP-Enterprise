@@ -19,6 +19,7 @@ class OnboardingInitiateRequest(BaseModel):
     additional_permission_ids: tuple[UUID, ...] = ()
     login_email: SecretStr | None = None
     existing_user_id: UUID | None = None
+    existing_employee_id: UUID | None = None
 
     @model_validator(mode="after")
     def one_login_source(self) -> "OnboardingInitiateRequest":
@@ -37,6 +38,7 @@ class OnboardingPlanRequest(BaseModel):
     role_ids: tuple[UUID, ...] = ()
     additional_permission_ids: tuple[UUID, ...] = ()
     login_email: SecretStr
+    existing_employee_id: UUID | None = None
 
 
 class OnboardingPlanResponse(BaseModel):

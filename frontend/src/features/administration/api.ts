@@ -87,6 +87,7 @@ export interface IdentityOnboardingInitiateRequest {
   role_ids: string[];
   additional_permission_ids: string[];
   login_email: string;
+  existing_employee_id?: string;
 }
 
 export interface IdentityOnboardingPlan {
