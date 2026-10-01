@@ -7,10 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.operational_migration.models import HcpEmployeeSourceCrosswalk
 from app.platform.audit.service import AuditEntry, audit_service
+from app.platform.auth.services import normalize_email
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.employees.models import Employee
+from app.platform.onboarding.models import IdentityOnboardingRequest
+from app.platform.onboarding.service import (
+    OnboardingCommand,
+    OnboardingConflictError,
+    identity_onboarding_service,
+)
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import AdministrationPermission, WorkforcePermission
 from app.platform.permissions.models import MembershipRole, Role
 from app.platform.users.models import User, UserCredential
 from app.workforce.employee_identity_classification import employee_is_synthetic
@@ -24,9 +32,12 @@ from app.workforce.models import (
 from app.workforce.real_roster import (
     REAL_ALL_COUNTY_ROSTER,
     REAL_ALL_COUNTY_ROSTER_BY_KEY,
+    RealRosterAdmission,
 )
 from app.workforce.schemas import (
     RealRosterBindingCandidate,
+    RealRosterOnboardingPreview,
+    RealRosterOnboardingRequest,
     RealRosterReadiness,
     RealRosterReadinessItem,
     RealRosterSourceEvidence,
@@ -38,6 +49,205 @@ class RealRosterConflict(ValueError):
 
 
 class RealRosterService:
+    @staticmethod
+    def _onboarding_request_key(source_employee_id: str) -> str:
+        return f"hcp-real-roster:{source_employee_id}:v1"
+
+    async def onboarding_preview(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        roster_key: str,
+    ) -> RealRosterOnboardingPreview:
+        person = REAL_ALL_COUNTY_ROSTER_BY_KEY.get(roster_key)
+        if person is None:
+            raise RealRosterConflict("Roster identity is not owner-confirmed.")
+        if person.admission is not RealRosterAdmission.SAFE_CREATE:
+            raise RealRosterConflict(
+                "Roster identity requires its recorded owner disposition."
+            )
+        if (
+            person.source_employee_id is None
+            or person.source_login_email is None
+            or person.owner_login_email is None
+        ):
+            raise RealRosterConflict("Source Employee identity is incomplete.")
+        source = await session.scalar(
+            select(HcpEmployeeSourceCrosswalk)
+            .where(
+                HcpEmployeeSourceCrosswalk.company_id == context.company.id,
+                HcpEmployeeSourceCrosswalk.native_employee_id
+                == person.source_employee_id,
+            )
+            .order_by(HcpEmployeeSourceCrosswalk.evidence_version.desc())
+            .limit(1)
+        )
+        if (
+            source is None
+            or source.disposition != "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE"
+            or source.employee_id is None
+        ):
+            raise RealRosterConflict(
+                "Exact HCP Employee candidate evidence is unavailable."
+            )
+        employee = await session.scalar(
+            select(Employee).where(
+                Employee.company_id == context.company.id,
+                Employee.id == source.employee_id,
+            )
+        )
+        branch = await session.scalar(
+            select(Branch).where(
+                Branch.company_id == context.company.id,
+                Branch.id == source.branch_id,
+                Branch.code == "MAIN",
+                Branch.status == "active",
+                Branch.archived_at.is_(None),
+            )
+        )
+        blockers: list[str] = []
+        if employee is None:
+            blockers.append("SOURCE_EMPLOYEE_TARGET_MISSING")
+        elif (
+            employee.first_name.strip() + " " + employee.last_name.strip()
+            != person.display_name
+            or employee.display_name != person.display_name
+            or employee.home_branch_id != source.branch_id
+            or employee.archived_at is not None
+        ):
+            blockers.append("SOURCE_EMPLOYEE_TARGET_CONFLICT")
+        elif await employee_is_synthetic(session, employee=employee):
+            blockers.append("SYNTHETIC_EMPLOYEE_EXCLUDED")
+        if branch is None or not context.can_access_branch(source.branch_id):
+            blockers.append("MAIN_BRANCH_NOT_AUTHORIZED")
+        existing_request = await session.scalar(
+            select(IdentityOnboardingRequest).where(
+                IdentityOnboardingRequest.company_id == context.company.id,
+                IdentityOnboardingRequest.request_key
+                == self._onboarding_request_key(person.source_employee_id),
+            )
+        )
+        if employee is not None:
+            if employee.membership_id is None and employee.status != "inactive":
+                blockers.append("SOURCE_EMPLOYEE_NOT_INACTIVE")
+            elif employee.membership_id is not None and (
+                existing_request is None
+                or existing_request.employee_id != employee.id
+                or employee.status != "active"
+            ):
+                blockers.append("SOURCE_EMPLOYEE_ALREADY_LINKED")
+        assert person.source_employee_id is not None
+        assert person.source_login_email is not None
+        if employee is None or branch is None:
+            raise RealRosterConflict(
+                "Source Employee onboarding evidence is incomplete."
+            )
+        return RealRosterOnboardingPreview(
+            roster_key=person.key,
+            display_name=person.display_name,
+            first_name=employee.first_name,
+            last_name=employee.last_name,
+            operating_role=person.role.value,
+            required_role_codes=tuple(sorted(person.required_role_codes)),
+            source_employee_id=person.source_employee_id,
+            source_login_email=person.source_login_email,
+            proposed_login_email=person.owner_login_email,
+            source_branch_id=source.branch_id,
+            source_branch_code=branch.code,
+            source_candidate_employee_id=employee.id,
+            source_disposition=source.disposition,
+            safe_to_apply=not blockers,
+            blockers=tuple(blockers),
+        )
+
+    async def onboard_source_employee(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        roster_key: str,
+        command: RealRosterOnboardingRequest,
+    ) -> IdentityOnboardingRequest:
+        required_permissions = {
+            AdministrationPermission.IDENTITY_ONBOARDING_MANAGE,
+            WorkforcePermission.CAPABILITY_MANAGE,
+        }
+        if not required_permissions.issubset(context.permission_codes):
+            raise RealRosterConflict("Owner onboarding authority is required.")
+        preview = await self.onboarding_preview(
+            session, context=context, roster_key=roster_key
+        )
+        if not preview.safe_to_apply:
+            raise RealRosterConflict("Source Employee onboarding is not ready.")
+        if (
+            command.confirmed_source_employee_id != preview.source_employee_id
+            or not command.confirm_access_profile
+        ):
+            raise RealRosterConflict(
+                "Exact source identity and access profile confirmation is required."
+            )
+        roles = tuple(
+            await session.scalars(
+                select(Role).where(
+                    Role.company_id == context.company.id,
+                    Role.code.in_(preview.required_role_codes),
+                    Role.status == "active",
+                    Role.archived_at.is_(None),
+                )
+            )
+        )
+        if {role.code for role in roles} != set(preview.required_role_codes):
+            raise RealRosterConflict(
+                "Canonical Employee access profile is unavailable."
+            )
+        confirmed_login_email = normalize_email(command.confirmed_login_email)
+        existing_user = await session.scalar(
+            select(User).where(
+                User.normalized_email == confirmed_login_email
+            )
+        )
+        role_ids = tuple(sorted((role.id for role in roles), key=str))
+        existing_user_id = existing_user.id if existing_user is not None else None
+        # Release the read-only preview transaction before the governed onboarding
+        # service starts its own atomic transaction.
+        await session.rollback()
+        try:
+            record = await identity_onboarding_service.initiate(
+                session,
+                context=context,
+                command=OnboardingCommand(
+                    request_key=self._onboarding_request_key(
+                        preview.source_employee_id
+                    ),
+                    branch_id=preview.source_branch_id,
+                    first_name=preview.first_name,
+                    last_name=preview.last_name,
+                    display_name=preview.display_name,
+                    employee_type="employee",
+                    employee_number_prefix="EMP-",
+                    employee_number_width=4,
+                    role_ids=role_ids,
+                    additional_permission_ids=(),
+                    login_email=(
+                        None
+                        if existing_user_id is not None
+                        else confirmed_login_email
+                    ),
+                    existing_user_id=existing_user_id,
+                    existing_employee_id=preview.source_candidate_employee_id,
+                ),
+            )
+        except OnboardingConflictError as error:
+            raise RealRosterConflict(str(error)) from error
+        await self.bind(
+            session,
+            context=context,
+            roster_key=roster_key,
+            employee_id=preview.source_candidate_employee_id,
+        )
+        return record
+
     async def bind(
         self,
         session: AsyncSession,
@@ -143,6 +353,23 @@ class RealRosterService:
                 )
             ).all()
         }
+        source_records = tuple(
+            (
+                await session.scalars(
+                    select(HcpEmployeeSourceCrosswalk)
+                    .where(HcpEmployeeSourceCrosswalk.company_id == context.company.id)
+                    .order_by(
+                        HcpEmployeeSourceCrosswalk.native_employee_id,
+                        HcpEmployeeSourceCrosswalk.evidence_version.desc(),
+                    )
+                )
+            ).all()
+        )
+        latest_source: dict[str, HcpEmployeeSourceCrosswalk] = {}
+        for recorded_source in source_records:
+            latest_source.setdefault(
+                recorded_source.native_employee_id, recorded_source
+            )
         main_branch = await session.scalar(
             select(Branch).where(
                 Branch.company_id == context.company.id,
@@ -153,8 +380,13 @@ class RealRosterService:
         items: list[RealRosterReadinessItem] = []
         for person in REAL_ALL_COUNTY_ROSTER:
             binding = bindings.get(person.key)
+            source_record = (
+                latest_source.get(person.source_employee_id)
+                if person.source_employee_id is not None
+                else None
+            )
             if binding is None:
-                items.append(self._unbound(person))
+                items.append(self._unbound(person, source_record=source_record))
                 continue
             employee = await session.scalar(
                 select(Employee).where(
@@ -163,7 +395,13 @@ class RealRosterService:
                 )
             )
             if employee is None:
-                items.append(self._unbound(person, blocker="BOUND_EMPLOYEE_MISSING"))
+                items.append(
+                    self._unbound(
+                        person,
+                        source_record=source_record,
+                        blocker="BOUND_EMPLOYEE_MISSING",
+                    )
+                )
                 continue
             membership = None
             user = None
@@ -290,6 +528,13 @@ class RealRosterService:
                     display_name=person.display_name,
                     operating_role=person.role.value,
                     field_tech=person.field_tech,
+                    source_employee_id=person.source_employee_id,
+                    source_login_email=person.source_login_email,
+                    source_admission=person.admission.value,
+                    source_onboarding_state="ALREADY_BOUND",
+                    source_candidate_employee_id=(
+                        source_record.employee_id if source_record is not None else None
+                    ),
                     employee_id=employee.id,
                     employee_display_name=employee.display_name,
                     employment_status=cast(
@@ -496,13 +741,46 @@ class RealRosterService:
 
     @staticmethod
     def _unbound(
-        person, blocker: str = "OWNER_EMPLOYEE_BINDING_REQUIRED"
+        person,
+        source_record: HcpEmployeeSourceCrosswalk | None = None,
+        blocker: str = "OWNER_EMPLOYEE_BINDING_REQUIRED",
     ) -> RealRosterReadinessItem:
+        source_state: Literal[
+            "READY_TO_ONBOARD",
+            "ALREADY_BOUND",
+            "OWNER_DECISION_REQUIRED",
+            "SOURCE_EVIDENCE_MISSING",
+            "SOURCE_EVIDENCE_CONFLICT",
+        ]
+        if person.admission is RealRosterAdmission.OWNER_IDENTITY_DECISION_REQUIRED:
+            source_state = "OWNER_DECISION_REQUIRED"
+        elif (
+            person.admission is RealRosterAdmission.SAFE_CREATE
+            and source_record is not None
+            and source_record.disposition == "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE"
+            and source_record.employee_id is not None
+        ):
+            source_state = "READY_TO_ONBOARD"
+        elif person.admission is RealRosterAdmission.SAFE_CREATE:
+            source_state = (
+                "SOURCE_EVIDENCE_MISSING"
+                if source_record is None
+                else "SOURCE_EVIDENCE_CONFLICT"
+            )
+        else:
+            source_state = "SOURCE_EVIDENCE_CONFLICT"
         return RealRosterReadinessItem(
             roster_key=person.key,
             display_name=person.display_name,
             operating_role=person.role.value,
             field_tech=person.field_tech,
+            source_employee_id=person.source_employee_id,
+            source_login_email=person.source_login_email,
+            source_admission=person.admission.value,
+            source_onboarding_state=source_state,
+            source_candidate_employee_id=(
+                source_record.employee_id if source_record is not None else None
+            ),
             employee_id=None,
             employee_display_name=None,
             employment_status=None,

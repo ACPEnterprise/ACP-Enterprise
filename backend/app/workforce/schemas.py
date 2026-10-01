@@ -154,6 +154,22 @@ class RealRosterReadinessItem(WorkforceSchema):
     display_name: str
     operating_role: str
     field_tech: bool
+    source_employee_id: str | None
+    source_login_email: str | None
+    source_admission: Literal[
+        "SAFE_CREATE",
+        "ALREADY_ACTIVE",
+        "OWNER_IDENTITY_DECISION_REQUIRED",
+        "HISTORICAL_TERMINATED",
+    ]
+    source_onboarding_state: Literal[
+        "READY_TO_ONBOARD",
+        "ALREADY_BOUND",
+        "OWNER_DECISION_REQUIRED",
+        "SOURCE_EVIDENCE_MISSING",
+        "SOURCE_EVIDENCE_CONFLICT",
+    ]
+    source_candidate_employee_id: UUID | None
     employee_id: UUID | None
     employee_display_name: str | None
     employment_status: Literal["active", "inactive", "leave", "terminated"] | None
@@ -183,6 +199,30 @@ class RealRosterBindingCandidate(WorkforceSchema):
     display_name: str
     employment_status: Literal["active", "inactive", "leave", "terminated"]
     home_branch_id: UUID | None
+
+
+class RealRosterOnboardingRequest(WorkforceSchema):
+    confirmed_source_employee_id: str = Field(min_length=1, max_length=191)
+    confirmed_login_email: str = Field(min_length=3, max_length=320)
+    confirm_access_profile: bool
+
+
+class RealRosterOnboardingPreview(WorkforceSchema):
+    roster_key: str
+    display_name: str
+    first_name: str
+    last_name: str
+    operating_role: str
+    required_role_codes: tuple[str, ...]
+    source_employee_id: str
+    source_login_email: str
+    proposed_login_email: str
+    source_branch_id: UUID
+    source_branch_code: str
+    source_candidate_employee_id: UUID
+    source_disposition: str
+    safe_to_apply: bool
+    blockers: tuple[str, ...]
 
 
 class RealRosterSourceEvidence(WorkforceSchema):

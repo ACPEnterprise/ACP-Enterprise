@@ -2,6 +2,11 @@ import axios from "axios";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
+import {
+  getRealRosterOnboardingPreview,
+  onboardRealRosterEmployee,
+  type RealRosterOnboardingPreview,
+} from "../../api/workforce";
 import { useAuth } from "../../auth";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Spinner } from "../../ui";
 import {
@@ -44,6 +49,7 @@ function submissionMessage(error: unknown): string {
 
 export function IdentityOnboardingRoute() {
   const [searchParams] = useSearchParams();
+  const rosterKey = searchParams.get("roster");
   const { activeCompany, permissionCodes = [] } = useAuth();
   const authorized = permissionCodes.includes(ONBOARDING_PERMISSION);
   const canReconcileProfiles = permissionCodes.includes("COMPANY_PERMISSION_MANAGE");
@@ -65,6 +71,27 @@ export function IdentityOnboardingRoute() {
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [onboarding, setOnboarding] = useState<IdentityOnboardingView | null>(null);
   const [delivery, setDelivery] = useState<IdentityOnboardingDeliveryView | null>(null);
+  const [rosterPreview, setRosterPreview] = useState<RealRosterOnboardingPreview | null>(null);
+  const [rosterPreviewError, setRosterPreviewError] = useState(false);
+  const [confirmAccessProfile, setConfirmAccessProfile] = useState(false);
+
+  useEffect(() => {
+    if (!authorized || !rosterKey) return;
+    let current = true;
+    void getRealRosterOnboardingPreview(rosterKey).then((preview) => {
+      if (!current) return;
+      setRosterPreviewError(false);
+      setRosterPreview(preview);
+      setFirstName(preview.first_name);
+      setLastName(preview.last_name);
+      setEmail(preview.proposed_login_email);
+      setProfileLabel(preview.operating_role);
+      setBranchId(preview.source_branch_id);
+    }).catch(() => {
+      if (current) setRosterPreviewError(true);
+    });
+    return () => { current = false; };
+  }, [authorized, rosterKey]);
 
   useEffect(() => {
     if (!authorized) return;
@@ -114,6 +141,22 @@ export function IdentityOnboardingRoute() {
     setSubmitting(true);
     setMessage(null);
     try {
+      if (rosterKey && rosterPreview) {
+        const created = await onboardRealRosterEmployee(rosterKey, {
+          confirmed_source_employee_id: rosterPreview.source_employee_id,
+          confirmed_login_email: email.trim(),
+          confirm_access_profile: confirmAccessProfile,
+        });
+        setOnboarding(created);
+        if (created.status === "invited") {
+          setDelivery(await getIdentityOnboardingDelivery(created.id));
+          setMessage({ kind: "success", text: "Source Employee bound and invited. Delivery status is shown below." });
+        } else {
+          setDelivery(null);
+          setMessage({ kind: "success", text: "Source Employee was bound to the existing active login. No duplicate invitation was sent." });
+        }
+        return;
+      }
       const input = {
         branch_id: branchId,
         first_name: firstName.trim(),
@@ -178,19 +221,23 @@ export function IdentityOnboardingRoute() {
   };
 
   return <div className="mx-auto w-full max-w-2xl space-y-ui-5 pb-ui-8">
-    <header><h1 className="text-heading-m">Team / Employees</h1><p className="mt-ui-2 text-body-s text-content-muted">Add an employee, select their standard role, and send a protected invitation.</p></header>
+    <header><h1 className="text-heading-m">Team / Employees</h1><p className="mt-ui-2 text-body-s text-content-muted">{rosterKey ? "Review preserved HCP identity evidence, confirm access, and send one protected invitation." : "Add an employee, select their standard role, and send a protected invitation."}</p></header>
     {message && <Alert variant={message.kind === "success" ? "success" : "danger"} announcement={message.kind === "success" ? "polite" : "assertive"}>{message.text}</Alert>}
-    <Card><CardHeader><CardTitle>Add Employee</CardTitle><CardDescription>Standard role permissions and Company scope are applied automatically. Duplicate identities fail safely. Login email is never guessed or prefilled from roster identity.</CardDescription></CardHeader><CardContent>
+    {rosterPreviewError && <Alert variant="danger">The exact source Employee is not ready for onboarding. No Employee or invitation was created.</Alert>}
+    {rosterKey && !rosterPreview && !rosterPreviewError && <Spinner label="Loading exact source Employee" />}
+    {rosterPreview && <Alert variant="information"><strong>{rosterPreview.display_name}</strong> · HCP {rosterPreview.source_employee_id} · {rosterPreview.source_login_email} · {rosterPreview.source_branch_code}. This source identity is locked; ACP will activate the existing deterministic Employee instead of creating a duplicate.</Alert>}
+    <Card><CardHeader><CardTitle>{rosterPreview ? "Activate Source Employee" : "Add Employee"}</CardTitle><CardDescription>{rosterPreview ? "The preserved source identity is read-only. Confirm the canonical access profile before issuing its single-use invitation." : "Standard role permissions and Company scope are applied automatically. Duplicate identities fail safely. Login email is never guessed or prefilled from roster identity."}</CardDescription></CardHeader><CardContent>
       {preparation.state === "loading" ? <Spinner label="Checking Employee onboarding readiness" /> : preparation.state === "blocked" ? <Alert variant="danger"><div className="space-y-ui-3"><p>{preparation.message}</p>{preparation.reconciliation && !preparation.reconciliation.safe_to_apply && <p>A protected role identity conflict requires review. No role will be replaced automatically.</p>}<div className="flex flex-wrap gap-ui-3">{preparation.reconciliation?.safe_to_apply && canReconcileProfiles && <Button loading={reconciling} loadingLabel="Preparing profiles" onClick={() => void reconcileProfiles()}>Prepare approved profiles</Button>}<Button variant="secondary" onClick={() => { setPreparation({ state: "loading" }); setReadinessAttempt((value) => value + 1); }}>Retry readiness</Button>{(!preparation.reconciliation?.safe_to_apply || !canReconcileProfiles) && <Link className="text-link" to="/administration">Review protected roles</Link>}</div></div></Alert> :
         <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-ui-3 sm:grid-cols-2">
-            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} required /></label>
-            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} required /></label>
+            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
+            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
           </div>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Role</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profile.label.replaceAll("_", " ")}</option>)}</select><span className="text-body-xs text-content-muted">Field Tech includes ACP Employee Mobile access. Dispatch eligibility is confirmed separately for an exact appointment window. Office roles do not receive field capability.</span></label>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => setBranchId(event.target.value)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
-          <Button type="submit" loading={submitting} loadingLabel="Sending invite" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim()}>Send Invite</Button>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input aria-label="Email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required /><span className="text-body-xs text-content-muted">The provider email remains preserved above. An owner may enter a different verified current login email without rewriting source evidence.</span></label>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Role</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} disabled={Boolean(rosterPreview)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profile.label.replaceAll("_", " ")}</option>)}</select><span className="text-body-xs text-content-muted">Field Tech includes ACP Employee Mobile access. Dispatch eligibility is confirmed separately for an exact appointment window. Office roles do not receive field capability.</span></label>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => setBranchId(event.target.value)} disabled={Boolean(rosterPreview)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
+          {rosterPreview && <label className="flex items-start gap-ui-3 rounded-lg border border-stroke p-ui-3 text-body-s"><input className="mt-1" type="checkbox" checked={confirmAccessProfile} onChange={(event) => setConfirmAccessProfile(event.target.checked)} /><span>I confirm the <strong>{rosterPreview.operating_role.replaceAll("_", " ")}</strong> access profile ({rosterPreview.required_role_codes.join(", ")}) for this exact source Employee.</span></label>}
+          <Button type="submit" loading={submitting} loadingLabel="Sending invite" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim() || (Boolean(rosterPreview) && !confirmAccessProfile)}>{rosterPreview ? "Confirm Source & Send Invite" : "Send Invite"}</Button>
         </form>}
     </CardContent></Card>
     {onboarding && delivery && <Card><CardHeader><CardTitle>Employee status</CardTitle><CardDescription>Invitation and email delivery are tracked separately. Queued is not delivered.</CardDescription></CardHeader><CardContent className="space-y-ui-4"><dl className="grid gap-ui-3 text-body-s sm:grid-cols-2"><div><dt className="text-content-muted">Account</dt><dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Invitation</dt><dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Email delivery</dt><dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Provider</dt><dd className="font-semibold">{delivery.provider_reference_present ? "Accepted" : "Not accepted"}</dd></div></dl>{delivery.last_error_code && <Alert variant="warning">Invitation delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.</Alert>}<p className="text-body-xs text-content-muted">The employee receives an expiring, single-use activation link and creates their own password.</p><div className="flex gap-ui-3"><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>Reissue invitation</Button><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>Revoke invitation</Button></div></CardContent></Card>}

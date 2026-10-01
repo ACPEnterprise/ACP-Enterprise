@@ -1,0 +1,91 @@
+{
+  "contract": "hcp-workforce-source-authority/v1",
+  "source_package_digest": "4a4a9582d7fde37dba73ba9e93db5669d9341768c7f5741f6e8916971fd9ec60",
+  "branch_code": "MAIN",
+  "records": [
+    {
+      "provider_employee_id": "pro_0ff2024a6baa4475a883f76d6cbcc58b",
+      "canonical_source_name": "Dakota Wilcox",
+      "source_email": "dakotawilcox23@gmail.com",
+      "owner_current_email": "dakotawilcox23@gmail.com",
+      "employment_status": "ACTIVE",
+      "status_effective_at": null,
+      "source_as_of": "2026-09-30T22:30:00Z",
+      "source_snapshot_digest": "eba7c65a22fabd59f0007aa784be962390d89b19effe29c4ddf2cbdcaa57fdf1",
+      "source_record_digest": "7ecff113548b1d1a14d6293c49af276c198d1edfbbf5ba611e0adeb99209fb1b",
+      "owner_disposition": "SAFE_CREATE"
+    },
+    {
+      "provider_employee_id": "pro_10853bfb63874a0b9d17cab14d1da20b",
+      "canonical_source_name": "Alex Donahue",
+      "source_email": "alexallcountyleaks@gmail.com",
+      "owner_current_email": "alexallcountyplumbingandleak@gmail.com",
+      "employment_status": "ACTIVE",
+      "status_effective_at": null,
+      "source_as_of": "2026-09-30T22:30:00Z",
+      "source_snapshot_digest": "eba7c65a22fabd59f0007aa784be962390d89b19effe29c4ddf2cbdcaa57fdf1",
+      "source_record_digest": "b39b926208ae0769850ffb7580fa4826563462c53f6a5b7a42b417dd3c8ed51f",
+      "owner_disposition": "OWNER_IDENTITY_DECISION_REQUIRED"
+    },
+    {
+      "provider_employee_id": "pro_23be6c33b14a4127bd737529180a56a1",
+      "canonical_source_name": "Melvin Santiago",
+      "source_email": "koqui360@gmail.com",
+      "owner_current_email": "koqui360@gmail.com",
+      "employment_status": "ACTIVE",
+      "status_effective_at": null,
+      "source_as_of": "2026-09-30T22:30:00Z",
+      "source_snapshot_digest": "eba7c65a22fabd59f0007aa784be962390d89b19effe29c4ddf2cbdcaa57fdf1",
+      "source_record_digest": "4b242926ddc2e6c01a2c5c963b2f1405eb3dc6f2c2a0b40cff077ee0331a9015",
+      "owner_disposition": "SAFE_CREATE"
+    },
+    {
+      "provider_employee_id": "pro_2edf25dd14494b1885a50fa134b44fd8",
+      "canonical_source_name": "Dareis Montgomery",
+      "source_email": "dareismontgomery37@gmail.com",
+      "owner_current_email": "dareismontgomery37@gmail.com",
+      "employment_status": "ACTIVE",
+      "status_effective_at": null,
+      "source_as_of": "2026-09-30T22:30:00Z",
+      "source_snapshot_digest": "eba7c65a22fabd59f0007aa784be962390d89b19effe29c4ddf2cbdcaa57fdf1",
+      "source_record_digest": "c9f09f51f4bce541a03cb04d208f0a892d50337c36c4fda86e3dc3cbc48a7335",
+      "owner_disposition": "SAFE_CREATE"
+    },
+    {
+      "provider_employee_id": "pro_4f1d81e3d31b4ffa9072dd6a32906586",
+      "canonical_source_name": "Adam Mari",
+      "source_email": "ajjmari3516@gmail.com",
+      "owner_current_email": null,
+      "employment_status": "TERMINATED",
+      "status_effective_at": "2026-09-18T00:00:00-04:00",
+      "source_as_of": "2026-09-10T21:00:00Z",
+      "source_snapshot_digest": "5a003dcb925f01b375564062652823153d4a07ebe842655b4f4e951280e29976",
+      "source_record_digest": "cf4f845ffca5cfd07218689c38f3621210695e85c6ef6d1ffd06ff7e5ebf2880",
+      "owner_disposition": "HISTORICAL_TERMINATED"
+    },
+    {
+      "provider_employee_id": "pro_622e39dd3a544e4cb4fb8782ac767287",
+      "canonical_source_name": "Michael Fouse",
+      "source_email": "allcountyleak@gmail.com",
+      "owner_current_email": "allcountyleak@gmail.com",
+      "employment_status": "ACTIVE",
+      "status_effective_at": null,
+      "source_as_of": "2026-09-30T22:30:00Z",
+      "source_snapshot_digest": "eba7c65a22fabd59f0007aa784be962390d89b19effe29c4ddf2cbdcaa57fdf1",
+      "source_record_digest": "e023c0bb63597966ceea4bff89fd9fb9424f2cee7bdd5cd4113375bc474819f0",
+      "owner_disposition": "SAFE_CREATE"
+    },
+    {
+      "provider_employee_id": "pro_6b2b2b7177a54187a690cb198a6dbda5",
+      "canonical_source_name": "Jason Calci",
+      "source_email": "jasoncalci27@gmail.com",
+      "owner_current_email": "jasoncalci27@gmail.com",
+      "employment_status": "ACTIVE",
+      "status_effective_at": null,
+      "source_as_of": "2026-09-30T22:30:00Z",
+      "source_snapshot_digest": "eba7c65a22fabd59f0007aa784be962390d89b19effe29c4ddf2cbdcaa57fdf1",
+      "source_record_digest": "482fab84509dd7d8eeaf72f42d17f856a47c9a7b9a932d98263f4e2d0d217339",
+      "owner_disposition": "SAFE_CREATE"
+    }
+  ]
+}
