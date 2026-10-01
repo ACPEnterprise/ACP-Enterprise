@@ -458,6 +458,20 @@ class AuthorizationService:
             .all()
         )
 
+        if (
+            authenticated.authentication_session.authentication_method
+            == "acceptance_service_principal"
+        ):
+            from app.platform.service_principals.contracts import (
+                READ_PERMISSION_CODES,
+                ROLE_CODE,
+            )
+
+            if {role.code for role in effective_roles} != {ROLE_CODE} or {
+                permission.code for permission in effective_permissions
+            } != READ_PERMISSION_CODES:
+                raise TenantAccessDeniedError("Tenant access denied.")
+
         return AuthorizationContext(
             user=user,
             company=company,
