@@ -63,5 +63,5 @@ def test_seed_does_not_create_quantity_or_opening_movement() -> None:
 
 def test_migration_is_single_head_and_append_only() -> None:
     migration = Path("alembic/versions/ti9k1m3o5q7s_common_stock_seed_catalog.py").read_text()
-    assert 'down_revision: str | Sequence[str] | None = "sh8d0f2g4j6l8"' in migration
+    assert 'down_revision: str | Sequence[str] | None = "sp9e1g3i5k7m9"' in migration
     assert "reject_material_seed_evidence_mutation" in migration

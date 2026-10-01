@@ -9,6 +9,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.analytics.service import AnalyticsService
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
@@ -52,12 +59,6 @@ from app.scheduling.service import (
 from app.scheduling.types import (
     AppointmentCancellationReason,
     AppointmentRescheduleReason,
-)
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
 )
 
 BUSINESS_TIMEZONE = ZoneInfo("America/New_York")
