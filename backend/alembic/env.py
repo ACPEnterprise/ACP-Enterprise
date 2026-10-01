@@ -85,6 +85,9 @@ from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.provider_connections import (
     models as provider_connection_models,  # noqa: F401
 )
+from app.platform.service_principals import (
+    models as service_principal_models,  # noqa: F401
+)
 from app.platform.users import identity_models  # noqa: F401
 from app.platform.users import models as user_models  # noqa: F401
 from app.price_book import models as price_book_models  # noqa: F401
