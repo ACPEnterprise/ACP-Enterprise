@@ -3,7 +3,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import pytest
-
 from app.operational_migration.hcp_continuous_delta import (
     DeltaDisposition,
     NativeObservation,

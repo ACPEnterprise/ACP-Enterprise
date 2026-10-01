@@ -7,9 +7,8 @@ Revises: sp9e1g3i5k7m9
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "ti9k1m3o5q7s"
 down_revision: str | Sequence[str] | None = "sp9e1g3i5k7m9"
