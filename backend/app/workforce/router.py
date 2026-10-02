@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
-from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.onboarding.schemas import OnboardingView
+from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission, WorkforcePermission
 from app.platform.permissions.dependencies import require_permission

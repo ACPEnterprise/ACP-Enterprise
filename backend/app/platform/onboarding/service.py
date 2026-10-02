@@ -434,6 +434,10 @@ class IdentityOnboardingService:
                         or source_employee.last_name != command.last_name.strip()
                         or source_employee.display_name != command.display_name.strip()
                     ):
+                        if source_employee is not None and source_employee.status != "inactive":
+                            raise OnboardingConflictError(
+                                "Eligible existing Employee is not available for onboarding."
+                            )
                         raise OnboardingConflictError(
                             "Source Employee candidate conflicts with current authority."
                         )
@@ -521,7 +525,6 @@ class IdentityOnboardingService:
                         first_name=command.first_name.strip(),
                         last_name=command.last_name.strip(),
                         display_name=command.display_name.strip(),
-                        phone=command.phone,
                         status="invited",
                     )
                     session.add(user)
@@ -554,6 +557,7 @@ class IdentityOnboardingService:
                         first_name=command.first_name.strip(),
                         last_name=command.last_name.strip(),
                         display_name=command.display_name.strip(),
+                        phone=command.phone,
                         employee_type=command.employee_type,
                         status="active",
                         created_by_user_id=context.user.id,

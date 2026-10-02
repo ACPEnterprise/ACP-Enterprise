@@ -13,9 +13,9 @@ import {
   getIdentityOnboardingDelivery,
   getCanonicalRoleSyncPlan,
   applyCanonicalRoleSync,
-  initiateEmployeeBetaOnboarding,
+  matchSimpleEmployee,
+  onboardSimpleEmployee,
   listRoles,
-  planEmployeeOnboarding,
   reissueIdentityOnboarding,
   revokeIdentityOnboarding,
   type CompanyRole,
@@ -75,7 +75,7 @@ export function IdentityOnboardingRoute() {
   const [rosterPreview, setRosterPreview] = useState<RealRosterOnboardingPreview | null>(null);
   const [rosterPreviewError, setRosterPreviewError] = useState(false);
   const [confirmAccessProfile, setConfirmAccessProfile] = useState(false);
-  const [matchPlan, setMatchPlan] = useState<Awaited<ReturnType<typeof planEmployeeOnboarding>> | null>(null);
+  const [matchPlan, setMatchPlan] = useState<import("./api").SimpleEmployeeMatchResponse | null>(null);
 
   useEffect(() => {
     if (!authorized || !rosterKey) return;
@@ -159,37 +159,25 @@ export function IdentityOnboardingRoute() {
         }
         return;
       }
-      const input = {
-        branch_id: branchId,
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        display_name: `${firstName.trim()} ${lastName.trim()}`,
-        role_ids: selectedProfile.roles.map((role) => role.id),
-        additional_permission_ids: [],
-        login_email: email.trim(),
-      };
-      const plan = await planEmployeeOnboarding(input);
-      if (plan.classification === "MEMBERSHIP_NEEDS_EMPLOYEE_LINK" && plan.existing_user_id) {
-        setMatchPlan(plan);
+      const match = await matchSimpleEmployee({ branch_id: branchId, first_name: firstName.trim(), last_name: lastName.trim(), email: email.trim(), phone: phone.trim() || undefined });
+      if (match.outcome !== "NONE") {
+        setMatchPlan(match);
         setMessage(null);
         return;
       }
-      if (!plan.safe_to_apply) {
-        setMessage({ kind: "error", text: plan.blockers.length > 0
-          ? `This employee needs review before an invitation can be sent: ${plan.blockers.map((item) => item.replaceAll("_", " ")).join(" · ")}.`
-          : "This employee needs review before an invitation can be sent." });
-        return;
-      }
-      const created = await initiateEmployeeBetaOnboarding({
-        ...input,
+      const created = await onboardSimpleEmployee({
         request_key: requestKey,
-        employee_type: "employee",
-        employee_number_prefix: plan.employee_number_prefix,
-        employee_number_width: plan.employee_number_width,
+        branch_id: branchId,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF",
       });
-      setOnboarding(created);
-      setDelivery(await getIdentityOnboardingDelivery(created.id));
-      setFirstName(""); setLastName(""); setEmail("");
+      const view: IdentityOnboardingView = { id: created.onboarding_request_id, employee_id: created.employee_id, membership_id: created.membership_id, branch_id: created.branch_id, masked_login: email.trim(), status: created.status };
+      setOnboarding(view);
+      setDelivery(await getIdentityOnboardingDelivery(view.id));
+      setFirstName(""); setLastName(""); setEmail(""); setPhone("");
       setRequestKey(`employee-admin-${crypto.randomUUID()}`);
       setMessage({ kind: "success", text: "Employee invited. Delivery status is shown below." });
     } catch (error) {
@@ -200,26 +188,21 @@ export function IdentityOnboardingRoute() {
   };
 
   const confirmExistingHistory = async () => {
-    if (!matchPlan?.existing_user_id || !branchId || !firstName.trim() || !lastName.trim()) return;
+    if (!matchPlan || matchPlan.outcome !== "SINGLE" || !matchPlan.candidates[0] || !branchId || !firstName.trim() || !lastName.trim()) return;
     setSubmitting(true);
     try {
-      const selectedProfile = preparation.state === "ready" ? preparation.profiles.find((profile) => profile.label === profileLabel) : undefined;
-      if (!selectedProfile) return;
-      const linked = await initiateEmployeeBetaOnboarding({
+      const linked = await onboardSimpleEmployee({
         request_key: requestKey,
         branch_id: branchId,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        display_name: `${firstName.trim()} ${lastName.trim()}`,
-        employee_type: "employee",
-        employee_number_prefix: matchPlan.employee_number_prefix,
-        employee_number_width: matchPlan.employee_number_width,
-        role_ids: selectedProfile.roles.map((role) => role.id),
-        additional_permission_ids: [],
-        existing_user_id: matchPlan.existing_user_id,
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF",
       });
-      setOnboarding(linked);
-      setDelivery(linked.status === "invited" ? await getIdentityOnboardingDelivery(linked.id) : null);
+      const view: IdentityOnboardingView = { id: linked.onboarding_request_id, employee_id: linked.employee_id, membership_id: linked.membership_id, branch_id: linked.branch_id, masked_login: email.trim(), status: linked.status };
+      setOnboarding(view);
+      setDelivery(linked.status === "invited" ? await getIdentityOnboardingDelivery(view.id) : null);
       setMatchPlan(null);
       setMessage({ kind: "success", text: "Employee linked. Invitation status is shown below." });
     } catch (error) {
@@ -275,7 +258,7 @@ export function IdentityOnboardingRoute() {
           <Button type="submit" loading={submitting} loadingLabel="Checking employee history" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim() || (Boolean(rosterPreview) && !confirmAccessProfile)}>{rosterPreview ? "Confirm Source & Send Invite" : "Send Invite"}</Button>
         </form>}
     </CardContent></Card>
-    {matchPlan && <Card className="border-action-primary"><CardHeader><CardTitle>Existing employee history found</CardTitle><CardDescription>Would you like to link this employee to the existing history?</CardDescription></CardHeader><CardContent className="flex gap-ui-3"><Button loading={submitting} onClick={() => void confirmExistingHistory()}>Link &amp; Continue</Button><Button variant="secondary" disabled={submitting} onClick={() => setMatchPlan(null)}>Cancel</Button></CardContent></Card>}
+    {matchPlan && <Card className="border-action-primary"><CardHeader><CardTitle>{matchPlan.outcome === "SINGLE" ? "Existing employee history found" : "Multiple existing employee records found"}</CardTitle><CardDescription>{matchPlan.outcome === "SINGLE" ? "Would you like to link this employee to the existing history?" : "This employee needs a quick identity choice before an invitation can be sent."}</CardDescription></CardHeader><CardContent className="space-y-ui-3">{matchPlan.outcome === "AMBIGUOUS" && <ul className="list-disc pl-5 text-body-s">{matchPlan.candidates.map((candidate) => <li key={candidate.employee_id}>Existing Employee {candidate.employee_id}{candidate.source_employee_id ? ` · source ${candidate.source_employee_id}` : ""}</li>)}</ul>}<div className="flex gap-ui-3">{matchPlan.outcome === "SINGLE" && <Button loading={submitting} onClick={() => void confirmExistingHistory()}>Link &amp; Continue</Button>}<Button variant="secondary" disabled={submitting} onClick={() => setMatchPlan(null)}>Cancel</Button></div></CardContent></Card>}
     {onboarding && <Card><CardHeader><CardTitle>Employee created/linked</CardTitle><CardDescription>Invitation sent. The employee can use the invitation to finish setup.</CardDescription></CardHeader><CardContent className="space-y-ui-3"><p><strong>Branch:</strong> {branches.find((branch) => branch.id === onboarding.branch_id)?.name ?? "Selected branch"}</p><p><strong>Access profile:</strong> {profileLabel.replaceAll("_", " ")}</p><div className="flex flex-wrap gap-ui-3"><Link className="text-link" to={`/employees?employee=${onboarding.employee_id}`}>View Employee</Link><Button variant="secondary" onClick={() => { setOnboarding(null); setDelivery(null); setMessage(null); setMatchPlan(null); setFirstName(""); setLastName(""); setEmail(""); setPhone(""); }}>Add Another Employee</Button></div></CardContent></Card>}
     {onboarding && delivery && <Card><CardHeader><CardTitle>Invitation status</CardTitle><CardDescription>Invitation and email delivery are tracked separately. Queued is not delivered.</CardDescription></CardHeader><CardContent className="space-y-ui-4"><dl className="grid gap-ui-3 text-body-s sm:grid-cols-2"><div><dt className="text-content-muted">Account</dt><dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Invitation</dt><dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Email delivery</dt><dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Provider</dt><dd className="font-semibold">{delivery.provider_reference_present ? "Accepted" : "Not accepted"}</dd></div></dl>{delivery.last_error_code && <Alert variant="warning">Invitation delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.</Alert>}<p className="text-body-xs text-content-muted">The employee receives an expiring, single-use activation link and creates their own password.</p><div className="flex gap-ui-3"><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>Reissue invitation</Button><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>Revoke invitation</Button></div></CardContent></Card>}
     <div className="flex gap-ui-4"><Link className="text-link" to="/employees">View Team</Link><Link className="text-link" to="/administration">Advanced Administration</Link></div>

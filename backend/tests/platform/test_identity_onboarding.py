@@ -183,7 +183,6 @@ def command(
     existing_employee_id: UUID | None = None,
     role_ids: tuple[UUID, ...] = (),
     additional_permission_ids: tuple[UUID, ...] = (),
-    existing_employee_id: UUID | None = None,
 ) -> OnboardingCommand:
     return OnboardingCommand(
         request_key=request_key,

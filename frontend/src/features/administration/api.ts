@@ -86,15 +86,10 @@ export interface IdentityOnboardingInitiateRequest {
   employee_number_width: number;
   role_ids: string[];
   additional_permission_ids: string[];
-<<<<<<< HEAD
   login_email?: string;
   existing_user_id?: string;
   existing_employee_id?: string;
   phone?: string;
-=======
-  login_email?: string;
-  existing_user_id?: string;
->>>>>>> d6c4fe80 (feat(workforce): simplify owner add employee flow)
 }
 
 export interface IdentityOnboardingPlan {
@@ -127,6 +122,37 @@ export interface IdentityOnboardingDeliveryView {
   created_at: string | null;
   submitted_at: string | null;
   delivered_at: string | null;
+}
+
+export interface SimpleEmployeeMatchRequest {
+  branch_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+}
+
+export interface SimpleEmployeeMatchResponse {
+  outcome: "NONE" | "SINGLE" | "AMBIGUOUS";
+  candidates: Array<{
+    employee_id: string;
+    source_system: string | null;
+    source_employee_id: string | null;
+  }>;
+}
+
+export interface SimpleEmployeeOnboardingRequest extends SimpleEmployeeMatchRequest {
+  request_key: string;
+  access_profile: "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECHNICIAN";
+}
+
+export interface SimpleEmployeeOnboardingResponse {
+  onboarding_request_id: string;
+  employee_id: string;
+  membership_id: string;
+  branch_id: string;
+  status: string;
+  invitation_eligible: boolean;
 }
 
 interface IdentityOnboardingOwnerClaimView {
@@ -393,6 +419,24 @@ export async function planEmployeeOnboarding(
       request,
     )
   ).data;
+}
+
+export async function matchSimpleEmployee(
+  request: SimpleEmployeeMatchRequest,
+): Promise<SimpleEmployeeMatchResponse> {
+  return (await apiClient.post<SimpleEmployeeMatchResponse>(
+    "/api/v1/workforce/administration/employee-onboarding/match",
+    request,
+  )).data;
+}
+
+export async function onboardSimpleEmployee(
+  request: SimpleEmployeeOnboardingRequest,
+): Promise<SimpleEmployeeOnboardingResponse> {
+  return (await apiClient.post<SimpleEmployeeOnboardingResponse>(
+    "/api/v1/workforce/administration/employee-onboarding",
+    request,
+  )).data;
 }
 
 export async function getIdentityOnboardingDelivery(
