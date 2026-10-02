@@ -180,6 +180,7 @@ def command(
     request_key: str = "request-1",
     email: str | None = None,
     existing_user_id: UUID | None = None,
+    existing_employee_id: UUID | None = None,
     role_ids: tuple[UUID, ...] = (),
     additional_permission_ids: tuple[UUID, ...] = (),
     existing_employee_id: UUID | None = None,
@@ -199,6 +200,148 @@ def command(
         existing_user_id=existing_user_id,
         existing_employee_id=existing_employee_id,
     )
+
+
+@pytest.mark.asyncio
+async def test_source_employee_invitation_reuses_canonical_employee_and_replays(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    employee = Employee(
+        company_id=context.company.id,
+        home_branch_id=context.active_branch.id,
+        employee_number="HCP-EXACT-1",
+        first_name="Synthetic",
+        last_name="Employee",
+        display_name="Synthetic Employee",
+        employee_type="employee",
+        status="inactive",
+    )
+    async with factory() as setup, setup.begin():
+        setup.add(employee)
+
+    source_command = command(
+        context,
+        request_key=f"source-reuse-{uuid4()}",
+        email=f"source-reuse-{uuid4()}@example.test",
+        existing_employee_id=employee.id,
+    )
+    async with factory() as session:
+        created = await service.initiate(
+            session, context=context, command=source_command
+        )
+        replay = await service.initiate(
+            session, context=context, command=source_command
+        )
+        canonical = await session.get(Employee, employee.id)
+        employees = tuple(
+            await session.scalars(
+                select(Employee).where(Employee.company_id == context.company.id)
+            )
+        )
+
+        assert created.employee_id == employee.id
+        assert replay.id == created.id
+        assert len(employees) == 1
+        assert canonical is not None
+        assert canonical.membership_id == created.membership_id
+        assert canonical.status == "active"
+
+        invitation_id = await session.scalar(
+            select(IdentityOnboardingInvitation.id).where(
+                IdentityOnboardingInvitation.onboarding_request_id == created.id
+            )
+        )
+        await session.rollback()
+        delivery = await service.claim_protected_delivery(
+            session,
+            invitation_id=invitation_id,
+        )
+        activated = await service.activate(
+            session, token=delivery.secret, password="Strong-password-123!"
+        )
+        assert activated.employee_id == employee.id
+        membership = await session.get(Membership, activated.membership_id)
+        assert membership is not None and membership.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_terminated_employee_cannot_be_reactivated_by_invitation(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    employee = Employee(
+        company_id=context.company.id,
+        home_branch_id=context.active_branch.id,
+        employee_number="HCP-TERMINATED-1",
+        first_name="Synthetic",
+        last_name="Employee",
+        display_name="Synthetic Employee",
+        employee_type="employee",
+        status="terminated",
+    )
+    async with factory() as setup, setup.begin():
+        setup.add(employee)
+    async with factory() as session:
+        with pytest.raises(OnboardingConflictError, match="Eligible existing Employee"):
+            await service.initiate(
+                session,
+                context=context,
+                command=command(
+                    context,
+                    request_key=f"terminated-{uuid4()}",
+                    email=f"terminated-{uuid4()}@example.test",
+                    existing_employee_id=employee.id,
+                ),
+            )
+        preserved = await session.get(Employee, employee.id)
+        assert preserved is not None
+        assert preserved.status == "terminated"
+        assert preserved.membership_id is None
+
+
+@pytest.mark.asyncio
+async def test_normal_new_hires_are_payroll_visible_by_the_same_employee_ids(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    subjects = (("Kamen", "Hire"), ("Malcolm", "Hire"))
+    created_ids: list[UUID] = []
+    async with factory() as session:
+        for first_name, last_name in subjects:
+            created = await service.initiate(
+                session,
+                context=context,
+                command=replace(
+                    command(
+                        context,
+                        request_key=f"new-hire-{first_name.lower()}-{uuid4()}",
+                        email=f"{first_name.lower()}-{uuid4()}@example.test",
+                    ),
+                    first_name=first_name,
+                    last_name=last_name,
+                    display_name=f"{first_name} {last_name}",
+                ),
+            )
+            created_ids.append(created.employee_id)
+
+        payroll_population_ids = set(
+            await session.scalars(
+                select(Employee.id).where(
+                    Employee.company_id == context.company.id,
+                    Employee.status == "active",
+                    Employee.archived_at.is_(None),
+                )
+            )
+        )
+        assert len(set(created_ids)) == 2
+        assert set(created_ids).issubset(payroll_population_ids)
 
 
 @pytest.mark.asyncio
