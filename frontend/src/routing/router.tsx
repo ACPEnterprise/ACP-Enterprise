@@ -6,6 +6,7 @@ import { CommandCenterRouteGuard } from "../auth/CommandCenterRouteGuard";
 import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuard";
 import {
   accountsPayableHandle,
+  bankingHandle,
   financialReportsHandle,
   qboMigrationHandle,
   businessEconomicsHandle,
@@ -259,6 +260,11 @@ export const appRoutes: RouteObject[] = [
             path: "financial-reports",
             handle: financialReportsHandle,
             lazy: async () => ({ Component: (await import("../routes/FinancialReportsRoute")).FinancialReportsRoute }),
+          },
+          {
+            path: "accounting/banking",
+            handle: bankingHandle,
+            lazy: async () => ({ Component: (await import("../routes/BankingRoute")).BankingRoute }),
           },
           {
             path: "accounting/quickbooks-migration",

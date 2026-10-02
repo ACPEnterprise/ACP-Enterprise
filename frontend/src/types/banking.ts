@@ -1,0 +1,18 @@
+export interface BankAccount {
+  id: string; institution_name: string; account_name: string; account_type: string;
+  masked_identity: string; currency: string; status: string; source_system: string;
+  source_as_of: string; opening_balance: string | null; opening_balance_date: string | null;
+}
+export interface Reconciliation { id: string; statement_identity: string; period_start: string; period_end: string; ending_balance: string; difference: string; status: string; preparer_user_id: string; reviewer_user_id: string | null; closed_at: string | null; evidence_digest: string; }
+export interface BankSummary { account: BankAccount; imported_count: number; matched_count: number; unmatched_count: number; review_required_count: number; transfer_candidate_count: number; active_reconciliation_state: string; current_difference: string | null; last_reconciled_through: string | null; latest_closed_reconciliation: Reconciliation | null; }
+export interface BankTransaction { id: string; bank_account_id: string; external_transaction_id: string; posted_date: string; effective_date: string | null; amount: string; currency: string; direction: string; kind: string; description: string; memo: string | null; state: string; source_as_of: string; }
+export interface ImportTransaction { source_system: string; external_transaction_id: string; related_identity?: string | null; group_key?: string | null; source_version: string; source_digest: string; acquired_at: string; source_as_of: string; posted_date: string; effective_date?: string | null; amount: string; currency: string; direction: string; kind: string; description: string; memo?: string | null; state?: string; }
+export interface ImportRequest { statement_identity: string; period_start: string; period_end: string; opening_balance: string | null; ending_balance: string | null; transactions: ImportTransaction[]; }
+export interface ImportDisposition { source_system: string; source_identity: string; disposition: string; reason: string; }
+export interface ImportPreview extends ImportRequest { bank_account_id: string; transaction_count: number; new_count: number; replay_count: number; duplicate_count: number; conflict_count: number; invalid_count: number; preview_digest: string; dispositions: ImportDisposition[]; }
+export interface ImportConfirm { preview_digest: string; persisted_count: number; replay_count: number; quarantined_count: number; dispositions: ImportDisposition[]; }
+export interface MatchReview { transaction: BankTransaction; match_id: string | null; match_state: string; target_type: string | null; target_identity: string | null; reason_code: string; deterministic: boolean; }
+export interface Drilldown { transaction: BankTransaction; match: MatchReview; bank_account_id: string; ledger_account_id: string; target_reference: string | null; source_system: string; source_digest: string; }
+export interface ReconciliationPreview { bank_account_id: string; statement_identity: string; period_start: string; period_end: string; beginning_balance: string; ending_balance: string; book_balance: string; cleared_total: string; outstanding_total: string; difference: string; unresolved_exceptions: number; can_close: boolean; blocker_reasons: string[]; }
+export interface CashFlowSection { amount: string; journal_ids: string[]; }
+export interface CashFlow { period_start: string; period_end: string; basis: string; cutoff: string; completeness: string; beginning_cash: string; operating_activities: CashFlowSection; investing_activities: CashFlowSection; financing_activities: CashFlowSection; unclassified_amount: string; unclassified_journal_ids: string[]; net_change: string; ending_cash: string; canonical_bank_cash: string | null; difference: string | null; tie_status: string; }
