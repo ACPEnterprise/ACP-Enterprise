@@ -13,9 +13,9 @@ import {
   getIdentityOnboardingDelivery,
   getCanonicalRoleSyncPlan,
   applyCanonicalRoleSync,
-  initiateEmployeeBetaOnboarding,
+  matchSimpleEmployee,
+  onboardSimpleEmployee,
   listRoles,
-  planEmployeeOnboarding,
   reissueIdentityOnboarding,
   revokeIdentityOnboarding,
   type CompanyRole,
@@ -62,6 +62,7 @@ export function IdentityOnboardingRoute() {
   const [firstName, setFirstName] = useState(nameParts.slice(0, -1).join(" "));
   const [lastName, setLastName] = useState(nameParts.at(-1) ?? "");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [profileLabel, setProfileLabel] = useState(searchParams.get("profile") ?? "FIELD_TECH");
   const [requestKey, setRequestKey] = useState(() => `employee-admin-${crypto.randomUUID()}`);
   const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
@@ -74,6 +75,7 @@ export function IdentityOnboardingRoute() {
   const [rosterPreview, setRosterPreview] = useState<RealRosterOnboardingPreview | null>(null);
   const [rosterPreviewError, setRosterPreviewError] = useState(false);
   const [confirmAccessProfile, setConfirmAccessProfile] = useState(false);
+  const [matchPlan, setMatchPlan] = useState<import("./api").SimpleEmployeeMatchResponse | null>(null);
 
   useEffect(() => {
     if (!authorized || !rosterKey) return;
@@ -157,32 +159,25 @@ export function IdentityOnboardingRoute() {
         }
         return;
       }
-      const input = {
+      const match = await matchSimpleEmployee({ branch_id: branchId, first_name: firstName.trim(), last_name: lastName.trim(), email: email.trim(), phone: phone.trim() || undefined });
+      if (match.outcome !== "NONE") {
+        setMatchPlan(match);
+        setMessage(null);
+        return;
+      }
+      const created = await onboardSimpleEmployee({
+        request_key: requestKey,
         branch_id: branchId,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        display_name: `${firstName.trim()} ${lastName.trim()}`,
-        role_ids: selectedProfile.roles.map((role) => role.id),
-        additional_permission_ids: [],
-        login_email: email.trim(),
-      };
-      const plan = await planEmployeeOnboarding(input);
-      if (!plan.safe_to_apply) {
-        setMessage({ kind: "error", text: plan.blockers.length > 0
-          ? `This employee needs review before an invitation can be sent: ${plan.blockers.map((item) => item.replaceAll("_", " ")).join(" · ")}.`
-          : "This employee needs review before an invitation can be sent." });
-        return;
-      }
-      const created = await initiateEmployeeBetaOnboarding({
-        ...input,
-        request_key: requestKey,
-        employee_type: "employee",
-        employee_number_prefix: plan.employee_number_prefix,
-        employee_number_width: plan.employee_number_width,
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF",
       });
-      setOnboarding(created);
-      setDelivery(await getIdentityOnboardingDelivery(created.id));
-      setFirstName(""); setLastName(""); setEmail("");
+      const view: IdentityOnboardingView = { id: created.onboarding_request_id, employee_id: created.employee_id, membership_id: created.membership_id, branch_id: created.branch_id, masked_login: email.trim(), status: created.status };
+      setOnboarding(view);
+      setDelivery(await getIdentityOnboardingDelivery(view.id));
+      setFirstName(""); setLastName(""); setEmail(""); setPhone("");
       setRequestKey(`employee-admin-${crypto.randomUUID()}`);
       setMessage({ kind: "success", text: "Employee invited. Delivery status is shown below." });
     } catch (error) {
@@ -190,6 +185,29 @@ export function IdentityOnboardingRoute() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const confirmExistingHistory = async () => {
+    if (!matchPlan || matchPlan.outcome !== "SINGLE" || !matchPlan.candidates[0] || !branchId || !firstName.trim() || !lastName.trim()) return;
+    setSubmitting(true);
+    try {
+      const linked = await onboardSimpleEmployee({
+        request_key: requestKey,
+        branch_id: branchId,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF",
+      });
+      const view: IdentityOnboardingView = { id: linked.onboarding_request_id, employee_id: linked.employee_id, membership_id: linked.membership_id, branch_id: linked.branch_id, masked_login: email.trim(), status: linked.status };
+      setOnboarding(view);
+      setDelivery(linked.status === "invited" ? await getIdentityOnboardingDelivery(view.id) : null);
+      setMatchPlan(null);
+      setMessage({ kind: "success", text: "Employee linked. Invitation status is shown below." });
+    } catch (error) {
+      setMessage({ kind: "error", text: submissionMessage(error) });
+    } finally { setSubmitting(false); }
   };
 
   const reconcileProfiles = async () => {
@@ -221,7 +239,7 @@ export function IdentityOnboardingRoute() {
   };
 
   return <div className="mx-auto w-full max-w-2xl space-y-ui-5 pb-ui-8">
-    <header><h1 className="text-heading-m">Team / Employees</h1><p className="mt-ui-2 text-body-s text-content-muted">{rosterKey ? "Review preserved HCP identity evidence, confirm access, and send one protected invitation." : "Add an employee, select their standard role, and send a protected invitation."}</p></header>
+    <header><h1 className="text-heading-m">Workforce / Add Employee</h1><p className="mt-ui-2 text-body-s text-content-muted">Add an employee, choose their branch and access profile, then send an invitation.</p></header>
     {message && <Alert variant={message.kind === "success" ? "success" : "danger"} announcement={message.kind === "success" ? "polite" : "assertive"}>{message.text}</Alert>}
     {rosterPreviewError && <Alert variant="danger">The exact source Employee is not ready for onboarding. No Employee or invitation was created.</Alert>}
     {rosterKey && !rosterPreview && !rosterPreviewError && <Spinner label="Loading exact source Employee" />}
@@ -233,14 +251,16 @@ export function IdentityOnboardingRoute() {
             <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
             <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
           </div>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input aria-label="Email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required /><span className="text-body-xs text-content-muted">The provider email remains preserved above. An owner may enter a different verified current login email without rewriting source evidence.</span></label>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Role</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} disabled={Boolean(rosterPreview)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profile.label.replaceAll("_", " ")}</option>)}</select><span className="text-body-xs text-content-muted">Field Tech includes ACP Employee Mobile access. Dispatch eligibility is confirmed separately for an exact appointment window. Office roles do not receive field capability.</span></label>
+          <div className="grid gap-ui-3 sm:grid-cols-2"><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input aria-label="Email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Phone</span><Input aria-label="Phone" type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(555) 555-5555" /></label></div>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Access profile</span><select aria-label="Access profile" className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} disabled={Boolean(rosterPreview)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profile.label.replaceAll("_", " ")}</option>)}</select></label>
           <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => setBranchId(event.target.value)} disabled={Boolean(rosterPreview)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
           {rosterPreview && <label className="flex items-start gap-ui-3 rounded-lg border border-stroke p-ui-3 text-body-s"><input className="mt-1" type="checkbox" checked={confirmAccessProfile} onChange={(event) => setConfirmAccessProfile(event.target.checked)} /><span>I confirm the <strong>{rosterPreview.operating_role.replaceAll("_", " ")}</strong> access profile ({rosterPreview.required_role_codes.join(", ")}) for this exact source Employee.</span></label>}
-          <Button type="submit" loading={submitting} loadingLabel="Sending invite" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim() || (Boolean(rosterPreview) && !confirmAccessProfile)}>{rosterPreview ? "Confirm Source & Send Invite" : "Send Invite"}</Button>
+          <Button type="submit" loading={submitting} loadingLabel="Checking employee history" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim() || (Boolean(rosterPreview) && !confirmAccessProfile)}>{rosterPreview ? "Confirm Source & Send Invite" : "Send Invite"}</Button>
         </form>}
     </CardContent></Card>
-    {onboarding && delivery && <Card><CardHeader><CardTitle>Employee status</CardTitle><CardDescription>Invitation and email delivery are tracked separately. Queued is not delivered.</CardDescription></CardHeader><CardContent className="space-y-ui-4"><dl className="grid gap-ui-3 text-body-s sm:grid-cols-2"><div><dt className="text-content-muted">Account</dt><dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Invitation</dt><dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Email delivery</dt><dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Provider</dt><dd className="font-semibold">{delivery.provider_reference_present ? "Accepted" : "Not accepted"}</dd></div></dl>{delivery.last_error_code && <Alert variant="warning">Invitation delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.</Alert>}<p className="text-body-xs text-content-muted">The employee receives an expiring, single-use activation link and creates their own password.</p><div className="flex gap-ui-3"><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>Reissue invitation</Button><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>Revoke invitation</Button></div></CardContent></Card>}
+    {matchPlan && <Card className="border-action-primary"><CardHeader><CardTitle>{matchPlan.outcome === "SINGLE" ? "Existing employee history found" : "Multiple existing employee records found"}</CardTitle><CardDescription>{matchPlan.outcome === "SINGLE" ? "Would you like to link this employee to the existing history?" : "This employee needs a quick identity choice before an invitation can be sent."}</CardDescription></CardHeader><CardContent className="space-y-ui-3">{matchPlan.outcome === "AMBIGUOUS" && <ul className="list-disc pl-5 text-body-s">{matchPlan.candidates.map((candidate) => <li key={candidate.employee_id}>Existing Employee {candidate.employee_id}{candidate.source_employee_id ? ` · source ${candidate.source_employee_id}` : ""}</li>)}</ul>}<div className="flex gap-ui-3">{matchPlan.outcome === "SINGLE" && <Button loading={submitting} onClick={() => void confirmExistingHistory()}>Link &amp; Continue</Button>}<Button variant="secondary" disabled={submitting} onClick={() => setMatchPlan(null)}>Cancel</Button></div></CardContent></Card>}
+    {onboarding && <Card><CardHeader><CardTitle>Employee created/linked</CardTitle><CardDescription>Invitation sent. The employee can use the invitation to finish setup.</CardDescription></CardHeader><CardContent className="space-y-ui-3"><p><strong>Branch:</strong> {branches.find((branch) => branch.id === onboarding.branch_id)?.name ?? "Selected branch"}</p><p><strong>Access profile:</strong> {profileLabel.replaceAll("_", " ")}</p><div className="flex flex-wrap gap-ui-3"><Link className="text-link" to={`/employees?employee=${onboarding.employee_id}`}>View Employee</Link><Button variant="secondary" onClick={() => { setOnboarding(null); setDelivery(null); setMessage(null); setMatchPlan(null); setFirstName(""); setLastName(""); setEmail(""); setPhone(""); }}>Add Another Employee</Button></div></CardContent></Card>}
+    {onboarding && delivery && <Card><CardHeader><CardTitle>Invitation status</CardTitle><CardDescription>Invitation and email delivery are tracked separately. Queued is not delivered.</CardDescription></CardHeader><CardContent className="space-y-ui-4"><dl className="grid gap-ui-3 text-body-s sm:grid-cols-2"><div><dt className="text-content-muted">Account</dt><dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Invitation</dt><dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Email delivery</dt><dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Provider</dt><dd className="font-semibold">{delivery.provider_reference_present ? "Accepted" : "Not accepted"}</dd></div></dl>{delivery.last_error_code && <Alert variant="warning">Invitation delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.</Alert>}<p className="text-body-xs text-content-muted">The employee receives an expiring, single-use activation link and creates their own password.</p><div className="flex gap-ui-3"><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>Reissue invitation</Button><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>Revoke invitation</Button></div></CardContent></Card>}
     <div className="flex gap-ui-4"><Link className="text-link" to="/employees">View Team</Link><Link className="text-link" to="/administration">Advanced Administration</Link></div>
   </div>;
 }

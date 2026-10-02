@@ -16,7 +16,8 @@ describe("IdentityOnboardingRoute", () => {
     vi.clearAllMocks(); vi.mocked(api.listRoles).mockResolvedValue(roles);
     vi.mocked(api.getCanonicalRoleSyncPlan).mockResolvedValue({ company_id: "company-1", plan_digest: "a".repeat(64), safe_to_apply: true, items: [] });
     vi.mocked(api.applyCanonicalRoleSync).mockResolvedValue({ plan: { company_id: "company-1", plan_digest: "a".repeat(64), safe_to_apply: true, items: [] }, roles_created: [], permissions_added: [], metadata_restored: [], authorization_users_advanced: 0 });
-    vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({ classification: "NEW_EMPLOYEE_CANDIDATE", safe_to_apply: true, masked_login: "l***@example.com", user_action: "CREATE_USER", membership_action: "CREATE_MEMBERSHIP", employee_action: "CREATE_EMPLOYEE", branch_action: "GRANT_EXPLICIT_BRANCH", employee_number_prefix: "ACP-", employee_number_width: 4, role_codes: ["TECHNICIAN"], additional_permission_codes: [], readiness_stages: { IDENTITY: "READY" }, blockers: [] });
+    vi.mocked(api.matchSimpleEmployee).mockResolvedValue({ outcome: "NONE", candidates: [] });
+    vi.mocked(api.onboardSimpleEmployee).mockResolvedValue({ onboarding_request_id: "request-1", employee_id: "employee-1", membership_id: "membership-2", branch_id: "main", status: "invited", invitation_eligible: true });
     vi.mocked(api.initiateEmployeeBetaOnboarding).mockResolvedValue({ id: "request-1", employee_id: "employee-1", membership_id: "membership-2", branch_id: "main", masked_login: "l***@example.com", status: "invited" });
     vi.mocked(api.getIdentityOnboardingDelivery).mockResolvedValue({ request_id: "request-1", invitation_id: "invitation-1", message_id: "message-1", invitation_status: "active", delivery_status: "submitted", template_version: "identity-onboarding-invitation-v1", retry_count: 0, provider_reference_present: true, last_error_code: null, created_at: "2026-09-10T00:00:00Z", submitted_at: "2026-09-10T00:00:01Z", delivered_at: null });
     vi.mocked(workforceApi.getRealRosterOnboardingPreview).mockResolvedValue({ roster_key: "melvin-santiago", display_name: "Melvin Santiago", first_name: "Melvin", last_name: "Santiago", operating_role: "FIELD_TECH", required_role_codes: ["ACP_EMPLOYEE_MOBILE", "TECHNICIAN"], source_employee_id: "pro_23be6c33b14a4127bd737529180a56a1", source_login_email: "koqui360@gmail.com", proposed_login_email: "koqui360@gmail.com", source_branch_id: "main", source_branch_code: "MAIN", source_candidate_employee_id: "employee-melvin", source_disposition: "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE", safe_to_apply: true, blockers: [] });
@@ -29,8 +30,8 @@ describe("IdentityOnboardingRoute", () => {
     expect(role).toHaveValue("FIELD_TECH"); expect(branch).toHaveValue("main");
     expect(screen.queryByText(/Membership UUID/i)).not.toBeInTheDocument(); expect(screen.queryByText(/Effective permission preview/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Send Invite" }));
-    expect(api.planEmployeeOnboarding).toHaveBeenCalledWith(expect.objectContaining({ role_ids: ["technician", "mobile"], additional_permission_ids: [], branch_id: "main" }));
-    expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledTimes(1); expect(await screen.findByText("Employee invited. Delivery status is shown below.")).toBeInTheDocument();
+    expect(api.matchSimpleEmployee).toHaveBeenCalledWith(expect.objectContaining({ branch_id: "main", email: "lianne@example.com" }));
+    expect(api.onboardSimpleEmployee).toHaveBeenCalledWith(expect.objectContaining({ access_profile: "FIELD_TECHNICIAN", branch_id: "main" })); expect(await screen.findByText("Employee invited. Delivery status is shown below.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View Team" })).toHaveAttribute("href", "/employees");
   });
   it("shows only the four approved owner-facing operating profiles", async () => {
@@ -66,9 +67,21 @@ describe("IdentityOnboardingRoute", () => {
     expect(await screen.findByText("Source Employee bound and invited. Delivery status is shown below.")).toBeVisible();
   });
   it("does not mutate when identity planning finds a conflict", async () => {
-    vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({ classification: "DUPLICATE_CONFLICT", safe_to_apply: false, masked_login: "l***@example.com", user_action: "REUSE_REVIEW_REQUIRED", membership_action: "NO_CHANGE", employee_action: "NO_CHANGE", branch_action: "NO_CHANGE", employee_number_prefix: "ACP-", employee_number_width: 4, role_codes: ["TECHNICIAN"], additional_permission_codes: [], readiness_stages: { IDENTITY: "REVIEW_REQUIRED" }, blockers: ["employee_identity_already_exists"] });
+    vi.mocked(api.matchSimpleEmployee).mockResolvedValue({ outcome: "AMBIGUOUS", candidates: [{ employee_id: "employee-1", source_system: "HOUSECALL_PRO", source_employee_id: "source-1" }, { employee_id: "employee-2", source_system: null, source_employee_id: null }] });
     const user = userEvent.setup(); renderPage(); await user.type(await screen.findByLabelText("First name"), "Lianne"); await user.type(screen.getByLabelText("Last name"), "Hernandez"); await user.type(screen.getByLabelText("Email"), "lianne@example.com"); await user.click(screen.getByRole("button", { name: "Send Invite" }));
-    expect(await screen.findByText(/needs review.*employee identity already exists/i)).toBeInTheDocument(); expect(api.initiateEmployeeBetaOnboarding).not.toHaveBeenCalled();
+    expect(await screen.findByText(/multiple existing employee records/i)).toBeInTheDocument(); expect(api.onboardSimpleEmployee).not.toHaveBeenCalled();
+  });
+  it("asks before linking a single existing employee history", async () => {
+    vi.mocked(api.matchSimpleEmployee).mockResolvedValue({ outcome: "SINGLE", candidates: [{ employee_id: "employee-linked", source_system: "HOUSECALL_PRO", source_employee_id: "source-1" }] });
+    vi.mocked(api.onboardSimpleEmployee).mockResolvedValue({ onboarding_request_id: "request-linked", employee_id: "employee-linked", membership_id: "membership-1", branch_id: "main", status: "active", invitation_eligible: false });
+    const user = userEvent.setup(); renderPage();
+    await user.type(await screen.findByLabelText("First name"), "Alex"); await user.type(screen.getByLabelText("Last name"), "Donahue"); await user.type(screen.getByLabelText("Email"), "alex@example.com");
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Link & Continue" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Link & Continue" }));
+    expect(api.onboardSimpleEmployee).toHaveBeenCalledWith(expect.objectContaining({ email: "alex@example.com", access_profile: "FIELD_TECHNICIAN" }));
+    expect(await screen.findByText("Employee created/linked")).toBeInTheDocument();
   });
   it("fails closed without onboarding authority", () => { renderPage({ ...context, permissionCodes: [] }); expect(screen.getByText("You are not authorized to add employees.")).toBeInTheDocument(); expect(api.listRoles).not.toHaveBeenCalled(); });
   it("repairs safely missing canonical profiles through the audited reconciliation", async () => {
