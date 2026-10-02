@@ -125,7 +125,136 @@ class BankReconciliationResponse(BaseModel):
     outstanding_total: Decimal
     difference: Decimal
     status: str
+    cleared_transaction_ids: list[str]
+    outstanding_items: list[dict[str, object]]
+    source_evidence: dict[str, object]
     evidence_digest: str
     preparer_user_id: UUID
     reviewer_user_id: UUID | None
     closed_at: datetime | None
+
+
+class BankAccountSummary(BaseModel):
+    account: BankAccountResponse
+    imported_count: int
+    matched_count: int
+    unmatched_count: int
+    review_required_count: int
+    transfer_candidate_count: int
+    active_reconciliation_state: str
+    current_difference: Decimal | None
+    last_reconciled_through: date | None
+    latest_closed_reconciliation: BankReconciliationResponse | None
+
+
+class BankImportPreviewRequest(BaseModel):
+    statement_identity: str = Field(min_length=1, max_length=240)
+    period_start: date
+    period_end: date
+    opening_balance: Decimal | None = None
+    ending_balance: Decimal | None = None
+    transactions: tuple[BankTransactionIngest, ...]
+
+
+class BankImportDisposition(BaseModel):
+    source_system: str
+    source_identity: str
+    disposition: str
+    reason: str
+
+
+class BankImportPreviewResponse(BaseModel):
+    bank_account_id: UUID
+    statement_identity: str
+    period_start: date
+    period_end: date
+    opening_balance: Decimal | None
+    ending_balance: Decimal | None
+    transaction_count: int
+    new_count: int
+    replay_count: int
+    duplicate_count: int
+    conflict_count: int
+    invalid_count: int
+    preview_digest: str
+    dispositions: tuple[BankImportDisposition, ...]
+
+
+class BankImportConfirmRequest(BankImportPreviewRequest):
+    preview_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class BankImportConfirmResponse(BaseModel):
+    preview_digest: str
+    persisted_count: int
+    replay_count: int
+    quarantined_count: int
+    dispositions: tuple[BankImportDisposition, ...]
+
+
+class BankMatchReviewItem(BaseModel):
+    transaction: BankTransactionResponse
+    match_id: UUID | None
+    match_state: str
+    target_type: str | None
+    target_identity: str | None
+    reason_code: str
+    deterministic: bool
+
+
+class BankReconciliationPreviewRequest(BaseModel):
+    statement_identity: str = Field(min_length=1, max_length=240)
+    period_start: date
+    period_end: date
+    ending_balance: Decimal
+    cleared_transaction_ids: tuple[UUID, ...]
+
+
+class BankReconciliationPreviewResponse(BaseModel):
+    bank_account_id: UUID
+    statement_identity: str
+    period_start: date
+    period_end: date
+    beginning_balance: Decimal
+    ending_balance: Decimal
+    book_balance: Decimal
+    cleared_total: Decimal
+    outstanding_total: Decimal
+    difference: Decimal
+    unresolved_exceptions: int
+    can_close: bool
+    blocker_reasons: tuple[str, ...]
+
+
+class BankDrilldownResponse(BaseModel):
+    transaction: BankTransactionResponse
+    match: BankMatchReviewItem
+    bank_account_id: UUID
+    ledger_account_id: UUID
+    target_reference: str | None
+    source_system: str
+    source_digest: str
+
+
+class CashFlowSection(BaseModel):
+    amount: Decimal
+    journal_ids: tuple[UUID, ...]
+
+
+class CashFlowResponse(BaseModel):
+    period_start: date
+    period_end: date
+    basis: str
+    cutoff: date
+    completeness: str
+    beginning_cash: Decimal
+    operating_activities: CashFlowSection
+    investing_activities: CashFlowSection
+    financing_activities: CashFlowSection
+    unclassified_amount: Decimal
+    unclassified_journal_ids: tuple[UUID, ...]
+    net_change: Decimal
+    ending_cash: Decimal
+    canonical_bank_cash: Decimal | None
+    difference: Decimal | None
+    tie_status: str
