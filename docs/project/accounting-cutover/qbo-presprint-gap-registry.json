@@ -1,0 +1,14 @@
+{
+  "schema_version": "qbo-presprint-gap-registry/v1",
+  "observed_protected_sha": "290ad8119951412237df640f6003ecc3f3d08ada",
+  "gates": [
+    {"id":"QB-G01","priority":"P0","gap":"No accepted real All County QBO source package and immutable cutoff manifest","owner":"LPTP1A","dependency":"Owner/provider read-only connection","state":"EXTERNAL_GATE"},
+    {"id":"QB-G02","priority":"P0","gap":"Bank ingestion, matching, reconciliation, and statement close","owner":"LPTP1A","dependency":"Sanctioned bank evidence and accountant policy","state":"ENGINEERING_PLUS_EXTERNAL"},
+    {"id":"QB-G03","priority":"P0","gap":"AR/AP control-account tie at accepted cutoff","owner":"LPTP1A","dependency":"QBO aging/open items and subledger authority","state":"EVIDENCE_REQUIRED"},
+    {"id":"QB-G04","priority":"P0","gap":"Opening balances, equity, and period basis approval","owner":"LPTP1A","dependency":"Accountant opening-control decision","state":"HUMAN_GATE"},
+    {"id":"QB-G05","priority":"P0","gap":"Inventory valuation and job-cost accounting authority","owner":"LPTP1A/LPTP1E","dependency":"Accepted material cost and accounting policy","state":"HUMAN_GATE"},
+    {"id":"QB-G06","priority":"P0","gap":"Payroll liabilities and posting tie","owner":"OM2 Payroll + LPTP1A","dependency":"Payroll close and accountant evidence","state":"CROSS_DOMAIN"},
+    {"id":"QB-G07","priority":"P0","gap":"Cash-flow reporting parity","owner":"LPTP1B","dependency":"GL, bank, deposit, and basis authority","state":"ENGINEERING"},
+    {"id":"QB-G08","priority":"P0","gap":"Physical operator/accountant acceptance and independent go/no-go","owner":"LPTP1E","dependency":"All critical controls green and real evidence","state":"OWNER_ACCOUNTANT_GATE"}
+  ]
+}
