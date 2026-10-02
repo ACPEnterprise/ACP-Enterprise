@@ -1,4 +1,4 @@
-export type Capability = "home.view" | "time.self.view" | "time.self.punch" | "my_day.view" | "jobs.view" | "jobs.execute" | "pay.self.view" | "assets.view" | "estimates.view" | "job.sources.view" | "price_book.view" | "invoices.view" | "payments.view" | "communications.view" | "notifications.view" | "team_time.view" | "lia.view";
+export type Capability = "home.view" | "time.self.view" | "time.self.punch" | "my_day.view" | "jobs.view" | "jobs.execute" | "pay.self.view" | "assets.view" | "estimates.view" | "job.sources.view" | "price_book.view" | "invoices.view" | "payments.view" | "communications.view" | "notifications.view" | "team_time.view" | "lia.view" | "accounting.read";
 export const INITIAL_CAPABILITIES: readonly Capability[] = ["home.view", "time.self.view"];
 export function can(capabilities: readonly Capability[], capability: Capability): boolean { return capabilities.includes(capability); }
 export function capabilitiesFromPermissions(permissionCodes: readonly string[]): Capability[] {
@@ -16,6 +16,7 @@ export function capabilitiesFromPermissions(permissionCodes: readonly string[]):
   if (permissionCodes.includes("COMPANY_COMMUNICATIONS_READ")) capabilities.push("communications.view");
   if (permissionCodes.includes("COMPANY_PRICE_BOOK_READ")) capabilities.push("price_book.view");
   if (permissionCodes.includes("COMPANY_EMPLOYEE_OPERATIONS_OWN_LIA_READ")) capabilities.push("lia.view");
+  if (permissionCodes.includes("COMPANY_ACCOUNTING_REPORT_READ")) capabilities.push("accounting.read");
   if (["COMPANY_JOB_READ", "COMPANY_CUSTOMER_READ", "COMPANY_INVOICE_READ", "COMPANY_PAYMENT_READ", "COMPANY_COMMUNICATIONS_READ"].every((permission) => permissionCodes.includes(permission))) capabilities.push("job.sources.view");
   return capabilities;
 }
