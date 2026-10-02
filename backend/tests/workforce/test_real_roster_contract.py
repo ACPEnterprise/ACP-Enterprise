@@ -4,8 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
@@ -18,6 +16,7 @@ from app.workforce.real_roster import (
     RealRosterRole,
 )
 from app.workforce.real_roster_service import RealRosterConflict, RealRosterService
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -144,7 +143,7 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
             item.admission is RealRosterAdmission.SAFE_CREATE
             for item in REAL_ALL_COUNTY_ROSTER
         )
-        == 5
+        == 6
     )
     assert (
         sum(
@@ -165,7 +164,7 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
             item.admission is RealRosterAdmission.OWNER_IDENTITY_DECISION_REQUIRED
             for item in REAL_ALL_COUNTY_ROSTER
         )
-        == 1
+        == 0
     )
     assert {
         item.source_employee_id: item.source_login_email
@@ -177,6 +176,7 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
         "pro_2edf25dd14494b1885a50fa134b44fd8": "dareismontgomery37@gmail.com",
         "pro_0ff2024a6baa4475a883f76d6cbcc58b": "dakotawilcox23@gmail.com",
         "pro_6b2b2b7177a54187a690cb198a6dbda5": "jasoncalci27@gmail.com",
+        "pro_10853bfb63874a0b9d17cab14d1da20b": "alexallcountyleaks@gmail.com",
     }
     alex = next(item for item in REAL_ALL_COUNTY_ROSTER if item.key == "alex-donahue")
     assert alex.source_login_email == "alexallcountyleaks@gmail.com"
@@ -207,19 +207,10 @@ def test_unbound_roster_identity_remains_unknown_not_missing() -> None:
     assert item.blockers == ("OWNER_EMPLOYEE_BINDING_REQUIRED",)
 
 
-@pytest.mark.asyncio
-async def test_alex_source_onboarding_requires_explicit_owner_identity_decision() -> (
-    None
-):
-    with pytest.raises(
-        RealRosterConflict,
-        match="requires its recorded owner disposition",
-    ):
-        await RealRosterService().onboarding_preview(
-            None,  # type: ignore[arg-type]
-            context=SimpleNamespace(),
-            roster_key="alex-donahue",
-        )
+def test_alex_source_onboarding_is_owner_authorized_for_exact_identity_reuse() -> None:
+    alex = next(item for item in REAL_ALL_COUNTY_ROSTER if item.key == "alex-donahue")
+    assert alex.admission is RealRosterAdmission.SAFE_CREATE
+    assert alex.owner_login_email == "alexallcountyplumbingandleak@gmail.com"
 
 
 @pytest.mark.asyncio

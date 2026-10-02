@@ -66,7 +66,7 @@ REAL_ALL_COUNTY_ROSTER = (
         "pro_10853bfb63874a0b9d17cab14d1da20b",
         "alexallcountyleaks@gmail.com",
         "alexallcountyplumbingandleak@gmail.com",
-        RealRosterAdmission.OWNER_IDENTITY_DECISION_REQUIRED,
+        RealRosterAdmission.SAFE_CREATE,
     ),
     RealRosterPerson(
         "melvin-santiago",
