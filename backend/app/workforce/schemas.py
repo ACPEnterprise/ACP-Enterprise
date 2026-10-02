@@ -443,3 +443,38 @@ class EmployeeNotificationTarget(WorkforceSchema):
     blockers: tuple[str, ...]
     delivery_channel: Literal["EMPLOYEE_INBOX"] = "EMPLOYEE_INBOX"
     external_push_state: Literal["PROVIDER_REQUIRED"] = "PROVIDER_REQUIRED"
+
+
+class SimpleEmployeeMatchRequest(WorkforceSchema):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=320)
+    phone: str | None = Field(default=None, max_length=32)
+    branch_id: UUID
+
+
+class SimpleEmployeeMatchCandidate(WorkforceSchema):
+    employee_id: UUID
+    source_system: str | None
+    source_employee_id: str | None
+
+
+class SimpleEmployeeMatchResponse(WorkforceSchema):
+    outcome: Literal["NONE", "SINGLE", "AMBIGUOUS"]
+    candidates: tuple[SimpleEmployeeMatchCandidate, ...]
+
+
+class SimpleEmployeeOnboardingRequest(SimpleEmployeeMatchRequest):
+    request_key: str = Field(min_length=1, max_length=128)
+    access_profile: Literal[
+        "ADMINISTRATOR", "OFFICE_MANAGER", "OFFICE_STAFF", "FIELD_TECHNICIAN"
+    ]
+
+
+class SimpleEmployeeOnboardingResponse(WorkforceSchema):
+    onboarding_request_id: UUID
+    employee_id: UUID
+    membership_id: UUID
+    branch_id: UUID
+    status: str
+    invitation_eligible: bool
