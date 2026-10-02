@@ -70,6 +70,18 @@ describe("IdentityOnboardingRoute", () => {
     const user = userEvent.setup(); renderPage(); await user.type(await screen.findByLabelText("First name"), "Lianne"); await user.type(screen.getByLabelText("Last name"), "Hernandez"); await user.type(screen.getByLabelText("Email"), "lianne@example.com"); await user.click(screen.getByRole("button", { name: "Send Invite" }));
     expect(await screen.findByText(/needs review.*employee identity already exists/i)).toBeInTheDocument(); expect(api.initiateEmployeeBetaOnboarding).not.toHaveBeenCalled();
   });
+  it("asks before linking a single existing employee history", async () => {
+    vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({ classification: "MEMBERSHIP_NEEDS_EMPLOYEE_LINK", safe_to_apply: true, masked_login: "a***@example.com", user_action: "REUSE_REVIEW_REQUIRED", membership_action: "REUSE_MEMBERSHIP", employee_action: "LINK_NEW_EMPLOYEE", branch_action: "GRANT_EXPLICIT_BRANCH", employee_number_prefix: "ACP-", employee_number_width: 4, role_codes: ["TECHNICIAN"], additional_permission_codes: [], readiness_stages: { IDENTITY: "REVIEW_REQUIRED" }, blockers: [], existing_user_id: "user-1" });
+    vi.mocked(api.initiateEmployeeBetaOnboarding).mockResolvedValue({ id: "request-linked", employee_id: "employee-linked", membership_id: "membership-1", branch_id: "main", masked_login: "a***@example.com", status: "active" });
+    const user = userEvent.setup(); renderPage();
+    await user.type(await screen.findByLabelText("First name"), "Alex"); await user.type(screen.getByLabelText("Last name"), "Donahue"); await user.type(screen.getByLabelText("Email"), "alex@example.com");
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Link & Continue" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Link & Continue" }));
+    expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledWith(expect.objectContaining({ existing_user_id: "user-1" }));
+    expect(await screen.findByText("Employee created/linked")).toBeInTheDocument();
+  });
   it("fails closed without onboarding authority", () => { renderPage({ ...context, permissionCodes: [] }); expect(screen.getByText("You are not authorized to add employees.")).toBeInTheDocument(); expect(api.listRoles).not.toHaveBeenCalled(); });
   it("repairs safely missing canonical profiles through the audited reconciliation", async () => {
     const user = userEvent.setup();

@@ -55,6 +55,10 @@ class OnboardingPlanResponse(BaseModel):
     additional_permission_codes: tuple[str, ...]
     readiness_stages: dict[str, str]
     blockers: tuple[str, ...]
+    # Internal handoff token for the owner confirmation step.  The UI never
+    # renders this identifier; it is used only to ask the governed onboarding
+    # mutation to reuse the matched login instead of creating a duplicate.
+    existing_user_id: UUID | None = None
 
     model_config = ConfigDict(extra="forbid")
 
