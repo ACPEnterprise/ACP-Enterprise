@@ -18,10 +18,11 @@ from app.accounting.banking_schemas import (
     BankImportPreviewRequest,
     BankImportPreviewResponse,
     BankMatchReviewItem,
-    BankReconciliationClose,
+    BankReconciliationPrepare,
     BankReconciliationPreviewRequest,
     BankReconciliationPreviewResponse,
     BankReconciliationResponse,
+    BankReconciliationTransition,
     BankTransactionIngest,
     BankTransactionMatchResponse,
     BankTransactionResponse,
@@ -30,7 +31,6 @@ from app.accounting.banking_schemas import (
 from app.accounting.errors import (
     AccountingConflict,
     AccountingNotFound,
-    AccountingPermissionDenied,
     AccountingValidation,
 )
 from app.accounting.models import BankAccount, BankTransaction
@@ -47,6 +47,10 @@ ReadContext = Annotated[
 ]
 ReconcileContext = Annotated[
     AuthorizationContext, Depends(require_permission(AccountingPermission.RECONCILE))
+]
+ApproveContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AccountingPermission.FINANCE_APPROVE)),
 ]
 
 
@@ -250,6 +254,23 @@ async def preview_bank_reconciliation(
 
 
 @router.get(
+    "/accounts/{bank_account_id}/reconciliations",
+    response_model=tuple[BankReconciliationResponse, ...],
+)
+async def bank_reconciliation_states(
+    bank_account_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> tuple[BankReconciliationResponse, ...]:
+    try:
+        return await banking_operator_service.reconciliations(
+            session, company_id=context.company.id, account_id=bank_account_id
+        )
+    except AccountingNotFound as error:
+        raise translate(error) from error
+
+
+@router.get(
     "/accounts/{bank_account_id}/reconciliations/history",
     response_model=tuple[BankReconciliationResponse, ...],
 )
@@ -287,29 +308,73 @@ async def bank_cash_flow(
 
 
 @router.post(
-    "/accounts/{bank_account_id}/reconciliations/close",
+    "/accounts/{bank_account_id}/reconciliations/prepare",
+    response_model=BankReconciliationResponse,
+)
+async def prepare_bank_reconciliation(
+    bank_account_id: UUID,
+    data: BankReconciliationPrepare,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> BankReconciliationResponse:
+    try:
+        async with session.begin():
+            row = await bank_authority_service.prepare_reconciliation(
+                session,
+                context=context,
+                bank_account_id=bank_account_id,
+                **data.model_dump(),
+            )
+        return await banking_operator_service.reconciliation_response(session, row)
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/accounts/{bank_account_id}/reconciliations/{reconciliation_id}/submit",
+    response_model=BankReconciliationResponse,
+)
+async def submit_bank_reconciliation(
+    bank_account_id: UUID,
+    reconciliation_id: UUID,
+    data: BankReconciliationTransition,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> BankReconciliationResponse:
+    try:
+        async with session.begin():
+            row = await bank_authority_service.submit_reconciliation(
+                session,
+                context=context,
+                bank_account_id=bank_account_id,
+                reconciliation_id=reconciliation_id,
+                expected_version=data.expected_version,
+            )
+        return await banking_operator_service.reconciliation_response(session, row)
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/accounts/{bank_account_id}/reconciliations/{reconciliation_id}/close",
     response_model=BankReconciliationResponse,
 )
 async def close_bank_reconciliation(
     bank_account_id: UUID,
-    data: BankReconciliationClose,
-    context: ReconcileContext,
+    reconciliation_id: UUID,
+    data: BankReconciliationTransition,
+    context: ApproveContext,
     session: DatabaseSession,
 ) -> BankReconciliationResponse:
-    if not context.has_permission(AccountingPermission.FINANCE_APPROVE):
-        raise translate(
-            AccountingPermissionDenied(
-                "Bank reconciliation close requires Finance approval."
-            )
-        )
     try:
         async with session.begin():
             row = await bank_authority_service.close_reconciliation(
                 session,
                 context=context,
                 bank_account_id=bank_account_id,
-                **data.model_dump(),
+                reconciliation_id=reconciliation_id,
+                expected_version=data.expected_version,
             )
-        return BankReconciliationResponse.model_validate(row)
+        return await banking_operator_service.reconciliation_response(session, row)
     except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
         raise translate(error) from error
