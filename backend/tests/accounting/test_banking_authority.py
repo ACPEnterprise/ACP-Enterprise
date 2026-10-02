@@ -90,11 +90,16 @@ def test_auto_match_requires_one_exact_explicit_source_link() -> None:
         date(2026, 10, 1),
         "bank-tx-1",
     )
-    decision = deterministic_match(evidence(), (candidate,))
+    decision = deterministic_match(evidence(related_identity="payment-1"), (candidate,))
     assert decision.state is MatchState.MATCHED
     assert decision.deterministic is True
 
-    ambiguous = deterministic_match(evidence(), (candidate, candidate))
+    same_external_id_without_lineage = deterministic_match(evidence(), (candidate,))
+    assert same_external_id_without_lineage.state is MatchState.REVIEW_REQUIRED
+
+    ambiguous = deterministic_match(
+        evidence(related_identity="payment-1"), (candidate, candidate)
+    )
     assert ambiguous.state is MatchState.AMBIGUOUS
     assert ambiguous.deterministic is False
 
@@ -123,7 +128,10 @@ def test_grouped_deposit_clears_unique_components_without_new_revenue() -> None:
         components=(("receipt-1", Decimal("75.00")), ("receipt-2", Decimal("50.00"))),
     )
     assert candidate.amount == Decimal("125.00")
-    assert deterministic_match(evidence(), (candidate,)).state is MatchState.MATCHED
+    assert (
+        deterministic_match(evidence(related_identity="deposit-1"), (candidate,)).state
+        is MatchState.MATCHED
+    )
     control = control_integrity(
         bank_delta=Decimal("125.00"),
         cash_gl_delta=Decimal(0),
@@ -201,6 +209,8 @@ def test_bank_models_encode_company_scope_and_immutable_close_controls() -> None
     }
     assert {column.name for column in BankTransaction.__table__.columns} >= {
         "external_transaction_id",
+        "related_identity",
+        "group_key",
         "prior_source_digest",
         "acquired_at",
         "state",
@@ -219,6 +229,10 @@ def test_banking_api_is_default_deny_and_has_no_reopen_or_money_movement() -> No
     assert client.get("/api/v1/accounting/banking/accounts").status_code == 401
     paths = app.openapi()["paths"]
     assert "/api/v1/accounting/banking/accounts" in paths
+    assert (
+        "/api/v1/accounting/banking/accounts/{bank_account_id}/transactions/"
+        "{transaction_id}/match"
+    ) in paths
     banking_paths = [path for path in paths if "/accounting/banking" in path]
     assert not any("reopen" in path for path in banking_paths)
     assert not any("transfer" in path for path in banking_paths)

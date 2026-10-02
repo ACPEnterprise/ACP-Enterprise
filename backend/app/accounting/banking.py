@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
@@ -61,6 +61,8 @@ class NormalizedBankEvidence:
     description: str
     memo: str | None = None
     state: str = "posted"
+    related_identity: str | None = None
+    group_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,10 @@ class CanonicalMatchCandidate:
     effective_date: date
     explicit_bank_source_identity: str | None
     component_identities: tuple[str, ...] = ()
+    source_system: str | None = None
+    source_digest: str | None = None
+    evidence_strength: str = "structured_review"
+    expected_direction: str | None = None
 
 
 @dataclass(frozen=True)
@@ -160,8 +166,14 @@ def deterministic_match(
         and candidate.currency == transaction.currency
         and candidate.effective_date
         == (transaction.effective_date or transaction.posted_date)
-        and candidate.explicit_bank_source_identity
-        == transaction.external_transaction_id
+        and candidate.expected_direction in (None, transaction.direction)
+        and (
+            transaction.related_identity == candidate.target_identity
+            or (
+                transaction.group_key is not None
+                and transaction.group_key == candidate.explicit_bank_source_identity
+            )
+        )
     )
     if len(exact) == 1:
         candidate = exact[0]
@@ -187,6 +199,7 @@ def deterministic_match(
         for candidate in candidates
         if candidate.amount == transaction.amount
         and candidate.currency == transaction.currency
+        and candidate.expected_direction in (None, transaction.direction)
     )
     if similar:
         return MatchDecision(
@@ -285,6 +298,66 @@ def reconciliation_preview(
 
 
 class BankAuthorityService:
+    async def match_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        bank_account_id: UUID,
+        bank_transaction_id: UUID,
+    ) -> BankTransactionMatch:
+        """Project canonical evidence and persist the deterministic decision."""
+        transaction = await session.scalar(
+            select(BankTransaction).where(
+                BankTransaction.company_id == context.company.id,
+                BankTransaction.bank_account_id == bank_account_id,
+                BankTransaction.id == bank_transaction_id,
+            )
+        )
+        if transaction is None:
+            raise AccountingNotFound("Bank transaction was not found")
+        account = await session.scalar(
+            select(BankAccount).where(
+                BankAccount.company_id == context.company.id,
+                BankAccount.id == bank_account_id,
+            )
+        )
+        if account is None:
+            raise AccountingNotFound("Bank account was not found")
+        target_date = transaction.effective_date or transaction.posted_date
+        from app.accounting.banking_candidates import bank_match_candidate_adapters
+
+        candidates = await bank_match_candidate_adapters.all_candidates(
+            session,
+            bank_account=account,
+            period_start=target_date - timedelta(days=7),
+            period_end=target_date,
+        )
+        evidence = NormalizedBankEvidence(
+            external_transaction_id=transaction.external_transaction_id,
+            source_version=transaction.source_version,
+            source_digest=transaction.source_digest,
+            acquired_at=transaction.acquired_at,
+            source_as_of=transaction.source_as_of,
+            posted_date=transaction.posted_date,
+            effective_date=transaction.effective_date,
+            amount=transaction.amount,
+            currency=transaction.currency,
+            direction=transaction.direction,
+            kind=transaction.kind,
+            description=transaction.description,
+            memo=transaction.memo,
+            state=transaction.state,
+            related_identity=transaction.related_identity,
+            group_key=transaction.group_key,
+        )
+        return await self.record_match(
+            session,
+            context=context,
+            bank_transaction_id=transaction.id,
+            decision=deterministic_match(evidence, candidates),
+        )
+
     async def create_account(
         self,
         session: AsyncSession,
@@ -429,6 +502,8 @@ class BankAuthorityService:
                 existing.kind = evidence.kind
                 existing.description = evidence.description
                 existing.memo = evidence.memo
+                existing.related_identity = evidence.related_identity
+                existing.group_key = evidence.group_key
                 existing.state = "posted"
                 existing.updated_at = datetime.now(timezone.utc)
                 self._audit(
@@ -447,6 +522,8 @@ class BankAuthorityService:
             bank_account_id=bank_account_id,
             source_system=source_system,
             external_transaction_id=evidence.external_transaction_id,
+            related_identity=evidence.related_identity,
+            group_key=evidence.group_key,
             source_version=evidence.source_version,
             source_digest=evidence.source_digest,
             acquired_at=evidence.acquired_at,

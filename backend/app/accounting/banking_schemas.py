@@ -45,6 +45,8 @@ class BankAccountResponse(BaseModel):
 class BankTransactionIngest(BaseModel):
     source_system: str = Field(min_length=1, max_length=40)
     external_transaction_id: str = Field(min_length=1, max_length=240)
+    related_identity: str | None = Field(default=None, max_length=240)
+    group_key: str | None = Field(default=None, max_length=240)
     source_version: str = Field(min_length=1, max_length=80)
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     acquired_at: datetime
@@ -66,6 +68,8 @@ class BankTransactionResponse(BaseModel):
     company_id: UUID
     bank_account_id: UUID
     external_transaction_id: str
+    related_identity: str | None
+    group_key: str | None
     source_version: str
     source_digest: str
     acquired_at: datetime
@@ -79,6 +83,18 @@ class BankTransactionResponse(BaseModel):
     description: str
     memo: str | None
     state: str
+
+
+class BankTransactionMatchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    bank_transaction_id: UUID
+    state: str
+    target_type: str | None
+    target_identity: str | None
+    deterministic: bool
+    reason_code: str
+    evidence_digest: str
 
 
 class BankReconciliationClose(BaseModel):

@@ -12,6 +12,7 @@ from app.accounting.banking_schemas import (
     BankReconciliationClose,
     BankReconciliationResponse,
     BankTransactionIngest,
+    BankTransactionMatchResponse,
     BankTransactionResponse,
 )
 from app.accounting.errors import (
@@ -106,6 +107,29 @@ async def ingest_bank_transaction(
                 evidence=NormalizedBankEvidence(**values),
             )
         return BankTransactionResponse.model_validate(row)
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/accounts/{bank_account_id}/transactions/{transaction_id}/match",
+    response_model=BankTransactionMatchResponse,
+)
+async def match_bank_transaction(
+    bank_account_id: UUID,
+    transaction_id: UUID,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> BankTransactionMatchResponse:
+    try:
+        async with session.begin():
+            row = await bank_authority_service.match_transaction(
+                session,
+                context=context,
+                bank_account_id=bank_account_id,
+                bank_transaction_id=transaction_id,
+            )
+        return BankTransactionMatchResponse.model_validate(row)
     except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
         raise translate(error) from error
 

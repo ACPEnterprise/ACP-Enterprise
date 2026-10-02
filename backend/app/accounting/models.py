@@ -275,6 +275,8 @@ class BankTransaction(Base):
     bank_account_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     source_system: Mapped[str] = mapped_column(String(40), nullable=False)
     external_transaction_id: Mapped[str] = mapped_column(String(240), nullable=False)
+    related_identity: Mapped[str | None] = mapped_column(String(240))
+    group_key: Mapped[str | None] = mapped_column(String(240))
     source_version: Mapped[str] = mapped_column(String(80), nullable=False)
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     acquired_at: Mapped[datetime] = mapped_column(
