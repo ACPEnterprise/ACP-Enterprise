@@ -71,6 +71,7 @@ class OnboardingCommand:
     login_email: str | None = field(default=None, repr=False)
     existing_user_id: UUID | None = None
     existing_employee_id: UUID | None = None
+    phone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -373,6 +374,7 @@ class IdentityOnboardingService:
             "existing_employee_id": str(command.existing_employee_id)
             if command.existing_employee_id
             else None,
+            "phone": command.phone,
         }
         request_digest = _digest(facts)
         now = datetime.now(timezone.utc)
@@ -518,6 +520,7 @@ class IdentityOnboardingService:
                         first_name=command.first_name.strip(),
                         last_name=command.last_name.strip(),
                         display_name=command.display_name.strip(),
+                        phone=command.phone,
                         status="invited",
                     )
                     session.add(user)
@@ -559,6 +562,7 @@ class IdentityOnboardingService:
                 else:
                     employee = source_employee
                     employee.membership_id = membership.id
+                    employee.phone = command.phone
                     employee.status = "active"
                     employee.updated_by_user_id = context.user.id
                 await session.flush()

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.onboarding.schemas import OnboardingView
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission, WorkforcePermission
@@ -48,6 +49,11 @@ from app.workforce.schemas import (
     RealRosterOnboardingPreview,
     RealRosterOnboardingRequest,
     RealRosterReadiness,
+    SimpleEmployeeMatchCandidate,
+    SimpleEmployeeMatchRequest,
+    SimpleEmployeeMatchResponse,
+    SimpleEmployeeOnboardingRequest,
+    SimpleEmployeeOnboardingResponse,
     SourceCertificationDecisionRequest,
     SourceCertificationLedger,
     WorkforceDirectory,
@@ -58,6 +64,11 @@ from app.workforce.schemas import (
     WorkforceProfileResponse,
 )
 from app.workforce.service import workforce_operations_service
+from app.workforce.simple_onboarding import (
+    AccessProfile,
+    SimpleOnboardingConflict,
+    simple_employee_onboarding_service,
+)
 from app.workforce.source_certification import (
     SourceCertificationConflict,
     source_certification_service,
@@ -91,6 +102,10 @@ CompanyAdministrationContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(AdministrationPermission.COMPANY_ADMINISTER)),
 ]
+OnboardingManageContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AdministrationPermission.IDENTITY_ONBOARDING_MANAGE)),
+]
 
 
 def _require_employee_administration(context: AuthorizationContext) -> None:
@@ -104,7 +119,7 @@ def _require_employee_administration(context: AuthorizationContext) -> None:
         )
 
 
-def _workforce_conflict(error: ValueError) -> HTTPException:
+def _workforce_conflict(error: Exception) -> HTTPException:
     failure = SafeFailure(
         FailureCode.RESOURCE_STATE_CONFLICT,
         "Workforce evidence conflicts with current authority.",
@@ -112,6 +127,24 @@ def _workforce_conflict(error: ValueError) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+
+
+@router.post("/administration/employee-onboarding/match", response_model=SimpleEmployeeMatchResponse)
+async def match_employee_for_onboarding(data: SimpleEmployeeMatchRequest, context: OnboardingManageContext, session: Session) -> SimpleEmployeeMatchResponse:
+    try:
+        result = await simple_employee_onboarding_service.match(session, context=context, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone)
+    except (SimpleOnboardingConflict, OnboardingConflictError) as error:
+        raise _workforce_conflict(error) from error
+    return SimpleEmployeeMatchResponse(outcome=result.outcome.value, candidates=tuple(SimpleEmployeeMatchCandidate(employee_id=item.employee_id, source_system=item.source_system, source_employee_id=item.source_employee_id) for item in result.candidates))
+
+
+@router.post("/administration/employee-onboarding", response_model=SimpleEmployeeOnboardingResponse, status_code=status.HTTP_201_CREATED)
+async def onboard_employee(data: SimpleEmployeeOnboardingRequest, context: OnboardingManageContext, session: Session) -> SimpleEmployeeOnboardingResponse:
+    try:
+        record = await simple_employee_onboarding_service.onboard(session, context=context, request_key=data.request_key, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone, access_profile=AccessProfile(data.access_profile))
+    except SimpleOnboardingConflict as error:
+        raise _workforce_conflict(error) from error
+    return SimpleEmployeeOnboardingResponse(onboarding_request_id=record.id, employee_id=record.employee_id, membership_id=record.membership_id, branch_id=record.branch_id, status=record.status, invitation_eligible=record.status == "invited")
 
 
 def _functional_access_response(
