@@ -10,7 +10,13 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select, text, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import Settings, settings
+from app.customers.models import Customer, ServiceLocation  # noqa: F401
+from app.jobs.models import Job, JobAppointmentLink  # noqa: F401
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
 from app.platform.auth.errors import PasswordPolicyError
@@ -48,10 +54,13 @@ from app.platform.permissions.models import (
     RolePermission,
 )
 from app.platform.users.models import User, UserCredential
+from app.scheduling.models import (
+    BranchSchedulingCalendar,
+    BranchSchedulingWeeklyInterval,
+)
 from app.timekeeping.repository import timekeeping_repository
-from sqlalchemy import func, select, text, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from app.workforce.query import WorkforceEligibilityQuery
+from app.workforce.query_service import WorkforceEligibilityService
 
 
 class Context:
@@ -257,6 +266,156 @@ async def test_onboarding_plan_detects_new_and_duplicate_identity_without_mutati
         assert not duplicate.safe_to_apply
         assert duplicate.blockers == ("employee_identity_already_exists",)
         assert created.employee_id is not None
+
+
+@pytest.mark.asyncio
+async def test_existing_employee_onboarding_reuses_identity_and_is_dispatch_eligible(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    existing_user = User(
+        normalized_email=f"linked-tech-{uuid4()}@example.test",
+        first_name="Linked",
+        last_name="Technician",
+        display_name="Linked Technician",
+        status="active",
+        email_verified_at=datetime.now(timezone.utc),
+    )
+    technician = Role(
+        company_id=context.company.id,
+        code="TECHNICIAN",
+        name="Technician",
+        status="active",
+        is_system=True,
+    )
+    mobile = Role(
+        company_id=context.company.id,
+        code="ACP_EMPLOYEE_MOBILE",
+        name="ACP Employee Mobile",
+        status="active",
+        is_system=True,
+    )
+    local_start = datetime.now(timezone.utc).astimezone().replace(
+        hour=10, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    local_end = local_start + timedelta(hours=2)
+    async with factory() as session, session.begin():
+        session.add_all([existing_user, technician, mobile])
+        await session.flush()
+        membership = Membership(
+            user_id=existing_user.id,
+            company_id=context.company.id,
+            status="active",
+            default_branch_id=None,
+            has_all_branch_access=False,
+            accepted_at=datetime.now(timezone.utc),
+        )
+        session.add(membership)
+        session.add(
+            UserCredential(
+                user_id=existing_user.id,
+                password_hash="qualification-password-hash",
+                password_changed_at=datetime.now(timezone.utc),
+            )
+        )
+        employee = Employee(
+            company_id=context.company.id,
+            home_branch_id=context.active_branch.id,
+            employee_number=f"SOURCE-{uuid4().hex[:8].upper()}",
+            first_name="Linked",
+            last_name="Technician",
+            display_name="Linked Technician",
+            employee_type="employee",
+            status="inactive",
+            created_by_user_id=context.user.id,
+            updated_by_user_id=context.user.id,
+        )
+        session.add(employee)
+        calendar = BranchSchedulingCalendar(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id,
+            booking_horizon_days=365,
+            minimum_notice_minutes=0,
+            slot_interval_minutes=15,
+            default_capacity_units=2,
+        )
+        session.add(calendar)
+        await session.flush()
+        session.add(
+            BranchSchedulingWeeklyInterval(
+                calendar_id=calendar.id,
+                day_of_week=local_start.weekday(),
+                start_minute=0,
+                end_minute=1440,
+                capacity_units=2,
+            )
+        )
+        employee_id = employee.id
+        membership_id = membership.id
+
+    command = OnboardingCommand(
+        request_key=f"linked-tech-{uuid4()}",
+        branch_id=context.active_branch.id,
+        first_name="Linked",
+        last_name="Technician",
+        display_name="Linked Technician",
+        employee_type="employee",
+        employee_number_prefix="EMP-",
+        employee_number_width=4,
+        role_ids=(technician.id, mobile.id),
+        existing_user_id=existing_user.id,
+        existing_employee_id=employee_id,
+    )
+    async with factory() as session:
+        record = await service.initiate(session, context=context, command=command)
+        assert record.employee_id == employee_id
+        assert record.membership_id == membership_id
+
+    async with factory() as session:
+        replay = await service.initiate(session, context=context, command=command)
+        assert replay.id == record.id
+        assert replay.employee_id == employee_id
+
+    async with factory() as session:
+        employees = tuple(
+            await session.scalars(
+                select(Employee).where(Employee.company_id == context.company.id)
+            )
+        )
+        linked = next(item for item in employees if item.id == employee_id)
+        assert (
+            len(
+                [item for item in employees if item.display_name == linked.display_name]
+            )
+            == 1
+        )
+        assert linked.status == "active"
+        assert linked.membership_id == membership_id
+        membership = await session.get(Membership, membership_id)
+        assert membership is not None
+        assert membership.default_branch_id == context.active_branch.id
+        projection_context = SimpleNamespace(
+            company=SimpleNamespace(id=context.company.id),
+            authorized_branch_ids=frozenset({context.active_branch.id}),
+            can_access_branch=lambda branch_id: branch_id == context.active_branch.id,
+        )
+        candidates = await WorkforceEligibilityService().eligible_technicians(
+            session,
+            context=projection_context,  # type: ignore[arg-type]
+            query=WorkforceEligibilityQuery(
+                company_id=context.company.id,
+                authorized_branch_ids=frozenset({context.active_branch.id}),
+                branch_id=context.active_branch.id,
+                window_start_at=local_start.astimezone(timezone.utc),
+                window_end_at=local_end.astimezone(timezone.utc),
+            ),
+        )
+    candidate = next(item for item in candidates if item.employee_id == employee_id)
+    assert candidate.eligible
+    assert candidate.decision == "eligible"
+    assert candidate.availability_confidence == "branch_schedule"
 
 
 @pytest.mark.asyncio
