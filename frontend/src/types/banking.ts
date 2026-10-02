@@ -1,9 +1,12 @@
 export interface BankAccount {
   id: string; institution_name: string; account_name: string; account_type: string;
   masked_identity: string; currency: string; status: string; source_system: string;
-  source_as_of: string; opening_balance: string | null; opening_balance_date: string | null;
+  source_version: string; source_digest: string; source_as_of: string;
+  opening_balance: string | null; opening_balance_date: string | null;
 }
-export interface Reconciliation { id: string; statement_identity: string; period_start: string; period_end: string; ending_balance: string; difference: string; status: string; preparer_user_id: string; reviewer_user_id: string | null; closed_at: string | null; evidence_digest: string; }
+export interface ReconciliationActor { display_name: string; occurred_at: string; }
+export interface Reconciliation { id: string; statement_identity: string; period_start: string; period_end: string; ending_balance: string; book_balance: string; cleared_total: string; outstanding_total: string; difference: string; status: string; cleared_transaction_ids: string[]; outstanding_items: Record<string, unknown>[]; source_evidence: Record<string, unknown>; preparer_user_id: string; reviewer_user_id: string | null; prepared_at: string; submitted_at: string | null; closed_at: string | null; evidence_digest: string; version: number; prepared_by: ReconciliationActor; reviewed_by: ReconciliationActor | null; }
+export interface ReconciliationPrepare { statement_identity: string; period_start: string; period_end: string; ending_balance: string; book_balance: string; cleared_total: string; outstanding_total: string; cleared_transaction_ids: string[]; outstanding_items: Record<string, unknown>[]; source_evidence: Record<string, unknown>; }
 export interface BankSummary { account: BankAccount; imported_count: number; matched_count: number; unmatched_count: number; review_required_count: number; transfer_candidate_count: number; active_reconciliation_state: string; current_difference: string | null; last_reconciled_through: string | null; latest_closed_reconciliation: Reconciliation | null; }
 export interface BankTransaction { id: string; bank_account_id: string; external_transaction_id: string; posted_date: string; effective_date: string | null; amount: string; currency: string; direction: string; kind: string; description: string; memo: string | null; state: string; source_as_of: string; }
 export interface ImportTransaction { source_system: string; external_transaction_id: string; related_identity?: string | null; group_key?: string | null; source_version: string; source_digest: string; acquired_at: string; source_as_of: string; posted_date: string; effective_date?: string | null; amount: string; currency: string; direction: string; kind: string; description: string; memo?: string | null; state?: string; }
