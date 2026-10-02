@@ -245,6 +245,7 @@ class IdentityOnboardingService:
                 "MOBILE": "PENDING_ACTIVATION",
             },
             blockers=tuple(blockers),
+            existing_user_id=user.id if user is not None and employee is None else None,
         )
 
     def _delivery_cipher(self) -> tuple[str, AESGCM]:

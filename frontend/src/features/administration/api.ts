@@ -86,7 +86,8 @@ export interface IdentityOnboardingInitiateRequest {
   employee_number_width: number;
   role_ids: string[];
   additional_permission_ids: string[];
-  login_email: string;
+  login_email?: string;
+  existing_user_id?: string;
 }
 
 export interface IdentityOnboardingPlan {
@@ -103,6 +104,7 @@ export interface IdentityOnboardingPlan {
   additional_permission_codes: string[];
   readiness_stages: Record<string, string>;
   blockers: string[];
+  existing_user_id?: string | null;
 }
 
 export interface IdentityOnboardingDeliveryView {
