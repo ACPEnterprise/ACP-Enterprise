@@ -354,3 +354,11 @@ class WorkerIdentityPermission:
     MANAGE = "COMPANY_WORKER_IDENTITY_MANAGE"
 
     ALL = frozenset({MANAGE})
+
+
+class ReleasePrincipalPermission:
+    """Platform authority for Release-managed acceptance principals only."""
+
+    MANAGE = "PLATFORM_ACCEPTANCE_PRINCIPAL_MANAGE"
+
+    ALL = frozenset({MANAGE})

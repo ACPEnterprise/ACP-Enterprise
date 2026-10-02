@@ -31,6 +31,7 @@ from app.platform.permissions.codes import (
     PipelinePermission,
     PriceBookPermission,
     PurchasingPermission,
+    ReleasePrincipalPermission,
     SchedulingPermission,
     ServiceAgreementPermission,
     WorkerControlPermission,
@@ -512,6 +513,17 @@ WORKER_IDENTITY_DEFINITIONS = tuple(
     for code in sorted(WorkerIdentityPermission.ALL)
 )
 
+RELEASE_PRINCIPAL_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Acceptance Principal Management",
+        resource="acceptance_service_principal",
+        action="manage",
+        scope=PermissionScope.PLATFORM,
+    )
+    for code in sorted(ReleasePrincipalPermission.ALL)
+)
+
 permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + LAUNCH_PLATFORM_DEFINITIONS
@@ -547,4 +559,5 @@ permission_catalog = PermissionCatalog(
     + ENGINEERING_REPOSITORY_OPERATION_DEFINITIONS
     + WORKER_CONTROL_DEFINITIONS
     + WORKER_IDENTITY_DEFINITIONS
+    + RELEASE_PRINCIPAL_DEFINITIONS
 )
