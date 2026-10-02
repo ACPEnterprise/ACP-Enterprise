@@ -97,7 +97,7 @@ class BankTransactionMatchResponse(BaseModel):
     evidence_digest: str
 
 
-class BankReconciliationClose(BaseModel):
+class BankReconciliationPrepare(BaseModel):
     statement_identity: str = Field(min_length=1, max_length=240)
     period_start: date
     period_end: date
@@ -108,7 +108,15 @@ class BankReconciliationClose(BaseModel):
     cleared_transaction_ids: tuple[UUID, ...]
     outstanding_items: list[dict[str, object]] = Field(default_factory=list)
     source_evidence: dict[str, object]
-    preparer_user_id: UUID
+
+
+class BankReconciliationTransition(BaseModel):
+    expected_version: int = Field(ge=1)
+
+
+class ReconciliationActor(BaseModel):
+    display_name: str
+    occurred_at: datetime
 
 
 class BankReconciliationResponse(BaseModel):
@@ -130,8 +138,14 @@ class BankReconciliationResponse(BaseModel):
     source_evidence: dict[str, object]
     evidence_digest: str
     preparer_user_id: UUID
+    preparer_membership_id: UUID | None
     reviewer_user_id: UUID | None
+    prepared_at: datetime
+    submitted_at: datetime | None
     closed_at: datetime | None
+    version: int
+    prepared_by: ReconciliationActor
+    reviewed_by: ReconciliationActor | None
 
 
 class BankAccountSummary(BaseModel):

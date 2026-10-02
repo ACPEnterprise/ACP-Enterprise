@@ -48,6 +48,7 @@ from app.accounting.models import (
     JournalLine,
 )
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.users.models import User
 
 
 def _digest(value: object) -> str:
@@ -61,6 +62,33 @@ def _signed(direction: str, amount: Decimal) -> Decimal:
 
 
 class BankingOperatorService:
+    async def reconciliation_response(
+        self, session: AsyncSession, row: BankReconciliation
+    ) -> BankReconciliationResponse:
+        preparer = await session.get(User, row.preparer_user_id)
+        reviewer = (
+            await session.get(User, row.reviewer_user_id)
+            if row.reviewer_user_id is not None
+            else None
+        )
+        values = {
+            column.name: getattr(row, column.name)
+            for column in BankReconciliation.__table__.columns
+        }
+        values["prepared_by"] = {
+            "display_name": preparer.display_name if preparer else "Unavailable user",
+            "occurred_at": row.submitted_at or row.prepared_at,
+        }
+        values["reviewed_by"] = (
+            {
+                "display_name": reviewer.display_name,
+                "occurred_at": row.closed_at,
+            }
+            if reviewer is not None and row.closed_at is not None
+            else None
+        )
+        return BankReconciliationResponse.model_validate(values)
+
     async def _account(
         self, session: AsyncSession, company_id: UUID, account_id: UUID
     ) -> BankAccount:
@@ -126,6 +154,16 @@ class BankingOperatorService:
                 .order_by(BankReconciliation.period_end.desc())
                 .limit(1)
             )
+            active = await session.scalar(
+                select(BankReconciliation)
+                .where(
+                    BankReconciliation.company_id == company_id,
+                    BankReconciliation.bank_account_id == account.id,
+                    BankReconciliation.status != "closed",
+                )
+                .order_by(BankReconciliation.prepared_at.desc())
+                .limit(1)
+            )
             result.append(
                 BankAccountSummary(
                     account=BankAccountResponse.model_validate(account),
@@ -138,11 +176,11 @@ class BankingOperatorService:
                     review_required_count=counts["review_required"]
                     + counts["ambiguous"],
                     transfer_candidate_count=counts["transfer_candidate"],
-                    active_reconciliation_state="none",
-                    current_difference=None,
+                    active_reconciliation_state=active.status if active else "none",
+                    current_difference=active.difference if active else None,
                     last_reconciled_through=latest.period_end if latest else None,
                     latest_closed_reconciliation=(
-                        BankReconciliationResponse.model_validate(latest)
+                        await self.reconciliation_response(session, latest)
                         if latest
                         else None
                     ),
@@ -183,9 +221,7 @@ class BankingOperatorService:
             disposition, reason = "new", "New source identity."
             try:
                 normalize_evidence(
-                    NormalizedBankEvidence(
-                        **row.model_dump(exclude={"source_system"})
-                    )
+                    NormalizedBankEvidence(**row.model_dump(exclude={"source_system"}))
                 )
             except AccountingValidation as error:
                 disposition, reason = "invalid", str(error)
@@ -195,7 +231,10 @@ class BankingOperatorService:
                 if duplicates[identity] > 1:
                     disposition, reason = "duplicate", "Repeated in this batch."
                 elif prior and prior.source_digest == row.source_digest:
-                    disposition, reason = "replay", "Identical evidence is already stored."
+                    disposition, reason = (
+                        "replay",
+                        "Identical evidence is already stored.",
+                    )
                 elif prior:
                     disposition, reason = "conflict", "Source identity digest changed."
             dispositions.append(
@@ -289,9 +328,7 @@ class BankingOperatorService:
             .outerjoin(
                 BankTransactionMatch,
                 (BankTransactionMatch.company_id == BankTransaction.company_id)
-                & (
-                    BankTransactionMatch.bank_transaction_id == BankTransaction.id
-                ),
+                & (BankTransactionMatch.bank_transaction_id == BankTransaction.id),
             )
             .where(BankTransaction.company_id == company_id)
         )
@@ -305,14 +342,22 @@ class BankingOperatorService:
                 match_state=(
                     match.state
                     if match
-                    else ("review_required" if transaction.state == "pending" else "unmatched")
+                    else (
+                        "review_required"
+                        if transaction.state == "pending"
+                        else "unmatched"
+                    )
                 ),
                 target_type=match.target_type if match else None,
                 target_identity=match.target_identity if match else None,
                 reason_code=(
                     match.reason_code
                     if match
-                    else ("PENDING_SOURCE" if transaction.state == "pending" else "NO_DECISION")
+                    else (
+                        "PENDING_SOURCE"
+                        if transaction.state == "pending"
+                        else "NO_DECISION"
+                    )
                 ),
                 deterministic=match.deterministic if match else False,
             )
@@ -340,9 +385,7 @@ class BankingOperatorService:
             .limit(1)
         )
         beginning = (
-            prior.ending_balance
-            if prior
-            else (account.opening_balance or Decimal(0))
+            prior.ending_balance if prior else (account.opening_balance or Decimal(0))
         )
         selected = tuple(
             (
@@ -431,7 +474,23 @@ class BankingOperatorService:
             .order_by(BankReconciliation.period_end.desc())
         )
         return tuple(
-            BankReconciliationResponse.model_validate(row) for row in rows.all()
+            [await self.reconciliation_response(session, row) for row in rows.all()]
+        )
+
+    async def reconciliations(
+        self, session: AsyncSession, *, company_id: UUID, account_id: UUID
+    ) -> tuple[BankReconciliationResponse, ...]:
+        await self._account(session, company_id, account_id)
+        rows = await session.scalars(
+            select(BankReconciliation)
+            .where(
+                BankReconciliation.company_id == company_id,
+                BankReconciliation.bank_account_id == account_id,
+            )
+            .order_by(BankReconciliation.prepared_at.desc())
+        )
+        return tuple(
+            [await self.reconciliation_response(session, row) for row in rows.all()]
         )
 
     async def drilldown(
@@ -455,7 +514,9 @@ class BankingOperatorService:
         if row is None:
             raise AccountingNotFound("Bank transaction was not found")
         transaction, match, account = row
-        review = (await self.review_queue(session, company_id=company_id, account_id=account.id))
+        review = await self.review_queue(
+            session, company_id=company_id, account_id=account.id
+        )
         item = next(value for value in review if value.transaction.id == transaction.id)
         return BankDrilldownResponse(
             transaction=BankTransactionResponse.model_validate(transaction),
@@ -491,21 +552,25 @@ class BankingOperatorService:
             ).all()
         )
         ledger_ids = tuple(row.ledger_account_id for row in accounts)
-        rows = tuple(
-            (
-                await session.execute(
-                    select(Journal, JournalLine)
-                    .join(JournalLine, JournalLine.journal_id == Journal.id)
-                    .where(
-                        Journal.company_id == company_id,
-                        Journal.status == "posted",
-                        Journal.effective_date.between(period_start, period_end),
-                        JournalLine.company_id == company_id,
-                        JournalLine.account_id.in_(ledger_ids),
+        rows = (
+            tuple(
+                (
+                    await session.execute(
+                        select(Journal, JournalLine)
+                        .join(JournalLine, JournalLine.journal_id == Journal.id)
+                        .where(
+                            Journal.company_id == company_id,
+                            Journal.status == "posted",
+                            Journal.effective_date.between(period_start, period_end),
+                            JournalLine.company_id == company_id,
+                            JournalLine.account_id.in_(ledger_ids),
+                        )
                     )
-                )
-            ).all()
-        ) if ledger_ids else ()
+                ).all()
+            )
+            if ledger_ids
+            else ()
+        )
         sections: dict[str, list[tuple[UUID, Decimal]]] = {
             "operating": [],
             "investing": [],
@@ -561,25 +626,27 @@ class BankingOperatorService:
         op = build_section("operating")
         inv = build_section("investing")
         fin = build_section("financing")
-        unclassified = sum(
-            (value for _, value in sections["unclassified"]), Decimal(0)
-        )
+        unclassified = sum((value for _, value in sections["unclassified"]), Decimal(0))
         net = op.amount + inv.amount + fin.amount + unclassified
         ending = beginning + net
-        reconciliations = tuple(
-            (
-                await session.scalars(
-                    select(BankReconciliation).where(
-                        BankReconciliation.company_id == company_id,
-                        BankReconciliation.bank_account_id.in_(
-                            tuple(a.id for a in accounts)
-                        ),
-                        BankReconciliation.period_end == period_end,
-                        BankReconciliation.status == "closed",
+        reconciliations = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(BankReconciliation).where(
+                            BankReconciliation.company_id == company_id,
+                            BankReconciliation.bank_account_id.in_(
+                                tuple(a.id for a in accounts)
+                            ),
+                            BankReconciliation.period_end == period_end,
+                            BankReconciliation.status == "closed",
+                        )
                     )
-                )
-            ).all()
-        ) if accounts else ()
+                ).all()
+            )
+            if accounts
+            else ()
+        )
         canonical = (
             sum((row.ending_balance for row in reconciliations), Decimal(0))
             if len(reconciliations) == len(accounts) and accounts
@@ -594,14 +661,28 @@ class BankingOperatorService:
             else "PARTIAL"
         )
         return CashFlowResponse(
-            period_start=period_start, period_end=period_end, basis=basis,
-            cutoff=period_end, completeness=completeness, beginning_cash=beginning,
-            operating_activities=op, investing_activities=inv,
-            financing_activities=fin, unclassified_amount=unclassified,
+            period_start=period_start,
+            period_end=period_end,
+            basis=basis,
+            cutoff=period_end,
+            completeness=completeness,
+            beginning_cash=beginning,
+            operating_activities=op,
+            investing_activities=inv,
+            financing_activities=fin,
+            unclassified_amount=unclassified,
             unclassified_journal_ids=tuple(i for i, _ in sections["unclassified"]),
-            net_change=net, ending_cash=ending, canonical_bank_cash=canonical,
+            net_change=net,
+            ending_cash=ending,
+            canonical_bank_cash=canonical,
             difference=difference,
-            tie_status=("TIED" if difference == 0 else "REVIEW_REQUIRED" if difference is not None else "UNAVAILABLE"),
+            tie_status=(
+                "TIED"
+                if difference == 0
+                else "REVIEW_REQUIRED"
+                if difference is not None
+                else "UNAVAILABLE"
+            ),
         )
 
 
