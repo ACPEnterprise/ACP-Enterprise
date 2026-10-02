@@ -6,7 +6,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BankingRoute } from "./BankingRoute";
 import * as banking from "../api/banking";
 
-vi.mock("../auth", () => ({ useHasPermission: () => true }));
+let currentUserId = "preparer-user";
+let deniedPermission = "";
+vi.mock("../auth", () => ({
+  useHasPermission: (permission: string) => permission !== deniedPermission,
+  useAuth: () => ({ user: { id: currentUserId } }),
+}));
 vi.mock("../api/banking", () => ({
   getBankingSummary: vi.fn(),
   getBankTransactions: vi.fn(),
@@ -17,6 +22,10 @@ vi.mock("../api/banking", () => ({
   getBankDrilldown: vi.fn(),
   previewReconciliation: vi.fn(),
   getReconciliationHistory: vi.fn(),
+  getReconciliations: vi.fn(),
+  prepareReconciliation: vi.fn(),
+  submitReconciliation: vi.fn(),
+  closeReconciliation: vi.fn(),
   getCashFlow: vi.fn(),
 }));
 
@@ -36,6 +45,47 @@ const transaction = {
   source_as_of: "2026-09-15T12:00:00Z",
 };
 
+const reconciliationRecord = (status: string, version: number) => ({
+  id: "reconciliation-1",
+  statement_identity: "September statement",
+  period_start: "2026-09-01",
+  period_end: "2026-09-30",
+  ending_balance: "1125.00",
+  book_balance: "1125.00",
+  cleared_total: "125.00",
+  outstanding_total: "0.00",
+  difference: "0.00",
+  status,
+  cleared_transaction_ids: ["txn-1"],
+  outstanding_items: [],
+  source_evidence: { source_digest: "a".repeat(64) },
+  preparer_user_id: "preparer-user",
+  reviewer_user_id: status === "closed" ? "reviewer-user" : null,
+  prepared_at: "2026-10-02T12:00:00Z",
+  submitted_at: version >= 2 ? "2026-10-02T12:05:00Z" : null,
+  closed_at: status === "closed" ? "2026-10-02T12:10:00Z" : null,
+  evidence_digest: "c".repeat(64),
+  version,
+  prepared_by: { display_name: "Pat Preparer", occurred_at: "2026-10-02T12:00:00Z" },
+  reviewed_by: status === "closed" ? { display_name: "Riley Reviewer", occurred_at: "2026-10-02T12:10:00Z" } : null,
+});
+
+const zeroPreview = {
+  bank_account_id: "bank-1",
+  statement_identity: "September statement",
+  period_start: "2026-09-01",
+  period_end: "2026-09-30",
+  beginning_balance: "1000.00",
+  ending_balance: "1125.00",
+  book_balance: "1125.00",
+  cleared_total: "125.00",
+  outstanding_total: "0.00",
+  difference: "0.00",
+  unresolved_exceptions: 0,
+  can_close: true,
+  blocker_reasons: [],
+};
+
 function renderRoute() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -49,6 +99,8 @@ function renderRoute() {
 
 describe("BankingRoute", () => {
   beforeEach(() => {
+    currentUserId = "preparer-user";
+    deniedPermission = "";
     vi.clearAllMocks();
     vi.mocked(banking.getBankingSummary).mockResolvedValue([
       {
@@ -61,6 +113,8 @@ describe("BankingRoute", () => {
           currency: "USD",
           status: "active",
           source_system: "statement_import",
+          source_version: "1",
+          source_digest: "b".repeat(64),
           source_as_of: "2026-09-30T12:00:00Z",
           opening_balance: "1000.00",
           opening_balance_date: "2026-09-01",
@@ -89,6 +143,7 @@ describe("BankingRoute", () => {
       },
     ]);
     vi.mocked(banking.getReconciliationHistory).mockResolvedValue([]);
+    vi.mocked(banking.getReconciliations).mockResolvedValue([]);
     vi.mocked(banking.getCashFlow).mockResolvedValue({
       period_start: "2026-09-01",
       period_end: "2026-09-30",
@@ -124,7 +179,7 @@ describe("BankingRoute", () => {
     expect(screen.queryByRole("button", { name: /ignore|reject/i })).not.toBeInTheDocument();
   });
 
-  it("keeps close disabled even at zero until the backend supplies a preparer handoff", async () => {
+  it("keeps prepare unavailable for a non-zero difference", async () => {
     vi.mocked(banking.previewReconciliation).mockResolvedValue({
       bank_account_id: "bank-1",
       statement_identity: "September statement",
@@ -132,13 +187,13 @@ describe("BankingRoute", () => {
       period_end: "2026-09-30",
       beginning_balance: "1000.00",
       ending_balance: "1125.00",
-      book_balance: "1125.00",
+      book_balance: "1100.00",
       cleared_total: "125.00",
       outstanding_total: "0.00",
-      difference: "0.00",
+      difference: "25.00",
       unresolved_exceptions: 0,
-      can_close: true,
-      blocker_reasons: [],
+      can_close: false,
+      blocker_reasons: ["NON_ZERO_DIFFERENCE"],
     });
     renderRoute();
     fireEvent.click(await screen.findByRole("button", { name: "Reconcile" }));
@@ -146,9 +201,8 @@ describe("BankingRoute", () => {
     fireEvent.change(screen.getByLabelText("Statement ending balance"), { target: { value: "1125.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Calculate difference" }));
 
-    expect((await screen.findAllByText("$0.00")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Close reconciliation" })).toBeDisabled();
-    expect(screen.getByText(/distinct preparer submits/i)).toBeVisible();
+    expect(await screen.findByText("Non zero difference")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Prepare reconciliation" })).toBeDisabled();
   });
 
   it("previews before confirming and preserves canonical item dispositions", async () => {
@@ -209,6 +263,110 @@ describe("BankingRoute", () => {
       statement,
       "a".repeat(64),
     );
+  });
+
+  it("prepares and submits without actor IDs, then prevents preparer self-close", async () => {
+    vi.mocked(banking.previewBankImport).mockResolvedValue({
+      bank_account_id: "bank-1", statement_identity: "September statement",
+      period_start: "2026-09-01", period_end: "2026-09-30",
+      opening_balance: "1000.00", ending_balance: "1125.00",
+      transaction_count: 1, new_count: 1, replay_count: 0, duplicate_count: 0,
+      conflict_count: 0, invalid_count: 0, preview_digest: "a".repeat(64),
+      dispositions: [], transactions: [],
+    });
+    vi.mocked(banking.previewReconciliation).mockResolvedValue(zeroPreview);
+    vi.mocked(banking.prepareReconciliation).mockResolvedValue(reconciliationRecord("ready_to_submit", 1));
+    vi.mocked(banking.submitReconciliation).mockResolvedValue(reconciliationRecord("submitted_for_review", 2));
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Import" }));
+    const statement = { statement_identity: "September statement", period_start: "2026-09-01", period_end: "2026-09-30", opening_balance: "1000.00", ending_balance: "1125.00", transactions: [] };
+    const file = new File([JSON.stringify(statement)], "statement.json", { type: "application/json" });
+    Object.defineProperty(file, "text", { value: async () => JSON.stringify(statement) });
+    fireEvent.change(screen.getByLabelText("Statement file"), { target: { files: [file] } });
+    await screen.findByText(/September statement/);
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+    await screen.findByText("Preview");
+    fireEvent.click(screen.getByRole("button", { name: "Reconcile" }));
+    fireEvent.change(screen.getByLabelText("Statement reference"), { target: { value: "September statement" } });
+    fireEvent.change(screen.getByLabelText("Statement ending balance"), { target: { value: "1125.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calculate difference" }));
+    await screen.findAllByText("$0.00");
+    fireEvent.click(screen.getByRole("button", { name: "Prepare reconciliation" }));
+
+    expect(await screen.findByText("Ready to submit")).toBeVisible();
+    expect(screen.getByText("Pat Preparer")).toBeVisible();
+    expect(banking.prepareReconciliation).toHaveBeenCalledWith(
+      "bank-1",
+      expect.not.objectContaining({ preparer_user_id: expect.anything(), reviewer_user_id: expect.anything() }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Submit for review" }));
+    expect(await screen.findByText("Submitted for review")).toBeVisible();
+    expect(screen.getByText(/Waiting for review by another authorized finance user/i)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Close reconciliation" })).not.toBeInTheDocument();
+    expect(banking.submitReconciliation).toHaveBeenCalledWith("bank-1", "reconciliation-1", 1);
+  });
+
+  it("lets a distinct finance reviewer close by version and shows immutable history", async () => {
+    currentUserId = "reviewer-user";
+    const submitted = reconciliationRecord("submitted_for_review", 2);
+    const closed = reconciliationRecord("closed", 3);
+    vi.mocked(banking.getReconciliations).mockResolvedValue([submitted]);
+    vi.mocked(banking.previewReconciliation).mockResolvedValue(zeroPreview);
+    vi.mocked(banking.closeReconciliation).mockResolvedValue(closed);
+    vi.mocked(banking.getReconciliationHistory).mockResolvedValue([closed]);
+    renderRoute();
+    fireEvent.click(await screen.findByRole("button", { name: "Reconcile" }));
+    fireEvent.change(screen.getByLabelText("Statement reference"), { target: { value: "September statement" } });
+    fireEvent.change(screen.getByLabelText("Statement ending balance"), { target: { value: "1125.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calculate difference" }));
+
+    expect(await screen.findByRole("button", { name: "Close reconciliation" })).toBeEnabled();
+    expect(screen.getByText("Pat Preparer")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Close reconciliation" }));
+    expect(await screen.findByText(/closed and read-only/i)).toBeVisible();
+    expect(banking.closeReconciliation).toHaveBeenCalledWith("bank-1", "reconciliation-1", 2);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    expect(await screen.findByText("Riley Reviewer")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /reopen/i })).not.toBeInTheDocument();
+  });
+
+  it("refreshes stale state without silently retrying a financial close", async () => {
+    currentUserId = "reviewer-user";
+    vi.mocked(banking.getReconciliations).mockResolvedValue([
+      reconciliationRecord("submitted_for_review", 2),
+    ]);
+    vi.mocked(banking.previewReconciliation).mockResolvedValue(zeroPreview);
+    vi.mocked(banking.closeReconciliation).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409 },
+    });
+    renderRoute();
+    fireEvent.click(await screen.findByRole("button", { name: "Reconcile" }));
+    fireEvent.change(screen.getByLabelText("Statement reference"), { target: { value: "September statement" } });
+    fireEvent.change(screen.getByLabelText("Statement ending balance"), { target: { value: "1125.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calculate difference" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Close reconciliation" }));
+
+    expect(await screen.findByText(/changed.*latest version/i)).toBeVisible();
+    expect(banking.closeReconciliation).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expose Close without Finance approval", async () => {
+    currentUserId = "reviewer-user";
+    deniedPermission = "COMPANY_ACCOUNTING_FINANCE_APPROVE";
+    vi.mocked(banking.getReconciliations).mockResolvedValue([
+      reconciliationRecord("submitted_for_review", 2),
+    ]);
+    vi.mocked(banking.previewReconciliation).mockResolvedValue(zeroPreview);
+    renderRoute();
+    fireEvent.click(await screen.findByRole("button", { name: "Reconcile" }));
+    fireEvent.change(screen.getByLabelText("Statement reference"), { target: { value: "September statement" } });
+    fireEvent.change(screen.getByLabelText("Statement ending balance"), { target: { value: "1125.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calculate difference" }));
+
+    expect(await screen.findByText(/Finance approval permission is required/i)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Close reconciliation" })).not.toBeInTheDocument();
   });
 
   it("renders formal partial cash flow without turning missing authority into completeness", async () => {
