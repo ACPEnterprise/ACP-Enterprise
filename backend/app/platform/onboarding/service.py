@@ -71,6 +71,7 @@ class OnboardingCommand:
     login_email: str | None = field(default=None, repr=False)
     existing_user_id: UUID | None = None
     existing_employee_id: UUID | None = None
+    phone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -351,6 +352,10 @@ class IdentityOnboardingService:
             "existing_user_id": str(command.existing_user_id)
             if command.existing_user_id
             else None,
+            "existing_employee_id": str(command.existing_employee_id)
+            if command.existing_employee_id
+            else None,
+            "phone": command.phone,
         }
         request_digest = _digest(facts)
         now = datetime.now(timezone.utc)
@@ -388,28 +393,60 @@ class IdentityOnboardingService:
                     raise OnboardingConflictError(
                         "Active Company Branch was not found."
                     )
-                policy = await session.scalar(
-                    select(EmployeeNumberPolicy)
-                    .where(EmployeeNumberPolicy.company_id == context.company.id)
-                    .with_for_update()
-                )
-                if policy is None:
-                    policy = EmployeeNumberPolicy(
-                        company_id=context.company.id,
-                        prefix=command.employee_number_prefix,
-                        width=command.employee_number_width,
-                        next_value=1,
+                employee = None
+                if command.existing_employee_id is not None:
+                    employee = await session.scalar(
+                        select(Employee)
+                        .where(
+                            Employee.id == command.existing_employee_id,
+                            Employee.company_id == context.company.id,
+                            Employee.home_branch_id == branch.id,
+                            Employee.membership_id.is_(None),
+                            Employee.status == "inactive",
+                            Employee.archived_at.is_(None),
+                        )
+                        .with_for_update()
                     )
-                    session.add(policy)
-                    await session.flush()
-                if (
-                    policy.prefix != command.employee_number_prefix
-                    or policy.width != command.employee_number_width
-                ):
-                    raise OnboardingConflictError("Employee-number policy conflicts.")
-                employee_number = f"{policy.prefix}{policy.next_value:0{policy.width}d}"
-                policy.next_value += 1
-                policy.updated_at = now
+                    if employee is None:
+                        raise OnboardingConflictError(
+                            "Eligible source-backed Employee was not found."
+                        )
+                    if (
+                        employee.first_name.casefold()
+                        != command.first_name.strip().casefold()
+                        or employee.last_name.casefold()
+                        != command.last_name.strip().casefold()
+                    ):
+                        raise OnboardingConflictError(
+                            "Source-backed Employee identity conflicts."
+                        )
+                if employee is None:
+                    policy = await session.scalar(
+                        select(EmployeeNumberPolicy)
+                        .where(EmployeeNumberPolicy.company_id == context.company.id)
+                        .with_for_update()
+                    )
+                    if policy is None:
+                        policy = EmployeeNumberPolicy(
+                            company_id=context.company.id,
+                            prefix=command.employee_number_prefix,
+                            width=command.employee_number_width,
+                            next_value=1,
+                        )
+                        session.add(policy)
+                        await session.flush()
+                    if (
+                        policy.prefix != command.employee_number_prefix
+                        or policy.width != command.employee_number_width
+                    ):
+                        raise OnboardingConflictError(
+                            "Employee-number policy conflicts."
+                        )
+                    employee_number = (
+                        f"{policy.prefix}{policy.next_value:0{policy.width}d}"
+                    )
+                    policy.next_value += 1
+                    policy.updated_at = now
                 if command.existing_user_id:
                     user = await session.scalar(
                         select(User)
@@ -488,20 +525,28 @@ class IdentityOnboardingService:
                         )
                     )
                     issue_invitation = True
-                employee = Employee(
-                    company_id=context.company.id,
-                    membership_id=membership.id,
-                    home_branch_id=branch.id,
-                    employee_number=employee_number,
-                    first_name=command.first_name.strip(),
-                    last_name=command.last_name.strip(),
-                    display_name=command.display_name.strip(),
-                    employee_type=command.employee_type,
-                    status="active",
-                    created_by_user_id=context.user.id,
-                    updated_by_user_id=context.user.id,
-                )
-                session.add(employee)
+                if employee is None:
+                    employee = Employee(
+                        company_id=context.company.id,
+                        membership_id=membership.id,
+                        home_branch_id=branch.id,
+                        employee_number=employee_number,
+                        first_name=command.first_name.strip(),
+                        last_name=command.last_name.strip(),
+                        display_name=command.display_name.strip(),
+                        phone=command.phone,
+                        employee_type=command.employee_type,
+                        status="active",
+                        created_by_user_id=context.user.id,
+                        updated_by_user_id=context.user.id,
+                    )
+                    session.add(employee)
+                else:
+                    employee.membership_id = membership.id
+                    employee.display_name = command.display_name.strip()
+                    employee.phone = command.phone
+                    employee.status = "active"
+                    employee.updated_by_user_id = context.user.id
                 await session.flush()
                 for role_id in sorted(set(command.role_ids), key=str):
                     role = await session.scalar(
