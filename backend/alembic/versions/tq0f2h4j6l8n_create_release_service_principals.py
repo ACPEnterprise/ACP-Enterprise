@@ -1,7 +1,7 @@
 """Create Beta Release service principals.
 
 Revision ID: tq0f2h4j6l8n
-Revises: sp9e1g3i5k7m9
+Revises: ti9k1m3o5q7s
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "tq0f2h4j6l8n"
-down_revision: str | None = "sp9e1g3i5k7m9"
+down_revision: str | None = "ti9k1m3o5q7s"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
