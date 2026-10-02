@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.accounting import models as accounting_models  # noqa: F401
 from app.accounts_payable import models as accounts_payable_models  # noqa: F401
 from app.beacon import models as beacon_models  # noqa: F401
 from app.business_economics import models as business_economics_models  # noqa: F401
