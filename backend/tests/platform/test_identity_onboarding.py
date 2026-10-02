@@ -1255,6 +1255,60 @@ async def test_existing_verified_user_is_reused_without_credential_change(
 
 
 @pytest.mark.asyncio
+async def test_source_backed_employee_is_reused_with_phone_and_exact_replay(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    source_employee = Employee(
+        company_id=context.company.id,
+        home_branch_id=context.active_branch.id,
+        employee_number=f"HCP-{uuid4().hex[:8].upper()}",
+        first_name="Alex",
+        last_name="Donahue",
+        display_name="Alex Donahue",
+        employee_type="employee",
+        status="inactive",
+    )
+    async with factory() as setup, setup.begin():
+        setup.add(source_employee)
+    value = OnboardingCommand(
+        request_key=f"source-reuse-{uuid4()}",
+        branch_id=context.active_branch.id,
+        first_name="Alex",
+        last_name="Donahue",
+        display_name="Alex Donahue",
+        employee_type="employee",
+        employee_number_prefix="EMP-",
+        employee_number_width=4,
+        login_email="alexallcountyplumbingandleak@gmail.com",
+        existing_employee_id=source_employee.id,
+        phone="+17275550123",
+    )
+    async with factory() as session:
+        created = await service.initiate(session, context=context, command=value)
+        replay = await service.initiate(session, context=context, command=value)
+        assert replay.id == created.id
+        assert created.employee_id == source_employee.id
+        stored = await session.get(Employee, source_employee.id)
+        assert stored is not None
+        assert stored.membership_id == created.membership_id
+        assert stored.status == "active"
+        assert stored.phone == "+17275550123"
+        assert (
+            await session.scalar(
+                select(func.count(Employee.id)).where(
+                    Employee.company_id == context.company.id,
+                    Employee.first_name == "Alex",
+                    Employee.last_name == "Donahue",
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
 async def test_expired_and_cross_company_scope_fail_closed(
     onboarding_db: tuple[
         async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
