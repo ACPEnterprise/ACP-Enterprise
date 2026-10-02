@@ -1,0 +1,13 @@
+{
+  "schema_version": "qbo-presprint-acceptance-registry/v1",
+  "physical_green_rule": "A control becomes GREEN only after real All County operator/accountant proof is attached.",
+  "acceptance_cases": [
+    {"id":"QB-ACC-01","area":"Source custody","evidence":"real QBO realm/company identity, cutoff, checksums, archive","actor":"accountant","status":"PENDING_EXTERNAL"},
+    {"id":"QB-ACC-02","area":"AR/AP","evidence":"AR/AP subledgers equal GL controls at cutoff","actor":"accountant","status":"PENDING_REAL_DATA"},
+    {"id":"QB-ACC-03","area":"Bank","evidence":"statement reconciliation, differences, reopen, audit","actor":"accountant","status":"PENDING_PROVIDER_AND_REAL_DATA"},
+    {"id":"QB-ACC-04","area":"Reports","evidence":"P&L, Balance Sheet, Cash Flow, TB, GL, aging drilldowns","actor":"Michael/Lianne/accountant","status":"PENDING_REAL_DATA"},
+    {"id":"QB-ACC-05","area":"Opening state","evidence":"balanced opening load and equity/period approval","actor":"accountant","status":"PENDING_HUMAN_GATE"},
+    {"id":"QB-ACC-06","area":"Replay safety","evidence":"same source replay returns same result; digest drift quarantines","actor":"engineering/accountant","status":"SPEC_READY"},
+    {"id":"QB-ACC-07","area":"Cutover","evidence":"freeze, final export, reconcile, owner activation, QBO retirement","actor":"owner + independent Finance","status":"PENDING_ALL_PRIOR_CASES"}
+  ]
+}
