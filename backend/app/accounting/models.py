@@ -362,12 +362,17 @@ class BankReconciliation(Base):
             "period_start <= period_end", name="ck_bank_reconciliation_period"
         ),
         CheckConstraint(
-            "status IN ('draft','review_required','ready_to_close','closed')",
+            "status IN ('draft','ready_to_submit','submitted_for_review','closed')",
             name="ck_bank_reconciliation_status",
         ),
         CheckConstraint(
             "status <> 'closed' OR (difference = 0 AND closed_at IS NOT NULL AND reviewer_user_id IS NOT NULL)",
             name="ck_bank_reconciliation_closed_integrity",
+        ),
+        CheckConstraint("version >= 1", name="ck_bank_reconciliation_version"),
+        CheckConstraint(
+            "status NOT IN ('submitted_for_review','closed') OR submitted_at IS NOT NULL",
+            name="ck_bank_reconciliation_submission_integrity",
         ),
         UniqueConstraint(
             "company_id",
@@ -404,12 +409,17 @@ class BankReconciliation(Base):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    preparer_membership_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("memberships.id", ondelete="RESTRICT")
+    )
     reviewer_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
     )
     prepared_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

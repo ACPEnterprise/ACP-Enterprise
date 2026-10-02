@@ -604,7 +604,7 @@ class BankAuthorityService:
         )
         return record
 
-    async def close_reconciliation(
+    async def prepare_reconciliation(
         self,
         session: AsyncSession,
         *,
@@ -620,12 +620,7 @@ class BankAuthorityService:
         cleared_transaction_ids: tuple[UUID, ...],
         outstanding_items: list[dict[str, object]],
         source_evidence: dict[str, object],
-        preparer_user_id: UUID,
     ) -> BankReconciliation:
-        if preparer_user_id == context.user.id:
-            raise AccountingConflict(
-                "Reconciliation preparer and reviewer must be distinct"
-            )
         statement_source_digest = source_evidence.get("source_digest")
         if (
             not isinstance(statement_source_digest, str)
@@ -651,10 +646,6 @@ class BankAuthorityService:
                 1 for item in outstanding_items if item.get("state") != "explained"
             ),
         )
-        if preview.status != "ready_to_close":
-            raise AccountingConflict(
-                "Bank reconciliation difference must be zero with no unresolved items"
-            )
         transaction_count = await session.scalar(
             select(func.count(BankTransaction.id)).where(
                 BankTransaction.company_id == context.company.id,
@@ -690,7 +681,12 @@ class BankAuthorityService:
         if existing is not None:
             if existing.evidence_digest == reconciliation_digest:
                 return existing
-            raise AccountingConflict("Closed bank reconciliation is immutable")
+            if existing.status in {"submitted_for_review", "closed"}:
+                raise AccountingConflict("Submitted bank reconciliation is immutable")
+            if existing.preparer_user_id != context.user.id:
+                raise AccountingConflict("Another preparer owns this reconciliation")
+            raise AccountingConflict("Create a new preparation from current evidence")
+        now = datetime.now(timezone.utc)
         record = BankReconciliation(
             company_id=context.company.id,
             bank_account_id=bank_account_id,
@@ -702,16 +698,111 @@ class BankAuthorityService:
             cleared_total=cleared_total,
             outstanding_total=outstanding_total,
             difference=preview.difference,
-            status="closed",
+            status=(
+                "ready_to_submit" if preview.status == "ready_to_close" else "draft"
+            ),
             cleared_transaction_ids=[str(value) for value in cleared_transaction_ids],
             outstanding_items=outstanding_items,
             source_evidence=source_evidence,
             evidence_digest=reconciliation_digest,
-            preparer_user_id=preparer_user_id,
-            reviewer_user_id=context.user.id,
-            closed_at=datetime.now(timezone.utc),
+            preparer_user_id=context.user.id,
+            preparer_membership_id=context.membership.id,
+            prepared_at=now,
+            version=1,
         )
         session.add(record)
+        await session.flush()
+        self._audit(
+            session,
+            context,
+            "accounting.bank_reconciliation.prepared",
+            "bank_reconciliation",
+            record.id,
+        )
+        return record
+
+    async def submit_reconciliation(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        bank_account_id: UUID,
+        reconciliation_id: UUID,
+        expected_version: int,
+    ) -> BankReconciliation:
+        record = await session.scalar(
+            select(BankReconciliation)
+            .where(
+                BankReconciliation.company_id == context.company.id,
+                BankReconciliation.bank_account_id == bank_account_id,
+                BankReconciliation.id == reconciliation_id,
+            )
+            .with_for_update()
+        )
+        if record is None:
+            raise AccountingNotFound("Bank reconciliation was not found")
+        if record.preparer_user_id != context.user.id:
+            raise AccountingConflict("Only the authenticated preparer may submit")
+        if record.status == "submitted_for_review":
+            return record
+        if record.status == "closed":
+            raise AccountingConflict("Closed bank reconciliation is immutable")
+        if record.version != expected_version:
+            raise AccountingConflict("Bank reconciliation version is stale")
+        unresolved = sum(
+            1 for item in record.outstanding_items if item.get("state") != "explained"
+        )
+        if record.difference != 0 or unresolved:
+            raise AccountingConflict(
+                "Reconciliation requires zero difference and no blocking exceptions"
+            )
+        record.status = "submitted_for_review"
+        record.submitted_at = datetime.now(timezone.utc)
+        record.version += 1
+        await session.flush()
+        self._audit(
+            session,
+            context,
+            "accounting.bank_reconciliation.submitted",
+            "bank_reconciliation",
+            record.id,
+        )
+        return record
+
+    async def close_reconciliation(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        bank_account_id: UUID,
+        reconciliation_id: UUID,
+        expected_version: int,
+    ) -> BankReconciliation:
+        record = await session.scalar(
+            select(BankReconciliation)
+            .where(
+                BankReconciliation.company_id == context.company.id,
+                BankReconciliation.bank_account_id == bank_account_id,
+                BankReconciliation.id == reconciliation_id,
+            )
+            .with_for_update()
+        )
+        if record is None:
+            raise AccountingNotFound("Bank reconciliation was not found")
+        if record.status == "closed":
+            return record
+        if record.version != expected_version:
+            raise AccountingConflict("Bank reconciliation version is stale")
+        if record.status != "submitted_for_review":
+            raise AccountingConflict("Reconciliation must be submitted for review")
+        if record.preparer_user_id == context.user.id:
+            raise AccountingConflict("Reconciliation preparer cannot self-close")
+        if record.difference != 0:
+            raise AccountingConflict("Bank reconciliation difference must be zero")
+        record.status = "closed"
+        record.reviewer_user_id = context.user.id
+        record.closed_at = datetime.now(timezone.utc)
+        record.version += 1
         await session.flush()
         self._audit(
             session,
