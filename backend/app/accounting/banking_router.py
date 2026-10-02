@@ -1,19 +1,31 @@
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounting.banking import NormalizedBankEvidence, bank_authority_service
+from app.accounting.banking_operator import banking_operator_service
 from app.accounting.banking_schemas import (
     BankAccountCreate,
     BankAccountResponse,
+    BankAccountSummary,
+    BankDrilldownResponse,
+    BankImportConfirmRequest,
+    BankImportConfirmResponse,
+    BankImportPreviewRequest,
+    BankImportPreviewResponse,
+    BankMatchReviewItem,
     BankReconciliationClose,
+    BankReconciliationPreviewRequest,
+    BankReconciliationPreviewResponse,
     BankReconciliationResponse,
     BankTransactionIngest,
     BankTransactionMatchResponse,
     BankTransactionResponse,
+    CashFlowResponse,
 )
 from app.accounting.errors import (
     AccountingConflict,
@@ -36,6 +48,15 @@ ReadContext = Annotated[
 ReconcileContext = Annotated[
     AuthorizationContext, Depends(require_permission(AccountingPermission.RECONCILE))
 ]
+
+
+@router.get("/summary", response_model=tuple[BankAccountSummary, ...])
+async def bank_account_summary(
+    context: ReadContext, session: DatabaseSession
+) -> tuple[BankAccountSummary, ...]:
+    return await banking_operator_service.summaries(
+        session, company_id=context.company.id
+    )
 
 
 @router.get("/accounts", response_model=tuple[BankAccountResponse, ...])
@@ -112,6 +133,49 @@ async def ingest_bank_transaction(
 
 
 @router.post(
+    "/accounts/{bank_account_id}/imports/preview",
+    response_model=BankImportPreviewResponse,
+)
+async def preview_bank_import(
+    bank_account_id: UUID,
+    data: BankImportPreviewRequest,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> BankImportPreviewResponse:
+    try:
+        return await banking_operator_service.preview_import(
+            session,
+            company_id=context.company.id,
+            account_id=bank_account_id,
+            request=data,
+        )
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/accounts/{bank_account_id}/imports/confirm",
+    response_model=BankImportConfirmResponse,
+)
+async def confirm_bank_import(
+    bank_account_id: UUID,
+    data: BankImportConfirmRequest,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> BankImportConfirmResponse:
+    try:
+        async with session.begin():
+            return await banking_operator_service.confirm_import(
+                session,
+                context=context,
+                account_id=bank_account_id,
+                request=data,
+            )
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
     "/accounts/{bank_account_id}/transactions/{transaction_id}/match",
     response_model=BankTransactionMatchResponse,
 )
@@ -131,6 +195,94 @@ async def match_bank_transaction(
             )
         return BankTransactionMatchResponse.model_validate(row)
     except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.get("/match-review", response_model=tuple[BankMatchReviewItem, ...])
+async def bank_match_review_queue(
+    context: ReadContext,
+    session: DatabaseSession,
+    bank_account_id: UUID | None = None,
+) -> tuple[BankMatchReviewItem, ...]:
+    return await banking_operator_service.review_queue(
+        session,
+        company_id=context.company.id,
+        account_id=bank_account_id,
+    )
+
+
+@router.get(
+    "/transactions/{transaction_id}/drilldown",
+    response_model=BankDrilldownResponse,
+)
+async def bank_transaction_drilldown(
+    transaction_id: UUID, context: ReadContext, session: DatabaseSession
+) -> BankDrilldownResponse:
+    try:
+        return await banking_operator_service.drilldown(
+            session,
+            company_id=context.company.id,
+            transaction_id=transaction_id,
+        )
+    except AccountingNotFound as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/accounts/{bank_account_id}/reconciliations/preview",
+    response_model=BankReconciliationPreviewResponse,
+)
+async def preview_bank_reconciliation(
+    bank_account_id: UUID,
+    data: BankReconciliationPreviewRequest,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> BankReconciliationPreviewResponse:
+    try:
+        return await banking_operator_service.reconciliation_preview(
+            session,
+            company_id=context.company.id,
+            account_id=bank_account_id,
+            request=data,
+        )
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.get(
+    "/accounts/{bank_account_id}/reconciliations/history",
+    response_model=tuple[BankReconciliationResponse, ...],
+)
+async def bank_reconciliation_history(
+    bank_account_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> tuple[BankReconciliationResponse, ...]:
+    try:
+        return await banking_operator_service.history(
+            session, company_id=context.company.id, account_id=bank_account_id
+        )
+    except AccountingNotFound as error:
+        raise translate(error) from error
+
+
+@router.get("/cash-flow", response_model=CashFlowResponse)
+async def bank_cash_flow(
+    context: ReadContext,
+    session: DatabaseSession,
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+    basis: Annotated[str, Query()] = "posted_cash_movement",
+) -> CashFlowResponse:
+    try:
+        return await banking_operator_service.cash_flow(
+            session,
+            company_id=context.company.id,
+            period_start=period_start,
+            period_end=period_end,
+            basis=basis,
+        )
+    except AccountingConflict as error:
         raise translate(error) from error
 
 
