@@ -304,6 +304,7 @@ class AuthenticationService:
             else:
                 from app.platform.service_principals.models import (
                     AcceptanceServicePrincipal,
+                    ReleaseServicePrincipal,
                 )
 
                 credential = await session.scalar(
@@ -316,8 +317,13 @@ class AuthenticationService:
                         AcceptanceServicePrincipal.user_id == user.id
                     )
                 )
+                release_principal_id = await session.scalar(
+                    select(ReleaseServicePrincipal.id).where(
+                        ReleaseServicePrincipal.user_id == user.id
+                    )
+                )
                 failure_reason: str | None = None
-                if service_principal_id is not None:
+                if service_principal_id is not None or release_principal_id is not None:
                     self.password_service.perform_dummy_verification(password)
                     failure_reason = "non_human_login_denied"
                 elif user.status != "active" or user.archived_at is not None:
@@ -635,6 +641,24 @@ class AuthenticationService:
                     or principal.version != claims.credential_version
                 ):
                     raise SessionInvalidError("Session is invalid.")
+            if authentication_session.authentication_method == "release_service_principal":
+                from app.platform.service_principals.models import (
+                    ReleaseServicePrincipal,
+                )
+
+                release_principal = await session.scalar(
+                    select(ReleaseServicePrincipal).where(
+                        ReleaseServicePrincipal.user_id == user.id
+                    )
+                )
+                if (
+                    release_principal is None
+                    or release_principal.state != "active"
+                    or release_principal.environment
+                    != self.configuration.environment.strip().lower()
+                    or release_principal.version != claims.credential_version
+                ):
+                    raise SessionInvalidError("Session is invalid.")
             if (
                 now - authentication_session.last_seen_at
             ).total_seconds() >= self.configuration.session_last_seen_throttle_seconds:
@@ -847,6 +871,7 @@ class RecoveryService:
             if user is not None:
                 from app.platform.service_principals.models import (
                     AcceptanceServicePrincipal,
+                    ReleaseServicePrincipal,
                 )
 
                 service_principal_id = await session.scalar(
@@ -854,9 +879,15 @@ class RecoveryService:
                         AcceptanceServicePrincipal.user_id == user.id
                     )
                 )
+                release_principal_id = await session.scalar(
+                    select(ReleaseServicePrincipal.id).where(
+                        ReleaseServicePrincipal.user_id == user.id
+                    )
+                )
             if (
                 user is not None
                 and service_principal_id is None
+                and release_principal_id is None
                 and user.status == "active"
                 and user.archived_at is None
             ):

@@ -5,9 +5,6 @@ from datetime import timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.platform.audit.models import AuditRecord
 from app.platform.auth.errors import InvalidCredentialsError, SessionInvalidError
@@ -22,18 +19,22 @@ from app.platform.permissions.authorization import (
     TenantAccessDeniedError,
     authorization_service,
 )
-from app.platform.permissions.codes import WorkerIdentityPermission
+from app.platform.permissions.codes import ReleasePrincipalPermission
 from app.platform.permissions.models import MembershipRole, Permission, RolePermission
 from app.platform.service_principals.contracts import (
     AUTHENTICATION_METHOD,
     READ_PERMISSION_CODES,
 )
 from app.platform.service_principals.models import AcceptanceServicePrincipal
+from app.platform.service_principals.release_actor import ReleaseActorService
 from app.platform.service_principals.service import (
     MAX_ACCESS_LIFETIME,
     AcceptanceServicePrincipalService,
 )
 from app.platform.users.models import UserCredential
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -76,8 +77,94 @@ def platform_context(fixture: ServiceFixture):
         fixture.context.user,
         fixture.context.company,
         fixture.context.membership,
-        (WorkerIdentityPermission.MANAGE,),
+        (ReleasePrincipalPermission.MANAGE,),
     )
+
+
+@pytest.mark.asyncio
+async def test_release_actor_is_beta_only_exact_and_rotation_invalidates_old_token(
+    principal_database: ServiceFixture,
+) -> None:
+    fixture = principal_database
+    service = ReleaseActorService()
+    now = utc_now()
+    async with fixture.factory() as session, session.begin():
+        first = await service.provision_and_rotate(
+            session, company_id=fixture.context.company.id, now=now
+        )
+    first_claims = access_token_service.decode(first.access_token)
+    async with fixture.factory() as session:
+        authenticated = await authentication_service.validate_access_context(
+            session, first_claims
+        )
+        context = await authorization_service.resolve(
+            session,
+            authenticated=authenticated,
+            company_id=fixture.context.company.id,
+            branch_id=None,
+        )
+        assert context.permission_codes == {ReleasePrincipalPermission.MANAGE}
+        assert context.membership.has_all_branch_access is False
+        await session.rollback()
+    async with fixture.factory() as session, session.begin():
+        second = await service.provision_and_rotate(
+            session,
+            company_id=fixture.context.company.id,
+            now=now,
+        )
+    assert second.principal_id == first.principal_id
+    assert second.session_id != first.session_id
+    async with fixture.factory() as session:
+        with pytest.raises(SessionInvalidError):
+            await authentication_service.validate_access_context(session, first_claims)
+    second_claims = access_token_service.decode(second.access_token)
+    async with fixture.factory() as session, session.begin():
+        await service.revoke(
+            session,
+            company_id=fixture.context.company.id,
+            now=now,
+        )
+    async with fixture.factory() as session:
+        with pytest.raises(SessionInvalidError):
+            await authentication_service.validate_access_context(session, second_claims)
+
+
+@pytest.mark.asyncio
+async def test_release_actor_rejects_production_and_has_no_business_authority(
+    principal_database: ServiceFixture,
+) -> None:
+    fixture = principal_database
+    service = ReleaseActorService()
+    with pytest.raises(ValueError, match="forbidden"):
+        async with fixture.factory() as session, session.begin():
+            await service.provision_and_rotate(
+                session,
+                company_id=fixture.context.company.id,
+                configuration=settings.model_copy(update={"environment": "production"}),
+            )
+    context = context_with_permissions(
+        fixture.context.user,
+        fixture.context.company,
+        fixture.context.membership,
+        (ReleasePrincipalPermission.MANAGE,),
+    )
+    for permission in (
+        "COMPANY_WORKFORCE_MANAGE",
+        "COMPANY_IDENTITY_ONBOARDING_MANAGE",
+        "COMPANY_PAYROLL_POLICY_MANAGE",
+        "COMPANY_PAYROLL_COMPENSATION_MANAGE",
+        "COMPANY_PAYROLL_RUN_ASSEMBLE",
+        "COMPANY_PAYROLL_CALCULATION_EXECUTE",
+        "COMPANY_PAYROLL_RUN_APPROVE",
+        "COMPANY_PAYROLL_RUN_CLOSE",
+        "COMPANY_TIMEKEEPING_MANUAL_ENTRY",
+        "COMPANY_CUSTOMER_MANAGE",
+        "COMPANY_JOB_MANAGE",
+        "COMPANY_SCHEDULING_MANAGE",
+        "COMPANY_PAYMENT_MANAGE",
+    ):
+        with pytest.raises(PermissionDeniedError):
+            authorization_service.require_permission(context, permission)
 
 
 @pytest.mark.asyncio

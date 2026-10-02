@@ -7,6 +7,21 @@ password or password recovery.
 
 ## Beta provisioning
 
+Release first provisions or rotates the dedicated non-human actor from the trusted
+backend Release environment:
+
+```sh
+python -m scripts.provision_beta_release_actor \
+  --company-id "$ACP_BETA_COMPANY_ID" \
+  --minutes 60
+```
+
+This writes only `/run/secrets/release_actor_token` (mode `0600`) and emits
+non-secret IDs, expiry, and that reference. Re-running rotates the actor session
+and invalidates prior actor tokens. The actor has exactly
+`PLATFORM_ACCEPTANCE_PRINCIPAL_MANAGE`: no business permission, branch access,
+refresh token, password login, or password-recovery path.
+
 Run inside the deployed backend container after the schema is at the protected
 head. Supply the Release actor credential through the process environment; never
 place it or the resulting reader token on the command line.
@@ -42,3 +57,10 @@ versions, revokes every active session, and writes an audit record. Deleting the
 token file is an additional custody cleanup step, not a substitute for revocation.
 
 No Production principal is authorized by this procedure.
+
+Release can invalidate the actor and all of its sessions with:
+
+```sh
+python -m scripts.revoke_beta_release_actor \
+  --company-id "$ACP_BETA_COMPANY_ID"
+```
