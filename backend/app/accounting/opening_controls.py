@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
@@ -66,6 +67,7 @@ class SubledgerItem(OpeningControlSchema):
     as_of: datetime
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     duplicate: bool = False
+    evidence_chain: tuple[str, ...] = ()
 
 
 class OpeningControlPreviewRequest(OpeningControlSchema):
@@ -135,6 +137,20 @@ class OpeningControlSubmit(OpeningControlSchema):
     preview_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class SealedOpeningPackageSelection(OpeningControlSchema):
+    """An operator selects sealed custody; the server constructs accounting facts."""
+
+    package_identity: str = Field(min_length=1, max_length=200)
+
+
+class OpeningControlPage(OpeningControlSchema):
+    package_id: UUID
+    items: tuple[Mapping[str, object], ...]
+    offset: int
+    limit: int
+    total: int
+
+
 class OpeningControlApply(OpeningControlTransition):
     journal_id: UUID
 
@@ -156,6 +172,20 @@ class OpeningControlResponse(OpeningControlSchema):
     version: int
     approved_by_user_id: UUID | None
     applied_journal_id: UUID | None
+
+
+class OpeningControlDetail(OpeningControlSchema):
+    package: OpeningControlResponse
+    trial_balance: tuple[TrialBalanceLine, ...]
+    total_debits: Decimal
+    total_credits: Decimal
+    difference: Decimal
+    equity_categories: tuple[str, ...]
+    ar_difference: Decimal | None
+    ap_difference: Decimal | None
+    source_as_of: datetime
+    cutoff_at: datetime
+    lifecycle: tuple[Mapping[str, object], ...]
 
 
 def _digest(value: object) -> str:
@@ -495,4 +525,3 @@ class OpeningControlService:
 
 
 opening_control_service = OpeningControlService()
-
