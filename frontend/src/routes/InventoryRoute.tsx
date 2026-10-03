@@ -5,6 +5,7 @@ import { InventoryCountAdjustmentWorkbench } from "../components/InventoryCountA
 import { MaterialCostReadinessCard } from "../components/MaterialCostReadinessCard";
 import { useInventory, useInventoryMutations, useMaterialCostReadiness } from "../hooks/useInventory";
 import { useJobs } from "../hooks/useJobs";
+import type { CommonStockSeedAdmission, CommonStockSeedPreview } from "../types/inventory";
 import {
   Alert,
   Badge,
@@ -46,6 +47,10 @@ export function InventoryRoute() {
   const canCount = useHasPermission("COMPANY_INVENTORY_COUNT");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const [branch, setBranch] = useState("");
+  const [seedFile, setSeedFile] = useState<File | null>(null);
+  const [seedPreview, setSeedPreview] = useState<CommonStockSeedPreview | null>(null);
+  const [seedAdmission, setSeedAdmission] = useState<CommonStockSeedAdmission | null>(null);
+  const [seedReason, setSeedReason] = useState("Owner-approved initial common residential plumbing stock catalog");
   const inventory = useInventory(branch || undefined, canRead);
   const costReadiness = useMaterialCostReadiness(canRead);
   const jobs = useJobs(
@@ -149,6 +154,27 @@ export function InventoryRoute() {
       // Retain the reservation evidence for correction or retry.
     }
   };
+  const previewSeed = async () => {
+    if (!seedFile) return;
+    try {
+      setSeedAdmission(null);
+      setSeedPreview(await mutations.previewCommonStockSeed.mutateAsync(seedFile));
+    } catch {
+      setSeedPreview(null);
+    }
+  };
+  const admitSeed = async () => {
+    if (!seedFile || !seedPreview) return;
+    try {
+      setSeedAdmission(await mutations.admitCommonStockSeed.mutateAsync({
+        file: seedFile,
+        expectedDigest: seedPreview.source_digest,
+        reason: seedReason,
+      }));
+    } catch {
+      // Preserve the reviewed file, digest, and reason for correction or retry.
+    }
+  };
   const failedMutation = [
     mutations.createItem,
     mutations.createLocation,
@@ -158,6 +184,8 @@ export function InventoryRoute() {
     mutations.release,
     mutations.issueMaterial,
     mutations.reverseIssue,
+    mutations.previewCommonStockSeed,
+    mutations.admitCommonStockSeed,
   ].find((mutation) => mutation.isError);
   const runReservationMutation = async (operation: () => Promise<unknown>) => {
     try {
@@ -233,6 +261,65 @@ export function InventoryRoute() {
                   <label className="flex min-h-11 items-center gap-2 text-sm font-medium"><input type="checkbox" checked={item.allow_fractional} onChange={(event) => setItem({...item, allow_fractional: event.target.checked})} />Allow fractional quantity</label>
                   <Button type="submit" loading={mutations.createItem.isPending}>Create material item</Button>
                 </form>
+              </CardContent>
+            </Card>
+          )}
+          {canManage && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Common stock seed catalog</CardTitle>
+                <CardDescription>
+                  Preview and explicitly admit an owner-approved Numbers workbook. Vendor SKU and purchase cost remain evidence; no quantity or Price Book mapping is created.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Input
+                  aria-label="Common stock Numbers workbook"
+                  type="file"
+                  accept=".numbers"
+                  onChange={(event) => {
+                    setSeedFile(event.target.files?.[0] ?? null);
+                    setSeedPreview(null);
+                    setSeedAdmission(null);
+                  }}
+                />
+                <Button
+                  type="button"
+                  disabled={!seedFile}
+                  loading={mutations.previewCommonStockSeed.isPending}
+                  onClick={() => void previewSeed()}
+                >
+                  Preview catalog
+                </Button>
+                {seedPreview && (
+                  <div className="space-y-3 rounded-md border border-stroke p-4">
+                    <p><strong>{seedPreview.acp_materials_proposed}</strong> materials proposed from {seedPreview.source_rows_read} source rows; {seedPreview.rows_held} held.</p>
+                    <p className="text-sm">
+                      {seedPreview.vendor_cross_references_proposed} vendor cross-references and {seedPreview.purchase_cost_evidence_proposed} purchase-cost evidence records proposed.
+                    </p>
+                    <p className="break-all text-sm text-content-muted">Verified digest: {seedPreview.source_digest}</p>
+                    <Alert variant="warning">Opening stock will remain zero / not historically reconstructed. Price Book mapping is not required and will not be activated.</Alert>
+                    {seedPreview.held_rows.map((row) => (
+                      <p className="text-sm" key={row.source_row_number}>Row {row.source_row_number}: {row.reason.replaceAll("_", " ")}</p>
+                    ))}
+                    <Input
+                      aria-label="Catalog admission reason"
+                      value={seedReason}
+                      onChange={(event) => setSeedReason(event.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      disabled={seedReason.trim().length < 3}
+                      loading={mutations.admitCommonStockSeed.isPending}
+                      onClick={() => void admitSeed()}
+                    >
+                      Admit {seedPreview.acp_materials_proposed} materials
+                    </Button>
+                  </div>
+                )}
+                {seedAdmission && (
+                  <Alert variant="success">Catalog admission completed: {seedAdmission.records_admitted} admitted and {seedAdmission.records_held} held. No opening quantity or Price Book price was created.</Alert>
+                )}
               </CardContent>
             </Card>
           )}

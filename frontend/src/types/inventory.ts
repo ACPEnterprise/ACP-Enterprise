@@ -14,6 +14,26 @@ export interface InventoryItemCreate {
   stocking_unit: string;
   allow_fractional: boolean;
 }
+export interface CommonStockHeldRow {
+  source_row_number: number;
+  reason: string;
+}
+export interface CommonStockSeedPreview {
+  source_filename: string;
+  source_digest: string;
+  source_rows_read: number;
+  acp_materials_proposed: number;
+  rows_held: number;
+  vendor_cross_references_proposed: number;
+  purchase_cost_evidence_proposed: number;
+  held_rows: readonly CommonStockHeldRow[];
+  opening_inventory_state: "not_historically_reconstructed";
+  price_book_mapping_required: false;
+}
+export interface CommonStockSeedAdmission extends CommonStockSeedPreview {
+  records_admitted: number;
+  records_held: number;
+}
 export interface InventoryLocation {
   id: string;
   company_id: string;

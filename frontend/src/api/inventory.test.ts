@@ -5,6 +5,8 @@ import {
   allocateInventoryReservation,
   createInventoryLocation,
   createInventoryReservation,
+  admitCommonStockSeed,
+  previewCommonStockSeed,
 } from "./inventory";
 
 vi.mock("./client", () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }));
@@ -49,6 +51,25 @@ describe("Inventory API", () => {
     expect(apiClient.post).toHaveBeenLastCalledWith(
       "/api/v1/inventory/reservations/reservation-1/allocations",
       expect.objectContaining({ expected_version: 2, allow_partial: true }),
+    );
+  });
+
+  it("sends a reviewed workbook as bounded binary evidence", async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { source_digest: "a".repeat(64) } });
+    const file = new File(["fixture"], "common.numbers");
+    await previewCommonStockSeed(file);
+    expect(apiClient.post).toHaveBeenLastCalledWith(
+      "/api/v1/inventory/common-stock-seed/preview",
+      file,
+      expect.objectContaining({ params: { source_filename: "common.numbers" } }),
+    );
+    await admitCommonStockSeed({ file, expectedDigest: "a".repeat(64), reason: "Owner approved" });
+    expect(apiClient.post).toHaveBeenLastCalledWith(
+      "/api/v1/inventory/common-stock-seed/admit",
+      file,
+      expect.objectContaining({ params: expect.objectContaining({
+        expected_source_digest: "a".repeat(64), reason: "Owner approved",
+      }) }),
     );
   });
 });

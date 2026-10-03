@@ -41,6 +41,8 @@ const mutateAsync = {
   startCount: vi.fn(),
   recordCount: vi.fn(),
   completeCount: vi.fn(),
+  previewCommonStockSeed: vi.fn(),
+  admitCommonStockSeed: vi.fn(),
 };
 
 const mutation = (fn: ReturnType<typeof vi.fn>, error: unknown = null) => ({
@@ -63,6 +65,8 @@ const inventoryMutations = (locationError: unknown = null) => ({
   startCount: mutation(mutateAsync.startCount),
   recordCount: mutation(mutateAsync.recordCount),
   completeCount: mutation(mutateAsync.completeCount),
+  previewCommonStockSeed: mutation(mutateAsync.previewCommonStockSeed),
+  admitCommonStockSeed: mutation(mutateAsync.admitCommonStockSeed),
 });
 
 describe("InventoryRoute", () => {
@@ -151,6 +155,43 @@ describe("InventoryRoute", () => {
     expect(screen.queryByText("Create stock location")).not.toBeInTheDocument();
     expect(screen.queryByText("Create reservation")).not.toBeInTheDocument();
     expect(screen.queryByText("Allocate available")).not.toBeInTheDocument();
+    expect(screen.queryByText("Common stock seed catalog")).not.toBeInTheDocument();
+  });
+
+  it("previews and explicitly admits the common stock workbook", async () => {
+    permissions.add("COMPANY_INVENTORY_MANAGE");
+    const preview = {
+      source_filename: "common.numbers",
+      source_digest: "a".repeat(64),
+      source_rows_read: 361,
+      acp_materials_proposed: 360,
+      rows_held: 1,
+      vendor_cross_references_proposed: 360,
+      purchase_cost_evidence_proposed: 360,
+      held_rows: [{ source_row_number: 64, reason: "duplicate_vendor_sku_in_source" }],
+      opening_inventory_state: "not_historically_reconstructed",
+      price_book_mapping_required: false,
+    };
+    mutateAsync.previewCommonStockSeed.mockResolvedValue(preview);
+    mutateAsync.admitCommonStockSeed.mockResolvedValue({
+      ...preview, records_admitted: 360, records_held: 1,
+    });
+    render(<InventoryRoute />);
+    const file = new File(["fixture"], "common.numbers");
+    fireEvent.change(screen.getByLabelText("Common stock Numbers workbook"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview catalog" }));
+    await screen.findByText(/materials proposed from 361 source rows/i);
+    expect(screen.getByText(/360 vendor cross-references and 360 purchase-cost/i)).toBeVisible();
+    expect(screen.getByText(/Price Book mapping is not required/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Admit 360 materials" }));
+    await waitFor(() => expect(mutateAsync.admitCommonStockSeed).toHaveBeenCalledWith({
+      file,
+      expectedDigest: "a".repeat(64),
+      reason: "Owner-approved initial common residential plumbing stock catalog",
+    }));
+    expect(await screen.findByText(/360 admitted and 1 held/i)).toBeVisible();
   });
 
   it("creates an authoritative material item without vendor or cost guesses", async () => {

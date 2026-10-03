@@ -1,5 +1,7 @@
 {
   "entries": [
+    {"classification":"NON_MUTATING_READ_ONLY","domain":"inventory","mechanism":"Read-only parsing and deterministic digest/classification of the supplied workbook; no database session is opened","method":"POST","operation_id":"preview_common_stock_seed_api_v1_inventory_common_stock_seed_preview_post","path":"/api/v1/inventory/common-stock-seed/preview","reason":"Preview validates the accepted immutable workbook and returns deterministic dispositions without persistence.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
+    {"classification":"NATURALLY_IDEMPOTENT","domain":"inventory","mechanism":"Company/source-digest/source-row admission uniqueness with deterministic material and vendor identities","method":"POST","operation_id":"admit_common_stock_seed_api_v1_inventory_common_stock_seed_admit_post","path":"/api/v1/inventory/common-stock-seed/admit","reason":"Exact replay resolves the existing append-only admission ledger and returns the same admitted/held totals without duplicate materials, cross-references, cost evidence, audit, or Business Events.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"workforce","mechanism":"Company-scoped Employee and functional-area row locking with canonical role target state","method":"PUT","operation_id":"grant_functional_access_api_v1_workforce_administration_employees__employee_id__functional_access_put","path":"/api/v1/workforce/administration/employees/{employee_id}/functional-access","reason":"A functional-area update supersedes the prior active grant and advances authorization version atomically.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"workforce","mechanism":"Company-scoped immutable role-grant identity and idempotent revocation timestamp","method":"POST","operation_id":"revoke_functional_access_api_v1_workforce_administration_employees__employee_id__functional_access__assignment_id__revoke_post","path":"/api/v1/workforce/administration/employees/{employee_id}/functional-access/{assignment_id}/revoke","reason":"Repeated revocation leaves the same grant ineffective and preserves its history.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
     {"classification":"NATURALLY_IDEMPOTENT","domain":"scheduling","mechanism":"Branch calendar row lock, optimistic policy version, and complete target-state replacement","method":"PUT","operation_id":"configure_branch_scheduling_policy_api_v1_scheduling_branches__branch_id__policy_put","path":"/api/v1/scheduling/branches/{branch_id}/policy","reason":"Owner policy updates reject stale versions and converge on the explicitly submitted Branch calendar state.","tenant_scope":"COMPANY_WITH_BRANCH_CONTEXT"},
@@ -3428,6 +3430,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "af1a8a04e8ba60c258ab29b20624ed81f0c5ddeca07d761f15ada11c706c6234",
+  "fingerprint": "0c0115691440a2b18f9bf0e3b07db690a60c5478948c4400b398263c6f0aa958",
   "schema_version": "1"
 }

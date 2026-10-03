@@ -173,6 +173,7 @@ class EventType(str, Enum):
     INVENTORY_MATERIAL_ISSUE_REVERSED = "inventory.material_issue_reversed"
     INVENTORY_PURCHASE_RECEIPT_POSTED = "inventory.purchase_receipt.posted"
     INVENTORY_PURCHASE_RETURN_POSTED = "inventory.purchase_return.posted"
+    INVENTORY_COMMON_STOCK_SEED_ADMITTED = "inventory.common_stock_seed.admitted"
 
     # Purchasing
     PURCHASING_VENDOR_CREATED = "purchasing.vendor_created"

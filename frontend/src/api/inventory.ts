@@ -20,9 +20,47 @@ import type {
   InventoryReservationCreate,
   InventoryTransfer,
   MaterialCostReadiness,
+  CommonStockSeedAdmission,
+  CommonStockSeedPreview,
 } from "../types/inventory";
 
 const ROOT = "/api/v1/inventory";
+
+export async function previewCommonStockSeed(
+  file: File,
+): Promise<CommonStockSeedPreview> {
+  return (
+    await apiClient.post<CommonStockSeedPreview>(
+      `${ROOT}/common-stock-seed/preview`,
+      file,
+      {
+        params: { source_filename: file.name },
+        headers: { "Content-Type": "application/octet-stream" },
+      },
+    )
+  ).data;
+}
+
+export async function admitCommonStockSeed(input: {
+  file: File;
+  expectedDigest: string;
+  reason: string;
+}): Promise<CommonStockSeedAdmission> {
+  return (
+    await apiClient.post<CommonStockSeedAdmission>(
+      `${ROOT}/common-stock-seed/admit`,
+      input.file,
+      {
+        params: {
+          source_filename: input.file.name,
+          expected_source_digest: input.expectedDigest,
+          reason: input.reason,
+        },
+        headers: { "Content-Type": "application/octet-stream" },
+      },
+    )
+  ).data;
+}
 
 export async function getJobMaterials(jobId: string): Promise<JobMaterials> {
   return (

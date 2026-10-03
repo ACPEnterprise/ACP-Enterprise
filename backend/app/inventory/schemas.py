@@ -116,6 +116,29 @@ class ItemResponse(InventorySchema):
     version: int
 
 
+class CommonStockHeldRow(InventorySchema):
+    source_row_number: int
+    reason: str
+
+
+class CommonStockSeedPreview(InventorySchema):
+    source_filename: str
+    source_digest: str
+    source_rows_read: int
+    acp_materials_proposed: int
+    rows_held: int
+    vendor_cross_references_proposed: int
+    purchase_cost_evidence_proposed: int
+    held_rows: tuple[CommonStockHeldRow, ...]
+    opening_inventory_state: str = "not_historically_reconstructed"
+    price_book_mapping_required: bool = False
+
+
+class CommonStockSeedAdmission(CommonStockSeedPreview):
+    records_admitted: int
+    records_held: int
+
+
 class JobMaterialRequirementResponse(InventorySchema):
     component_code: str | None
     label: str
