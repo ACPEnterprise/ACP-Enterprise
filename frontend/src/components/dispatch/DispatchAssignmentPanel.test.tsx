@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -58,5 +59,77 @@ describe("DispatchAssignmentPanel", () => {
     expect(screen.queryByRole("button", { name: "Add crew member" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Release assignment" })).not.toBeInTheDocument();
     expect(screen.queryByText("Former Crew")).not.toBeInTheDocument();
+  });
+
+  it("keeps an atomic placement failure visible instead of silently closing", async () => {
+    const user = userEvent.setup();
+    const onPlaceUnassigned = vi.fn().mockRejectedValue(
+      new Error("capacity reservation was rejected"),
+    );
+    vi.mocked(useDispatchMutations).mockReturnValue(mutations as never);
+    vi.mocked(useEligibleTechnicians).mockReturnValue({
+      isLoading: false,
+      data: [{
+        employee_id: "employee-2",
+        display_name: "Michael Brian",
+        decision: "eligible",
+        eligible: true,
+        reasons: [],
+      }],
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <DispatchAssignmentPanel
+          item={{ ...released, assignment: null }}
+          onPlaceUnassigned={onPlaceUnassigned}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    await user.selectOptions(screen.getByLabelText("Technician"), "employee-2");
+    await user.click(screen.getByRole("button", { name: "Assign primary" }));
+    await user.click(screen.getByRole("button", { name: "Confirm assignment change" }));
+
+    await waitFor(() => expect(onPlaceUnassigned).toHaveBeenCalledOnce());
+    expect(await screen.findByText("Unexpected error")).toBeVisible();
+    expect(screen.getByText("FAILED")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Assign primary" })).toBeVisible();
+  });
+
+  it("does not close until placement confirms the selected technician", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onPlaceUnassigned = vi.fn().mockResolvedValue({
+      assignment: { primary_employee_id: "different-employee" },
+    });
+    vi.mocked(useDispatchMutations).mockReturnValue(mutations as never);
+    vi.mocked(useEligibleTechnicians).mockReturnValue({
+      isLoading: false,
+      data: [{
+        employee_id: "employee-2",
+        display_name: "Michael Brian",
+        decision: "eligible",
+        eligible: true,
+        reasons: [],
+      }],
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <DispatchAssignmentPanel
+          item={{ ...released, assignment: null }}
+          onPlaceUnassigned={onPlaceUnassigned}
+          onClose={onClose}
+        />
+      </MemoryRouter>,
+    );
+    await user.selectOptions(screen.getByLabelText("Technician"), "employee-2");
+    await user.click(screen.getByRole("button", { name: "Assign primary" }));
+    await user.click(screen.getByRole("button", { name: "Confirm assignment change" }));
+
+    expect(await screen.findByText("Unexpected error")).toBeVisible();
+    expect(screen.getByText("FAILED")).toBeVisible();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
