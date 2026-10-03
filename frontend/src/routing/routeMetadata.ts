@@ -244,6 +244,18 @@ export const qboCutoverHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const accountingCloseHandle = {
+  workspace: {
+    pageTitle: "Accountant Close",
+    breadcrumbs: [
+      { label: "Accounting", path: "/financial-reports" },
+      { label: "Accountant Close" },
+    ],
+    helpTopic: "accountant-close",
+    aiContext: "accounting-close-review",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const businessEconomicsHandle = {
   workspace: { pageTitle: "Business Economics", breadcrumbs: [{ label: "Business Economics" }], helpTopic: "business-economics", aiContext: "business-economics" },
 } as const satisfies ShellRouteHandle;

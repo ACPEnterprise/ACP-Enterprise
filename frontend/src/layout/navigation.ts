@@ -223,6 +223,14 @@ export const navigationCatalog = [
     requiredPermission: "COMPANY_ACCOUNTING_REPORT_READ",
   },
   {
+    id: "accounting-close",
+    label: "Accountant Close",
+    path: "/accounting/close",
+    icon: ClipboardList,
+    availability: "available",
+    requiredPermission: "COMPANY_ACCOUNTING_REPORT_READ",
+  },
+  {
     id: "business-economics",
     label: "Business Economics",
     path: "/business-economics",
@@ -411,6 +419,7 @@ export const navigationGroups = [
       item("inventory"),
       item("qbo-migration"),
       item("qbo-cutover"),
+      item("accounting-close"),
       item("purchasing"),
     ],
   },
