@@ -155,8 +155,6 @@ def test_exact_accounting_table_boundary_and_posting_constraints() -> None:
         "accounting_bank_transactions",
         "accounting_bank_transaction_matches",
         "accounting_bank_reconciliations",
-        "accounting_opening_control_packages",
-        "accounting_opening_control_exceptions",
     }
     journal_constraints = {item.name for item in Journal.__table__.constraints}
     line_constraints = {item.name for item in JournalLine.__table__.constraints}
