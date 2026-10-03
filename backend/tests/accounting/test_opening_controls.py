@@ -152,4 +152,3 @@ def test_preview_digest_is_reproducible_and_preview_has_no_mutation_surface() ->
     second = preview_opening_controls(request())
     assert first.evidence_digest == second.evidence_digest
     assert len(first.evidence_digest) == 64
-
