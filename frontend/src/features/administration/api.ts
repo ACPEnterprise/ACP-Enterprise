@@ -143,7 +143,7 @@ export interface SimpleEmployeeMatchResponse {
 
 export interface SimpleEmployeeOnboardingRequest extends SimpleEmployeeMatchRequest {
   request_key: string;
-  access_profile: "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECHNICIAN";
+  access_profile: "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECHNICIAN" | "FIELD_MANAGER";
 }
 
 export interface SimpleEmployeeOnboardingResponse {

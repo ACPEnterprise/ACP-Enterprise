@@ -41,6 +41,7 @@ class AccessProfile(StrEnum):
     OFFICE_MANAGER = "OFFICE_MANAGER"
     OFFICE_STAFF = "OFFICE_STAFF"
     FIELD_TECHNICIAN = "FIELD_TECHNICIAN"
+    FIELD_MANAGER = "FIELD_MANAGER"
 
 
 ROLE_CODES = {
@@ -48,6 +49,12 @@ ROLE_CODES = {
     AccessProfile.OFFICE_MANAGER: frozenset({"OFFICE_MANAGER"}),
     AccessProfile.OFFICE_STAFF: frozenset({"SERVICE_CSR"}),
     AccessProfile.FIELD_TECHNICIAN: frozenset({"TECHNICIAN", "ACP_EMPLOYEE_MOBILE"}),
+    # Field Manager is a reusable composite profile: assigned field execution
+    # plus the existing dispatcher supervision authority. It deliberately
+    # excludes administration, Payroll, accounting, and security roles.
+    AccessProfile.FIELD_MANAGER: frozenset(
+        {"FIELD_MANAGER", "TECHNICIAN", "ACP_EMPLOYEE_MOBILE", "DISPATCHER"}
+    ),
 }
 
 
