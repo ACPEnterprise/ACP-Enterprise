@@ -98,6 +98,10 @@ describe("FinancialReportsRoute", () => {
     expect(screen.queryByLabelText(/Branch ID/i)).not.toBeInTheDocument();
     expect(screen.getByText("$125.50")).toBeVisible();
     expect(screen.getByText("$140.50")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open Cash Flow" })).toHaveAttribute(
+      "href",
+      "/accounting/banking?section=cash-flow",
+    );
   });
 
   it("rejects reversed report periods before changing the authoritative request", () => {
