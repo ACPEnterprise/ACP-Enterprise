@@ -1,12 +1,12 @@
 {
   "schema_version": "qbo-cutover-parity/v2",
-  "protected_sha": "66fd912d4be1986731190b1d0603be5101d022e6",
+  "protected_sha": "e703c7b6210c62c99d2e69c44ecb0c70e09f9bc9",
   "green_rule": "GREEN requires engineering, normal operator workflow, real All County evidence, reconciliation proof, and required human acceptance.",
   "rows": [
     {"id":"COA","capability":"Chart of accounts","engineering_complete":true,"operator_workflow_complete":true,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},
     {"id":"GL","capability":"General ledger and balanced journals","engineering_complete":true,"operator_workflow_complete":true,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},
     {"id":"PERIODS","capability":"Fiscal periods and close controls","engineering_complete":true,"operator_workflow_complete":true,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},
-    {"id":"OPENING","capability":"Opening balances and equity","engineering_complete":true,"operator_workflow_complete":true,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},
+    {"id":"OPENING","capability":"Opening balances and equity","engineering_complete":true,"operator_workflow_complete":false,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},
     {"id":"AR","capability":"Invoices, credits, payments, customer balances","engineering_complete":true,"operator_workflow_complete":true,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},
     {"id":"AR_AGING","capability":"AR aging and customer drill-down","engineering_complete":true,"operator_workflow_complete":true,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},
     {"id":"AP","capability":"Vendors, bills, credits, AP aging","engineering_complete":true,"operator_workflow_complete":true,"real_all_county_evidence":false,"reconciliation_complete":false,"accountant_acceptance":false,"owner_acceptance":false,"status":"YELLOW"},

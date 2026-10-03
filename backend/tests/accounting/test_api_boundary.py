@@ -2,6 +2,8 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+
 from app.accounting.errors import (
     AccountingConflict,
     AccountingNotFound,
@@ -10,7 +12,6 @@ from app.accounting.errors import (
 )
 from app.accounting.router import approve_reopen, close_period, router, translate
 from app.platform.permissions.codes import AccountingPermission
-from fastapi import HTTPException
 
 
 class PermissionContext:
@@ -74,6 +75,11 @@ def test_accounting_api_is_company_authenticated_and_bounded() -> None:
         "/api/v1/accounting/journals/{journal_id}/post",
         "/api/v1/accounting/journals/{journal_id}/reversals",
         "/api/v1/accounting/trial-balance",
+        "/api/v1/accounting/opening-controls/preview",
+        "/api/v1/accounting/opening-controls",
+        "/api/v1/accounting/opening-controls/{package_id}/exceptions",
+        "/api/v1/accounting/opening-controls/{package_id}/approve",
+        "/api/v1/accounting/opening-controls/{package_id}/apply",
     }
     assert all(route.path.startswith("/api/v1/accounting") for route in router.routes)
 
