@@ -28,6 +28,11 @@ cutoff. It does not authorize a live cutover and it never writes to HCP.
    UPDATE only when it is a provable provider successor and native state has not
    changed since the prior provider assertion. Every other changed record is a
    HOLD with an explicit reason.
+   The packet also contains a `source_completeness` manifest. It inventories
+   every sealed provider ID/version by domain and reports CREATE, UPDATE,
+   CONFLICT, REPLAY, and unexplained counts. Release must reject a cutover while
+   `unexplained_provider_gaps` is nonzero. A CONFLICT is an explicit quarantine,
+   not an unexplained omission and does not block unrelated safe records.
 5. Execute the resulting nested overlay with the established
    `execute_hcp_current_overlay.py` command and a fresh clone backup digest.
    The existing executor applies Customers, Locations, Jobs, and Appointments
@@ -49,6 +54,9 @@ record exact counts for created/updated/replayed/held records. Verify:
 - recent Appointments appear in Calendar and Dispatch queries with their source
   status and assignment evidence;
 - held records and their descendants do not block independent safe records.
+- Customers, Jobs, Estimates, Appointments, Invoices, Payments, Employee source
+  identities, and open-work references have explicit source-completeness rows,
+  even when a family remains evidence-only and therefore quarantined.
 
 Release must publish the clone backup digest, source acquisition timestamp,
 cutoff, packet digest, receipt digest, projection counts, and conflict counts.
