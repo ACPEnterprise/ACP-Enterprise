@@ -83,6 +83,20 @@ describe("IdentityOnboardingRoute", () => {
     expect(api.onboardSimpleEmployee).toHaveBeenCalledWith(expect.objectContaining({ email: "alex@example.com", access_profile: "FIELD_TECHNICIAN" }));
     expect(await screen.findByText("Employee created/linked")).toBeInTheDocument();
   });
+  it("clears stale candidates before applying the current SINGLE response", async () => {
+    vi.mocked(api.matchSimpleEmployee)
+      .mockResolvedValueOnce({ outcome: "AMBIGUOUS", candidates: [{ employee_id: "stale-1", source_system: null, source_employee_id: null }, { employee_id: "stale-2", source_system: null, source_employee_id: null }] })
+      .mockResolvedValueOnce({ outcome: "SINGLE", candidates: [{ employee_id: "7501498f-3183-491a-ac7d-81af9278730c", source_system: null, source_employee_id: null }] });
+    const user = userEvent.setup(); renderPage();
+    await user.type(await screen.findByLabelText("First name"), "Alex"); await user.type(screen.getByLabelText("Last name"), "Donahue"); await user.type(screen.getByLabelText("Email"), "old@example.com");
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing Employee stale-1")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Email")); await user.type(screen.getByLabelText("Email"), "alexallcountyplumbingandleak@gmail.com");
+    expect(screen.queryByText("Existing Employee stale-1")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Link & Continue" })).toBeInTheDocument();
+  });
   it("fails closed without onboarding authority", () => { renderPage({ ...context, permissionCodes: [] }); expect(screen.getByText("You are not authorized to add employees.")).toBeInTheDocument(); expect(api.listRoles).not.toHaveBeenCalled(); });
   it("repairs safely missing canonical profiles through the audited reconciliation", async () => {
     const user = userEvent.setup();
