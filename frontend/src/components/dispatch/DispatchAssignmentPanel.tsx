@@ -25,9 +25,11 @@ import { employeeDetailPath } from "../../routing/paths";
 const label = (value: string) => value.replaceAll("_", " ");
 export function DispatchAssignmentPanel({
   item,
+  onPlaceUnassigned,
   onClose,
 }: {
   readonly item: DispatchBoardItem;
+  readonly onPlaceUnassigned?: (employeeId: string, reason: string) => Promise<unknown>;
   readonly onClose: () => void;
 }) {
   const technicians = useEligibleTechnicians(item.appointment_id);
@@ -123,6 +125,10 @@ export function DispatchAssignmentPanel({
         },
         { onSuccess: complete, onError: () => setConfirm(null) },
       );
+    else if (employeeId && !assignment && onPlaceUnassigned)
+      void onPlaceUnassigned(employeeId, reason)
+        .then(complete)
+        .catch(() => setConfirm(null));
     else if (employeeId)
       mutations.assign.mutate(
         {
