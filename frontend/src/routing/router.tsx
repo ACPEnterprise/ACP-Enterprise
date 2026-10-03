@@ -8,6 +8,7 @@ import {
   accountsPayableHandle,
   financialReportsHandle,
   qboMigrationHandle,
+  qboCutoverHandle,
   businessEconomicsHandle,
   economicsAdministrationHandle,
   luminaryHandle,
@@ -264,6 +265,11 @@ export const appRoutes: RouteObject[] = [
             path: "accounting/quickbooks-migration",
             handle: qboMigrationHandle,
             lazy: async () => ({ Component: (await import("../routes/QboMigrationRoute")).QboMigrationRoute }),
+          },
+          {
+            path: "accounting/quickbooks-cutover",
+            handle: qboCutoverHandle,
+            lazy: async () => ({ Component: (await import("../routes/QboCutoverRoute")).QboCutoverRoute }),
           },
           {
             path: "business-economics",
