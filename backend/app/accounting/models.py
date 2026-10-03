@@ -514,3 +514,107 @@ class PostingFailure(Base):
     failed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class OpeningControlPackage(Base):
+    """Immutable cutoff control evidence before governed opening application."""
+
+    __tablename__ = "accounting_opening_control_packages"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED','APPLIED')",
+            name="ck_opening_control_package_status",
+        ),
+        CheckConstraint(
+            "total_debits >= 0 AND total_credits >= 0",
+            name="ck_opening_control_package_totals",
+        ),
+        CheckConstraint("version >= 1", name="ck_opening_control_package_version"),
+        UniqueConstraint(
+            "company_id", "realm_id", "package_identity",
+            name="uq_opening_control_package_identity",
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_opening_control_package_company_id"
+        ),
+        Index(
+            "ix_opening_control_package_cutoff", "company_id", "cutoff_at", "status"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    realm_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    package_identity: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    cutoff_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cutoff_timezone: Mapped[str] = mapped_column(String(80), nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_manifest_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    total_debits: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
+    total_credits: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
+    ar_control_balance: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    ar_subledger_balance: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    ap_control_balance: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    ap_subledger_balance: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    evidence_snapshot: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    prepared_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    applied_journal_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("accounting_journals.id", ondelete="RESTRICT")
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OpeningControlException(Base):
+    __tablename__ = "accounting_opening_control_exceptions"
+    __table_args__ = (
+        CheckConstraint(
+            "disposition IN ('MATCHED','SOURCE_ONLY','ACP_ONLY','AMOUNT_DIFFERENCE',"
+            "'DATE_CUTOFF_DIFFERENCE','DUPLICATE','MISSING_LINK','REVIEW_REQUIRED')",
+            name="ck_opening_control_exception_disposition",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "package_id"],
+            ["accounting_opening_control_packages.company_id", "accounting_opening_control_packages.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "package_id", "exception_identity",
+            name="uq_opening_control_exception_identity",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    package_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    exception_identity: Mapped[str] = mapped_column(String(200), nullable=False)
+    control_family: Mapped[str] = mapped_column(String(32), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_identity: Mapped[str | None] = mapped_column(String(200))
+    native_identity: Mapped[str | None] = mapped_column(String(200))
+    source_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    native_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

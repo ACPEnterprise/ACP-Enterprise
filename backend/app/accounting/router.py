@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounting.errors import (
@@ -9,6 +10,18 @@ from app.accounting.errors import (
     AccountingNotFound,
     AccountingPermissionDenied,
     AccountingValidation,
+)
+from app.accounting.models import OpeningControlException, OpeningControlPackage
+from app.accounting.opening_controls import (
+    ControlExceptionView,
+    OpeningControlApply,
+    OpeningControlPreview,
+    OpeningControlPreviewRequest,
+    OpeningControlResponse,
+    OpeningControlSubmit,
+    OpeningControlTransition,
+    opening_control_service,
+    preview_opening_controls,
 )
 from app.accounting.repository import accounting_repository
 from app.accounting.schemas import (
@@ -58,6 +71,13 @@ ReverseContext = Annotated[
 ]
 ReportContext = Annotated[
     AuthorizationContext, Depends(require_permission(AccountingPermission.REPORT_READ))
+]
+ReconcileContext = Annotated[
+    AuthorizationContext, Depends(require_permission(AccountingPermission.RECONCILE))
+]
+OpeningApproveContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AccountingPermission.OPENING_STATE_APPROVE)),
 ]
 
 
@@ -396,3 +416,107 @@ async def trial_balance(
         net=debits - credits,
         balanced=debits == credits,
     )
+
+
+@router.post("/opening-controls/preview", response_model=OpeningControlPreview)
+async def preview_opening_state_controls(
+    data: OpeningControlPreviewRequest,
+    context: ReconcileContext,
+) -> OpeningControlPreview:
+    del context
+    return preview_opening_controls(data)
+
+
+@router.post(
+    "/opening-controls",
+    response_model=OpeningControlResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_opening_state_controls(
+    data: OpeningControlSubmit,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> OpeningControlResponse:
+    try:
+        async with session.begin():
+            row = await opening_control_service.submit(
+                session,
+                context=context,
+                request=data.preview,
+                expected_digest=data.preview_digest,
+            )
+        return OpeningControlResponse.model_validate(row)
+    except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.get(
+    "/opening-controls/{package_id}/exceptions",
+    response_model=tuple[ControlExceptionView, ...],
+)
+async def opening_state_control_exceptions(
+    package_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> tuple[ControlExceptionView, ...]:
+    package = await session.scalar(
+        select(OpeningControlPackage.id).where(
+            OpeningControlPackage.company_id == context.company.id,
+            OpeningControlPackage.id == package_id,
+        )
+    )
+    if package is None:
+        raise translate(AccountingNotFound("Opening control package was not found"))
+    rows = await session.scalars(
+        select(OpeningControlException)
+        .where(
+            OpeningControlException.company_id == context.company.id,
+            OpeningControlException.package_id == package_id,
+        )
+        .order_by(OpeningControlException.control_family, OpeningControlException.exception_identity)
+    )
+    return tuple(ControlExceptionView.model_validate(row) for row in rows.all())
+
+
+@router.post(
+    "/opening-controls/{package_id}/approve",
+    response_model=OpeningControlResponse,
+)
+async def approve_opening_state_controls(
+    package_id: UUID,
+    data: OpeningControlTransition,
+    context: OpeningApproveContext,
+    session: DatabaseSession,
+) -> OpeningControlResponse:
+    try:
+        async with session.begin():
+            row = await opening_control_service.approve(
+                session, context=context, package_id=package_id, transition=data
+            )
+        return OpeningControlResponse.model_validate(row)
+    except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/opening-controls/{package_id}/apply",
+    response_model=OpeningControlResponse,
+)
+async def apply_opening_state_controls(
+    package_id: UUID,
+    data: OpeningControlApply,
+    context: OpeningApproveContext,
+    session: DatabaseSession,
+) -> OpeningControlResponse:
+    try:
+        async with session.begin():
+            row = await opening_control_service.mark_applied(
+                session,
+                context=context,
+                package_id=package_id,
+                journal_id=data.journal_id,
+                transition=data,
+            )
+        return OpeningControlResponse.model_validate(row)
+    except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
+        raise translate(error) from error
