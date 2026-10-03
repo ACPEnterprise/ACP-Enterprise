@@ -40,3 +40,12 @@ class AppointmentRescheduleReason(StrEnum):
     OPERATIONAL_ADJUSTMENT = "operational_adjustment"
     SCHEDULING_CONFLICT = "scheduling_conflict"
     WEATHER = "weather"
+
+
+class SchedulingOverrideReason(StrEnum):
+    EMERGENCY_SERVICE = "emergency_service"
+    CUSTOMER_REQUESTED = "customer_requested"
+    DISPATCHER_OVERRIDE = "dispatcher_override"
+    OWNER_OVERRIDE = "owner_override"
+    AFTER_HOURS_CALL = "after_hours_call"
+    OTHER = "other"

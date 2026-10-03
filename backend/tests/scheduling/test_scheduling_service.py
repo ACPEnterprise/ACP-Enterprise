@@ -29,6 +29,7 @@ from app.scheduling.errors import (
     SchedulingCapacityError,
     SchedulingConflictError,
     SchedulingNotFoundError,
+    SchedulingOverrideRequiredError,
     SchedulingValidationError,
     SchedulingValidationFailure,
     SchedulingVersionConflictError,
@@ -52,6 +53,7 @@ from app.scheduling.service import (
 from app.scheduling.types import (
     AppointmentCancellationReason,
     AppointmentRescheduleReason,
+    SchedulingOverrideReason,
 )
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import (
@@ -717,10 +719,11 @@ async def test_partial_closed_exception_overlap_rejects_creation(
         capacity_units=None,
     )
     async with factory() as session:
-        with pytest.raises(SchedulingCapacityError):
+        with pytest.raises(SchedulingOverrideRequiredError) as error:
             await SchedulingService(clock=lambda: FIXED_NOW).create_appointment(
                 session, context=fixture.context, command=create_command(fixture)
             )
+    assert error.value.constraints == ("outside_service_hours",)
 
 
 @pytest.mark.asyncio
@@ -759,10 +762,11 @@ async def test_full_day_closure_rejects_creation(
         capacity_units=None,
     )
     async with factory() as session:
-        with pytest.raises(SchedulingCapacityError):
+        with pytest.raises(SchedulingOverrideRequiredError) as error:
             await SchedulingService(clock=lambda: FIXED_NOW).create_appointment(
                 session, context=fixture.context, command=create_command(fixture)
             )
+    assert error.value.constraints == ("outside_service_hours",)
 
 
 @pytest.mark.asyncio
@@ -827,10 +831,11 @@ async def test_arrival_window_must_fit_when_working_interval_fits(
         expected_duration_minutes=30,
     )
     async with factory() as session:
-        with pytest.raises(SchedulingCapacityError):
+        with pytest.raises(SchedulingOverrideRequiredError) as error:
             await SchedulingService(clock=lambda: FIXED_NOW).create_appointment(
                 session, context=fixture.context, command=command
             )
+    assert error.value.constraints == ("outside_service_hours",)
 
 
 @pytest.mark.asyncio
@@ -848,10 +853,72 @@ async def test_working_interval_must_fit_when_arrival_window_fits(
         expected_duration_minutes=90,
     )
     async with factory() as session:
-        with pytest.raises(SchedulingCapacityError):
+        with pytest.raises(SchedulingOverrideRequiredError) as error:
             await SchedulingService(clock=lambda: FIXED_NOW).create_appointment(
                 session, context=fixture.context, command=command
             )
+    assert error.value.constraints == ("outside_service_hours",)
+
+
+def test_governed_override_records_minimum_notice_hours_and_interval() -> None:
+    start = FIXED_NOW + timedelta(minutes=30)
+    local_start = start.astimezone(BUSINESS_TIMEZONE)
+    start = local_start.replace(minute=30, second=0, microsecond=0).astimezone(
+        timezone.utc
+    )
+    constraints = SchedulingService._validate_calendar_policy(
+        BranchSchedulingCalendar(
+            booking_horizon_days=180,
+            minimum_notice_minutes=120,
+            slot_interval_minutes=60,
+            default_capacity_units=Decimal("2.00"),
+        ),
+        branch_timezone="America/New_York",
+        window_start_at=start,
+        window_end_at=start + timedelta(hours=1),
+        reservation_end_at=start + timedelta(hours=1),
+        now=FIXED_NOW,
+        allow_override=True,
+    )[3]
+    assert constraints == ("minimum_notice", "non_preferred_booking_interval")
+
+
+@pytest.mark.asyncio
+async def test_after_hours_override_persists_governed_capacity_evidence(
+    service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
+) -> None:
+    factory, fixture = service_database
+    start = FIRST_START + timedelta(hours=9)
+    command = CreateAppointmentCommand(
+        branch_id=fixture.branch.id,
+        customer_id=fixture.customer.id,
+        service_location_id=fixture.location.id,
+        arrival_window_start_at=start,
+        arrival_window_end_at=start + timedelta(hours=1),
+        expected_duration_minutes=60,
+        override_reason_code=SchedulingOverrideReason.AFTER_HOURS_CALL,
+    )
+    async with factory() as session:
+        appointment = await SchedulingService(
+            clock=lambda: FIXED_NOW
+        ).create_appointment(session, context=fixture.context, command=command)
+    async with factory() as session:
+        reservation = await session.scalar(
+            select(AppointmentCapacityReservation).where(
+                AppointmentCapacityReservation.appointment_id == appointment.id
+            )
+        )
+        assert reservation is not None
+        assert reservation.is_override is True
+        assert reservation.override_reason_code == "after_hours_call"
+        event = await session.scalar(
+            select(BusinessEvent).where(
+                BusinessEvent.event_type == "appointment.created",
+                BusinessEvent.entity_id == appointment.id,
+            )
+        )
+        assert event is not None
+        assert event.payload["override_constraints"] == ["outside_service_hours"]
 
 
 @pytest.mark.asyncio

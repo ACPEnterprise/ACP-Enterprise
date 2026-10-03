@@ -48,6 +48,7 @@ export function useScheduleExistingJob(jobId: string) {
             "Office assignment while scheduling Job",
             undefined,
             `schedule-assignment:${input.request_id}`,
+            input.override_reason_code,
           );
         } catch (assignmentError) {
           return { ...result, assignmentState: "FAILED" as const, assignmentError };

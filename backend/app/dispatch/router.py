@@ -211,6 +211,7 @@ async def assign(
             context=context,
             appointment_id=appointment_id,
             **request.model_dump(),
+            allow_outside_shift=request.override_reason_code is not None,
         )
     except DispatchError as error:
         raise dispatch_http(error) from error
@@ -238,6 +239,8 @@ async def replace(
             reason=request.reason,
             idempotency_key=request.idempotency_key,
             expected_version=request.expected_version,
+            override_reason_code=request.override_reason_code,
+            allow_outside_shift=request.override_reason_code is not None,
         )
     except DispatchError as error:
         raise dispatch_http(error) from error
