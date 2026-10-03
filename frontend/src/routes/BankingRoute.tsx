@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { useAuth, useHasPermission } from "../auth";
 import { closeReconciliation, confirmBankImport, getBankDrilldown, getBankingSummary, getBankTransactions, getCashFlow, getMatchReview, getReconciliationHistory, getReconciliations, matchBankTransaction, prepareReconciliation, previewBankImport, previewReconciliation, submitReconciliation } from "../api/banking";
@@ -12,6 +12,22 @@ const today = new Date().toISOString().slice(0, 10);
 const monthStart = `${today.slice(0, 8)}01`;
 const money = (value: string | null, currency = "USD") => value === null ? "Unavailable" : new Intl.NumberFormat(undefined, { style: "currency", currency }).format(Number(value));
 const label = (value: string) => value.replaceAll("_", " ").toLowerCase().replace(/^./, (letter) => letter.toUpperCase());
+const bankingSectionOptions = [
+  ["transactions", "Transactions"],
+  ["import", "Import"],
+  ["review", "Needs Review"],
+  ["reconcile", "Reconcile"],
+  ["history", "History"],
+  ["cash-flow", "Cash Flow"],
+] as const;
+type BankingSection = (typeof bankingSectionOptions)[number][0];
+const bankingSections = bankingSectionOptions.map(([value]) => value);
+
+function initialSection(value: string | null): BankingSection {
+  return bankingSections.includes(value as BankingSection)
+    ? (value as BankingSection)
+    : "transactions";
+}
 
 export function BankingRoute() {
   const { user } = useAuth();
@@ -19,9 +35,10 @@ export function BankingRoute() {
   const canReconcile = useHasPermission("COMPANY_ACCOUNTING_RECONCILE");
   const canApprove = useHasPermission("COMPANY_ACCOUNTING_FINANCE_APPROVE");
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const summary = useQuery({ queryKey: ["banking", "summary"], queryFn: getBankingSummary, enabled: canRead });
   const [accountId, setAccountId] = useState("");
-  const [section, setSection] = useState("transactions");
+  const [section, setSection] = useState<BankingSection>(() => initialSection(searchParams.get("section")));
   const selectedId = accountId || summary.data?.[0]?.account.id || "";
   const selected = summary.data?.find((item) => item.account.id === selectedId);
   const transactions = useQuery({ queryKey: ["banking", selectedId, "transactions"], queryFn: () => getBankTransactions(selectedId), enabled: canRead && Boolean(selectedId) });
@@ -65,7 +82,7 @@ export function BankingRoute() {
       {counts.map(([name, value]) => <div className="rounded-lg bg-surface-subtle p-3" key={name}><p className="text-xs text-content-muted">{name}</p><p className="text-xl font-bold tabular-nums">{value}</p></div>)}
     </CardContent></Card>
     {selected && <div className="flex flex-wrap items-center gap-3 text-sm"><Badge variant={selected.active_reconciliation_state === "closed" ? "success" : "neutral"}>{label(selected.active_reconciliation_state)}</Badge><span>Source updated {new Date(selected.account.source_as_of).toLocaleString()}</span><span>Reconciled through {selected.last_reconciled_through ?? "Not yet reconciled"}</span>{selected.current_difference !== null && <strong>Difference {money(selected.current_difference, selected.account.currency)}</strong>}</div>}
-    <nav aria-label="Banking workspace" className="flex flex-wrap gap-2">{[["transactions","Transactions"],["import","Import"],["review","Needs Review"],["reconcile","Reconcile"],["history","History"],["cash-flow","Cash Flow"]].map(([value, text]) => <Button key={value} variant={section === value ? "primary" : "secondary"} onClick={() => setSection(value)}>{text}</Button>)}</nav>
+    <nav aria-label="Banking workspace" className="flex flex-wrap gap-2">{bankingSectionOptions.map(([value, text]) => <Button key={value} variant={section === value ? "primary" : "secondary"} onClick={() => { setSection(value); setSearchParams(value === "transactions" ? {} : { section: value }); }}>{text}</Button>)}</nav>
     {section === "transactions" && <TransactionTable rows={transactions.data ?? []} currency={selected?.account.currency ?? "USD"} onDrill={async (id) => setDrilldown(await getBankDrilldown(id))} />}
     {section === "import" && <Card><CardHeader><CardTitle>Import a statement</CardTitle><CardDescription>Choose a supported Twelve Hats statement JSON export. Previewing does not save anything.</CardDescription></CardHeader><CardContent className="space-y-4"><Input aria-label="Statement file" type="file" accept="application/json,.json" disabled={!canReconcile} onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; setImportError(""); setImportPreview(null); setImportResult(null); try { setImportRequest(JSON.parse(await file.text()) as ImportRequest); } catch { setImportRequest(null); setImportError("This statement file could not be read. Choose a valid supported JSON export."); } }} />{importError && <Alert variant="danger">{importError}</Alert>}{importRequest && <p>{importRequest.statement_identity} · {importRequest.period_start} through {importRequest.period_end} · {importRequest.transactions.length} transactions</p>}<Button disabled={!canReconcile || !importRequest} loading={previewImport.isPending} onClick={() => previewImport.mutate()}>Preview import</Button>{previewImport.isError && <Alert variant="danger">The statement preview could not be completed. Nothing was imported.</Alert>}{importPreview && <ImportPreviewPanel preview={importPreview} onConfirm={() => confirmImport.mutate()} confirming={confirmImport.isPending} />}{confirmImport.isError && <Alert variant="danger">The import could not be confirmed. Review the statement and try again.</Alert>}{importResult && <Alert variant={importResult.quarantined_count ? "warning" : "success"}>Imported {importResult.persisted_count}; replayed {importResult.replay_count}; needs review {importResult.quarantined_count}.</Alert>}</CardContent></Card>}
     {section === "review" && <MatchReviewPanel rows={reviews.data ?? []} canReconcile={canReconcile} matching={runMatch.isPending} onMatch={(id) => runMatch.mutate(id)} onDrill={async (id) => setDrilldown(await getBankDrilldown(id))} />}

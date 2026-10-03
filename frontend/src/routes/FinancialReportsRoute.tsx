@@ -236,6 +236,23 @@ export function FinancialReportsRoute() {
         </div>
         <Card>
           <CardHeader>
+            <CardTitle>Statement of Cash Flows</CardTitle>
+            <CardDescription>
+              Review operating, investing, and financing cash movement with
+              reconciliation evidence.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              className="font-semibold text-action-primary"
+              href="/accounting/banking?section=cash-flow"
+            >
+              Open Cash Flow
+            </a>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
             <CardTitle>Report scope</CardTitle>
             <CardDescription>
               Branch reports exclude unassigned Company lines and are labeled as

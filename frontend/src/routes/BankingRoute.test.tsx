@@ -86,11 +86,11 @@ const zeroPreview = {
   blocker_reasons: [],
 };
 
-function renderRoute() {
+function renderRoute(initialEntry = "/accounting/banking") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <BankingRoute />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -162,6 +162,13 @@ describe("BankingRoute", () => {
       difference: null,
       tie_status: "UNAVAILABLE",
     });
+  });
+
+  it("opens the Cash Flow section from the Financial Reports deep link", async () => {
+    renderRoute("/accounting/banking?section=cash-flow");
+
+    expect(await screen.findByRole("heading", { name: "Statement of Cash Flows" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Cash Flow" })).toHaveClass("bg-action-primary");
   });
 
   it("presents a normal account summary and canonical review states", async () => {
