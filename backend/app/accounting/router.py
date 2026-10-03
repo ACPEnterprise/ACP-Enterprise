@@ -6,13 +6,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounting.close_controls import (
+    AccountantReviewProjection,
+    PeriodCloseReadiness,
+    ReportComparison,
+    accounting_close_control_service,
+)
 from app.accounting.errors import (
     AccountingConflict,
     AccountingNotFound,
     AccountingPermissionDenied,
     AccountingValidation,
 )
-from app.accounting.models import OpeningControlException, OpeningControlPackage
+from app.accounting.models import (
+    AccountingPeriod,
+    OpeningControlException,
+    OpeningControlPackage,
+)
 from app.accounting.opening_controls import (
     ControlExceptionView,
     OpeningControlApply,
@@ -199,6 +209,50 @@ async def list_periods(
     )
 
 
+async def _read_period(
+    session: AsyncSession, context: AuthorizationContext, period_id: UUID
+) -> AccountingPeriod:
+    period = await session.scalar(
+        select(AccountingPeriod).where(
+            AccountingPeriod.company_id == context.company.id,
+            AccountingPeriod.id == period_id,
+        )
+    )
+    if period is None:
+        raise translate(AccountingNotFound("Accounting period was not found"))
+    return period
+
+
+@router.get(
+    "/periods/{period_id}/report-comparisons",
+    response_model=tuple[ReportComparison, ...],
+)
+async def report_comparisons(
+    period_id: UUID, context: ReportContext, session: DatabaseSession
+) -> tuple[ReportComparison, ...]:
+    period = await _read_period(session, context, period_id)
+    return await accounting_close_control_service.comparisons(
+        session, context=context, period=period
+    )
+
+
+@router.get("/accountant-review", response_model=AccountantReviewProjection)
+async def accountant_review_queue(
+    context: ReconcileContext, session: DatabaseSession
+) -> AccountantReviewProjection:
+    return await accounting_close_control_service.review_queue(session, context=context)
+
+
+@router.get("/periods/{period_id}/close-readiness", response_model=PeriodCloseReadiness)
+async def period_close_readiness(
+    period_id: UUID, context: ReportContext, session: DatabaseSession
+) -> PeriodCloseReadiness:
+    period = await _read_period(session, context, period_id)
+    return await accounting_close_control_service.readiness(
+        session, context=context, period=period
+    )
+
+
 @router.post(
     "/periods", response_model=PeriodResponse, status_code=status.HTTP_201_CREATED
 )
@@ -245,10 +299,30 @@ async def close_period(
                 "Period close requires period management and Finance approval."
             )
         )
+    period = await _read_period(session, context, period_id)
+    readiness = await accounting_close_control_service.readiness(
+        session, context=context, period=period
+    )
+    if (
+        data.readiness_digest is None
+        or data.readiness_digest != readiness.evidence_digest
+        or readiness.overall_readiness != "READY"
+    ):
+        raise translate(
+            AccountingConflict("Current canonical period-close readiness is required")
+        )
     try:
         return PeriodResponse.model_validate(
             await accounting_service.close_period(
-                session, context=context, period_id=period_id, data=data
+                session,
+                context=context,
+                period_id=period_id,
+                data=data.model_copy(
+                    update={
+                        "controls_reconciled": True,
+                        "evidence_digest": readiness.evidence_digest,
+                    }
+                ),
             )
         )
     except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:

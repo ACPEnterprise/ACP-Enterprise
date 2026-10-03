@@ -3,8 +3,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from app.accounting.errors import AccountingValidation
 from app.accounting.models import Journal, JournalLine
 from app.accounting.schemas import JournalLineCreate
@@ -14,6 +12,7 @@ from app.core.database import Base
 from app.events.types import EventType
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import AccountingPermission
+from pydantic import ValidationError
 
 
 @dataclass(frozen=True)
@@ -155,6 +154,8 @@ def test_exact_accounting_table_boundary_and_posting_constraints() -> None:
         "accounting_bank_transactions",
         "accounting_bank_transaction_matches",
         "accounting_bank_reconciliations",
+        "accounting_opening_control_packages",
+        "accounting_opening_control_exceptions",
     }
     journal_constraints = {item.name for item in Journal.__table__.constraints}
     line_constraints = {item.name for item in JournalLine.__table__.constraints}
