@@ -23,6 +23,12 @@ const localInput = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
+const nextOfficeSlot = (date: Date) => {
+  const slot = new Date(date);
+  slot.setSeconds(0, 0);
+  slot.setMinutes(Math.ceil(slot.getMinutes() / 15) * 15);
+  return slot;
+};
 
 export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose: () => void; readonly returnTo?: string }) {
   const { activeCompany } = useAuth();
@@ -36,8 +42,8 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
     activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? "",
   );
   const [locationId, setLocationId] = useState("");
-  const [startAt, setStartAt] = useState(() => localInput(new Date(Date.now() + 60 * 60 * 1000)));
-  const [endAt, setEndAt] = useState(() => localInput(new Date(Date.now() + 3 * 60 * 60 * 1000)));
+  const [startAt, setStartAt] = useState(() => localInput(nextOfficeSlot(new Date(Date.now() + 60 * 60 * 1000))));
+  const [endAt, setEndAt] = useState(() => localInput(nextOfficeSlot(new Date(Date.now() + 3 * 60 * 60 * 1000))));
   const [duration, setDuration] = useState(120);
   const [priority, setPriority] = useState<JobPriority>("normal");
   const [problem, setProblem] = useState("");
@@ -105,8 +111,11 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
   const start = new Date(startAt);
   const end = new Date(endAt);
   const validWindow = !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end > start;
+  const officeSlotValid = [start, end].every(
+    (value) => !Number.isNaN(value.getTime()) && value.getMinutes() % 15 === 0,
+  ) && duration >= 15 && duration % 15 === 0;
   const ready = Boolean(
-    branchId && customerId && locationId && startAt && endAt && duration > 0 && validWindow,
+    branchId && customerId && locationId && startAt && endAt && validWindow && officeSlotValid,
   );
   const error = create.error ? schedulingMutationRecovery(create.error, "booking") : null;
 
@@ -206,9 +215,10 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
             {(activeCompany?.branches ?? []).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
           </Select>
         </Field>
-        <Field label="Arrival window starts" required><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
-        <Field label="Arrival window ends" required helperText={startAt && endAt && !validWindow ? "Arrival window must end after it starts." : "Customer-facing arrival window; this is separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
-        <Field label="Expected duration (minutes)" required><Input type="number" min={15} max={1440} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
+        <Field label="Arrival window starts" required helperText="Choose a 15-minute office slot."><Input type="datetime-local" step={900} value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
+        <Field label="Arrival window ends" required helperText={startAt && endAt && !validWindow ? "Arrival window must end after it starts." : "Customer-facing arrival window in 15-minute increments; this is separate from expected work duration."}><Input type="datetime-local" step={900} value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
+        <Field label="Expected duration (minutes)" required><Input type="number" min={15} max={1440} step={15} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
+        {!officeSlotValid ? <p className="text-sm text-status-danger md:col-span-2">Choose :00, :15, :30, or :45 and use a 15-minute duration increment.</p> : null}
         <Field label="Priority"><Select value={priority} onChange={(event) => setPriority(event.target.value as JobPriority)}>{["low", "normal", "high", "urgent", "emergency"].map((value) => <option value={value} key={value}>{value}</option>)}</Select></Field>
         <Field label="Customer-reported problem" className="md:col-span-2"><Textarea value={problem} onChange={(event) => setProblem(event.target.value)} /></Field>
         <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
