@@ -36,7 +36,7 @@ describe("IdentityOnboardingRoute", () => {
   });
   it("shows the approved owner-facing operating profiles", async () => {
     renderPage(); const select = (await screen.findAllByRole("combobox"))[0];
-    for (const label of ["ADMIN", "OFFICE MANAGER", "OFFICE STAFF", "FIELD TECH", "FIELD MANAGER"]) expect(select).toHaveTextContent(label);
+    for (const label of ["ADMIN", "OFFICE MANAGER", "OFFICE STAFF", "FIELD TECH", "Field Manager"]) expect(select).toHaveTextContent(label);
     expect(select).not.toHaveTextContent("SUPPORT"); expect(select).not.toHaveTextContent("ACP EMPLOYEE MOBILE");
   });
   it("prefills owner-confirmed roster facts but never invents login email", async () => {
