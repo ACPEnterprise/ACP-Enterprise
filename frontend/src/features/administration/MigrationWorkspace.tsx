@@ -297,6 +297,24 @@ export function MigrationWorkspace() {
           <a className="rounded-lg border border-stroke p-ui-3 hover:bg-surface-subtle" href="#hcp-history-review"><strong>Attachments / Open Work / History</strong><p className="mt-ui-1 text-body-xs text-content-muted">Review preserved evidence and chronology before any retirement decision.</p></a>
         </CardContent>
       </Card>
+      <Card id="hcp-extended-domains">
+        <CardHeader>
+          <CardTitle>Extended cutover domains</CardTitle>
+          <CardDescription>Domains without a current admitted projection remain visibly gated; stale rehearsal counts are never presented as current source evidence.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            ["Credits / refunds", "EXTERNAL ACCESS REQUIRED"],
+            ["Attachments / open work", "EXTERNAL ACCESS REQUIRED"],
+            ["Memberships / service plans", "EXTERNAL ACCESS REQUIRED"],
+            ["Reviews / ratings", "HISTORY-ONLY REVIEW"],
+            ["Tags / source / business unit / job type", "HISTORY-ONLY REVIEW"],
+            ["Pricebook / service references", "OWNER DECISION REQUIRED"],
+            ["Current open work", "CURRENT SOURCE REQUIRED"],
+            ["Full historical evidence", data.historical_window.completeness === "family_specific_available_coverage" ? "REVIEW AVAILABLE" : "CURRENT SOURCE REQUIRED"],
+          ].map(([domain, state]) => <article className="rounded-lg border border-stroke p-ui-3" key={domain}><div className="flex items-start justify-between gap-ui-2"><strong>{domain}</strong><Badge variant={state === "REVIEW AVAILABLE" ? "success" : "warning"}>{state}</Badge></div><p className="mt-ui-1 text-body-xs text-content-muted">No native completeness is inferred until the canonical source projection is available.</p></article>)}
+        </CardContent>
+      </Card>
       <Card id="hcp-history-review">
         <CardHeader>
           <CardTitle>Contacts and historical notes</CardTitle>
@@ -317,6 +335,21 @@ export function MigrationWorkspace() {
             ["Customer", "/customers"], ["Job", "/jobs"], ["Estimate", "/estimates"], ["Invoice", "/invoices"], ["Payment", "/payments"], ["History", "#hcp-history-review"],
           ].map(([kind, href]) => <div className="flex flex-wrap items-center justify-between gap-ui-3 rounded-lg border border-stroke p-ui-3" key={kind}><span><strong>{kind}</strong><span className="ml-ui-2 text-content-muted">Owner comparison required</span></span><a className="font-semibold text-action-primary underline" href={href}>Open representative records</a></div>)}
           <Alert variant="information">Durable spot-check marking is not exposed by the current migration API. Owner findings remain an external acceptance gate until that governed evidence endpoint exists.</Alert>
+        </CardContent>
+      </Card>
+      <Card id="hcp-freeze-sequence">
+        <CardHeader>
+          <CardTitle>Freeze, final delta, and retirement readiness</CardTitle>
+          <CardDescription>Retirement remains unavailable until the canonical controller confirms every required gate.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ol className="grid gap-ui-2 sm:grid-cols-2 lg:grid-cols-3">
+            {["Historical completeness", "Current source acquired", "Delta rehearsal", "Conflict review", "Open-work reconciliation", "Freeze approved", "Final delta", "Replay proof", "Owner spot checks", "Retirement readiness"].map((step, index) => {
+              const active = index < 3;
+              return <li className="rounded-lg border border-stroke p-ui-3" key={step}><span className="text-body-xs text-content-muted">{index + 1}</span><div className="mt-ui-1 font-semibold">{step}</div><Badge variant={active ? "success" : "warning"}>{active ? "EVIDENCE AVAILABLE" : "GATE REQUIRED"}</Badge></li>;
+            })}
+          </ol>
+          <Alert className="mt-ui-4" variant="warning">HCP retirement is not available. Final source access, delta evidence, conflict decisions, freeze approval, and durable owner spot-check evidence are still required.</Alert>
         </CardContent>
       </Card>
       <div className="grid gap-ui-4 lg:grid-cols-2">
