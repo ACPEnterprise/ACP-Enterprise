@@ -88,6 +88,7 @@ class AppointmentResponse(SchedulingApiSchema):
     arrival_window_end_at: AwareDatetime | None
     expected_duration_minutes: int | None
     capacity_units: Decimal | None
+    capacity_state: str
     concurrency_version: int = Field(ge=1)
     reschedule_count: int = Field(ge=0)
     rescheduled_at: AwareDatetime | None

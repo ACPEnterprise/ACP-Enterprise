@@ -129,7 +129,8 @@ const branchTime = (value: string | null, timeZone: string) =>
     ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone })
     : "Time unknown";
 const isCapacityUnreconciled = (item: AppointmentDetail) =>
-  ["scheduled", "confirmed"].includes(item.status) && item.capacity_units === null;
+  ["scheduled", "confirmed"].includes(item.status) &&
+  item.capacity_state === "legacy_unreconciled";
 const toLocalInput = (value: string | null) => {
   if (!value) return "";
   const date = new Date(value);
@@ -534,7 +535,7 @@ export function SchedulingRoute({
     startMinute: number,
   ) => {
     setDropError(null);
-    if (isCapacityUnreconciled(appointment)) {
+    if (appointment.capacity_state === "legacy_unreconciled") {
       setDropError("Imported Appointment has no reconciled capacity reservation and cannot be moved.");
       return;
     }
@@ -1010,7 +1011,7 @@ export function SchedulingRoute({
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         {currentSelection ? (
           <AppointmentPanel
-            key={`${currentSelection.id}:${currentSelection.concurrency_version}:${currentSelection.status}:${currentSelection.capacity_units ?? "unreconciled"}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
+            key={`${currentSelection.id}:${currentSelection.concurrency_version}:${currentSelection.status}:${currentSelection.capacity_state}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
             appointment={currentSelection}
             dispatchItem={selectedDispatch}
             job={
@@ -1037,6 +1038,30 @@ export function SchedulingRoute({
       {selectedDispatch && canDispatchManage && (
         <DispatchAssignmentPanel
           item={selectedDispatch}
+          onPlaceUnassigned={
+            currentSelection?.arrival_window_start_at &&
+            currentSelection.arrival_window_end_at
+              ? (employeeId, reason) =>
+                  calendarPlacement.mutateAsync({
+                    appointmentId: currentSelection.id,
+                    input: {
+                      request_id: crypto.randomUUID(),
+                      expected_appointment_version:
+                        currentSelection.concurrency_version,
+                      expected_assignment_version: null,
+                      employee_id: employeeId,
+                      arrival_window_start_at:
+                        currentSelection.arrival_window_start_at!,
+                      arrival_window_end_at:
+                        currentSelection.arrival_window_end_at!,
+                      expected_duration_minutes:
+                        currentSelection.expected_duration_minutes ?? 60,
+                      capacity_units: currentSelection.capacity_units ?? "1.00",
+                      reason,
+                    },
+                  })
+              : undefined
+          }
           onClose={() => setSelectedId(null)}
         />
       )}
@@ -1077,7 +1102,6 @@ function DayCalendar({
     zonedDateKey(now, policy.timezone) === date
       ? zonedMinute(now, policy.timezone) - startMinuteOfDay
       : null;
-  const hourCount = Math.ceil(visibleMinutes / 60);
   return (
     <>
       {operating.closed && (
@@ -1177,20 +1201,24 @@ function DayCalendar({
                 }}
               />
             ))}
-            {Array.from({ length: hourCount + 1 }, (_, index) => (
+            {Array.from({ length: visibleMinutes / 15 + 1 }, (_, index) => {
+              const offset = index * 15;
+              const minute = (startMinuteOfDay + offset) % 60;
+              const isHour = minute === 0;
+              return (
               <div
-                className="absolute inset-x-0 border-t border-stroke"
-                style={{ top: `${index * 60}px` }}
+                className={`absolute inset-x-0 border-t ${isHour ? "border-stroke" : "border-stroke/40"}`}
+                style={{ top: `${offset}px` }}
                 key={index}
               >
-                <span className="absolute left-2 -translate-y-1/2 bg-surface pr-2 text-xs text-content-muted">
-                  {new Date(2026, 0, 1, 0, startMinuteOfDay + index * 60).toLocaleTimeString(
-                    [],
-                    { hour: "numeric" },
-                  )}
+                <span className={`absolute left-2 -translate-y-1/2 bg-surface pr-2 text-content-muted ${isHour ? "text-xs" : "text-[10px]"}`}>
+                  {isHour
+                    ? new Date(2026, 0, 1, 0, startMinuteOfDay + offset).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+                    : `:${String(minute).padStart(2, "0")}`}
                 </span>
               </div>
-            ))}
+              );
+            })}
             <div className="absolute bottom-2 left-2 text-[11px] text-content-muted">
               Open space is capacity context; lane labels disclose roster availability authority.
             </div>

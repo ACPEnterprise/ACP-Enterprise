@@ -35,6 +35,7 @@ from app.scheduling.repository import (
 )
 from app.scheduling.types import (
     AppointmentCancellationReason,
+    AppointmentCapacityState,
     AppointmentRescheduleReason,
     AppointmentStatus,
 )
@@ -91,6 +92,7 @@ class RescheduleAppointmentCommand:
     expected_duration_minutes: int
     capacity_units: Decimal
     reason_code: AppointmentRescheduleReason
+    establish_capacity_if_unassigned: bool = False
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,11 @@ class SchedulingService:
                 arrival_window_start_at=command.arrival_window_start_at,
                 arrival_window_end_at=command.arrival_window_end_at,
                 expected_duration_minutes=command.expected_duration_minutes,
+                capacity_state=(
+                    AppointmentCapacityState.RESERVED.value
+                    if command.reserve_capacity
+                    else AppointmentCapacityState.INTENTIONALLY_UNASSIGNED.value
+                ),
                 scheduling_timezone=branch.timezone,
                 concurrency_version=1,
                 created_by_user_id=context.user.id,
@@ -343,6 +350,7 @@ class SchedulingService:
             arrival_window_start_at=command.arrival_window_start_at,
             arrival_window_end_at=command.arrival_window_end_at,
             expected_duration_minutes=command.expected_duration_minutes,
+            capacity_state=AppointmentCapacityState.LEGACY_UNRECONCILED.value,
             scheduling_timezone=branch.timezone,
             concurrency_version=1,
             created_by_user_id=context.user.id,
@@ -517,19 +525,40 @@ class SchedulingService:
                 for_update=True,
             )
             if reservation is None:
-                raise SchedulingConflictError(
-                    "Scheduled Appointment has no capacity reservation."
+                if (
+                    appointment.capacity_state
+                    != AppointmentCapacityState.INTENTIONALLY_UNASSIGNED.value
+                ):
+                    raise SchedulingConflictError(
+                        "Scheduled Appointment has unreconciled capacity authority."
+                    )
+                if command.establish_capacity_if_unassigned:
+                    reservation = await self._repository.create_capacity_reservation(
+                        session,
+                        capacity_context=decision.context,
+                        reservation=AppointmentCapacityReservation(
+                            company_id=context.company.id,
+                            branch_id=appointment.branch_id,
+                            appointment_id=appointment.id,
+                            reserved_start_at=decision.reservation_start_at,
+                            reserved_end_at=decision.reservation_end_at,
+                            capacity_units=command.capacity_units,
+                            created_at=now,
+                            updated_at=now,
+                        ),
+                    )
+                    appointment.capacity_state = AppointmentCapacityState.RESERVED.value
+            else:
+                self._repository.move_capacity_reservation(
+                    reservation,
+                    reserved_start_at=decision.reservation_start_at,
+                    reserved_end_at=decision.reservation_end_at,
+                    capacity_units=command.capacity_units,
+                    updated_at=now,
                 )
             appointment.capacity_reservation = reservation
             previous_start = appointment.arrival_window_start_at
             previous_end = appointment.arrival_window_end_at
-            self._repository.move_capacity_reservation(
-                reservation,
-                reserved_start_at=decision.reservation_start_at,
-                reserved_end_at=decision.reservation_end_at,
-                capacity_units=command.capacity_units,
-                updated_at=now,
-            )
             self._repository.reschedule_appointment(
                 appointment,
                 arrival_window_start_at=command.arrival_window_start_at,
@@ -812,9 +841,10 @@ class SchedulingService:
             and appointment.arrival_window_end_at == command.arrival_window_end_at
             and appointment.expected_duration_minutes
             == command.expected_duration_minutes
-            and (reservation is not None) == command.reserve_capacity
+            and (not command.reserve_capacity or reservation is not None)
             and (
-                reservation is None
+                not command.reserve_capacity
+                or reservation is None
                 or reservation.capacity_units == command.capacity_units
             )
         )

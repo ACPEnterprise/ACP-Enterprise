@@ -44,6 +44,7 @@ class AppointmentQueryRecord:
     arrival_window_end_at: datetime | None
     expected_duration_minutes: int | None
     capacity_units: Decimal | None
+    capacity_state: str
     concurrency_version: int
     reschedule_count: int
     rescheduled_at: datetime | None

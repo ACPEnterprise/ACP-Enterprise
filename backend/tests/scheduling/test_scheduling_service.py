@@ -409,9 +409,11 @@ async def test_unassigned_creation_skips_capacity_and_replays_without_duplicate(
         )
 
     assert first.id == replay.id
+    assert first.capacity_state == "intentionally_unassigned"
     assert first.capacity_reservation is None
     response = appointment_response(first)
     assert response.capacity_units is None
+    assert response.capacity_state == "intentionally_unassigned"
     async with factory() as session:
         assert (
             await SchedulingRepository.get_capacity_reservation(
@@ -427,6 +429,24 @@ async def test_unassigned_creation_skips_capacity_and_replays_without_duplicate(
             )
             == 1
         )
+
+    async with factory() as session, session.begin():
+        placed = await service.stage_reschedule_appointment(
+            session,
+            context=fixture.context,
+            command=RescheduleAppointmentCommand(
+                appointment_id=first.id,
+                expected_version=1,
+                arrival_window_start_at=FIRST_START + timedelta(hours=1),
+                arrival_window_end_at=FIRST_START + timedelta(hours=2),
+                expected_duration_minutes=60,
+                capacity_units=Decimal("1.00"),
+                reason_code=AppointmentRescheduleReason.OPERATIONAL_ADJUSTMENT,
+                establish_capacity_if_unassigned=True,
+            ),
+        )
+    assert placed.capacity_state == "reserved"
+    assert placed.capacity_reservation is not None
 
 
 @pytest.mark.asyncio
