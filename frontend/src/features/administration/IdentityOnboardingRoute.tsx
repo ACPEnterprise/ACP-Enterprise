@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import {
@@ -84,6 +84,12 @@ export function IdentityOnboardingRoute() {
   const [rosterPreviewError, setRosterPreviewError] = useState(false);
   const [confirmAccessProfile, setConfirmAccessProfile] = useState(false);
   const [matchPlan, setMatchPlan] = useState<import("./api").SimpleEmployeeMatchResponse | null>(null);
+  const matchRequestSequence = useRef(0);
+
+  const invalidateMatch = () => {
+    matchRequestSequence.current += 1;
+    setMatchPlan(null);
+  };
 
   useEffect(() => {
     if (!authorized || !rosterKey) return;
@@ -167,7 +173,10 @@ export function IdentityOnboardingRoute() {
         }
         return;
       }
+      const requestSequence = ++matchRequestSequence.current;
+      setMatchPlan(null);
       const match = await matchSimpleEmployee({ branch_id: branchId, first_name: firstName.trim(), last_name: lastName.trim(), email: email.trim(), phone: phone.trim() || undefined });
+      if (requestSequence !== matchRequestSequence.current) return;
       if (match.outcome !== "NONE") {
         setMatchPlan(match);
         setMessage(null);
@@ -256,12 +265,12 @@ export function IdentityOnboardingRoute() {
       {preparation.state === "loading" ? <Spinner label="Checking Employee onboarding readiness" /> : preparation.state === "blocked" ? <Alert variant="danger"><div className="space-y-ui-3"><p>{preparation.message}</p>{preparation.reconciliation && !preparation.reconciliation.safe_to_apply && <p>A protected role identity conflict requires review. No role will be replaced automatically.</p>}<div className="flex flex-wrap gap-ui-3">{preparation.reconciliation?.safe_to_apply && canReconcileProfiles && <Button loading={reconciling} loadingLabel="Preparing profiles" onClick={() => void reconcileProfiles()}>Prepare approved profiles</Button>}<Button variant="secondary" onClick={() => { setPreparation({ state: "loading" }); setReadinessAttempt((value) => value + 1); }}>Retry readiness</Button>{(!preparation.reconciliation?.safe_to_apply || !canReconcileProfiles) && <Link className="text-link" to="/administration">Review protected roles</Link>}</div></div></Alert> :
         <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-ui-3 sm:grid-cols-2">
-            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
-            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} readOnly={Boolean(rosterPreview)} required /></label>
+            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => { invalidateMatch(); setFirstName(event.target.value); }} readOnly={Boolean(rosterPreview)} required /></label>
+            <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => { invalidateMatch(); setLastName(event.target.value); }} readOnly={Boolean(rosterPreview)} required /></label>
           </div>
-          <div className="grid gap-ui-3 sm:grid-cols-2"><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input aria-label="Email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Phone</span><Input aria-label="Phone" type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(555) 555-5555" /></label></div>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Access profile</span><select aria-label="Access profile" className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} disabled={Boolean(rosterPreview)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profileDisplayName(profile.label)}</option>)}</select></label>
-          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => setBranchId(event.target.value)} disabled={Boolean(rosterPreview)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
+          <div className="grid gap-ui-3 sm:grid-cols-2"><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input aria-label="Email" type="email" autoComplete="off" value={email} onChange={(event) => { invalidateMatch(); setEmail(event.target.value); }} required /></label><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Phone</span><Input aria-label="Phone" type="tel" autoComplete="tel" value={phone} onChange={(event) => { invalidateMatch(); setPhone(event.target.value); }} placeholder="(555) 555-5555" /></label></div>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Access profile</span><select aria-label="Access profile" className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => { invalidateMatch(); setProfileLabel(event.target.value); }} disabled={Boolean(rosterPreview)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profileDisplayName(profile.label)}</option>)}</select></label>
+          <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => { invalidateMatch(); setBranchId(event.target.value); }} disabled={Boolean(rosterPreview)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
           {rosterPreview && <label className="flex items-start gap-ui-3 rounded-lg border border-stroke p-ui-3 text-body-s"><input className="mt-1" type="checkbox" checked={confirmAccessProfile} onChange={(event) => setConfirmAccessProfile(event.target.checked)} /><span>I confirm the <strong>{rosterPreview.operating_role.replaceAll("_", " ")}</strong> access profile ({rosterPreview.required_role_codes.join(", ")}) for this exact source Employee.</span></label>}
           <Button type="submit" loading={submitting} loadingLabel="Checking employee history" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim() || (Boolean(rosterPreview) && !confirmAccessProfile)}>{rosterPreview ? "Confirm Source & Send Invite" : "Send Invite"}</Button>
         </form>}
