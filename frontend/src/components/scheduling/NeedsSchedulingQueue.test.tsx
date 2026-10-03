@@ -51,6 +51,7 @@ const appointment = (
   arrival_window_end_at: "2026-09-15T16:00:00Z",
   expected_duration_minutes: 90,
   capacity_units: "1.00",
+  capacity_state: "reserved",
   concurrency_version: 1,
   reschedule_count: 0,
   rescheduled_at: null,

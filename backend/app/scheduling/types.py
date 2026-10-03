@@ -22,6 +22,12 @@ class AppointmentStatus(StrEnum):
     NO_SHOW = "no_show"
 
 
+class AppointmentCapacityState(StrEnum):
+    RESERVED = "reserved"
+    INTENTIONALLY_UNASSIGNED = "intentionally_unassigned"
+    LEGACY_UNRECONCILED = "legacy_unreconciled"
+
+
 class AppointmentCancellationReason(StrEnum):
     CUSTOMER_REQUEST = "customer_request"
     DUPLICATE_APPOINTMENT = "duplicate_appointment"

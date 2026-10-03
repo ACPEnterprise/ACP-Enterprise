@@ -341,6 +341,11 @@ class Appointment(Base):
             "updated_at >= created_at",
             name="ck_appointments_updated_after_created",
         ),
+        CheckConstraint(
+            "capacity_state IN ('reserved', 'intentionally_unassigned', "
+            "'legacy_unreconciled')",
+            name="ck_appointments_capacity_state",
+        ),
         UniqueConstraint(
             "company_id",
             "appointment_number",
@@ -410,6 +415,9 @@ class Appointment(Base):
         DateTime(timezone=True)
     )
     expected_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    capacity_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="legacy_unreconciled"
+    )
     scheduling_timezone: Mapped[str] = mapped_column(String(100), nullable=False)
     concurrency_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     reschedule_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

@@ -5,6 +5,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+
 from app.jobs.types import JobPriority
 from app.main import app
 from app.operations.schemas import ServiceRequestCreate
@@ -30,7 +31,9 @@ def service_request() -> ServiceRequestCreate:
 
 
 @pytest.mark.asyncio
-async def test_calendar_placement_stages_schedule_and_dispatch_in_one_transaction() -> None:
+async def test_calendar_placement_stages_schedule_and_dispatch_in_one_transaction() -> (
+    None
+):
     data = service_request()
     appointment_id = uuid4()
     employee_id = uuid4()
@@ -64,6 +67,8 @@ async def test_calendar_placement_stages_schedule_and_dispatch_in_one_transactio
     assert result.appointment is appointment
     assert result.assignment is assignment
     assert scheduling.stage_reschedule_appointment.await_count == 1
+    reschedule = scheduling.stage_reschedule_appointment.await_args.kwargs["command"]
+    assert reschedule.establish_capacity_if_unassigned is True
     assert dispatch.stage_assign_or_replace.await_args.kwargs == {
         "context": ANY,
         "appointment_id": appointment_id,

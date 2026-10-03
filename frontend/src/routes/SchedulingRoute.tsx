@@ -129,7 +129,8 @@ const branchTime = (value: string | null, timeZone: string) =>
     ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone })
     : "Time unknown";
 const isCapacityUnreconciled = (item: AppointmentDetail) =>
-  ["scheduled", "confirmed"].includes(item.status) && item.capacity_units === null;
+  ["scheduled", "confirmed"].includes(item.status) &&
+  item.capacity_state === "legacy_unreconciled";
 const toLocalInput = (value: string | null) => {
   if (!value) return "";
   const date = new Date(value);
@@ -534,7 +535,7 @@ export function SchedulingRoute({
     startMinute: number,
   ) => {
     setDropError(null);
-    if (isCapacityUnreconciled(appointment)) {
+    if (appointment.capacity_state === "legacy_unreconciled") {
       setDropError("Imported Appointment has no reconciled capacity reservation and cannot be moved.");
       return;
     }
@@ -1010,7 +1011,7 @@ export function SchedulingRoute({
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         {currentSelection ? (
           <AppointmentPanel
-            key={`${currentSelection.id}:${currentSelection.concurrency_version}:${currentSelection.status}:${currentSelection.capacity_units ?? "unreconciled"}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
+            key={`${currentSelection.id}:${currentSelection.concurrency_version}:${currentSelection.status}:${currentSelection.capacity_state}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
             appointment={currentSelection}
             dispatchItem={selectedDispatch}
             job={
@@ -1037,6 +1038,30 @@ export function SchedulingRoute({
       {selectedDispatch && canDispatchManage && (
         <DispatchAssignmentPanel
           item={selectedDispatch}
+          onPlaceUnassigned={
+            currentSelection?.arrival_window_start_at &&
+            currentSelection.arrival_window_end_at
+              ? (employeeId, reason) =>
+                  calendarPlacement.mutateAsync({
+                    appointmentId: currentSelection.id,
+                    input: {
+                      request_id: crypto.randomUUID(),
+                      expected_appointment_version:
+                        currentSelection.concurrency_version,
+                      expected_assignment_version: null,
+                      employee_id: employeeId,
+                      arrival_window_start_at:
+                        currentSelection.arrival_window_start_at!,
+                      arrival_window_end_at:
+                        currentSelection.arrival_window_end_at!,
+                      expected_duration_minutes:
+                        currentSelection.expected_duration_minutes ?? 60,
+                      capacity_units: currentSelection.capacity_units ?? "1.00",
+                      reason,
+                    },
+                  })
+              : undefined
+          }
           onClose={() => setSelectedId(null)}
         />
       )}
