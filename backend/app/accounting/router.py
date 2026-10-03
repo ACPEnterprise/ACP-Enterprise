@@ -1,15 +1,42 @@
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounting.close_controls import (
+    AccountantReviewProjection,
+    PeriodCloseReadiness,
+    ReportComparison,
+    accounting_close_control_service,
+)
 from app.accounting.errors import (
     AccountingConflict,
     AccountingNotFound,
     AccountingPermissionDenied,
     AccountingValidation,
 )
+from app.accounting.models import (
+    AccountingPeriod,
+    OpeningControlException,
+    OpeningControlPackage,
+)
+from app.accounting.opening_controls import (
+    ControlExceptionView,
+    OpeningControlApply,
+    OpeningControlDetail,
+    OpeningControlPage,
+    OpeningControlPreview,
+    OpeningControlPreviewRequest,
+    OpeningControlResponse,
+    OpeningControlTransition,
+    SealedOpeningPackageSelection,
+    opening_control_service,
+    preview_opening_controls,
+)
+from app.accounting.opening_source_adapter import SealedOpeningPackageAdapter
 from app.accounting.repository import accounting_repository
 from app.accounting.schemas import (
     AccountCreate,
@@ -29,12 +56,14 @@ from app.accounting.schemas import (
     TrialBalanceResponse,
 )
 from app.accounting.service import accounting_service
+from app.core.config import settings
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AccountingPermission
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+from app.platform.users.models import User
 
 router = APIRouter(prefix="/api/v1/accounting", tags=["Accounting"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -58,6 +87,13 @@ ReverseContext = Annotated[
 ]
 ReportContext = Annotated[
     AuthorizationContext, Depends(require_permission(AccountingPermission.REPORT_READ))
+]
+ReconcileContext = Annotated[
+    AuthorizationContext, Depends(require_permission(AccountingPermission.RECONCILE))
+]
+OpeningApproveContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AccountingPermission.OPENING_STATE_APPROVE)),
 ]
 
 
@@ -173,6 +209,50 @@ async def list_periods(
     )
 
 
+async def _read_period(
+    session: AsyncSession, context: AuthorizationContext, period_id: UUID
+) -> AccountingPeriod:
+    period = await session.scalar(
+        select(AccountingPeriod).where(
+            AccountingPeriod.company_id == context.company.id,
+            AccountingPeriod.id == period_id,
+        )
+    )
+    if period is None:
+        raise translate(AccountingNotFound("Accounting period was not found"))
+    return period
+
+
+@router.get(
+    "/periods/{period_id}/report-comparisons",
+    response_model=tuple[ReportComparison, ...],
+)
+async def report_comparisons(
+    period_id: UUID, context: ReportContext, session: DatabaseSession
+) -> tuple[ReportComparison, ...]:
+    period = await _read_period(session, context, period_id)
+    return await accounting_close_control_service.comparisons(
+        session, context=context, period=period
+    )
+
+
+@router.get("/accountant-review", response_model=AccountantReviewProjection)
+async def accountant_review_queue(
+    context: ReconcileContext, session: DatabaseSession
+) -> AccountantReviewProjection:
+    return await accounting_close_control_service.review_queue(session, context=context)
+
+
+@router.get("/periods/{period_id}/close-readiness", response_model=PeriodCloseReadiness)
+async def period_close_readiness(
+    period_id: UUID, context: ReportContext, session: DatabaseSession
+) -> PeriodCloseReadiness:
+    period = await _read_period(session, context, period_id)
+    return await accounting_close_control_service.readiness(
+        session, context=context, period=period
+    )
+
+
 @router.post(
     "/periods", response_model=PeriodResponse, status_code=status.HTTP_201_CREATED
 )
@@ -219,10 +299,30 @@ async def close_period(
                 "Period close requires period management and Finance approval."
             )
         )
+    period = await _read_period(session, context, period_id)
+    readiness = await accounting_close_control_service.readiness(
+        session, context=context, period=period
+    )
+    if (
+        data.readiness_digest is None
+        or data.readiness_digest != readiness.evidence_digest
+        or readiness.overall_readiness != "READY"
+    ):
+        raise translate(
+            AccountingConflict("Current canonical period-close readiness is required")
+        )
     try:
         return PeriodResponse.model_validate(
             await accounting_service.close_period(
-                session, context=context, period_id=period_id, data=data
+                session,
+                context=context,
+                period_id=period_id,
+                data=data.model_copy(
+                    update={
+                        "controls_reconciled": True,
+                        "evidence_digest": readiness.evidence_digest,
+                    }
+                ),
             )
         )
     except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
@@ -396,3 +496,246 @@ async def trial_balance(
         net=debits - credits,
         balanced=debits == credits,
     )
+
+
+@router.post("/opening-controls/sealed-preview", response_model=OpeningControlPreview)
+async def preview_sealed_opening_state_controls(
+    data: SealedOpeningPackageSelection,
+    context: ReconcileContext,
+) -> OpeningControlPreview:
+    """Preview server-owned sealed evidence; accepts no client calculations."""
+    del context
+    if not settings.qbo_production_evidence_root:
+        raise translate(AccountingNotFound("QBO source custody is not configured"))
+    try:
+        request = SealedOpeningPackageAdapter(
+            Path(settings.qbo_production_evidence_root)
+        ).resolve(data.package_identity)
+        return preview_opening_controls(request)
+    except (AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/opening-controls/sealed",
+    response_model=OpeningControlResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_sealed_opening_state_controls(
+    data: SealedOpeningPackageSelection,
+    context: ReconcileContext,
+    session: DatabaseSession,
+) -> OpeningControlResponse:
+    if not settings.qbo_production_evidence_root:
+        raise translate(AccountingNotFound("QBO source custody is not configured"))
+    try:
+        request = SealedOpeningPackageAdapter(
+            Path(settings.qbo_production_evidence_root)
+        ).resolve(data.package_identity)
+        preview = preview_opening_controls(request)
+        async with session.begin():
+            row = await opening_control_service.submit(
+                session,
+                context=context,
+                request=request,
+                expected_digest=preview.evidence_digest,
+            )
+        return OpeningControlResponse.model_validate(row)
+    except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.get("/opening-controls/{package_id}", response_model=OpeningControlDetail)
+async def opening_state_control_detail(
+    package_id: UUID, context: ReadContext, session: DatabaseSession
+) -> OpeningControlDetail:
+    row = await session.scalar(
+        select(OpeningControlPackage).where(
+            OpeningControlPackage.company_id == context.company.id,
+            OpeningControlPackage.id == package_id,
+        )
+    )
+    if row is None:
+        raise translate(AccountingNotFound("Opening control package was not found"))
+    snapshot = OpeningControlPreviewRequest.model_validate(row.evidence_snapshot)
+    actor_ids = tuple(
+        value
+        for value in (row.prepared_by_user_id, row.approved_by_user_id)
+        if value is not None
+    )
+    actor_rows = (
+        await session.execute(
+            select(User.id, User.display_name).where(User.id.in_(actor_ids))
+        )
+    ).all()
+    actor_names: dict[UUID, str] = {
+        actor_id: display_name for actor_id, display_name in actor_rows
+    }
+    lifecycle: list[dict[str, object]] = [
+        {
+            "state": "PREVIEWED",
+            "at": row.created_at,
+            "actor_role": "preparer",
+            "actor_display_name": actor_names.get(
+                row.prepared_by_user_id, "Unavailable"
+            ),
+        }
+    ]
+    lifecycle.append(
+        {
+            "state": "READY_FOR_REVIEW"
+            if row.status == "READY_FOR_APPROVAL"
+            else row.status,
+            "at": row.applied_at or row.approved_at or row.created_at,
+            "actor_role": "system" if row.status == "REVIEW_REQUIRED" else "reviewer",
+            "actor_display_name": (
+                actor_names.get(row.approved_by_user_id, "Pending")
+                if row.approved_by_user_id
+                else "Pending"
+            ),
+        }
+    )
+    return OpeningControlDetail(
+        package=OpeningControlResponse.model_validate(row),
+        trial_balance=snapshot.trial_balance,
+        total_debits=row.total_debits,
+        total_credits=row.total_credits,
+        difference=row.total_debits - row.total_credits,
+        equity_categories=tuple(
+            sorted(
+                {
+                    line.equity_category
+                    for line in snapshot.trial_balance
+                    if line.equity_category
+                }
+            )
+        ),
+        ar_difference=(
+            row.ar_control_balance - row.ar_subledger_balance
+            if row.ar_control_balance is not None
+            and row.ar_subledger_balance is not None
+            else None
+        ),
+        ap_difference=(
+            row.ap_control_balance - row.ap_subledger_balance
+            if row.ap_control_balance is not None
+            and row.ap_subledger_balance is not None
+            else None
+        ),
+        source_as_of=row.source_as_of,
+        cutoff_at=row.cutoff_at,
+        lifecycle=tuple(lifecycle),
+    )
+
+
+@router.get(
+    "/opening-controls/{package_id}/subledger/{family}",
+    response_model=OpeningControlPage,
+)
+async def opening_state_subledger_detail(
+    package_id: UUID,
+    family: Literal["ar", "ap"],
+    context: ReadContext,
+    session: DatabaseSession,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> OpeningControlPage:
+    row = await session.scalar(
+        select(OpeningControlPackage).where(
+            OpeningControlPackage.company_id == context.company.id,
+            OpeningControlPackage.id == package_id,
+        )
+    )
+    if row is None:
+        raise translate(AccountingNotFound("Opening control package was not found"))
+    snapshot = OpeningControlPreviewRequest.model_validate(row.evidence_snapshot)
+    values = snapshot.source_ar if family == "ar" else snapshot.source_ap
+    ordered = sorted(
+        values,
+        key=lambda item: (
+            item.party_identity,
+            item.document_identity,
+            item.source_identity,
+        ),
+    )
+    items = tuple(
+        item.model_dump(mode="json") for item in ordered[offset : offset + limit]
+    )
+    return OpeningControlPage(
+        package_id=row.id, items=items, offset=offset, limit=limit, total=len(ordered)
+    )
+
+
+@router.get(
+    "/opening-controls/{package_id}/exceptions",
+    response_model=tuple[ControlExceptionView, ...],
+)
+async def opening_state_control_exceptions(
+    package_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> tuple[ControlExceptionView, ...]:
+    package = await session.scalar(
+        select(OpeningControlPackage.id).where(
+            OpeningControlPackage.company_id == context.company.id,
+            OpeningControlPackage.id == package_id,
+        )
+    )
+    if package is None:
+        raise translate(AccountingNotFound("Opening control package was not found"))
+    rows = await session.scalars(
+        select(OpeningControlException)
+        .where(
+            OpeningControlException.company_id == context.company.id,
+            OpeningControlException.package_id == package_id,
+        )
+        .order_by(
+            OpeningControlException.control_family,
+            OpeningControlException.exception_identity,
+        )
+    )
+    return tuple(ControlExceptionView.model_validate(row) for row in rows.all())
+
+
+@router.post(
+    "/opening-controls/{package_id}/approve",
+    response_model=OpeningControlResponse,
+)
+async def approve_opening_state_controls(
+    package_id: UUID,
+    data: OpeningControlTransition,
+    context: OpeningApproveContext,
+    session: DatabaseSession,
+) -> OpeningControlResponse:
+    try:
+        async with session.begin():
+            row = await opening_control_service.approve(
+                session, context=context, package_id=package_id, transition=data
+            )
+        return OpeningControlResponse.model_validate(row)
+    except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/opening-controls/{package_id}/apply",
+    response_model=OpeningControlResponse,
+)
+async def apply_opening_state_controls(
+    package_id: UUID,
+    data: OpeningControlApply,
+    context: OpeningApproveContext,
+    session: DatabaseSession,
+) -> OpeningControlResponse:
+    try:
+        async with session.begin():
+            row = await opening_control_service.mark_applied(
+                session,
+                context=context,
+                package_id=package_id,
+                journal_id=data.journal_id,
+                transition=data,
+            )
+        return OpeningControlResponse.model_validate(row)
+    except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
+        raise translate(error) from error

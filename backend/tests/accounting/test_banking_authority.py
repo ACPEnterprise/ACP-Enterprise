@@ -3,8 +3,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.accounting.banking import (
     CanonicalMatchCandidate,
     MatchState,
@@ -20,6 +18,7 @@ from app.accounting.banking import (
 from app.accounting.errors import AccountingConflict, AccountingValidation
 from app.accounting.models import BankAccount, BankReconciliation, BankTransaction
 from app.main import app
+from fastapi.testclient import TestClient
 
 NOW = datetime(2026, 10, 2, tzinfo=timezone.utc)
 DIGEST = "a" * 64

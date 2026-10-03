@@ -82,6 +82,7 @@ class PeriodTransitionRequest(AccountingSchema):
     finance_approver_user_id: UUID | None = None
     evidence_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     controls_reconciled: bool = False
+    readiness_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class JournalLineCreate(AccountingSchema):

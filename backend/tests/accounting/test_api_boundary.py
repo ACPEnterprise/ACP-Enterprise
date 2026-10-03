@@ -1,4 +1,6 @@
+from datetime import date
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -9,6 +11,7 @@ from app.accounting.errors import (
     AccountingValidation,
 )
 from app.accounting.router import approve_reopen, close_period, router, translate
+from app.accounting.schemas import PeriodTransitionRequest
 from app.platform.permissions.codes import AccountingPermission
 from fastapi import HTTPException
 
@@ -64,6 +67,9 @@ def test_accounting_api_is_company_authenticated_and_bounded() -> None:
         "/api/v1/accounting/accounts",
         "/api/v1/accounting/control-accounts",
         "/api/v1/accounting/periods",
+        "/api/v1/accounting/periods/{period_id}/report-comparisons",
+        "/api/v1/accounting/periods/{period_id}/close-readiness",
+        "/api/v1/accounting/accountant-review",
         "/api/v1/accounting/periods/{period_id}/begin-close",
         "/api/v1/accounting/periods/{period_id}/close",
         "/api/v1/accounting/periods/{period_id}/reopen-request",
@@ -74,6 +80,13 @@ def test_accounting_api_is_company_authenticated_and_bounded() -> None:
         "/api/v1/accounting/journals/{journal_id}/post",
         "/api/v1/accounting/journals/{journal_id}/reversals",
         "/api/v1/accounting/trial-balance",
+        "/api/v1/accounting/opening-controls/sealed-preview",
+        "/api/v1/accounting/opening-controls/sealed",
+        "/api/v1/accounting/opening-controls/{package_id}",
+        "/api/v1/accounting/opening-controls/{package_id}/subledger/{family}",
+        "/api/v1/accounting/opening-controls/{package_id}/exceptions",
+        "/api/v1/accounting/opening-controls/{package_id}/approve",
+        "/api/v1/accounting/opening-controls/{package_id}/apply",
     }
     assert all(route.path.startswith("/api/v1/accounting") for route in router.routes)
 
@@ -115,3 +128,51 @@ async def test_period_reopen_approval_requires_finance_approval_permission() -> 
     assert raised.value.status_code == 403
     assert raised.value.detail["code"] == "forbidden"
     assert raised.value.detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_period_close_replaces_browser_assertions_with_server_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.accounting.router as accounting_router
+
+    period_id = uuid4()
+    company_id = uuid4()
+    period = SimpleNamespace(id=period_id)
+    readiness = SimpleNamespace(evidence_digest="b" * 64, overall_readiness="READY")
+    result = SimpleNamespace(
+        id=period_id,
+        company_id=company_id,
+        name="May 2026",
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 5, 31),
+        status="closed",
+        version=3,
+    )
+    close = AsyncMock(return_value=result)
+    monkeypatch.setattr(
+        accounting_router, "_read_period", AsyncMock(return_value=period)
+    )
+    monkeypatch.setattr(
+        accounting_router.accounting_close_control_service,
+        "readiness",
+        AsyncMock(return_value=readiness),
+    )
+    monkeypatch.setattr(accounting_router.accounting_service, "close_period", close)
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=company_id),
+        has_permission=lambda _permission: True,
+    )
+    request = PeriodTransitionRequest(
+        expected_version=2,
+        reason="Accountant approved",
+        readiness_digest="b" * 64,
+        evidence_digest="a" * 64,
+        controls_reconciled=False,
+    )
+
+    await close_period(period_id, request, context, SimpleNamespace())
+
+    sent = close.await_args.kwargs["data"]
+    assert sent.controls_reconciled is True
+    assert sent.evidence_digest == "b" * 64

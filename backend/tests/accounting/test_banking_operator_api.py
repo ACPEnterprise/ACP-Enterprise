@@ -5,8 +5,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.accounting.banking_operator import BankingOperatorService
 from app.accounting.banking_schemas import (
     BankImportConfirmRequest,
@@ -17,6 +15,7 @@ from app.accounting.banking_schemas import (
 )
 from app.accounting.errors import AccountingConflict
 from app.main import app
+from fastapi.testclient import TestClient
 
 NOW = datetime(2026, 10, 2, tzinfo=timezone.utc)
 

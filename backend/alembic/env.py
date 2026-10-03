@@ -1,7 +1,5 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
 from app.accounting import models as accounting_models  # noqa: F401
 from app.accounts_payable import models as accounts_payable_models  # noqa: F401
@@ -105,6 +103,7 @@ from app.worker_control.transport.persistence import (
 )
 from app.worker_identity import models as worker_identity_models  # noqa: F401
 from app.workforce import models as workforce_models  # noqa: F401
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 
