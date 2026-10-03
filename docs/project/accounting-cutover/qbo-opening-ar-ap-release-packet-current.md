@@ -2,7 +2,7 @@
 
 - Protected base: `e703c7b6210c62c99d2e69c44ecb0c70e09f9bc9`
 - Candidate branch: `release/laptop1-qbo-banking-operator-current-1`
-- Candidate: published after integration of this packet
+- Candidate: `c434aaf454c745a3d78954daf8531f5f936a1947`
 - Migration head: `bw8y0a2c4e6g`
 - Scope: immutable QBO opening-control evidence, balanced trial-balance
   preview, explicit opening-equity review, AR/AP control-to-subledger
