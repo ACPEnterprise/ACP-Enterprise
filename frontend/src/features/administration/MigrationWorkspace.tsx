@@ -255,7 +255,7 @@ export function MigrationWorkspace() {
                     <td className="p-ui-2 tabular-nums">{item.held.toLocaleString()}</td>
                     <td className="p-ui-2 tabular-nums">{item.exception.toLocaleString()}</td>
                     <td className="p-ui-2 tabular-nums">{item.delta.toLocaleString()}</td>
-                    <td className="p-ui-2">{item.delta > 0 ? "REQUIRED" : "None reported"}</td>
+                    <td className="p-ui-2">{item.delta > 0 ? <><strong>REQUIRED</strong><a className="ml-ui-2 font-semibold text-action-primary underline" href="#hcp-owner-decisions">Review queue</a></> : "None reported"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -312,7 +312,7 @@ export function MigrationWorkspace() {
           </CardContent>
         </Card>
       </div>
-      <Card>
+      <Card id="hcp-owner-decisions">
         <CardHeader>
           <CardTitle>Owner decision packet</CardTitle>
           <CardDescription>
