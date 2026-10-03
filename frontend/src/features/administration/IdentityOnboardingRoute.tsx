@@ -33,6 +33,10 @@ const OPERATING_PROFILES = [
     label: "FIELD_TECH",
     roleCodes: [["TECHNICIAN"], ["ACP_EMPLOYEE_MOBILE"]],
   },
+  {
+    label: "FIELD_MANAGER",
+    roleCodes: [["TECHNICIAN"], ["ACP_EMPLOYEE_MOBILE"], ["DISPATCHER"]],
+  },
 ] as const;
 
 type OperatingProfile = { label: string; roles: CompanyRole[] };
@@ -172,7 +176,7 @@ export function IdentityOnboardingRoute() {
         last_name: lastName.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
-        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF",
+        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_MANAGER",
       });
       const view: IdentityOnboardingView = { id: created.onboarding_request_id, employee_id: created.employee_id, membership_id: created.membership_id, branch_id: created.branch_id, masked_login: email.trim(), status: created.status };
       setOnboarding(view);
@@ -198,7 +202,7 @@ export function IdentityOnboardingRoute() {
         last_name: lastName.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
-        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF",
+        access_profile: profileLabel === "FIELD_TECH" ? "FIELD_TECHNICIAN" : profileLabel as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_MANAGER",
       });
       const view: IdentityOnboardingView = { id: linked.onboarding_request_id, employee_id: linked.employee_id, membership_id: linked.membership_id, branch_id: linked.branch_id, masked_login: email.trim(), status: linked.status };
       setOnboarding(view);

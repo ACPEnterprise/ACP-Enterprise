@@ -8,7 +8,7 @@ import * as api from "./api";
 import { IdentityOnboardingRoute } from "./IdentityOnboardingRoute";
 vi.mock("./api");
 vi.mock("../../api/workforce");
-const roles = [["company-admin", "COMPANY_ADMINISTRATOR", "Company Administrator"], ["manager", "OFFICE_MANAGER", "Office Manager"], ["csr", "SERVICE_CSR", "Service CSR"], ["technician", "TECHNICIAN", "Technician"], ["mobile", "ACP_EMPLOYEE_MOBILE", "ACP Employee Mobile"]].map(([id, code, name]) => ({ id, code, name, company_id: "company-1", description: null, status: "active", is_system: true }));
+const roles = [["company-admin", "COMPANY_ADMINISTRATOR", "Company Administrator"], ["manager", "OFFICE_MANAGER", "Office Manager"], ["csr", "SERVICE_CSR", "Service CSR"], ["technician", "TECHNICIAN", "Technician"], ["mobile", "ACP_EMPLOYEE_MOBILE", "ACP Employee Mobile"], ["dispatcher", "DISPATCHER", "Dispatcher"]].map(([id, code, name]) => ({ id, code, name, company_id: "company-1", description: null, status: "active", is_system: true }));
 const context: AuthenticationContextValue = { status: "authenticated", activeCompany: { id: "company-1", code: "ACP", name: "All County", membership_id: "membership-1", default_branch_id: "main", has_all_branch_access: false, branches: [{ id: "main", code: "MAIN", name: "Main Branch", is_primary: true }] }, permissionCodes: ["COMPANY_IDENTITY_ONBOARDING_MANAGE"], user: null, signIn: vi.fn(), signOut: vi.fn(), signOutAll: vi.fn(), refreshAuthorization: vi.fn(), requireReauthentication: vi.fn() };
 function renderPage(authentication = context, entry = "/administration/identity-onboarding") { const router = createMemoryRouter([{ path: "/administration/identity-onboarding", Component: IdentityOnboardingRoute }], { initialEntries: [entry] }); render(<AuthenticationContext.Provider value={authentication}><RouterProvider router={router} /></AuthenticationContext.Provider>); }
 describe("IdentityOnboardingRoute", () => {
@@ -34,9 +34,9 @@ describe("IdentityOnboardingRoute", () => {
     expect(api.onboardSimpleEmployee).toHaveBeenCalledWith(expect.objectContaining({ access_profile: "FIELD_TECHNICIAN", branch_id: "main" })); expect(await screen.findByText("Employee invited. Delivery status is shown below.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View Team" })).toHaveAttribute("href", "/employees");
   });
-  it("shows only the four approved owner-facing operating profiles", async () => {
+  it("shows the approved owner-facing operating profiles", async () => {
     renderPage(); const select = (await screen.findAllByRole("combobox"))[0];
-    for (const label of ["ADMIN", "OFFICE MANAGER", "OFFICE STAFF", "FIELD TECH"]) expect(select).toHaveTextContent(label);
+    for (const label of ["ADMIN", "OFFICE MANAGER", "OFFICE STAFF", "FIELD TECH", "FIELD MANAGER"]) expect(select).toHaveTextContent(label);
     expect(select).not.toHaveTextContent("SUPPORT"); expect(select).not.toHaveTextContent("ACP EMPLOYEE MOBILE");
   });
   it("prefills owner-confirmed roster facts but never invents login email", async () => {

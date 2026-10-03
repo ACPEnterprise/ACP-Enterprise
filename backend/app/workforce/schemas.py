@@ -467,7 +467,7 @@ class SimpleEmployeeMatchResponse(WorkforceSchema):
 class SimpleEmployeeOnboardingRequest(SimpleEmployeeMatchRequest):
     request_key: str = Field(min_length=1, max_length=128)
     access_profile: Literal[
-        "ADMINISTRATOR", "OFFICE_MANAGER", "OFFICE_STAFF", "FIELD_TECHNICIAN"
+        "ADMINISTRATOR", "OFFICE_MANAGER", "OFFICE_STAFF", "FIELD_TECHNICIAN", "FIELD_MANAGER"
     ]
 
 

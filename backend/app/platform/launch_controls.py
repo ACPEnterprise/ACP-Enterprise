@@ -201,6 +201,7 @@ class LaunchRoleCode(StrEnum):
     COMPANY_ADMINISTRATOR = "COMPANY_ADMINISTRATOR"
     OFFICE_MANAGER = "OFFICE_MANAGER"
     DISPATCHER = "DISPATCHER"
+    FIELD_MANAGER = "FIELD_MANAGER"
     TECHNICIAN = "TECHNICIAN"
     AUDITOR = "AUDITOR"
     SUPPORT = "SUPPORT"
@@ -333,6 +334,36 @@ LAUNCH_ROLE_MATRIX = (
                 EmployeeOperationsPermission.OWN_DAY_READ,
                 TimekeepingPermission.OWN_READ,
                 TimekeepingPermission.OWN_PUNCH,
+            }
+        ),
+    ),
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.FIELD_MANAGER,
+        purpose=(
+            "Lead field operations with assigned Job execution and bounded "
+            "Service Board supervision, without finance, Payroll, or access administration."
+        ),
+        permission_codes=frozenset(
+            {
+                CustomerPermission.READ,
+                PipelinePermission.READ,
+                PipelinePermission.UPDATE,
+                PipelinePermission.ASSIGN,
+                SchedulingPermission.READ,
+                SchedulingPermission.MANAGE,
+                JobPermission.READ,
+                JobPermission.MANAGE,
+                JobPermission.EXECUTE,
+                DispatchPermission.READ,
+                DispatchPermission.MANAGE,
+                WorkforcePermission.READ,
+                TimekeepingPermission.OWN_READ,
+                TimekeepingPermission.OWN_PUNCH,
+                EmployeeOperationsPermission.OWN_DAY_READ,
+                EmployeeOperationsPermission.OWN_LIA_READ,
+                PriceBookPermission.READ,
+                InventoryPermission.READ,
+                InventoryPermission.RESERVE,
             }
         ),
     ),
