@@ -2,7 +2,6 @@ import hashlib
 from pathlib import Path
 
 import pytest
-
 from app.operational_migration.hcp_supplemental_evidence import (
     attachment_retry_queue,
     build_attachment_authority,
