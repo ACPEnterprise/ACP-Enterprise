@@ -85,6 +85,7 @@ describe("Operations recovery", () => {
       "Office assignment while scheduling Job",
       undefined,
       `schedule-assignment:${request.request_id}`,
+      undefined,
     );
   });
 

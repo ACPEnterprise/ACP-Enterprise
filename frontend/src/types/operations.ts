@@ -2,6 +2,14 @@ import type { JobPriority } from "./jobs";
 import type { DispatchAssignment } from "./dispatch";
 import type { AppointmentDetail } from "./scheduling";
 
+export type SchedulingOverrideReason =
+  | "emergency_service"
+  | "customer_requested"
+  | "dispatcher_override"
+  | "owner_override"
+  | "after_hours_call"
+  | "other";
+
 export interface ServiceRequestCreateInput {
   request_id: string;
   branch_id: string;
@@ -35,6 +43,7 @@ export interface ExistingJobScheduleInput {
   capacity_units: string;
   reserve_capacity: boolean;
   employee_id: string | null;
+  override_reason_code?: SchedulingOverrideReason | null;
 }
 
 export interface ExistingJobScheduleResult {
@@ -53,6 +62,7 @@ export interface CalendarPlacementInput {
   expected_duration_minutes: number;
   capacity_units: string;
   reason: string;
+  override_reason_code?: SchedulingOverrideReason | null;
 }
 
 export interface CalendarPlacementResult {

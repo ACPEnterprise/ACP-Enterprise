@@ -51,3 +51,11 @@ class SchedulingCapacityError(SchedulingConflictError):
 
 class SchedulingVersionConflictError(SchedulingConflictError):
     pass
+
+
+class SchedulingOverrideRequiredError(SchedulingConflictError):
+    def __init__(self, constraints: tuple[str, ...]) -> None:
+        self.constraints = constraints
+        super().__init__(
+            "Scheduling planning constraints require an authorized override."
+        )

@@ -8,6 +8,14 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.analytics.service import AnalyticsService
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
@@ -39,6 +47,7 @@ from app.scheduling.errors import (
     SchedulingCapacityError,
     SchedulingCapacityFailure,
     SchedulingError,
+    SchedulingOverrideRequiredError,
     SchedulingValidationError,
     SchedulingValidationFailure,
     SchedulingVersionConflictError,
@@ -51,13 +60,6 @@ from app.scheduling.models import (
     BranchSchedulingWeeklyInterval,
 )
 from app.scheduling.router import router, translate_scheduling_error
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 @dataclass(frozen=True)
@@ -577,8 +579,9 @@ async def test_company_admin_configures_versioned_branch_scheduling_policy(
 
 
 def test_branch_scheduling_policy_rejects_overlapping_intervals() -> None:
-    from app.scheduling.schemas import BranchSchedulingPolicyWrite
     from pydantic import ValidationError
+
+    from app.scheduling.schemas import BranchSchedulingPolicyWrite
 
     with pytest.raises(ValidationError, match="cannot overlap"):
         BranchSchedulingPolicyWrite.model_validate(
@@ -1078,6 +1081,19 @@ def test_scheduling_failures_use_safe_recovery_contract(
     assert detail["code"] == code
     assert detail["recovery"] == recovery
     assert detail["correlation_id"] is None
+
+
+def test_override_warning_returns_typed_constraints() -> None:
+    translated = translate_scheduling_error(
+        SchedulingOverrideRequiredError(("minimum_notice", "outside_service_hours"))
+    )
+    assert translated.status_code == 409
+    assert translated.detail["code"] == "scheduling_override_required"
+    assert translated.detail["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert translated.detail["constraints"] == [
+        "minimum_notice",
+        "outside_service_hours",
+    ]
 
 
 @pytest.mark.parametrize(

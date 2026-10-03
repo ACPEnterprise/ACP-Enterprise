@@ -10,6 +10,7 @@ from app.scheduling.types import (
     AppointmentCancellationReason,
     AppointmentRescheduleReason,
     AppointmentStatus,
+    SchedulingOverrideReason,
 )
 
 
@@ -41,6 +42,7 @@ class AppointmentCreateRequest(SchedulingApiSchema):
         decimal_places=2,
         description="Branch scheduling capacity required by the Appointment.",
     )
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 class AppointmentCancellationRequest(SchedulingApiSchema):
@@ -74,6 +76,7 @@ class AppointmentRescheduleRequest(SchedulingApiSchema):
     reason_code: AppointmentRescheduleReason = Field(
         description="Controlled reason for rescheduling the Appointment."
     )
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 class AppointmentResponse(SchedulingApiSchema):

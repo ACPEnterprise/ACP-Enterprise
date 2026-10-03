@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -26,7 +26,7 @@ from app.scheduling.service import (
     SchedulingService,
     scheduling_service,
 )
-from app.scheduling.types import AppointmentRescheduleReason
+from app.scheduling.types import AppointmentRescheduleReason, SchedulingOverrideReason
 
 
 @dataclass(frozen=True)
@@ -78,6 +78,7 @@ class OperationsService:
         expected_duration_minutes: int,
         capacity_units: Decimal,
         reason: str,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> CalendarPlacementResult:
         """Move and assign as one canonical Scheduling/Dispatch transaction."""
         async with session.begin():
@@ -93,6 +94,7 @@ class OperationsService:
                     capacity_units=capacity_units,
                     reason_code=AppointmentRescheduleReason.OPERATIONAL_ADJUSTMENT,
                     establish_capacity_if_unassigned=True,
+                    override_reason_code=override_reason_code,
                 ),
             )
             assignment = await self._dispatch.stage_assign_or_replace(
@@ -103,6 +105,8 @@ class OperationsService:
                 reason=reason,
                 idempotency_key=str(request_id),
                 expected_assignment_version=expected_assignment_version,
+                allow_outside_shift=override_reason_code is not None,
+                override_reason_code=override_reason_code,
             )
         return CalendarPlacementResult(appointment=appointment, assignment=assignment)
 
@@ -117,9 +121,14 @@ class OperationsService:
         priority: JobPriority,
         customer_reported_problem: str | None,
         internal_description: str | None,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> LaunchWorkflowResult:
         if appointment.idempotency_key != request_id:
             raise ValueError("Appointment identity must match the service request.")
+        if override_reason_code is not None:
+            appointment = replace(
+                appointment, override_reason_code=override_reason_code
+            )
         scheduled = await self._scheduling.create_appointment(
             session, context=context, command=appointment
         )
@@ -148,10 +157,15 @@ class OperationsService:
         job_id: UUID,
         expected_job_version: int,
         appointment: CreateAppointmentCommand,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> LaunchWorkflowResult:
         """Schedule and link one existing Job through replay-safe domain commands."""
         if appointment.idempotency_key != request_id:
             raise ValueError("Appointment identity must match the schedule request.")
+        if override_reason_code is not None:
+            appointment = replace(
+                appointment, override_reason_code=override_reason_code
+            )
         async with session.begin():
             existing_job = await self._job_repository.get_job(
                 session, company_id=context.company.id, job_id=job_id
