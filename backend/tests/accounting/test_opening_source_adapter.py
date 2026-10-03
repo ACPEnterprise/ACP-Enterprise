@@ -5,7 +5,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from app.accounting.opening_source_adapter import SealedOpeningPackageAdapter
 
 
