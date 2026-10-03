@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,6 +96,71 @@ describe("IdentityOnboardingRoute", () => {
     await user.click(screen.getByRole("button", { name: "Send Invite" }));
     expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Link & Continue" })).toBeInTheDocument();
+  });
+  it("invalidates a SINGLE match when the access profile or Branch changes", async () => {
+    vi.mocked(api.matchSimpleEmployee).mockResolvedValue({ outcome: "SINGLE", candidates: [{ employee_id: "employee-linked", source_system: null, source_employee_id: null }] });
+    const user = userEvent.setup();
+    renderPage({
+      ...context,
+      activeCompany: {
+        ...context.activeCompany!,
+        branches: [
+          ...context.activeCompany!.branches,
+          { id: "north", code: "NORTH", name: "North Branch", is_primary: false },
+        ],
+      },
+    });
+    await user.type(await screen.findByLabelText("First name"), "Alex");
+    await user.type(screen.getByLabelText("Last name"), "Donahue");
+    await user.type(screen.getByLabelText("Email"), "alexallcountyplumbingandleak@gmail.com");
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Access profile"), "FIELD_MANAGER");
+    expect(screen.queryByText("Existing employee history found")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Branch"), "north");
+    expect(screen.queryByText("Existing employee history found")).not.toBeInTheDocument();
+  });
+  it("does not apply a stale NONE response after identity changes and then renders the current SINGLE match", async () => {
+    let resolveStale: ((value: import("./api").SimpleEmployeeMatchResponse) => void) | undefined;
+    vi.mocked(api.matchSimpleEmployee)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveStale = resolve; }))
+      .mockResolvedValueOnce({ outcome: "SINGLE", candidates: [{ employee_id: "7501498f-3183-491a-ac7d-81af9278730c", source_system: null, source_employee_id: null }] });
+    const user = userEvent.setup(); renderPage();
+    await user.type(await screen.findByLabelText("First name"), "Alex");
+    await user.type(screen.getByLabelText("Last name"), "Donahue");
+    await user.type(screen.getByLabelText("Email"), "legacy@example.com");
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    await user.clear(screen.getByLabelText("Email"));
+    await user.type(screen.getByLabelText("Email"), "alexallcountyplumbingandleak@gmail.com");
+    resolveStale?.({ outcome: "NONE", candidates: [] });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send Invite" })).toBeEnabled());
+    expect(api.onboardSimpleEmployee).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Link & Continue" })).toBeInTheDocument();
+  });
+  it("clears a SINGLE match before processing a current NONE response", async () => {
+    vi.mocked(api.matchSimpleEmployee)
+      .mockResolvedValueOnce({ outcome: "SINGLE", candidates: [{ employee_id: "employee-linked", source_system: null, source_employee_id: null }] })
+      .mockResolvedValueOnce({ outcome: "NONE", candidates: [] });
+    const user = userEvent.setup(); renderPage();
+    await user.type(await screen.findByLabelText("First name"), "Alex");
+    await user.type(screen.getByLabelText("Last name"), "Donahue");
+    await user.type(screen.getByLabelText("Email"), "alex@example.com");
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Email"));
+    await user.type(screen.getByLabelText("Email"), "new.employee@example.com");
+    expect(screen.queryByText("Existing employee history found")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send Invite" }));
+    expect(await screen.findByText("Employee invited. Delivery status is shown below.")).toBeInTheDocument();
+    expect(api.onboardSimpleEmployee).toHaveBeenCalledTimes(1);
   });
   it("fails closed without onboarding authority", () => { renderPage({ ...context, permissionCodes: [] }); expect(screen.getByText("You are not authorized to add employees.")).toBeInTheDocument(); expect(api.listRoles).not.toHaveBeenCalled(); });
   it("repairs safely missing canonical profiles through the audited reconciliation", async () => {
