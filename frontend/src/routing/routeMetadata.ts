@@ -208,6 +208,18 @@ export const financialReportsHandle = {
   workspace: { pageTitle: "Financial Reports", breadcrumbs: [{ label: "Financial Reports" }], helpTopic: "financial-reporting", aiContext: "financial-reporting" },
 } as const satisfies ShellRouteHandle;
 
+export const bankingHandle = {
+  workspace: {
+    pageTitle: "Banking",
+    breadcrumbs: [
+      { label: "Accounting", path: "/financial-reports" },
+      { label: "Banking" },
+    ],
+    helpTopic: "banking",
+    aiContext: "accounting-banking",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const qboMigrationHandle = {
   workspace: {
     pageTitle: "QuickBooks Migration",

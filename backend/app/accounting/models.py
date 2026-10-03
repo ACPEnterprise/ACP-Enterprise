@@ -158,6 +158,271 @@ class AccountSourceIdentity(Base):
     )
 
 
+class BankAccount(Base):
+    """Provider-neutral bank identity mapped to one Accounting cash account."""
+
+    __tablename__ = "accounting_bank_accounts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "ledger_account_id"],
+            ["accounting_accounts.company_id", "accounting_accounts.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "account_type IN ('checking','savings','money_market','cash','other')",
+            name="ck_accounting_bank_account_type",
+        ),
+        CheckConstraint(
+            "status IN ('active','inactive')", name="ck_accounting_bank_account_status"
+        ),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_bank_account_currency"),
+        CheckConstraint(
+            "length(btrim(masked_identity)) > 0",
+            name="ck_bank_account_masked_identity",
+        ),
+        CheckConstraint(
+            "opening_balance IS NULL OR (opening_balance_date IS NOT NULL AND opening_balance_provenance <> '{}'::jsonb)",
+            name="ck_bank_account_opening_provenance",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_account_id",
+            name="uq_bank_account_source_identity",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_bank_account_company_id"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    ledger_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    institution_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    account_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    account_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    masked_identity: Mapped[str] = mapped_column(String(40), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    source_system: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_account_id: Mapped[str] = mapped_column(String(180), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_as_of: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    opening_balance: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    opening_balance_date: Mapped[date | None] = mapped_column(Date)
+    opening_balance_provenance: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class BankTransaction(Base):
+    """Immutable source transaction identity with controlled pending-to-posted evolution."""
+
+    __tablename__ = "accounting_bank_transactions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "bank_account_id"],
+            ["accounting_bank_accounts.company_id", "accounting_bank_accounts.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "kind IN ('deposit','withdrawal','check','ach','merchant_settlement','fee','interest','refund','reversal','transfer','payroll','vendor_payment','owner_movement','other')",
+            name="ck_bank_transaction_kind",
+        ),
+        CheckConstraint(
+            "state IN ('pending','posted')", name="ck_bank_transaction_state"
+        ),
+        CheckConstraint(
+            "direction IN ('inflow','outflow')", name="ck_bank_transaction_direction"
+        ),
+        CheckConstraint("amount > 0", name="ck_bank_transaction_positive_amount"),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_bank_transaction_currency"),
+        UniqueConstraint(
+            "company_id",
+            "bank_account_id",
+            "source_system",
+            "external_transaction_id",
+            name="uq_bank_transaction_source_identity",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_bank_transaction_company_id"),
+        Index(
+            "ix_bank_transaction_period", "company_id", "bank_account_id", "posted_date"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    bank_account_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(40), nullable=False)
+    external_transaction_id: Mapped[str] = mapped_column(String(240), nullable=False)
+    related_identity: Mapped[str | None] = mapped_column(String(240))
+    group_key: Mapped[str | None] = mapped_column(String(240))
+    source_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    source_as_of: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    posted_date: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_date: Mapped[date | None] = mapped_column(Date)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    direction: Mapped[str] = mapped_column(String(12), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    memo: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(12), nullable=False)
+    prior_source_digest: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class BankTransactionMatch(Base):
+    __tablename__ = "accounting_bank_transaction_matches"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "bank_transaction_id"],
+            [
+                "accounting_bank_transactions.company_id",
+                "accounting_bank_transactions.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "state IN ('matched','unmatched','ambiguous','review_required','ignored','transfer_candidate','reconciliation_only')",
+            name="ck_bank_transaction_match_state",
+        ),
+        CheckConstraint(
+            "NOT deterministic OR state = 'matched'",
+            name="ck_bank_match_deterministic_state",
+        ),
+        UniqueConstraint(
+            "company_id", "bank_transaction_id", name="uq_bank_match_transaction"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    bank_transaction_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    state: Mapped[str] = mapped_column(String(28), nullable=False)
+    target_type: Mapped[str | None] = mapped_column(String(48))
+    target_identity: Mapped[str | None] = mapped_column(String(240))
+    candidate_evidence: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    deterministic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    decided_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class BankReconciliation(Base):
+    __tablename__ = "accounting_bank_reconciliations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "bank_account_id"],
+            ["accounting_bank_accounts.company_id", "accounting_bank_accounts.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "period_start <= period_end", name="ck_bank_reconciliation_period"
+        ),
+        CheckConstraint(
+            "status IN ('draft','ready_to_submit','submitted_for_review','closed')",
+            name="ck_bank_reconciliation_status",
+        ),
+        CheckConstraint(
+            "status <> 'closed' OR (difference = 0 AND closed_at IS NOT NULL AND reviewer_user_id IS NOT NULL)",
+            name="ck_bank_reconciliation_closed_integrity",
+        ),
+        CheckConstraint("version >= 1", name="ck_bank_reconciliation_version"),
+        CheckConstraint(
+            "status NOT IN ('submitted_for_review','closed') OR submitted_at IS NOT NULL",
+            name="ck_bank_reconciliation_submission_integrity",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "bank_account_id",
+            "statement_identity",
+            name="uq_bank_reconciliation_statement",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_bank_reconciliation_company_id"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    bank_account_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    statement_identity: Mapped[str] = mapped_column(String(240), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    ending_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    book_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    cleared_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    outstanding_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    difference: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    cleared_transaction_ids: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    outstanding_items: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    source_evidence: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    preparer_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    preparer_membership_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("memberships.id", ondelete="RESTRICT")
+    )
+    reviewer_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    prepared_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ControlAccountAssignment(Base):
     __tablename__ = "accounting_control_account_assignments"
     __table_args__ = (
