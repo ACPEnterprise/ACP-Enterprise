@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.accounting.banking_router import router as accounting_banking_router
 from app.accounting.router import router as accounting_router
 from app.accounts_payable.router import router as accounts_payable_router
 from app.analytics.router import router as analytics_router
@@ -181,6 +182,7 @@ app.include_router(health_router)
 app.include_router(events_router)
 app.include_router(analytics_router)
 app.include_router(accounting_router)
+app.include_router(accounting_banking_router)
 app.include_router(financial_reporting_router)
 app.include_router(beacon_router)
 app.include_router(business_economics_router)
