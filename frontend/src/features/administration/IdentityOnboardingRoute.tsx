@@ -35,7 +35,7 @@ const OPERATING_PROFILES = [
   },
   {
     label: "FIELD_MANAGER",
-    roleCodes: [["TECHNICIAN"], ["ACP_EMPLOYEE_MOBILE"], ["DISPATCHER"]],
+    roleCodes: [["FIELD_MANAGER"], ["TECHNICIAN"], ["ACP_EMPLOYEE_MOBILE"], ["DISPATCHER"]],
   },
 ] as const;
 
