@@ -13,6 +13,7 @@ export interface AppointmentDetail {
   arrival_window_end_at: string | null;
   expected_duration_minutes: number | null;
   capacity_units: string | null;
+  capacity_state: "reserved" | "intentionally_unassigned" | "legacy_unreconciled";
   concurrency_version: number;
   reschedule_count: number;
   rescheduled_at: string | null;
