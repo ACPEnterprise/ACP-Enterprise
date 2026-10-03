@@ -53,7 +53,7 @@ ROLE_CODES = {
     # plus the existing dispatcher supervision authority. It deliberately
     # excludes administration, Payroll, accounting, and security roles.
     AccessProfile.FIELD_MANAGER: frozenset(
-        {"TECHNICIAN", "ACP_EMPLOYEE_MOBILE", "DISPATCHER"}
+        {"FIELD_MANAGER", "TECHNICIAN", "ACP_EMPLOYEE_MOBILE", "DISPATCHER"}
     ),
 }
 

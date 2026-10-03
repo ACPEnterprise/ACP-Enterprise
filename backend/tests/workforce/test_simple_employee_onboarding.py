@@ -178,6 +178,7 @@ def test_phone_and_access_profiles_are_canonical() -> None:
         "ACP_EMPLOYEE_MOBILE",
     }
     assert ROLE_CODES[AccessProfile.FIELD_MANAGER] == {
+        "FIELD_MANAGER",
         "TECHNICIAN",
         "ACP_EMPLOYEE_MOBILE",
         "DISPATCHER",
