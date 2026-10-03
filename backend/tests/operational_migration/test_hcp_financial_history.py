@@ -44,6 +44,15 @@ def _source(tmp_path: Path) -> Path:
                     },
                 ],
                 "refunds": [{"id": "refund-1"}, {"id": None}],
+                "credits": [{"id": "credit-1", "status": "issued", "amount": "20.00"}],
+                "payment_reversals": [
+                    {
+                        "id": "reversal-1",
+                        "payment_id": "payment-1",
+                        "amount": "10.00",
+                    }
+                ],
+                "unapplied_credits": [{"id": None, "amount": "5.00"}],
             },
             {
                 "id": "invoice-2",
@@ -98,6 +107,19 @@ def test_classifies_source_history_without_promoting_accounting(tmp_path: Path) 
         "EXACT_REFUND",
         "SOURCE_BACKED_UNLINKED_REFUND",
     }
+    assert result.adjustment_counts == {
+        "source_acquired": 3,
+        "exact_source_identity": 2,
+        "review_required": 1,
+        "type_invoice_credit": 1,
+        "type_payment_reversal": 1,
+        "type_unapplied_credit": 1,
+    }
+    assert {row["aggregation_safe"] for row in result.adjustment_records} == {False}
+    assert {row["disposition"] for row in result.adjustment_records} == {
+        "SOURCE_HISTORY_EXACT_IDENTITY",
+        "REVIEW_REQUIRED_MISSING_PROVIDER_IDENTITY",
+    }
     assert result.authority["mutation_authority"] == "none"
 
 
@@ -110,6 +132,9 @@ def test_payment_and_refund_records_are_digest_stable(tmp_path: Path) -> None:
     first.verify()
     assert all(record["aggregation_safe"] is False for record in first.payment_records)
     assert all(record["aggregation_safe"] is False for record in first.refund_records)
+    assert all(
+        record["aggregation_safe"] is False for record in first.adjustment_records
+    )
 
 
 def test_rejects_duplicate_payment_source_identity(tmp_path: Path) -> None:
