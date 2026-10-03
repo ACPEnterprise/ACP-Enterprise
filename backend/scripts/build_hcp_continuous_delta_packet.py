@@ -14,6 +14,11 @@ from app.operational_migration.hcp_continuous_delta import (
     build_continuous_delta,
 )
 from app.operational_migration.hcp_current_overlay import OverlayKey
+from app.operational_migration.hcp_source_completeness import (
+    SourceIdentity,
+    build_source_completeness,
+    manifest_value,
+)
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -69,6 +74,21 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     plan = build(args)
+    provider_packet = _load(args.provider_observations)
+    completeness = build_source_completeness(
+        cutoff=args.cutoff,
+        acquired_at=provider_packet["acquired_at"],
+        source=tuple(
+            SourceIdentity(
+                row["domain"],
+                row["source_id"],
+                row.get("source_version"),
+                row["source_digest"],
+            )
+            for row in provider_packet["records"]
+        ),
+        delta=plan,
+    )
     value = {
         "contract": plan.contract,
         "cutoff": plan.cutoff,
@@ -85,6 +105,7 @@ def main() -> int:
             for row in plan.decisions
         ],
         "overlay": plan.manifest.private_payload() if plan.manifest else None,
+        "source_completeness": manifest_value(completeness),
     }
     args.output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     args.output.write_text(json.dumps(value, indent=2) + "\n")
@@ -97,6 +118,9 @@ def main() -> int:
                 "overlay_records": len(plan.manifest.records)
                 if plan.manifest
                 else 0,
+                "unexplained_provider_gaps": (
+                    completeness.unexplained_provider_gaps
+                ),
             }
         )
     )
