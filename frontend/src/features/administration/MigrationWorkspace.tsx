@@ -232,6 +232,126 @@ export function MigrationWorkspace() {
           </div>
         </CardContent>
       </Card>
+      <Card id="hcp-domain-completeness">
+        <CardHeader>
+          <CardTitle>HCP completeness by domain</CardTitle>
+          <CardDescription>
+            A plain-language answer to what is accounted for, what is held for
+            review, and what still needs a final source delta. Conflicts and
+            ambiguous records remain in the review queue until explicitly
+            resolved; no identity or relationship is inferred here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="min-w-[980px] w-full text-left text-body-s">
+              <thead><tr className="text-content-muted"><th className="border-b border-stroke p-ui-2">Domain</th><th className="border-b border-stroke p-ui-2">HCP source</th><th className="border-b border-stroke p-ui-2">ACP bound/admitted</th><th className="border-b border-stroke p-ui-2">Held</th><th className="border-b border-stroke p-ui-2">Conflicts / ambiguous</th><th className="border-b border-stroke p-ui-2">Unexplained</th><th className="border-b border-stroke p-ui-2">Final delta</th></tr></thead>
+              <tbody>
+                {data.counts.map((item) => (
+                  <tr className="border-t border-stroke" key={`completeness-${item.domain}`}>
+                    <th className="p-ui-2">{item.domain}</th>
+                    <td className="p-ui-2 tabular-nums">{item.source.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.migrated.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.held.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.exception.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.delta.toLocaleString()}</td>
+                    <td className="p-ui-2">{item.delta > 0 ? <><strong>REQUIRED</strong><a className="ml-ui-2 font-semibold text-action-primary underline" href="#hcp-owner-decisions">Review queue</a></> : "None reported"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+      <Card id="hcp-source-status">
+        <CardHeader>
+          <CardTitle>Source freshness and replay</CardTitle>
+          <CardDescription>Use this evidence to decide whether a final delta review can proceed.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 md:grid-cols-2">
+          {data.sources.map((source) => (
+            <article className="rounded-lg border border-stroke p-ui-3 text-body-s" key={`source-status-${source.source}`}>
+              <h3 className="font-semibold">Source status · {source.source}</h3>
+              <p className="mt-ui-1">Last source as-of: <strong>{source.cutoff ? "See Accounting cutoff above" : "Protected source snapshot"}</strong></p>
+              <p>Last replay result: <strong>{source.connection_state.includes("replay") ? "Verified" : label(source.delta_state)}</strong></p>
+              <p>Final delta: <strong>{label(source.delta_state)}</strong></p>
+            </article>
+          ))}
+        </CardContent>
+      </Card>
+      <Card id="hcp-domain-review">
+        <CardHeader>
+          <CardTitle>Owner domain review</CardTitle>
+          <CardDescription>Open the normal ACP workspace for representative records. Source-only history is never presented as native operating truth.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            ["Customers", "/customers"], ["Contacts", "/customers"], ["Locations", "/customers"],
+            ["Jobs", "/jobs"], ["Estimates", "/estimates"], ["Appointments", "/scheduling"],
+            ["Invoices", "/invoices"], ["Payments", "/payments"], ["Employees", "/employees"],
+          ].map(([domain, href]) => {
+            const count = data.counts.find((item) => item.domain.toLowerCase() === domain.toLowerCase());
+            const state = !count ? "EXTERNAL ACCESS REQUIRED" : count.delta > 0 ? "FINAL DELTA REQUIRED" : count.held + count.exception > 0 ? "OWNER DECISION REQUIRED" : "COMPLETE";
+            return <a className="rounded-lg border border-stroke p-ui-3 hover:bg-surface-subtle" href={href} key={domain}><div className="flex items-center justify-between gap-ui-2"><strong>{domain}</strong><Badge variant={state === "COMPLETE" ? "success" : state.includes("REQUIRED") ? "warning" : "neutral"}>{state}</Badge></div><p className="mt-ui-1 text-body-xs text-content-muted">Review source coverage, admitted records, and any held evidence.</p></a>;
+          })}
+          <a className="rounded-lg border border-stroke p-ui-3 hover:bg-surface-subtle" href="#hcp-history-review"><strong>Attachments / Open Work / History</strong><p className="mt-ui-1 text-body-xs text-content-muted">Review preserved evidence and chronology before any retirement decision.</p></a>
+        </CardContent>
+      </Card>
+      <Card id="hcp-extended-domains">
+        <CardHeader>
+          <CardTitle>Extended cutover domains</CardTitle>
+          <CardDescription>Domains without a current admitted projection remain visibly gated; stale rehearsal counts are never presented as current source evidence.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            ["Credits / refunds", "EXTERNAL ACCESS REQUIRED"],
+            ["Attachments / open work", "EXTERNAL ACCESS REQUIRED"],
+            ["Memberships / service plans", "EXTERNAL ACCESS REQUIRED"],
+            ["Reviews / ratings", "HISTORY-ONLY REVIEW"],
+            ["Tags / source / business unit / job type", "HISTORY-ONLY REVIEW"],
+            ["Pricebook / service references", "OWNER DECISION REQUIRED"],
+            ["Current open work", "CURRENT SOURCE REQUIRED"],
+            ["Full historical evidence", data.historical_window.completeness === "family_specific_available_coverage" ? "REVIEW AVAILABLE" : "CURRENT SOURCE REQUIRED"],
+          ].map(([domain, state]) => <article className="rounded-lg border border-stroke p-ui-3" key={domain}><div className="flex items-start justify-between gap-ui-2"><strong>{domain}</strong><Badge variant={state === "REVIEW AVAILABLE" ? "success" : "warning"}>{state}</Badge></div><p className="mt-ui-1 text-body-xs text-content-muted">No native completeness is inferred until the canonical source projection is available.</p></article>)}
+        </CardContent>
+      </Card>
+      <Card id="hcp-history-review">
+        <CardHeader>
+          <CardTitle>Contacts and historical notes</CardTitle>
+          <CardDescription>Customer and Job detail pages show admitted contacts, notes, and chronological history. Text notes remain historical context, not structured operational facts.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 md:grid-cols-2 text-body-s">
+          <div className="rounded-lg border border-stroke p-ui-3"><strong>Customer contacts</strong><p className="mt-ui-1 text-content-muted">Names, email, phones, role, preference, customer association, and admitted history are reviewed from the Customer workspace.</p><a className="mt-ui-2 inline-block font-semibold text-action-primary underline" href="/customers">Open Customers</a></div>
+          <div className="rounded-lg border border-stroke p-ui-3"><strong>Notes and chronology</strong><p className="mt-ui-1 text-content-muted">Customer notes and source history retain timestamps and provenance. Missing or unavailable history is shown explicitly.</p><a className="mt-ui-2 inline-block font-semibold text-action-primary underline" href="/jobs">Open Jobs</a></div>
+        </CardContent>
+      </Card>
+      <Card id="hcp-spot-checks">
+        <CardHeader>
+          <CardTitle>Physical spot-check workflow</CardTitle>
+          <CardDescription>Use representative records to compare HCP evidence with ACP. This screen does not alter source evidence or activate records.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-ui-3 text-body-s">
+          {[
+            ["Customer", "/customers"], ["Job", "/jobs"], ["Estimate", "/estimates"], ["Invoice", "/invoices"], ["Payment", "/payments"], ["History", "#hcp-history-review"],
+          ].map(([kind, href]) => <div className="flex flex-wrap items-center justify-between gap-ui-3 rounded-lg border border-stroke p-ui-3" key={kind}><span><strong>{kind}</strong><span className="ml-ui-2 text-content-muted">Owner comparison required</span></span><a className="font-semibold text-action-primary underline" href={href}>Open representative records</a></div>)}
+          <Alert variant="information">Durable spot-check marking is not exposed by the current migration API. Owner findings remain an external acceptance gate until that governed evidence endpoint exists.</Alert>
+        </CardContent>
+      </Card>
+      <Card id="hcp-freeze-sequence">
+        <CardHeader>
+          <CardTitle>Freeze, final delta, and retirement readiness</CardTitle>
+          <CardDescription>Retirement remains unavailable until the canonical controller confirms every required gate.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ol className="grid gap-ui-2 sm:grid-cols-2 lg:grid-cols-3">
+            {["Historical completeness", "Current source acquired", "Delta rehearsal", "Conflict review", "Open-work reconciliation", "Freeze approved", "Final delta", "Replay proof", "Owner spot checks", "Retirement readiness"].map((step, index) => {
+              const active = index < 3;
+              return <li className="rounded-lg border border-stroke p-ui-3" key={step}><span className="text-body-xs text-content-muted">{index + 1}</span><div className="mt-ui-1 font-semibold">{step}</div><Badge variant={active ? "success" : "warning"}>{active ? "EVIDENCE AVAILABLE" : "GATE REQUIRED"}</Badge></li>;
+            })}
+          </ol>
+          <Alert className="mt-ui-4" variant="warning">HCP retirement is not available. Final source access, delta evidence, conflict decisions, freeze approval, and durable owner spot-check evidence are still required.</Alert>
+        </CardContent>
+      </Card>
       <div className="grid gap-ui-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -265,7 +385,7 @@ export function MigrationWorkspace() {
           </CardContent>
         </Card>
       </div>
-      <Card>
+      <Card id="hcp-owner-decisions">
         <CardHeader>
           <CardTitle>Owner decision packet</CardTitle>
           <CardDescription>
