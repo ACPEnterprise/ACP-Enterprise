@@ -1,6 +1,6 @@
 # QuickBooks replacement pre-sprint parity matrix
 
-Observed protected authority: `290ad8119951412237df640f6003ecc3f3d08ada`.
+Observed protected authority: `66fd912d4be1986731190b1d0603be5101d022e6`.
 
 The complete machine-readable matrix is
 [`qbo-presprint-parity-matrix.json`](./qbo-presprint-parity-matrix.json). It

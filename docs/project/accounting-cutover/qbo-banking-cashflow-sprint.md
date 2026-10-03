@@ -1,6 +1,6 @@
 # Banking and cash-flow closure sprint
 
-Protected authority at preparation: `290ad8119951412237df640f6003ecc3f3d08ada`.
+Protected authority at preparation: `66fd912d4be1986731190b1d0603be5101d022e6`.
 
 This bounded preparation adds read-only, provider-neutral controls in
 `app.qbo_source.presprint_reconciliation`. It does not import a bank feed,

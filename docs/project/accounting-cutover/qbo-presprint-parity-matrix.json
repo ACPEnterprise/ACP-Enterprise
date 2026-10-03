@@ -1,6 +1,6 @@
 {
   "schema_version": "qbo-presprint-parity/v1",
-  "observed_protected_sha": "290ad8119951412237df640f6003ecc3f3d08ada",
+  "observed_protected_sha": "66fd912d4be1986731190b1d0603be5101d022e6",
   "strict_green_rule": "GREEN requires equal_or_better plus physical/operator proof; code/tests alone cannot produce GREEN.",
   "rows": [
     {"domain":"Accounting","quickbooks_capability":"Chart of accounts","all_county_use_evidence":"Active COA and stable source identities are required by ACC.DATA.1; real accepted export not observed in this checkout.","acp_current_state":"Source/evidence contracts and account mappings exist; operator acceptance pending.","status":"YELLOW","gap":"Real COA export, mapping approval, and UI proof are pending.","dependencies":"ACC.DATA.1; accountant mapping approval","implementation_size":"M","acceptance_test":"Load sealed COA; verify stable IDs, types, controls, permissions, and operator lookup.","owner_action":"Approve Day-1 account policy","accountant_action":"Approve mappings","external_action":"Provide sealed QBO COA export","recommended_day":"1","lane":"LPTP1A"},
