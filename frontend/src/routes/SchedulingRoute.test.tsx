@@ -38,6 +38,7 @@ const appointment = {
   arrival_window_start_at: "2026-08-13T13:00:00Z",
   arrival_window_end_at: "2026-08-13T15:00:00Z",
   capacity_units: "1.00",
+  capacity_state: "reserved",
 };
 const expectedLocalInput = (value: string) => {
   const date = new Date(value);
@@ -509,7 +510,7 @@ describe("SchedulingRoute", () => {
 
   it("labels imported capacity-unreconciled Appointments and blocks unsafe moves", async () => {
     permissions.add("COMPANY_SCHEDULING_MANAGE");
-    const imported = { ...appointment, capacity_units: null };
+    const imported = { ...appointment, capacity_units: null, capacity_state: "legacy_unreconciled" };
     vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [imported], total_count: 1, page: 1, page_size: 100 } } as never);
     render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}><SchedulingRoute /></MemoryRouter>);
     expect(screen.getAllByText(/IMPORTED \/.*CAPACITY.*RECONCILED/i).length).toBeGreaterThan(0);
@@ -524,7 +525,7 @@ describe("SchedulingRoute", () => {
       isLoading: false,
       isError: false,
       data: {
-        items: [{ ...appointment, capacity_units: null }],
+        items: [{ ...appointment, capacity_units: null, capacity_state: "legacy_unreconciled" }],
         total_count: 1,
         page: 1,
         page_size: 100,
@@ -546,7 +547,7 @@ describe("SchedulingRoute", () => {
       isLoading: false,
       isError: false,
       data: {
-        items: [{ ...appointment, capacity_units: "1.00", concurrency_version: 3 }],
+        items: [{ ...appointment, capacity_units: "1.00", capacity_state: "reserved", concurrency_version: 3 }],
         total_count: 1,
         page: 1,
         page_size: 100,

@@ -9,6 +9,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.analytics.service import AnalyticsService
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
@@ -52,12 +59,6 @@ from app.scheduling.service import (
 from app.scheduling.types import (
     AppointmentCancellationReason,
     AppointmentRescheduleReason,
-)
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
 )
 
 BUSINESS_TIMEZONE = ZoneInfo("America/New_York")
@@ -409,9 +410,11 @@ async def test_unassigned_creation_skips_capacity_and_replays_without_duplicate(
         )
 
     assert first.id == replay.id
+    assert first.capacity_state == "intentionally_unassigned"
     assert first.capacity_reservation is None
     response = appointment_response(first)
     assert response.capacity_units is None
+    assert response.capacity_state == "intentionally_unassigned"
     async with factory() as session:
         assert (
             await SchedulingRepository.get_capacity_reservation(
@@ -427,6 +430,24 @@ async def test_unassigned_creation_skips_capacity_and_replays_without_duplicate(
             )
             == 1
         )
+
+    async with factory() as session, session.begin():
+        placed = await service.stage_reschedule_appointment(
+            session,
+            context=fixture.context,
+            command=RescheduleAppointmentCommand(
+                appointment_id=first.id,
+                expected_version=1,
+                arrival_window_start_at=FIRST_START + timedelta(hours=1),
+                arrival_window_end_at=FIRST_START + timedelta(hours=2),
+                expected_duration_minutes=60,
+                capacity_units=Decimal("1.00"),
+                reason_code=AppointmentRescheduleReason.OPERATIONAL_ADJUSTMENT,
+                establish_capacity_if_unassigned=True,
+            ),
+        )
+    assert placed.capacity_state == "reserved"
+    assert placed.capacity_reservation is not None
 
 
 @pytest.mark.asyncio
