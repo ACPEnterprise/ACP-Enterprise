@@ -232,6 +232,53 @@ export function MigrationWorkspace() {
           </div>
         </CardContent>
       </Card>
+      <Card id="hcp-domain-completeness">
+        <CardHeader>
+          <CardTitle>HCP completeness by domain</CardTitle>
+          <CardDescription>
+            A plain-language answer to what is accounted for, what is held for
+            review, and what still needs a final source delta. Conflicts and
+            ambiguous records remain in the review queue until explicitly
+            resolved; no identity or relationship is inferred here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="min-w-[980px] w-full text-left text-body-s">
+              <thead><tr className="text-content-muted"><th className="border-b border-stroke p-ui-2">Domain</th><th className="border-b border-stroke p-ui-2">HCP source</th><th className="border-b border-stroke p-ui-2">ACP bound/admitted</th><th className="border-b border-stroke p-ui-2">Held</th><th className="border-b border-stroke p-ui-2">Conflicts / ambiguous</th><th className="border-b border-stroke p-ui-2">Unexplained</th><th className="border-b border-stroke p-ui-2">Final delta</th></tr></thead>
+              <tbody>
+                {data.counts.map((item) => (
+                  <tr className="border-t border-stroke" key={`completeness-${item.domain}`}>
+                    <th className="p-ui-2">{item.domain}</th>
+                    <td className="p-ui-2 tabular-nums">{item.source.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.migrated.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.held.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.exception.toLocaleString()}</td>
+                    <td className="p-ui-2 tabular-nums">{item.delta.toLocaleString()}</td>
+                    <td className="p-ui-2">{item.delta > 0 ? "REQUIRED" : "None reported"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+      <Card id="hcp-source-status">
+        <CardHeader>
+          <CardTitle>Source freshness and replay</CardTitle>
+          <CardDescription>Use this evidence to decide whether a final delta review can proceed.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 md:grid-cols-2">
+          {data.sources.map((source) => (
+            <article className="rounded-lg border border-stroke p-ui-3 text-body-s" key={`source-status-${source.source}`}>
+              <h3 className="font-semibold">Source status · {source.source}</h3>
+              <p className="mt-ui-1">Last source as-of: <strong>{source.cutoff ? "See Accounting cutoff above" : "Protected source snapshot"}</strong></p>
+              <p>Last replay result: <strong>{source.connection_state.includes("replay") ? "Verified" : label(source.delta_state)}</strong></p>
+              <p>Final delta: <strong>{label(source.delta_state)}</strong></p>
+            </article>
+          ))}
+        </CardContent>
+      </Card>
       <div className="grid gap-ui-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
