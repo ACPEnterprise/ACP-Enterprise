@@ -294,6 +294,9 @@ export function InventoryRoute() {
                 {seedPreview && (
                   <div className="space-y-3 rounded-md border border-stroke p-4">
                     <p><strong>{seedPreview.acp_materials_proposed}</strong> materials proposed from {seedPreview.source_rows_read} source rows; {seedPreview.rows_held} held.</p>
+                    <p className="text-sm">
+                      {seedPreview.vendor_cross_references_proposed} vendor cross-references and {seedPreview.purchase_cost_evidence_proposed} purchase-cost evidence records proposed.
+                    </p>
                     <p className="break-all text-sm text-content-muted">Verified digest: {seedPreview.source_digest}</p>
                     <Alert variant="warning">Opening stock will remain zero / not historically reconstructed. Price Book mapping is not required and will not be activated.</Alert>
                     {seedPreview.held_rows.map((row) => (

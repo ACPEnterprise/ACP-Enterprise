@@ -166,6 +166,8 @@ describe("InventoryRoute", () => {
       source_rows_read: 361,
       acp_materials_proposed: 360,
       rows_held: 1,
+      vendor_cross_references_proposed: 360,
+      purchase_cost_evidence_proposed: 360,
       held_rows: [{ source_row_number: 64, reason: "duplicate_vendor_sku_in_source" }],
       opening_inventory_state: "not_historically_reconstructed",
       price_book_mapping_required: false,
@@ -181,6 +183,7 @@ describe("InventoryRoute", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview catalog" }));
     await screen.findByText(/materials proposed from 361 source rows/i);
+    expect(screen.getByText(/360 vendor cross-references and 360 purchase-cost/i)).toBeVisible();
     expect(screen.getByText(/Price Book mapping is not required/i)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Admit 360 materials" }));
     await waitFor(() => expect(mutateAsync.admitCommonStockSeed).toHaveBeenCalledWith({

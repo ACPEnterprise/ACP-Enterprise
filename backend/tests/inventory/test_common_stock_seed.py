@@ -4,8 +4,10 @@ from pathlib import Path
 
 import pytest
 from app.inventory.common_stock_seed import (
+    ACCEPTED_COMMON_STOCK_SOURCE_DIGEST,
     CommonStockAdmissionService,
     CommonStockRow,
+    CommonStockWorkbook,
     planning_cost_candidate,
 )
 from app.inventory.errors import InventoryValidation
@@ -18,6 +20,9 @@ from app.inventory.router import (
 )
 from app.price_book.models import PriceBookComponent
 from app.purchasing.models import VendorItemCrossReference, VendorPurchaseCostEvidence
+from sqlalchemy import func, select
+
+from tests.inventory.test_inventory_foundation import inventory_fixture  # noqa: F401
 
 
 def row(
@@ -98,9 +103,82 @@ def test_normal_api_is_managed_two_step_and_atomic() -> None:
 
 
 def test_upload_boundary_rejects_unbounded_or_wrong_source() -> None:
+    assert ACCEPTED_COMMON_STOCK_SOURCE_DIGEST == (
+        "c9707e9abfc40a46be2ab0d234d7149857b5e7d9605a6aa747e152bb094c0712"
+    )
+    assert "ACCEPTED_COMMON_STOCK_SOURCE_DIGEST" in getsource(_read_common_stock_upload)
     with pytest.raises(InventoryValidation):
         _read_common_stock_upload(b"not-numbers", "catalog.xlsx")
     with pytest.raises(InventoryValidation):
         _read_common_stock_upload(
             b"x" * (MAX_COMMON_STOCK_WORKBOOK_BYTES + 1), "catalog.numbers"
+        )
+
+
+@pytest.mark.asyncio
+async def test_admission_exact_replay_preserves_material_authority(
+    inventory_fixture,  # noqa: F811
+) -> None:
+    factory, company, _, _, actor = inventory_fixture
+    admitted_row = row()
+    held_row = CommonStockRow(
+        source_row_number=3,
+        description="1/2 IN COPPER ELBOW",
+        vendor_sku="H-100",
+        purchase_cost=Decimal("1.25000000"),
+        unit="Each",
+        row_digest="b" * 64,
+        source_payload={"description": "1/2 IN COPPER ELBOW"},
+        disposition="held",
+        hold_reason="duplicate_vendor_sku_in_source",
+    )
+    workbook = CommonStockWorkbook(
+        source_path=Path("common.numbers"),
+        source_digest=ACCEPTED_COMMON_STOCK_SOURCE_DIGEST,
+        columns=("description", "part_number", "cost", "unit_of_measure"),
+        rows=(admitted_row, held_row),
+    )
+    service = CommonStockAdmissionService()
+
+    for _ in range(2):
+        async with factory() as session, session.begin():
+            assert await service.admit(
+                session,
+                workbook=workbook,
+                company_id=company.id,
+                actor_user_id=actor.id,
+            ) == (1, 1)
+
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(MaterialCatalogAdmission.id)).where(
+                    MaterialCatalogAdmission.company_id == company.id
+                )
+            )
+            == 2
+        )
+        assert (
+            await session.scalar(
+                select(func.count(VendorItemCrossReference.id)).where(
+                    VendorItemCrossReference.company_id == company.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(VendorPurchaseCostEvidence.id)).where(
+                    VendorPurchaseCostEvidence.company_id == company.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(InventoryQuantity.id)).where(
+                    InventoryQuantity.company_id == company.id
+                )
+            )
+            == 0
         )

@@ -127,6 +127,8 @@ class CommonStockSeedPreview(InventorySchema):
     source_rows_read: int
     acp_materials_proposed: int
     rows_held: int
+    vendor_cross_references_proposed: int
+    purchase_cost_evidence_proposed: int
     held_rows: tuple[CommonStockHeldRow, ...]
     opening_inventory_state: str = "not_historically_reconstructed"
     price_book_mapping_required: bool = False

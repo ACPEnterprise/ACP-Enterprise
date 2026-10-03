@@ -10,7 +10,7 @@ from pathlib import Path
 from uuid import UUID
 
 from numbers_parser import Document  # type: ignore[import-untyped]
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.schemas import BusinessEventCreate
@@ -26,6 +26,9 @@ from app.purchasing.models import (
 )
 
 REQUIRED_COLUMNS = ("description", "part_number", "cost", "unit_of_measure")
+ACCEPTED_COMMON_STOCK_SOURCE_DIGEST = (
+    "c9707e9abfc40a46be2ab0d234d7149857b5e7d9605a6aa747e152bb094c0712"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,12 +159,20 @@ class CommonStockAdmissionService:
         reason: str,
     ) -> tuple[int, int]:
         async with session.begin():
+            existing_count = await session.scalar(
+                select(func.count(MaterialCatalogAdmission.id)).where(
+                    MaterialCatalogAdmission.company_id == context.company.id,
+                    MaterialCatalogAdmission.source_digest == workbook.source_digest,
+                )
+            )
             admitted, held = await self.admit(
                 session,
                 workbook=workbook,
                 company_id=context.company.id,
                 actor_user_id=context.user.id,
             )
+            if (existing_count or 0) == len(workbook.rows):
+                return admitted, held
             audit_service.stage(
                 session,
                 AuditEntry(
@@ -207,14 +218,21 @@ class CommonStockAdmissionService:
         vendor_code: str = "HUGHES_SUPPLY",
         vendor_name: str = "Hughes Supply",
     ) -> tuple[int, int]:
-        existing_rows = set(
-            await session.scalars(
-                select(MaterialCatalogAdmission.source_row_number).where(
-                    MaterialCatalogAdmission.company_id == company_id,
-                    MaterialCatalogAdmission.source_digest == workbook.source_digest,
+        existing_dispositions = {
+            row_number: disposition
+            for row_number, disposition in (
+                await session.execute(
+                    select(
+                        MaterialCatalogAdmission.source_row_number,
+                        MaterialCatalogAdmission.disposition,
+                    ).where(
+                        MaterialCatalogAdmission.company_id == company_id,
+                        MaterialCatalogAdmission.source_digest
+                        == workbook.source_digest,
+                    )
                 )
-            )
-        )
+            ).all()
+        }
         vendor = await session.scalar(
             select(OperationalVendor).where(
                 OperationalVendor.company_id == company_id,
@@ -233,10 +251,15 @@ class CommonStockAdmissionService:
             )
             session.add(vendor)
             await session.flush()
-        admitted = held = 0
+        admitted = sum(
+            disposition == "admitted" for disposition in existing_dispositions.values()
+        )
+        held = sum(
+            disposition == "held" for disposition in existing_dispositions.values()
+        )
         observed_at = datetime.now(timezone.utc)
         for row in workbook.rows:
-            if row.source_row_number in existing_rows:
+            if row.source_row_number in existing_dispositions:
                 continue
             item: InventoryItem | None = None
             disposition, reason = row.disposition, row.hold_reason

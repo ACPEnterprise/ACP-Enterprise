@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.inventory.common_stock_seed import (
+    ACCEPTED_COMMON_STOCK_SOURCE_DIGEST,
     CommonStockWorkbook,
     common_stock_admission_service,
     read_common_stock_workbook,
@@ -120,6 +121,10 @@ def _read_common_stock_upload(
             workbook = read_common_stock_workbook(Path(temporary.name))
     except (OSError, ValueError) as error:
         raise InventoryValidation("Common stock workbook is invalid") from error
+    if workbook.source_digest != ACCEPTED_COMMON_STOCK_SOURCE_DIGEST:
+        raise InventoryValidation(
+            "Common stock workbook is not the accepted owner source"
+        )
     return CommonStockWorkbook(
         source_path=Path(source_filename),
         source_digest=workbook.source_digest,
@@ -135,6 +140,8 @@ def _common_stock_preview(workbook: CommonStockWorkbook) -> CommonStockSeedPrevi
         source_rows_read=len(workbook.rows),
         acp_materials_proposed=workbook.proposed_count,
         rows_held=workbook.held_count,
+        vendor_cross_references_proposed=workbook.proposed_count,
+        purchase_cost_evidence_proposed=workbook.proposed_count,
         held_rows=tuple(
             CommonStockHeldRow(
                 source_row_number=row.source_row_number,

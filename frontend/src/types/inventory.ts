@@ -24,6 +24,8 @@ export interface CommonStockSeedPreview {
   source_rows_read: number;
   acp_materials_proposed: number;
   rows_held: number;
+  vendor_cross_references_proposed: number;
+  purchase_cost_evidence_proposed: number;
   held_rows: readonly CommonStockHeldRow[];
   opening_inventory_state: "not_historically_reconstructed";
   price_book_mapping_required: false;
