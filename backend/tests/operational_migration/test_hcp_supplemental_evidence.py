@@ -10,6 +10,7 @@ from app.operational_migration.hcp_supplemental_evidence import (
     build_review_authority,
     build_supplemental_delta,
     import_attachment_content,
+    import_attachment_manifest,
 )
 
 ACQUIRED = "2026-10-03T15:00:00Z"
@@ -182,6 +183,39 @@ def test_attachment_content_rejects_digest_drift(tmp_path: Path) -> None:
             expected_digest=hashlib.sha256(source.read_bytes()).hexdigest(),
             expected_size=source.stat().st_size,
         )
+
+
+def test_manifest_import_is_bounded_and_returns_record_level_retry(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    good = source_root / "good.jpg"
+    good.write_bytes(b"good")
+    records = [
+        _attachment(
+            provider_attachment_id="att-good",
+            filename="good.jpg",
+            content_digest=hashlib.sha256(good.read_bytes()).hexdigest(),
+            byte_size=good.stat().st_size,
+        ),
+        _attachment(
+            provider_attachment_id="att-missing",
+            filename="missing.jpg",
+            content_digest="0" * 64,
+            byte_size=1,
+        ),
+    ]
+
+    imported, counts = import_attachment_manifest(
+        source_root=source_root,
+        custody_root=tmp_path / "custody",
+        company_id="company-1",
+        records=records,
+    )
+
+    assert counts == {"IMPORTED": 1, "RETRY_REQUIRED": 1}
+    assert {row["state"] for row in imported} == {"IMPORTED", "RETRY_REQUIRED"}
+    failed = next(row for row in imported if row["state"] == "RETRY_REQUIRED")
+    assert failed["error_reason"]
 
 
 def test_attachment_manifest_rejects_paths_duplicates_and_unverified_imports() -> None:

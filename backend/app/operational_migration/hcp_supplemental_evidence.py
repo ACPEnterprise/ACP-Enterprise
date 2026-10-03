@@ -153,6 +153,52 @@ def attachment_retry_queue(packet: Mapping[str, Any]) -> tuple[dict[str, Any], .
     )
 
 
+def import_attachment_manifest(
+    *,
+    source_root: Path,
+    custody_root: Path,
+    company_id: str,
+    records: Iterable[Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Import every AVAILABLE object while preserving record-level failures."""
+    imported: list[dict[str, Any]] = []
+    counts: Counter[str] = Counter()
+    for raw in records:
+        row = dict(raw)
+        state = AttachmentState(_identity(row.get("state"), "attachment state"))
+        if state is not AttachmentState.AVAILABLE:
+            imported.append(row)
+            counts[state.value] += 1
+            continue
+        filename = _safe_filename(row.get("filename"))
+        source_id = _identity(
+            row.get("provider_attachment_id"), "provider_attachment_id"
+        )
+        try:
+            result = import_attachment_content(
+                source_path=source_root / filename,
+                custody_root=custody_root,
+                company_id=company_id,
+                provider_attachment_id=source_id,
+                expected_digest=_sha256(row.get("content_digest"), "content_digest"),
+                expected_size=_integer(row.get("byte_size"), "byte_size"),
+            )
+        except (OSError, ValueError) as error:
+            row["state"] = AttachmentState.RETRY_REQUIRED.value
+            row["storage_reference"] = None
+            row["error_reason"] = str(error)
+            counts[AttachmentState.RETRY_REQUIRED.value] += 1
+        else:
+            row["state"] = AttachmentState.IMPORTED.value
+            row["storage_reference"] = result.storage_reference
+            row["error_reason"] = None
+            counts[AttachmentState.IMPORTED.value] += 1
+            if result.replayed:
+                counts["REPLAYED"] += 1
+        imported.append(row)
+    return imported, dict(sorted(counts.items()))
+
+
 def build_attachment_authority(
     *,
     company_id: str,
@@ -445,6 +491,12 @@ def _sha256(value: object, label: str) -> str:
     if len(result) != 64 or any(char not in "0123456789abcdef" for char in result):
         raise ValueError(f"{label} must be SHA-256")
     return result
+
+
+def _integer(value: object, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{label} must be a nonnegative integer")
+    return value
 
 
 def _safe_filename(value: object) -> str:

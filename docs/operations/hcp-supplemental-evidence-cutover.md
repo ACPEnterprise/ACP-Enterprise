@@ -86,6 +86,13 @@ python scripts/build_hcp_supplemental_packet.py memberships \
 python scripts/build_hcp_supplemental_packet.py reviews \
   --input /run/evidence/hcp/reviews-input.json \
   --output /run/evidence/hcp/reviews-packet.json
+
+python scripts/import_hcp_attachment_manifest.py \
+  --input /run/evidence/hcp/attachments-input.json \
+  --source-root /run/evidence/hcp/exported-content \
+  --custody-root /run/custody/hcp-attachments \
+  --output /run/evidence/hcp/attachments-imported-packet.json \
+  --retry-output /run/evidence/hcp/attachments-retry.json
 ```
 
 For a fresh acquisition, add `--prior <sealed-prior-packet>`. The output reports
