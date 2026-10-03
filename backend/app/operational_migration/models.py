@@ -105,6 +105,64 @@ class HcpMigrationMasterRun(Base):
     )
 
 
+class HcpCutoverClosureEvidence(Base):
+    """Immutable whole-source parity and retirement evidence for one HCP master."""
+
+    __tablename__ = "hcp_cutover_closure_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('BLOCKED','RETIREMENT_READY')",
+            name="ck_hcp_cutover_closure_status",
+        ),
+        CheckConstraint(
+            "unexplained_gap_count >= 0",
+            name="ck_hcp_cutover_closure_unexplained",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_cutover_closure_master_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "master_run_id",
+            "replay_digest",
+            name="uq_hcp_cutover_closure_replay",
+        ),
+        Index(
+            "ix_hcp_cutover_closure_scope_status",
+            "company_id",
+            "branch_id",
+            "status",
+            "as_of",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_cutoff: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    provider_source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    packet: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    unexplained_gap_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    replay_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class HcpCustomerSourceLineage(Base):
     __tablename__ = "hcp_customer_source_lineage"
     __table_args__ = (
