@@ -168,6 +168,33 @@ async def test_multiple_exact_source_candidates_are_ambiguous(monkeypatch) -> No
     assert result.outcome is MatchOutcome.AMBIGUOUS
 
 
+@pytest.mark.asyncio
+async def test_stale_revisions_for_one_source_identity_resolve_to_latest_employee(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    company_id, branch_id = uuid4(), uuid4()
+    first, stale = employee(company_id, branch_id), employee(company_id, branch_id)
+    source_id = "pro_10853bfb63874a0b9d17cab14d1da20b"
+    monkeypatch.setattr(module, "employee_is_synthetic", AsyncMock(return_value=False))
+    source = SimpleNamespace(native_employee_id=source_id)
+    latest = SimpleNamespace(native_employee_id=source_id, employee_id=first.id)
+    session = SimpleNamespace(
+        scalars=AsyncMock(return_value=[first, stale]),
+        scalar=AsyncMock(side_effect=[source, source, latest]),
+    )
+    result = await SimpleEmployeeOnboardingService().match(
+        session,
+        context=context(company_id, branch_id),
+        branch_id=branch_id,
+        first_name="Alex",
+        last_name="Donahue",
+        email="alexallcountyplumbingandleak@gmail.com",
+        phone=None,
+    )
+    assert result.outcome is MatchOutcome.SINGLE
+    assert result.candidates[0].employee_id == first.id
+
+
 def test_phone_and_access_profiles_are_canonical() -> None:
     assert normalize_phone("(727) 598-6848") == "+17275986848"
     assert normalize_phone("(727) 478-9760") == "+17274789760"

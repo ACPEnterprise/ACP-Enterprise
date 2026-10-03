@@ -121,6 +121,7 @@ class SimpleEmployeeOnboardingService:
             )
         )
         candidates: dict[UUID, MatchCandidate] = {}
+        source_candidates: dict[str, set[UUID]] = {}
         owner_source_ids = {
             person.source_employee_id
             for person in REAL_ALL_COUNTY_ROSTER
@@ -170,6 +171,30 @@ class SimpleEmployeeOnboardingService:
                 candidates[employee.id] = MatchCandidate(
                     employee.id, "HOUSECALL_PRO", source.native_employee_id
                 )
+                source_candidates.setdefault(source.native_employee_id, set()).add(employee.id)
+
+        # A source identity may have several historical crosswalk revisions.  Only
+        # the employee named by the newest authoritative revision is a deterministic
+        # match; stale revisions must not turn the owner flow into an ambiguity list.
+        for native_employee_id, employee_ids in source_candidates.items():
+            if len(employee_ids) < 2:
+                continue
+            latest = await session.scalar(
+                select(HcpEmployeeSourceCrosswalk)
+                .where(
+                    HcpEmployeeSourceCrosswalk.company_id == context.company.id,
+                    HcpEmployeeSourceCrosswalk.branch_id == branch_id,
+                    HcpEmployeeSourceCrosswalk.native_employee_id == native_employee_id,
+                    HcpEmployeeSourceCrosswalk.disposition
+                    == "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+                )
+                .order_by(HcpEmployeeSourceCrosswalk.evidence_version.desc())
+                .limit(1)
+            )
+            if latest is None or latest.employee_id not in employee_ids:
+                continue
+            for employee_id in employee_ids - {latest.employee_id}:
+                candidates.pop(employee_id, None)
         values = tuple(
             sorted(candidates.values(), key=lambda item: str(item.employee_id))
         )
