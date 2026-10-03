@@ -232,6 +232,18 @@ export const qboMigrationHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const qboCutoverHandle = {
+  workspace: {
+    pageTitle: "QuickBooks Cutover",
+    breadcrumbs: [
+      { label: "Accounting", path: "/financial-reports" },
+      { label: "QuickBooks Cutover" },
+    ],
+    helpTopic: "quickbooks-cutover",
+    aiContext: "qbo-opening-state-review",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const businessEconomicsHandle = {
   workspace: { pageTitle: "Business Economics", breadcrumbs: [{ label: "Business Economics" }], helpTopic: "business-economics", aiContext: "business-economics" },
 } as const satisfies ShellRouteHandle;

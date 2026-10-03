@@ -39,6 +39,7 @@ export type NavigationItemId =
   | "financial-reports"
   | "banking"
   | "qbo-migration"
+  | "qbo-cutover"
   | "business-economics"
   | "economics-administration"
   | "luminary"
