@@ -53,6 +53,7 @@ export interface AppointmentRescheduleInput {
     | "operational_adjustment"
     | "scheduling_conflict"
     | "weather";
+  override_reason_code?: import("./operations").SchedulingOverrideReason | null;
 }
 
 export interface BranchWeeklyInterval {

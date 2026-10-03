@@ -13,6 +13,7 @@ import {
   resolveReconciliation,
 } from "../api/dispatch";
 import type { DispatchExceptionCode } from "../types/dispatch";
+import type { SchedulingOverrideReason } from "../types/operations";
 import { appointmentKeys } from "./useScheduling";
 
 export const dispatchKeys = {
@@ -89,7 +90,16 @@ export function useDispatchMutations() {
         employeeId: string;
         reason: string;
         version?: number;
-      }) => assignPrimary(x.appointmentId, x.employeeId, x.reason, x.version),
+        overrideReason?: SchedulingOverrideReason;
+      }) =>
+        assignPrimary(
+          x.appointmentId,
+          x.employeeId,
+          x.reason,
+          x.version,
+          undefined,
+          x.overrideReason,
+        ),
       onSettled: refresh,
     }),
     release: useMutation({

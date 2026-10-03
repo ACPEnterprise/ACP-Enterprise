@@ -132,4 +132,43 @@ describe("DispatchAssignmentPanel", () => {
     expect(screen.getByText("FAILED")).toBeVisible();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("requires and submits a governed reason for an outside-shift technician", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useDispatchMutations).mockReturnValue(mutations as never);
+    vi.mocked(useEligibleTechnicians).mockReturnValue({
+      isLoading: false,
+      data: [{
+        employee_id: "employee-2",
+        display_name: "Michael Brian",
+        decision: "availability_not_ready",
+        eligible: false,
+        reasons: ["outside_branch_schedule"],
+      }],
+    } as never);
+    render(
+      <MemoryRouter>
+        <DispatchAssignmentPanel
+          item={{ ...released, assignment: null }}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    await user.selectOptions(screen.getByLabelText("Technician"), "employee-2");
+    expect(screen.getByText("Outside scheduled shift — override required")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Assign primary" })).toBeDisabled();
+    await user.selectOptions(
+      screen.getByLabelText("Scheduling override reason"),
+      "emergency_service",
+    );
+    await user.click(screen.getByRole("button", { name: "Assign primary" }));
+    await user.click(screen.getByRole("button", { name: "Confirm assignment change" }));
+    expect(mutations.assign.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employeeId: "employee-2",
+        overrideReason: "emergency_service",
+      }),
+      expect.any(Object),
+    );
+  });
 });

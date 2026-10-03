@@ -76,6 +76,8 @@ async def test_calendar_placement_stages_schedule_and_dispatch_in_one_transactio
         "reason": "Calendar drag/drop",
         "idempotency_key": str(data.request_id),
         "expected_assignment_version": 2,
+        "allow_outside_shift": False,
+        "override_reason_code": None,
     }
 
 
