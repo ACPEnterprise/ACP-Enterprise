@@ -17,6 +17,10 @@ from app.database.session import get_database_session
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.payroll.accounting_controls import (
+    PayrollAccountingControlProjection,
+    project_payroll_run_accounting_control,
+)
 from app.payroll.calculation import PayrollGrossCalculationEngine
 from app.payroll.calculation_authority import (
     build_federal_authority_inputs,
@@ -96,6 +100,7 @@ PaymentManage = Annotated[AuthorizationContext, Depends(require_permission(Payro
 PaymentAssemble = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_ASSEMBLE))]
 PaymentReview = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_REVIEW))]
 PaymentApprove = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.PAYMENT_RELEASE_APPROVE))]
+AccountingRead = Annotated[AuthorizationContext, Depends(require_permission(PayrollPermission.ACCOUNTING_READ))]
 
 
 class RunMemberInput(BaseModel):
@@ -127,6 +132,28 @@ class PaperCheckIssueInput(BaseModel):
     check_number: str = Field(min_length=1, max_length=80)
     issue_date: date
     idempotency_key: str = Field(min_length=1, max_length=255)
+
+
+@router.get(
+    "/accounting-controls/runs/{run_id}",
+    response_model=PayrollAccountingControlProjection,
+)
+async def payroll_accounting_control(
+    run_id: UUID,
+    cutoff_at: datetime,
+    context: AccountingRead,
+    session: Session,
+) -> PayrollAccountingControlProjection:
+    """Read-only Payroll-subledger to GL tie at an explicit cutoff."""
+    try:
+        return await project_payroll_run_accounting_control(
+            session,
+            context=context,
+            payroll_run_id=run_id,
+            cutoff_at=cutoff_at,
+        )
+    except PayrollConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 class PaperCheckVoidInput(BaseModel):
