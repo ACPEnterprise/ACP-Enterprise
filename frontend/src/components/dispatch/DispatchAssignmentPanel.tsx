@@ -29,7 +29,10 @@ export function DispatchAssignmentPanel({
   onClose,
 }: {
   readonly item: DispatchBoardItem;
-  readonly onPlaceUnassigned?: (employeeId: string, reason: string) => Promise<unknown>;
+  readonly onPlaceUnassigned?: (
+    employeeId: string,
+    reason: string,
+  ) => Promise<{ readonly assignment: { readonly primary_employee_id: string | null } }>;
   readonly onClose: () => void;
 }) {
   const technicians = useEligibleTechnicians(item.appointment_id);
@@ -40,6 +43,8 @@ export function DispatchAssignmentPanel({
     "assignment_ambiguous",
   );
   const [removeEmployeeId, setRemoveEmployeeId] = useState<string | null>(null);
+  const [placementPending, setPlacementPending] = useState(false);
+  const [placementError, setPlacementError] = useState<unknown>(null);
   const [confirm, setConfirm] = useState<
     | "assign"
     | "release"
@@ -60,8 +65,10 @@ export function DispatchAssignmentPanel({
     mutations.release.isPending ||
     mutations.crew.isPending ||
     mutations.reconcile.isPending ||
-    mutations.exception.isPending;
+    mutations.exception.isPending ||
+    placementPending;
   const error =
+    placementError ||
     mutations.assign.error ||
     mutations.release.error ||
     mutations.crew.error ||
@@ -125,10 +132,24 @@ export function DispatchAssignmentPanel({
         },
         { onSuccess: complete, onError: () => setConfirm(null) },
       );
-    else if (employeeId && !assignment && onPlaceUnassigned)
+    else if (employeeId && !assignment && onPlaceUnassigned) {
+      setPlacementError(null);
+      setPlacementPending(true);
       void onPlaceUnassigned(employeeId, reason)
-        .then(complete)
-        .catch(() => setConfirm(null));
+        .then((result) => {
+          if (result.assignment.primary_employee_id !== employeeId) {
+            throw new Error(
+              "Assignment response did not confirm the selected technician.",
+            );
+          }
+          complete();
+        })
+        .catch((placementFailure: unknown) => {
+          setPlacementError(placementFailure);
+          setConfirm(null);
+        })
+        .finally(() => setPlacementPending(false));
+    }
     else if (employeeId)
       mutations.assign.mutate(
         {
