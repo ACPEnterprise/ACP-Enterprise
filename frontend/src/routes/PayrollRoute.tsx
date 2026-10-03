@@ -113,6 +113,23 @@ export function PayrollRoute() {
       <Alert variant={nativeReady ? "success" : "warning"} title={nativeReady ? "Native Payroll evidence available" : "NATIVE CALCULATION NOT READY"}>
         {nativeReady ? "Native Payroll results are available for the reported run state." : "Complete the approved policy, employee, time, compensation, and tax evidence before native calculation can proceed."} {canReadCutover && <><Link className="ml-1 font-semibold underline" to="#manual-bridge-payroll">Record reviewed manual payroll</Link> is available for an owner-reviewed external calculation.</>}
       </Alert>
+      {!effectivePayPeriodId && (
+        <Card id="payroll-first-run-start">
+          <CardHeader>
+            <CardTitle>First Payroll: start here</CardTitle>
+            <CardDescription>Complete these steps in order. Each step reads the Company’s current authority and updates readiness; no Payroll is calculated or paid from setup.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="grid gap-3 text-sm md:grid-cols-2">
+              <li className="rounded-lg border border-stroke p-3"><strong>1. Company Payroll policy</strong><p className="mt-1 text-content-muted">Owner drafts it; a separate authorized approver approves it.</p><Link className="mt-2 inline-block font-semibold text-action-primary underline" to="#payroll-policy-setup">Open Payroll policy setup</Link></li>
+              <li className="rounded-lg border border-stroke p-3"><strong>2. Current pay period</strong><p className="mt-1 text-content-muted">Owner enters the period dates, processing date, and payday after policy approval.</p><Link className="mt-2 inline-block font-semibold text-action-primary underline" to="#pay-periods">Open pay-period setup</Link></li>
+              <li className="rounded-lg border border-stroke p-3"><strong>3. Lianne and other included Employees</strong><p className="mt-1 text-content-muted">Enter approved compensation, withholding/jurisdiction, deductions or approved N/A, and opening/YTD evidence.</p><Link className="mt-2 inline-block font-semibold text-action-primary underline" to="#payroll-period-review">Open Employee readiness</Link></li>
+              <li className="rounded-lg border border-stroke p-3"><strong>4. Accepted time</strong><p className="mt-1 text-content-muted">Manager or timekeeper resolves and accepts the selected period’s timecards.</p><Link className="mt-2 inline-block font-semibold text-action-primary underline" to="/employees">Open Time &amp; Attendance</Link></li>
+              <li className="rounded-lg border border-stroke p-3 md:col-span-2"><strong>5. Assemble → Calculate → Review → Approve → Close</strong><p className="mt-1 text-content-muted">These actions appear only after the preceding readiness gates pass. Paper-check evidence is recorded after Close.</p></li>
+            </ol>
+          </CardContent>
+        </Card>
+      )}
       <section aria-label="Payroll status" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card><CardHeader><CardTitle>Status</CardTitle><CardDescription>Current governed Payroll state</CardDescription></CardHeader><CardContent className="text-xl font-bold">{workflowStatus}</CardContent></Card>
         <Card><CardHeader><CardTitle>Employees</CardTitle><CardDescription>Included and requiring attention</CardDescription></CardHeader><CardContent className="text-xl font-bold">{Object.values(value.member_dispositions).reduce((sum, count) => sum + count, 0)} <span className="text-sm font-normal text-content-muted">({value.blocker_count} attention)</span></CardContent></Card>

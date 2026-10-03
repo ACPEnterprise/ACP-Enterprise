@@ -99,6 +99,17 @@ describe("BookCustomerWorkPanel", () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it("blocks an off-grid customer-work booking before review", async () => {
+    render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Customer/ }), "customer-1");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Service Location/ }), "location-1");
+    await userEvent.clear(fieldInput("Arrival window starts"));
+    await userEvent.type(fieldInput("Arrival window starts"), "2026-09-14T09:50");
+    expect(screen.getByText(/choose :00, :15, :30, or :45/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Review booking" })).toBeDisabled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it("truthfully keeps technician assignment separate after persistence", () => {
     vi.mocked(useCreateServiceRequest).mockReturnValue({
       mutate,

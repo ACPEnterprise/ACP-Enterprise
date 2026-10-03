@@ -92,6 +92,7 @@ class OperationsService:
                     expected_duration_minutes=expected_duration_minutes,
                     capacity_units=capacity_units,
                     reason_code=AppointmentRescheduleReason.OPERATIONAL_ADJUSTMENT,
+                    establish_capacity_if_unassigned=True,
                 ),
             )
             assignment = await self._dispatch.stage_assign_or_replace(

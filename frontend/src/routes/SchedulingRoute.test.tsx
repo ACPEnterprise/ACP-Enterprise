@@ -38,6 +38,7 @@ const appointment = {
   arrival_window_start_at: "2026-08-13T13:00:00Z",
   arrival_window_end_at: "2026-08-13T15:00:00Z",
   capacity_units: "1.00",
+  capacity_state: "reserved",
 };
 const expectedLocalInput = (value: string) => {
   const date = new Date(value);
@@ -135,11 +136,15 @@ describe("SchedulingRoute", () => {
       screen.getByRole("heading", { name: "Service Board" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
+    const dayCalendar = within(screen.getByRole("region", { name: "Day calendar" }));
+    expect(dayCalendar.getAllByText(":15").length).toBeGreaterThan(0);
+    expect(dayCalendar.getAllByText(":30").length).toBeGreaterThan(0);
+    expect(dayCalendar.getAllByText(":45").length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "Day agenda" })).toBeVisible();
     expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(
       2,
     );
-    const block = within(screen.getByRole("region", { name: "Day calendar" })).getByRole("button", { name: /APT-000001/ });
+    const block = dayCalendar.getByRole("button", { name: /APT-000001/ });
     expect(block).toHaveStyle({ top: "120px", height: "120px" });
   });
 
@@ -509,7 +514,7 @@ describe("SchedulingRoute", () => {
 
   it("labels imported capacity-unreconciled Appointments and blocks unsafe moves", async () => {
     permissions.add("COMPANY_SCHEDULING_MANAGE");
-    const imported = { ...appointment, capacity_units: null };
+    const imported = { ...appointment, capacity_units: null, capacity_state: "legacy_unreconciled" };
     vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [imported], total_count: 1, page: 1, page_size: 100 } } as never);
     render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}><SchedulingRoute /></MemoryRouter>);
     expect(screen.getAllByText(/IMPORTED \/.*CAPACITY.*RECONCILED/i).length).toBeGreaterThan(0);
@@ -524,7 +529,7 @@ describe("SchedulingRoute", () => {
       isLoading: false,
       isError: false,
       data: {
-        items: [{ ...appointment, capacity_units: null }],
+        items: [{ ...appointment, capacity_units: null, capacity_state: "legacy_unreconciled" }],
         total_count: 1,
         page: 1,
         page_size: 100,
@@ -546,7 +551,7 @@ describe("SchedulingRoute", () => {
       isLoading: false,
       isError: false,
       data: {
-        items: [{ ...appointment, capacity_units: "1.00", concurrency_version: 3 }],
+        items: [{ ...appointment, capacity_units: "1.00", capacity_state: "reserved", concurrency_version: 3 }],
         total_count: 1,
         page: 1,
         page_size: 100,

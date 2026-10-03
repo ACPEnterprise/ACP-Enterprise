@@ -431,6 +431,27 @@ describe("PayrollRoute authorization", () => {
      expect(screen.getByText("Manager / Timekeeper")).toBeVisible();
   });
 
+  it("shows the ordered First Payroll start-here path before a pay period exists", () => {
+    permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ"]);
+    vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: false, aggregate_approved_gross: "0.00", aggregate_approved_net: "0.00", reconciliation_state: "attention_required", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: {}, member_dispositions: {}, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
+    vi.mocked(useCurrentPayPeriod).mockReturnValue(query(null) as never);
+    vi.mocked(usePayPeriods).mockReturnValue(query([]) as never);
+
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
+
+    expect(screen.getByRole("heading", { name: "First Payroll: start here" })).toBeVisible();
+    expect(screen.getByText("1. Company Payroll policy")).toBeVisible();
+    expect(screen.getByText("2. Current pay period")).toBeVisible();
+    expect(screen.getByText("3. Lianne and other included Employees")).toBeVisible();
+    expect(screen.getByText("4. Accepted time")).toBeVisible();
+    expect(screen.getByText("5. Assemble → Calculate → Review → Approve → Close")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open Payroll policy setup" })).toHaveAttribute("href", "/#payroll-policy-setup");
+    expect(screen.getByRole("link", { name: "Open pay-period setup" })).toHaveAttribute("href", "/#pay-periods");
+    expect(screen.getByRole("link", { name: "Open Employee readiness" })).toHaveAttribute("href", "/#payroll-period-review");
+    expect(screen.getByRole("link", { name: "Open Time & Attendance" })).toHaveAttribute("href", "/employees");
+    expect(screen.getByText(/no Payroll is calculated or paid from setup/i)).toBeVisible();
+  });
+
   it("renders and invokes Approve Payroll for reviewed accepted state", async () => {
     permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_APPROVE"]);
     const approve = vi.fn();
