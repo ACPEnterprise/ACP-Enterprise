@@ -36,6 +36,60 @@ class _Session:
         self.results = [
             _Result([]),
             *[_Result([{"admitted": 2, "projected": 2}]) for _ in range(7)],
+            _Result(
+                [
+                    {
+                        "invoices": 2,
+                        "customer_job_linked": 2,
+                        "source_line_items": 4,
+                        "open_ar_invoices": 1,
+                        "open_ar_amount": "125.00",
+                        "paid": 1,
+                        "open_status": 1,
+                    }
+                ]
+            ),
+            _Result(
+                [
+                    {
+                        "payment_assertions": 2,
+                        "invoice_linked": 2,
+                        "succeeded": 2,
+                        "non_succeeded": 0,
+                    }
+                ]
+            ),
+            _Result(
+                [
+                    {
+                        "parent_type": "job",
+                        "registered": 3,
+                        "available": 2,
+                        "failed": 1,
+                        "retryable": 1,
+                    }
+                ]
+            ),
+            _Result(
+                [
+                    {
+                        "parent_type": "job",
+                        "entry_type": "note",
+                        "admitted": 5,
+                        "unresolved_employee": 1,
+                    }
+                ]
+            ),
+            _Result(
+                [
+                    {
+                        "source_identities": 7,
+                        "canonical_bound": 6,
+                        "terminated_or_excluded": 1,
+                        "unresolved": 0,
+                    }
+                ]
+            ),
             _Result([{"entity_kind": "job", "count": 3}]),
             _Result(
                 [
@@ -88,6 +142,22 @@ async def test_snapshot_is_read_only_and_accounts_native_continuity() -> None:
     }
     assert result["held_by_entity_kind"] == {"job": 3}
     assert result["current_operations"]["dispatch_graph_complete"] == 1
+    assert result["invoice_parity"] == {
+        "invoices": 2,
+        "customer_job_linked": 2,
+        "source_line_items": 4,
+        "open_ar_invoices": 1,
+        "open_ar_amount": "125.00",
+        "paid": 1,
+        "open_status": 1,
+    }
+    assert result["payment_parity"]["invoice_linked"] == 2
+    assert result["attachment_parity"]["by_parent_type"]["job"]["failed"] == 1
+    assert result["employee_source_parity"]["canonical_bound"] == 6
+    assert result["history_parity"]["by_parent_and_type"]["job:note"] == {
+        "admitted": 5,
+        "unresolved_employee": 1,
+    }
     assert result["historical_customer_journeys"][0]["customer_id"] == str(UUID(int=4))
     assert len(result["digest"]) == 64
     assert not any(
