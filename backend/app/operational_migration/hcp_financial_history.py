@@ -37,8 +37,10 @@ class FinancialHistoryClassification:
     invoice_counts: dict[str, int]
     payment_counts: dict[str, int]
     refund_counts: dict[str, int]
+    adjustment_counts: dict[str, int]
     payment_records: tuple[dict[str, Any], ...]
     refund_records: tuple[dict[str, Any], ...]
+    adjustment_records: tuple[dict[str, Any], ...]
     authority: dict[str, str]
     digest: str
 
@@ -88,6 +90,16 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         (invoice, refund)
         for invoice in invoices
         for refund in invoice.get("refunds", [])
+    ]
+    adjustments = [
+        (invoice, kind, record)
+        for invoice in invoices
+        for kind, collection in (
+            ("invoice_credit", invoice.get("credits", [])),
+            ("payment_reversal", invoice.get("payment_reversals", [])),
+            ("unapplied_credit", invoice.get("unapplied_credits", [])),
+        )
+        for record in collection
     ]
 
     payment_records = tuple(
@@ -141,6 +153,34 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
             ),
         )
     )
+    adjustment_records = tuple(
+        {
+            "source_adjustment_id": record.get("id"),
+            "source_invoice_id": str(invoice["id"]),
+            "adjustment_type": kind,
+            "status": str(record.get("status")),
+            "amount": record.get("amount"),
+            "occurred_at": record.get("occurred_at")
+            or record.get("created_at")
+            or record.get("refunded_at"),
+            "related_payment_source_id": record.get("payment_id"),
+            "disposition": (
+                "SOURCE_HISTORY_EXACT_IDENTITY"
+                if record.get("id")
+                else "REVIEW_REQUIRED_MISSING_PROVIDER_IDENTITY"
+            ),
+            "display_authority": "HCP_SOURCE_BACKED_NOT_ACCOUNTING_POSTING",
+            "aggregation_safe": False,
+        }
+        for invoice, kind, record in sorted(
+            adjustments,
+            key=lambda item: (
+                str(item[0]["id"]),
+                item[1],
+                str(item[2].get("id") or ""),
+            ),
+        )
+    )
 
     invoice_counts = {
         "source_acquired": len(invoices),
@@ -170,6 +210,17 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         "conflicting": 0,
         "source_missing": 0,
     }
+    adjustment_types = Counter(row["adjustment_type"] for row in adjustment_records)
+    adjustment_counts = {
+        "source_acquired": len(adjustment_records),
+        "exact_source_identity": sum(
+            bool(row["source_adjustment_id"]) for row in adjustment_records
+        ),
+        "review_required": sum(
+            not row["source_adjustment_id"] for row in adjustment_records
+        ),
+        **{f"type_{key}": value for key, value in sorted(adjustment_types.items())},
+    }
     authority = {
         "invoice": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
         "payment": "HCP_SOURCE_BACKED_PAYMENT_EVIDENCE_NOT_ACCOUNTING_POSTING",
@@ -183,8 +234,10 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         "invoice_counts": invoice_counts,
         "payment_counts": payment_counts,
         "refund_counts": refund_counts,
+        "adjustment_counts": adjustment_counts,
         "payment_records": payment_records,
         "refund_records": refund_records,
+        "adjustment_records": adjustment_records,
         "authority": authority,
     }
     return FinancialHistoryClassification(
@@ -193,8 +246,10 @@ def classify_financial_history(source_root: Path) -> FinancialHistoryClassificat
         invoice_counts=invoice_counts,
         payment_counts=payment_counts,
         refund_counts=refund_counts,
+        adjustment_counts=adjustment_counts,
         payment_records=payment_records,
         refund_records=refund_records,
+        adjustment_records=adjustment_records,
         authority=authority,
         digest=_canonical_digest(payload),
     )
