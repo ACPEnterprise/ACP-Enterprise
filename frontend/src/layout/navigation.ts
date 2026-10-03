@@ -207,6 +207,14 @@ export const navigationCatalog = [
     requiredPermission: "COMPANY_ACCOUNTING_RECONCILE",
   },
   {
+    id: "qbo-cutover",
+    label: "QuickBooks Cutover",
+    path: "/accounting/quickbooks-cutover",
+    icon: ClipboardList,
+    availability: "available",
+    requiredPermission: "COMPANY_ACCOUNTING_REPORT_READ",
+  },
+  {
     id: "business-economics",
     label: "Business Economics",
     path: "/business-economics",
@@ -393,6 +401,7 @@ export const navigationGroups = [
       item("financial-reports"),
       item("inventory"),
       item("qbo-migration"),
+      item("qbo-cutover"),
       item("purchasing"),
     ],
   },
