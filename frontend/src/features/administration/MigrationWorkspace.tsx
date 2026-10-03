@@ -279,6 +279,46 @@ export function MigrationWorkspace() {
           ))}
         </CardContent>
       </Card>
+      <Card id="hcp-domain-review">
+        <CardHeader>
+          <CardTitle>Owner domain review</CardTitle>
+          <CardDescription>Open the normal ACP workspace for representative records. Source-only history is never presented as native operating truth.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            ["Customers", "/customers"], ["Contacts", "/customers"], ["Locations", "/customers"],
+            ["Jobs", "/jobs"], ["Estimates", "/estimates"], ["Appointments", "/scheduling"],
+            ["Invoices", "/invoices"], ["Payments", "/payments"], ["Employees", "/employees"],
+          ].map(([domain, href]) => {
+            const count = data.counts.find((item) => item.domain.toLowerCase() === domain.toLowerCase());
+            const state = !count ? "EXTERNAL ACCESS REQUIRED" : count.delta > 0 ? "FINAL DELTA REQUIRED" : count.held + count.exception > 0 ? "OWNER DECISION REQUIRED" : "COMPLETE";
+            return <a className="rounded-lg border border-stroke p-ui-3 hover:bg-surface-subtle" href={href} key={domain}><div className="flex items-center justify-between gap-ui-2"><strong>{domain}</strong><Badge variant={state === "COMPLETE" ? "success" : state.includes("REQUIRED") ? "warning" : "neutral"}>{state}</Badge></div><p className="mt-ui-1 text-body-xs text-content-muted">Review source coverage, admitted records, and any held evidence.</p></a>;
+          })}
+          <a className="rounded-lg border border-stroke p-ui-3 hover:bg-surface-subtle" href="#hcp-history-review"><strong>Attachments / Open Work / History</strong><p className="mt-ui-1 text-body-xs text-content-muted">Review preserved evidence and chronology before any retirement decision.</p></a>
+        </CardContent>
+      </Card>
+      <Card id="hcp-history-review">
+        <CardHeader>
+          <CardTitle>Contacts and historical notes</CardTitle>
+          <CardDescription>Customer and Job detail pages show admitted contacts, notes, and chronological history. Text notes remain historical context, not structured operational facts.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-ui-3 md:grid-cols-2 text-body-s">
+          <div className="rounded-lg border border-stroke p-ui-3"><strong>Customer contacts</strong><p className="mt-ui-1 text-content-muted">Names, email, phones, role, preference, customer association, and admitted history are reviewed from the Customer workspace.</p><a className="mt-ui-2 inline-block font-semibold text-action-primary underline" href="/customers">Open Customers</a></div>
+          <div className="rounded-lg border border-stroke p-ui-3"><strong>Notes and chronology</strong><p className="mt-ui-1 text-content-muted">Customer notes and source history retain timestamps and provenance. Missing or unavailable history is shown explicitly.</p><a className="mt-ui-2 inline-block font-semibold text-action-primary underline" href="/jobs">Open Jobs</a></div>
+        </CardContent>
+      </Card>
+      <Card id="hcp-spot-checks">
+        <CardHeader>
+          <CardTitle>Physical spot-check workflow</CardTitle>
+          <CardDescription>Use representative records to compare HCP evidence with ACP. This screen does not alter source evidence or activate records.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-ui-3 text-body-s">
+          {[
+            ["Customer", "/customers"], ["Job", "/jobs"], ["Estimate", "/estimates"], ["Invoice", "/invoices"], ["Payment", "/payments"], ["History", "#hcp-history-review"],
+          ].map(([kind, href]) => <div className="flex flex-wrap items-center justify-between gap-ui-3 rounded-lg border border-stroke p-ui-3" key={kind}><span><strong>{kind}</strong><span className="ml-ui-2 text-content-muted">Owner comparison required</span></span><a className="font-semibold text-action-primary underline" href={href}>Open representative records</a></div>)}
+          <Alert variant="information">Durable spot-check marking is not exposed by the current migration API. Owner findings remain an external acceptance gate until that governed evidence endpoint exists.</Alert>
+        </CardContent>
+      </Card>
       <div className="grid gap-ui-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
