@@ -109,6 +109,154 @@ async def build_realworld_snapshot(
             "missing_native_projection": int(row["admitted"] - row["projected"]),
         }
 
+    invoice_parity = (
+        (
+            await session.execute(
+                text(
+                    """
+                    SELECT count(DISTINCT isi.id) AS invoices,
+                           count(DISTINCT isi.id) FILTER (
+                             WHERE isi.customer_id IS NOT NULL
+                               AND isi.job_id IS NOT NULL
+                           ) AS customer_job_linked,
+                           (SELECT count(*)
+                              FROM operational_migration_invoice_line_item_source_identities ilsi
+                              JOIN operational_migration_invoice_source_identities parent
+                                ON parent.id = ilsi.invoice_source_identity_id
+                             WHERE parent.company_id = :company_id
+                               AND parent.branch_id = :branch_id
+                               AND parent.source_system = :source
+                           ) AS source_line_items,
+                           count(DISTINCT i.id) FILTER (
+                             WHERE i.open_amount > 0
+                           ) AS open_ar_invoices,
+                           coalesce(sum(i.open_amount) FILTER (
+                             WHERE i.open_amount > 0
+                           ), 0) AS open_ar_amount,
+                           count(DISTINCT i.id) FILTER (
+                             WHERE i.status = 'paid'
+                           ) AS paid,
+                           count(DISTINCT i.id) FILTER (
+                             WHERE i.status IN ('issued','partially_paid','adjusted')
+                           ) AS open_status
+                    FROM operational_migration_invoice_source_identities isi
+                    JOIN invoices i ON i.id = isi.invoice_id
+                    WHERE isi.company_id = :company_id
+                      AND isi.branch_id = :branch_id
+                      AND isi.source_system = :source
+                    """
+                ),
+                scope,
+            )
+        )
+        .mappings()
+        .one()
+    )
+    payment_parity = (
+        (
+            await session.execute(
+                text(
+                    """
+                    SELECT count(DISTINCT psi.id) AS payment_assertions,
+                           count(DISTINCT psi.id) FILTER (
+                             WHERE isi.id IS NOT NULL
+                           ) AS invoice_linked,
+                           count(DISTINCT psi.id) FILTER (
+                             WHERE psi.source_status = 'succeeded'
+                           ) AS succeeded,
+                           count(DISTINCT psi.id) FILTER (
+                             WHERE psi.source_status <> 'succeeded'
+                           ) AS non_succeeded
+                    FROM operational_migration_payment_source_identities psi
+                    LEFT JOIN operational_migration_invoice_source_identities isi
+                      ON isi.id = psi.invoice_source_identity_id
+                     AND isi.company_id = psi.company_id
+                    WHERE psi.company_id = :company_id
+                      AND psi.branch_id = :branch_id
+                      AND psi.source_system = :source
+                    """
+                ),
+                scope,
+            )
+        )
+        .mappings()
+        .one()
+    )
+    attachment_rows = (
+        await session.execute(
+            text(
+                """
+                SELECT parent_type, count(*) AS registered,
+                       count(*) FILTER (
+                         WHERE transfer_state = 'transferred'
+                           AND validation_state = 'valid'
+                       ) AS available,
+                       count(*) FILTER (
+                         WHERE transfer_state = 'failed'
+                       ) AS failed,
+                       count(*) FILTER (
+                         WHERE retry_eligible
+                       ) AS retryable
+                FROM operational_migration_artifacts
+                WHERE company_id = :company_id AND branch_id = :branch_id
+                  AND source_system = :source
+                GROUP BY parent_type ORDER BY parent_type
+                """
+            ),
+            scope,
+        )
+    ).mappings()
+    history_rows = (
+        await session.execute(
+            text(
+                """
+                SELECT parent_type, entry_type, count(*) AS admitted,
+                       count(*) FILTER (
+                         WHERE attribution_status = 'unresolved'
+                       ) AS unresolved_employee
+                FROM operational_migration_history_entries
+                WHERE company_id = :company_id AND branch_id = :branch_id
+                  AND source_system = :source
+                GROUP BY parent_type, entry_type
+                ORDER BY parent_type, entry_type
+                """
+            ),
+            scope,
+        )
+    ).mappings()
+    employee_parity = (
+        (
+            await session.execute(
+                text(
+                    """
+                    WITH latest AS (
+                      SELECT DISTINCT ON (native_employee_id)
+                             native_employee_id, disposition, employee_id
+                      FROM hcp_employee_source_crosswalks
+                      WHERE company_id = :company_id AND branch_id = :branch_id
+                      ORDER BY native_employee_id, evidence_version DESC
+                    )
+                    SELECT count(*) AS source_identities,
+                           count(*) FILTER (
+                             WHERE employee_id IS NOT NULL
+                           ) AS canonical_bound,
+                           count(*) FILTER (
+                             WHERE disposition = 'EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS'
+                           ) AS terminated_or_excluded,
+                           count(*) FILTER (
+                             WHERE disposition = 'CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE'
+                               AND employee_id IS NULL
+                           ) AS unresolved
+                    FROM latest
+                    """
+                ),
+                scope,
+            )
+        )
+        .mappings()
+        .one()
+    )
+
     hold_rows = (
         await session.execute(
             text(
@@ -212,6 +360,38 @@ async def build_realworld_snapshot(
         "observed_at": observed_at.isoformat(),
         "mutation_authority": "none",
         "families": families,
+        "invoice_parity": {
+            key: str(value) if key == "open_ar_amount" else int(value or 0)
+            for key, value in invoice_parity.items()
+        },
+        "payment_parity": {
+            **{key: int(value or 0) for key, value in payment_parity.items()},
+            "refund_credit_authority": "SOURCE_PACKAGE_RECONCILIATION_REQUIRED",
+        },
+        "attachment_parity": {
+            "by_parent_type": {
+                str(row["parent_type"]): {
+                    key: int(row[key] or 0)
+                    for key in ("registered", "available", "failed", "retryable")
+                }
+                for row in attachment_rows
+            },
+            "source_acquisition": "HCP_UI_OR_SUPPORT_EXPORT_REQUIRED",
+            "absence_is_authoritative": False,
+        },
+        "employee_source_parity": {
+            key: int(value or 0) for key, value in employee_parity.items()
+        },
+        "history_parity": {
+            "by_parent_and_type": {
+                f"{row['parent_type']}:{row['entry_type']}": {
+                    "admitted": int(row["admitted"] or 0),
+                    "unresolved_employee": int(row["unresolved_employee"] or 0),
+                }
+                for row in history_rows
+            },
+            "source_scope": "SOURCE_REPORTED_PARTIAL_API",
+        },
         "held_by_entity_kind": holds,
         "current_operations": {
             key: int(value or 0) for key, value in operations.items()
@@ -224,8 +404,8 @@ async def build_realworld_snapshot(
             for row in journeys
         ],
         "limitations": [
-            "attachments_have_no_native_source_identity_contract",
-            "employee_source_identity_is_not_a_customer_graph_family",
+            "attachment_source_acquisition_requires_hcp_ui_or_support_export",
+            "refund_credit_source_counts_require_sealed_package_reconciliation",
             "source_acquired_and_legacy_only_counts_require_sealed_package_reconciliation",
             "calendar_lane_membership_requires_deployed_schedule_acceptance",
         ],
