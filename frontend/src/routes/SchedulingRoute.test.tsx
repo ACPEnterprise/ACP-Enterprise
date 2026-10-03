@@ -136,11 +136,15 @@ describe("SchedulingRoute", () => {
       screen.getByRole("heading", { name: "Service Board" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
+    const dayCalendar = within(screen.getByRole("region", { name: "Day calendar" }));
+    expect(dayCalendar.getAllByText(":15").length).toBeGreaterThan(0);
+    expect(dayCalendar.getAllByText(":30").length).toBeGreaterThan(0);
+    expect(dayCalendar.getAllByText(":45").length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "Day agenda" })).toBeVisible();
     expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(
       2,
     );
-    const block = within(screen.getByRole("region", { name: "Day calendar" })).getByRole("button", { name: /APT-000001/ });
+    const block = dayCalendar.getByRole("button", { name: /APT-000001/ });
     expect(block).toHaveStyle({ top: "120px", height: "120px" });
   });
 
