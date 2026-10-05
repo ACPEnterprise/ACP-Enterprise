@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
+
 from app.accounting.close_controls import (
     AccountingCloseControlService,
     CanonicalReportEvidence,
@@ -201,11 +202,13 @@ async def test_period_is_ready_only_from_complete_server_owned_controls(
     )
     session = AsyncMock()
     empty = SimpleNamespace(all=list)
-    session.scalars.side_effect = [empty, empty]
+    session.scalars.side_effect = [empty, empty, empty, empty]
     session.scalar.return_value = SimpleNamespace(
         status="APPLIED", evidence_digest="c" * 64
     )
-    context = SimpleNamespace(company=SimpleNamespace(id=COMPANY_ID))
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=COMPANY_ID), can_access_branch=lambda _id: True
+    )
     monkeypatch.setattr(
         "app.accounting.close_controls.financial_reporting_repository.context",
         AsyncMock(return_value=SimpleNamespace(currency="USD")),
@@ -235,9 +238,11 @@ async def test_missing_server_evidence_remains_blocking(
     )
     session = AsyncMock()
     empty = SimpleNamespace(all=list)
-    session.scalars.side_effect = [empty, empty]
+    session.scalars.side_effect = [empty, empty, empty, empty]
     session.scalar.return_value = None
-    context = SimpleNamespace(company=SimpleNamespace(id=COMPANY_ID))
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=COMPANY_ID), can_access_branch=lambda _id: True
+    )
     monkeypatch.setattr(
         "app.accounting.close_controls.financial_reporting_repository.context",
         AsyncMock(return_value=None),

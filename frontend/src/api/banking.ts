@@ -1,8 +1,9 @@
 import { apiClient } from "./client";
-import type { BankSummary, BankTransaction, CashFlow, Drilldown, ImportConfirm, ImportPreview, ImportRequest, MatchReview, Reconciliation, ReconciliationPrepare, ReconciliationPreview } from "../types/banking";
+import type { BankConnection, BankSummary, BankTransaction, CashFlow, Drilldown, ImportConfirm, ImportPreview, ImportRequest, MatchReview, Reconciliation, ReconciliationPrepare, ReconciliationPreview } from "../types/banking";
 
 const root = "/api/v1/accounting/banking";
 export const getBankingSummary = async () => (await apiClient.get<BankSummary[]>(`${root}/summary`)).data;
+export const getBankConnections = async () => (await apiClient.get<BankConnection[]>(`${root}/connections`)).data;
 export const getBankTransactions = async (accountId: string) => (await apiClient.get<BankTransaction[]>(`${root}/accounts/${accountId}/transactions`)).data;
 export const previewBankImport = async (accountId: string, request: ImportRequest) => (await apiClient.post<ImportPreview>(`${root}/accounts/${accountId}/imports/preview`, request)).data;
 export const confirmBankImport = async (accountId: string, request: ImportRequest, previewDigest: string) => (await apiClient.post<ImportConfirm>(`${root}/accounts/${accountId}/imports/confirm`, { ...request, preview_digest: previewDigest })).data;

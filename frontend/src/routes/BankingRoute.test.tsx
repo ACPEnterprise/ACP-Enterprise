@@ -14,6 +14,7 @@ vi.mock("../auth", () => ({
 }));
 vi.mock("../api/banking", () => ({
   getBankingSummary: vi.fn(),
+  getBankConnections: vi.fn(),
   getBankTransactions: vi.fn(),
   previewBankImport: vi.fn(),
   confirmBankImport: vi.fn(),
@@ -102,13 +103,19 @@ describe("BankingRoute", () => {
     currentUserId = "preparer-user";
     deniedPermission = "";
     vi.clearAllMocks();
+    vi.mocked(banking.getBankConnections).mockResolvedValue([]);
     vi.mocked(banking.getBankingSummary).mockResolvedValue([
       {
         account: {
           id: "bank-1",
+          connection_id: null,
+          branch_id: null,
+          ledger_account_id: "ledger-1",
           institution_name: "Example Bank",
           account_name: "Operating",
           account_type: "checking",
+          account_subtype: "checking",
+          ownership_scope: "company",
           masked_identity: "•••• 4321",
           currency: "USD",
           status: "active",
@@ -128,6 +135,11 @@ describe("BankingRoute", () => {
         current_difference: "25.00",
         last_reconciled_through: "2026-08-31",
         latest_closed_reconciliation: null,
+        connection_status: "manual",
+        mapping_state: "approved",
+        current_balance: "1025.00",
+        available_balance: "1000.00",
+        balance_as_of: "2026-09-30T12:00:00Z",
       },
     ]);
     vi.mocked(banking.getBankTransactions).mockResolvedValue([transaction]);
@@ -178,7 +190,7 @@ describe("BankingRoute", () => {
     expect(screen.getByRole("combobox", { name: "Bank account" })).toHaveDisplayValue(
       "Example Bank · Operating •••• 4321",
     );
-    expect(screen.getByText("25.00", { exact: false })).toBeVisible();
+    expect(screen.getByText("Difference $25.00")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Needs Review" }));
     expect(await screen.findByText("Ambiguous")).toBeVisible();

@@ -26,10 +26,14 @@ class BankAccountResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     company_id: UUID
-    ledger_account_id: UUID
+    connection_id: UUID | None
+    branch_id: UUID | None
+    ledger_account_id: UUID | None
     institution_name: str
     account_name: str
     account_type: str
+    account_subtype: str | None
+    ownership_scope: str
     masked_identity: str
     currency: str
     status: str
@@ -159,6 +163,11 @@ class BankAccountSummary(BaseModel):
     current_difference: Decimal | None
     last_reconciled_through: date | None
     latest_closed_reconciliation: BankReconciliationResponse | None
+    connection_status: str
+    mapping_state: str
+    current_balance: Decimal | None
+    available_balance: Decimal | None
+    balance_as_of: datetime | None
 
 
 class BankImportPreviewRequest(BaseModel):
@@ -244,7 +253,7 @@ class BankDrilldownResponse(BaseModel):
     transaction: BankTransactionResponse
     match: BankMatchReviewItem
     bank_account_id: UUID
-    ledger_account_id: UUID
+    ledger_account_id: UUID | None
     target_reference: str | None
     source_system: str
     source_digest: str

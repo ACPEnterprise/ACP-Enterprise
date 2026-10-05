@@ -3,9 +3,16 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounting.bank_connectivity import (
+    BankAccountingEvidence,
+    ConnectionView,
+    GLMappingRequest,
+    GLMappingView,
+    bank_connectivity_service,
+)
 from app.accounting.banking import NormalizedBankEvidence, bank_authority_service
 from app.accounting.banking_operator import banking_operator_service
 from app.accounting.banking_schemas import (
@@ -33,7 +40,7 @@ from app.accounting.errors import (
     AccountingNotFound,
     AccountingValidation,
 )
-from app.accounting.models import BankAccount, BankTransaction
+from app.accounting.models import BankAccount, BankConnection, BankTransaction
 from app.accounting.router import translate
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
@@ -52,6 +59,83 @@ ApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(AccountingPermission.FINANCE_APPROVE)),
 ]
+MappingContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AccountingPermission.OPENING_STATE_APPROVE)),
+]
+
+
+@router.get("/connections", response_model=tuple[ConnectionView, ...])
+async def list_bank_connections(
+    context: ReadContext, session: DatabaseSession
+) -> tuple[ConnectionView, ...]:
+    rows = tuple(
+        (
+            await session.scalars(
+                select(BankConnection)
+                .where(BankConnection.company_id == context.company.id)
+                .order_by(BankConnection.institution_name, BankConnection.id)
+            )
+        ).all()
+    )
+    count_rows = (
+        await session.execute(
+            select(BankAccount.connection_id, func.count(BankAccount.id))
+            .where(BankAccount.company_id == context.company.id)
+            .group_by(BankAccount.connection_id)
+        )
+    ).all()
+    counts: dict[UUID | None, int] = {
+        connection_id: int(count) for connection_id, count in count_rows
+    }
+    return tuple(
+        ConnectionView.model_validate(row).model_copy(
+            update={"account_count": counts.get(row.id, 0)}
+        )
+        for row in rows
+        if row.branch_id is None or context.can_access_branch(row.branch_id)
+    )
+
+
+@router.post("/accounts/{bank_account_id}/gl-mapping", response_model=GLMappingView)
+async def approve_bank_gl_mapping(
+    bank_account_id: UUID,
+    data: GLMappingRequest,
+    context: MappingContext,
+    session: DatabaseSession,
+) -> GLMappingView:
+    try:
+        async with session.begin():
+            row = await bank_connectivity_service.approve_mapping(
+                session,
+                context=context,
+                bank_account_id=bank_account_id,
+                request=data,
+            )
+        return GLMappingView.model_validate(row)
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
+
+
+@router.get(
+    "/accounts/{bank_account_id}/accounting-evidence",
+    response_model=BankAccountingEvidence,
+)
+async def bank_accounting_evidence(
+    bank_account_id: UUID,
+    cutoff: date,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> BankAccountingEvidence:
+    try:
+        return await bank_connectivity_service.accounting_evidence(
+            session,
+            context=context,
+            bank_account_id=bank_account_id,
+            cutoff=cutoff,
+        )
+    except (AccountingConflict, AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
 
 
 @router.get("/summary", response_model=tuple[BankAccountSummary, ...])
@@ -59,7 +143,9 @@ async def bank_account_summary(
     context: ReadContext, session: DatabaseSession
 ) -> tuple[BankAccountSummary, ...]:
     return await banking_operator_service.summaries(
-        session, company_id=context.company.id
+        session,
+        company_id=context.company.id,
+        accessible_branch_ids=context.authorized_branch_ids,
     )
 
 
@@ -72,7 +158,11 @@ async def list_bank_accounts(
         .where(BankAccount.company_id == context.company.id)
         .order_by(BankAccount.account_name)
     )
-    return tuple(BankAccountResponse.model_validate(row) for row in rows.all())
+    return tuple(
+        BankAccountResponse.model_validate(row)
+        for row in rows.all()
+        if row.branch_id is None or context.can_access_branch(row.branch_id)
+    )
 
 
 @router.post(

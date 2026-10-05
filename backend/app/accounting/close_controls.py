@@ -14,8 +14,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounting.bank_connectivity import bank_connectivity_service
 from app.accounting.models import (
     AccountingPeriod,
+    BankAccount,
+    BankAccountGLMapping,
+    BankConnection,
     OpeningControlException,
     OpeningControlPackage,
 )
@@ -454,6 +458,50 @@ class AccountingCloseControlService:
                     action_path="/accounting/qbo-review",
                 )
             )
+        bank_accounts = tuple(
+            (
+                await session.scalars(
+                    select(BankAccount).where(
+                        BankAccount.company_id == context.company.id,
+                        BankAccount.status == "active",
+                        BankAccount.connection_id.is_not(None),
+                    )
+                )
+            ).all()
+        )
+        for bank_account in bank_accounts:
+            if bank_account.branch_id is not None and not context.can_access_branch(
+                bank_account.branch_id
+            ):
+                continue
+            connection = await session.get(BankConnection, bank_account.connection_id)
+            mapping = await session.scalar(
+                select(BankAccountGLMapping).where(
+                    BankAccountGLMapping.company_id == context.company.id,
+                    BankAccountGLMapping.bank_account_id == bank_account.id,
+                    BankAccountGLMapping.status == "approved",
+                )
+            )
+            if connection is not None and connection.status == "healthy" and mapping:
+                continue
+            reasons = []
+            if connection is None or connection.status != "healthy":
+                reasons.append("Bank connection requires attention")
+            if mapping is None:
+                reasons.append("GL mapping requires accountant approval")
+            items.append(
+                AccountantReviewItem(
+                    source_domain="banking",
+                    source_reference=str(bank_account.id),
+                    category="bank_connection_or_mapping",
+                    state="REVIEW_REQUIRED",
+                    review_requirement="; ".join(reasons),
+                    display_identity=f"{bank_account.institution_name} {bank_account.account_name} {bank_account.masked_identity}",
+                    provenance=(bank_account.source_digest,),
+                    source_lifecycle=connection.status if connection else "unmanaged",
+                    action_path="/accounting/banking",
+                )
+            )
         return AccountantReviewProjection(
             company_id=context.company.id,
             items=tuple(
@@ -536,6 +584,40 @@ class AccountingCloseControlService:
                     evidence_reference=payroll_reference,
                 )
             )
+        connected_accounts = tuple(
+            (
+                await session.scalars(
+                    select(BankAccount).where(
+                        BankAccount.company_id == context.company.id,
+                        BankAccount.status == "active",
+                        BankAccount.connection_id.is_not(None),
+                    )
+                )
+            ).all()
+        )
+        bank_evidence_digests: list[str] = []
+        for account in connected_accounts:
+            if account.branch_id is not None and not context.can_access_branch(
+                account.branch_id
+            ):
+                continue
+            evidence = await bank_connectivity_service.accounting_evidence(
+                session,
+                context=context,
+                bank_account_id=account.id,
+                cutoff=period.end_date,
+            )
+            bank_evidence_digests.append(evidence.evidence_digest)
+            if evidence.readiness != "READY":
+                blockers.append(
+                    CloseBlocker(
+                        code="BANKING_ACCOUNT_NOT_READY",
+                        family="banking",
+                        state=evidence.readiness,
+                        explanation=f"{evidence.display_identity}: {', '.join(evidence.blockers)}.",
+                        evidence_reference=evidence.evidence_digest,
+                    )
+                )
         report_context = await financial_reporting_repository.context(
             session, context.company.id
         )
@@ -548,6 +630,7 @@ class AccountingCloseControlService:
                 "opening": opening.evidence_digest if opening else None,
                 "comparisons": [item.evidence_digest for item in comparisons],
                 "review": [item.source_reference for item in queue.items],
+                "banking": bank_evidence_digests,
                 "blockers": [item.code for item in blockers],
             }
         )

@@ -41,6 +41,9 @@ from app.accounting.errors import (
 )
 from app.accounting.models import (
     BankAccount,
+    BankAccountGLMapping,
+    BankBalanceEvidence,
+    BankConnection,
     BankReconciliation,
     BankTransaction,
     BankTransactionMatch,
@@ -103,14 +106,22 @@ class BankingOperatorService:
         return account
 
     async def summaries(
-        self, session: AsyncSession, *, company_id: UUID
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        accessible_branch_ids: frozenset[UUID] | None = None,
     ) -> tuple[BankAccountSummary, ...]:
+        scope = [BankAccount.company_id == company_id]
+        if accessible_branch_ids is not None:
+            scope.append(
+                BankAccount.branch_id.is_(None)
+                | BankAccount.branch_id.in_(accessible_branch_ids)
+            )
         accounts = tuple(
             (
                 await session.scalars(
-                    select(BankAccount)
-                    .where(BankAccount.company_id == company_id)
-                    .order_by(BankAccount.account_name)
+                    select(BankAccount).where(*scope).order_by(BankAccount.account_name)
                 )
             ).all()
         )
@@ -164,6 +175,27 @@ class BankingOperatorService:
                 .order_by(BankReconciliation.prepared_at.desc())
                 .limit(1)
             )
+            connection = (
+                await session.get(BankConnection, account.connection_id)
+                if account.connection_id
+                else None
+            )
+            mapping = await session.scalar(
+                select(BankAccountGLMapping).where(
+                    BankAccountGLMapping.company_id == company_id,
+                    BankAccountGLMapping.bank_account_id == account.id,
+                    BankAccountGLMapping.status == "approved",
+                )
+            )
+            balance = await session.scalar(
+                select(BankBalanceEvidence)
+                .where(
+                    BankBalanceEvidence.company_id == company_id,
+                    BankBalanceEvidence.bank_account_id == account.id,
+                )
+                .order_by(BankBalanceEvidence.balance_as_of.desc())
+                .limit(1)
+            )
             result.append(
                 BankAccountSummary(
                     account=BankAccountResponse.model_validate(account),
@@ -184,6 +216,11 @@ class BankingOperatorService:
                         if latest
                         else None
                     ),
+                    connection_status=connection.status if connection else "manual",
+                    mapping_state=mapping.status if mapping else "unmapped",
+                    current_balance=balance.current_balance if balance else None,
+                    available_balance=balance.available_balance if balance else None,
+                    balance_as_of=balance.balance_as_of if balance else None,
                 )
             )
         return tuple(result)
@@ -405,6 +442,8 @@ class BankingOperatorService:
         cleared = sum(
             (_signed(row.direction, row.amount) for row in selected), Decimal(0)
         )
+        if account.ledger_account_id is None:
+            raise AccountingValidation("Approved GL mapping is required")
         book = await self._book_cash_balance(
             session, company_id, account.ledger_account_id, request.period_end
         )
@@ -610,6 +649,8 @@ class BankingOperatorService:
             sections[section_name].append((journal.id, amount))
         beginning = Decimal(0)
         for account in accounts:
+            if account.ledger_account_id is None:
+                continue
             beginning += await self._book_cash_balance(
                 session,
                 company_id,
