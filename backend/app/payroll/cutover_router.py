@@ -21,6 +21,7 @@ from app.payroll.models import (
     PayrollCutoverFactRevision,
     PayrollCutoverReviewRecord,
     PayrollPaymentDestinationVersion,
+    PayrollPayStatementRecord,
     PayrollProtectedInputEnvelope,
 )
 from app.payroll.permissions import PayrollPermission
@@ -102,6 +103,30 @@ ACCOUNTANT_FACTS = frozenset(
         "prior_period_coverage",
         "opening_ytd_boundary",
     }
+)
+
+BRIDGE_FACT_DEFINITIONS: tuple[dict[str, str], ...] = (
+    {"key": "gross_wages", "label": "Gross wages", "owner": "accountant"},
+    {"key": "regular_hours", "label": "Regular hours", "owner": "owner"},
+    {"key": "regular_wages", "label": "Regular wages", "owner": "accountant"},
+    {"key": "overtime_hours", "label": "Overtime hours", "owner": "owner"},
+    {"key": "overtime_wages", "label": "Overtime wages", "owner": "accountant"},
+    {"key": "other_earnings", "label": "Other earnings", "owner": "accountant"},
+    {"key": "deductions", "label": "Deductions", "owner": "accountant"},
+    {"key": "employee_taxes", "label": "Employee taxes", "owner": "accountant"},
+    {"key": "employer_taxes", "label": "Employer taxes", "owner": "accountant"},
+    {"key": "reimbursements", "label": "Reimbursements", "owner": "accountant"},
+    {"key": "net_pay", "label": "Net check", "owner": "accountant"},
+    {"key": "check_reference", "label": "Check number/reference", "owner": "owner"},
+    {"key": "liability_impact", "label": "Liability impact", "owner": "accountant"},
+    {"key": "payment_status", "label": "Payment status", "owner": "owner"},
+    {
+        "key": "tax_remittance_status",
+        "label": "Tax/remittance status",
+        "owner": "accountant",
+    },
+    {"key": "source_document", "label": "Source document", "owner": "owner"},
+    {"key": "notes", "label": "Evidence notes", "owner": "owner"},
 )
 
 
@@ -429,6 +454,127 @@ async def get_review(context: Read, session: Session) -> dict[str, object]:
             }
             for p in periods
         ],
+    }
+
+
+@router.get("/completion-readiness")
+async def completion_readiness(context: Read, session: Session) -> dict[str, object]:
+    """Return a value-free bridge/YTD completion queue; never calculate Payroll."""
+
+    review = await _review(session, context.company.id)
+    employees = tuple(
+        (
+            await session.scalars(
+                select(Employee)
+                .where(Employee.company_id == context.company.id)
+                .order_by(Employee.display_name, Employee.id)
+            )
+        ).all()
+    )
+    periods: tuple[PayrollCutoverBridgePeriodRecord, ...] = ()
+    facts: tuple[PayrollCutoverBridgeEmployeeFactRevision, ...] = ()
+    if review is not None:
+        periods = tuple(
+            (
+                await session.scalars(
+                    select(PayrollCutoverBridgePeriodRecord)
+                    .where(
+                        PayrollCutoverBridgePeriodRecord.company_id
+                        == context.company.id,
+                        PayrollCutoverBridgePeriodRecord.review_id == review.id,
+                        PayrollCutoverBridgePeriodRecord.certification_state
+                        != "superseded",
+                    )
+                    .order_by(PayrollCutoverBridgePeriodRecord.period_start)
+                )
+            ).all()
+        )
+        facts = tuple(
+            (
+                await session.scalars(
+                    select(PayrollCutoverBridgeEmployeeFactRevision).where(
+                        PayrollCutoverBridgeEmployeeFactRevision.company_id
+                        == context.company.id,
+                        PayrollCutoverBridgeEmployeeFactRevision.certification_state
+                        != "superseded",
+                    )
+                )
+            ).all()
+        )
+    fact_keys = {item["key"] for item in BRIDGE_FACT_DEFINITIONS}
+    facts_by_subject: dict[tuple[UUID, UUID], set[str]] = {}
+    for fact in facts:
+        if fact.employee_id is not None:
+            facts_by_subject.setdefault(
+                (fact.bridge_period_id, fact.employee_id), set()
+            ).add(fact.fact_key)
+    employee_rows: list[dict[str, object]] = []
+    for employee in employees:
+        latest_statement = await session.scalar(
+            select(PayrollPayStatementRecord)
+            .where(
+                PayrollPayStatementRecord.company_id == context.company.id,
+                PayrollPayStatementRecord.employee_id == employee.id,
+                PayrollPayStatementRecord.lifecycle.in_(("issued", "superseded")),
+            )
+            .order_by(PayrollPayStatementRecord.created_at.desc())
+            .limit(1)
+        )
+        period_rows = []
+        for period in periods:
+            present = facts_by_subject.get((period.id, employee.id), set())
+            if not present:
+                continue
+            period_rows.append(
+                {
+                    "bridge_period_id": str(period.id),
+                    "period_start": period.period_start,
+                    "period_end": period.period_end,
+                    "pay_date": period.pay_date,
+                    "certification_state": period.certification_state,
+                    "present_fact_keys": sorted(present & fact_keys),
+                    "missing_fact_keys": sorted(fact_keys - present),
+                }
+            )
+        employee_rows.append(
+            {
+                "employee_id": str(employee.id),
+                "display_name": employee.display_name,
+                "employment_status": employee.status,
+                "operational_reactivation_required": False,
+                "bridge_periods": period_rows,
+                "bridge_population_state": (
+                    "RECORDED" if period_rows else "EMPLOYEE_PERIOD_SELECTION_REQUIRED"
+                ),
+                "acp_ytd_state": (
+                    latest_statement.ytd_status if latest_statement else "unavailable"
+                ),
+                "final_paper_check_recording": (
+                    "AVAILABLE_WITHOUT_REACTIVATION"
+                    if employee.status in {"inactive", "terminated"}
+                    else "NOT_APPLICABLE"
+                ),
+            }
+        )
+    return {
+        "review_state": review.lifecycle if review else "NOT_STARTED",
+        "calculation_performed": False,
+        "payroll_executed": False,
+        "money_moved": False,
+        "required_bridge_fields": BRIDGE_FACT_DEFINITIONS,
+        "period_selection_state": "RECORDED"
+        if periods
+        else "PHYSICAL_EVIDENCE_REQUIRED",
+        "employees": employee_rows,
+        "final_check_recording_path": "/payroll#manual-bridge-payroll",
+        "accounting_requirements": (
+            "approved_payroll_run",
+            "approved_account_mappings",
+            "posted_journal_and_gl_lines",
+            "liability_and_settlement_evidence",
+            "opening_ytd_certification",
+            "employee_identity_and_cutoff_lineage",
+        ),
     }
 
 

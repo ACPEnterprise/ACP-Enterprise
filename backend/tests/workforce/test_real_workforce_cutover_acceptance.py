@@ -32,7 +32,7 @@ def test_acceptance_passes_only_for_exact_ready_roster() -> None:
         item["employee_id"]: {
             "role_codes": policy["required_roles"],
             "permissions": [{"code": code} for code in CONTRACT["mobile_permissions"]]
-            if policy["classification"] == "FIELD_TECH"
+            if policy["classification"] in {"FIELD_MANAGER", "FIELD_TECH", "HELPER"}
             else [],
         }
         for item, policy in zip(items, CONTRACT["expected_roster"], strict=True)
@@ -40,11 +40,35 @@ def test_acceptance_passes_only_for_exact_ready_roster() -> None:
     eligibility = [
         {"employee_id": item["employee_id"], "eligible": True}
         for item, policy in zip(items, CONTRACT["expected_roster"], strict=True)
-        if policy["classification"] == "FIELD_TECH"
+        if policy["classification"] in {"FIELD_MANAGER", "FIELD_TECH", "HELPER"}
     ]
-    result = evaluate(CONTRACT, {"items": items}, administration, eligibility)
+    terminated = []
+    for policy in CONTRACT["terminated_historical_roster"]:
+        employee_id = f"employee-{policy['key']}"
+        terminated.append(
+            {
+                "employee_id": employee_id,
+                "display_name": policy["canonical_display_name"],
+                "employment_status": "terminated",
+                "operational_reactivation_required": False,
+                "final_paper_check_recording": "AVAILABLE_WITHOUT_REACTIVATION",
+            }
+        )
+        administration[employee_id] = {
+            "access_status": "DISABLED",
+            "membership_status": "inactive",
+            "mobile_readiness": "BLOCKED",
+            "active_assignment_count": 0,
+        }
+    result = evaluate(
+        CONTRACT,
+        {"items": items},
+        administration,
+        eligibility,
+        {"employees": terminated},
+    )
     assert result["status"] == "PASS"
-    assert result["actual_roster_count"] == 8
+    assert result["actual_roster_count"] == 7
 
 
 def test_acceptance_fails_closed_for_unbound_synthetic_and_privilege_leak() -> None:
@@ -70,4 +94,44 @@ def test_acceptance_fails_closed_for_unbound_synthetic_and_privilege_leak() -> N
         failure.startswith("FIELD_PRIVILEGE_LEAK:")
         for employee in result["employees"]
         for failure in employee["failures"]
+    )
+
+
+def test_acceptance_fails_closed_when_terminated_access_is_not_closed() -> None:
+    items = [_ready_item(policy) for policy in CONTRACT["expected_roster"]]
+    administration = {
+        item["employee_id"]: {
+            "role_codes": policy["required_roles"],
+            "permissions": [],
+        }
+        for item, policy in zip(items, CONTRACT["expected_roster"], strict=True)
+    }
+    terminated = []
+    for policy in CONTRACT["terminated_historical_roster"]:
+        employee_id = f"employee-{policy['key']}"
+        terminated.append(
+            {
+                "employee_id": employee_id,
+                "display_name": policy["canonical_display_name"],
+                "employment_status": "terminated",
+                "operational_reactivation_required": False,
+                "final_paper_check_recording": "AVAILABLE_WITHOUT_REACTIVATION",
+            }
+        )
+        administration[employee_id] = {
+            "access_status": "ACTIVE",
+            "membership_status": "active",
+            "mobile_readiness": "READY",
+            "active_assignment_count": 1,
+        }
+    result = evaluate(
+        CONTRACT,
+        {"items": items},
+        administration,
+        completion={"employees": terminated},
+    )
+    assert result["status"] == "FAIL"
+    assert all(
+        "OPERATIONAL_ACCESS_NOT_DISABLED" in employee["failures"]
+        for employee in result["terminated_historical_employees"]
     )

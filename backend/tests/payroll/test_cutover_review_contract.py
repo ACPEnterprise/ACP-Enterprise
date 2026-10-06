@@ -1,6 +1,11 @@
 """Fail-closed contract checks for Payroll cutover review authority."""
 
-from app.payroll.cutover_router import ACCOUNTANT_FACTS, OWNER_FACTS, router
+from app.payroll.cutover_router import (
+    ACCOUNTANT_FACTS,
+    BRIDGE_FACT_DEFINITIONS,
+    OWNER_FACTS,
+    router,
+)
 from app.payroll.models import (
     PayrollCutoverBridgeEmployeeFactRevision,
     PayrollCutoverBridgePeriodRecord,
@@ -62,6 +67,7 @@ def test_api_has_review_only_and_no_execution_routes() -> None:
     assert "/api/v1/payroll/cutover-review/bridge-periods" in paths
     assert "/api/v1/payroll/cutover-review/gates" in paths
     assert "/api/v1/payroll/cutover-review/direct-deposit-readiness" in paths
+    assert "/api/v1/payroll/cutover-review/completion-readiness" in paths
     assert not any(
         any(word in path for word in ("execute", "calculate", "ach", "post-accounting"))
         for path in paths
@@ -72,3 +78,29 @@ def test_owner_and_accountant_fact_authorities_do_not_overlap() -> None:
     assert OWNER_FACTS
     assert ACCOUNTANT_FACTS
     assert OWNER_FACTS.isdisjoint(ACCOUNTANT_FACTS)
+
+
+def test_bridge_completion_contract_requires_physical_payroll_evidence() -> None:
+    fields = {item["key"]: item for item in BRIDGE_FACT_DEFINITIONS}
+    assert set(fields) == {
+        "gross_wages",
+        "regular_hours",
+        "regular_wages",
+        "overtime_hours",
+        "overtime_wages",
+        "other_earnings",
+        "deductions",
+        "employee_taxes",
+        "employer_taxes",
+        "reimbursements",
+        "net_pay",
+        "check_reference",
+        "liability_impact",
+        "payment_status",
+        "tax_remittance_status",
+        "source_document",
+        "notes",
+    }
+    assert fields["regular_hours"]["owner"] == "owner"
+    assert fields["gross_wages"]["owner"] == "accountant"
+    assert fields["liability_impact"]["owner"] == "accountant"
