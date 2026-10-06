@@ -3,12 +3,15 @@
   "expected_roster": [
     {"key": "michael-fouse", "display_name": "Michael Fouse", "classification": "ADMIN", "required_roles": ["COMPANY_ADMINISTRATOR"]},
     {"key": "lianne-hernandez", "display_name": "Lianne Hernandez", "classification": "OFFICE_MANAGER", "required_roles": ["OFFICE_MANAGER"]},
-    {"key": "alex-donahue", "display_name": "Alex Donahue", "classification": "OFFICE_STAFF", "required_roles": ["SERVICE_CSR"]},
+    {"key": "alex-donahue", "display_name": "Alex Donahue", "classification": "FIELD_MANAGER", "required_roles": ["FIELD_MANAGER", "TECHNICIAN", "ACP_EMPLOYEE_MOBILE", "DISPATCHER"]},
     {"key": "melvin-santiago", "display_name": "Melvin Santiago", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
-    {"key": "adam-mari", "display_name": "Adam Mari", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
-    {"key": "dareis-montgomery", "display_name": "Dareis Montgomery", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
     {"key": "dakota-wilcox", "display_name": "Dakota Wilcox", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
-    {"key": "jason-calci", "display_name": "Jason Calci", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]}
+    {"key": "jason-calci", "display_name": "Jason Calci", "classification": "FIELD_TECH", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]},
+    {"key": "malcolm-calci", "display_name": "Malcolm Calci", "classification": "HELPER", "required_roles": ["TECHNICIAN", "ACP_EMPLOYEE_MOBILE"]}
+  ],
+  "terminated_historical_roster": [
+    {"key": "dareis-montgomery", "display_name": "Dareis", "canonical_display_name": "Dareis Montgomery", "final_paper_checks_expected": 2},
+    {"key": "kamen-wilmington", "display_name": "Kamen", "canonical_display_name": "Kamen Wilmington", "final_paper_checks_expected": 2}
   ],
   "mobile_permissions": [
     "COMPANY_TIMEKEEPING_OWN_READ",

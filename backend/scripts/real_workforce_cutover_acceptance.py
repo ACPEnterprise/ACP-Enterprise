@@ -14,6 +14,7 @@ def evaluate(
     roster: dict[str, Any],
     administration: dict[str, dict[str, Any]],
     eligibility: list[dict[str, Any]] | None = None,
+    completion: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     expected = {item["key"]: item for item in contract["expected_roster"]}
     actual = {item["roster_key"]: item for item in roster.get("items", [])}
@@ -44,7 +45,7 @@ def evaluate(
         ):
             if item.get(field) != ready:
                 failures.append(f"{field.upper()}:{item.get(field, 'UNAVAILABLE')}")
-        if policy["classification"] == "FIELD_TECH":
+        if policy["classification"] in {"FIELD_MANAGER", "FIELD_TECH", "HELPER"}:
             if item.get("mobile_state") != "MOBILE_READY":
                 failures.append(f"MOBILE:{item.get('mobile_state', 'UNAVAILABLE')}")
             if item.get("technician_capability_state") != "TECHNICIAN_CAPABILITY_READY":
@@ -77,15 +78,56 @@ def evaluate(
             }
         )
     unexpected = sorted(set(actual) - set(expected))
+    completion_employees = {
+        item["display_name"]: item for item in (completion or {}).get("employees", [])
+    }
+    terminated_results: list[dict[str, Any]] = []
+    for policy in contract.get("terminated_historical_roster", []):
+        item = completion_employees.get(policy["canonical_display_name"])
+        failures = []
+        if item is None:
+            failures.append("TERMINATED_EMPLOYEE_NOT_FOUND")
+        else:
+            employee_id = item["employee_id"]
+            admin = administration.get(employee_id, {})
+            if item.get("employment_status") not in {"inactive", "terminated"}:
+                failures.append("EMPLOYMENT_NOT_TERMINATED_OR_INACTIVE")
+            if admin.get("access_status") not in {"DISABLED", "NOT_LINKED"}:
+                failures.append("OPERATIONAL_ACCESS_NOT_DISABLED")
+            if admin.get("membership_status") == "active":
+                failures.append("MEMBERSHIP_STILL_ACTIVE")
+            if admin.get("mobile_readiness") == "READY":
+                failures.append("MOBILE_STILL_READY")
+            if admin.get("active_assignment_count", 0) != 0:
+                failures.append("DISPATCH_ASSIGNMENTS_REMAIN")
+            if (
+                item.get("final_paper_check_recording")
+                != "AVAILABLE_WITHOUT_REACTIVATION"
+            ):
+                failures.append("FINAL_CHECK_EVIDENCE_PATH_UNAVAILABLE")
+            if item.get("operational_reactivation_required") is not False:
+                failures.append("FINAL_CHECK_PATH_REQUIRES_REACTIVATION")
+        terminated_results.append(
+            {
+                "roster_key": policy["key"],
+                "employee_id": item.get("employee_id") if item else None,
+                "expected_final_paper_checks": policy["final_paper_checks_expected"],
+                "status": "PASS" if not failures else "FAIL",
+                "failures": failures,
+            }
+        )
     return {
         "contract": contract["contract"],
         "status": "PASS"
-        if not unexpected and all(item["status"] == "PASS" for item in results)
+        if not unexpected
+        and all(item["status"] == "PASS" for item in results)
+        and all(item["status"] == "PASS" for item in terminated_results)
         else "FAIL",
         "expected_roster_count": len(expected),
         "actual_roster_count": len(actual),
         "unexpected_roster_keys": unexpected,
         "employees": results,
+        "terminated_historical_employees": terminated_results,
         "payroll_non_identity_categories": contract["payroll_non_identity_categories"],
     }
 
@@ -110,14 +152,21 @@ def main() -> int:
     token = args.token_file.read_text(encoding="utf-8").strip()
     contract = json.loads(args.contract.read_text(encoding="utf-8"))
     roster = _get(args.base_url, "/api/v1/workforce/real-roster", token)
+    completion = _get(
+        args.base_url, "/api/v1/payroll/cutover-review/completion-readiness", token
+    )
+    employee_ids = {
+        item["employee_id"]
+        for item in (*roster["items"], *completion.get("employees", []))
+        if item.get("employee_id")
+    }
     administration = {
-        item["employee_id"]: _get(
+        employee_id: _get(
             args.base_url,
-            f"/api/v1/workforce/administration/employees/{item['employee_id']}",
+            f"/api/v1/workforce/administration/employees/{employee_id}",
             token,
         )
-        for item in roster["items"]
-        if item.get("employee_id")
+        for employee_id in employee_ids
     }
     eligibility = (
         _get(
@@ -128,7 +177,7 @@ def main() -> int:
         if args.appointment_id
         else None
     )
-    result = evaluate(contract, roster, administration, eligibility)
+    result = evaluate(contract, roster, administration, eligibility, completion)
     args.output.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
