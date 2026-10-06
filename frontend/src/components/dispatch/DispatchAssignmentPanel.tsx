@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { schedulingMutationRecovery } from "../scheduling/schedulingRecovery";
+import {
+  schedulingMutationRecovery,
+  schedulingOverrideConstraints,
+} from "../scheduling/schedulingRecovery";
 import {
   useDispatchMutations,
   useEligibleTechnicians,
@@ -21,6 +24,7 @@ import {
 import { dispatchReadiness, isDispatchSelectable } from "./dispatchEligibility";
 import { activeDispatchAssignment } from "./dispatchOperations";
 import { employeeDetailPath } from "../../routing/paths";
+import type { SchedulingOverrideReason } from "../../types/operations";
 
 const label = (value: string) => value.replaceAll("_", " ");
 export function DispatchAssignmentPanel({
@@ -32,6 +36,7 @@ export function DispatchAssignmentPanel({
   readonly onPlaceUnassigned?: (
     employeeId: string,
     reason: string,
+    overrideReason?: SchedulingOverrideReason,
   ) => Promise<{ readonly assignment: { readonly primary_employee_id: string | null } }>;
   readonly onClose: () => void;
 }) {
@@ -45,6 +50,8 @@ export function DispatchAssignmentPanel({
   const [removeEmployeeId, setRemoveEmployeeId] = useState<string | null>(null);
   const [placementPending, setPlacementPending] = useState(false);
   const [placementError, setPlacementError] = useState<unknown>(null);
+  const [overrideConstraints, setOverrideConstraints] = useState<readonly string[]>([]);
+  const [overrideReason, setOverrideReason] = useState<SchedulingOverrideReason | "">("");
   const [confirm, setConfirm] = useState<
     | "assign"
     | "release"
@@ -58,6 +65,13 @@ export function DispatchAssignmentPanel({
     () => technicians.data?.find((x) => x.employee_id === employeeId),
     [employeeId, technicians.data],
   );
+  const outsideShiftOverrideRequired =
+    selected?.eligible === false &&
+    selected.reasons.length === 1 &&
+    selected.reasons[0] === "outside_branch_schedule";
+  const effectiveOverrideConstraints = outsideShiftOverrideRequired
+    ? ["outside_technician_shift"]
+    : overrideConstraints;
   const assignmentEvidence = item.assignment;
   const assignment = activeDispatchAssignment(item);
   const pending =
@@ -135,7 +149,11 @@ export function DispatchAssignmentPanel({
     else if (employeeId && !assignment && onPlaceUnassigned) {
       setPlacementError(null);
       setPlacementPending(true);
-      void onPlaceUnassigned(employeeId, reason)
+      void onPlaceUnassigned(
+        employeeId,
+        reason,
+        overrideReason || undefined,
+      )
         .then((result) => {
           if (result.assignment.primary_employee_id !== employeeId) {
             throw new Error(
@@ -146,6 +164,7 @@ export function DispatchAssignmentPanel({
         })
         .catch((placementFailure: unknown) => {
           setPlacementError(placementFailure);
+          setOverrideConstraints(schedulingOverrideConstraints(placementFailure));
           setConfirm(null);
         })
         .finally(() => setPlacementPending(false));
@@ -157,6 +176,7 @@ export function DispatchAssignmentPanel({
           employeeId,
           reason,
           version: assignment?.version,
+          overrideReason: overrideReason || undefined,
         },
         { onSuccess: complete, onError: () => setConfirm(null) },
       );
@@ -239,6 +259,30 @@ export function DispatchAssignmentPanel({
           {recovery.message}
         </Alert>
       )}
+      {effectiveOverrideConstraints.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-status-warning/40 bg-status-warning/10 p-3">
+          <p className="font-semibold">Continue with governed override</p>
+          <p className="text-sm text-content-secondary">
+            {effectiveOverrideConstraints.map(label).join(" · ")}. The reason and violated
+            planning constraints will be recorded.
+          </p>
+          <Select
+            aria-label="Scheduling override reason"
+            value={overrideReason}
+            onChange={(event) =>
+              setOverrideReason(event.target.value as SchedulingOverrideReason)
+            }
+          >
+            <option value="">Select override reason</option>
+            <option value="emergency_service">Emergency service</option>
+            <option value="customer_requested">Customer requested</option>
+            <option value="dispatcher_override">Dispatcher override</option>
+            <option value="owner_override">Owner override</option>
+            <option value="after_hours_call">After-hours call</option>
+            <option value="other">Other</option>
+          </Select>
+        </div>
+      )}
       {technicians.isLoading ? (
         <Spinner label="Loading eligible technicians" />
       ) : (
@@ -274,8 +318,9 @@ export function DispatchAssignmentPanel({
           <div className="grid gap-2 sm:grid-cols-2">
             <Button
               disabled={
-                !selected?.eligible ||
+                !selected || !isDispatchSelectable(selected) ||
                 pending ||
+                (effectiveOverrideConstraints.length > 0 && !overrideReason) ||
                 assignment?.status === "reconciliation_required"
               }
               onClick={() => setConfirm("assign")}
@@ -288,7 +333,7 @@ export function DispatchAssignmentPanel({
               <Button
                 variant="outline"
                 disabled={
-                  !selected?.eligible ||
+                  !selected || !isDispatchSelectable(selected) ||
                   pending ||
                   assignment.status === "reconciliation_required"
                 }
@@ -402,11 +447,17 @@ function Eligibility({ item }: { readonly item: TechnicianEligibility }) {
     <Alert
       variant={item.eligible ? "success" : "warning"}
       title={
-        item.eligible ? "Eligible technician" : "Technician cannot be assigned"
+        item.eligible
+          ? "Eligible technician"
+          : isDispatchSelectable(item)
+            ? "Outside scheduled shift — override required"
+            : "Technician cannot be assigned"
       }
     >
       {item.eligible
         ? "Active, Branch eligible, qualified, available, and conflict-free."
+        : isDispatchSelectable(item)
+          ? "Otherwise eligible and conflict-free. An authorized dispatcher may continue with a recorded reason."
         : `${dispatchReadiness(item).replaceAll("_", " ")} · ${item.reasons.map(label).join(" · ")}`}
     </Alert>
   );

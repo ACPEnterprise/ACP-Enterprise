@@ -112,6 +112,7 @@ async def accept_service_request(
             priority=data.priority,
             customer_reported_problem=data.customer_reported_problem,
             internal_description=data.internal_description,
+            override_reason_code=data.override_reason_code,
         )
     except SchedulingError as error:
         raise translate_scheduling_error(error) from error
@@ -157,6 +158,7 @@ async def schedule_existing_job(
                 capacity_units=data.capacity_units,
                 reserve_capacity=data.reserve_capacity,
             ),
+            override_reason_code=data.override_reason_code,
         )
     except SchedulingError as error:
         raise translate_scheduling_error(error) from error

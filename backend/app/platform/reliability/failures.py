@@ -32,6 +32,7 @@ class FailureCode(StrEnum):
     SCHEDULING_CROSS_DAY = "scheduling_cross_day"
     SCHEDULING_SLOT_ALIGNMENT = "scheduling_slot_alignment"
     SCHEDULING_INVALID_WINDOW = "scheduling_invalid_window"
+    SCHEDULING_OVERRIDE_REQUIRED = "scheduling_override_required"
     IDEMPOTENCY_CONFLICT = "idempotency_conflict"
     DEPENDENCY_UNAVAILABLE = "dependency_unavailable"
     PROVIDER_UNAVAILABLE = "provider_unavailable"

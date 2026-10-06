@@ -17,6 +17,7 @@ from app.scheduling.errors import (
     SchedulingCapacityFailure,
     SchedulingConflictError,
     SchedulingNotFoundError,
+    SchedulingOverrideRequiredError,
     SchedulingValidationError,
     SchedulingValidationFailure,
     SchedulingVersionConflictError,
@@ -38,6 +39,7 @@ from app.scheduling.types import (
     AppointmentCapacityState,
     AppointmentRescheduleReason,
     AppointmentStatus,
+    SchedulingOverrideReason,
 )
 
 
@@ -63,6 +65,7 @@ class CreateAppointmentCommand:
     capacity_units: Decimal = Decimal("1.00")
     reserve_capacity: bool = True
     idempotency_key: UUID | None = None
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,7 @@ class RescheduleAppointmentCommand:
     capacity_units: Decimal
     reason_code: AppointmentRescheduleReason
     establish_capacity_if_unassigned: bool = False
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,7 @@ class _CapacityDecision:
     context: CapacityLockContext
     reservation_start_at: datetime
     reservation_end_at: datetime
+    override_constraints: tuple[str, ...] = ()
 
 
 class SchedulingService:
@@ -182,6 +187,7 @@ class SchedulingService:
                     expected_duration_minutes=command.expected_duration_minutes,
                     capacity_units=command.capacity_units,
                     now=now,
+                    override_reason_code=command.override_reason_code,
                 )
             if command.idempotency_key is not None:
                 existing = await self._repository.get_appointment_for_update(
@@ -237,6 +243,17 @@ class SchedulingService:
                         reserved_start_at=decision.reservation_start_at,
                         reserved_end_at=decision.reservation_end_at,
                         capacity_units=command.capacity_units,
+                        is_override=bool(decision.override_constraints),
+                        override_reason_code=(
+                            command.override_reason_code.value
+                            if decision.override_constraints
+                            and command.override_reason_code is not None
+                            else None
+                        ),
+                        overridden_at=now if decision.override_constraints else None,
+                        overridden_by_user_id=(
+                            context.user.id if decision.override_constraints else None
+                        ),
                         created_at=now,
                         updated_at=now,
                     ),
@@ -262,6 +279,16 @@ class SchedulingService:
                     "arrival_window_start_at": command.arrival_window_start_at.isoformat(),
                     "arrival_window_end_at": command.arrival_window_end_at.isoformat(),
                     "schema_version": 1,
+                    "override_reason_code": (
+                        command.override_reason_code.value
+                        if decision is not None
+                        and decision.override_constraints
+                        and command.override_reason_code is not None
+                        else None
+                    ),
+                    "override_constraints": (
+                        list(decision.override_constraints) if decision else []
+                    ),
                 },
             )
             self._stage_event(
@@ -517,6 +544,7 @@ class SchedulingService:
                 capacity_units=command.capacity_units,
                 now=now,
                 exclude_appointment_id=appointment.id,
+                override_reason_code=command.override_reason_code,
             )
             reservation = await self._repository.get_capacity_reservation(
                 session,
@@ -543,6 +571,21 @@ class SchedulingService:
                             reserved_start_at=decision.reservation_start_at,
                             reserved_end_at=decision.reservation_end_at,
                             capacity_units=command.capacity_units,
+                            is_override=bool(decision.override_constraints),
+                            override_reason_code=(
+                                command.override_reason_code.value
+                                if decision.override_constraints
+                                and command.override_reason_code is not None
+                                else None
+                            ),
+                            overridden_at=now
+                            if decision.override_constraints
+                            else None,
+                            overridden_by_user_id=(
+                                context.user.id
+                                if decision.override_constraints
+                                else None
+                            ),
                             created_at=now,
                             updated_at=now,
                         ),
@@ -555,6 +598,19 @@ class SchedulingService:
                     reserved_end_at=decision.reservation_end_at,
                     capacity_units=command.capacity_units,
                     updated_at=now,
+                )
+                reservation.is_override = bool(decision.override_constraints)
+                reservation.override_reason_code = (
+                    command.override_reason_code.value
+                    if decision.override_constraints
+                    and command.override_reason_code is not None
+                    else None
+                )
+                reservation.overridden_at = (
+                    now if decision.override_constraints else None
+                )
+                reservation.overridden_by_user_id = (
+                    context.user.id if decision.override_constraints else None
                 )
             appointment.capacity_reservation = reservation
             previous_start = appointment.arrival_window_start_at
@@ -583,6 +639,13 @@ class SchedulingService:
                     "arrival_window_start_at": command.arrival_window_start_at.isoformat(),
                     "arrival_window_end_at": command.arrival_window_end_at.isoformat(),
                     "reason_code": reason_code,
+                    "override_reason_code": (
+                        command.override_reason_code.value
+                        if decision.override_constraints
+                        and command.override_reason_code is not None
+                        else None
+                    ),
+                    "override_constraints": list(decision.override_constraints),
                     "schema_version": 1,
                 },
             )
@@ -615,6 +678,7 @@ class SchedulingService:
         expected_duration_minutes: int,
         capacity_units: Decimal,
         now: datetime,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> _CapacityDecision:
         capacity_context = await self._repository.lock_capacity_context(
             session, company_id=company_id, branch_id=branch_id
@@ -630,6 +694,7 @@ class SchedulingService:
             expected_duration_minutes=expected_duration_minutes,
             capacity_units=capacity_units,
             now=now,
+            override_reason_code=override_reason_code,
         )
 
     async def _evaluate_capacity(
@@ -644,6 +709,7 @@ class SchedulingService:
         capacity_units: Decimal,
         now: datetime,
         exclude_appointment_id: UUID | None = None,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> _CapacityDecision:
         calendar = await self._repository.get_branch_calendar(
             session,
@@ -655,13 +721,16 @@ class SchedulingService:
                 SchedulingCapacityFailure.CALENDAR_UNAVAILABLE
             )
         reservation_end = window_start_at + timedelta(minutes=expected_duration_minutes)
-        local_start, local_arrival_end, local_work_end = self._validate_calendar_policy(
-            calendar,
-            branch_timezone=branch_timezone,
-            window_start_at=window_start_at,
-            window_end_at=window_end_at,
-            reservation_end_at=reservation_end,
-            now=now,
+        local_start, local_arrival_end, local_work_end, policy_constraints = (
+            self._validate_calendar_policy(
+                calendar,
+                branch_timezone=branch_timezone,
+                window_start_at=window_start_at,
+                window_end_at=window_end_at,
+                reservation_end_at=reservation_end,
+                now=now,
+                allow_override=override_reason_code is not None,
+            )
         )
         intervals = await self._repository.get_weekly_intervals(
             session,
@@ -677,7 +746,7 @@ class SchedulingService:
             exception_date=local_start.date(),
         )
         start_minute = local_start.hour * 60 + local_start.minute
-        self._applicable_capacity(
+        _, arrival_constraint = self._applicable_capacity(
             calendar,
             intervals=intervals,
             exceptions=exceptions,
@@ -685,7 +754,7 @@ class SchedulingService:
             start_minute=start_minute,
             end_minute=local_arrival_end.hour * 60 + local_arrival_end.minute,
         )
-        available = self._applicable_capacity(
+        available, work_constraint = self._applicable_capacity(
             calendar,
             intervals=intervals,
             exceptions=exceptions,
@@ -693,6 +762,16 @@ class SchedulingService:
             start_minute=start_minute,
             end_minute=local_work_end.hour * 60 + local_work_end.minute,
         )
+        constraints = tuple(
+            dict.fromkeys(
+                (
+                    *policy_constraints,
+                    *(x for x in (arrival_constraint, work_constraint) if x),
+                )
+            )
+        )
+        if constraints and override_reason_code is None:
+            raise SchedulingOverrideRequiredError(constraints)
         overlaps = await self._repository.get_overlapping_capacity_reservations(
             session,
             capacity_context=capacity_context,
@@ -710,6 +789,7 @@ class SchedulingService:
             context=capacity_context,
             reservation_start_at=window_start_at,
             reservation_end_at=reservation_end,
+            override_constraints=constraints,
         )
 
     @staticmethod
@@ -721,7 +801,8 @@ class SchedulingService:
         window_end_at: datetime,
         reservation_end_at: datetime,
         now: datetime,
-    ) -> tuple[datetime, datetime, datetime]:
+        allow_override: bool = False,
+    ) -> tuple[datetime, datetime, datetime, tuple[str, ...]]:
         """Validate arrival and working intervals independently.
 
         The customer arrival window and the technician working interval both must
@@ -735,11 +816,11 @@ class SchedulingService:
                 "Branch timezone is invalid.",
                 SchedulingValidationFailure.INVALID_TIMEZONE,
             ) from error
+        constraints: list[str] = []
         if window_start_at < now + timedelta(minutes=calendar.minimum_notice_minutes):
-            raise SchedulingValidationError(
-                "Arrival window violates minimum notice.",
-                SchedulingValidationFailure.MINIMUM_NOTICE,
-            )
+            if not allow_override:
+                raise SchedulingOverrideRequiredError(("minimum_notice",))
+            constraints.append("minimum_notice")
         if window_start_at > now + timedelta(days=calendar.booking_horizon_days):
             raise SchedulingValidationError(
                 "Arrival window exceeds booking horizon.",
@@ -756,22 +837,24 @@ class SchedulingService:
                 "Scheduling intervals must remain within one Branch calendar day.",
                 SchedulingValidationFailure.CROSS_DAY,
             )
-        if (
-            (local_start.hour * 60 + local_start.minute)
-            % calendar.slot_interval_minutes
-            or local_start.second
-            or local_start.microsecond
-        ):
+        start_minute = local_start.hour * 60 + local_start.minute
+        if start_minute % 15 or local_start.second or local_start.microsecond:
             raise SchedulingValidationError(
-                "Arrival window does not align with the Branch slot interval.",
+                "Arrival window must align with the canonical quarter-hour grid.",
                 SchedulingValidationFailure.SLOT_ALIGNMENT,
             )
+        if start_minute % calendar.slot_interval_minutes:
+            if not allow_override:
+                raise SchedulingOverrideRequiredError(
+                    ("non_preferred_booking_interval",)
+                )
+            constraints.append("non_preferred_booking_interval")
         if window_end_at <= window_start_at:
             raise SchedulingValidationError(
                 "Arrival window is invalid.",
                 SchedulingValidationFailure.INVALID_WINDOW,
             )
-        return local_start, local_arrival_end, local_work_end
+        return local_start, local_arrival_end, local_work_end, tuple(constraints)
 
     @staticmethod
     def _applicable_capacity(
@@ -782,7 +865,7 @@ class SchedulingService:
         day_of_week: int,
         start_minute: int,
         end_minute: int,
-    ) -> Decimal:
+    ) -> tuple[Decimal, str | None]:
         closed_exceptions = [
             exception
             for exception in exceptions
@@ -797,7 +880,7 @@ class SchedulingService:
             )
         ]
         if closed_exceptions:
-            raise SchedulingCapacityError(SchedulingCapacityFailure.CALENDAR_CLOSED)
+            return calendar.default_capacity_units, "outside_service_hours"
         exception_capacity = [
             exception.capacity_units
             for exception in exceptions
@@ -814,7 +897,7 @@ class SchedulingService:
             )
         ]
         if exception_capacity:
-            return min(exception_capacity)
+            return min(exception_capacity), None
         interval_capacity = [
             interval.capacity_units
             for interval in intervals
@@ -823,10 +906,8 @@ class SchedulingService:
             and interval.end_minute >= end_minute
         ]
         if not interval_capacity:
-            raise SchedulingCapacityError(
-                SchedulingCapacityFailure.INTERVAL_UNAVAILABLE
-            )
-        return min(min(interval_capacity), calendar.default_capacity_units)
+            return calendar.default_capacity_units, "outside_service_hours"
+        return min(min(interval_capacity), calendar.default_capacity_units), None
 
     @staticmethod
     def _require_matching_creation(

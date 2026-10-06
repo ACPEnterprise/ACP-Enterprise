@@ -5,8 +5,9 @@ import { useScheduleExistingJob } from "../../hooks/useOperations";
 import { useWorkforceEligibility } from "../../hooks/useWorkforce";
 import { appointmentDetailPath, schedulingReturnPath } from "../../routing/paths";
 import type { JobDetail } from "../../types/jobs";
+import type { SchedulingOverrideReason } from "../../types/operations";
 import { Alert, Button, Field, Input, Select } from "../../ui";
-import { schedulingMutationRecovery } from "../scheduling/schedulingRecovery";
+import { schedulingMutationRecovery, schedulingOverrideConstraints } from "../scheduling/schedulingRecovery";
 
 const localInput = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -32,6 +33,7 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   const [duration, setDuration] = useState(120);
   const [employeeId, setEmployeeId] = useState("");
   const [lastAttempt, setLastAttempt] = useState<{ fingerprint: string; requestId: string } | null>(null);
+  const [overrideReason, setOverrideReason] = useState<SchedulingOverrideReason | "">("");
   const eligibilityRequest = useMemo(() => {
     const start = new Date(startAt);
     if (Number.isNaN(start.getTime()) || duration < 15) return null;
@@ -69,6 +71,7 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
       capacity_units: "1.00",
       reserve_capacity: Boolean(employeeId),
       employee_id: employeeId || null,
+      override_reason_code: overrideReason || null,
     };
     const fingerprint = JSON.stringify(intent);
     const requestId = lastAttempt?.fingerprint === fingerprint ? lastAttempt.requestId : crypto.randomUUID();
@@ -77,11 +80,13 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
   };
   const submit = (event: FormEvent) => { event.preventDefault(); book(); };
   const error = schedule.error ? schedulingMutationRecovery(schedule.error, "Job scheduling") : null;
+  const overrideConstraints = schedulingOverrideConstraints(schedule.error);
   return <section className="twelve-hats-panel-outline rounded-xl border bg-surface p-4 sm:p-6" aria-labelledby="schedule-job-heading">
     <h3 id="schedule-job-heading" className="text-xl font-semibold">Schedule Job</h3>
     <p className="mt-1 text-sm text-content-muted">Book an authoritative Appointment for this Job. Technician assignment is optional and remains human-confirmed.</p>
     {job.status === "in_progress" || job.status === "paused" ? <Alert className="mt-4" variant="warning" title="Unscheduled field work already began">ACP supports emergency work before scheduling. Add the service window now so office, Dispatch, and My Day share the same operating record.</Alert> : null}
-    {error ? <Alert className="mt-4" variant="danger" title={error.title} action={error.retryLabel ? <Button variant="outline" onClick={book} disabled={schedule.isPending}>{error.retryLabel}</Button> : undefined}><strong>{error.state.replaceAll("_", " ")}</strong> — {error.message}</Alert> : null}
+    {error ? <Alert className="mt-4" variant={overrideConstraints.length ? "warning" : "danger"} title={error.title} action={!overrideConstraints.length && error.retryLabel ? <Button variant="outline" onClick={book} disabled={schedule.isPending}>{error.retryLabel}</Button> : undefined}><strong>{error.state.replaceAll("_", " ")}</strong> — {error.message}</Alert> : null}
+    {overrideConstraints.length > 0 ? <div className="mt-4 space-y-2 rounded-lg border border-status-warning/40 bg-status-warning/10 p-3"><p className="font-semibold">Continue with governed override</p><p className="text-sm">{overrideConstraints.map((item) => item.replaceAll("_", " ")).join(" · ")}. Select a reason, then submit again.</p><Select aria-label="Scheduling override reason" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value as SchedulingOverrideReason)}><option value="">Select override reason</option><option value="emergency_service">Emergency service</option><option value="customer_requested">Customer requested</option><option value="dispatcher_override">Dispatcher override</option><option value="owner_override">Owner override</option><option value="after_hours_call">After-hours call</option><option value="other">Other</option></Select></div> : null}
     {schedule.isSuccess && schedule.data.assignmentState === "FAILED" ? <Alert className="mt-4" variant="warning" title="Appointment booked; technician not assigned">The Appointment exists and will remain in Needs Scheduling. Open it to review current Dispatch eligibility and assign a technician; do not book it again.<div className="mt-2"><Link className="font-semibold underline" to={appointmentDetailPath(schedule.data.appointment.id)}>Open {schedule.data.appointment.appointment_number}</Link></div></Alert> : null}
     {schedule.isSuccess && schedule.data.assignmentState !== "FAILED" ? <Alert className="mt-4" variant="success" title="Job scheduled">SUCCEEDED — The Appointment was linked to this Job{schedule.data.assignmentState === "ASSIGNED" ? " and the technician was assigned" : ""}. Authoritative operating views were refreshed.{returnTo ? <div className="mt-2"><Link className="font-semibold underline" to={schedulingReturnPath(returnTo)}>Return to prior Schedule view</Link></div> : null}</Alert> : null}
     <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
@@ -95,7 +100,7 @@ export function ScheduleJobPanel({ job, canAssign, returnTo }: {
           {technicians.map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} — {employee.employee_number}</option>)}
         </Select>
       </Field>
-      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || !endAt || new Date(endAt) <= new Date(startAt) || !officeSlotValid}>Book Appointment</Button></div>
+      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || !endAt || new Date(endAt) <= new Date(startAt) || !officeSlotValid || (overrideConstraints.length > 0 && !overrideReason)}>Book Appointment</Button></div>
     </form>
   </section>;
 }

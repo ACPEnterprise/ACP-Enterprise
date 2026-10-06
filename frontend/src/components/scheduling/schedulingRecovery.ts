@@ -14,6 +14,16 @@ export interface SchedulingRecovery {
   readonly retryLabel: string | null;
 }
 
+export function schedulingOverrideConstraints(error: unknown): readonly string[] {
+  if (!axios.isAxiosError(error)) return [];
+  const detail = error.response?.data?.detail;
+  if (typeof detail !== "object" || detail === null) return [];
+  const constraints = "constraints" in detail ? detail.constraints : null;
+  return Array.isArray(constraints)
+    ? constraints.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
 const detailValue = (error: unknown, key: "code" | "recovery") => {
   if (!axios.isAxiosError(error)) return null;
   const detail = error.response?.data?.detail;
@@ -95,6 +105,17 @@ export function schedulingMutationRecovery(
       title: "Branch capacity already committed",
       message: "The requested technician work interval has no remaining Branch capacity. Review existing work for that interval or choose another planned start.",
       retryLabel: null,
+    };
+  }
+  if (code === "scheduling_override_required") {
+    const constraints = schedulingOverrideConstraints(error)
+      .map((item) => item.replaceAll("_", " "))
+      .join("; ");
+    return {
+      state: "FAILED",
+      title: "Dispatcher override required",
+      message: `Planning warning${constraints ? `: ${constraints}` : ""}. An authorized dispatcher may continue with a recorded reason.`,
+      retryLabel: "Continue with override",
     };
   }
   const policyValidation = {

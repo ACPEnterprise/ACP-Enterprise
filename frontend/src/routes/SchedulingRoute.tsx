@@ -29,7 +29,7 @@ import {
   type QueueSort,
 } from "../components/scheduling/NeedsSchedulingQueue";
 import { needsSchedulingAttentionCount } from "../components/scheduling/needsSchedulingAttention";
-import { schedulingMutationRecovery } from "../components/scheduling/schedulingRecovery";
+import { schedulingMutationRecovery, schedulingOverrideConstraints } from "../components/scheduling/schedulingRecovery";
 import {
   dayRange,
   localDateValue,
@@ -54,6 +54,7 @@ import {
 } from "../routing/paths";
 import type { DispatchBoardItem } from "../types/dispatch";
 import type { JobListItem, JobPriority, JobStatus } from "../types/jobs";
+import type { SchedulingOverrideReason } from "../types/operations";
 import type {
   AppointmentDetail,
   AppointmentStatus,
@@ -1041,7 +1042,7 @@ export function SchedulingRoute({
           onPlaceUnassigned={
             currentSelection?.arrival_window_start_at &&
             currentSelection.arrival_window_end_at
-              ? (employeeId, reason) =>
+              ? (employeeId, reason, overrideReason) =>
                   calendarPlacement.mutateAsync({
                     appointmentId: currentSelection.id,
                     input: {
@@ -1058,6 +1059,7 @@ export function SchedulingRoute({
                         currentSelection.expected_duration_minutes ?? 60,
                       capacity_units: currentSelection.capacity_units ?? "1.00",
                       reason,
+                      override_reason_code: overrideReason ?? null,
                     },
                   })
               : undefined
@@ -1704,6 +1706,8 @@ function AppointmentPanel({
     appointment.expected_duration_minutes ?? 60,
   );
   const [confirmMove, setConfirmMove] = useState(false);
+  const [overrideReason, setOverrideReason] = useState<SchedulingOverrideReason | "">("");
+  const overrideConstraints = schedulingOverrideConstraints(mutation.error);
   const canReschedule = ["scheduled", "confirmed"].includes(appointment.status);
   const capacityReconciled = !isCapacityUnreconciled(appointment);
   const validWindow = Boolean(start && end && new Date(end) > new Date(start));
@@ -1724,6 +1728,7 @@ function AppointmentPanel({
           expected_duration_minutes: duration,
           capacity_units: appointment.capacity_units ?? "1.00",
           reason_code: "operational_adjustment",
+          override_reason_code: overrideReason || null,
         },
       },
       {
@@ -1863,10 +1868,19 @@ function AppointmentPanel({
             />
           </label>
           {mutationError && (
-            <Alert variant="danger" title={mutationError.title}>
+            <Alert variant={overrideConstraints.length ? "warning" : "danger"} title={mutationError.title}>
               <strong>{mutationError.state.replaceAll("_", " ")}</strong> —{" "}
               {mutationError.message}
             </Alert>
+          )}
+          {overrideConstraints.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-status-warning/40 bg-status-warning/10 p-3">
+              <p className="font-semibold">Continue with governed override</p>
+              <p className="text-sm">{overrideConstraints.map((item) => item.replaceAll("_", " ")).join(" · ")}. Select a reason, then review the time again.</p>
+              <Select aria-label="Scheduling override reason" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value as SchedulingOverrideReason)}>
+                <option value="">Select override reason</option><option value="emergency_service">Emergency service</option><option value="customer_requested">Customer requested</option><option value="dispatcher_override">Dispatcher override</option><option value="owner_override">Owner override</option><option value="after_hours_call">After-hours call</option><option value="other">Other</option>
+              </Select>
+            </div>
           )}
           {mutation.isSuccess && (
             <Alert variant="success">
@@ -1876,7 +1890,7 @@ function AppointmentPanel({
           <Button
             type="submit"
             loading={mutation.isPending}
-            disabled={!validWindow || duration < 15 || duration % 15 !== 0}
+            disabled={!validWindow || duration < 15 || duration % 15 !== 0 || (overrideConstraints.length > 0 && !overrideReason)}
           >
             Review new time
           </Button>

@@ -21,6 +21,7 @@ from app.scheduling.errors import (
     SchedulingConflictError,
     SchedulingError,
     SchedulingNotFoundError,
+    SchedulingOverrideRequiredError,
     SchedulingValidationError,
     SchedulingValidationFailure,
     SchedulingVersionConflictError,
@@ -157,6 +158,18 @@ def translate_scheduling_error(error: SchedulingError) -> HTTPException:
             status_code=status.HTTP_409_CONFLICT,
             detail=failure.detail(),
         )
+    if isinstance(error, SchedulingOverrideRequiredError):
+        failure = SafeFailure(
+            FailureCode.SCHEDULING_OVERRIDE_REQUIRED,
+            "Scheduling planning constraints require an authorized override.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        detail: dict[str, object] = {
+            **failure.detail(),
+            "constraints": list(error.constraints),
+        }
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     if isinstance(error, SchedulingCapacityError):
         capacity_failures = {
             SchedulingCapacityFailure.CALENDAR_MISSING: (
@@ -463,6 +476,7 @@ async def create_appointment(
                 arrival_window_end_at=data.arrival_window_end_at,
                 expected_duration_minutes=data.expected_duration_minutes,
                 capacity_units=data.capacity_units,
+                override_reason_code=data.override_reason_code,
             ),
         )
     except SchedulingError as error:
@@ -521,6 +535,7 @@ async def reschedule_appointment(
                 expected_duration_minutes=data.expected_duration_minutes,
                 capacity_units=data.capacity_units,
                 reason_code=data.reason_code,
+                override_reason_code=data.override_reason_code,
             ),
         )
     except SchedulingError as error:

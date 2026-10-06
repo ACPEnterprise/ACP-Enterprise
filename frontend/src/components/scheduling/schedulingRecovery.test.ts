@@ -1,7 +1,10 @@
 import { AxiosError, AxiosHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 import { describe, expect, it } from "vitest";
 
-import { schedulingMutationRecovery } from "./schedulingRecovery";
+import {
+  schedulingMutationRecovery,
+  schedulingOverrideConstraints,
+} from "./schedulingRecovery";
 
 const failure = (status?: number, detail?: unknown) => {
   const config = { headers: new AxiosHeaders() } as InternalAxiosRequestConfig;
@@ -75,6 +78,22 @@ describe("Scheduling mutation recovery", () => {
       state: "FAILED",
       title: "Access denied",
       retryLabel: null,
+    });
+  });
+
+  it("preserves typed planning constraints for the governed override flow", () => {
+    const error = failure(409, {
+      code: "scheduling_override_required",
+      recovery: "USER_CORRECTION_REQUIRED",
+      constraints: ["minimum_notice", "outside_service_hours"],
+    });
+    expect(schedulingOverrideConstraints(error)).toEqual([
+      "minimum_notice",
+      "outside_service_hours",
+    ]);
+    expect(schedulingMutationRecovery(error, "booking")).toMatchObject({
+      state: "FAILED",
+      title: "Dispatcher override required",
     });
   });
 });

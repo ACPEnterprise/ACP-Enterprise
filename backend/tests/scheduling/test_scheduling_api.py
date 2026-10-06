@@ -39,6 +39,7 @@ from app.scheduling.errors import (
     SchedulingCapacityError,
     SchedulingCapacityFailure,
     SchedulingError,
+    SchedulingOverrideRequiredError,
     SchedulingValidationError,
     SchedulingValidationFailure,
     SchedulingVersionConflictError,
@@ -1078,6 +1079,19 @@ def test_scheduling_failures_use_safe_recovery_contract(
     assert detail["code"] == code
     assert detail["recovery"] == recovery
     assert detail["correlation_id"] is None
+
+
+def test_override_warning_returns_typed_constraints() -> None:
+    translated = translate_scheduling_error(
+        SchedulingOverrideRequiredError(("minimum_notice", "outside_service_hours"))
+    )
+    assert translated.status_code == 409
+    assert translated.detail["code"] == "scheduling_override_required"
+    assert translated.detail["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert translated.detail["constraints"] == [
+        "minimum_notice",
+        "outside_service_hours",
+    ]
 
 
 @pytest.mark.parametrize(

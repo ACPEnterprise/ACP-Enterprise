@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.scheduling.types import SchedulingOverrideReason
+
 
 class DispatchSchema(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
@@ -141,6 +143,7 @@ class AssignPrimaryRequest(DispatchSchema):
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
     )
     expected_version: int | None = Field(default=None, ge=1)
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 class AssignmentReasonRequest(DispatchSchema):
