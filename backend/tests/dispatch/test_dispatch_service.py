@@ -5,9 +5,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.dispatch.errors import DispatchConflict, DispatchNotFound
@@ -36,6 +33,8 @@ from app.workforce.models import (
     WorkforceCapabilityProfile,
     WorkforceWorkingAvailability,
 )
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
