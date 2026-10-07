@@ -49,6 +49,7 @@ from app.engineering_execution.controlled import (
 from app.engineering_execution.supervision import (
     models as supervision_models,  # noqa: F401
 )
+from app.equipment_readiness import models as equipment_readiness_models  # noqa: F401
 from app.estimates import models as estimate_models  # noqa: F401
 from app.events import models as event_models  # noqa: F401
 from app.execution_nodes import models as execution_node_models  # noqa: F401
