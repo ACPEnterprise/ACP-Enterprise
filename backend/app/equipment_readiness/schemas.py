@@ -137,6 +137,17 @@ class DailyPrompt(Schema):
     items: tuple[PromptItem, ...]
 
 
+class EquipmentChecklistSetting(Schema):
+    equipment_checklist_requirement: str = Field(
+        pattern=r"^(not_required|required_at_clock_in)$"
+    )
+
+
+class EquipmentChecklistSettingOut(Schema):
+    employee_id: UUID
+    equipment_checklist_requirement: str
+
+
 class CustodyTransferRequest(Schema):
     to_employee_id: UUID | None = None
     to_location_kind: str = Field(pattern=r"^(vehicle|employee|shop|warehouse|repair_vendor|other|unknown)$")
