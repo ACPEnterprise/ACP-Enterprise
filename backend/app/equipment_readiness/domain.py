@@ -8,6 +8,14 @@ ReadinessState = Literal[
     "EQUIPMENT_OUT_OF_SERVICE",
     "EQUIPMENT_SET_INCOMPLETE",
 ]
+EquipmentChecklistRequirement = Literal["not_required", "required_at_clock_in"]
+
+
+def equipment_checklist_prompt_required(
+    requirement: EquipmentChecklistRequirement, *, has_custody_items: bool, already_confirmed: bool
+) -> bool:
+    """Employee setting is authoritative; custody only supplies checklist items."""
+    return requirement == "required_at_clock_in" and has_custody_items and not already_confirmed
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,8 @@ from app.equipment_readiness.schemas import (
     CustodyTransferRequest,
     DailyConfirmationRequest,
     DailyPrompt,
+    EquipmentChecklistSetting,
+    EquipmentChecklistSettingOut,
     IntelligenceEvidence,
     JobFit,
     PlacementCreate,
@@ -92,6 +94,34 @@ async def create_placement(data: PlacementCreate, context: Manage, session: Sess
 async def daily_prompt(employee_id: UUID, work_date: date, context: Read, session: Session):
     try:
         return DailyPrompt.model_validate(await equipment_readiness_service.daily_prompt(session, context, employee_id, work_date))
+    except (EquipmentNotFound, EquipmentConflict, EquipmentValidation) as exc:
+        raise translated(exc) from exc
+
+
+@router.get("/employees/{employee_id}/checklist-setting", response_model=EquipmentChecklistSettingOut)
+async def checklist_setting(employee_id: UUID, context: Read, session: Session):
+    try:
+        employee = await equipment_readiness_service.get_checklist_setting(session, context, employee_id)
+        return EquipmentChecklistSettingOut(
+            employee_id=employee.id,
+            equipment_checklist_requirement=employee.equipment_checklist_requirement,
+        )
+    except (EquipmentNotFound, EquipmentConflict, EquipmentValidation) as exc:
+        raise translated(exc) from exc
+
+
+@router.put("/employees/{employee_id}/checklist-setting", response_model=EquipmentChecklistSettingOut)
+async def set_checklist_setting(
+    employee_id: UUID, data: EquipmentChecklistSetting, context: Manage, session: Session
+):
+    try:
+        employee = await equipment_readiness_service.set_checklist_setting(
+            session, context, employee_id, data
+        )
+        return EquipmentChecklistSettingOut(
+            employee_id=employee.id,
+            equipment_checklist_requirement=employee.equipment_checklist_requirement,
+        )
     except (EquipmentNotFound, EquipmentConflict, EquipmentValidation) as exc:
         raise translated(exc) from exc
 

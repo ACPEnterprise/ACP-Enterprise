@@ -8,6 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dispatch.models import DispatchAssignment
+from app.equipment_readiness.domain import equipment_checklist_prompt_required
 from app.equipment_readiness.models import (
     EquipmentAttention,
     EquipmentCatalogItem,
@@ -22,6 +23,7 @@ from app.equipment_readiness.schemas import (
     ComponentCreate,
     CustodyTransferRequest,
     DailyConfirmationRequest,
+    EquipmentChecklistSetting,
     PlacementCreate,
     RequirementCreate,
 )
@@ -201,6 +203,13 @@ class EquipmentReadinessService:
 
     async def daily_prompt(self, session: AsyncSession, context: AuthorizationContext, employee_id: UUID, work_date: date):
         employee = await self._employee(session, context, employee_id)
+        if employee.equipment_checklist_requirement != "required_at_clock_in":
+            return {
+                "employee_id": employee.id, "work_date": work_date,
+                "required": False,
+                "reason": "Equipment checklist is not required for this Employee.",
+                "already_confirmed": False, "items": (),
+            }
         placements = list((await session.scalars(select(EquipmentPlacement).where(
             EquipmentPlacement.company_id == context.company.id,
             EquipmentPlacement.branch_id.in_(context.authorized_branch_ids),
@@ -234,10 +243,28 @@ class EquipmentReadinessService:
             })
         return {
             "employee_id": employee.id, "work_date": work_date,
-            "required": bool(prompt) and not bool(latest),
+            "required": equipment_checklist_prompt_required(
+                employee.equipment_checklist_requirement,
+                has_custody_items=bool(prompt),
+                already_confirmed=bool(latest),
+            ),
             "reason": "Confirm the equipment expected in your custody." if prompt else "No dispatch-critical equipment is assigned to you.",
             "already_confirmed": bool(latest), "items": tuple(prompt),
         }
+
+    async def get_checklist_setting(self, session, context, employee_id: UUID):
+        employee = await self._employee(session, context, employee_id)
+        return employee
+
+    async def set_checklist_setting(
+        self, session, context, employee_id: UUID, data: EquipmentChecklistSetting
+    ):
+        employee = await self._employee(session, context, employee_id)
+        employee.equipment_checklist_requirement = data.equipment_checklist_requirement
+        employee.updated_by_user_id = context.user.id
+        await session.commit()
+        await session.refresh(employee)
+        return employee
 
     async def confirm(self, session: AsyncSession, context: AuthorizationContext, data: DailyConfirmationRequest):
         employee = await self._employee(session, context, data.employee_id)

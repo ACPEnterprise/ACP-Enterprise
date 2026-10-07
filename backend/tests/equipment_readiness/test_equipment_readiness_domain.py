@@ -1,9 +1,17 @@
 from app.equipment_readiness.domain import (
     attention_priority,
     can_view_management_attention,
+    equipment_checklist_prompt_required,
     equipment_fit,
     projection_state,
 )
+
+
+def test_employee_setting_controls_prompt_independently_of_position():
+    assert equipment_checklist_prompt_required("not_required", has_custody_items=True, already_confirmed=False) is False
+    assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=True, already_confirmed=False) is True
+    assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=True, already_confirmed=True) is False
+    assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=False, already_confirmed=False) is False
 from app.equipment_readiness.schemas import DailyConfirmationRequest
 
 
