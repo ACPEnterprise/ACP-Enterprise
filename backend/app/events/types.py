@@ -7,6 +7,8 @@ class EventType(str, Enum):
     ASSET_EVIDENCE_RECORDED = "asset.evidence_recorded"
     ASSET_RELATIONSHIP_RECORDED = "asset.relationship_recorded"
     ASSET_LIFECYCLE_CHANGED = "asset.lifecycle_changed"
+    EQUIPMENT_READINESS_CONFIRMED = "equipment.readiness_confirmed"
+    EQUIPMENT_CUSTODY_CHANGED = "equipment.custody_changed"
     SERVICE_AGREEMENT_CHANGED = "service_agreement.changed"
     SERVICE_ENTITLEMENT_CHANGED = "service_agreement.entitlement_changed"
     SERVICE_AGREEMENT_BILLING_READY = "service_agreement.billing_ready"
