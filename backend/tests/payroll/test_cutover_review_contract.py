@@ -90,6 +90,7 @@ def test_bridge_completion_contract_requires_physical_payroll_evidence() -> None
         "overtime_wages",
         "other_earnings",
         "deductions",
+        "contributions",
         "employee_taxes",
         "employer_taxes",
         "reimbursements",

@@ -113,6 +113,7 @@ BRIDGE_FACT_DEFINITIONS: tuple[dict[str, str], ...] = (
     {"key": "overtime_wages", "label": "Overtime wages", "owner": "accountant"},
     {"key": "other_earnings", "label": "Other earnings", "owner": "accountant"},
     {"key": "deductions", "label": "Deductions", "owner": "accountant"},
+    {"key": "contributions", "label": "Contributions", "owner": "accountant"},
     {"key": "employee_taxes", "label": "Employee taxes", "owner": "accountant"},
     {"key": "employer_taxes", "label": "Employer taxes", "owner": "accountant"},
     {"key": "reimbursements", "label": "Reimbursements", "owner": "accountant"},

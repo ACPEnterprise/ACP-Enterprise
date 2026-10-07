@@ -1,0 +1,50 @@
+{
+  "contract": "qbo-payroll-history-acquisition.v1",
+  "source_authority": {
+    "accounting_api_scope": "com.intuit.quickbooks.accounting",
+    "sealed_accounting_snapshot": "NOT_MOUNTED_IN_WORKER_RUNTIME",
+    "detailed_payroll_api": "NOT_PRESENT_IN_CURRENT_QBO_ACCOUNTING_ADAPTER",
+    "real_acquisition_authorized": false
+  },
+  "active_roster": [
+    {"display_name": "Michael Fouse", "business_role": "Owner", "crosswalk": "UNRESOLVED"},
+    {"display_name": "Lianne Hernandez", "business_role": "Operations Manager", "crosswalk": "UNRESOLVED"},
+    {"display_name": "Alex Donahue", "business_role": "Field Service Manager", "crosswalk": "UNRESOLVED"},
+    {"display_name": "Melvin Santiago", "business_role": "Technician", "crosswalk": "UNRESOLVED"},
+    {"display_name": "Jason Calci", "business_role": "Technician", "crosswalk": "UNRESOLVED"},
+    {"display_name": "Dakota Wilcox", "business_role": "Technician", "crosswalk": "UNRESOLVED"},
+    {"display_name": "Malcolm Calci", "business_role": "Helper", "crosswalk": "OWNER_CONFIRMATION_REQUIRED", "exact_binding_rule": "One unique authoritative QBO source Employee and one unique authoritative ACP Employee must be proven by provider IDs; name alone is insufficient."}
+  ],
+  "historical_terminated": [
+    {"display_name": "Dareis Montgomery", "crosswalk": "HISTORICAL_TERMINATED", "expected_future_paper_check_slots": 2, "slots_populated": 0, "operational_reactivation_permitted": false},
+    {"display_name": "Kamen Wilmington", "crosswalk": "HISTORICAL_TERMINATED", "expected_future_paper_check_slots": 2, "slots_populated": 0, "operational_reactivation_permitted": false}
+  ],
+  "required_external_exports": [
+    "Payroll Details",
+    "Payroll Summary by Employee",
+    "Paycheck List",
+    "Payroll Deductions/Contributions",
+    "Payroll Tax and Wage Summary",
+    "Payroll Tax Liability",
+    "Payroll Tax Payments",
+    "Employee Details"
+  ],
+  "required_export_custody": [
+    "QBO realm/company identity",
+    "report name and exact filters",
+    "report period and basis where applicable",
+    "export timestamp and source as-of",
+    "original file digest",
+    "page/row completeness",
+    "protected storage reference"
+  ],
+  "last_qbo_payroll_cutoff": "UNAVAILABLE",
+  "bridge_periods": "UNAVAILABLE",
+  "safety": {
+    "payroll_executed": false,
+    "qbo_write_occurred": false,
+    "accounting_posting_occurred": false,
+    "money_moved": false,
+    "missing_values_are_zero": false
+  }
+}

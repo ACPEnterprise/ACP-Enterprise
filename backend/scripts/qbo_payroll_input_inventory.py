@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from app.payroll.qbo_employee_input_migration import classify_accounting_catalog
+from app.payroll.qbo_payroll_history_acquisition import acquisition_plan
 from app.qbo_source.bounded_evidence import (
     BoundedEvidenceError,
     latest_bounded_evidence,
@@ -45,6 +46,11 @@ def main() -> int:
         return 2
     snapshot = packet.manifest.get("snapshot")
     classification = classify_accounting_catalog(entity_counts=counts)
+    history_plan = acquisition_plan(
+        entity_counts=counts,
+        source_manifest_sha256=packet.manifest_sha256,
+        acquisition_state=str(packet.manifest.get("state", "UNKNOWN")),
+    )
     print(
         json.dumps(
             {
@@ -68,6 +74,7 @@ def main() -> int:
                     "catalog_presence_does_not_create_payroll_authority",
                     "missing_values_are_not_zero",
                 ],
+                "payroll_history_acquisition": history_plan,
             },
             sort_keys=True,
         )
