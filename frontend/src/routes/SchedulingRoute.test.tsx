@@ -70,7 +70,9 @@ describe("SchedulingRoute", () => {
       isSuccess: false,
       mutate: rescheduleMutate,
     } as never);
-    vi.mocked(useCalendarPlacement).mockReturnValue({ mutateAsync: placementMutateAsync } as never);
+    vi.mocked(useCalendarPlacement).mockReturnValue({
+      mutateAsync: placementMutateAsync,
+    } as never);
     vi.mocked(useBranchSchedulingPolicy).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -85,14 +87,24 @@ describe("SchedulingRoute", () => {
         minimum_notice_minutes: 0,
         slot_interval_minutes: 15,
         default_capacity_units: "2.00",
-        weekly_intervals: Array.from({ length: 7 }, (_, day_of_week) => ({ day_of_week, start_minute: 420, end_minute: 1140, capacity_units: "2.00" })),
+        weekly_intervals: Array.from({ length: 7 }, (_, day_of_week) => ({
+          day_of_week,
+          start_minute: 420,
+          end_minute: 1140,
+          capacity_units: "2.00",
+        })),
         exceptions: [],
       },
     } as never);
     vi.mocked(useBranchCalendarRoster).mockReturnValue({
       isLoading: false,
       isError: false,
-      data: { branch_id: "branch-1", window_start_at: "2026-08-13T00:00:00Z", window_end_at: "2026-08-14T00:00:00Z", technicians: [] },
+      data: {
+        branch_id: "branch-1",
+        window_start_at: "2026-08-13T00:00:00Z",
+        window_end_at: "2026-08-14T00:00:00Z",
+        technicians: [],
+      },
     } as never);
   });
 
@@ -116,8 +128,14 @@ describe("SchedulingRoute", () => {
       "COMPANY_JOB_EXECUTE",
     ]);
     vi.mocked(useAppointments).mockReturnValue({ isLoading: false } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-    expect(screen.getByText(/not authorized to view Scheduling/i)).toBeVisible();
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText(/not authorized to view Scheduling/i),
+    ).toBeVisible();
     expect(useAppointments).toHaveBeenCalledWith(expect.any(Object), false);
   });
 
@@ -136,7 +154,9 @@ describe("SchedulingRoute", () => {
       screen.getByRole("heading", { name: "Service Board" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
-    const dayCalendar = within(screen.getByRole("region", { name: "Day calendar" }));
+    const dayCalendar = within(
+      screen.getByRole("region", { name: "Day calendar" }),
+    );
     expect(dayCalendar.getAllByText(":15").length).toBeGreaterThan(0);
     expect(dayCalendar.getAllByText(":30").length).toBeGreaterThan(0);
     expect(dayCalendar.getAllByText(":45").length).toBeGreaterThan(0);
@@ -294,23 +314,74 @@ describe("SchedulingRoute", () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
-    expect(screen.getByText(/available technician lanes remain visible/i)).toBeVisible();
+    expect(
+      screen.getByText(/available technician lanes remain visible/i),
+    ).toBeVisible();
   });
 
   it("blocks a normal calendar when Branch Scheduling setup is required", () => {
-    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 100 } } as never);
-    vi.mocked(useBranchSchedulingPolicy).mockReturnValue({ isLoading: false, isError: false, data: { readiness: "SCHEDULING_SETUP_REQUIRED", blockers: ["NO_ACTIVE_CALENDAR"] } } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 100 },
+    } as never);
+    vi.mocked(useBranchSchedulingPolicy).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        readiness: "SCHEDULING_SETUP_REQUIRED",
+        blockers: ["NO_ACTIVE_CALENDAR"],
+      },
+    } as never);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
     expect(screen.getByText("SCHEDULING SETUP REQUIRED")).toBeVisible();
-    expect(screen.getByRole("link", { name: /Administration.*Branch Scheduling Setup/i })).toHaveAttribute("href", "/administration");
-    expect(screen.queryByRole("region", { name: "Day calendar" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: /Administration.*Branch Scheduling Setup/i,
+      }),
+    ).toHaveAttribute("href", "/administration");
+    expect(
+      screen.queryByRole("region", { name: "Day calendar" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows Branch roster technicians even when they have zero Appointments", () => {
-    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 100 } } as never);
-    vi.mocked(useBranchCalendarRoster).mockReturnValue({ isLoading: false, isError: false, data: { technicians: [{ employee_id: "employee-michael", employee_number: "E-1", display_name: "Michael Brian", job_title: "Technician", readiness: "AVAILABLE", readiness_reasons: [], availability_confidence: "branch_schedule" }] } } as never);
-    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-    expect(screen.getAllByText("Michael Brian").some((item) => item.tagName === "DIV")).toBe(true);
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 100 },
+    } as never);
+    vi.mocked(useBranchCalendarRoster).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        technicians: [
+          {
+            employee_id: "employee-michael",
+            employee_number: "E-1",
+            display_name: "Michael Brian",
+            job_title: "Technician",
+            readiness: "AVAILABLE",
+            readiness_reasons: [],
+            availability_confidence: "branch_schedule",
+          },
+        ],
+      },
+    } as never);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen
+        .getAllByText("Michael Brian")
+        .some((item) => item.tagName === "DIV"),
+    ).toBe(true);
     expect(screen.getByText("Available roster")).toBeVisible();
   });
 
@@ -360,16 +431,90 @@ describe("SchedulingRoute", () => {
   });
 
   it("renders a technician-lane Week grid with open capacity and multi-day Job visits", async () => {
-    const nextVisit = { ...appointment, id: "appointment-2", appointment_number: "APT-000002", arrival_window_start_at: "2026-08-14T13:00:00Z", arrival_window_end_at: "2026-08-14T15:00:00Z" };
-    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [appointment, nextVisit], total_count: 2, page: 1, page_size: 100 } } as never);
-    vi.mocked(useBranchCalendarRoster).mockReturnValue({ isLoading: false, isError: false, data: { technicians: [{ employee_id: "employee-alex", employee_number: "E-1", display_name: "Alex Technician", job_title: null, readiness: "AVAILABLE", readiness_reasons: [], availability_confidence: "branch_schedule" }] } } as never);
-    vi.mocked(useDispatchBoard).mockReturnValue({ isLoading: false, isError: false, data: { total_count: 2, items: [appointment, nextVisit].map((item) => ({ appointment_id: item.id, appointment_number: item.appointment_number, job_id: "job-multi", branch_id: "branch-1", status: "scheduled", window_start_at: item.arrival_window_start_at, window_end_at: item.arrival_window_end_at, assignment: { id: `assignment-${item.id}`, appointment_id: item.id, appointment_number: item.appointment_number, job_id: "job-multi", company_id: "company-1", branch_id: "branch-1", primary_employee_id: "employee-alex", primary_employee_name: "Alex Technician", status: "assigned", arrival_state: "pending", active_exception_code: null, assignment_reason: "scheduled", window_start_at: item.arrival_window_start_at, window_end_at: item.arrival_window_end_at, effective_at: item.arrival_window_start_at, released_at: null, version: 1, crew_members: [] } })) } } as never);
-    render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}><SchedulingRoute /></MemoryRouter>);
+    const nextVisit = {
+      ...appointment,
+      id: "appointment-2",
+      appointment_number: "APT-000002",
+      arrival_window_start_at: "2026-08-14T13:00:00Z",
+      arrival_window_end_at: "2026-08-14T15:00:00Z",
+    };
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [appointment, nextVisit],
+        total_count: 2,
+        page: 1,
+        page_size: 100,
+      },
+    } as never);
+    vi.mocked(useBranchCalendarRoster).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        technicians: [
+          {
+            employee_id: "employee-alex",
+            employee_number: "E-1",
+            display_name: "Alex Technician",
+            job_title: null,
+            readiness: "AVAILABLE",
+            readiness_reasons: [],
+            availability_confidence: "branch_schedule",
+          },
+        ],
+      },
+    } as never);
+    vi.mocked(useDispatchBoard).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        total_count: 2,
+        items: [appointment, nextVisit].map((item) => ({
+          appointment_id: item.id,
+          appointment_number: item.appointment_number,
+          job_id: "job-multi",
+          branch_id: "branch-1",
+          status: "scheduled",
+          window_start_at: item.arrival_window_start_at,
+          window_end_at: item.arrival_window_end_at,
+          assignment: {
+            id: `assignment-${item.id}`,
+            appointment_id: item.id,
+            appointment_number: item.appointment_number,
+            job_id: "job-multi",
+            company_id: "company-1",
+            branch_id: "branch-1",
+            primary_employee_id: "employee-alex",
+            primary_employee_name: "Alex Technician",
+            status: "assigned",
+            arrival_state: "pending",
+            active_exception_code: null,
+            assignment_reason: "scheduled",
+            window_start_at: item.arrival_window_start_at,
+            window_end_at: item.arrival_window_end_at,
+            effective_at: item.arrival_window_start_at,
+            released_at: null,
+            version: 1,
+            crew_members: [],
+          },
+        })),
+      },
+    } as never);
+    render(
+      <MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Week" }));
     const week = screen.getByRole("region", { name: "Week calendar" });
-    expect(within(week).getByText("Alex Technician")).toBeVisible();
-    expect(within(week).getAllByText("Continuation")).toHaveLength(2);
-    expect(within(week).getAllByText("Open capacity").length).toBeGreaterThan(0);
+    expect(within(week).getAllByText("Alex Technician").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      within(week).getAllByRole("button", { name: /Alex Technician/ }).length,
+    ).toBeGreaterThan(0);
+    expect(within(week).getAllByText("Customer unavailable").length).toBeGreaterThanOrEqual(2);
   });
 
   it("projects the same appointments across Work Week, Month, and Dispatch", async () => {
@@ -393,10 +538,7 @@ describe("SchedulingRoute", () => {
     ).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Day" }));
     await userEvent.click(screen.getByRole("button", { name: "Dispatch" }));
-    expect(
-      screen.getByRole("region", { name: "Dispatch timeline" }),
-    ).toBeVisible();
-    expect(screen.getByText(/review-only/i)).toBeVisible();
+    expect(screen.getByRole("region", { name: "Week calendar" })).toBeVisible();
   });
 
   it("opens directly in the Dispatch calendar perspective", () => {
@@ -410,9 +552,7 @@ describe("SchedulingRoute", () => {
         <SchedulingRoute />
       </MemoryRouter>,
     );
-    expect(
-      screen.getByRole("region", { name: "Dispatch timeline" }),
-    ).toBeVisible();
+    expect(screen.getByRole("region", { name: "Week calendar" })).toBeVisible();
   });
 
   it("restores a direct-linked operating scope instead of resetting the CSR workspace", async () => {
@@ -514,13 +654,33 @@ describe("SchedulingRoute", () => {
 
   it("labels imported capacity-unreconciled Appointments and blocks unsafe moves", async () => {
     permissions.add("COMPANY_SCHEDULING_MANAGE");
-    const imported = { ...appointment, capacity_units: null, capacity_state: "legacy_unreconciled" };
-    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [imported], total_count: 1, page: 1, page_size: 100 } } as never);
-    render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}><SchedulingRoute /></MemoryRouter>);
-    expect(screen.getAllByText(/IMPORTED \/.*CAPACITY.*RECONCILED/i).length).toBeGreaterThan(0);
-    await userEvent.click(screen.getAllByRole("button", { name: /APT-000001/ })[0]);
-    expect(screen.getAllByText("IMPORTED / NOT YET CAPACITY-RECONCILED").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "Review new time" })).not.toBeInTheDocument();
+    const imported = {
+      ...appointment,
+      capacity_units: null,
+      capacity_state: "legacy_unreconciled",
+    };
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [imported], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    render(
+      <MemoryRouter initialEntries={["/scheduling?date=2026-08-13"]}>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getAllByText(/IMPORTED \/.*CAPACITY.*RECONCILED/i).length,
+    ).toBeGreaterThan(0);
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /APT-000001/ })[0],
+    );
+    expect(
+      screen.getAllByText("IMPORTED / NOT YET CAPACITY-RECONCILED").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "Review new time" }),
+    ).not.toBeInTheDocument();
   });
 
   it("enables normal rescheduling when canonical reconciliation supplies capacity authority", async () => {
@@ -529,7 +689,13 @@ describe("SchedulingRoute", () => {
       isLoading: false,
       isError: false,
       data: {
-        items: [{ ...appointment, capacity_units: null, capacity_state: "legacy_unreconciled" }],
+        items: [
+          {
+            ...appointment,
+            capacity_units: null,
+            capacity_state: "legacy_unreconciled",
+          },
+        ],
         total_count: 1,
         page: 1,
         page_size: 100,
@@ -551,7 +717,14 @@ describe("SchedulingRoute", () => {
       isLoading: false,
       isError: false,
       data: {
-        items: [{ ...appointment, capacity_units: "1.00", capacity_state: "reserved", concurrency_version: 3 }],
+        items: [
+          {
+            ...appointment,
+            capacity_units: "1.00",
+            capacity_state: "reserved",
+            concurrency_version: 3,
+          },
+        ],
         total_count: 1,
         page: 1,
         page_size: 100,
@@ -566,7 +739,9 @@ describe("SchedulingRoute", () => {
     expect(
       screen.queryByText("IMPORTED / NOT YET CAPACITY-RECONCILED"),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Review new time" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Review new time" }),
+    ).toBeVisible();
   });
 
   it("reconciles selected appointment detail after the authoritative calendar refreshes", async () => {
@@ -619,14 +794,31 @@ describe("SchedulingRoute", () => {
       vi.mocked(useAppointments).mockReturnValue({
         isLoading: false,
         isError: false,
-        data: { items: [{ ...appointment, status }], total_count: 1, page: 1, page_size: 100 },
+        data: {
+          items: [{ ...appointment, status }],
+          total_count: 1,
+          page: 1,
+          page_size: 100,
+        },
       } as never);
-      render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
-      await userEvent.click(screen.getAllByRole("button", { name: /APT-000001/ })[0]);
+      render(
+        <MemoryRouter>
+          <SchedulingRoute />
+        </MemoryRouter>,
+      );
+      await userEvent.click(
+        screen.getAllByRole("button", { name: /APT-000001/ })[0],
+      );
 
       expect(screen.getByText("Appointment cannot be moved")).toBeVisible();
-      expect(screen.getByText(new RegExp(`This Appointment is ${status.replaceAll("_", " ")}`, "i"))).toBeVisible();
-      expect(screen.queryByRole("button", { name: "Review new time" })).not.toBeInTheDocument();
+      expect(
+        screen.getByText(
+          new RegExp(`This Appointment is ${status.replaceAll("_", " ")}`, "i"),
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Review new time" }),
+      ).not.toBeInTheDocument();
     },
   );
 
@@ -772,7 +964,9 @@ describe("SchedulingRoute", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Needs Scheduling 1" }),
     );
-    expect(screen.getByRole("heading", { name: "Needs Scheduling work queue" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Needs Scheduling work queue" }),
+    ).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Open Job to schedule" }),
     ).toHaveAttribute(
@@ -916,5 +1110,108 @@ describe("SchedulingRoute", () => {
       screen.getAllByRole("button", { name: /APT-000001.*Michael Brian/i })
         .length,
     ).toBeGreaterThan(0);
+  });
+
+  it("opens Dispatch calendar-first on the current week with stable whole-team lanes and compact filters", () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    vi.mocked(useBranchCalendarRoster).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        technicians: [
+          {
+            employee_id: "employee-jason",
+            employee_number: "E-2",
+            display_name: "Jason",
+            job_title: null,
+            readiness: "AVAILABLE",
+            readiness_reasons: [],
+            availability_confidence: "branch_schedule",
+          },
+          {
+            employee_id: "employee-alex",
+            employee_number: "E-1",
+            display_name: "Alex",
+            job_title: null,
+            readiness: "AVAILABLE",
+            readiness_reasons: [],
+            availability_confidence: "branch_schedule",
+          },
+        ],
+      },
+    } as never);
+
+    render(
+      <MemoryRouter
+        initialEntries={["/scheduling?perspective=dispatch&date=2026-08-13"]}
+      >
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Dispatch" })).toBeVisible();
+    const week = screen.getByRole("region", { name: "Week calendar" });
+    expect(within(week).getAllByText("Unassigned").length).toBeGreaterThanOrEqual(7);
+    expect(within(week).getAllByText("Alex").length).toBeGreaterThanOrEqual(7);
+    expect(within(week).getAllByText("Jason").length).toBeGreaterThanOrEqual(7);
+    expect(screen.queryByLabelText("Dispatch filters")).not.toBeInTheDocument();
+  });
+
+  it("inherits day, technician, time, and Branch when an authorized dispatcher selects empty calendar space", async () => {
+    permissions = new Set([
+      "COMPANY_SCHEDULING_READ",
+      "COMPANY_SCHEDULING_MANAGE",
+      "COMPANY_DISPATCH_READ",
+      "COMPANY_DISPATCH_MANAGE",
+      "COMPANY_JOB_READ",
+      "COMPANY_JOB_MANAGE",
+      "COMPANY_CUSTOMER_READ",
+    ]);
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 100 },
+    } as never);
+    vi.mocked(useBranchCalendarRoster).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        technicians: [
+          {
+            employee_id: "employee-alex",
+            employee_number: "E-1",
+            display_name: "Alex",
+            job_title: null,
+            readiness: "AVAILABLE",
+            readiness_reasons: [],
+            availability_confidence: "branch_schedule",
+          },
+        ],
+      },
+    } as never);
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/scheduling?perspective=dispatch&view=week&date=2026-08-13",
+        ]}
+      >
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Schedule Alex on 8/13/2026" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "What would you like to schedule?" }),
+    ).toBeVisible();
+    expect(screen.getByText(/Alex · Branch inherited/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Job" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Estimate" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Meeting" })).toBeDisabled();
   });
 });

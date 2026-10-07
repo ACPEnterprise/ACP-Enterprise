@@ -4,12 +4,19 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AuthenticationContext, type AuthenticationContextValue } from "../auth/AuthenticationContext";
+import {
+  AuthenticationContext,
+  type AuthenticationContextValue,
+} from "../auth/AuthenticationContext";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { appRoutes } from "./router";
 
-vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
-vi.mock("../routes/CommandCenterRoute", () => ({ CommandCenterRoute: () => <div>Command Center route content</div> }));
+vi.mock("../routes/MissionControlRoute", () => ({
+  MissionControlRoute: () => <div>Mission route content</div>,
+}));
+vi.mock("../routes/CommandCenterRoute", () => ({
+  CommandCenterRoute: () => <div>Command Center route content</div>,
+}));
 vi.mock("../features/administration/hooks", () => ({
   useAdministrationAccess: () => ({ isSuccess: true }),
 }));
@@ -21,15 +28,35 @@ vi.mock("../routes/CustomersRoute", () => ({
     return <div>Customer route content</div>;
   },
 }));
-vi.mock("../routes/CustomerDetailRoute", () => ({ CustomerDetailRoute: () => <div>Customer detail route content</div> }));
-vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content</div> }));
-vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
-vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
-vi.mock("../routes/DispatchRoute", () => ({ DispatchRoute: () => <div>Dispatch route content</div> }));
-vi.mock("../routes/SchedulingRoute", () => ({ SchedulingRoute: () => <div>Service Board route content</div> }));
-vi.mock("../routes/TechnicianRoute", () => ({ TechnicianRoute: () => <div>Technician route content</div> }));
-vi.mock("../features/engineering-mobile/MobileEngineeringListPage", () => ({ MobileEngineeringListPage: () => <div>Engineering route content</div> }));
-vi.mock("../features/engineering-mobile/MobileEngineeringDetailPage", () => ({ MobileEngineeringDetailPage: () => <div>Engineering detail route content</div> }));
+vi.mock("../routes/CustomerDetailRoute", () => ({
+  CustomerDetailRoute: () => <div>Customer detail route content</div>,
+}));
+vi.mock("../routes/JobsRoute", () => ({
+  JobsRoute: () => <div>Jobs route content</div>,
+}));
+vi.mock("../routes/JobDetailRoute", () => ({
+  JobDetailRoute: () => <div>Job detail route content</div>,
+}));
+vi.mock("../routes/AppointmentDetailRoute", () => ({
+  AppointmentDetailRoute: () => <div>Appointment detail route content</div>,
+}));
+vi.mock("../routes/DispatchRoute", () => ({
+  DispatchRoute: () => <div>Dispatch route content</div>,
+}));
+vi.mock("../routes/SchedulingRoute", () => ({
+  SchedulingRoute: () => <div>Service Board route content</div>,
+}));
+vi.mock("../routes/TechnicianRoute", () => ({
+  TechnicianRoute: () => <div>Technician route content</div>,
+}));
+vi.mock("../features/engineering-mobile/MobileEngineeringListPage", () => ({
+  MobileEngineeringListPage: () => <div>Engineering route content</div>,
+}));
+vi.mock("../features/engineering-mobile/MobileEngineeringDetailPage", () => ({
+  MobileEngineeringDetailPage: () => (
+    <div>Engineering detail route content</div>
+  ),
+}));
 
 const authenticatedContext: AuthenticationContextValue = {
   status: "authenticated",
@@ -61,10 +88,23 @@ const fieldTechnicianContext: AuthenticationContextValue = {
   ],
 };
 
-function renderRoute(path: string, context: AuthenticationContextValue = authenticatedContext) {
+function renderRoute(
+  path: string,
+  context: AuthenticationContextValue = authenticatedContext,
+) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<ThemeProvider preference="dark"><AuthenticationContext.Provider value={context}><QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider></AuthenticationContext.Provider></ThemeProvider>);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <ThemeProvider preference="dark">
+      <AuthenticationContext.Provider value={context}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </AuthenticationContext.Provider>
+    </ThemeProvider>,
+  );
   return router;
 }
 
@@ -74,46 +114,79 @@ describe("application routing", () => {
   });
 
   it("redirects an unauthenticated user to login without looping", async () => {
-    const router = renderRoute("/customers", { ...authenticatedContext, status: "unauthenticated", user: null });
-    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    const router = renderRoute("/customers", {
+      ...authenticatedContext,
+      status: "unauthenticated",
+      user: null,
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Sign in" }),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/login");
   });
 
   it("uses Command Center as the authorized owner landing route", async () => {
     const router = renderRoute("/");
-    expect(await screen.findByText("Command Center route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Command Center route content"),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/command-center");
-    expect(screen.getByRole("link", { name: "Command Center" })).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("link", { name: "Command Center" }),
+    ).toHaveAttribute("aria-current", "page");
   });
 
   it("lands a field technician on My Day with only own-work navigation", async () => {
     const router = renderRoute("/", fieldTechnicianContext);
-    expect(await screen.findByText("Technician route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Technician route content"),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/technician");
-    expect(screen.queryByRole("link", { name: "Command Center" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Jobs" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Scheduling" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Command Center" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Jobs" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Scheduling" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "My day" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "My Schedule" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "My time clock" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "My Schedule" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "My time clock" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "My Jobs" })).toBeInTheDocument();
   });
 
   it("denies direct Command Center navigation to a field technician", async () => {
     const router = renderRoute("/command-center", fieldTechnicianContext);
-    expect(await screen.findByText("Technician route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Technician route content"),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/technician");
-    expect(screen.queryByText("Command Center route content")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Command Center route content"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders Customers directly and marks its navigation link active", async () => {
     renderRoute("/customers");
-    expect(await screen.findByText("Customer route content")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute("aria-current", "page");
+    expect(
+      await screen.findByText("Customer route content"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("uses the mobile-safe customer boundary instead of the developer screen", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     routeFailure.customers = true;
 
     renderRoute("/customers");
@@ -121,7 +194,9 @@ describe("application routing", () => {
     expect(
       await screen.findByText("This page could not be displayed"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reload page" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reload page" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(/Unexpected Application Error/i),
     ).not.toBeInTheDocument();
@@ -130,7 +205,9 @@ describe("application routing", () => {
 
   it("supports direct Customer detail navigation through the protected shell", async () => {
     renderRoute("/customers/customer-1");
-    expect(await screen.findByText("Customer detail route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Customer detail route content"),
+    ).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("link", { name: "Customers" })
@@ -141,14 +218,21 @@ describe("application routing", () => {
   it("routes Jobs list and detail through the application shell", async () => {
     const router = renderRoute("/jobs");
     expect(await screen.findByText("Jobs route content")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     await router.navigate("/jobs/job-1");
-    expect(await screen.findByText("Job detail route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Job detail route content"),
+    ).toBeInTheDocument();
   });
 
   it("supports direct Appointment detail navigation through the protected shell", async () => {
     const router = renderRoute("/appointments/appointment-1");
-    expect(await screen.findByText("Appointment detail route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Appointment detail route content"),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/appointments/appointment-1");
   });
 
@@ -157,74 +241,128 @@ describe("application routing", () => {
       ...authenticatedContext,
       permissionCodes: ["COMPANY_SCHEDULING_READ"],
     });
-    expect(await screen.findByText("Service Board route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Service Board route content"),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/scheduling");
     expect(router.state.location.search).toContain("date=2026-09-30");
-    expect(router.state.location.search).toContain("view=day");
+    expect(router.state.location.search).toContain("view=week");
     expect(router.state.location.search).toContain("perspective=dispatch");
-    expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("allows a field-capable user to load the technician shell", async () => {
     renderRoute("/technician", {
       ...authenticatedContext,
-      permissionCodes: ["COMPANY_JOB_EXECUTE", "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ"],
+      permissionCodes: [
+        "COMPANY_JOB_EXECUTE",
+        "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+      ],
     });
-    expect(await screen.findByText("Technician route content")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "My day" })).toHaveAttribute("aria-current", "page");
+    expect(
+      await screen.findByText("Technician route content"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "My day" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("redirects a user without field permission away from the technician route", async () => {
-    const router = renderRoute("/technician", { ...authenticatedContext, permissionCodes: [] });
-    expect(await screen.findByText("Mission route content")).toBeInTheDocument();
+    const router = renderRoute("/technician", {
+      ...authenticatedContext,
+      permissionCodes: [],
+    });
+    expect(
+      await screen.findByText("Mission route content"),
+    ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/mission-control");
-    expect(screen.queryByRole("link", { name: "My day" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "My day" }),
+    ).not.toBeInTheDocument();
   });
 
   it("routes Engineering list and detail through the protected shell", async () => {
     const router = renderRoute("/engineering");
-    expect(await screen.findByText("Engineering route content")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Engineering Factory" })).toHaveAttribute("aria-current", "page");
+    expect(
+      await screen.findByText("Engineering route content"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Engineering Factory" }),
+    ).toHaveAttribute("aria-current", "page");
     await router.navigate("/engineering/command-1");
-    expect(await screen.findByText("Engineering detail route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Engineering detail route content"),
+    ).toBeInTheDocument();
   });
 
   it("preserves browser-style back and forward navigation", async () => {
     const router = renderRoute("/mission-control");
     await screen.findByText("Mission route content");
     await router.navigate("/customers");
-    expect(await screen.findByText("Customer route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Customer route content"),
+    ).toBeInTheDocument();
     await router.navigate(-1);
-    expect(await screen.findByText("Mission route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Mission route content"),
+    ).toBeInTheDocument();
     await router.navigate(1);
-    expect(await screen.findByText("Customer route content")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Customer route content"),
+    ).toBeInTheDocument();
   });
 
   it("renders a constrained not-found route inside the workspace", async () => {
     renderRoute("/unknown");
-    expect(await screen.findByRole("heading", { name: "Page not found", level: 3 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Page not found", level: 3 }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-workspace");
   });
 
   it("provides skip navigation and keeps the AI workspace absent", async () => {
     renderRoute("/mission-control");
     await screen.findByText("Mission route content");
-    expect(screen.getByRole("link", { name: "Skip to main content" })).toHaveAttribute("href", "#main-workspace");
-    expect(screen.queryByRole("complementary", { name: "AI workspace" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Skip to main content" }),
+    ).toHaveAttribute("href", "#main-workspace");
+    expect(
+      screen.queryByRole("complementary", { name: "AI workspace" }),
+    ).not.toBeInTheDocument();
   });
 
   it("closes mobile navigation with Escape and restores trigger focus", async () => {
     const user = userEvent.setup();
     renderRoute("/mission-control");
-    const trigger = await screen.findByRole("button", { name: "Open navigation" });
+    const trigger = await screen.findByRole("button", {
+      name: "Open navigation",
+    });
     await user.click(trigger);
-    expect(screen.getByRole("complementary", { name: "Mobile application navigation" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("complementary", {
+        name: "Mobile application navigation",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Customers" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "Jobs" })).toHaveLength(2);
-    expect(screen.queryByRole("link", { name: "Dispatch" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Engineering Factory" })).toHaveLength(2);
+    expect(
+      screen.queryByRole("link", { name: "Dispatch" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Engineering Factory" }),
+    ).toHaveLength(2);
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mobile application navigation" })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("complementary", {
+          name: "Mobile application navigation",
+        }),
+      ).not.toBeInTheDocument(),
+    );
     expect(trigger).toHaveFocus();
   });
 });
