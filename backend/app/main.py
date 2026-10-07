@@ -42,6 +42,7 @@ from app.engineering_execution.controlled.router import (
     router as controlled_execution_router,
 )
 from app.engineering_execution.status.router import router as execution_status_router
+from app.equipment_readiness.router import router as equipment_readiness_router
 from app.estimates.router import router as estimates_router
 from app.events.router import router as events_router
 from app.events.schemas import BusinessEventCreate
@@ -208,6 +209,7 @@ app.include_router(jobs_router)
 app.include_router(lia_router)
 app.include_router(inventory_router)
 app.include_router(operational_assets_router)
+app.include_router(equipment_readiness_router)
 app.include_router(purchasing_router)
 app.include_router(procurement_matching_router)
 app.include_router(operations_router)
