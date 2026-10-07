@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from app.equipment_readiness.domain import (
     attention_priority,
     can_view_management_attention,
@@ -6,6 +9,8 @@ from app.equipment_readiness.domain import (
     projection_state,
     suggested_equipment_checklist_requirement,
 )
+from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
+from app.platform.permissions.codes import AssetPermission
 
 
 def test_employee_setting_controls_prompt_independently_of_position():
@@ -51,9 +56,34 @@ def test_upcoming_job_elevates_attention_without_beacon():
 
 
 def test_management_routing_uses_roles_not_employee_names():
+    assert can_view_management_attention({"FIELD_MANAGER"})
     assert can_view_management_attention({"FIELD_SERVICE_MANAGER"})
     assert can_view_management_attention({"OWNER"})
     assert not can_view_management_attention({"FIELD_TECHNICIAN"})
+
+
+def test_field_manager_can_read_attention_without_asset_mutation_authority():
+    role = next(
+        item for item in LAUNCH_ROLE_MATRIX if item.code is LaunchRoleCode.FIELD_MANAGER
+    )
+    assert AssetPermission.READ in role.permission_codes
+    assert AssetPermission.MANAGE not in role.permission_codes
+    assert AssetPermission.CUSTODY not in role.permission_codes
+
+
+def test_owner_catalog_preserves_controlled_asset_serialization_policy():
+    contract = json.loads(
+        (
+            Path(__file__).parents[3]
+            / "docs/operations/allcounty-dispatch-critical-equipment.v1.json"
+        ).read_text()
+    )
+    items = {item["code"]: item for item in contract["items"]}
+    assert items["K60_DRAIN_MACHINE"]["item_kind"] == "controlled_asset"
+    assert items["K60_DRAIN_MACHINE"]["serialization_required"] is True
+    assert items["PISTOL_AUGER"]["item_kind"] == "controlled_asset"
+    assert items["PISTOL_AUGER"]["serialization_required"] is False
+    assert items["TOILET_AUGER"]["item_kind"] == "non_serialized_item"
 
 
 def test_incomplete_set_requires_explicit_missing_component_evidence():

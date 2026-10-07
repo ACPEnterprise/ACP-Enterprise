@@ -493,7 +493,7 @@ class EquipmentReadinessService:
 
     async def attention(self, session: AsyncSession, context: AuthorizationContext, branch_id: UUID | None = None):
         role_codes = {x.code for x in context.effective_roles}
-        if not role_codes.intersection({"OWNER", "COMPANY_ADMINISTRATOR", "FIELD_SERVICE_MANAGER"}):
+        if not role_codes.intersection({"OWNER", "COMPANY_ADMINISTRATOR", "FIELD_MANAGER", "FIELD_SERVICE_MANAGER"}):
             return []
         stmt = select(EquipmentAttention).where(
             EquipmentAttention.company_id == context.company.id,

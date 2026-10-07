@@ -66,5 +66,10 @@ def attention_priority(*, upcoming_job_impacted: bool, state: str) -> str:
 def can_view_management_attention(role_codes: set[str]) -> bool:
     return bool(
         role_codes
-        & {"OWNER", "COMPANY_ADMINISTRATOR", "FIELD_SERVICE_MANAGER"}
+        & {
+            "OWNER",
+            "COMPANY_ADMINISTRATOR",
+            "FIELD_MANAGER",
+            "FIELD_SERVICE_MANAGER",
+        }
     )

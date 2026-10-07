@@ -35,7 +35,7 @@ remain authoritative and separate.
 
 ## Manager home
 
-Users with governed Owner, Company Administrator, or Field Service Manager role
+Users with governed Owner, Company Administrator, or Field Manager role
 authority may read `/attention`. The UI should show critical-before-job items first,
 then needs-attention and information items. It must not use Employee names to infer
 management authority.

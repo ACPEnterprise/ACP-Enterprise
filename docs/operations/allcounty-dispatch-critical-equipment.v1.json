@@ -5,7 +5,7 @@
   "review_state": "OWNER_REVIEW_REQUIRED",
   "items": [
     {"code": "K60_DRAIN_MACHINE", "display_name": "K-60 Drain Machine", "capability_code": "DRAIN_MACHINE", "item_kind": "controlled_asset", "serialization_required": true},
-    {"code": "PISTOL_AUGER", "display_name": "Pistol Auger", "capability_code": "PISTOL_AUGER", "item_kind": "non_serialized_item", "serialization_required": false},
+    {"code": "PISTOL_AUGER", "display_name": "Pistol Auger", "capability_code": "PISTOL_AUGER", "item_kind": "controlled_asset", "serialization_required": false},
     {"code": "TOILET_AUGER", "display_name": "Toilet Auger", "capability_code": "TOILET_AUGER", "item_kind": "non_serialized_item", "serialization_required": false},
     {"code": "PROPRESS_TOOL", "display_name": "ProPress Tool", "capability_code": "PRESS_TOOL", "item_kind": "controlled_asset", "serialization_required": true},
     {"code": "PROPRESS_JAWS_FULL", "display_name": "ProPress Jaws — Full Set", "capability_code": "PRESS_JAWS_FULL_SET", "item_kind": "equipment_set", "serialization_required": false},
