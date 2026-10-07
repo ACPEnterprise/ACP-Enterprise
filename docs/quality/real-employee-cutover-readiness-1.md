@@ -95,6 +95,7 @@ the command line or in the report:
 PYTHONPATH=backend python backend/scripts/real_workforce_cutover_acceptance.py \
   --base-url https://preview.allcountyhomeservices.com \
   --token-file /restricted/path/owner-token \
+  --company-id '<all-county-company-id>' \
   --contract backend/operations/real-workforce-cutover-contract.v1.json \
   --appointment-id '<exact-real-preview-appointment-id>' \
   --output /restricted/path/real-workforce-result.json

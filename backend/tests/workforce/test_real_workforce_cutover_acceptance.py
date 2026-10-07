@@ -1,13 +1,38 @@
 import json
+from io import BytesIO
 from pathlib import Path
+from uuid import UUID
 
-from scripts.real_workforce_cutover_acceptance import evaluate
+import pytest
+from scripts.real_workforce_cutover_acceptance import _get, evaluate
 
 CONTRACT = json.loads(
     (
         Path(__file__).parents[2] / "operations/real-workforce-cutover-contract.v1.json"
     ).read_text()
 )
+
+
+def test_live_read_includes_explicit_company_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["request"] = request
+        captured["timeout"] = timeout
+        return BytesIO(b'{"status": "ok"}')
+
+    monkeypatch.setattr(
+        "scripts.real_workforce_cutover_acceptance.urlopen", fake_urlopen
+    )
+    company_id = UUID("a56fc415-563b-459c-913f-2e6183109119")
+
+    assert _get("https://beta.example", "/read", "token", company_id) == {
+        "status": "ok"
+    }
+    assert captured["request"].get_header("X-company-id") == str(company_id)
+    assert captured["timeout"] == 30
 
 
 def _ready_item(policy):

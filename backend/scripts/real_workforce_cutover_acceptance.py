@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
+from uuid import UUID
 
 
 def evaluate(
@@ -132,10 +133,14 @@ def evaluate(
     }
 
 
-def _get(base_url: str, path: str, token: str) -> Any:
+def _get(base_url: str, path: str, token: str, company_id: UUID) -> Any:
     request = Request(
         f"{base_url.rstrip('/')}{path}",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "X-Company-ID": str(company_id),
+        },
     )
     with urlopen(request, timeout=30) as response:
         return json.load(response)
@@ -145,15 +150,24 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--token-file", required=True, type=Path)
+    parser.add_argument("--company-id", required=True, type=UUID)
     parser.add_argument("--contract", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--appointment-id")
     args = parser.parse_args()
     token = args.token_file.read_text(encoding="utf-8").strip()
     contract = json.loads(args.contract.read_text(encoding="utf-8"))
-    roster = _get(args.base_url, "/api/v1/workforce/real-roster", token)
+    roster = _get(
+        args.base_url,
+        "/api/v1/workforce/real-roster",
+        token,
+        args.company_id,
+    )
     completion = _get(
-        args.base_url, "/api/v1/payroll/cutover-review/completion-readiness", token
+        args.base_url,
+        "/api/v1/payroll/cutover-review/completion-readiness",
+        token,
+        args.company_id,
     )
     employee_ids = {
         item["employee_id"]
@@ -165,6 +179,7 @@ def main() -> int:
             args.base_url,
             f"/api/v1/workforce/administration/employees/{employee_id}",
             token,
+            args.company_id,
         )
         for employee_id in employee_ids
     }
@@ -173,6 +188,7 @@ def main() -> int:
             args.base_url,
             f"/api/v1/dispatch/appointments/{args.appointment_id}/eligible-technicians",
             token,
+            args.company_id,
         )
         if args.appointment_id
         else None

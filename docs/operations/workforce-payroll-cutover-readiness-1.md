@@ -17,6 +17,7 @@ The protected read-only acceptance command remains:
 python -m scripts.real_workforce_cutover_acceptance \
   --base-url <beta-api> \
   --token-file <sanctioned-owner-token-file> \
+  --company-id <all-county-company-id> \
   --contract operations/real-workforce-cutover-contract.v1.json \
   --output <evidence-output.json>
 ```
