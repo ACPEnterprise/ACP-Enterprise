@@ -361,6 +361,7 @@ LAUNCH_ROLE_MATRIX = (
                 TimekeepingPermission.OWN_PUNCH,
                 EmployeeOperationsPermission.OWN_DAY_READ,
                 EmployeeOperationsPermission.OWN_LIA_READ,
+                AssetPermission.READ,
                 PriceBookPermission.READ,
                 InventoryPermission.READ,
                 InventoryPermission.RESERVE,

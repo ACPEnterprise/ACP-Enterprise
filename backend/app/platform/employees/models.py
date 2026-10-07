@@ -51,9 +51,13 @@ class Employee(Base):
             "employee_type IN ('employee', 'contractor', 'vendor')",
             name="ck_employees_employee_type",
         ),
+    CheckConstraint(
+        "status IN ('active', 'inactive', 'leave', 'terminated')",
+        name="ck_employees_status",
+    ),
         CheckConstraint(
-            "status IN ('active', 'inactive', 'leave', 'terminated')",
-            name="ck_employees_status",
+            "equipment_checklist_requirement IN ('not_required', 'required_at_clock_in')",
+            name="ck_employees_equipment_checklist_requirement",
         ),
         CheckConstraint(
             "termination_date IS NULL OR hire_date IS NULL "
@@ -107,6 +111,9 @@ class Employee(Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(32))
     job_title: Mapped[str | None] = mapped_column(String(150))
+    equipment_checklist_requirement: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_required", server_default="not_required"
+    )
     employee_type: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     hire_date: Mapped[date | None] = mapped_column(Date)
