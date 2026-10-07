@@ -3,12 +3,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Filter,
+  MapPinned,
   RefreshCw,
   Search,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
 import { useAuth, useHasPermission } from "../auth";
@@ -17,6 +19,11 @@ import { DispatchRecommendationPanel } from "../components/dispatch/DispatchReco
 import { activeDispatchAssignment } from "../components/dispatch/dispatchOperations";
 import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
 import { CalendarReadinessCard } from "../components/scheduling/CalendarReadinessCard";
+import {
+  humanServiceLabel,
+  humanWorkLabel,
+  technicianCalendarColor,
+} from "../components/scheduling/calendarIdentity";
 import { quarterHourDropMinute } from "../components/scheduling/calendarDragDrop";
 import {
   calendarIssues,
@@ -29,7 +36,10 @@ import {
   type QueueSort,
 } from "../components/scheduling/NeedsSchedulingQueue";
 import { needsSchedulingAttentionCount } from "../components/scheduling/needsSchedulingAttention";
-import { schedulingMutationRecovery, schedulingOverrideConstraints } from "../components/scheduling/schedulingRecovery";
+import {
+  schedulingMutationRecovery,
+  schedulingOverrideConstraints,
+} from "../components/scheduling/schedulingRecovery";
 import {
   dayRange,
   localDateValue,
@@ -86,6 +96,7 @@ const statuses: readonly AppointmentStatus[] = [
 ];
 type Perspective = "schedule" | "dispatch";
 type View = "day" | "week" | "work_week" | "month" | "unassigned";
+type Surface = "calendar" | "map";
 const views: readonly View[] = [
   "day",
   "week",
@@ -127,7 +138,11 @@ const zonedMinute = (value: Date, timeZone: string) => {
 };
 const branchTime = (value: string | null, timeZone: string) =>
   value
-    ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone })
+    ? new Date(value).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone,
+      })
     : "Time unknown";
 const isCapacityUnreconciled = (item: AppointmentDetail) =>
   ["scheduled", "confirmed"].includes(item.status) &&
@@ -245,7 +260,10 @@ function calendarLanes(
   for (const item of items) {
     const dispatch = dispatchByAppointment.get(item.id);
     const assignment = dispatch ? activeDispatchAssignment(dispatch) : null;
-    if (assignment?.primary_employee_id && !lanes.has(assignment.primary_employee_id)) {
+    if (
+      assignment?.primary_employee_id &&
+      !lanes.has(assignment.primary_employee_id)
+    ) {
       lanes.set(assignment.primary_employee_id, {
         id: assignment.primary_employee_id,
         label: assignment.primary_employee_name ?? "Assigned technician",
@@ -254,21 +272,40 @@ function calendarLanes(
       });
     }
   }
-  return [UNASSIGNED_LANE, ...Array.from(lanes.values()).sort((a, b) => a.label.localeCompare(b.label))];
+  return [
+    UNASSIGNED_LANE,
+    ...Array.from(lanes.values()).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    ),
+  ];
 }
 
-const appointmentLaneId = (item: AppointmentDetail, dispatchByAppointment: Map<string, DispatchBoardItem>) => {
+const appointmentLaneId = (
+  item: AppointmentDetail,
+  dispatchByAppointment: Map<string, DispatchBoardItem>,
+) => {
   const dispatch = dispatchByAppointment.get(item.id);
-  return (dispatch ? activeDispatchAssignment(dispatch)?.primary_employee_id : null) ?? UNASSIGNED_LANE.id;
+  return (
+    (dispatch
+      ? activeDispatchAssignment(dispatch)?.primary_employee_id
+      : null) ?? UNASSIGNED_LANE.id
+  );
 };
 
 function policyMinutes(policy: BranchSchedulingPolicy | undefined, day: Date) {
   const dateKey = localDateValue(day);
-  const exception = policy?.exceptions.find((item) => item.exception_date === dateKey);
+  const exception = policy?.exceptions.find(
+    (item) => item.exception_date === dateKey,
+  );
   const dayOfWeek = (day.getDay() + 6) % 7;
-  const intervals = policy?.weekly_intervals.filter((item) => item.day_of_week === dayOfWeek) ?? [];
+  const intervals =
+    policy?.weekly_intervals.filter((item) => item.day_of_week === dayOfWeek) ??
+    [];
   const normal = intervals.length
-    ? { start: Math.min(...intervals.map((item) => item.start_minute)), end: Math.max(...intervals.map((item) => item.end_minute)) }
+    ? {
+        start: Math.min(...intervals.map((item) => item.start_minute)),
+        end: Math.max(...intervals.map((item) => item.end_minute)),
+      }
     : { start: START_HOUR * 60, end: END_HOUR * 60 };
   if (!exception) return { ...normal, closed: false };
   if (exception.is_closed) return { ...normal, closed: true };
@@ -285,6 +322,7 @@ export function SchedulingRoute({
   readonly initialPerspective?: Perspective;
 } = {}) {
   const { activeCompany } = useAuth();
+  const navigate = useNavigate();
   const canRead = useHasPermission("COMPANY_SCHEDULING_READ");
   const canManage = useHasPermission("COMPANY_SCHEDULING_MANAGE");
   const canDispatch = useHasPermission("COMPANY_DISPATCH_READ");
@@ -306,10 +344,23 @@ export function SchedulingRoute({
   const [view, setView] = useState<View>(() =>
     views.includes(searchParams.get("view") as View)
       ? (searchParams.get("view") as View)
-      : "day",
+      : searchParams.get("perspective") === "dispatch" ||
+          initialPerspective === "dispatch"
+        ? "week"
+        : "day",
+  );
+  const [surface, setSurface] = useState<Surface>("calendar");
+  const [filtersOpen, setFiltersOpen] = useState(
+    () =>
+      searchParams.get("perspective") !== "dispatch" &&
+      initialPerspective !== "dispatch",
   );
   const [branchId, setBranchId] = useState(
-    () => searchParams.get("branch") ?? activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? "",
+    () =>
+      searchParams.get("branch") ??
+      activeCompany?.default_branch_id ??
+      activeCompany?.branches[0]?.id ??
+      "",
   );
   const [status, setStatus] = useState<AppointmentStatus | "">(() =>
     statuses.includes(searchParams.get("status") as AppointmentStatus)
@@ -354,12 +405,23 @@ export function SchedulingRoute({
     searchParams.get("appointment"),
   );
   const [booking, setBooking] = useState(false);
+  const [bookingContext, setBookingContext] = useState<{
+    branchId: string;
+    startAt: Date;
+    endAt: Date;
+    technicianName: string;
+  } | null>(null);
+  const [createMenu, setCreateMenu] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
   const calendarPlacement = useCalendarPlacement();
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
   const branchPolicy = useBranchSchedulingPolicy(branchId || undefined);
-  const branchRoster = useBranchCalendarRoster(branchId || undefined, range.startAt, range.endAt);
+  const branchRoster = useBranchCalendarRoster(
+    branchId || undefined,
+    range.startAt,
+    range.endAt,
+  );
   const graphAppointments = useAppointments(
     {
       ...CURRENT_CALENDAR_QUERY_RANGE,
@@ -411,12 +473,13 @@ export function SchedulingRoute({
   const technicians = useMemo(
     () =>
       Array.from(
-        new Set(
-          [
-            ...(branchRoster.data?.technicians.map((item) => item.display_name) ?? []),
-            ...(dispatch.data?.items ?? []).flatMap((item) => assignedTechnicianNames(item)),
-          ],
-        ),
+        new Set([
+          ...(branchRoster.data?.technicians.map((item) => item.display_name) ??
+            []),
+          ...(dispatch.data?.items ?? []).flatMap((item) =>
+            assignedTechnicianNames(item),
+          ),
+        ]),
       ).sort(),
     [branchRoster.data?.technicians, dispatch.data?.items],
   );
@@ -464,7 +527,12 @@ export function SchedulingRoute({
     ],
   );
   const lanes = useMemo(
-    () => calendarLanes(branchRoster.data?.technicians ?? [], visible, dispatchByAppointment),
+    () =>
+      calendarLanes(
+        branchRoster.data?.technicians ?? [],
+        visible,
+        dispatchByAppointment,
+      ),
     [branchRoster.data?.technicians, dispatchByAppointment, visible],
   );
   const issues = useMemo(
@@ -527,8 +595,28 @@ export function SchedulingRoute({
     }
   }, [routeState, searchParams, setSearchParams]);
 
-  const selectAppointment = (appointment: AppointmentDetail) =>
+  const selectAppointment = (appointment: AppointmentDetail) => {
+    const dispatchItem = dispatchByAppointment.get(appointment.id);
+    if (perspective === "dispatch" && dispatchItem?.job_id) {
+      navigate(
+        withSchedulingReturn(jobDetailPath(dispatchItem.job_id), returnTo),
+      );
+      return;
+    }
     setSelectedId(appointment.id);
+  };
+
+  const startBookingAt = (day: Date, lane: CalendarLane, minute: number) => {
+    const startAt = new Date(day);
+    startAt.setHours(0, minute, 0, 0);
+    setBookingContext({
+      branchId,
+      startAt,
+      endAt: new Date(startAt.getTime() + 2 * 60 * 60 * 1000),
+      technicianName: lane.label,
+    });
+    setCreateMenu(true);
+  };
 
   const moveAppointment = async (
     appointment: AppointmentDetail,
@@ -537,7 +625,9 @@ export function SchedulingRoute({
   ) => {
     setDropError(null);
     if (appointment.capacity_state === "legacy_unreconciled") {
-      setDropError("Imported Appointment has no reconciled capacity reservation and cannot be moved.");
+      setDropError(
+        "Imported Appointment has no reconciled capacity reservation and cannot be moved.",
+      );
       return;
     }
     const currentStart = appointment.arrival_window_start_at
@@ -552,14 +642,20 @@ export function SchedulingRoute({
     }
     const startAt = new Date(`${date}T00:00:00`);
     startAt.setMinutes(startMinute);
-    const endAt = new Date(startAt.getTime() + (currentEnd.getTime() - currentStart.getTime()));
+    const endAt = new Date(
+      startAt.getTime() + (currentEnd.getTime() - currentStart.getTime()),
+    );
     try {
       if (employeeId === UNASSIGNED_LANE.id) {
-        setDropError("Use the accessible Release assignment control to move work back to Unassigned.");
+        setDropError(
+          "Use the accessible Release assignment control to move work back to Unassigned.",
+        );
         return;
       }
       const dispatchItem = dispatchByAppointment.get(appointment.id);
-      const assignment = dispatchItem ? activeDispatchAssignment(dispatchItem) : null;
+      const assignment = dispatchItem
+        ? activeDispatchAssignment(dispatchItem)
+        : null;
       const placed = await calendarPlacement.mutateAsync({
         appointmentId: appointment.id,
         input: {
@@ -569,14 +665,17 @@ export function SchedulingRoute({
           employee_id: employeeId,
           arrival_window_start_at: startAt.toISOString(),
           arrival_window_end_at: endAt.toISOString(),
-          expected_duration_minutes: appointment.expected_duration_minutes ?? 60,
+          expected_duration_minutes:
+            appointment.expected_duration_minutes ?? 60,
           capacity_units: appointment.capacity_units ?? "1.00",
           reason: "Calendar drag/drop",
         },
       });
       setSelectedId(placed.appointment.id);
     } catch (error) {
-      setDropError(schedulingMutationRecovery(error, "appointment move").message);
+      setDropError(
+        schedulingMutationRecovery(error, "appointment move").message,
+      );
     }
   };
 
@@ -601,6 +700,29 @@ export function SchedulingRoute({
       moveDate(date, amount * (["week", "work_week"].includes(view) ? 7 : 1)),
     );
   };
+  const periodLabel = (() => {
+    const selected = new Date(`${date}T12:00:00`);
+    if (view === "month")
+      return selected.toLocaleDateString([], {
+        month: "long",
+        year: "numeric",
+      });
+    if (view === "week" || view === "work_week") {
+      const first = new Date(selected);
+      first.setDate(
+        selected.getDate() - selected.getDay() + (view === "work_week" ? 1 : 0),
+      );
+      const last = new Date(first);
+      last.setDate(first.getDate() + (view === "work_week" ? 4 : 6));
+      return `${first.toLocaleDateString([], { month: "short", day: "numeric" })}–${last.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}`;
+    }
+    return selected.toLocaleDateString([], {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  })();
 
   return (
     <div className="min-w-0 space-y-5 pb-12">
@@ -610,56 +732,131 @@ export function SchedulingRoute({
             Office operations
           </p>
           <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-            Service Board
+            {perspective === "dispatch" ? "Dispatch" : "Service Board"}
           </h1>
-          <p className="mt-2 text-content-muted">
-            See when work happens, who owns it, and what still needs scheduling
-            or assignment.
+          <p className="mt-1 text-sm text-content-muted">
+            {activeCompany.branches.find((branch) => branch.id === branchId)
+              ?.name ?? "Current Branch"}{" "}
+            · whole field operation
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canManage && canManageJobs && canReadCustomers && (
-            <Button onClick={() => setBooking(true)}>Book customer work</Button>
-          )}
-          <Link
-            className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-4 font-semibold"
-            to="/jobs"
+          {perspective === "schedule" &&
+            canManage &&
+            canManageJobs &&
+            canReadCustomers && (
+              <Button
+                onClick={() => {
+                  setBookingContext(null);
+                  setBooking(true);
+                }}
+              >
+                Book customer work
+              </Button>
+            )}
+          <Button
+            variant="outline"
+            onClick={() => setFiltersOpen((value) => !value)}
+            aria-expanded={filtersOpen}
           >
-            Create or open Job
-          </Link>
+            <Filter size={16} /> Filters
+          </Button>
         </div>
       </header>
       <section
         aria-label="Service Board attention"
         className="flex flex-wrap items-center gap-2"
       >
-        {needsSchedulingCount > 0 && (
-          <Button
-            variant="outline"
-            className="rounded-full border-2 border-[#C01529]"
-            onClick={() => {
-              setQueueAssignment("needs_attention");
-              setView("unassigned");
-            }}
-          >
-            Needs Scheduling {needsSchedulingCount}
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          className={
+            needsSchedulingCount > 0
+              ? "rounded-full border-2 border-[#C01529]"
+              : "rounded-full"
+          }
+          onClick={() => {
+            setQueueAssignment("needs_attention");
+            setView("unassigned");
+            setSurface("calendar");
+          }}
+        >
+          {perspective === "dispatch"
+            ? `Needs Scheduling (${needsSchedulingCount})`
+            : `Needs Scheduling ${needsSchedulingCount}`}
+        </Button>
         <CalendarReadinessCard
           appointments={graphAppointments.data?.items ?? []}
           appointmentTotal={graphAppointments.data?.total_count ?? 0}
           jobs={jobs.data?.items ?? []}
           jobTotal={jobs.data?.total_count ?? 0}
-          unavailable={!canReadJobs || graphAppointments.isError || jobs.isError}
+          unavailable={
+            !canReadJobs || graphAppointments.isError || jobs.isError
+          }
         />
       </section>
       {booking && (
         <BookCustomerWorkPanel
-          onClose={() => setBooking(false)}
+          onClose={() => {
+            setBooking(false);
+            setBookingContext(null);
+          }}
           returnTo={returnTo}
+          context={bookingContext ?? undefined}
         />
       )}
-      {dropError && <Alert variant="danger" title="Calendar move not saved">{dropError} The board has refreshed authoritative state.</Alert>}
+      {createMenu && bookingContext && (
+        <Card className="p-4" aria-label="Schedule work menu">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">
+                What would you like to schedule?
+              </h2>
+              <p className="text-sm text-content-muted">
+                {bookingContext.startAt.toLocaleString()} ·{" "}
+                {bookingContext.technicianName} · Branch inherited
+              </p>
+            </div>
+            <Button variant="ghost" onClick={() => setCreateMenu(false)}>
+              Close
+            </Button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                setCreateMenu(false);
+                setBooking(true);
+              }}
+            >
+              Job
+            </Button>
+            <Link
+              className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-4 font-semibold"
+              to="/estimates"
+            >
+              Estimate
+            </Link>
+            <Button
+              variant="outline"
+              disabled
+              title="Meeting authority is not available in the current Scheduling contract"
+            >
+              Meeting
+            </Button>
+          </div>
+          {bookingContext.technicianName !== "Unassigned" && (
+            <p className="mt-3 text-xs text-content-muted">
+              The selected technician is preserved as placement context. The
+              current service-request contract creates work unassigned; use the
+              governed assignment control after creation.
+            </p>
+          )}
+        </Card>
+      )}
+      {dropError && (
+        <Alert variant="danger" title="Calendar move not saved">
+          {dropError} The board has refreshed authoritative state.
+        </Alert>
+      )}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto">
@@ -683,32 +880,43 @@ export function SchedulingRoute({
             >
               <ChevronRight size={18} />
             </Button>
-            <Input
-              className="col-span-3 w-full sm:col-auto sm:w-auto"
-              aria-label="Service date"
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-            />
+            <strong className="col-span-3 min-w-48 text-center text-sm sm:col-auto">
+              {periodLabel}
+            </strong>
+            {initialPerspective === "schedule" && (
+              <Input
+                className="col-span-3 w-full sm:col-auto sm:w-auto"
+                aria-label="Service date"
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+              />
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <div
-              className="grid grid-cols-2 rounded-lg border border-stroke p-1"
-              aria-label="Schedule perspective"
-            >
-              <Button
-                variant={perspective === "schedule" ? "primary" : "ghost"}
-                onClick={() => setPerspective("schedule")}
+            {perspective === "schedule" && (
+              <div
+                className="flex rounded-lg border border-stroke p-1"
+                aria-label="Schedule perspective"
               >
-                Schedule
-              </Button>
-              <Button
-                variant={perspective === "dispatch" ? "primary" : "ghost"}
-                onClick={() => setPerspective("dispatch")}
-              >
-                Dispatch
-              </Button>
-            </div>
+                <Button
+                  variant={perspective === "schedule" ? "primary" : "ghost"}
+                  onClick={() => setPerspective("schedule")}
+                >
+                  Schedule
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPerspective("dispatch");
+                    setView("week");
+                    setFiltersOpen(false);
+                  }}
+                >
+                  Dispatch
+                </Button>
+              </div>
+            )}
             <div
               className="flex flex-wrap rounded-lg border border-stroke p-1"
               aria-label="Calendar view"
@@ -726,113 +934,140 @@ export function SchedulingRoute({
                 Week
               </Button>
               <Button
-                variant={view === "work_week" ? "primary" : "ghost"}
-                onClick={() => setView("work_week")}
-              >
-                Work Week
-              </Button>
-              <Button
                 variant={view === "month" ? "primary" : "ghost"}
                 onClick={() => setView("month")}
               >
                 Month
               </Button>
+              {perspective === "schedule" && (
+                <Button
+                  variant={view === "work_week" ? "primary" : "ghost"}
+                  onClick={() => setView("work_week")}
+                >
+                  Work Week
+                </Button>
+              )}
+              {perspective === "schedule" && (
+                <Button
+                  variant={view === "unassigned" ? "primary" : "ghost"}
+                  onClick={() => setView("unassigned")}
+                >
+                  Unassigned
+                </Button>
+              )}
+            </div>
+            <div
+              className="flex rounded-lg border border-stroke p-1"
+              aria-label="Operation surface"
+            >
               <Button
-                variant={view === "unassigned" ? "primary" : "ghost"}
-                onClick={() => setView("unassigned")}
+                variant={surface === "calendar" ? "primary" : "ghost"}
+                onClick={() => setSurface("calendar")}
               >
-                Unassigned
+                Calendar
+              </Button>
+              <Button
+                variant={surface === "map" ? "primary" : "ghost"}
+                onClick={() => setSurface("map")}
+              >
+                <MapPinned size={16} /> Map
               </Button>
             </div>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <label className="text-sm font-medium">
-            Branch
-            <Select
-              className="mt-1"
-              aria-label="Branch"
-              value={branchId}
-              onChange={(event) => setBranchId(event.target.value)}
-            >
-              <option value="">All accessible Branches</option>
-              {activeCompany.branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="text-sm font-medium">
-            Technician
-            <Select
-              className="mt-1"
-              aria-label="Technician"
-              value={technician}
-              onChange={(event) => setTechnician(event.target.value)}
-            >
-              <option value="">All technicians</option>
-              <option value="__unassigned">Unassigned only</option>
-              {technicians.map((name) => (
-                <option key={name}>{name}</option>
-              ))}
-            </Select>
-          </label>
-          <label className="text-sm font-medium">
-            Status
-            <Select
-              className="mt-1"
-              aria-label="Appointment status"
-              value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as AppointmentStatus | "")
-              }
-            >
-              <option value="">All statuses</option>
-              {statuses.map((value) => (
-                <option key={value} value={value}>
-                  {label(value)}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="text-sm font-medium">
-            Service category
-            <Select
-              className="mt-1"
-              aria-label="Service category"
-              value={serviceCategory}
-              onChange={(event) => setServiceCategory(event.target.value)}
-            >
-              <option value="">All categories</option>
-              {serviceCategories.map((value) => (
-                <option key={value} value={value}>
-                  {label(value)}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="text-sm font-medium">
-            Search
-            <span className="relative mt-1 block">
-              <Search
-                className="absolute left-3 top-3 text-content-muted"
-                size={17}
-              />
-              <Input
-                className="pl-9"
-                aria-label="Search schedule"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Job, Customer, Location"
-              />
-            </span>
-          </label>
-        </div>
+        {filtersOpen && (
+          <div
+            className="grid gap-3 rounded-lg border border-stroke bg-surface-subtle p-3 md:grid-cols-2 xl:grid-cols-5"
+            aria-label="Dispatch filters"
+          >
+            <label className="text-sm font-medium">
+              Branch
+              <Select
+                className="mt-1"
+                aria-label="Branch"
+                value={branchId}
+                onChange={(event) => setBranchId(event.target.value)}
+              >
+                <option value="">All accessible Branches</option>
+                {activeCompany.branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-sm font-medium">
+              Technician
+              <Select
+                className="mt-1"
+                aria-label="Technician"
+                value={technician}
+                onChange={(event) => setTechnician(event.target.value)}
+              >
+                <option value="">All technicians</option>
+                <option value="__unassigned">Unassigned only</option>
+                {technicians.map((name) => (
+                  <option key={name}>{name}</option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-sm font-medium">
+              Status
+              <Select
+                className="mt-1"
+                aria-label="Appointment status"
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value as AppointmentStatus | "")
+                }
+              >
+                <option value="">All statuses</option>
+                {statuses.map((value) => (
+                  <option key={value} value={value}>
+                    {label(value)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-sm font-medium">
+              Service category
+              <Select
+                className="mt-1"
+                aria-label="Service category"
+                value={serviceCategory}
+                onChange={(event) => setServiceCategory(event.target.value)}
+              >
+                <option value="">All categories</option>
+                {serviceCategories.map((value) => (
+                  <option key={value} value={value}>
+                    {label(value)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-sm font-medium">
+              Search
+              <span className="relative mt-1 block">
+                <Search
+                  className="absolute left-3 top-3 text-content-muted"
+                  size={17}
+                />
+                <Input
+                  className="pl-9"
+                  aria-label="Search schedule"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Job, Customer, Location"
+                />
+              </span>
+            </label>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-content-muted">
             Times are shown in {branchPolicy.data?.timezone ?? displayTimeZone}
-            {branchPolicy.data ? " Branch time" : " device time"}. Appointment source windows remain stored as authoritative instants.
+            {branchPolicy.data ? " Branch time" : " device time"}. Appointment
+            source windows remain stored as authoritative instants.
           </p>
           <Button
             variant="outline"
@@ -920,32 +1155,52 @@ export function SchedulingRoute({
         </Alert>
       )}
       {branchPolicy.isLoading && (
-        <Card className="p-8"><Spinner label="Checking Branch scheduling readiness" /></Card>
+        <Card className="p-8">
+          <Spinner label="Checking Branch scheduling readiness" />
+        </Card>
       )}
       {branchPolicy.isError && (
         <Alert variant="danger" title="Branch scheduling readiness unavailable">
-          The operating calendar cannot be trusted until the selected Branch policy can be read.
+          The operating calendar cannot be trusted until the selected Branch
+          policy can be read.
         </Alert>
       )}
       {branchPolicy.data?.readiness === "SCHEDULING_SETUP_REQUIRED" && (
         <Alert
           variant="warning"
           title="SCHEDULING SETUP REQUIRED"
-          action={<Link className="font-semibold text-action-primary underline" to="/administration">Administration → Branch Scheduling Setup</Link>}
+          action={
+            <Link
+              className="font-semibold text-action-primary underline"
+              to="/administration"
+            >
+              Administration → Branch Scheduling Setup
+            </Link>
+          }
         >
-          This Branch is not configured for live scheduling. A normal empty-day calendar is intentionally unavailable.
+          This Branch is not configured for live scheduling. A normal empty-day
+          calendar is intentionally unavailable.
         </Alert>
       )}
-      {branchPolicy.data?.readiness === "SCHEDULING_READY" && branchRoster.isError && (
-        <Alert variant="danger" title="Technician roster unavailable">
-          Appointment evidence remains intact, but the office calendar cannot represent available technician lanes safely.
-        </Alert>
-      )}
+      {branchPolicy.data?.readiness === "SCHEDULING_READY" &&
+        branchRoster.isError && (
+          <Alert variant="danger" title="Technician roster unavailable">
+            Appointment evidence remains intact, but the office calendar cannot
+            represent available technician lanes safely.
+          </Alert>
+        )}
       {!appointments.isLoading &&
         !appointments.isError &&
         branchPolicy.data?.readiness === "SCHEDULING_READY" &&
         !branchRoster.isError &&
-        (view === "unassigned" ? (
+        (surface === "map" ? (
+          <DispatchMapBoundary
+            items={visible}
+            dispatchByAppointment={dispatchByAppointment}
+            jobsById={jobsById}
+            onSelect={selectAppointment}
+          />
+        ) : view === "unassigned" ? (
           <NeedsSchedulingQueue
             jobs={jobs.data?.items ?? []}
             appointments={visible}
@@ -965,7 +1220,7 @@ export function SchedulingRoute({
             onSortChange={setQueueSort}
             onSelect={selectAppointment}
           />
-        ) : view === "day" && perspective === "schedule" ? (
+        ) : view === "day" ? (
           <DayCalendar
             date={date}
             items={visible}
@@ -976,14 +1231,9 @@ export function SchedulingRoute({
             onSelect={selectAppointment}
             canManage={canManage && canDispatchManage}
             onMove={moveAppointment}
-          />
-        ) : view === "day" ? (
-          <DispatchTimeline
-            date={date}
-            items={visible}
-            dispatchByAppointment={dispatchByAppointment}
-            jobsById={jobsById}
-            onSelect={selectAppointment}
+            onEmptySlot={(lane, minute) =>
+              startBookingAt(new Date(`${date}T12:00:00`), lane, minute)
+            }
           />
         ) : view === "month" ? (
           <MonthCalendar
@@ -1007,6 +1257,8 @@ export function SchedulingRoute({
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
             onSelect={selectAppointment}
+            canManage={canManage && canManageJobs && canReadCustomers}
+            onEmptySlot={startBookingAt}
           />
         ))}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
@@ -1084,6 +1336,7 @@ function DayCalendar({
   onSelect,
   canManage,
   onMove,
+  onEmptySlot,
 }: {
   readonly date: string;
   readonly items: readonly AppointmentDetail[];
@@ -1093,7 +1346,12 @@ function DayCalendar({
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
   readonly canManage: boolean;
-  readonly onMove: (item: AppointmentDetail, employeeId: string, startMinute: number) => Promise<void>;
+  readonly onMove: (
+    item: AppointmentDetail,
+    employeeId: string,
+    startMinute: number,
+  ) => Promise<void>;
+  readonly onEmptySlot: (lane: CalendarLane, startMinute: number) => void;
 }) {
   const selectedDay = new Date(`${date}T12:00:00`);
   const operating = policyMinutes(policy, selectedDay);
@@ -1108,11 +1366,20 @@ function DayCalendar({
     <>
       {operating.closed && (
         <Alert variant="warning" title="Branch closed by scheduling exception">
-          Existing Appointment evidence remains visible, but this date has no configured open capacity.
+          Existing Appointment evidence remains visible, but this date has no
+          configured open capacity.
         </Alert>
       )}
       <section aria-label="Day agenda" className="space-y-2 md:hidden">
-        {!items.length && <Card className="p-5"><h2 className="font-semibold">No scheduled appointments</h2><p className="mt-1 text-sm text-content-muted">The Branch is scheduling-ready. Available technician lanes remain visible on desktop.</p></Card>}
+        {!items.length && (
+          <Card className="p-5">
+            <h2 className="font-semibold">No scheduled appointments</h2>
+            <p className="mt-1 text-sm text-content-muted">
+              The Branch is scheduling-ready. Available technician lanes remain
+              visible on desktop.
+            </p>
+          </Card>
+        )}
         {items.map((item) => {
           const dispatch = dispatchByAppointment.get(item.id);
           const job = dispatch?.job_id
@@ -1126,7 +1393,9 @@ function DayCalendar({
               key={item.id}
             >
               <span className="flex items-center justify-between gap-3">
-                <strong>{branchTime(item.arrival_window_start_at, policy.timezone)}</strong>
+                <strong>
+                  {branchTime(item.arrival_window_start_at, policy.timezone)}
+                </strong>
                 <Badge>{appointmentState(item, dispatch, job)}</Badge>
               </span>
               <span className="mt-2 block font-semibold">
@@ -1140,7 +1409,9 @@ function DayCalendar({
                 · {primaryTechnicianName(dispatch) ?? "Unassigned"}
               </span>
               {isCapacityUnreconciled(item) && (
-                <Badge variant="warning">IMPORTED / NOT YET CAPACITY-RECONCILED</Badge>
+                <Badge variant="warning">
+                  IMPORTED / NOT YET CAPACITY-RECONCILED
+                </Badge>
               )}
             </button>
           );
@@ -1173,56 +1444,89 @@ function DayCalendar({
                 <UserRound className="mr-2 inline" size={16} />
                 {lane.label}
                 <span className="mt-1 block text-[11px] font-normal text-content-muted">
-                  {lane.readiness === "AVAILABLE" ? "Available roster" : lane.readiness === "UNASSIGNED" ? "Work awaiting assignment" : label(lane.readiness)}
+                  {lane.readiness === "AVAILABLE"
+                    ? "Available roster"
+                    : lane.readiness === "UNASSIGNED"
+                      ? "Work awaiting assignment"
+                      : label(lane.readiness)}
                 </span>
               </div>
             ))}
           </div>
           <div className="relative" style={{ height: `${visibleMinutes}px` }}>
-            {canManage && lanes.map((lane, laneIndex) => (
-              <div
-                key={`drop-${lane.id}`}
-                aria-label={`Drop Appointment on ${lane.label}`}
-                className="absolute inset-y-0 z-[1]"
-                style={{
-                  left: `calc(5rem + ${laneIndex} * ((100% - 5rem) / ${lanes.length}))`,
-                  width: `calc((100% - 5rem) / ${lanes.length})`,
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const appointment = items.find((item) => item.id === event.dataTransfer.getData("text/appointment-id"));
-                  if (!appointment) return;
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  const quarterHour = quarterHourDropMinute(
-                    startMinuteOfDay,
-                    visibleMinutes,
-                    event.clientY - rect.top,
-                  );
-                  void onMove(appointment, lane.id, quarterHour);
-                }}
-              />
-            ))}
+            {canManage &&
+              lanes.map((lane, laneIndex) => (
+                <div
+                  key={`drop-${lane.id}`}
+                  aria-label={`Drop Appointment on ${lane.label}`}
+                  className="absolute inset-y-0 z-[1]"
+                  style={{
+                    left: `calc(5rem + ${laneIndex} * ((100% - 5rem) / ${lanes.length}))`,
+                    width: `calc((100% - 5rem) / ${lanes.length})`,
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onClick={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    onEmptySlot(
+                      lane,
+                      quarterHourDropMinute(
+                        startMinuteOfDay,
+                        visibleMinutes,
+                        event.clientY - rect.top,
+                      ),
+                    );
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const appointment = items.find(
+                      (item) =>
+                        item.id ===
+                        event.dataTransfer.getData("text/appointment-id"),
+                    );
+                    if (!appointment) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const quarterHour = quarterHourDropMinute(
+                      startMinuteOfDay,
+                      visibleMinutes,
+                      event.clientY - rect.top,
+                    );
+                    void onMove(appointment, lane.id, quarterHour);
+                  }}
+                />
+              ))}
             {Array.from({ length: visibleMinutes / 15 + 1 }, (_, index) => {
               const offset = index * 15;
               const minute = (startMinuteOfDay + offset) % 60;
               const isHour = minute === 0;
               return (
-              <div
-                className={`absolute inset-x-0 border-t ${isHour ? "border-stroke" : "border-stroke/40"}`}
-                style={{ top: `${offset}px` }}
-                key={index}
-              >
-                <span className={`absolute left-2 -translate-y-1/2 bg-surface pr-2 text-content-muted ${isHour ? "text-xs" : "text-[10px]"}`}>
-                  {isHour
-                    ? new Date(2026, 0, 1, 0, startMinuteOfDay + offset).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-                    : `:${String(minute).padStart(2, "0")}`}
-                </span>
-              </div>
+                <div
+                  className={`absolute inset-x-0 border-t ${isHour ? "border-stroke" : "border-stroke/40"}`}
+                  style={{ top: `${offset}px` }}
+                  key={index}
+                >
+                  <span
+                    className={`absolute left-2 -translate-y-1/2 bg-surface pr-2 text-content-muted ${isHour ? "text-xs" : "text-[10px]"}`}
+                  >
+                    {isHour
+                      ? new Date(
+                          2026,
+                          0,
+                          1,
+                          0,
+                          startMinuteOfDay + offset,
+                        ).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })
+                      : `:${String(minute).padStart(2, "0")}`}
+                  </span>
+                </div>
               );
             })}
             <div className="absolute bottom-2 left-2 text-[11px] text-content-muted">
-              Open space is capacity context; lane labels disclose roster availability authority.
+              Open space is capacity context; lane labels disclose roster
+              availability authority.
             </div>
             {currentMinute !== null &&
               currentMinute >= 0 &&
@@ -1239,7 +1543,14 @@ function DayCalendar({
               )}
             {items.map((item) => {
               const dispatch = dispatchByAppointment.get(item.id);
-              const lane = Math.max(0, lanes.findIndex((candidate) => candidate.id === appointmentLaneId(item, dispatchByAppointment)));
+              const lane = Math.max(
+                0,
+                lanes.findIndex(
+                  (candidate) =>
+                    candidate.id ===
+                    appointmentLaneId(item, dispatchByAppointment),
+                ),
+              );
               const start = item.arrival_window_start_at
                 ? new Date(item.arrival_window_start_at)
                 : null;
@@ -1258,6 +1569,9 @@ function DayCalendar({
               const job = dispatch?.job_id
                 ? jobsById.get(dispatch.job_id)
                 : undefined;
+              const color = technicianCalendarColor(
+                lanes[lane]?.id ?? UNASSIGNED_LANE.id,
+              );
               return (
                 <button
                   type="button"
@@ -1269,24 +1583,27 @@ function DayCalendar({
                     event.dataTransfer.effectAllowed = "move";
                   }}
                   key={item.id}
-                  className="absolute z-[2] overflow-hidden rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left shadow-sm hover:bg-action-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+                  className="absolute z-[2] overflow-hidden rounded-lg border-l-4 p-2 text-left shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
                   style={{
                     top: `${Math.max(0, startMinutes)}px`,
                     height: `${Math.max(24, Math.min(duration, visibleMinutes - Math.max(0, startMinutes)))}px`,
                     left: `calc(5rem + ${lane} * ((100% - 5rem) / ${lanes.length}) + .25rem)`,
                     width: `calc((100% - 5rem) / ${lanes.length} - .5rem)`,
+                    backgroundColor: color.background,
+                    borderColor: color.border,
+                    color: color.text,
                   }}
+                  title={`${humanWorkLabel(job?.customer_display_name)}\n${humanServiceLabel(job?.job_type_code)}\n${branchTime(item.arrival_window_start_at, policy.timezone)}–${branchTime(item.arrival_window_end_at, policy.timezone)}\n${primaryTechnicianName(dispatch) ?? "Unassigned"}\n${job?.service_location_label ?? "Location unavailable"}`}
                 >
                   <strong className="block truncate text-sm">
-                    {job?.job_number ?? item.appointment_number}
+                    {humanWorkLabel(job?.customer_display_name)}
                   </strong>
                   <span className="block truncate text-xs">
-                    {job?.customer_display_name ??
-                      "Customer context unavailable"}
+                    {humanServiceLabel(job?.job_type_code)}
                   </span>
                   <span className="block truncate text-xs text-content-muted">
-                    {branchTime(item.arrival_window_start_at, policy.timezone)} ·{" "}
-                    {appointmentState(item, dispatch, job)}
+                    {branchTime(item.arrival_window_start_at, policy.timezone)}{" "}
+                    · {appointmentState(item, dispatch, job)}
                   </span>
                   {isCapacityUnreconciled(item) && (
                     <span className="block truncate text-[10px] font-semibold text-status-warning">
@@ -1303,7 +1620,7 @@ function DayCalendar({
   );
 }
 
-function DispatchTimeline({
+export function DispatchTimeline({
   date,
   items,
   dispatchByAppointment,
@@ -1388,7 +1705,9 @@ function DispatchTimeline({
                   <div
                     aria-label="Current time"
                     className="pointer-events-none absolute inset-y-0 z-10 border-l-2 border-status-danger"
-                    style={{ left: `${(currentMinute / MINUTES_VISIBLE) * 100}%` }}
+                    style={{
+                      left: `${(currentMinute / MINUTES_VISIBLE) * 100}%`,
+                    }}
                   />
                 )}
               {items
@@ -1445,6 +1764,77 @@ function DispatchTimeline({
         Intelligence proposals remain review-only until an authorized Scheduling
         or Dispatch command is submitted.
       </p>
+    </section>
+  );
+}
+
+function DispatchMapBoundary({
+  items,
+  dispatchByAppointment,
+  jobsById,
+  onSelect,
+}: {
+  readonly items: readonly AppointmentDetail[];
+  readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
+  readonly jobsById: Map<string, JobListItem>;
+  readonly onSelect: (item: AppointmentDetail) => void;
+}) {
+  return (
+    <section
+      aria-label="Dispatch map"
+      className="grid gap-4 rounded-xl border border-stroke bg-surface p-4 lg:grid-cols-[minmax(18rem,1fr)_2fr]"
+    >
+      <div>
+        <h2 className="font-semibold">Work in this calendar scope</h2>
+        <p className="mt-1 text-sm text-content-muted">
+          Locations come from the same authorized Job evidence as Calendar. Map
+          coordinates are not available in the current projection.
+        </p>
+        <div className="mt-3 space-y-2">
+          {items.map((item) => {
+            const dispatch = dispatchByAppointment.get(item.id);
+            const job = dispatch?.job_id
+              ? jobsById.get(dispatch.job_id)
+              : undefined;
+            return (
+              <button
+                type="button"
+                className="w-full rounded-lg border border-stroke p-3 text-left hover:border-action-primary"
+                onClick={() => onSelect(item)}
+                key={item.id}
+              >
+                <strong className="block">
+                  {humanWorkLabel(job?.customer_display_name)}
+                </strong>
+                <span className="block text-sm">
+                  {job?.service_location_label ??
+                    "Service Location unavailable"}
+                </span>
+                <span className="block text-xs text-content-muted">
+                  {time(item.arrival_window_start_at)} ·{" "}
+                  {primaryTechnicianName(dispatch) ?? "Unassigned"}
+                </span>
+              </button>
+            );
+          })}
+          {!items.length && (
+            <p className="text-sm text-content-muted">
+              No scheduled work in this scope.
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="grid min-h-72 place-items-center rounded-lg bg-surface-subtle p-8 text-center">
+        <div>
+          <MapPinned className="mx-auto text-content-muted" />
+          <p className="mt-3 font-semibold">
+            Geographic map pending location-coordinate authority
+          </p>
+          <p className="mt-1 text-sm text-content-muted">
+            No address is geocoded or inferred in the browser.
+          </p>
+        </div>
+      </div>
     </section>
   );
 }
@@ -1523,20 +1913,27 @@ function MonthCalendar({
                 const job = dispatch?.job_id
                   ? jobsById.get(dispatch.job_id)
                   : undefined;
+                const laneId = appointmentLaneId(item, dispatchByAppointment);
+                const color = technicianCalendarColor(laneId);
                 return (
                   <button
                     type="button"
-                    className="block w-full rounded border border-stroke p-1.5 text-left text-xs hover:border-action-primary"
+                    className="block w-full rounded border-l-4 p-1.5 text-left text-xs"
+                    style={{
+                      backgroundColor: color.background,
+                      borderColor: color.border,
+                      color: color.text,
+                    }}
                     onClick={() => onSelect(item)}
                     key={item.id}
                     aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}
                   >
                     <strong className="block truncate">
                       {time(item.arrival_window_start_at)} ·{" "}
-                      {job?.job_number ?? item.appointment_number}
+                      {humanWorkLabel(job?.customer_display_name)}
                     </strong>
                     <span className="block truncate">
-                      {job?.customer_display_name ?? "Customer unavailable"}
+                      {humanServiceLabel(job?.job_type_code)}
                     </span>
                     <span className="block truncate text-content-muted">
                       {primaryTechnicianName(dispatch) ?? "Unassigned"} ·{" "}
@@ -1585,6 +1982,8 @@ function WeekCalendar({
   dispatchByAppointment,
   jobsById,
   onSelect,
+  canManage,
+  onEmptySlot,
 }: {
   readonly date: string;
   readonly workWeek: boolean;
@@ -1594,6 +1993,8 @@ function WeekCalendar({
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
+  readonly canManage: boolean;
+  readonly onEmptySlot: (day: Date, lane: CalendarLane, minute: number) => void;
 }) {
   const days = Array.from({ length: workWeek ? 5 : 7 }, (_, index) => {
     const selected = new Date(`${date}T12:00:00`);
@@ -1603,73 +2004,204 @@ function WeekCalendar({
     );
     return sunday;
   });
-  const jobVisitCounts = new Map<string, number>();
-  for (const item of items) {
-    const jobId = dispatchByAppointment.get(item.id)?.job_id;
-    if (jobId) jobVisitCounts.set(jobId, (jobVisitCounts.get(jobId) ?? 0) + 1);
-  }
+  const startMinute = Math.min(
+    ...days.map((day) => policyMinutes(policy, day).start),
+  );
+  const endMinute = Math.max(
+    ...days.map((day) => policyMinutes(policy, day).end),
+  );
+  const visibleMinutes = Math.max(60, endMinute - startMinute);
+  const dayWidth = Math.max(360, lanes.length * 116);
   return (
     <section
       aria-label={workWeek ? "Work Week calendar" : "Week calendar"}
       className="overflow-x-auto rounded-xl border border-stroke bg-surface"
     >
-      <div className="min-w-[1100px]">
-        <div className="grid border-b border-stroke bg-surface-subtle" style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(9rem, 1fr))` }}>
-          <div className="p-3 text-xs font-semibold text-content-muted">Technician</div>
-          {days.map((day) => {
-            const operating = policyMinutes(policy, day);
-            return <div className="border-l border-stroke p-3" key={day.toISOString()}>
-              <h2 className="font-semibold">
-              {day.toLocaleDateString([], {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-              </h2>
-              <p className="text-[11px] text-content-muted">{operating.closed ? "Closed" : `${new Date(2026, 0, 1, 0, operating.start).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}–${new Date(2026, 0, 1, 0, operating.end).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}`}</p>
-            </div>;
-          })}
-        </div>
-        {lanes.map((lane) => (
-          <div className="grid border-b border-stroke last:border-b-0" style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(9rem, 1fr))` }} key={lane.id}>
-            <div className="p-3">
-              <strong className="block text-sm">{lane.label}</strong>
-              <span className="text-[11px] text-content-muted">{lane.readiness === "AVAILABLE" ? "Available roster" : label(lane.readiness)}</span>
-            </div>
-            {days.map((day) => {
-              const rows = items.filter((item) => item.arrival_window_start_at && zonedDateKey(new Date(item.arrival_window_start_at), policy.timezone) === localDateValue(day) && appointmentLaneId(item, dispatchByAppointment) === lane.id);
-              return <div className="min-h-28 space-y-1 border-l border-stroke p-2" key={`${lane.id}-${day.toISOString()}`}>
-              {rows.map((item) => {
-                const dispatch = dispatchByAppointment.get(item.id);
-                const job = dispatch?.job_id
-                  ? jobsById.get(dispatch.job_id)
-                  : undefined;
-                const continuation = Boolean(dispatch?.job_id && (jobVisitCounts.get(dispatch.job_id) ?? 0) > 1);
-                return (
-                  <button
-                    className="w-full rounded-lg border border-action-primary/30 bg-action-primary/10 p-2 text-left text-xs hover:border-action-primary"
-                    onClick={() => onSelect(item)}
-                    key={item.id}
-                    aria-label={`${lane.label}, ${item.appointment_number}, ${branchTime(item.arrival_window_start_at, policy.timezone)}`}
-                  >
-                    <strong className="block truncate">
-                      {branchTime(item.arrival_window_start_at, policy.timezone)} ·{" "}
-                      {job?.job_number ?? item.appointment_number}
-                    </strong>
-                    <span className="block truncate text-content-muted">
-                      {job?.customer_display_name ?? "Customer unavailable"}
-                    </span>
-                    {continuation && <Badge>Continuation</Badge>}
-                    {isCapacityUnreconciled(item) && <Badge variant="warning">Capacity not reconciled</Badge>}
-                  </button>
-                );
-              })}
-              {!rows.length && (
-                <p className="text-[11px] text-content-muted">Open capacity</p>
-              )}
-            </div>})}
+      <div className="space-y-2 p-3 md:hidden" aria-label="Mobile day dispatch">
+        <p className="font-semibold">{new Date(`${date}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</p>
+        {lanes.map((lane) => {
+          const laneItems = items.filter((item) => item.arrival_window_start_at && zonedDateKey(new Date(item.arrival_window_start_at), policy.timezone) === date && appointmentLaneId(item, dispatchByAppointment) === lane.id);
+          const color = technicianCalendarColor(lane.id);
+          return <div className="rounded-lg border border-stroke p-2" key={lane.id}>
+            <strong className="text-sm" style={{ color: color.text }}>{lane.label}</strong>
+            <div className="mt-1 space-y-1">{laneItems.map((item) => {
+              const dispatch = dispatchByAppointment.get(item.id);
+              const job = dispatch?.job_id ? jobsById.get(dispatch.job_id) : undefined;
+              return <button type="button" onClick={() => onSelect(item)} className="w-full rounded border-l-4 p-2 text-left text-xs" style={{ backgroundColor: color.background, borderColor: color.border, color: color.text }} key={item.id}>
+                <strong className="block">{humanWorkLabel(job?.customer_display_name)}</strong>
+                <span>{branchTime(item.arrival_window_start_at, policy.timezone)} · {humanServiceLabel(job?.job_type_code)}</span>
+              </button>;
+            })}{!laneItems.length && <span className="text-xs text-content-muted">No scheduled work</span>}</div>
+          </div>;
+        })}
+      </div>
+      <div className="hidden md:block" style={{ minWidth: `${80 + days.length * dayWidth}px` }}>
+        <div className="sticky top-0 z-20 flex border-b border-stroke bg-surface-subtle">
+          <div className="w-20 shrink-0 p-2 text-xs font-semibold text-content-muted">
+            Time
           </div>
-        ))}
+          {days.map((day) => (
+            <div
+              className="shrink-0 border-l border-stroke"
+              style={{ width: dayWidth }}
+              key={day.toISOString()}
+            >
+              <div className="p-2 text-center font-semibold">
+                {day.toLocaleDateString([], {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </div>
+              <div
+                className="grid border-t border-stroke"
+                style={{
+                  gridTemplateColumns: `repeat(${lanes.length}, minmax(116px, 1fr))`,
+                }}
+              >
+                {lanes.map((lane) => {
+                  const color = technicianCalendarColor(lane.id);
+                  return (
+                    <div
+                      className="truncate border-l border-stroke px-2 py-1 text-center text-[11px] font-semibold first:border-l-0"
+                      style={{ color: color.text }}
+                      key={lane.id}
+                    >
+                      {lane.label}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div
+          className="relative flex"
+          style={{ height: `${visibleMinutes}px` }}
+        >
+          <div className="relative w-20 shrink-0">
+            {Array.from(
+              { length: Math.ceil(visibleMinutes / 60) + 1 },
+              (_, index) => (
+                <span
+                  className="absolute right-2 -translate-y-1/2 text-[10px] text-content-muted"
+                  style={{ top: index * 60 }}
+                  key={index}
+                >
+                  {new Date(
+                    2026,
+                    0,
+                    1,
+                    0,
+                    startMinute + index * 60,
+                  ).toLocaleTimeString([], { hour: "numeric" })}
+                </span>
+              ),
+            )}
+          </div>
+          {days.map((day) => (
+            <div
+              className="relative shrink-0 border-l border-stroke bg-[linear-gradient(to_bottom,var(--color-stroke)_1px,transparent_1px)] bg-[size:100%_60px]"
+              style={{ width: dayWidth }}
+              key={day.toISOString()}
+            >
+              <div
+                className="absolute inset-0 grid"
+                style={{
+                  gridTemplateColumns: `repeat(${lanes.length}, minmax(116px, 1fr))`,
+                }}
+              >
+                {lanes.map((lane) => (
+                  <button
+                    type="button"
+                    aria-label={`Schedule ${lane.label} on ${day.toLocaleDateString()}`}
+                    className="border-l border-stroke/70 text-left first:border-l-0"
+                    disabled={!canManage}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      onEmptySlot(
+                        day,
+                        lane,
+                        quarterHourDropMinute(
+                          startMinute,
+                          visibleMinutes,
+                          event.clientY - rect.top,
+                        ),
+                      );
+                    }}
+                    key={lane.id}
+                  />
+                ))}
+              </div>
+              {items
+                .filter(
+                  (item) =>
+                    item.arrival_window_start_at &&
+                    zonedDateKey(
+                      new Date(item.arrival_window_start_at),
+                      policy.timezone,
+                    ) === localDateValue(day),
+                )
+                .map((item) => {
+                  const dispatch = dispatchByAppointment.get(item.id);
+                  const laneId = appointmentLaneId(item, dispatchByAppointment);
+                  const laneIndex = Math.max(
+                    0,
+                    lanes.findIndex((lane) => lane.id === laneId),
+                  );
+                  const job = dispatch?.job_id
+                    ? jobsById.get(dispatch.job_id)
+                    : undefined;
+                  const start = item.arrival_window_start_at
+                    ? zonedMinute(
+                        new Date(item.arrival_window_start_at),
+                        policy.timezone,
+                      ) - startMinute
+                    : 0;
+                  const duration = Math.max(
+                    30,
+                    item.expected_duration_minutes ?? 60,
+                  );
+                  const color = technicianCalendarColor(laneId);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => onSelect(item)}
+                      className="absolute z-10 overflow-hidden rounded border-l-4 p-1 text-left text-[10px] shadow-sm"
+                      style={{
+                        top: Math.max(0, start),
+                        height: Math.min(
+                          duration,
+                          visibleMinutes - Math.max(0, start),
+                        ),
+                        left: `calc(${laneIndex} * (100% / ${lanes.length}) + 2px)`,
+                        width: `calc(100% / ${lanes.length} - 4px)`,
+                        backgroundColor: color.background,
+                        borderColor: color.border,
+                        color: color.text,
+                      }}
+                      title={`${humanWorkLabel(job?.customer_display_name)}\n${humanServiceLabel(job?.job_type_code)}\n${branchTime(item.arrival_window_start_at, policy.timezone)}–${branchTime(item.arrival_window_end_at, policy.timezone)}\n${primaryTechnicianName(dispatch) ?? "Unassigned"}\n${job?.service_location_label ?? "Location unavailable"}`}
+                      aria-label={`${laneId === UNASSIGNED_LANE.id ? "Unassigned" : lanes[laneIndex]?.label}, ${humanWorkLabel(job?.customer_display_name)}, ${branchTime(item.arrival_window_start_at, policy.timezone)}`}
+                      key={item.id}
+                    >
+                      <strong className="block truncate">
+                        {humanWorkLabel(job?.customer_display_name)}
+                      </strong>
+                      <span className="block truncate">
+                        {humanServiceLabel(job?.job_type_code)}
+                      </span>
+                      <span className="block truncate">
+                        {branchTime(
+                          item.arrival_window_start_at,
+                          policy.timezone,
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -1706,7 +2238,9 @@ function AppointmentPanel({
     appointment.expected_duration_minutes ?? 60,
   );
   const [confirmMove, setConfirmMove] = useState(false);
-  const [overrideReason, setOverrideReason] = useState<SchedulingOverrideReason | "">("");
+  const [overrideReason, setOverrideReason] = useState<
+    SchedulingOverrideReason | ""
+  >("");
   const overrideConstraints = schedulingOverrideConstraints(mutation.error);
   const canReschedule = ["scheduled", "confirmed"].includes(appointment.status);
   const capacityReconciled = !isCapacityUnreconciled(appointment);
@@ -1770,7 +2304,8 @@ function AppointmentPanel({
           <dd>{primaryTechnicianName(dispatchItem) ?? "Unassigned"}</dd>
           {canAssignTechnician && dispatchItem && (
             <dd className="text-xs text-content-muted">
-              Change the technician through the governed Dispatch assignment controls below.
+              Change the technician through the governed Dispatch assignment
+              controls below.
             </dd>
           )}
         </div>
@@ -1808,13 +2343,25 @@ function AppointmentPanel({
         </Link>
       </div>
       {canManage && !canReschedule && (
-        <Alert className="mt-5" variant="warning" title="Appointment cannot be moved">
-          This Appointment is {appointment.status.replaceAll("_", " ")}. Only scheduled or confirmed Appointments can be rescheduled; its history remains available from Appointment detail.
+        <Alert
+          className="mt-5"
+          variant="warning"
+          title="Appointment cannot be moved"
+        >
+          This Appointment is {appointment.status.replaceAll("_", " ")}. Only
+          scheduled or confirmed Appointments can be rescheduled; its history
+          remains available from Appointment detail.
         </Alert>
       )}
       {canManage && canReschedule && !capacityReconciled && (
-        <Alert className="mt-5" variant="warning" title="IMPORTED / NOT YET CAPACITY-RECONCILED">
-          This source-backed Appointment remains visible, but Scheduling cannot safely move it until OM2C&apos;s canonical capacity reconciliation supplies reservation authority. No capacity is assumed or fabricated.
+        <Alert
+          className="mt-5"
+          variant="warning"
+          title="IMPORTED / NOT YET CAPACITY-RECONCILED"
+        >
+          This source-backed Appointment remains visible, but Scheduling cannot
+          safely move it until OM2C&apos;s canonical capacity reconciliation
+          supplies reservation authority. No capacity is assumed or fabricated.
         </Alert>
       )}
       {canManage && canReschedule && capacityReconciled && (
@@ -1868,7 +2415,10 @@ function AppointmentPanel({
             />
           </label>
           {mutationError && (
-            <Alert variant={overrideConstraints.length ? "warning" : "danger"} title={mutationError.title}>
+            <Alert
+              variant={overrideConstraints.length ? "warning" : "danger"}
+              title={mutationError.title}
+            >
               <strong>{mutationError.state.replaceAll("_", " ")}</strong> —{" "}
               {mutationError.message}
             </Alert>
@@ -1876,9 +2426,28 @@ function AppointmentPanel({
           {overrideConstraints.length > 0 && (
             <div className="space-y-2 rounded-lg border border-status-warning/40 bg-status-warning/10 p-3">
               <p className="font-semibold">Continue with governed override</p>
-              <p className="text-sm">{overrideConstraints.map((item) => item.replaceAll("_", " ")).join(" · ")}. Select a reason, then review the time again.</p>
-              <Select aria-label="Scheduling override reason" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value as SchedulingOverrideReason)}>
-                <option value="">Select override reason</option><option value="emergency_service">Emergency service</option><option value="customer_requested">Customer requested</option><option value="dispatcher_override">Dispatcher override</option><option value="owner_override">Owner override</option><option value="after_hours_call">After-hours call</option><option value="other">Other</option>
+              <p className="text-sm">
+                {overrideConstraints
+                  .map((item) => item.replaceAll("_", " "))
+                  .join(" · ")}
+                . Select a reason, then review the time again.
+              </p>
+              <Select
+                aria-label="Scheduling override reason"
+                value={overrideReason}
+                onChange={(event) =>
+                  setOverrideReason(
+                    event.target.value as SchedulingOverrideReason,
+                  )
+                }
+              >
+                <option value="">Select override reason</option>
+                <option value="emergency_service">Emergency service</option>
+                <option value="customer_requested">Customer requested</option>
+                <option value="dispatcher_override">Dispatcher override</option>
+                <option value="owner_override">Owner override</option>
+                <option value="after_hours_call">After-hours call</option>
+                <option value="other">Other</option>
               </Select>
             </div>
           )}
@@ -1890,7 +2459,12 @@ function AppointmentPanel({
           <Button
             type="submit"
             loading={mutation.isPending}
-            disabled={!validWindow || duration < 15 || duration % 15 !== 0 || (overrideConstraints.length > 0 && !overrideReason)}
+            disabled={
+              !validWindow ||
+              duration < 15 ||
+              duration % 15 !== 0 ||
+              (overrideConstraints.length > 0 && !overrideReason)
+            }
           >
             Review new time
           </Button>
