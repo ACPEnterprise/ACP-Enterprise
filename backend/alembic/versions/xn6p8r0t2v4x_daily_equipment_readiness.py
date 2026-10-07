@@ -1,7 +1,7 @@
 """Create daily field equipment readiness authority.
 
 Revision ID: xn6p8r0t2v4x
-Revises: wm3o5q7s9u1w
+Revises: bw8y0a2c4e6g
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "xn6p8r0t2v4x"
-down_revision = "wm3o5q7s9u1w"
+down_revision = "bw8y0a2c4e6g"
 branch_labels = None
 depends_on = None
 
