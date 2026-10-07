@@ -4,6 +4,7 @@ from app.equipment_readiness.domain import (
     equipment_checklist_prompt_required,
     equipment_fit,
     projection_state,
+    suggested_equipment_checklist_requirement,
 )
 
 
@@ -12,6 +13,12 @@ def test_employee_setting_controls_prompt_independently_of_position():
     assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=True, already_confirmed=False) is True
     assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=True, already_confirmed=True) is False
     assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=False, already_confirmed=False) is False
+
+
+def test_position_only_supplies_non_authoritative_setup_hint():
+    assert suggested_equipment_checklist_requirement("Technician") == "required_at_clock_in"
+    assert suggested_equipment_checklist_requirement("Helper") == "not_required"
+    assert suggested_equipment_checklist_requirement("Field Service Manager") == "not_required"
 from app.equipment_readiness.schemas import DailyConfirmationRequest
 
 

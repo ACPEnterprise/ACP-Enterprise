@@ -11,6 +11,14 @@ ReadinessState = Literal[
 EquipmentChecklistRequirement = Literal["not_required", "required_at_clock_in"]
 
 
+def suggested_equipment_checklist_requirement(position: str | None) -> EquipmentChecklistRequirement:
+    """A setup hint only; it never writes or overrides an Employee setting."""
+    normalized = (position or "").strip().upper().replace(" ", "_")
+    if normalized in {"TECHNICIAN", "FIELD_TECHNICIAN"}:
+        return "required_at_clock_in"
+    return "not_required"
+
+
 def equipment_checklist_prompt_required(
     requirement: EquipmentChecklistRequirement, *, has_custody_items: bool, already_confirmed: bool
 ) -> bool:
