@@ -5,6 +5,7 @@ import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as workdayApi from "../api/timekeeping";
+import * as equipmentApi from "../api/equipmentReadiness";
 import { AuthenticationContext, type AuthenticationContextValue } from "../auth/AuthenticationContext";
 import { WorkdayRoute } from "./WorkdayRoute";
 
@@ -17,6 +18,11 @@ vi.mock("../api/timekeeping", async (loadOriginal) => {
     recordOwnPunch: vi.fn(),
   };
 });
+vi.mock("../api/equipmentReadiness", async (loadOriginal) => ({
+  ...await loadOriginal<typeof import("../api/equipmentReadiness")>(),
+  getDailyEquipmentPrompt: vi.fn(),
+  confirmDailyEquipment: vi.fn(),
+}));
 
 const state = (value: workdayApi.WorkdayStateName): workdayApi.PunchState => ({
   state: value,
@@ -101,6 +107,8 @@ beforeEach(() => {
     state: action === "clock_in" ? state("clocked_in") : state("not_clocked_in"),
     completed_entry: null,
   }));
+  vi.mocked(equipmentApi.getDailyEquipmentPrompt).mockReset().mockResolvedValue({ employee_id: "employee-1", work_date: "2026-08-28", required: false, reason: "not_required", already_confirmed: false, items: [] });
+  vi.mocked(equipmentApi.confirmDailyEquipment).mockReset().mockResolvedValue({});
 });
 
 describe("mobile Workday Time route", () => {
@@ -125,6 +133,17 @@ describe("mobile Workday Time route", () => {
     await waitFor(() => expect(workdayApi.recordOwnPunch).toHaveBeenCalledTimes(1));
     complete({ punch_id: "punch", action: "clock_in", occurred_at: "2026-08-28T14:00:00Z", state: state("clocked_in"), completed_entry: null });
     expect(await screen.findByText("Punch accepted")).toBeInTheDocument();
+  });
+
+  it("requires the fast equipment confirmation before submitting Clock In when configured", async () => {
+    vi.mocked(equipmentApi.getDailyEquipmentPrompt).mockResolvedValue({ employee_id: "employee-1", work_date: "2026-08-28", required: true, reason: "employee_setting", already_confirmed: false, items: [{ catalog_item_id: "catalog-1", code: "K60", display_name: "K-60 Drain Machine", item_kind: "equipment", placement_id: "placement-1", default_state: "present_ready", readiness_state: "ready", last_confirmed_at: null }] });
+    renderWorkday();
+    await userEvent.click(await screen.findByRole("button", { name: "Clock In" }));
+    expect(await screen.findByText("Confirm today’s equipment")).toBeInTheDocument();
+    expect(workdayApi.recordOwnPunch).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm & Clock In" }));
+    expect(equipmentApi.confirmDailyEquipment).toHaveBeenCalled();
+    expect(workdayApi.recordOwnPunch).toHaveBeenCalledWith("clock_in");
   });
 
   it("reconciles an uncertain network outcome to authoritative server state", async () => {

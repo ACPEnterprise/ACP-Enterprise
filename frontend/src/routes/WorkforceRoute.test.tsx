@@ -7,6 +7,11 @@ import * as workforceHooks from "../hooks/useWorkforce";
 import { WorkforceRoute } from "./WorkforceRoute";
 
 vi.mock("../hooks/useWorkforce");
+vi.mock("../hooks/useEquipmentReadiness", () => ({
+  useEquipmentAttention: () => ({ data: [], isLoading: false, isError: false }),
+  useEquipmentChecklistSetting: () => ({ data: { employee_id: "employee-1", equipment_checklist_requirement: "not_required" }, isLoading: false, isError: false }),
+  useSetEquipmentChecklistSetting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+}));
 const authState = vi.hoisted(() => ({ permissionCodes: [] as string[] }));
 vi.mock("../hooks/useWorkdayTime", () => ({
   useAdminTimecardReview: () => ({

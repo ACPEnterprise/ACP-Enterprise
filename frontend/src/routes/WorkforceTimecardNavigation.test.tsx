@@ -15,6 +15,11 @@ vi.mock("../auth", () => ({
 vi.mock("../features/administration/hooks", () => ({
   useRoles: () => ({ data: [] }),
 }));
+vi.mock("../hooks/useEquipmentReadiness", () => ({
+  useEquipmentAttention: () => ({ data: [], isLoading: false, isError: false }),
+  useEquipmentChecklistSetting: () => ({ data: undefined, isLoading: false, isError: false }),
+  useSetEquipmentChecklistSetting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+}));
 vi.mock("../hooks/useWorkforce", () => ({
   useSourceCertification: () => ({
     query: { data: undefined, isLoading: false, isError: false },

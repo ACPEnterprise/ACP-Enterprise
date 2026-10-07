@@ -8,6 +8,8 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
+import { EquipmentAttentionPanel } from "../components/workforce/EquipmentAttentionPanel";
+import { EquipmentChecklistSettingCard } from "../components/workforce/EquipmentChecklistSettingCard";
 import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
@@ -35,6 +37,8 @@ export function WorkforceRoute() {
   const linkedEmployeeId = searchParams.get("employee");
   const { activeCompany, permissionCodes = [] } = useAuth();
   const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
+  const canReadEquipment = permissionCodes.includes("COMPANY_ASSET_READ");
+  const canManageEquipment = permissionCodes.includes("COMPANY_ASSET_MANAGE");
   const directory = useWorkforceDirectory();
   const canCertifySources = permissionCodes.includes("COMPANY_WORKFORCE_CERTIFICATION_MANAGE");
   const sourceCertifications = useSourceCertification(canCertifySources);
@@ -137,6 +141,7 @@ export function WorkforceRoute() {
         {canReviewTime && <a className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" href="#timecard-operations">Time &amp; Attendance</a>}
         {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" to="/payroll">Payroll</Link>}
       </nav>
+      <EquipmentAttentionPanel branchId={activeCompany?.default_branch_id ?? activeCompany?.branches?.[0]?.id} authorized={canReadEquipment} />
       <RealRosterActivationConsole />
       <Card className="p-4 sm:p-6">
         <h3 className="text-lg font-semibold">Source Employee certification</h3>
@@ -697,11 +702,13 @@ export function WorkforceRoute() {
               <Readiness state={detail.data.readiness_state} />
             </div>
             <nav aria-label="Employee detail" className="mt-4 flex flex-wrap gap-2 border-b border-stroke pb-3 text-sm font-semibold">
-              <a className="text-action-primary underline" href="#employee-personal">Personal</a>
-              <a className="text-action-primary underline" href="#employee-access-heading">Role / Permissions</a>
-              {canReviewTime && <a className="text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Time / Attendance</a>}
-              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Payroll setup</Link>}
-              <a className="text-action-primary underline" href="#employee-history">History</a>
+              <a className="text-action-primary underline" href="#employee-personal">Profile</a>
+              <a className="text-action-primary underline" href="#employee-personal">Employment</a>
+              {canReadEquipment && <a className="text-action-primary underline" href="#employee-field-operations">Field Operations</a>}
+              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Payroll</Link>}
+              {canReviewTime && <a className="text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Time</a>}
+              <a className="text-action-primary underline" href="#employee-access-heading">Permissions</a>
+              <a className="text-action-primary underline" href="#employee-history">Documents &amp; history</a>
             </nav>
             <section id="employee-personal" className="mt-4 scroll-mt-4" aria-label="Employee personal and work identity">
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
@@ -717,6 +724,7 @@ export function WorkforceRoute() {
                 <p className="mt-3 text-sm text-content-muted">Basic technician eligibility now derives from active employment, effective Field Operations access, Branch schedule, and explicit exceptions. Skills remain evidence; genuine credentials and restrictions remain hard constraints.</p>
               </section>
             )}
+            {canReadEquipment && <EquipmentChecklistSettingCard employeeId={detail.data.employee_id} canManage={canManageEquipment} />}
             {canAdministerEmployees && administration.isLoading && (
               <div className="mt-5">
                 <Spinner label="Loading Employee administration" />

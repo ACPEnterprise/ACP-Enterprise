@@ -8,6 +8,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DailyEquipmentConfirmation } from "../components/workforce/DailyEquipmentConfirmation";
+import { useDailyEquipmentPrompt } from "../hooks/useEquipmentReadiness";
 
 import {
   classifyWorkdayFailure,
@@ -110,6 +112,10 @@ export function WorkdayRoute() {
   const refetchTimecard = timecard.refetch;
   const punchInFlight = useRef(false);
   const [notice, setNotice] = useState<"accepted" | "reconciling" | null>(null);
+  const [equipmentPromptOpen, setEquipmentPromptOpen] = useState(false);
+  const employeeId = timecard.data?.employee_id ?? null;
+  const workDate = new Date().toLocaleDateString("en-CA");
+  const equipmentPrompt = useDailyEquipmentPrompt(employeeId, workDate, Boolean(employeeId && state.data?.state === "not_clocked_in"));
 
   useEffect(() => {
     const reconcile = () => {
@@ -199,6 +205,9 @@ export function WorkdayRoute() {
               <Alert variant="warning" title="Punch permission unavailable">You may view your timecard, but your account cannot submit punches.</Alert>
             )}
             {canPunch && (
+              equipmentPromptOpen && equipmentPrompt.data?.required && !equipmentPrompt.data.already_confirmed ? (
+                <DailyEquipmentConfirmation employeeId={employeeId!} workDate={workDate} items={equipmentPrompt.data.items} onContinue={() => submit("clock_in")} />
+              ) : (
               <div className="grid gap-ui-3" aria-label="Available punch actions">
                 {actions.map((action) => {
                   const presentation = actionPresentation[action];
@@ -214,13 +223,20 @@ export function WorkdayRoute() {
                       loadingLabel={presentation.pending}
                       disabled={punch.isPending}
                       leadingIcon={<Icon />}
-                      onClick={() => void submit(action)}
+                      onClick={() => {
+                        if (action === "clock_in" && equipmentPrompt.data?.required && !equipmentPrompt.data.already_confirmed) {
+                          setEquipmentPromptOpen(true);
+                          return;
+                        }
+                        void submit(action);
+                      }}
                     >
                       {presentation.label}
                     </Button>
                   );
                 })}
               </div>
+              )
             )}
             <p className="text-center text-xs text-content-muted">Times and transitions are recorded by the server. This phone does not determine payable duration.</p>
           </CardContent>
