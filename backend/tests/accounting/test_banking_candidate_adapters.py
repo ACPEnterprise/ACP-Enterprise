@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.accounting.banking import MatchState, deterministic_match
 from app.accounting.banking_candidates import (
     BankMatchCandidateAdapterService,
@@ -17,6 +16,7 @@ from app.accounting.banking_candidates import (
     payroll_payment_candidate,
     vendor_payment_candidate,
 )
+
 from tests.accounting.test_banking_authority import evidence
 
 DAY = date(2026, 10, 1)

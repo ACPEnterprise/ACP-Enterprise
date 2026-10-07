@@ -7,6 +7,7 @@ import type {
   DispatchExceptionCode,
   DispatchRecommendation,
 } from "../types/dispatch";
+import type { SchedulingOverrideReason } from "../types/operations";
 
 const ROOT = "/api/v1/dispatch";
 export async function getDispatchAssignment(
@@ -64,6 +65,7 @@ export async function assignPrimary(
   reason: string,
   expectedVersion?: number,
   idempotencyKey: string = crypto.randomUUID(),
+  overrideReason?: SchedulingOverrideReason | null,
 ): Promise<DispatchAssignment> {
   const path = `${ROOT}/appointments/${appointmentId}/assignment${expectedVersion ? "/primary" : ""}`;
   const method = expectedVersion ? apiClient.put : apiClient.post;
@@ -73,6 +75,7 @@ export async function assignPrimary(
       reason,
       idempotency_key: idempotencyKey,
       expected_version: expectedVersion,
+      override_reason_code: overrideReason ?? null,
     })
   ).data;
 }

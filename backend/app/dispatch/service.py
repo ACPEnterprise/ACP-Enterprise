@@ -30,6 +30,7 @@ from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 from app.scheduling.models import Appointment
+from app.scheduling.types import SchedulingOverrideReason
 from app.workforce.query import WorkforceEligibilityQuery
 from app.workforce.query_service import workforce_eligibility_service
 
@@ -262,6 +263,8 @@ class DispatchService:
         idempotency_key: str,
         expected_version: int | None = None,
         _caller_owns_transaction: bool = False,
+        allow_outside_shift: bool = False,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> AssignmentItem:
         request_digest = self._command_digest(
             "assign",
@@ -269,8 +272,13 @@ class DispatchService:
             employee_id=employee_id,
             reason=reason,
             expected_version=expected_version,
+            override_reason_code=override_reason_code,
         )
-        transaction = _caller_transaction(session) if _caller_owns_transaction else session.begin()
+        transaction = (
+            _caller_transaction(session)
+            if _caller_owns_transaction
+            else session.begin()
+        )
         async with transaction:
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -302,7 +310,13 @@ class DispatchService:
                 )
             work_start, work_end = self._technician_work_interval(appointment)
             await self._employee_lock(session, context.company.id, employee_id)
-            await self._require_eligible(session, context, appointment, employee_id)
+            outside_shift = await self._require_eligible(
+                session,
+                context,
+                appointment,
+                employee_id,
+                allow_outside_shift=allow_outside_shift,
+            )
             job_id = await session.scalar(
                 select(JobAppointmentLink.job_id)
                 .where(
@@ -363,6 +377,14 @@ class DispatchService:
                 assignment,
                 EventType.DISPATCH_ASSIGNMENT_CREATED,
                 context.user.id,
+                {
+                    "override_reason_code": (
+                        override_reason_code.value if override_reason_code else None
+                    ),
+                    "override_constraints": (
+                        ["outside_technician_shift"] if outside_shift else []
+                    ),
+                },
             )
             await session.flush()
             return await self._item(session, assignment, appointment.appointment_number)
@@ -378,6 +400,8 @@ class DispatchService:
         idempotency_key: str,
         expected_version: int,
         _caller_owns_transaction: bool = False,
+        allow_outside_shift: bool = False,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> AssignmentItem:
         request_digest = self._command_digest(
             "replace",
@@ -385,8 +409,13 @@ class DispatchService:
             employee_id=employee_id,
             reason=reason,
             expected_version=expected_version,
+            override_reason_code=override_reason_code,
         )
-        transaction = _caller_transaction(session) if _caller_owns_transaction else session.begin()
+        transaction = (
+            _caller_transaction(session)
+            if _caller_owns_transaction
+            else session.begin()
+        )
         async with transaction:
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -407,7 +436,13 @@ class DispatchService:
                 )
             self._version(assignment, expected_version)
             await self._employee_lock(session, context.company.id, employee_id)
-            await self._require_eligible(session, context, appointment, employee_id)
+            outside_shift = await self._require_eligible(
+                session,
+                context,
+                appointment,
+                employee_id,
+                allow_outside_shift=allow_outside_shift,
+            )
             old = assignment.primary_employee_id
             now = datetime.now(timezone.utc)
             assignment.primary_employee_id = employee_id
@@ -434,7 +469,15 @@ class DispatchService:
                 assignment,
                 EventType.DISPATCH_ASSIGNMENT_REPLACED,
                 context.user.id,
-                {"prior_employee_id": str(old) if old else None},
+                {
+                    "prior_employee_id": str(old) if old else None,
+                    "override_reason_code": (
+                        override_reason_code.value if override_reason_code else None
+                    ),
+                    "override_constraints": (
+                        ["outside_technician_shift"] if outside_shift else []
+                    ),
+                },
             )
             await session.flush()
             return await self._item(session, assignment, appointment.appointment_number)
@@ -449,6 +492,8 @@ class DispatchService:
         reason: str,
         idempotency_key: str,
         expected_assignment_version: int | None,
+        allow_outside_shift: bool = False,
+        override_reason_code: SchedulingOverrideReason | None = None,
     ) -> AssignmentItem:
         """Assign within a caller-owned cross-domain transaction."""
         existing = await self._get_assignment(
@@ -456,7 +501,9 @@ class DispatchService:
         )
         if existing is not None and existing.status in ACTIVE:
             if expected_assignment_version is None:
-                raise DispatchConflict("Assignment version is required for replacement.")
+                raise DispatchConflict(
+                    "Assignment version is required for replacement."
+                )
             return await self.replace(
                 session,
                 context=context,
@@ -466,6 +513,8 @@ class DispatchService:
                 idempotency_key=idempotency_key,
                 expected_version=expected_assignment_version,
                 _caller_owns_transaction=True,
+                allow_outside_shift=allow_outside_shift,
+                override_reason_code=override_reason_code,
             )
         return await self.assign(
             session,
@@ -476,6 +525,8 @@ class DispatchService:
             idempotency_key=idempotency_key,
             expected_version=expected_assignment_version,
             _caller_owns_transaction=True,
+            allow_outside_shift=allow_outside_shift,
+            override_reason_code=override_reason_code,
         )
 
     async def release(
@@ -885,7 +936,15 @@ class DispatchService:
             )
         return item
 
-    async def _require_eligible(self, session, context, appointment, employee_id):
+    async def _require_eligible(
+        self,
+        session,
+        context,
+        appointment,
+        employee_id,
+        *,
+        allow_outside_shift: bool = False,
+    ) -> bool:
         options = await self.eligible(
             session, context=context, appointment_id=appointment.id
         )
@@ -894,8 +953,10 @@ class DispatchService:
             raise DispatchNotFound(
                 "Employee was not found in the authorized Workforce scope."
             )
-        if not option.eligible:
+        outside_shift_only = set(option.reasons) == {"outside_branch_schedule"}
+        if not option.eligible and not (allow_outside_shift and outside_shift_only):
             raise DispatchConflict(f"Technician is not eligible: {option.decision}.")
+        return outside_shift_only
 
     @staticmethod
     async def _require_assigned_technician(session, *, context, assignment) -> None:

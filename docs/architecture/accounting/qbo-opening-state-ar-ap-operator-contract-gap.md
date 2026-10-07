@@ -1,7 +1,7 @@
 # QBO opening-state and control-reconciliation API handoff
 
-Date: 2026-10-03  
-Consumer: Accounting → QuickBooks Cutover  
+Date: 2026-10-03
+Consumer: Accounting → QuickBooks Cutover
 Authority reviewed: `origin/customer-management-v1` at `66fd912d4be1986731190b1d0603be5101d022e6`
 
 The protected server currently provides sealed QBO source custody, account-balance evidence, source invoices and bills, net aged A/R, native-application dispositions, and the governed review queue. Those contracts support source/cutoff review and source-record drill-down. They do not establish opening Accounting authority or an A/R/A/P control tie.

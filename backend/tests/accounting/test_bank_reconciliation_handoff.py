@@ -5,11 +5,10 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.accounting.banking import BankAuthorityService
 from app.accounting.errors import AccountingConflict, AccountingNotFound
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 def context(*, user_id=None, company_id=None):  # type: ignore[no-untyped-def]

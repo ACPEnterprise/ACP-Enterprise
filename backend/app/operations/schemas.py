@@ -7,6 +7,7 @@ from app.dispatch.schemas import AssignmentItem
 from app.jobs.schemas import JobMutationResponse
 from app.jobs.types import JobPriority
 from app.scheduling.schemas import AppointmentResponse
+from app.scheduling.types import SchedulingOverrideReason
 
 
 class OperationsApiSchema(BaseModel):
@@ -30,6 +31,7 @@ class ServiceRequestCreate(OperationsApiSchema):
     priority: JobPriority = JobPriority.NORMAL
     customer_reported_problem: str | None = None
     internal_description: str | None = None
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 class ServiceRequestResponse(OperationsApiSchema):
@@ -56,6 +58,7 @@ class ExistingJobScheduleCreate(OperationsApiSchema):
         default=True,
         description="Reserve Branch capacity; false for Needs Scheduling appointments.",
     )
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 class ExistingJobScheduleResponse(OperationsApiSchema):
@@ -74,6 +77,7 @@ class CalendarPlacementCreate(OperationsApiSchema):
     expected_duration_minutes: int = Field(gt=0)
     capacity_units: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
     reason: str = Field(min_length=1, max_length=500)
+    override_reason_code: SchedulingOverrideReason | None = None
 
 
 class CalendarPlacementResponse(OperationsApiSchema):

@@ -4,8 +4,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-from pydantic import ValidationError
-
 from app.payroll.accounting_controls import (
     PayrollAccountingControlRequest,
     PayrollControlAmount,
@@ -14,6 +12,7 @@ from app.payroll.accounting_controls import (
     reconcile_payroll_accounting,
 )
 from app.payroll.operator_router import router as operator_router
+from pydantic import ValidationError
 
 CUTOFF = datetime(2026, 9, 30, 23, 59, tzinfo=timezone.utc)
 DIGEST = "a" * 64
