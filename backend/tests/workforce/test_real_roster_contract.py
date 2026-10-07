@@ -125,16 +125,15 @@ async def real_roster_database():
 
 
 def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> None:
-    assert len(REAL_ALL_COUNTY_ROSTER) == 8
+    assert len(REAL_ALL_COUNTY_ROSTER) == 7
     assert [item.display_name for item in REAL_ALL_COUNTY_ROSTER] == [
         "Michael Fouse",
         "Lianne Hernandez",
         "Alex Donahue",
         "Melvin Santiago",
-        "Adam Mari",
-        "Dareis Montgomery",
         "Dakota Wilcox",
         "Jason Calci",
+        "Malcolm Calci",
     ]
     assert sum(item.field_tech for item in REAL_ALL_COUNTY_ROSTER) == 5
     assert all("marketing" not in item.key for item in REAL_ALL_COUNTY_ROSTER)
@@ -143,7 +142,7 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
             item.admission is RealRosterAdmission.SAFE_CREATE
             for item in REAL_ALL_COUNTY_ROSTER
         )
-        == 6
+        == 5
     )
     assert (
         sum(
@@ -157,14 +156,14 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
             item.admission is RealRosterAdmission.HISTORICAL_TERMINATED
             for item in REAL_ALL_COUNTY_ROSTER
         )
-        == 1
+        == 0
     )
     assert (
         sum(
             item.admission is RealRosterAdmission.OWNER_IDENTITY_DECISION_REQUIRED
             for item in REAL_ALL_COUNTY_ROSTER
         )
-        == 0
+        == 1
     )
     assert {
         item.source_employee_id: item.source_login_email
@@ -173,7 +172,6 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
     } == {
         "pro_622e39dd3a544e4cb4fb8782ac767287": "allcountyleak@gmail.com",
         "pro_23be6c33b14a4127bd737529180a56a1": "koqui360@gmail.com",
-        "pro_2edf25dd14494b1885a50fa134b44fd8": "dareismontgomery37@gmail.com",
         "pro_0ff2024a6baa4475a883f76d6cbcc58b": "dakotawilcox23@gmail.com",
         "pro_6b2b2b7177a54187a690cb198a6dbda5": "jasoncalci27@gmail.com",
         "pro_10853bfb63874a0b9d17cab14d1da20b": "alexallcountyleaks@gmail.com",
@@ -181,16 +179,28 @@ def test_owner_confirmed_roster_is_exact_and_excludes_marketing_account() -> Non
     alex = next(item for item in REAL_ALL_COUNTY_ROSTER if item.key == "alex-donahue")
     assert alex.source_login_email == "alexallcountyleaks@gmail.com"
     assert alex.owner_login_email == "alexallcountyplumbingandleak@gmail.com"
-    adam = next(item for item in REAL_ALL_COUNTY_ROSTER if item.key == "adam-mari")
-    assert adam.owner_login_email is None
+    malcolm = next(
+        item for item in REAL_ALL_COUNTY_ROSTER if item.key == "malcolm-calci"
+    )
+    assert malcolm.admission is RealRosterAdmission.OWNER_IDENTITY_DECISION_REQUIRED
+    assert malcolm.source_employee_id is None
 
 
 def test_roster_role_contracts_compose_existing_canonical_roles() -> None:
     roles = {item.role: item.required_role_codes for item in REAL_ALL_COUNTY_ROSTER}
     assert roles[RealRosterRole.ADMIN] == {"COMPANY_ADMINISTRATOR"}
     assert roles[RealRosterRole.OFFICE_MANAGER] == {"OFFICE_MANAGER"}
-    assert roles[RealRosterRole.OFFICE_STAFF] == {"SERVICE_CSR"}
+    assert roles[RealRosterRole.FIELD_MANAGER] == {
+        "FIELD_MANAGER",
+        "TECHNICIAN",
+        "ACP_EMPLOYEE_MOBILE",
+        "DISPATCHER",
+    }
     assert roles[RealRosterRole.FIELD_TECH] == {
+        "TECHNICIAN",
+        "ACP_EMPLOYEE_MOBILE",
+    }
+    assert roles[RealRosterRole.HELPER] == {
         "TECHNICIAN",
         "ACP_EMPLOYEE_MOBILE",
     }
