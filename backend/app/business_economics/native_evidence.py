@@ -122,7 +122,6 @@ class NativeEconomicsEvidenceService:
                 MaterialIssue.branch_id.in_(authorized_branch_ids),
                 MaterialIssue.occurred_at >= start_at,
                 MaterialIssue.occurred_at <= end_at,
-                InventoryReservation.demand_type == "job",
             )
             .order_by(MaterialIssue.occurred_at.desc(), MaterialIssue.id.desc())
             .limit(MAX_SOURCE_ROWS)
@@ -167,11 +166,14 @@ class NativeEconomicsEvidenceService:
         invoices = tuple((await session.scalars(invoices_query)).all())
         intervals = tuple((await session.scalars(intervals_query)).all())
         material_rows = tuple((await session.execute(materials_query)).all())
+        job_material_rows = tuple(
+            row for row in material_rows if row[1].demand_type == "job"
+        )
         settlement_rows = tuple((await session.execute(settlements_query)).all())
         referenced_job_ids = {
             *(item.job_id for item in invoices),
             *(item.job_id for item in intervals),
-            *(reservation.demand_id for _, reservation, _ in material_rows),
+            *(reservation.demand_id for _, reservation, _ in job_material_rows),
             *(invoice.job_id for _, invoice, _ in settlement_rows),
         }
         period_identity = or_(
@@ -298,15 +300,23 @@ class NativeEconomicsEvidenceService:
         material_totals: dict[UUID, int] = defaultdict(int)
         material_cost_complete: dict[UUID, bool] = defaultdict(lambda: True)
         material_currencies: set[str] = set()
-        for issue, reservation, movement in material_rows:
+        material_currencies_by_job: dict[UUID, set[str]] = defaultdict(set)
+        valued_material_records = 0
+        unvalued_material_records = 0
+        for issue, reservation, movement in job_material_rows:
             row = jobs.get(reservation.demand_id)
             if row is None:
                 continue
             row["material_quantity_evidence_count"] += 1
             if movement.unit_cost is None or movement.currency is None:
                 material_cost_complete[reservation.demand_id] = False
+                unvalued_material_records += 1
             else:
+                valued_material_records += 1
                 material_currencies.add(movement.currency.upper())
+                material_currencies_by_job[reservation.demand_id].add(
+                    movement.currency.upper()
+                )
                 direction = -1 if issue.issue_type == "reversal" else 1
                 material_totals[reservation.demand_id] += direction * _minor(
                     issue.quantity * movement.unit_cost
@@ -411,11 +421,11 @@ class NativeEconomicsEvidenceService:
             ),
             "DIRECT_MATERIAL": self._family(
                 "AVAILABLE"
-                if material_rows and all(material_cost_complete.values())
+                if job_material_rows and all(material_cost_complete.values())
                 else "PARTIAL"
-                if material_rows
+                if job_material_rows
                 else "ABSENT",
-                len(material_rows),
+                len(job_material_rows),
                 "Job-demand material issues; cost is available only with an authoritative Inventory valuation layer.",
             ),
             "ACCOUNTING": self._family(
@@ -486,6 +496,19 @@ class NativeEconomicsEvidenceService:
                     if len(material_currencies) == 1
                     else None
                 ),
+                "material_cost_readiness": {
+                    "actual_usage_records": len(job_material_rows),
+                    "valued_job_material_records": valued_material_records,
+                    "unvalued_job_material_usage": unvalued_material_records,
+                    "non_job_attributed_material_issues": (
+                        len(material_rows) - len(job_material_rows)
+                    ),
+                    "conflicting_valuation_jobs": sum(
+                        len(currencies) > 1
+                        for currencies in material_currencies_by_job.values()
+                    ),
+                    "expected_pricebook_cost_substituted": False,
+                },
                 "settlement_applied_minor": (
                     sum(
                         int(row["settlement_applied_minor"] or 0)
