@@ -11,6 +11,9 @@
       "owner_sanctioned_real_appointment",
       "authorized_owner_or_csr_session",
       "deployed_release_matches_protected_authority",
+      "fresh_hcp_delta_acquired_and_sealed",
+      "zero_unexplained_open_work_gap",
+      "admitted_source_identity_chain_verified",
       "record_versions_captured_immediately_before_mutation"
     ]
   },
@@ -21,12 +24,25 @@
     "real_appointment",
     "real_employee"
   ],
+  "physical_path": [
+    "customer",
+    "service_location",
+    "job",
+    "appointment",
+    "schedule",
+    "assign_technician",
+    "dispatch",
+    "technician_my_day",
+    "csr_fresh_session_readback"
+  ],
   "checks": [
     "calendar_day_week_work_week_month_and_needs_scheduling",
     "customer_location_job_appointment_relationship",
     "workforce_dispatch_eligibility",
     "primary_assignment_and_optional_crew",
     "save_refresh_persistence",
+    "same_identity_chain_in_technician_my_day",
+    "csr_fresh_session_readback",
     "job_dispatch_consistency",
     "employee_my_day_consistency",
     "authorized_reassignment",
@@ -39,6 +55,10 @@
     "release_sha",
     "frontend_digest",
     "schema_head",
+    "hcp_delta_acquired_at",
+    "hcp_delta_manifest_digest",
+    "open_work_reconciliation_digest",
+    "open_work_source_admitted_held_and_unexplained_counts",
     "company_id_reference",
     "branch_id_reference",
     "appointment_number",

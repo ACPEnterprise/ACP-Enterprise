@@ -10,8 +10,14 @@ from app.customers.models import Customer, ServiceLocation
 from app.dispatch.errors import DispatchConflict, DispatchNotFound
 from app.dispatch.models import DispatchAssignment, DispatchAssignmentHistory
 from app.dispatch.service import DispatchService
+from app.employee_operations.service import EmployeeDayService
 from app.events.models import BusinessEvent
+from app.jobs.commands import ActivateJob, CreateJobFromAppointment
 from app.jobs.models import Job, JobAppointmentLink
+from app.jobs.query import JobDetailQuery
+from app.jobs.query_service import JobsQueryService
+from app.jobs.service import JobService
+from app.jobs.types import JobPriority, JobStatus
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -24,6 +30,8 @@ from app.scheduling.models import (
     BranchSchedulingCalendar,
     BranchSchedulingWeeklyInterval,
 )
+from app.scheduling.query import AppointmentQuery
+from app.scheduling.query_service import SchedulingQueryService
 from app.scheduling.types import SchedulingOverrideReason
 from app.workforce.models import (
     Capability,
@@ -374,6 +382,123 @@ async def test_board_exposes_customer_job_and_location_drilldown_context(
     assert item.job_number == job.job_number
     assert item.customer_display_name
     assert item.service_location_label
+
+
+@pytest.mark.asyncio
+async def test_csr_cutover_path_reaches_technician_my_day_and_fresh_readback(
+    dispatch_fixture,
+):
+    factory, csr_context, appointment, _, technician = dispatch_fixture
+    jobs = JobService()
+    dispatch = DispatchService()
+
+    async with factory() as session:
+        scheduled = await SchedulingQueryService().get_appointment(
+            session,
+            context=csr_context,
+            query=AppointmentQuery(
+                company_id=csr_context.company.id,
+                authorized_branch_ids=csr_context.authorized_branch_ids,
+                appointment_id=appointment.id,
+            ),
+        )
+    assert scheduled.customer_id == appointment.customer_id
+    assert scheduled.service_location_id == appointment.service_location_id
+
+    async with factory() as session:
+        job = await jobs.create_job_from_appointment(
+            session,
+            context=csr_context,
+            command=CreateJobFromAppointment(
+                appointment_id=appointment.id,
+                service_request_id=uuid4(),
+                job_type_code="repair",
+                priority=JobPriority.NORMAL,
+                customer_reported_problem="Operational cutover acceptance",
+            ),
+        )
+    async with factory() as session:
+        activated = await jobs.activate_job(
+            session,
+            context=csr_context,
+            command=ActivateJob(job.id, job.concurrency_version),
+        )
+
+    async with factory() as session:
+        assigned = await dispatch.assign(
+            session,
+            context=csr_context,
+            appointment_id=appointment.id,
+            employee_id=technician.id,
+            reason="CSR operational cutover acceptance",
+            idempotency_key="csr-cutover-physical-path",
+        )
+    assert assigned.job_id == activated.id
+
+    async with factory() as session:
+        board = await dispatch.board(
+            session,
+            context=csr_context,
+            start_at=appointment.arrival_window_start_at - timedelta(minutes=1),
+            end_at=appointment.arrival_window_end_at + timedelta(minutes=1),
+            branch_id=appointment.branch_id,
+        )
+    board_item = next(
+        item for item in board.items if item.appointment_id == appointment.id
+    )
+    assert board_item.job_id == activated.id
+    assert board_item.assignment is not None
+    assert board_item.assignment.primary_employee_id == technician.id
+
+    async with factory() as session:
+        technician_membership = await session.get(Membership, technician.membership_id)
+        assert technician_membership is not None
+        technician_user = await session.get(User, technician_membership.user_id)
+        assert technician_user is not None
+        technician_context = AuthorizationContext(
+            user=technician_user,
+            company=csr_context.company,
+            membership=technician_membership,
+            authorized_branches=csr_context.authorized_branches,
+            active_branch=csr_context.active_branch,
+            effective_roles=(),
+            effective_permissions=(),
+            credential_version=1,
+            authorization_version=technician_user.authorization_version,
+        )
+        my_day = await EmployeeDayService().day(
+            session,
+            context=technician_context,
+            business_date=appointment.arrival_window_start_at.astimezone(
+                ZoneInfo("America/New_York")
+            ).date(),
+        )
+    my_day_item = next(
+        item for item in my_day.assignments if item.appointment_id == appointment.id
+    )
+    assert my_day_item.job_id == activated.id
+    assert my_day_item.assignment_status == "assigned"
+    assert my_day_item.customer_display_name == "Dispatch Customer"
+    assert my_day_item.service_location.address_line_1 == "1 Test"
+
+    # A new CSR session is the persistence proof: no identity is taken from a
+    # prior in-memory aggregate or mutation response.
+    async with factory() as session:
+        reopened = await JobsQueryService().get_job_detail(
+            session,
+            context=csr_context,
+            query=JobDetailQuery(activated.id),
+        )
+        persisted_assignment = await dispatch.detail(
+            session,
+            context=csr_context,
+            appointment_id=appointment.id,
+        )
+    assert reopened.status is JobStatus.READY
+    assert reopened.customer.id == appointment.customer_id
+    assert reopened.service_location.id == appointment.service_location_id
+    assert [item.appointment_id for item in reopened.appointments] == [appointment.id]
+    assert persisted_assignment.primary_employee_id == technician.id
 
 
 @pytest.mark.asyncio
