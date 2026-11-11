@@ -1,8 +1,10 @@
 # Accounting real-evidence execution runbook
 
-Date: 2026-11-11  
+Date: 2026-11-11
+
 Authority: protected Accounting/QBO contracts at
-`48f3911f20f8945f0fc183844363999e6d6c9d00`  
+`48f3911f20f8945f0fc183844363999e6d6c9d00`
+
 Execution owner: Laptop MASTER / ENTERPRISE.RELEASE
 
 This is a preparation packet. Do not run a command in a section marked
