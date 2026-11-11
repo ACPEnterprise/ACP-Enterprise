@@ -5,8 +5,6 @@ services:
       POSTGRES_DB: acp_hcp_rehearsal_import
       POSTGRES_USER: acp_hcp_rehearsal
       POSTGRES_PASSWORD: ${HCP_REHEARSAL_POSTGRES_PASSWORD:?Set a dedicated rehearsal password}
-    ports:
-      - "127.0.0.1:55432:5432"
     volumes:
       - hcp_rehearsal_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,9 +20,34 @@ services:
     networks:
       migration_rehearsal:
 
+  exporter:
+    profiles: ["export"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.test
+    environment:
+      ENVIRONMENT: migration_rehearsal
+      PYTHONPATH: /workspace/backend
+      DATABASE_URL: postgresql+asyncpg://acp_hcp_rehearsal:${HCP_REHEARSAL_POSTGRES_PASSWORD:?Set a dedicated rehearsal password}@postgres:5432/acp_hcp_rehearsal_import
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/workspace/backend:ro
+    working_dir: /workspace
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    networks:
+      migration_rehearsal:
+
 volumes:
   hcp_rehearsal_postgres_data:
-    name: acp_hcp_rehearsal_empty
 
 networks:
   migration_rehearsal:
