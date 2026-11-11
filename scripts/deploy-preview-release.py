@@ -159,6 +159,25 @@ def assert_preview_root(root: Path) -> tuple[Path, Path]:
     return releases, resolved
 
 
+def assert_bootstrap_root(root: Path) -> tuple[Path, Path]:
+    """Validate a clean ACP root without creating or switching anything."""
+    raw_root = Path(root)
+    if raw_root.is_symlink():
+        fail("bootstrap root must not be a symlink")
+    root = raw_root.resolve()
+    if root.name != "acp-enterprise" or "production" in str(root).lower():
+        fail(f"bootstrap root is not an approved non-Production ACP root: {root}")
+    current = root / "current"
+    if os.path.lexists(current):
+        fail(f"clean-root bootstrap refuses an existing current path: {current}")
+    releases = root / "releases"
+    if releases.is_symlink() or (releases.exists() and not releases.is_dir()):
+        fail(f"release directory is not a real directory: {releases}")
+    if releases.is_dir() and any(releases.iterdir()):
+        fail(f"clean-root bootstrap refuses a non-empty release directory: {releases}")
+    return root, releases
+
+
 def validate_runtime_env(path: Path, *, expected_sha: str | None = None) -> dict[str, str]:
     if not path.is_file() or path.is_symlink():
         fail(f"missing or unsafe runtime config: {path}")
@@ -243,6 +262,11 @@ def copy_runtime_config(previous: Path, stage: Path, sha: str) -> None:
     source = previous / ".env.preview"
     validate_runtime_env(source)
     write_private(stage / ".env.preview", update_app_version(source.read_text(encoding="utf-8"), sha))
+
+
+def copy_bootstrap_config(source: Path, stage: Path, sha: str) -> None:
+    validate_runtime_env(source, expected_sha=sha)
+    write_private(stage / ".env.preview", source.read_text(encoding="utf-8"))
 
 
 def env_values(path: Path) -> dict[str, str]:
@@ -447,6 +471,73 @@ def build_release(
         raise
 
 
+def build_bootstrap_release(
+    source_root: Path,
+    root: Path,
+    sha: str,
+    tree: str,
+    env_file: Path,
+    services: Sequence[str],
+) -> tuple[Release, Path]:
+    target = release_target(root, sha)
+    if os.path.lexists(target):
+        fail(f"conflicting target release already exists: {target}")
+    releases = root / "releases"
+    releases.mkdir(mode=0o755, parents=True, exist_ok=True)
+    stage = releases / f".{target.name}.tmp-{uuid.uuid4().hex}"
+    stage.mkdir(mode=0o755)
+    try:
+        extract_archive(source_root, sha, stage)
+        copy_bootstrap_config(env_file, stage, sha)
+        release = Release(root, stage, sha, None, None)
+        write_metadata(release, target.name, tree, services)
+        return release, target
+    except Exception:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+
+
+def bootstrap(args: argparse.Namespace) -> int:
+    source_root = Path(args.source_root).resolve()
+    root, releases = assert_bootstrap_root(Path(args.root))
+    services = selected_services(args.service)
+    sha, tree = require_source(source_root, args.sha)
+    env_file = Path(args.env_file).resolve()
+    validate_runtime_env(env_file, expected_sha=sha)
+    target = release_target(root, sha)
+    if os.path.lexists(target):
+        fail(f"conflicting target release already exists: {target}")
+    if args.dry_run:
+        print(f"DRY-RUN: clean-root source={source_root} sha={sha} tree={tree}")
+        print(f"DRY-RUN: env-file={env_file} mode-safe APP_VERSION={sha}")
+        print(f"DRY-RUN: target={target}")
+        print(f"DRY-RUN: current would atomically point to {target}")
+        print(f"DRY-RUN: services={','.join(services)} (none will start)")
+        print("DRY-RUN: PostgreSQL, Redis, migrations, HCP, QBO, Production, and DNS are untouched.")
+        return 0
+    releases.mkdir(mode=0o755, parents=True, exist_ok=True)
+    release, target = build_bootstrap_release(
+        source_root, root, sha, tree, env_file, services
+    )
+    finalized = False
+    try:
+        validate_compose(release.path, dry_run=False)
+        os.replace(release.path, target)
+        finalized = True
+        atomic_switch(root, target)
+    except Exception as exc:
+        current = root / "current"
+        if not finalized:
+            shutil.rmtree(release.path, ignore_errors=True)
+        elif not (current.is_symlink() and current.resolve() == target):
+            shutil.rmtree(target, ignore_errors=True)
+        raise DeployError(str(exc)) from exc
+    print(f"Bootstrapped Preview/Beta release: {target}")
+    print(f"APP_VERSION={sha}")
+    print("No PostgreSQL, Redis, migration, application, HCP, QBO, Production, or DNS action was performed.")
+    return 0
+
+
 def deploy(args: argparse.Namespace) -> int:
     source_root = Path(args.source_root).resolve()
     root = Path(args.root).resolve()
@@ -551,7 +642,6 @@ def rollback(args: argparse.Namespace) -> int:
 def parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--root", type=Path, default=DEFAULT_ROOT)
-    common.add_argument("--service", action="append", help="application service; repeatable, backend is required")
     common.add_argument("--health-timeout", type=int, default=180)
     common.add_argument("--dry-run", action="store_true")
     command_parser = argparse.ArgumentParser(description=__doc__)
@@ -559,14 +649,39 @@ def parser() -> argparse.ArgumentParser:
     deploy_parser = subparsers.add_parser("deploy", parents=[common])
     deploy_parser.add_argument("--sha", required=True)
     deploy_parser.add_argument("--source-root", type=Path, default=Path.cwd())
-    subparsers.add_parser("rollback", parents=[common]).add_argument("--to", type=Path)
+    deploy_parser.add_argument(
+        "--service",
+        action="append",
+        help="application service; repeatable, backend is required",
+    )
+    rollback_parser = subparsers.add_parser("rollback", parents=[common])
+    rollback_parser.add_argument("--to", type=Path)
+    rollback_parser.add_argument(
+        "--service",
+        action="append",
+        help="application service; repeatable, backend is required",
+    )
+    bootstrap_parser = subparsers.add_parser("bootstrap", parents=[common])
+    bootstrap_parser.add_argument("--source-root", type=Path, required=True)
+    bootstrap_parser.add_argument("--sha", required=True)
+    bootstrap_parser.add_argument("--env-file", type=Path, required=True)
+    bootstrap_parser.add_argument(
+        "--service",
+        action="append",
+        required=True,
+        help="application service; repeatable, backend is required",
+    )
     return command_parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser().parse_args(argv)
-        return deploy(args) if args.command == "deploy" else rollback(args)
+        if args.command == "deploy":
+            return deploy(args)
+        if args.command == "rollback":
+            return rollback(args)
+        return bootstrap(args)
     except DeployError as exc:
         print(f"BLOCKED: {exc}", file=sys.stderr)
         return 1

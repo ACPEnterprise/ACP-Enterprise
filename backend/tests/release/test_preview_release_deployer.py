@@ -74,6 +74,15 @@ def runtime_root(tmp_path: Path) -> tuple[Path, Path]:
     return root, previous
 
 
+def clean_root(tmp_path: Path, sha: str) -> tuple[Path, Path]:
+    root = tmp_path / "acp-enterprise"
+    root.mkdir()
+    env = tmp_path / ".env.preview"
+    env.write_text(preview_env(sha))
+    env.chmod(0o600)
+    return root, env
+
+
 def test_git_archive_materializes_source_without_git_and_copies_only_env(tmp_path: Path) -> None:
     source, sha = source_repo(tmp_path)
     root, previous = runtime_root(tmp_path)
@@ -118,6 +127,69 @@ def test_dry_run_does_not_create_target_or_switch_current(tmp_path: Path) -> Non
     assert not (root / "releases" / f"enterprise-beta-{sha[:8]}").exists()
 
 
+def test_clean_root_bootstrap_dry_run_does_not_create_current(
+    tmp_path: Path,
+) -> None:
+    source, sha = source_repo(tmp_path)
+    root, env = clean_root(tmp_path, sha)
+
+    assert (
+        deployer.main(
+            [
+                "bootstrap",
+                "--source-root",
+                str(source),
+                "--root",
+                str(root),
+                "--sha",
+                sha,
+                "--env-file",
+                str(env),
+                "--service",
+                "backend",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    assert not (root / "current").exists()
+    assert not (root / "releases").exists()
+
+
+def test_clean_root_bootstrap_materializes_and_switches_atomically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, sha = source_repo(tmp_path)
+    root, env = clean_root(tmp_path, sha)
+    monkeypatch.setattr(deployer, "validate_compose", lambda *_args, **_kwargs: None)
+
+    assert (
+        deployer.main(
+            [
+                "bootstrap",
+                "--source-root",
+                str(source),
+                "--root",
+                str(root),
+                "--sha",
+                sha,
+                "--env-file",
+                str(env),
+                "--service",
+                "backend",
+            ]
+        )
+        == 0
+    )
+    target = root / "releases" / f"enterprise-beta-{sha[:8]}"
+    assert target.is_dir()
+    assert (root / "current").resolve() == target
+    assert not (target / ".git").exists()
+    assert (target / ".env.preview").stat().st_mode & 0o777 == 0o600
+    assert f"APP_VERSION={sha}" in (target / ".env.preview").read_text()
+    assert '"previous_release": null' in (target / ".release-metadata.json").read_text()
+
+
 def test_dirty_source_is_blocked(tmp_path: Path) -> None:
     source, sha = source_repo(tmp_path)
     (source / "untracked.txt").write_text("dirty\n")
@@ -150,3 +222,29 @@ def test_atomic_switch_replaces_current_symlink(tmp_path: Path) -> None:
     target.mkdir()
     deployer.atomic_switch(root, target)
     assert os.readlink(root / "current") == "releases/enterprise-beta-bbbbbbbb"
+
+
+def test_rollback_dry_run_preserves_current_release(tmp_path: Path) -> None:
+    root, _ = runtime_root(tmp_path)
+    target = root / "releases" / "enterprise-beta-bbbbbbbb"
+    target.mkdir()
+    (target / ".env.preview").write_text(preview_env("b" * 40))
+    (target / ".env.preview").chmod(0o600)
+    (target / "docker-compose.preview.yml").write_text("services: {}\n")
+
+    assert (
+        deployer.main(
+            [
+                "rollback",
+                "--root",
+                str(root),
+                "--to",
+                str(target),
+                "--service",
+                "backend",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    assert os.readlink(root / "current") == "releases/enterprise-beta-aaaaaaaa"

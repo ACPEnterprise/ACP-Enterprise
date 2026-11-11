@@ -9,15 +9,55 @@ directory is expected to contain `.git`.
 The controlled source checkout is `/opt/acp-enterprise/builder`. It must be a
 clean checkout of this repository and is never used as a running application.
 The deployer uses `git archive` at the requested full commit SHA, copies only
-the prior release's mode-0600 `.env.preview`, sets its `APP_VERSION` to the full
-SHA, and records rollback metadata in `.release-metadata.json`.
+the approved mode-0600 `.env.preview`, sets or verifies its `APP_VERSION` to the
+full SHA, and records rollback metadata in `.release-metadata.json`.
 
 The first version deploys the `backend` service. Additional application
 services may be requested with repeated `--service` flags, but `backend` is
 always required for the version, schema, and health gates. PostgreSQL, Redis,
 Alembic migration services, QBO init services, and Production are rejected.
 
-## Dry run
+## Clean-root bootstrap dry run
+
+Use `bootstrap` exactly once on a new host. The root may already contain the
+builder/shared-secrets directories, but `current` must not exist and
+`releases/` must be absent or empty. Bootstrap only creates the immutable
+release and the `current` symlink; it does not start Docker services, run
+migrations, or contact HCP, QBO, Production, DNS, or Beta.
+
+The supplied environment file must already be mode `0600`, Preview-only, and
+contain `APP_VERSION` equal to the requested SHA.
+
+```bash
+cd /opt/acp-enterprise/builder
+python3 scripts/deploy-preview-release.py bootstrap \
+  --source-root /opt/acp-enterprise/builder \
+  --root /opt/acp-enterprise \
+  --sha dc9af03d60ed069993ef613775d033c9f5470a77 \
+  --env-file /opt/acp-enterprise/builder/.env.preview \
+  --service backend \
+  --dry-run
+```
+
+## Clean-root bootstrap
+
+Run only after the bootstrap dry run passes. This creates
+`/opt/acp-enterprise/releases/enterprise-beta-dc9af03d` and atomically creates
+`/opt/acp-enterprise/current`; it still starts no services. Starting the fresh
+isolated PostgreSQL/Redis/application stack and performing the one-time isolated
+database migration are separate owner actions.
+
+```bash
+cd /opt/acp-enterprise/builder
+python3 scripts/deploy-preview-release.py bootstrap \
+  --source-root /opt/acp-enterprise/builder \
+  --root /opt/acp-enterprise \
+  --sha dc9af03d60ed069993ef613775d033c9f5470a77 \
+  --env-file /opt/acp-enterprise/builder/.env.preview \
+  --service backend
+```
+
+## Promotion dry run
 
 Run from the controlled builder checkout. This performs source, runtime-config,
 target-conflict, and Preview-policy checks only; it does not create a release,
@@ -28,7 +68,7 @@ cd /opt/acp-enterprise/builder
 python3 scripts/deploy-preview-release.py deploy \
   --source-root /opt/acp-enterprise/builder \
   --root /opt/acp-enterprise \
-  --sha 4bfdf3b1d58c7fa3dd2c3871c01f7d5662b0575f \
+  --sha dc9af03d60ed069993ef613775d033c9f5470a77 \
   --service backend \
   --dry-run
 ```
@@ -50,14 +90,14 @@ cd /opt/acp-enterprise/builder
 python3 scripts/deploy-preview-release.py deploy \
   --source-root /opt/acp-enterprise/builder \
   --root /opt/acp-enterprise \
-  --sha 4bfdf3b1d58c7fa3dd2c3871c01f7d5662b0575f \
+  --sha dc9af03d60ed069993ef613775d033c9f5470a77 \
   --service backend
 ```
 
 The resulting runtime directory is:
 
 ```text
-/opt/acp-enterprise/releases/enterprise-beta-4bfdf3b1
+/opt/acp-enterprise/releases/enterprise-beta-dc9af03d
 ```
 
 The previous `current` target is retained and recorded in the new release's
