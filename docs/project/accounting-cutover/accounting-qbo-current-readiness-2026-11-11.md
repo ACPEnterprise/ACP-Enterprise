@@ -113,3 +113,7 @@ attempted and no counts were re-invented.
 This path requires no additional Accounting model or migration. The next
 productive action is controlled real-evidence execution and review, not another
 parallel reconciliation subsystem.
+
+The exact hold-safe commands, mutation boundaries, and Owner, Accountant, and
+Payroll decision packets are published in
+`accounting-real-evidence-execution-runbook-2026-11-11.md`.
