@@ -165,10 +165,36 @@ def adapt_source_packet(
         source_id = _require_text(record.get("source_id"), "hcp_november_adapter_identity_missing")
         if domain not in SOURCE_DOMAINS:
             _fail("hcp_november_adapter_unknown_domain", domain)
+        if str(record.get("disposition", "")).upper() not in DISPOSITIONS:
+            _fail("hcp_november_adapter_unknown_disposition", record.get("disposition"))
         key = (domain, source_id)
         if key in records_by_key:
             _fail("hcp_november_adapter_duplicate_identity", key)
         records_by_key[key] = record
+
+    execution_order = source.get("execution_order")
+    if not isinstance(execution_order, list):
+        _fail("hcp_november_adapter_execution_order_missing")
+    expected_order = {
+        (str(record["domain"]), str(record["source_id"]))
+        for record in raw_records
+        if record.get("disposition") in {"CREATE", "UPDATE", "REPLAY"}
+    }
+    observed_order: list[tuple[str, str]] = []
+    for item in execution_order:
+        if not isinstance(item, dict):
+            _fail("hcp_november_adapter_execution_order_invalid", item)
+        key = (
+            _require_text(item.get("domain"), "hcp_november_adapter_execution_order_domain_missing"),
+            _require_text(item.get("source_id"), "hcp_november_adapter_execution_order_identity_missing"),
+        )
+        if key in observed_order or key not in expected_order:
+            _fail("hcp_november_adapter_execution_order_ambiguous", key)
+        if item.get("disposition") != records_by_key[key].get("disposition"):
+            _fail("hcp_november_adapter_execution_order_disposition_mismatch", key)
+        observed_order.append(key)
+    if set(observed_order) != expected_order or len(observed_order) != len(expected_order):
+        _fail("hcp_november_adapter_execution_order_loss", {"expected": len(expected_order), "actual": len(observed_order)})
 
     acquired_at = _require_text(source.get("acquired_at"), "hcp_november_adapter_acquired_at_missing")
     derived_records: list[dict[str, Any]] = []
