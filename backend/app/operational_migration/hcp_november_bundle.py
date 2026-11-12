@@ -155,6 +155,7 @@ class NovemberQualificationAuthority:
     expected_reconciliation_digest: str
     expected_attachment_custody_digest: str
     bundle_root: Path | None = None
+    expected_policy_digest: str | None = None
 
     @classmethod
     def load(cls, path: Path) -> NovemberQualificationAuthority:
@@ -195,6 +196,7 @@ class NovemberQualificationAuthority:
                     if value.get("bundle_root")
                     else None
                 ),
+                expected_policy_digest=value.get("expected_policy_digest"),
                 **fields,
             )
         except SafeEvidenceError:
@@ -317,6 +319,7 @@ class NovemberQualificationAuthority:
             self.expected_acquisition_digest,
             self.expected_reconciliation_digest,
             self.expected_attachment_custody_digest,
+            *(([self.expected_policy_digest]) if self.expected_policy_digest else []),
         ):
             if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
                 _fail("hcp_november_digest_invalid", value)
@@ -343,6 +346,12 @@ class NovemberQualificationAuthority:
                 if actual_summary.get(key) != expected_count:
                     _fail("hcp_november_disposition_count_mismatch", {"key": key, "count": actual_summary.get(key)})
             policy = _require_mapping(_json_bytes(payloads["policy/final-operational-cutover-disposition.json"], "final-operational-cutover-disposition.json"), "hcp_november_policy_invalid")
+            if not self.expected_policy_digest:
+                _fail("hcp_november_policy_digest_missing", "expected_policy_digest")
+            if policy.get("digest") != self.expected_policy_digest:
+                _fail("hcp_november_policy_digest_mismatch", policy.get("digest"))
+            if policy.get("source_reconciliation_digest") != self.expected_reconciliation_digest:
+                _fail("hcp_november_policy_source_mismatch", policy.get("source_reconciliation_digest"))
             if policy.get("source_mutation") is not False or policy.get("live_database_access") is not False or policy.get("network_access") is not False:
                 _fail("hcp_november_policy_safety_boundary", policy)
             contamination = _require_mapping(policy.get("hold_contamination"), "hcp_november_hold_contamination_missing")
@@ -358,6 +367,7 @@ class NovemberQualificationAuthority:
                 "bundle_sha256": self.bundle_sha256,
                 "acquisition_digest": self.expected_acquisition_digest,
                 "reconciliation_digest": self.expected_reconciliation_digest,
+                "policy_digest": self.expected_policy_digest,
                 "attachment_custody_digest": self.expected_attachment_custody_digest,
                 "company_id": self.expected_company_id,
                 "branch_id": self.expected_branch_id,

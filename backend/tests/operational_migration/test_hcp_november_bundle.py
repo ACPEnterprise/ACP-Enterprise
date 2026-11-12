@@ -27,6 +27,7 @@ ACQUISITION = "02820d1bbdb0a2468304cf493f717b8cae3982c5f8774404a813e07208680754"
 RECONCILIATION = "7aaed3abde50d943cb4f981fbdcb185c19b1656e1cf3d1d8da6b20631ca12536"
 ATTACHMENT_CUSTODY = "c11e31d63541d6e5c202535d85f73fab161d969f19dc0b737f7085582fbed79e"
 SCHEMA_HEAD = "yp8r0t2v4x6z"
+POLICY = "285d288b98da96140fff9e25200b95beb120d05a2b5196560a89d0a616dd7c0e"
 
 
 def _record(source_id: str, domain: str, disposition: str, *, allowed: bool, reason: str | None = None) -> dict[str, Any]:
@@ -210,6 +211,8 @@ def _write_sealed_handoff(tmp_path: Path, *, omissions: bool = False) -> Novembe
     ).encode()
     payloads["policy/final-operational-cutover-disposition.json"] = json.dumps(
         {
+            "digest": POLICY,
+            "source_reconciliation_digest": RECONCILIATION,
             "source_mutation": False,
             "live_database_access": False,
             "network_access": False,
@@ -271,6 +274,7 @@ def _write_sealed_handoff(tmp_path: Path, *, omissions: bool = False) -> Novembe
         expected_acquisition_digest=ACQUISITION,
         expected_reconciliation_digest=RECONCILIATION,
         expected_attachment_custody_digest=ATTACHMENT_CUSTODY,
+        expected_policy_digest=POLICY,
     )
 
 
