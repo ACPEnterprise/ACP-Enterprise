@@ -191,7 +191,12 @@ def test_authority_contract_requires_private_mode(tmp_path: Path) -> None:
     assert error.value.code == "hcp_november_authority_permissions"
 
 
-def _write_sealed_handoff(tmp_path: Path, *, omissions: bool = False) -> NovemberQualificationAuthority:
+def _write_sealed_handoff(
+    tmp_path: Path,
+    *,
+    omissions: bool = False,
+    locationless_count: int = 23,
+) -> NovemberQualificationAuthority:
     root = tmp_path / "qualified-bundle"
     root.mkdir()
     payloads: dict[str, bytes] = {}
@@ -217,7 +222,7 @@ def _write_sealed_handoff(tmp_path: Path, *, omissions: bool = False) -> Novembe
             "live_database_access": False,
             "network_access": False,
             "held_quarantined": {
-                "locationless_open_jobs": {"source_ids": [f"job-{i}" for i in range(22)]},
+                "locationless_open_jobs": {"source_ids": [f"job-{i}" for i in range(locationless_count)]},
                 "legacy_duplicate_risk_appointments": {"source_ids": [f"appt-dup-{i}" for i in range(13)]},
                 "technician_conflicts": {"source_ids": ["tech-0", "tech-1"]},
                 "unassigned_appointment": {"source_id": "appt-unassigned"},
@@ -230,6 +235,19 @@ def _write_sealed_handoff(tmp_path: Path, *, omissions: bool = False) -> Novembe
             "unexplained_omissions_in_original_gate": (
                 [{"source_id": "omitted"}] if omissions else []
             ),
+            "resolved_original_gate_omissions": [
+                {
+                    "source_id": "job-corrected",
+                    "original_disposition": "HOLD_QUARANTINE",
+                    "final_disposition": "HOLD_QUARANTINE",
+                },
+                {
+                    "source_id": "appt-corrected",
+                    "original_disposition": "HOLD",
+                    "final_disposition": "HOLD",
+                },
+            ],
+            "source_prior_policy_digest": "e" * 64,
         }, sort_keys=True
     ).encode()
     for name, value in payloads.items():
@@ -288,8 +306,40 @@ def test_sealed_tar_handoff_qualifies_from_private_unpacked_root(tmp_path: Path)
     result = _write_sealed_handoff(tmp_path).verify()
 
     assert result["bundle_contract"] == SEALED_HANDOFF_CONTRACT
-    assert result["dispositions"]["locationless_open_jobs"] == 22
+    assert result["hold_source_ids"]["locationless_open_jobs"] == tuple(
+        f"job-{i}" for i in range(23)
+    )
+    assert len(result["hold_source_ids"]["legacy_duplicate_risk_appointments"]) + 1 == 14
     assert result["attachment_bodies_required"] is False
+
+
+def test_sealed_tar_handoff_rejects_obsolete_22_locationless_policy(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(SafeEvidenceError) as error:
+        _write_sealed_handoff(tmp_path, locationless_count=22).verify()
+
+    assert error.value.code == "hcp_november_hold_inventory_mismatch"
+
+
+def test_sealed_tar_handoff_rejects_prior_hold_release(tmp_path: Path) -> None:
+    authority = _write_sealed_handoff(tmp_path)
+    policy_path = authority.bundle_root / "policy/final-operational-cutover-disposition.json"  # type: ignore[union-attr]
+    policy = json.loads(policy_path.read_bytes())
+    policy["resolved_original_gate_omissions"][0]["final_disposition"] = "CREATE"
+    policy_bytes = json.dumps(policy, sort_keys=True).encode()
+    policy_path.write_bytes(policy_bytes)
+    manifest_path = authority.bundle_root / "BUNDLE-MANIFEST.json"  # type: ignore[union-attr]
+    manifest = json.loads(manifest_path.read_bytes())
+    for item in manifest["included_files"]:
+        if item["path"] == "policy/final-operational-cutover-disposition.json":
+            item["sha256"] = hashlib.sha256(policy_bytes).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True))
+
+    with pytest.raises(SafeEvidenceError) as error:
+        authority.verify()
+
+    assert error.value.code == "hcp_november_prior_hold_released"
 
 
 def test_sealed_tar_handoff_rejects_unexplained_omissions(tmp_path: Path) -> None:

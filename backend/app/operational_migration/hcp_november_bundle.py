@@ -48,6 +48,13 @@ EXPECTED_DISPOSITIONS = {
     "unassigned_appointments": (1, "HOLD"),
     "strict_open_relationship_failures": (0, "NONE"),
 }
+FINAL_POLICY_HOLD_COUNTS = {
+    "locationless_open_jobs": 23,
+    "legacy_duplicate_risk_appointments": 13,
+    "unresolved_technician_identities": 2,
+    "unassigned_appointments": 1,
+}
+FINAL_POLICY_APPOINTMENT_HOLD_COUNT = 14
 
 
 def qualification_digest(packet: dict[str, Any]) -> str:
@@ -397,6 +404,19 @@ class NovemberQualificationAuthority:
             omissions = policy.get("unexplained_omissions_in_original_gate", [])
             if omissions not in ([], None):
                 _fail("hcp_november_qualification_gap", {"key": "unexplained_omissions", "value": omissions})
+            resolved_omissions = policy.get("resolved_original_gate_omissions")
+            if not isinstance(resolved_omissions, list) or len(resolved_omissions) != 2:
+                _fail("hcp_november_resolved_omissions_invalid", resolved_omissions)
+            for omission in resolved_omissions:
+                row = _require_mapping(omission, "hcp_november_resolved_omission_invalid")
+                _require_text(row, "source_id", "hcp_november_resolved_omission_invalid")
+                if row.get("original_disposition") not in {"HOLD", "HOLD_QUARANTINE"}:
+                    _fail("hcp_november_prior_hold_released", row)
+                if row.get("final_disposition") not in {"HOLD", "HOLD_QUARANTINE"}:
+                    _fail("hcp_november_prior_hold_released", row)
+            prior_policy_digest = policy.get("source_prior_policy_digest")
+            if not isinstance(prior_policy_digest, str) or len(prior_policy_digest) != 64:
+                _fail("hcp_november_prior_policy_digest_missing", prior_policy_digest)
             dispositions = {key: count for key, count in actual_summary.items()}
             held = _require_mapping(policy.get("held_quarantined"), "hcp_november_hold_inventory_missing")
             hold_source_ids = {
@@ -405,10 +425,15 @@ class NovemberQualificationAuthority:
                 "unresolved_technician_identities": tuple(_require_mapping(held.get("technician_conflicts"), "hcp_november_hold_inventory_missing").get("source_ids", [])),
                 "unassigned_appointments": (str(_require_mapping(held.get("unassigned_appointment"), "hcp_november_hold_inventory_missing").get("source_id")),),
             }
-            if {key: len(value) for key, value in hold_source_ids.items()} != {
-                key: value[0] for key, value in EXPECTED_DISPOSITIONS.items() if key != "strict_open_relationship_failures"
-            }:
+            final_hold_counts = {key: len(value) for key, value in hold_source_ids.items()}
+            if final_hold_counts != FINAL_POLICY_HOLD_COUNTS:
                 _fail("hcp_november_hold_inventory_mismatch", hold_source_ids)
+            if (
+                final_hold_counts["legacy_duplicate_risk_appointments"]
+                + final_hold_counts["unassigned_appointments"]
+                != FINAL_POLICY_APPOINTMENT_HOLD_COUNT
+            ):
+                _fail("hcp_november_hold_inventory_mismatch", final_hold_counts)
             return {
                 "contract": AUTHORITY_CONTRACT,
                 "bundle_contract": SEALED_HANDOFF_CONTRACT,
