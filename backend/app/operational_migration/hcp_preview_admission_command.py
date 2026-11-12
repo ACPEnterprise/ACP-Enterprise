@@ -32,6 +32,10 @@ from app.operational_migration.hcp_migration2_runner import (
     HcpMigration2Runner,
     SafeEvidenceError,
 )
+from app.operational_migration.hcp_november_bundle import (
+    AUTHORITY_CONTRACT as NOVEMBER_AUTHORITY_CONTRACT,
+    NovemberQualificationAuthority,
+)
 from app.operational_migration.hcp_successor_reuse import (
     AdmissionGuardEvidence,
     QualifiedSuccessorManifest,
@@ -349,12 +353,81 @@ async def run(
     return {**packet, "result": result}
 
 
+async def run_november_bundle(
+    authority: NovemberQualificationAuthority,
+    *,
+    execute: bool,
+) -> dict[str, object]:
+    """Qualify the metadata-only November handoff without Preview writes."""
+    if execute:
+        raise SafeEvidenceError(
+            "hcp_november_execution_not_supported",
+            hashlib.sha256(authority.bundle_sha256.encode()).hexdigest(),
+        )
+    if (
+        os.getenv("TARGET_ENVIRONMENT") != "preview"
+        or os.getenv("PRODUCTION_ACCESS_ENABLED", "false") != "false"
+        or os.getenv("PREVIEW_ACCESS_ENABLED", "false") != "true"
+    ):
+        raise SafeEvidenceError("preview_runtime_boundary_invalid", "0" * 64)
+    packet = authority.verify()
+    target = PreviewAdmissionTarget(
+        "preview", settings.database_url, "acp_enterprise_preview"
+    )
+    try:
+        packet["target_digest"] = target.validate()
+    except ValueError as error:
+        raise SafeEvidenceError("preview_database_target_invalid", "0" * 64) from error
+    async with AsyncSessionFactory() as session:
+        schemas = tuple(
+            (await session.scalars(text("SELECT version_num FROM alembic_version"))).all()
+        )
+    if schemas != (authority.expected_schema_head,):
+        raise SafeEvidenceError("preview_schema_authority_mismatch", "0" * 64)
+    packet["schema_current"] = authority.expected_schema_head
+    packet["schema_head"] = authority.expected_schema_head
+    packet["mode"] = "qualify"
+    return packet
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("qualify", "execute"))
     parser.add_argument("--authority-file", required=True, type=Path)
     parser.add_argument("--authorize-execution", action="store_true")
     args = parser.parse_args(argv)
+    authority_path = args.authority_file
+    try:
+        authority_contract = json.loads(authority_path.read_bytes()).get("contract")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        authority_contract = None
+    if authority_contract == NOVEMBER_AUTHORITY_CONTRACT:
+        if args.mode == "execute":
+            print(
+                json.dumps(
+                    {
+                        "status": "rejected",
+                        "code": "hcp_november_execution_not_supported",
+                    }
+                )
+            )
+            return 2
+        try:
+            output = asyncio.run(
+                run_november_bundle(
+                    NovemberQualificationAuthority.load(authority_path), execute=False
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            code = (
+                error.code
+                if isinstance(error, SafeEvidenceError)
+                else "hcp_november_qualification_failed"
+            )
+            print(json.dumps({"status": "rejected", "code": code}))
+            return 2
+        print(json.dumps(output, sort_keys=True))
+        return 0
     if args.mode == "execute" and not args.authorize_execution:
         print(
             json.dumps(

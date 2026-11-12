@@ -1,0 +1,371 @@
+"""Fail-closed qualification for the sealed November HCP handoff bundle.
+
+The November handoff intentionally excludes large attachment bodies.  This
+module validates the custody seal and bounded operational disposition contract;
+it never reads HCP, opens attachment bodies, or writes Preview data.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import stat
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Iterable
+from uuid import UUID
+
+from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
+
+
+AUTHORITY_CONTRACT = "hcp-november-preview-qualification/v1"
+BUNDLE_CONTRACT = "hcp-november-operational-handoff/v1"
+EXPECTED_SCHEMA_HEAD = "yp8r0t2v4x6z"
+REQUIRED_FILES = frozenset(
+    {
+        "BUNDLE-MANIFEST.json",
+        "source/operational-acquisition-manifest.json",
+        "source/open-work-artifact-addendum-manifest.json",
+        "source/attachment-custody-manifest.json",
+        "gate/gate-packet.json",
+        "gate/provider-observations.json",
+        "reconciliation/reconciliation-manifest.json",
+        "reconciliation/technician-dispositions.json",
+        "reconciliation/open-work-reconciliation.json",
+        "reconciliation/owner-dispositions.json",
+        "policy/final-operational-cutover-disposition.json",
+        "identity/hcp-migration-2-authority.json",
+        "identity/HCP1A.BRANCH_SCOPE.V1.json",
+    }
+)
+EXPECTED_DISPOSITIONS = {
+    "locationless_open_jobs": (22, "HOLD_QUARANTINE"),
+    "legacy_duplicate_risk_appointments": (13, "HOLD"),
+    "unresolved_technician_identities": (2, "HOLD"),
+    "unassigned_appointments": (1, "HOLD"),
+    "strict_open_relationship_failures": (0, "NONE"),
+}
+
+
+def _digest_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _digest_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _canonical(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _fail(code: str, value: Any = "") -> None:
+    evidence = _digest_bytes(_canonical(value))
+    raise SafeEvidenceError(code, evidence)
+
+
+def _required_uuid(value: Any, code: str) -> str:
+    try:
+        return str(UUID(str(value)))
+    except (TypeError, ValueError):
+        _fail(code, value)
+    raise AssertionError("unreachable")
+
+
+def _require_mapping(value: Any, code: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        _fail(code, value)
+    return value
+
+
+def _require_text(mapping: dict[str, Any], key: str, code: str) -> str:
+    value = mapping.get(key)
+    if not isinstance(value, str) or not value:
+        _fail(code, {"key": key, "value": value})
+    return value
+
+
+def _json_bytes(value: bytes, name: str) -> Any:
+    try:
+        return json.loads(value)
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError) as error:
+        _fail("hcp_november_json_invalid", name)
+        raise AssertionError("unreachable") from error
+
+
+def _read_digest_map(value: Any) -> dict[str, str]:
+    if isinstance(value, dict):
+        result: dict[str, str] = {}
+        for key, digest in value.items():
+            if not isinstance(key, str) or not isinstance(digest, str):
+                _fail("hcp_november_file_digest_invalid", value)
+            result[key] = digest
+        return result
+    if isinstance(value, list):
+        result = {}
+        for item in value:
+            row = _require_mapping(item, "hcp_november_file_digest_invalid")
+            name = _require_text(row, "path", "hcp_november_file_digest_invalid")
+            digest = _require_text(row, "sha256", "hcp_november_file_digest_invalid")
+            result[name] = digest
+        return result
+    _fail("hcp_november_file_digest_invalid", value)
+    raise AssertionError("unreachable")
+
+
+def _action_counts(records: Iterable[dict[str, Any]]) -> dict[str, int]:
+    counts = {"create": 0, "update": 0, "replay": 0, "hold": 0}
+    for record in records:
+        disposition = str(record.get("disposition", "")).upper()
+        action = str(record.get("action", "")).lower()
+        if disposition in {"HOLD", "HOLD_QUARANTINE"} or action == "hold":
+            counts["hold"] += 1
+        elif action in counts:
+            counts[action] += 1
+        elif disposition in {"CREATE", "ADMIT_CREATE"}:
+            counts["create"] += 1
+        elif disposition in {"UPDATE", "ADMIT_UPDATE"}:
+            counts["update"] += 1
+        elif disposition in {"REPLAY", "ADMIT_REPLAY"}:
+            counts["replay"] += 1
+        else:
+            _fail("hcp_november_record_action_unknown", record)
+    return counts
+
+
+@dataclass(frozen=True)
+class NovemberQualificationAuthority:
+    bundle_path: Path
+    bundle_sha256: str
+    expected_repository_sha: str
+    expected_schema_head: str
+    expected_company_id: str
+    expected_branch_id: str
+    expected_actor_id: str
+    expected_hcp_provider_company_id: str
+    expected_environment: str
+    expected_acquisition_digest: str
+    expected_reconciliation_digest: str
+    expected_attachment_custody_digest: str
+
+    @classmethod
+    def load(cls, path: Path) -> NovemberQualificationAuthority:
+        try:
+            if not path.is_file() or path.is_symlink():
+                _fail("hcp_november_authority_missing", str(path))
+            if stat.S_IMODE(path.stat().st_mode) & 0o077:
+                _fail("hcp_november_authority_permissions", str(path))
+            value = _require_mapping(
+                json.loads(path.read_bytes()), "hcp_november_authority_invalid"
+            )
+            if value.get("contract") != AUTHORITY_CONTRACT:
+                _fail("hcp_november_authority_contract", value.get("contract"))
+            fields = {
+                key: _require_text(value, key, "hcp_november_authority_field_missing")
+                for key in (
+                    "bundle_sha256",
+                    "expected_repository_sha",
+                    "expected_schema_head",
+                    "expected_company_id",
+                    "expected_branch_id",
+                    "expected_actor_id",
+                    "expected_hcp_provider_company_id",
+                    "expected_environment",
+                    "expected_acquisition_digest",
+                    "expected_reconciliation_digest",
+                    "expected_attachment_custody_digest",
+                )
+            }
+            return cls(
+                bundle_path=Path(
+                    _require_text(
+                        value, "bundle_path", "hcp_november_authority_field_missing"
+                    )
+                ),
+                **fields,
+            )
+        except SafeEvidenceError:
+            raise
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
+            _fail("hcp_november_authority_invalid", str(error))
+        raise AssertionError("unreachable")
+
+    def _verify_expected_values(self, manifest: dict[str, Any]) -> None:
+        if manifest.get("contract") != BUNDLE_CONTRACT:
+            _fail("hcp_november_bundle_contract", manifest.get("contract"))
+        if manifest.get("environment") != self.expected_environment:
+            _fail("hcp_november_environment_mismatch", manifest.get("environment"))
+        if manifest.get("bundle_sha256") not in (None, self.bundle_sha256):
+            _fail("hcp_november_bundle_digest_declaration", manifest.get("bundle_sha256"))
+
+        scope = _require_mapping(manifest.get("scope"), "hcp_november_scope_missing")
+        expected_scope = {
+            "acp_company_id": self.expected_company_id,
+            "acp_branch_id": self.expected_branch_id,
+            "authorized_actor_id": self.expected_actor_id,
+            "hcp_provider_company_id": self.expected_hcp_provider_company_id,
+        }
+        for key, expected in expected_scope.items():
+            actual = _required_uuid(scope.get(key), "hcp_november_scope_invalid")
+            if actual != _required_uuid(expected, "hcp_november_authority_scope_invalid"):
+                _fail("hcp_november_scope_mismatch", {"key": key, "actual": actual})
+
+        authority = _require_mapping(
+            manifest.get("authority"), "hcp_november_authority_metadata_missing"
+        )
+        if _require_text(
+            authority, "repository_sha", "hcp_november_authority_metadata_missing"
+        ) != self.expected_repository_sha:
+            _fail("hcp_november_repository_mismatch", authority)
+        if _require_text(
+            authority, "schema_head", "hcp_november_authority_metadata_missing"
+        ) != self.expected_schema_head:
+            _fail("hcp_november_schema_mismatch", authority)
+
+        digests = _require_mapping(
+            manifest.get("digests"), "hcp_november_digest_metadata_missing"
+        )
+        expected_digests = {
+            "acquisition_digest": self.expected_acquisition_digest,
+            "reconciliation_digest": self.expected_reconciliation_digest,
+            "attachment_custody_digest": self.expected_attachment_custody_digest,
+        }
+        for key, expected in expected_digests.items():
+            if _require_text(digests, key, "hcp_november_digest_metadata_missing") != expected:
+                _fail("hcp_november_digest_mismatch", {"key": key})
+
+    def verify(self) -> dict[str, Any]:
+        if self.expected_environment != "preview":
+            _fail("hcp_november_target_environment_invalid", self.expected_environment)
+        if len(self.expected_repository_sha) != 40 or any(
+            character not in "0123456789abcdef" for character in self.expected_repository_sha
+        ):
+            _fail("hcp_november_repository_sha_invalid", self.expected_repository_sha)
+        if self.expected_schema_head != EXPECTED_SCHEMA_HEAD:
+            _fail("hcp_november_schema_head_invalid", self.expected_schema_head)
+        for value in (
+            self.bundle_sha256,
+            self.expected_acquisition_digest,
+            self.expected_reconciliation_digest,
+            self.expected_attachment_custody_digest,
+        ):
+            if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+                _fail("hcp_november_digest_invalid", value)
+
+        bundle = self.bundle_path
+        if not bundle.is_file() or bundle.is_symlink():
+            _fail("hcp_november_bundle_missing", str(bundle))
+        if stat.S_IMODE(bundle.stat().st_mode) & 0o077:
+            _fail("hcp_november_bundle_permissions", str(bundle))
+        if _digest_file(bundle) != self.bundle_sha256:
+            _fail("hcp_november_bundle_sha256_mismatch", str(bundle))
+
+        try:
+            with zipfile.ZipFile(bundle) as archive:
+                names = set(archive.namelist())
+                if names != REQUIRED_FILES:
+                    _fail(
+                        "hcp_november_bundle_contents_mismatch",
+                        {"missing": sorted(REQUIRED_FILES - names), "extra": sorted(names - REQUIRED_FILES)},
+                    )
+                payloads = {name: archive.read(name) for name in REQUIRED_FILES}
+        except (OSError, zipfile.BadZipFile, KeyError) as error:
+            _fail("hcp_november_bundle_unreadable", str(error))
+
+        manifest = _require_mapping(
+            _json_bytes(payloads["BUNDLE-MANIFEST.json"], "BUNDLE-MANIFEST.json"),
+            "hcp_november_bundle_manifest_invalid",
+        )
+        self._verify_expected_values(manifest)
+
+        file_digests = _read_digest_map(
+            manifest.get("file_sha256"),
+        )
+        for name in REQUIRED_FILES - {"BUNDLE-MANIFEST.json"}:
+            if file_digests.get(name) != _digest_bytes(payloads[name]):
+                _fail("hcp_november_file_digest_mismatch", name)
+
+        attachments = _require_mapping(
+            manifest.get("attachments"), "hcp_november_attachment_metadata_missing"
+        )
+        if attachments.get("bodies_included") is not False:
+            _fail("hcp_november_attachment_bodies_present", attachments)
+        if attachments.get("custody_digest") != self.expected_attachment_custody_digest:
+            _fail("hcp_november_attachment_custody_mismatch", attachments)
+
+        dispositions = _require_mapping(
+            manifest.get("dispositions"), "hcp_november_dispositions_missing"
+        )
+        normalized_counts: dict[str, int] = {}
+        for key, (expected_count, expected_disposition) in EXPECTED_DISPOSITIONS.items():
+            row = _require_mapping(dispositions.get(key), "hcp_november_disposition_invalid")
+            count = row.get("count")
+            if not isinstance(count, int) or count != expected_count:
+                _fail("hcp_november_disposition_count_mismatch", {"key": key, "count": count})
+            if row.get("disposition") != expected_disposition:
+                _fail("hcp_november_disposition_mismatch", {"key": key, "disposition": row.get("disposition")})
+            normalized_counts[key] = count
+
+        quality = _require_mapping(
+            manifest.get("qualification"), "hcp_november_qualification_metadata_missing"
+        )
+        if quality.get("held_identities_excluded") is not True:
+            _fail("hcp_november_held_identity_guard_missing", quality)
+        if quality.get("clean_records_not_blocked") is not True:
+            _fail("hcp_november_clean_record_guard_missing", quality)
+        for key in ("unexplained_omissions", "missing_lineage", "ambiguous_lineage"):
+            if quality.get(key) not in (0, []):
+                _fail("hcp_november_qualification_gap", {"key": key, "value": quality.get(key)})
+
+        assertions = manifest.get("record_assertions")
+        if not isinstance(assertions, list) or not assertions:
+            _fail("hcp_november_record_assertions_missing", "record_assertions")
+        records: list[dict[str, Any]] = []
+        for item in assertions:
+            record = _require_mapping(item, "hcp_november_record_assertion_invalid")
+            _require_text(record, "source_id", "hcp_november_record_identity_missing")
+            _require_text(record, "domain", "hcp_november_record_identity_missing")
+            if record.get("lineage") != "EXACT":
+                _fail("hcp_november_record_lineage_invalid", record)
+            disposition = record.get("disposition")
+            if disposition not in {"HOLD", "HOLD_QUARANTINE", "CREATE", "UPDATE", "REPLAY"}:
+                _fail("hcp_november_record_disposition_invalid", record)
+            if disposition in {"HOLD", "HOLD_QUARANTINE"} and record.get("admission_allowed") is not False:
+                _fail("hcp_november_held_identity_admittable", record)
+            if disposition not in {"HOLD", "HOLD_QUARANTINE"} and record.get("admission_allowed") is not True:
+                _fail("hcp_november_clean_record_blocked", record)
+            records.append(record)
+
+        counts = _action_counts(records)
+        expected_hold_count = sum(
+            count for key, (count, _) in EXPECTED_DISPOSITIONS.items() if key != "strict_open_relationship_failures"
+        )
+        if counts["hold"] < expected_hold_count:
+            _fail("hcp_november_hold_records_incomplete", counts)
+        return {
+            "contract": AUTHORITY_CONTRACT,
+            "bundle_contract": BUNDLE_CONTRACT,
+            "bundle_sha256": self.bundle_sha256,
+            "acquisition_digest": self.expected_acquisition_digest,
+            "reconciliation_digest": self.expected_reconciliation_digest,
+            "attachment_custody_digest": self.expected_attachment_custody_digest,
+            "company_id": self.expected_company_id,
+            "branch_id": self.expected_branch_id,
+            "actor_id": self.expected_actor_id,
+            "hcp_provider_company_id": self.expected_hcp_provider_company_id,
+            "repository_sha": self.expected_repository_sha,
+            "schema_head": self.expected_schema_head,
+            "environment": self.expected_environment,
+            "attachment_bodies_required": False,
+            "dispositions": normalized_counts,
+            "counts": counts,
+            "unexplained_omissions": 0,
+            "missing_lineage": 0,
+            "ambiguous_lineage": 0,
+            "qualification": "PASS",
+        }

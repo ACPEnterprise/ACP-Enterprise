@@ -125,3 +125,67 @@ deployer reads the prior target recorded by the active release metadata.
 Never delete a release, use `docker compose down -v`, invoke a migration, point
 the tool at `docker-compose.production.yml`, or set
 `QBO_PRODUCTION_ENABLED=true`.
+
+## November HCP handoff qualification
+
+The metadata-only November OM1C handoff is qualified through the dedicated
+authority contract `hcp-november-preview-qualification/v1`. It is not the
+older SOURCE.4 authority format and it does not require the excluded attachment
+bodies. The bundle is custody evidence only; this command performs no HCP call
+and no Preview write.
+
+The exact private transfer destination on the clean Beta host is:
+
+```text
+/opt/acp-enterprise/shared/hcp-admission/
+```
+
+The directory is root-owned mode `0700`. Transfer exactly these two mode-0600
+files into it:
+
+```text
+/opt/acp-enterprise/shared/hcp-admission/november-operational-handoff.zip
+/opt/acp-enterprise/shared/hcp-admission/preview-admission-authority.json
+```
+
+Inside the transient qualification container, the authority must refer to the
+bundle as `/run/hcp-admission/november-operational-handoff.zip`. The authority
+must bind the exact bundle SHA, acquisition/reconciliation/attachment-custody
+digests, Company/Branch/actor/HCP Company IDs, Master SHA, and
+`yp8r0t2v4x6z`. Its disposition contract must state 22
+`HOLD_QUARANTINE` location-less Jobs, 13 duplicate-risk Appointment `HOLD`s,
+2 unresolved-technician `HOLD`s, 1 unassigned Appointment `HOLD`, and zero
+strict-open relationship failures.
+
+Example owner transfer destination:
+
+```bash
+scp -i ~/.ssh/acp_beta_clean_ed25519 \
+  november-operational-handoff.zip preview-admission-authority.json \
+  root@162.243.232.59:/opt/acp-enterprise/shared/hcp-admission/
+```
+
+Run qualification only after verifying the private files and their modes:
+
+```bash
+docker compose \
+  --project-name acp-enterprise-preview \
+  --env-file /opt/acp-enterprise/current/.env.preview \
+  -f /opt/acp-enterprise/current/docker-compose.preview.yml \
+  run --rm --no-deps \
+  -e TARGET_ENVIRONMENT=preview \
+  -e PRODUCTION_ACCESS_ENABLED=false \
+  -e PREVIEW_ACCESS_ENABLED=true \
+  -v /opt/acp-enterprise/shared/hcp-admission:/run/hcp-admission:ro \
+  backend \
+  python -m app.operational_migration.hcp_preview_admission_command qualify \
+  --authority-file /run/hcp-admission/preview-admission-authority.json
+```
+
+Qualification fails closed on bundle SHA/file-digest mismatch, scope or
+authority mismatch, missing/ambiguous lineage, an admissible held identity,
+blocked clean records, unexplained omissions, or missing attachment custody.
+Attachment bodies are not required when the custody manifest and digest pass.
+There is no execute mode for this metadata-only authority; a bounded Preview
+admission requires a separately authored execution authority after this
+qualification passes.
