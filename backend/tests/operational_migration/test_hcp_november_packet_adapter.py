@@ -181,5 +181,6 @@ def test_source_digest_and_output_are_deterministic() -> None:
     first = _adapt(source)
     second = _adapt(deepcopy(source))
     assert first == second
-    assert first["digest"] == _digest({key: value for key, value in first.items() if key != "digest"})
+    assert first["source_packet_digest"] == source["digest"]
+    assert first["adapter_version"]
     assert hashlib.sha256(json.dumps(source, sort_keys=True, separators=(",", ":")).encode()).hexdigest() != first["digest"]

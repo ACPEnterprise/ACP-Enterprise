@@ -264,6 +264,9 @@ def adapt_source_packet(
         "acquired_at": acquired_at,
     }
     payload["digest"] = _digest(payload)
+    payload["adapter_version"] = ADAPTER_VERSION
+    payload["source_packet_sha256"] = source_packet_sha256
+    payload["source_packet_digest"] = expected_source_packet_digest
     return payload
 
 
