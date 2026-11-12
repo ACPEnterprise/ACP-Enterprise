@@ -41,6 +41,7 @@ SCHEMA = "yp8r0t2v4x6z"
 COMPANY = "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd"
 BRANCH = "887f413a-70dc-4ab1-98aa-8e84f4e7efd0"
 ACTOR = "c427ebd1-7583-4c0d-9c54-55a0c1214174"
+PROVIDER = "aba4de03-d1b7-4c4e-8fb6-32a3fca713f5"
 ACQUIRED = "2026-11-11T12:00:00+00:00"
 
 
@@ -108,7 +109,13 @@ def _hold_records() -> tuple[list[dict], dict[str, tuple[str, ...]]]:
         for source_id in ids:
             records.append(
                 {
-                    "domain": "job" if category == "locationless_open_jobs" else "appointment",
+                "domain": (
+                    "job"
+                    if category == "locationless_open_jobs"
+                    else "technician_reference"
+                    if category == "unresolved_technician_identities"
+                    else "appointment"
+                ),
                     "source_id": source_id,
                     "assertion": "hold",
                     "source_digest": BUNDLE,
@@ -162,6 +169,7 @@ def _packet(*, include_clean: bool = True) -> tuple[NovemberExecutionPacket, dic
         "company_id": COMPANY,
         "branch_id": BRANCH,
         "actor_id": ACTOR,
+        "provider_company_id": PROVIDER,
         "repository_sha": SHA,
         "schema_head": SCHEMA,
         "environment": "preview",
@@ -182,6 +190,7 @@ def _packet(*, include_clean: bool = True) -> tuple[NovemberExecutionPacket, dic
         company_id=COMPANY,
         branch_id=BRANCH,
         actor_id=ACTOR,
+        provider_company_id=PROVIDER,
         repository_sha=SHA,
         schema_head=SCHEMA,
         environment="preview",
@@ -197,7 +206,7 @@ def _packet(*, include_clean: bool = True) -> tuple[NovemberExecutionPacket, dic
         expected_company_id=COMPANY,
         expected_branch_id=BRANCH,
         expected_actor_id=ACTOR,
-        expected_hcp_provider_company_id="f" * 36,
+        expected_hcp_provider_company_id=PROVIDER,
         expected_environment="preview",
         expected_acquisition_digest="1" * 64,
         expected_reconciliation_digest=RECONCILIATION,
@@ -232,7 +241,7 @@ def _full_november_packet() -> NovemberExecutionPacket:
         if index < 14:
             domain = "appointment"
         elif index < 16:
-            domain = "technician_identity"
+            domain = "technician_reference"
         elif index == 16:
             domain = "appointment"
         else:
@@ -271,6 +280,7 @@ def _full_november_packet() -> NovemberExecutionPacket:
         "company_id": COMPANY,
         "branch_id": BRANCH,
         "actor_id": ACTOR,
+        "provider_company_id": PROVIDER,
         "repository_sha": SHA,
         "schema_head": SCHEMA,
         "environment": "preview",
@@ -285,6 +295,7 @@ def _full_november_packet() -> NovemberExecutionPacket:
         company_id=COMPANY,
         branch_id=BRANCH,
         actor_id=ACTOR,
+        provider_company_id=PROVIDER,
         repository_sha=SHA,
         schema_head=SCHEMA,
         environment="preview",
@@ -323,6 +334,7 @@ def _write_envelope(tmp_path: Path, packet: NovemberExecutionPacket, authority: 
         "company_id": packet.company_id,
         "branch_id": packet.branch_id,
         "actor_id": packet.actor_id,
+        "provider_company_id": packet.provider_company_id,
         "repository_sha": packet.repository_sha,
         "schema_head": packet.schema_head,
         "environment": packet.environment,
@@ -343,6 +355,7 @@ def _write_envelope(tmp_path: Path, packet: NovemberExecutionPacket, authority: 
         company_id=COMPANY,
         branch_id=BRANCH,
         actor_id=ACTOR,
+        provider_company_id=PROVIDER,
         repository_sha=SHA,
         schema_head=SCHEMA,
         environment="preview",
@@ -482,7 +495,7 @@ def test_full_november_inventory_and_envelope_preserve_source_packet(
         "note",
         "attachment",
         "history",
-        "technician_identity",
+        "technician_reference",
     }
     _, _, authority = _packet()
     envelope_path, envelope_authority = _write_envelope(tmp_path, packet, authority)

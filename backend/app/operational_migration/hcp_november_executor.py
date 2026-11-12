@@ -40,7 +40,13 @@ ENVELOPE_CONTRACT = "hcp-november-preview-execution-envelope/v1"
 EXECUTOR_CONTRACT = "hcp-november-preview-executor/v1"
 HOLD_DISPOSITIONS = frozenset({"HOLD", "HOLD_QUARANTINE"})
 WRITE_DISPOSITIONS = frozenset({"CREATE", "UPDATE", "REPLAY"})
-EXECUTABLE_DOMAINS = frozenset({"customer", "service_location", "job", "appointment"})
+# The November packet contains executable assertions for these domains.  The
+# native service layer remains responsible for refusing any domain it cannot
+# safely apply; the packet contract must nevertheless account for every
+# qualified executable assertion before execution begins.
+EXECUTABLE_DOMAINS = frozenset(
+    {"customer", "service_location", "job", "appointment", "estimate", "invoice", "employee"}
+)
 PACKET_DISPOSITIONS = WRITE_DISPOSITIONS | HOLD_DISPOSITIONS
 FINAL_OPERATIONAL_HOLD_POLICY = {
     "locationless_open_jobs": 23,
@@ -122,6 +128,7 @@ class NovemberExecutionPacket:
     company_id: str
     branch_id: str
     actor_id: str
+    provider_company_id: str
     repository_sha: str
     schema_head: str
     environment: str
@@ -193,6 +200,7 @@ class NovemberExecutionPacket:
                 company_id=str(value["company_id"]),
                 branch_id=str(value["branch_id"]),
                 actor_id=str(value["actor_id"]),
+                provider_company_id=str(value["provider_company_id"]),
                 # The source packet is reusable without being regenerated for a
                 # repository change.  repository_sha, when present in a legacy
                 # packet, is informational; the execution envelope is authoritative.
@@ -236,6 +244,7 @@ class NovemberExecutionPacket:
             "company_id": self.company_id,
             "branch_id": self.branch_id,
             "actor_id": self.actor_id,
+            "provider_company_id": self.provider_company_id,
             "schema_head": self.schema_head,
             "environment": self.environment,
             "records": list(self.records),
@@ -318,6 +327,7 @@ class NovemberExecutionEnvelope:
     company_id: str
     branch_id: str
     actor_id: str
+    provider_company_id: str
     repository_sha: str
     schema_head: str
     environment: str
@@ -364,6 +374,7 @@ class NovemberExecutionEnvelope:
                 company_id=str(value["company_id"]),
                 branch_id=str(value["branch_id"]),
                 actor_id=str(value["actor_id"]),
+                provider_company_id=str(value["provider_company_id"]),
                 repository_sha=str(value["repository_sha"]),
                 schema_head=str(value["schema_head"]),
                 environment=str(value["environment"]),
@@ -401,6 +412,7 @@ class NovemberExecutionEnvelope:
             "company_id": self.company_id,
             "branch_id": self.branch_id,
             "actor_id": self.actor_id,
+            "provider_company_id": self.provider_company_id,
             "repository_sha": self.repository_sha,
             "schema_head": self.schema_head,
             "environment": self.environment,
@@ -447,7 +459,7 @@ class NovemberExecutionEnvelope:
         expected_domains = {
             "locationless_open_jobs": ("job", "HOLD_QUARANTINE"),
             "duplicate_risk_appointments": ("appointment", "HOLD"),
-            "unresolved_technician_identities": ("technician_identity", "HOLD"),
+            "unresolved_technician_identities": ("technician_reference", "HOLD"),
             "unassigned_appointments": ("appointment", "HOLD"),
         }
         if set(self.operational_hold_source_ids) != set(expected_domains):
@@ -472,6 +484,7 @@ class NovemberExecutionEnvelope:
             "company_id": authority.expected_company_id,
             "branch_id": authority.expected_branch_id,
             "actor_id": authority.expected_actor_id,
+            "provider_company_id": authority.expected_hcp_provider_company_id,
             "repository_sha": authority.expected_repository_sha,
             "schema_head": authority.expected_schema_head,
             "environment": authority.expected_environment,
@@ -483,6 +496,7 @@ class NovemberExecutionEnvelope:
             "company_id": self.company_id,
             "branch_id": self.branch_id,
             "actor_id": self.actor_id,
+            "provider_company_id": self.provider_company_id,
             "repository_sha": self.repository_sha,
             "schema_head": self.schema_head,
             "environment": self.environment,
