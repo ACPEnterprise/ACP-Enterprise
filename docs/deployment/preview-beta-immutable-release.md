@@ -156,9 +156,12 @@ authority refers to the archive as
 root as `/run/hcp-admission/qualified-bundle`. It must bind the exact bundle
 SHA, acquisition/reconciliation/attachment-custody digests, Company/Branch/
 actor/HCP Company IDs, Master SHA, and `yp8r0t2v4x6z`. The qualifier derives
-and checks the 22 location-less Job holds, 13 duplicate-risk Appointment
-holds, 2 unresolved-technician holds, 1 unassigned Appointment hold, and zero
-strict-open relationship failures from the sealed reconciliation. Any
+and checks the source reconciliation disposition (the earlier source package
+records 22 location-less Job holds, 13 duplicate-risk Appointment holds, 2
+unresolved-technician holds, and 1 unassigned Appointment hold) with zero
+strict-open relationship failures. The later execution envelope is the
+authority for the qualified November packet's final 23/14/2/1 operational hold
+policy. Any
 unexplained omission, unsafe hold contamination, missing lineage, or digest
 mismatch rejects qualification.
 
@@ -199,29 +202,64 @@ described below.
 ## November bounded Preview execution
 
 The November qualification bundle is metadata-only and is not itself an
-executable record packet. Execution requires a separate private,
-mode-0600 `hcp-november-preview-execution-packet/v1` containing the admissible
-Customer, Location, Job, and Appointment assertions. It must include every
-qualified hold as a non-mutating assertion and bind all of the following to the
-PASS qualification: bundle SHA, policy digest, source reconciliation digest,
-Company/Branch/actor IDs, Master SHA, schema head, and `preview`.
+executable record packet. Execution requires two private, mode-0600 files: the
+immutable `hcp-november-preview-execution-packet/v1` source packet and an
+`hcp-november-preview-execution-envelope/v1` authority envelope. The source
+packet is never rewritten for a repository change: its byte SHA and canonical
+source-data digest remain reusable. The envelope binds the source packet,
+bundle/policy/reconciliation digests, Company/Branch/actor, Master SHA, schema
+head, target, full disposition counts, and execution-only authority digest.
+Held historical, financial, note, attachment, technician, and other provider
+identities remain first-class non-executable records; only the four currently
+implemented native write domains (`customer`, `service_location`, `job`, and
+`appointment`) may carry CREATE, UPDATE, or REPLAY dispositions.
 
 The authority must additionally contain:
 
 ```text
 qualification_status=PASS
 qualification_digest=<digest printed by qualify>
-execution_packet_path=/run/hcp-admission/november-execution-packet.json
-execution_packet_sha256=<private packet file SHA-256>
-execution_packet_digest=<packet semantic digest>
+execution_packet_path=/run/hcp-admission/november-execution-envelope.json
+execution_packet_sha256=<execution envelope file SHA-256>
+execution_packet_digest=<execution authority digest>
 rollback_backup_digest=<qualified Beta backup SHA-256>
 ```
 
-The packet is rejected unless its hold inventory exactly matches 22
-`HOLD_QUARANTINE` Jobs, 13 duplicate-risk Appointment `HOLD`s, 2 unresolved
-technician `HOLD`s, and 1 unassigned Appointment `HOLD`. Financial domains,
-held-record writes, release assertions, and missing parent lineage are
-unsupported.
+The envelope is rejected unless every source record is accounted for,
+CREATE+UPDATE+REPLAY equals the executable count, HOLD+HOLD_QUARANTINE equals
+the held count, unexplained omissions/lineage gaps/ambiguous lineage are zero,
+and executable records have zero held-parent edges. The final operational hold
+policy is 23 location-less Jobs as `HOLD_QUARANTINE`, 14 duplicate-risk
+Appointments as `HOLD`, 2 unresolved technician identities as `HOLD`, and 1
+unassigned Appointment as `HOLD`; all other held records remain exactly as
+classified. The envelope carries the exact source IDs for each of those four
+operational hold categories and verifies their domain/disposition. Held
+records cannot be created, updated, rebound, replayed as active, or released.
+
+The exact read-only final preflight is:
+
+```bash
+docker compose \
+  --project-name acp-enterprise-preview \
+  --env-file /opt/acp-enterprise/current/.env.preview \
+  -f /opt/acp-enterprise/current/docker-compose.preview.yml \
+  run --rm --no-deps --user 0:0 \
+  -e TARGET_ENVIRONMENT=preview \
+  -e PRODUCTION_ACCESS_ENABLED=false \
+  -e PREVIEW_ACCESS_ENABLED=true \
+  -e HCP_PROVIDER_WRITE_ENABLED=false \
+  -e HCP_LIVE_ACCESS_ENABLED=false \
+  -e QBO_PRODUCTION_ENABLED=false \
+  -e PAYROLL_EXECUTION_ENABLED=false \
+  -v /opt/acp-enterprise/shared/hcp-admission:/run/hcp-admission:ro \
+  backend \
+  python -m app.operational_migration.hcp_preview_admission_command qualify \
+  --authority-file /run/hcp-admission/preview-admission-authority.json
+```
+
+This preflight validates the envelope and source packet without executing any
+native mutation. Financial domains, held-record writes, release assertions,
+and missing parent lineage remain rejected.
 
 After the separate execution packet and authority are sealed, the exact
 bounded command is:

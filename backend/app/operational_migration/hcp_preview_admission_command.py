@@ -37,7 +37,11 @@ from app.operational_migration.hcp_november_bundle import (
     NovemberQualificationAuthority,
     qualification_digest,
 )
-from app.operational_migration.hcp_november_executor import run_november_execution
+from app.operational_migration.hcp_november_executor import (
+    NovemberExecutionEnvelope,
+    run_november_execution,
+    validate_runtime_boundary,
+)
 from app.operational_migration.hcp_successor_reuse import (
     AdmissionGuardEvidence,
     QualifiedSuccessorManifest,
@@ -363,12 +367,20 @@ async def run_november_bundle(
     """Qualify or execute the bounded November Preview handoff."""
     if execute:
         return await run_november_execution(authority, factory=AsyncSessionFactory)
-    if (
-        os.getenv("TARGET_ENVIRONMENT") != "preview"
-        or os.getenv("PRODUCTION_ACCESS_ENABLED", "false") != "false"
-        or os.getenv("PREVIEW_ACCESS_ENABLED", "false") != "true"
-    ):
-        raise SafeEvidenceError("preview_runtime_boundary_invalid", "0" * 64)
+    validate_runtime_boundary(
+        os.getenv("TARGET_ENVIRONMENT", ""),
+        os.getenv("PRODUCTION_ACCESS_ENABLED", "false").lower() == "true",
+        os.getenv("PREVIEW_ACCESS_ENABLED", "false").lower() == "true",
+        {
+            name: os.getenv(name, "false")
+            for name in (
+                "HCP_PROVIDER_WRITE_ENABLED",
+                "HCP_LIVE_ACCESS_ENABLED",
+                "QBO_PRODUCTION_ENABLED",
+                "PAYROLL_EXECUTION_ENABLED",
+            )
+        },
+    )
     packet = authority.verify()
     packet["qualification_status"] = "PASS"
     packet["qualification_digest"] = qualification_digest(authority.verify())
@@ -387,6 +399,31 @@ async def run_november_bundle(
         raise SafeEvidenceError("preview_schema_authority_mismatch", "0" * 64)
     packet["schema_current"] = authority.expected_schema_head
     packet["schema_head"] = authority.expected_schema_head
+    if (
+        authority.execution_packet_path is not None
+        and authority.execution_packet_sha256
+        and authority.execution_packet_digest
+    ):
+        if _sha256(authority.execution_packet_path) != authority.execution_packet_sha256:
+            raise SafeEvidenceError("hcp_november_execution_packet_sha256_mismatch", "0" * 64)
+        envelope = NovemberExecutionEnvelope.load(authority.execution_packet_path)
+        envelope.verify_against(authority)
+        envelope.packet.verify_against(authority, None)
+        packet["execution_envelope"] = {
+            "contract": "hcp-november-preview-execution-envelope/v1",
+            "authority_digest": envelope.authority_digest,
+            "source_packet_sha256": envelope.source_packet_sha256,
+            "source_packet_digest": envelope.source_packet_digest,
+            "packet_counts": envelope.packet_counts,
+            "total_held": envelope.total_held,
+            "executable_count": envelope.executable_count,
+            "unexplained_omissions": envelope.unexplained_omissions,
+            "lineage_gaps": envelope.lineage_gaps,
+            "ambiguous_lineage": envelope.ambiguous_lineage,
+            "held_parent_executable_edges": envelope.held_parent_executable_edges,
+            "operational_hold_policy": envelope.operational_hold_policy,
+            "operational_hold_source_ids": envelope.operational_hold_source_ids,
+        }
     packet["mode"] = "qualify"
     return packet
 

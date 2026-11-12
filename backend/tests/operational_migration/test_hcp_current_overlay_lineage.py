@@ -115,6 +115,33 @@ def _manifest(company: Company, branch: Branch) -> CurrentOverlayManifest:
     )
 
 
+def _broad_manifest(company: Company, branch: Branch) -> CurrentOverlayManifest:
+    records = (
+        OverlayRecord("customer", "cus_broad", OverlayAssertion.CREATE, "a" * 64, "2026-09-12T17:00:00+00:00", {}),
+        OverlayRecord(
+            "service_location", "loc_broad", OverlayAssertion.CREATE, "b" * 64, "2026-09-12T17:00:00+00:00", {},
+            parent_keys=(OverlayKey("customer", "cus_broad"),),
+        ),
+        OverlayRecord(
+            "job", "job_broad", OverlayAssertion.CREATE, "c" * 64, "2026-09-12T17:00:00+00:00", {},
+            parent_keys=(OverlayKey("service_location", "loc_broad"),),
+        ),
+        OverlayRecord(
+            "appointment", "appt_broad", OverlayAssertion.CREATE, "d" * 64, "2026-09-12T17:00:00+00:00", {},
+            parent_keys=(OverlayKey("job", "job_broad"),),
+        ),
+        OverlayRecord("attachment", "attachment_held", OverlayAssertion.HOLD, "e" * 64, "2026-09-12T17:00:00+00:00", {}),
+    )
+    return CurrentOverlayManifest.build(
+        base_source4_digest=DIGEST,
+        delta_digest="c" * 64,
+        company_id=str(company.id),
+        branch_id=str(branch.id),
+        acquired_at="2026-09-12T17:00:00+00:00",
+        records=records,
+    )
+
+
 def _bootstrap(
     company: Company,
     branch: Branch,
@@ -208,6 +235,15 @@ class _Services:
         self, session: AsyncSession, record: OverlayRecord
     ) -> None:
         return None
+
+
+class _FailingServices(_Services):
+    async def create(
+        self, session: AsyncSession, record: OverlayRecord
+    ) -> OverlaySourceState:
+        if record.domain == "appointment":
+            raise RuntimeError("synthetic native failure")
+        return await super().create(session, record)
 
 
 @pytest.mark.asyncio
@@ -315,3 +351,66 @@ async def test_repository_persists_receipt_and_exact_replay(
             rollback_backup_digest="3" * 64,
         )
     assert second == receipt
+
+
+@pytest.mark.asyncio
+async def test_db_executor_orders_all_write_domains_and_keeps_unknown_hold_untouched(
+    lineage_database: async_sessionmaker[AsyncSession],
+) -> None:
+    company, branch, user = await _scope(lineage_database)
+    manifest = _broad_manifest(company, branch)
+    bootstrap = _bootstrap(company, branch, user, manifest)
+    async with lineage_database() as session:
+        receipt = await CurrentOverlayExecutor().execute(
+            SqlAlchemyCurrentOverlayRepository(
+                session,
+                master_run_id=bootstrap.binding.master_run_id,
+                services=_Services(),
+                lineage_bootstrap=bootstrap,
+            ),
+            manifest=manifest,
+            expected_base_source4_digest=DIGEST,
+            rollback_backup_digest="3" * 64,
+            executable_domains=frozenset({"customer", "service_location", "job", "appointment"}),
+        )
+    assert [
+        entry.key.domain
+        for entry in receipt.journal
+        if entry.key.domain != "attachment"
+    ] == ["customer", "service_location", "job", "appointment"]
+    assert receipt.journal[0].key.domain == "attachment"
+    assert receipt.counts == {"created": 4, "held": 1}
+    assert next(
+        entry for entry in receipt.journal if entry.key.domain == "attachment"
+    ).native_id is None
+    async with lineage_database() as session:
+        master = await session.get(HcpMigrationMasterRun, bootstrap.binding.master_run_id)
+        assert master is not None
+        assert master.supported_entities == [
+            "appointment", "attachment", "customer", "job", "service_location"
+        ]
+
+
+@pytest.mark.asyncio
+async def test_db_executor_failure_rolls_back_all_lineage_and_native_state(
+    lineage_database: async_sessionmaker[AsyncSession],
+) -> None:
+    company, branch, user = await _scope(lineage_database)
+    manifest = _broad_manifest(company, branch)
+    bootstrap = _bootstrap(company, branch, user, manifest)
+    with pytest.raises(RuntimeError, match="synthetic native failure"):
+        async with lineage_database() as session:
+            await CurrentOverlayExecutor().execute(
+                SqlAlchemyCurrentOverlayRepository(
+                    session,
+                    master_run_id=bootstrap.binding.master_run_id,
+                    services=_FailingServices(),
+                    lineage_bootstrap=bootstrap,
+                ),
+                manifest=manifest,
+                expected_base_source4_digest=DIGEST,
+                rollback_backup_digest="3" * 64,
+                executable_domains=frozenset({"customer", "service_location", "job", "appointment"}),
+            )
+    async with lineage_database() as session:
+        assert await session.get(HcpMigrationMasterRun, bootstrap.binding.master_run_id) is None

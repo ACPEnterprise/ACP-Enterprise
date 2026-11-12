@@ -22,6 +22,11 @@ from typing import Protocol
 CONTRACT = "hcp-current-overlay/v1"
 EXECUTOR_CONTRACT = "hcp-current-overlay-executor/v1"
 OPERATIONAL_DOMAINS = frozenset({"customer", "service_location", "job", "appointment"})
+# A sealed handoff may contain held historical, financial, note, attachment, and
+# provider-specific identities for which ACP has no native write service.  Those
+# identities are still part of the accounting surface of the receipt.  Domain
+# services, rather than this structural manifest, decide which non-held records
+# are executable.
 SUPPORTED_DOMAINS = OPERATIONAL_DOMAINS | {"estimate", "invoice", "payment"}
 
 
@@ -246,6 +251,7 @@ class CurrentOverlayExecutor:
         execution_context: Mapping[str, object]
         | Callable[[OverlayExecutionReceipt], Mapping[str, object]]
         | None = None,
+        executable_domains: frozenset[str] | None = None,
     ) -> OverlayExecutionReceipt:
         manifest.verify()
         if manifest.base_source4_digest != expected_base_source4_digest:
@@ -262,6 +268,7 @@ class CurrentOverlayExecutor:
                 manifest,
                 rollback_backup_digest,
                 require_non_mutating_parents=require_non_mutating_parents,
+                executable_domains=executable_domains,
             )
             if execution_context is not None:
                 context = (
@@ -280,6 +287,7 @@ class CurrentOverlayExecutor:
         rollback_backup_digest: str,
         *,
         require_non_mutating_parents: bool,
+        executable_domains: frozenset[str] | None,
     ) -> OverlayExecutionReceipt:
         keys = {item.key for item in manifest.records}
         blocked_keys = {
@@ -287,17 +295,13 @@ class CurrentOverlayExecutor:
             for item in manifest.records
             if item.assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
         }
+        if executable_domains is not None:
+            for item in manifest.records:
+                if item.assertion not in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE} and item.domain not in executable_domains:
+                    raise ValueError(f"overlay executable domain is unsupported: {item.domain}")
+
+        ordered_records = _dependency_order(manifest.records)
         journal: list[OverlayJournalEntry] = []
-        domain_order = {
-            "customer": 0,
-            "service_location": 1,
-            "job": 2,
-            "appointment": 3,
-        }
-        ordered_records = sorted(
-            manifest.records,
-            key=lambda item: (domain_order.get(item.domain, 99), item.source_id),
-        )
         for record in ordered_records:
             for parent in record.parent_keys:
                 if (
@@ -431,6 +435,37 @@ class CurrentOverlayExecutor:
         return receipt
 
 
+def _dependency_order(
+    records: tuple[OverlayRecord, ...],
+) -> tuple[OverlayRecord, ...]:
+    """Order every domain by local parent dependencies, then deterministically."""
+    by_key = {record.key: record for record in records}
+    children: dict[OverlayKey, set[OverlayKey]] = {key: set() for key in by_key}
+    indegree: dict[OverlayKey, int] = {key: 0 for key in by_key}
+    for record in records:
+        for parent in record.parent_keys:
+            if parent in by_key and record.key not in children[parent]:
+                children[parent].add(record.key)
+                indegree[record.key] += 1
+
+    ready = sorted(
+        (key for key, degree in indegree.items() if degree == 0),
+        key=lambda key: (key.domain, key.source_id),
+    )
+    ordered: list[OverlayRecord] = []
+    while ready:
+        key = ready.pop(0)
+        ordered.append(by_key[key])
+        for child in sorted(children[key], key=lambda value: (value.domain, value.source_id)):
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                ready.append(child)
+                ready.sort(key=lambda value: (value.domain, value.source_id))
+    if len(ordered) != len(records):
+        raise ValueError("overlay parent dependency cycle")
+    return tuple(ordered)
+
+
 def _validate_manifest_values(
     *,
     base_source4_digest: str,
@@ -451,7 +486,7 @@ def _validate_manifest_values(
     if len(keys) != len(set(keys)):
         raise ValueError("overlay source identities must be unique")
     for item in records:
-        if item.domain not in SUPPORTED_DOMAINS or not item.source_id:
+        if not item.domain or not item.domain.strip() or not item.source_id:
             raise ValueError("overlay record identity is invalid")
         _require_digest(item.source_digest, "record source")
         if item.prior_source_digest is not None:
