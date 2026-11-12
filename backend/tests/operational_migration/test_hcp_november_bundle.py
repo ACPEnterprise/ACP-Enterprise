@@ -216,6 +216,12 @@ def _write_sealed_handoff(tmp_path: Path, *, omissions: bool = False) -> Novembe
             "source_mutation": False,
             "live_database_access": False,
             "network_access": False,
+            "held_quarantined": {
+                "locationless_open_jobs": {"source_ids": [f"job-{i}" for i in range(22)]},
+                "legacy_duplicate_risk_appointments": {"source_ids": [f"appt-dup-{i}" for i in range(13)]},
+                "technician_conflicts": {"source_ids": ["tech-0", "tech-1"]},
+                "unassigned_appointment": {"source_id": "appt-unassigned"},
+            },
             "hold_contamination": {
                 "inherent_contamination_if_final_policy_is_enforced": False,
                 "unrelated_clean_jobs_blocked": 0,

@@ -50,6 +50,11 @@ EXPECTED_DISPOSITIONS = {
 }
 
 
+def qualification_digest(packet: dict[str, Any]) -> str:
+    """Digest the deterministic PASS packet bound by a later executor."""
+    return _digest_bytes(_canonical(packet))
+
+
 def _digest_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
@@ -156,6 +161,28 @@ class NovemberQualificationAuthority:
     expected_attachment_custody_digest: str
     bundle_root: Path | None = None
     expected_policy_digest: str | None = None
+    qualification_status: str | None = None
+    qualification_digest: str | None = None
+    execution_packet_path: Path | None = None
+    execution_packet_sha256: str | None = None
+    execution_packet_digest: str | None = None
+    rollback_backup_digest: str | None = None
+
+    @property
+    def company_id(self) -> UUID:
+        return UUID(self.expected_company_id)
+
+    @property
+    def branch_id(self) -> UUID:
+        return UUID(self.expected_branch_id)
+
+    @property
+    def actor_id(self) -> UUID:
+        return UUID(self.expected_actor_id)
+
+    @property
+    def expected_database(self) -> str:
+        return "acp_enterprise_preview"
 
     @classmethod
     def load(cls, path: Path) -> NovemberQualificationAuthority:
@@ -197,6 +224,16 @@ class NovemberQualificationAuthority:
                     else None
                 ),
                 expected_policy_digest=value.get("expected_policy_digest"),
+                qualification_status=value.get("qualification_status"),
+                qualification_digest=value.get("qualification_digest"),
+                execution_packet_path=(
+                    Path(value["execution_packet_path"])
+                    if value.get("execution_packet_path")
+                    else None
+                ),
+                execution_packet_sha256=value.get("execution_packet_sha256"),
+                execution_packet_digest=value.get("execution_packet_digest"),
+                rollback_backup_digest=value.get("rollback_backup_digest"),
                 **fields,
             )
         except SafeEvidenceError:
@@ -361,6 +398,17 @@ class NovemberQualificationAuthority:
             if omissions not in ([], None):
                 _fail("hcp_november_qualification_gap", {"key": "unexplained_omissions", "value": omissions})
             dispositions = {key: count for key, count in actual_summary.items()}
+            held = _require_mapping(policy.get("held_quarantined"), "hcp_november_hold_inventory_missing")
+            hold_source_ids = {
+                "locationless_open_jobs": tuple(_require_mapping(held.get("locationless_open_jobs"), "hcp_november_hold_inventory_missing").get("source_ids", [])),
+                "legacy_duplicate_risk_appointments": tuple(_require_mapping(held.get("legacy_duplicate_risk_appointments"), "hcp_november_hold_inventory_missing").get("source_ids", [])),
+                "unresolved_technician_identities": tuple(_require_mapping(held.get("technician_conflicts"), "hcp_november_hold_inventory_missing").get("source_ids", [])),
+                "unassigned_appointments": (str(_require_mapping(held.get("unassigned_appointment"), "hcp_november_hold_inventory_missing").get("source_id")),),
+            }
+            if {key: len(value) for key, value in hold_source_ids.items()} != {
+                key: value[0] for key, value in EXPECTED_DISPOSITIONS.items() if key != "strict_open_relationship_failures"
+            }:
+                _fail("hcp_november_hold_inventory_mismatch", hold_source_ids)
             return {
                 "contract": AUTHORITY_CONTRACT,
                 "bundle_contract": SEALED_HANDOFF_CONTRACT,
@@ -378,6 +426,7 @@ class NovemberQualificationAuthority:
                 "environment": self.expected_environment,
                 "attachment_bodies_required": False,
                 "dispositions": dispositions,
+                "hold_source_ids": hold_source_ids,
                 "counts": {"create": None, "update": None, "replay": None, "hold": 38},
                 "unexplained_omissions": 0,
                 "missing_lineage": 0,

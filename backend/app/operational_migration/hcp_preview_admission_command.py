@@ -35,7 +35,9 @@ from app.operational_migration.hcp_migration2_runner import (
 from app.operational_migration.hcp_november_bundle import (
     AUTHORITY_CONTRACT as NOVEMBER_AUTHORITY_CONTRACT,
     NovemberQualificationAuthority,
+    qualification_digest,
 )
+from app.operational_migration.hcp_november_executor import run_november_execution
 from app.operational_migration.hcp_successor_reuse import (
     AdmissionGuardEvidence,
     QualifiedSuccessorManifest,
@@ -358,12 +360,9 @@ async def run_november_bundle(
     *,
     execute: bool,
 ) -> dict[str, object]:
-    """Qualify the metadata-only November handoff without Preview writes."""
+    """Qualify or execute the bounded November Preview handoff."""
     if execute:
-        raise SafeEvidenceError(
-            "hcp_november_execution_not_supported",
-            hashlib.sha256(authority.bundle_sha256.encode()).hexdigest(),
-        )
+        return await run_november_execution(authority, factory=AsyncSessionFactory)
     if (
         os.getenv("TARGET_ENVIRONMENT") != "preview"
         or os.getenv("PRODUCTION_ACCESS_ENABLED", "false") != "false"
@@ -371,6 +370,8 @@ async def run_november_bundle(
     ):
         raise SafeEvidenceError("preview_runtime_boundary_invalid", "0" * 64)
     packet = authority.verify()
+    packet["qualification_status"] = "PASS"
+    packet["qualification_digest"] = qualification_digest(authority.verify())
     target = PreviewAdmissionTarget(
         "preview", settings.database_url, "acp_enterprise_preview"
     )
@@ -402,12 +403,12 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, json.JSONDecodeError, AttributeError):
         authority_contract = None
     if authority_contract == NOVEMBER_AUTHORITY_CONTRACT:
-        if args.mode == "execute":
+        if args.mode == "execute" and not args.authorize_execution:
             print(
                 json.dumps(
                     {
                         "status": "rejected",
-                        "code": "hcp_november_execution_not_supported",
+                        "code": "explicit_execution_authorization_required",
                     }
                 )
             )
@@ -415,7 +416,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             output = asyncio.run(
                 run_november_bundle(
-                    NovemberQualificationAuthority.load(authority_path), execute=False
+                    NovemberQualificationAuthority.load(authority_path),
+                    execute=args.mode == "execute",
                 )
             )
         except Exception as error:  # noqa: BLE001

@@ -192,6 +192,63 @@ Qualification fails closed on bundle SHA/file-digest mismatch, scope or
 authority mismatch, missing/ambiguous lineage, an admissible held identity,
 blocked clean records, unexplained omissions, or missing attachment custody.
 Attachment bodies are not required when the custody manifest and digest pass.
-There is no execute mode for this metadata-only authority; a bounded Preview
-admission requires a separately authored execution authority after this
-qualification passes.
+The metadata-only authority cannot execute by itself; a bounded Preview
+admission requires the separately sealed execution packet and execution fields
+described below.
+
+## November bounded Preview execution
+
+The November qualification bundle is metadata-only and is not itself an
+executable record packet. Execution requires a separate private,
+mode-0600 `hcp-november-preview-execution-packet/v1` containing the admissible
+Customer, Location, Job, and Appointment assertions. It must include every
+qualified hold as a non-mutating assertion and bind all of the following to the
+PASS qualification: bundle SHA, policy digest, source reconciliation digest,
+Company/Branch/actor IDs, Master SHA, schema head, and `preview`.
+
+The authority must additionally contain:
+
+```text
+qualification_status=PASS
+qualification_digest=<digest printed by qualify>
+execution_packet_path=/run/hcp-admission/november-execution-packet.json
+execution_packet_sha256=<private packet file SHA-256>
+execution_packet_digest=<packet semantic digest>
+rollback_backup_digest=<qualified Beta backup SHA-256>
+```
+
+The packet is rejected unless its hold inventory exactly matches 22
+`HOLD_QUARANTINE` Jobs, 13 duplicate-risk Appointment `HOLD`s, 2 unresolved
+technician `HOLD`s, and 1 unassigned Appointment `HOLD`. Financial domains,
+held-record writes, release assertions, and missing parent lineage are
+unsupported.
+
+After the separate execution packet and authority are sealed, the exact
+bounded command is:
+
+```bash
+docker compose \
+  --project-name acp-enterprise-preview \
+  --env-file /opt/acp-enterprise/current/.env.preview \
+  -f /opt/acp-enterprise/current/docker-compose.preview.yml \
+  run --rm --no-deps --user 0:0 \
+  -e TARGET_ENVIRONMENT=preview \
+  -e PRODUCTION_ACCESS_ENABLED=false \
+  -e PREVIEW_ACCESS_ENABLED=true \
+  -e HCP_PROVIDER_WRITE_ENABLED=false \
+  -e HCP_LIVE_ACCESS_ENABLED=false \
+  -e QBO_PRODUCTION_ENABLED=false \
+  -e PAYROLL_EXECUTION_ENABLED=false \
+  -v /opt/acp-enterprise/shared/hcp-admission:/run/hcp-admission:ro \
+  backend \
+  python -m app.operational_migration.hcp_preview_admission_command execute \
+  --authorize-execution \
+  --authority-file /run/hcp-admission/preview-admission-authority.json
+```
+
+The executor uses the existing Preview domain services and atomic overlay
+transaction. It acquires a transaction-scoped advisory lock, writes only
+admissible assertions, records holds without mutation, and persists the
+receipt in the migration replay state. Any exception rolls back all native
+rows, bindings, lineage, and receipt state. A repeat with the same packet
+returns the identical durable receipt as an idempotent replay.

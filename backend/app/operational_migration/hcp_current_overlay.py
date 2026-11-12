@@ -11,9 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -201,6 +201,7 @@ class OverlayExecutionReceipt:
     counts: dict[str, int]
     journal: tuple[OverlayJournalEntry, ...]
     digest: str
+    execution_context: Mapping[str, object] = field(default_factory=dict)
 
 
 class CurrentOverlayRepository(Protocol):
@@ -242,6 +243,9 @@ class CurrentOverlayExecutor:
         expected_base_source4_digest: str,
         rollback_backup_digest: str,
         require_non_mutating_parents: bool = True,
+        execution_context: Mapping[str, object]
+        | Callable[[OverlayExecutionReceipt], Mapping[str, object]]
+        | None = None,
     ) -> OverlayExecutionReceipt:
         manifest.verify()
         if manifest.base_source4_digest != expected_base_source4_digest:
@@ -259,6 +263,13 @@ class CurrentOverlayExecutor:
                 rollback_backup_digest,
                 require_non_mutating_parents=require_non_mutating_parents,
             )
+            if execution_context is not None:
+                context = (
+                    execution_context(receipt)
+                    if callable(execution_context)
+                    else execution_context
+                )
+                receipt = _with_execution_context(receipt, context)
             await repository.persist_receipt(receipt)
             return receipt
 
@@ -473,6 +484,8 @@ def _verify_receipt(
         "counts": receipt.counts,
         "journal": [asdict(item) for item in receipt.journal],
     }
+    if receipt.execution_context:
+        payload["execution_context"] = dict(receipt.execution_context)
     if (
         receipt.contract != EXECUTOR_CONTRACT
         or receipt.manifest_digest != manifest_digest
@@ -480,6 +493,24 @@ def _verify_receipt(
         or receipt.digest != _digest(payload)
     ):
         raise ValueError("overlay replay receipt mismatch")
+
+
+def _with_execution_context(
+    receipt: OverlayExecutionReceipt, context: Mapping[str, object]
+) -> OverlayExecutionReceipt:
+    payload = {
+        "contract": receipt.contract,
+        "manifest_digest": receipt.manifest_digest,
+        "rollback_backup_digest": receipt.rollback_backup_digest,
+        "counts": receipt.counts,
+        "journal": [asdict(item) for item in receipt.journal],
+        "execution_context": dict(context),
+    }
+    return replace(
+        receipt,
+        execution_context=dict(context),
+        digest=_digest(payload),
+    )
 
 
 def _manifest_payload(
