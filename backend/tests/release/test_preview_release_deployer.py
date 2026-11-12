@@ -248,3 +248,129 @@ def test_rollback_dry_run_preserves_current_release(tmp_path: Path) -> None:
         == 0
     )
     assert os.readlink(root / "current") == "releases/enterprise-beta-aaaaaaaa"
+
+
+def test_backend_only_verification_does_not_require_frontend_or_proxy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(deployer, "wait_for_backend", lambda *_args: calls.append("wait"))
+    monkeypatch.setattr(
+        deployer,
+        "verify_backend_runtime",
+        lambda *_args: calls.append("backend"),
+    )
+    monkeypatch.setattr(deployer, "verify_schema", lambda *_args: calls.append("schema"))
+    monkeypatch.setattr(
+        deployer,
+        "verify_stateful_ids",
+        lambda *_args: calls.append("stateful"),
+    )
+    monkeypatch.setattr(
+        deployer,
+        "verify_http",
+        lambda *_args: calls.append("proxy"),
+    )
+    monkeypatch.setattr(
+        deployer,
+        "verify_beta",
+        lambda *_args: calls.append("beta"),
+    )
+
+    deployer.verify_release(
+        tmp_path / "release",
+        "a" * 40,
+        {"postgres": "postgres", "redis": "redis"},
+        1,
+        ("backend",),
+    )
+
+    assert calls == ["wait", "backend", "schema", "stateful"]
+
+
+def test_full_stack_verification_keeps_proxy_and_beta_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(deployer, "wait_for_backend", lambda *_args: calls.append("wait"))
+    monkeypatch.setattr(
+        deployer,
+        "verify_backend_runtime",
+        lambda *_args: calls.append("backend"),
+    )
+    monkeypatch.setattr(deployer, "verify_http", lambda *_args: calls.append("proxy"))
+    monkeypatch.setattr(deployer, "verify_schema", lambda *_args: calls.append("schema"))
+    monkeypatch.setattr(
+        deployer,
+        "verify_stateful_ids",
+        lambda *_args: calls.append("stateful"),
+    )
+    monkeypatch.setattr(deployer, "verify_beta", lambda *_args: calls.append("beta"))
+
+    deployer.verify_release(
+        tmp_path / "release",
+        "a" * 40,
+        {"postgres": "postgres", "redis": "redis"},
+        1,
+        ("backend", "frontend"),
+    )
+
+    assert calls == ["wait", "backend", "proxy", "schema", "stateful", "beta"]
+
+
+def test_backend_runtime_rejects_unhealthy_container(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    responses = iter(("backend-id\n", "running\n", "unhealthy\n"))
+    monkeypatch.setattr(deployer, "compose_command", lambda *_args: ("docker", "compose"))
+    monkeypatch.setattr(deployer, "run", lambda *_args, **_kwargs: next(responses))
+
+    with pytest.raises(deployer.DeployError, match="not healthy"):
+        deployer.verify_backend_runtime(tmp_path / "release", "a" * 40)
+
+
+def test_backend_runtime_rejects_wrong_app_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    responses = iter(("backend-id\n", "running\n", "healthy\n", "APP_VERSION=" + "b" * 40 + "\n"))
+    monkeypatch.setattr(deployer, "compose_command", lambda *_args: ("docker", "compose"))
+    monkeypatch.setattr(deployer, "run", lambda *_args, **_kwargs: next(responses))
+
+    with pytest.raises(deployer.DeployError, match="APP_VERSION"):
+        deployer.verify_backend_runtime(tmp_path / "release", "a" * 40)
+
+
+def test_deploy_rolls_back_when_schema_or_health_verification_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, sha = source_repo(tmp_path)
+    root, previous = runtime_root(tmp_path)
+    monkeypatch.setattr(deployer, "validate_compose", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(deployer, "compose_ids", lambda *_args: {"postgres": "p", "redis": "r"})
+    monkeypatch.setattr(deployer, "build", lambda *_args: None)
+    monkeypatch.setattr(deployer, "recreate", lambda *_args: None)
+    calls = 0
+
+    def fail_target_then_accept_rollback(*_args, **_kwargs) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise deployer.DeployError("schema mismatch")
+
+    monkeypatch.setattr(deployer, "verify_release", fail_target_then_accept_rollback)
+
+    assert deployer.main(
+        [
+            "deploy",
+            "--source-root",
+            str(source),
+            "--root",
+            str(root),
+            "--sha",
+            sha,
+            "--service",
+            "backend",
+        ]
+    ) == 1
+    assert calls == 2
+    assert (root / "current").resolve() == previous

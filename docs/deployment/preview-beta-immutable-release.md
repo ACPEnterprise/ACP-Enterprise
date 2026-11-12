@@ -94,6 +94,12 @@ python3 scripts/deploy-preview-release.py deploy \
   --service backend
 ```
 
+For a backend-only promotion, verification uses the backend container health
+check and an internal `http://127.0.0.1:8000/health` probe. It does not require
+the frontend, Caddy, or host port 8080. When `frontend` is included in the
+requested services, the deployer retains the full-stack host proxy and Beta
+connectivity checks.
+
 The resulting runtime directory is:
 
 ```text

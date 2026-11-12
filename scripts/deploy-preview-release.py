@@ -385,6 +385,69 @@ def wait_for_backend(release: Path, timeout: int) -> None:
     fail(f"backend did not become healthy within {timeout}s (last state: {last})")
 
 
+def verify_backend_runtime(release: Path, sha: str) -> None:
+    """Verify the backend directly without requiring a frontend or host proxy."""
+    output = run(compose_command(release, ("ps", "-q", "backend")), capture=True)
+    identifier = output.strip().splitlines()[-1] if output.strip() else ""
+    if not identifier:
+        fail("backend container is not running")
+
+    status = run(
+        (
+            "docker",
+            "inspect",
+            "--format",
+            "{{.State.Status}}",
+            identifier,
+        ),
+        capture=True,
+    ).strip()
+    if status != "running":
+        fail(f"backend container is not running: {status}")
+
+    health = run(
+        (
+            "docker",
+            "inspect",
+            "--format",
+            "{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}",
+            identifier,
+        ),
+        capture=True,
+    ).strip()
+    if health != "healthy":
+        fail(f"backend container is not healthy: {health}")
+
+    environment = run(
+        (
+            "docker",
+            "inspect",
+            "--format",
+            "{{range .Config.Env}}{{println .}}{{end}}",
+            identifier,
+        ),
+        capture=True,
+    )
+    app_versions = {
+        line.removeprefix("APP_VERSION=")
+        for line in environment.splitlines()
+        if line.startswith("APP_VERSION=")
+    }
+    if app_versions != {sha}:
+        fail(f"backend APP_VERSION is not {sha}")
+
+    probe = (
+        "import json,urllib.request; "
+        "print(json.dumps(json.load(urllib.request.urlopen("
+        "'http://127.0.0.1:8000/health', timeout=3))))"
+    )
+    payload = json.loads(
+        run(("docker", "exec", identifier, "python", "-c", probe), capture=True)
+    )
+    if payload.get("status") != "healthy" or payload.get("version") != sha:
+        fail("backend internal health is not healthy at the requested APP_VERSION")
+
+
 def verify_http(release: Path, sha: str) -> None:
     values = env_values(release / ".env.preview")
     port = values.get("PREVIEW_HTTP_PORT", "8080")
@@ -429,12 +492,22 @@ def verify_beta(release: Path) -> None:
     run(("sh", str(verifier)))
 
 
-def verify_release(release: Path, sha: str, before_ids: dict[str, str], timeout: int, *, beta: bool = True) -> None:
+def verify_release(
+    release: Path,
+    sha: str,
+    before_ids: dict[str, str],
+    timeout: int,
+    services: Sequence[str],
+    *,
+    beta: bool = True,
+) -> None:
     wait_for_backend(release, timeout)
-    verify_http(release, sha)
+    verify_backend_runtime(release, sha)
+    if "frontend" in services:
+        verify_http(release, sha)
     verify_schema(release)
     verify_stateful_ids(release, before_ids)
-    if beta:
+    if beta and "frontend" in services:
         verify_beta(release)
 
 
@@ -572,7 +645,7 @@ def deploy(args: argparse.Namespace) -> int:
         finalized = True
         atomic_switch(root, target)
         recreate(target, services)
-        verify_release(target, sha, before_ids, args.health_timeout)
+        verify_release(target, sha, before_ids, args.health_timeout, services)
     except Exception as exc:
         if not finalized:
             shutil.rmtree(release.path, ignore_errors=True)
@@ -582,7 +655,14 @@ def deploy(args: argparse.Namespace) -> int:
                 build(previous, services)
                 atomic_switch(root, previous)
                 recreate(previous, services)
-                verify_release(previous, previous_sha, before_ids, args.health_timeout, beta=False)
+                verify_release(
+                    previous,
+                    previous_sha,
+                    before_ids,
+                    args.health_timeout,
+                    services,
+                    beta=False,
+                )
                 print(f"Rollback completed to {previous}", file=sys.stderr)
             except Exception as rollback_exc:
                 print(f"AUTOMATIC ROLLBACK FAILED: {rollback_exc}", file=sys.stderr)
@@ -624,7 +704,14 @@ def rollback(args: argparse.Namespace) -> int:
         build(target, services)
         atomic_switch(root, target)
         recreate(target, services)
-        verify_release(target, target_sha, before_ids, args.health_timeout, beta=True)
+        verify_release(
+            target,
+            target_sha,
+            before_ids,
+            args.health_timeout,
+            services,
+            beta=True,
+        )
     except Exception as exc:
         if (root / "current").resolve() == target:
             try:
