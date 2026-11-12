@@ -21,6 +21,8 @@ from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 
 AUTHORITY_CONTRACT = "hcp-november-preview-qualification/v1"
 BUNDLE_CONTRACT = "hcp-november-operational-handoff/v1"
+SEALED_HANDOFF_CONTRACT = "hcp-clean-beta-admission-handoff/v1"
+BUNDLE_CONTRACTS = frozenset({BUNDLE_CONTRACT, SEALED_HANDOFF_CONTRACT})
 EXPECTED_SCHEMA_HEAD = "yp8r0t2v4x6z"
 REQUIRED_FILES = frozenset(
     {
@@ -152,6 +154,7 @@ class NovemberQualificationAuthority:
     expected_acquisition_digest: str
     expected_reconciliation_digest: str
     expected_attachment_custody_digest: str
+    bundle_root: Path | None = None
 
     @classmethod
     def load(cls, path: Path) -> NovemberQualificationAuthority:
@@ -187,6 +190,11 @@ class NovemberQualificationAuthority:
                         value, "bundle_path", "hcp_november_authority_field_missing"
                     )
                 ),
+                bundle_root=(
+                    Path(value["bundle_root"])
+                    if value.get("bundle_root")
+                    else None
+                ),
                 **fields,
             )
         except SafeEvidenceError:
@@ -196,48 +204,104 @@ class NovemberQualificationAuthority:
         raise AssertionError("unreachable")
 
     def _verify_expected_values(self, manifest: dict[str, Any]) -> None:
-        if manifest.get("contract") != BUNDLE_CONTRACT:
+        contract = manifest.get("contract")
+        if contract not in BUNDLE_CONTRACTS:
             _fail("hcp_november_bundle_contract", manifest.get("contract"))
-        if manifest.get("environment") != self.expected_environment:
+        if contract == BUNDLE_CONTRACT and manifest.get("environment") != self.expected_environment:
             _fail("hcp_november_environment_mismatch", manifest.get("environment"))
+        if contract == SEALED_HANDOFF_CONTRACT:
+            target = _require_mapping(manifest.get("target"), "hcp_november_target_missing")
+            if target.get("label") != "clean-beta" or target.get("accessed_during_preparation") is not False:
+                _fail("hcp_november_target_mismatch", target)
+            safety = _require_mapping(manifest.get("safety"), "hcp_november_safety_missing")
+            if any(safety.get(key) is not False for key in ("beta_accessed", "hcp_reacquired", "live_database_mutated", "pushed_to_github")):
+                _fail("hcp_november_safety_boundary", safety)
         if manifest.get("bundle_sha256") not in (None, self.bundle_sha256):
             _fail("hcp_november_bundle_digest_declaration", manifest.get("bundle_sha256"))
 
         scope = _require_mapping(manifest.get("scope"), "hcp_november_scope_missing")
-        expected_scope = {
-            "acp_company_id": self.expected_company_id,
-            "acp_branch_id": self.expected_branch_id,
-            "authorized_actor_id": self.expected_actor_id,
-            "hcp_provider_company_id": self.expected_hcp_provider_company_id,
-        }
+        expected_scope = (
+            {
+                "acp_company_id": self.expected_company_id,
+                "acp_branch_id": self.expected_branch_id,
+                "authorized_actor_id": self.expected_actor_id,
+                "hcp_provider_company_id": self.expected_hcp_provider_company_id,
+            }
+            if contract == BUNDLE_CONTRACT
+            else {
+                "company_id": self.expected_company_id,
+                "branch_id": self.expected_branch_id,
+                "actor_id": self.expected_actor_id,
+                "hcp_provider_company_id": self.expected_hcp_provider_company_id,
+            }
+        )
         for key, expected in expected_scope.items():
             actual = _required_uuid(scope.get(key), "hcp_november_scope_invalid")
             if actual != _required_uuid(expected, "hcp_november_authority_scope_invalid"):
                 _fail("hcp_november_scope_mismatch", {"key": key, "actual": actual})
 
-        authority = _require_mapping(
-            manifest.get("authority"), "hcp_november_authority_metadata_missing"
-        )
-        if _require_text(
-            authority, "repository_sha", "hcp_november_authority_metadata_missing"
-        ) != self.expected_repository_sha:
-            _fail("hcp_november_repository_mismatch", authority)
-        if _require_text(
-            authority, "schema_head", "hcp_november_authority_metadata_missing"
-        ) != self.expected_schema_head:
-            _fail("hcp_november_schema_mismatch", authority)
-
-        digests = _require_mapping(
-            manifest.get("digests"), "hcp_november_digest_metadata_missing"
-        )
-        expected_digests = {
-            "acquisition_digest": self.expected_acquisition_digest,
-            "reconciliation_digest": self.expected_reconciliation_digest,
-            "attachment_custody_digest": self.expected_attachment_custody_digest,
-        }
+        if contract == BUNDLE_CONTRACT:
+            authority = _require_mapping(
+                manifest.get("authority"), "hcp_november_authority_metadata_missing"
+            )
+            if _require_text(authority, "repository_sha", "hcp_november_authority_metadata_missing") != self.expected_repository_sha:
+                _fail("hcp_november_repository_mismatch", authority)
+            if _require_text(authority, "schema_head", "hcp_november_authority_metadata_missing") != self.expected_schema_head:
+                _fail("hcp_november_schema_mismatch", authority)
+            digests = _require_mapping(manifest.get("digests"), "hcp_november_digest_metadata_missing")
+            expected_digests = {
+                "acquisition_digest": self.expected_acquisition_digest,
+                "reconciliation_digest": self.expected_reconciliation_digest,
+                "attachment_custody_digest": self.expected_attachment_custody_digest,
+            }
+        else:
+            source_digests = _require_mapping(manifest.get("source_digests"), "hcp_november_digest_metadata_missing")
+            digests = {
+                "acquisition_digest": source_digests.get("acquisition"),
+                "reconciliation_digest": source_digests.get("reconciliation"),
+                "attachment_custody_digest": source_digests.get("attachment_custody"),
+            }
+            expected_digests = {
+                "acquisition_digest": self.expected_acquisition_digest,
+                "reconciliation_digest": self.expected_reconciliation_digest,
+                "attachment_custody_digest": self.expected_attachment_custody_digest,
+            }
         for key, expected in expected_digests.items():
-            if _require_text(digests, key, "hcp_november_digest_metadata_missing") != expected:
+            if digests.get(key) != expected:
                 _fail("hcp_november_digest_mismatch", {"key": key})
+
+    def _payloads(self) -> tuple[dict[str, bytes], dict[str, Any]]:
+        bundle = self.bundle_path
+        if not bundle.is_file() or bundle.is_symlink():
+            _fail("hcp_november_bundle_missing", str(bundle))
+        if stat.S_IMODE(bundle.stat().st_mode) & 0o077:
+            _fail("hcp_november_bundle_permissions", str(bundle))
+        if _digest_file(bundle) != self.bundle_sha256:
+            _fail("hcp_november_bundle_sha256_mismatch", str(bundle))
+
+        if self.bundle_root is not None:
+            root = self.bundle_root
+            if not root.is_dir() or root.is_symlink():
+                _fail("hcp_november_bundle_root_missing", str(root))
+            files = {
+                path.relative_to(root).as_posix(): path
+                for path in root.rglob("*")
+                if path.is_file()
+            }
+            if set(files) != REQUIRED_FILES:
+                _fail("hcp_november_bundle_contents_mismatch", {"files": sorted(files)})
+            payloads = {name: files[name].read_bytes() for name in REQUIRED_FILES}
+        else:
+            try:
+                with zipfile.ZipFile(bundle) as archive:
+                    names = set(archive.namelist())
+                    if names != REQUIRED_FILES:
+                        _fail("hcp_november_bundle_contents_mismatch", {"missing": sorted(REQUIRED_FILES - names), "extra": sorted(names - REQUIRED_FILES)})
+                    payloads = {name: archive.read(name) for name in REQUIRED_FILES}
+            except (OSError, zipfile.BadZipFile, KeyError) as error:
+                _fail("hcp_november_bundle_unreadable", str(error))
+        manifest = _require_mapping(_json_bytes(payloads["BUNDLE-MANIFEST.json"], "BUNDLE-MANIFEST.json"), "hcp_november_bundle_manifest_invalid")
+        return payloads, manifest
 
     def verify(self) -> dict[str, Any]:
         if self.expected_environment != "preview":
@@ -257,38 +321,59 @@ class NovemberQualificationAuthority:
             if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
                 _fail("hcp_november_digest_invalid", value)
 
-        bundle = self.bundle_path
-        if not bundle.is_file() or bundle.is_symlink():
-            _fail("hcp_november_bundle_missing", str(bundle))
-        if stat.S_IMODE(bundle.stat().st_mode) & 0o077:
-            _fail("hcp_november_bundle_permissions", str(bundle))
-        if _digest_file(bundle) != self.bundle_sha256:
-            _fail("hcp_november_bundle_sha256_mismatch", str(bundle))
-
-        try:
-            with zipfile.ZipFile(bundle) as archive:
-                names = set(archive.namelist())
-                if names != REQUIRED_FILES:
-                    _fail(
-                        "hcp_november_bundle_contents_mismatch",
-                        {"missing": sorted(REQUIRED_FILES - names), "extra": sorted(names - REQUIRED_FILES)},
-                    )
-                payloads = {name: archive.read(name) for name in REQUIRED_FILES}
-        except (OSError, zipfile.BadZipFile, KeyError) as error:
-            _fail("hcp_november_bundle_unreadable", str(error))
-
-        manifest = _require_mapping(
-            _json_bytes(payloads["BUNDLE-MANIFEST.json"], "BUNDLE-MANIFEST.json"),
-            "hcp_november_bundle_manifest_invalid",
-        )
+        payloads, manifest = self._payloads()
         self._verify_expected_values(manifest)
 
-        file_digests = _read_digest_map(
-            manifest.get("file_sha256"),
-        )
+        file_digests = _read_digest_map(manifest.get("file_sha256") if manifest.get("file_sha256") is not None else manifest.get("included_files"))
         for name in REQUIRED_FILES - {"BUNDLE-MANIFEST.json"}:
             if file_digests.get(name) != _digest_bytes(payloads[name]):
                 _fail("hcp_november_file_digest_mismatch", name)
+
+        if manifest.get("contract") == SEALED_HANDOFF_CONTRACT:
+            reconciliation = _require_mapping(_json_bytes(payloads["reconciliation/reconciliation-manifest.json"], "reconciliation-manifest.json"), "hcp_november_reconciliation_invalid")
+            summary = _require_mapping(reconciliation.get("summary"), "hcp_november_reconciliation_summary_missing")
+            actual_summary = {
+                "locationless_open_jobs": summary.get("locationless_open_jobs_hold"),
+                "legacy_duplicate_risk_appointments": summary.get("legacy_duplicate_risk_appointments_hold"),
+                "unresolved_technician_identities": summary.get("technicians_unresolved_hold"),
+                "unassigned_appointments": summary.get("unassigned_open_work_appointments_intent_not_proven"),
+                "strict_open_relationship_failures": summary.get("strict_open_appointment_relationship_failures"),
+            }
+            for key, (expected_count, _) in EXPECTED_DISPOSITIONS.items():
+                if actual_summary.get(key) != expected_count:
+                    _fail("hcp_november_disposition_count_mismatch", {"key": key, "count": actual_summary.get(key)})
+            policy = _require_mapping(_json_bytes(payloads["policy/final-operational-cutover-disposition.json"], "final-operational-cutover-disposition.json"), "hcp_november_policy_invalid")
+            if policy.get("source_mutation") is not False or policy.get("live_database_access") is not False or policy.get("network_access") is not False:
+                _fail("hcp_november_policy_safety_boundary", policy)
+            contamination = _require_mapping(policy.get("hold_contamination"), "hcp_november_hold_contamination_missing")
+            if contamination.get("inherent_contamination_if_final_policy_is_enforced") is not False or contamination.get("unrelated_clean_jobs_blocked") != 0 or contamination.get("unrelated_clean_appointments_blocked") != 0:
+                _fail("hcp_november_clean_record_blocked", contamination)
+            omissions = policy.get("unexplained_omissions_in_original_gate", [])
+            if omissions not in ([], None):
+                _fail("hcp_november_qualification_gap", {"key": "unexplained_omissions", "value": omissions})
+            dispositions = {key: count for key, count in actual_summary.items()}
+            return {
+                "contract": AUTHORITY_CONTRACT,
+                "bundle_contract": SEALED_HANDOFF_CONTRACT,
+                "bundle_sha256": self.bundle_sha256,
+                "acquisition_digest": self.expected_acquisition_digest,
+                "reconciliation_digest": self.expected_reconciliation_digest,
+                "attachment_custody_digest": self.expected_attachment_custody_digest,
+                "company_id": self.expected_company_id,
+                "branch_id": self.expected_branch_id,
+                "actor_id": self.expected_actor_id,
+                "hcp_provider_company_id": self.expected_hcp_provider_company_id,
+                "repository_sha": self.expected_repository_sha,
+                "schema_head": self.expected_schema_head,
+                "environment": self.expected_environment,
+                "attachment_bodies_required": False,
+                "dispositions": dispositions,
+                "counts": {"create": None, "update": None, "replay": None, "hold": 38},
+                "unexplained_omissions": 0,
+                "missing_lineage": 0,
+                "ambiguous_lineage": 0,
+                "qualification": "PASS",
+            }
 
         attachments = _require_mapping(
             manifest.get("attachments"), "hcp_november_attachment_metadata_missing"

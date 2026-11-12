@@ -14,6 +14,7 @@ from app.operational_migration.hcp_november_bundle import (
     BUNDLE_CONTRACT,
     NovemberQualificationAuthority,
     REQUIRED_FILES,
+    SEALED_HANDOFF_CONTRACT,
 )
 
 
@@ -187,3 +188,102 @@ def test_authority_contract_requires_private_mode(tmp_path: Path) -> None:
         NovemberQualificationAuthority.load(authority_path)
 
     assert error.value.code == "hcp_november_authority_permissions"
+
+
+def _write_sealed_handoff(tmp_path: Path, *, omissions: bool = False) -> NovemberQualificationAuthority:
+    root = tmp_path / "qualified-bundle"
+    root.mkdir()
+    payloads: dict[str, bytes] = {}
+    for name in REQUIRED_FILES:
+        if name != "BUNDLE-MANIFEST.json":
+            payloads[name] = json.dumps({"fixture": name}, sort_keys=True).encode()
+    payloads["reconciliation/reconciliation-manifest.json"] = json.dumps(
+        {
+            "summary": {
+                "locationless_open_jobs_hold": 22,
+                "legacy_duplicate_risk_appointments_hold": 13,
+                "technicians_unresolved_hold": 2,
+                "unassigned_open_work_appointments_intent_not_proven": 1,
+                "strict_open_appointment_relationship_failures": 0,
+            }
+        }, sort_keys=True
+    ).encode()
+    payloads["policy/final-operational-cutover-disposition.json"] = json.dumps(
+        {
+            "source_mutation": False,
+            "live_database_access": False,
+            "network_access": False,
+            "hold_contamination": {
+                "inherent_contamination_if_final_policy_is_enforced": False,
+                "unrelated_clean_jobs_blocked": 0,
+                "unrelated_clean_appointments_blocked": 0,
+            },
+            "unexplained_omissions_in_original_gate": (
+                [{"source_id": "omitted"}] if omissions else []
+            ),
+        }, sort_keys=True
+    ).encode()
+    for name, value in payloads.items():
+        destination = root / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(value)
+    manifest = {
+        "contract": SEALED_HANDOFF_CONTRACT,
+        "scope": {
+            "company_id": COMPANY,
+            "branch_id": BRANCH,
+            "actor_id": ACTOR,
+            "hcp_provider_company_id": HCP_COMPANY,
+        },
+        "source_digests": {
+            "acquisition": ACQUISITION,
+            "reconciliation": RECONCILIATION,
+            "attachment_custody": ATTACHMENT_CUSTODY,
+        },
+        "target": {"label": "clean-beta", "accessed_during_preparation": False},
+        "safety": {
+            "beta_accessed": False,
+            "hcp_reacquired": False,
+            "live_database_mutated": False,
+            "pushed_to_github": False,
+        },
+        "excluded": {"attachment_bodies": {"count": 621, "sealed_bytes": 3}},
+        "included_files": [
+            {"path": name, "sha256": hashlib.sha256(value).hexdigest()}
+            for name, value in sorted(payloads.items())
+        ],
+    }
+    (root / "BUNDLE-MANIFEST.json").write_text(json.dumps(manifest, sort_keys=True))
+    archive = tmp_path / "handoff.tar.gz"
+    archive.write_bytes(b"sealed-archive-fixture")
+    archive.chmod(0o600)
+    return NovemberQualificationAuthority(
+        bundle_path=archive,
+        bundle_root=root,
+        bundle_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
+        expected_repository_sha=REPOSITORY_SHA,
+        expected_schema_head=SCHEMA_HEAD,
+        expected_company_id=COMPANY,
+        expected_branch_id=BRANCH,
+        expected_actor_id=ACTOR,
+        expected_hcp_provider_company_id=HCP_COMPANY,
+        expected_environment="preview",
+        expected_acquisition_digest=ACQUISITION,
+        expected_reconciliation_digest=RECONCILIATION,
+        expected_attachment_custody_digest=ATTACHMENT_CUSTODY,
+    )
+
+
+def test_sealed_tar_handoff_qualifies_from_private_unpacked_root(tmp_path: Path) -> None:
+    result = _write_sealed_handoff(tmp_path).verify()
+
+    assert result["bundle_contract"] == SEALED_HANDOFF_CONTRACT
+    assert result["dispositions"]["locationless_open_jobs"] == 22
+    assert result["attachment_bodies_required"] is False
+
+
+def test_sealed_tar_handoff_rejects_unexplained_omissions(tmp_path: Path) -> None:
+    with pytest.raises(SafeEvidenceError) as error:
+        _write_sealed_handoff(tmp_path, omissions=True).verify()
+
+    assert error.value.code == "hcp_november_qualification_gap"

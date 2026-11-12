@@ -129,10 +129,10 @@ the tool at `docker-compose.production.yml`, or set
 ## November HCP handoff qualification
 
 The metadata-only November OM1C handoff is qualified through the dedicated
-authority contract `hcp-november-preview-qualification/v1`. It is not the
-older SOURCE.4 authority format and it does not require the excluded attachment
-bodies. The bundle is custody evidence only; this command performs no HCP call
-and no Preview write.
+authority contract `hcp-november-preview-qualification/v1`. The current sealed
+handoff contract is `hcp-clean-beta-admission-handoff/v1`; it is unpacked
+privately before qualification. The bundle is custody evidence only; this
+command performs no HCP call and no Preview write.
 
 The exact private transfer destination on the clean Beta host is:
 
@@ -140,28 +140,34 @@ The exact private transfer destination on the clean Beta host is:
 /opt/acp-enterprise/shared/hcp-admission/
 ```
 
-The directory is root-owned mode `0700`. Transfer exactly these two mode-0600
-files into it:
+The directory is root-owned mode `0700`. Transfer these mode-0600 files into it:
 
 ```text
-/opt/acp-enterprise/shared/hcp-admission/november-operational-handoff.zip
+/opt/acp-enterprise/shared/hcp-admission/hcp-clean-beta-admission-bundle.tar.gz
+/opt/acp-enterprise/shared/hcp-admission/hcp-clean-beta-admission-bundle.sha256
 /opt/acp-enterprise/shared/hcp-admission/preview-admission-authority.json
 ```
 
-Inside the transient qualification container, the authority must refer to the
-bundle as `/run/hcp-admission/november-operational-handoff.zip`. The authority
-must bind the exact bundle SHA, acquisition/reconciliation/attachment-custody
-digests, Company/Branch/actor/HCP Company IDs, Master SHA, and
-`yp8r0t2v4x6z`. Its disposition contract must state 22
-`HOLD_QUARANTINE` location-less Jobs, 13 duplicate-risk Appointment `HOLD`s,
-2 unresolved-technician `HOLD`s, 1 unassigned Appointment `HOLD`, and zero
-strict-open relationship failures.
+Unpack only into the root-owned mode-0700 directory
+`/opt/acp-enterprise/shared/hcp-admission/qualified-bundle/`, preserving the
+exact required file set. Inside the transient qualification container, the
+authority refers to the archive as
+`/run/hcp-admission/hcp-clean-beta-admission-bundle.tar.gz` and the unpacked
+root as `/run/hcp-admission/qualified-bundle`. It must bind the exact bundle
+SHA, acquisition/reconciliation/attachment-custody digests, Company/Branch/
+actor/HCP Company IDs, Master SHA, and `yp8r0t2v4x6z`. The qualifier derives
+and checks the 22 location-less Job holds, 13 duplicate-risk Appointment
+holds, 2 unresolved-technician holds, 1 unassigned Appointment hold, and zero
+strict-open relationship failures from the sealed reconciliation. Any
+unexplained omission, unsafe hold contamination, missing lineage, or digest
+mismatch rejects qualification.
 
 Example owner transfer destination:
 
 ```bash
 scp -i ~/.ssh/acp_beta_clean_ed25519 \
-  november-operational-handoff.zip preview-admission-authority.json \
+  hcp-clean-beta-admission-bundle.tar.gz hcp-clean-beta-admission-bundle.sha256 \
+  preview-admission-authority.json \
   root@162.243.232.59:/opt/acp-enterprise/shared/hcp-admission/
 ```
 
