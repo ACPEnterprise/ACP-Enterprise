@@ -50,7 +50,7 @@ EXECUTABLE_DOMAINS = frozenset(
 PACKET_DISPOSITIONS = WRITE_DISPOSITIONS | HOLD_DISPOSITIONS
 FINAL_OPERATIONAL_HOLD_POLICY = {
     "locationless_open_jobs": 23,
-    "duplicate_risk_appointments": 14,
+    "duplicate_risk_appointments": 13,
     "unresolved_technician_identities": 2,
     "unassigned_appointments": 1,
 }
@@ -458,7 +458,7 @@ class NovemberExecutionEnvelope:
         }
         expected_domains = {
             "locationless_open_jobs": ("job", "HOLD_QUARANTINE"),
-            "duplicate_risk_appointments": ("appointment", "HOLD"),
+            "duplicate_risk_appointments": ("legacy_appointment", "HOLD"),
             "unresolved_technician_identities": ("technician_reference", "HOLD"),
             "unassigned_appointments": ("appointment", "HOLD"),
         }

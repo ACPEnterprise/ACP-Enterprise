@@ -114,6 +114,8 @@ def _hold_records() -> tuple[list[dict], dict[str, tuple[str, ...]]]:
                     if category == "locationless_open_jobs"
                     else "technician_reference"
                     if category == "unresolved_technician_identities"
+                    else "legacy_appointment"
+                    if category == "legacy_duplicate_risk_appointments"
                     else "appointment"
                 ),
                     "source_id": source_id,
@@ -238,7 +240,9 @@ def _full_november_packet() -> NovemberExecutionPacket:
                 }
             )
     for index in range(2079):
-        if index < 14:
+        if index < 13:
+            domain = "legacy_appointment"
+        elif index == 13:
             domain = "appointment"
         elif index < 16:
             domain = "technician_reference"
@@ -368,15 +372,15 @@ def _write_envelope(tmp_path: Path, packet: NovemberExecutionPacket, authority: 
         held_parent_executable_edges=0,
         operational_hold_policy={
             "locationless_open_jobs": 23,
-            "duplicate_risk_appointments": 14,
+            "duplicate_risk_appointments": 13,
             "unresolved_technician_identities": 2,
             "unassigned_appointments": 1,
         },
         operational_hold_source_ids={
             "locationless_open_jobs": tuple(f"quarantine-{index}" for index in range(23)),
-            "duplicate_risk_appointments": tuple(f"hold-{index}" for index in range(14)),
+            "duplicate_risk_appointments": tuple(f"hold-{index}" for index in range(13)),
             "unresolved_technician_identities": ("hold-14", "hold-15"),
-            "unassigned_appointments": ("hold-16",),
+            "unassigned_appointments": ("hold-13",),
         },
         authority_digest="",
         packet=packet,

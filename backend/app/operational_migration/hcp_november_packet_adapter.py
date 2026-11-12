@@ -262,7 +262,7 @@ def adapt_source_packet(
     if expected_operational_hold_source_ids is not None:
         expected_hold_keys = {
             "locationless_open_jobs": ("job", "HOLD_QUARANTINE"),
-            "duplicate_risk_appointments": ("appointment", "HOLD"),
+            "duplicate_risk_appointments": ("legacy_appointment", "HOLD"),
             "unresolved_technician_identities": ("technician_reference", "HOLD"),
             "unassigned_appointments": ("appointment", "HOLD"),
         }
