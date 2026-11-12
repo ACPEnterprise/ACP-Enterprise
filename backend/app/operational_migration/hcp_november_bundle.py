@@ -410,10 +410,10 @@ class NovemberQualificationAuthority:
             for omission in resolved_omissions:
                 row = _require_mapping(omission, "hcp_november_resolved_omission_invalid")
                 _require_text(row, "source_id", "hcp_november_resolved_omission_invalid")
-                if row.get("original_disposition") not in {"HOLD", "HOLD_QUARANTINE"}:
-                    _fail("hcp_november_prior_hold_released", row)
                 if row.get("final_disposition") not in {"HOLD", "HOLD_QUARANTINE"}:
-                    _fail("hcp_november_prior_hold_released", row)
+                    if row.get("original_disposition") in {"HOLD", "HOLD_QUARANTINE"}:
+                        _fail("hcp_november_prior_hold_released", row)
+                    _fail("hcp_november_resolved_omission_not_held", row)
             prior_policy_digest = policy.get("source_prior_policy_digest")
             if not isinstance(prior_policy_digest, str) or len(prior_policy_digest) != 64:
                 _fail("hcp_november_prior_policy_digest_missing", prior_policy_digest)
