@@ -310,6 +310,13 @@ def test_sealed_tar_handoff_qualifies_from_private_unpacked_root(tmp_path: Path)
         f"job-{i}" for i in range(23)
     )
     assert len(result["hold_source_ids"]["legacy_duplicate_risk_appointments"]) + 1 == 14
+    assert result["final_policy_dispositions"] == {
+        "locationless_open_jobs": 23,
+        "legacy_duplicate_risk_appointments": 13,
+        "unresolved_technician_identities": 2,
+        "unassigned_appointments": 1,
+    }
+    assert result["final_policy_appointment_hold_count"] == 14
     assert result["attachment_bodies_required"] is False
 
 

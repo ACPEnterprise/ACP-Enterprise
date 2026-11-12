@@ -451,6 +451,8 @@ class NovemberQualificationAuthority:
                 "environment": self.expected_environment,
                 "attachment_bodies_required": False,
                 "dispositions": dispositions,
+                "final_policy_dispositions": final_hold_counts,
+                "final_policy_appointment_hold_count": FINAL_POLICY_APPOINTMENT_HOLD_COUNT,
                 "hold_source_ids": hold_source_ids,
                 "counts": {"create": None, "update": None, "replay": None, "hold": 38},
                 "unexplained_omissions": 0,
