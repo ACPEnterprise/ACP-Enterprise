@@ -435,7 +435,27 @@ def build_estimate(row: Mapping[str, object]) -> EstimateMigrationRecord:
         ),
         allow_extra=True,
     )
-    selected_id = _id(row["_selected_option_id"], "_selected_option_id", "est_")
+    selected_id_value = row.get("_selected_option_id")
+    if selected_id_value is None:
+        candidates = [
+            item
+            for item in options
+            if str(item.get("status") or "").lower()
+            not in {"deleted", "cancelled", "canceled"}
+        ]
+        if not candidates:
+            raise TransformationValidationError(
+                "authoritative_estimate_option_missing", fields=("options",)
+            )
+        selected_id_value = max(
+            candidates,
+            key=lambda item: (
+                str(item.get("updated_at") or ""),
+                str(item.get("option_number") or ""),
+                str(item.get("id") or ""),
+            ),
+        ).get("id")
+    selected_id = _id(selected_id_value, "_selected_option_id", "est_")
     selected = next(
         (
             item
