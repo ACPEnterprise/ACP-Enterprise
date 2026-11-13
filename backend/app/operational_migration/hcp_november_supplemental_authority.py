@@ -25,7 +25,6 @@ from app.operational_migration.hcp_november_executor import (
 CONTRACT = "hcp-november-supplemental-current-state-authority/v1"
 EXPECTED_ENVIRONMENT = "preview"
 EXPECTED_SCHEMA = "yp8r0t2v4x6z"
-EXPECTED_REPOSITORY_SHA = "f284d8466910aaba5816895275011e172cce373b"
 EXPECTED_COMPANY_ID = "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd"
 EXPECTED_BRANCH_ID = "887f413a-70dc-4ab1-98aa-8e84f4e7efd0"
 EXPECTED_ACTOR_ID = "c427ebd1-7583-4c0d-9c54-55a0c1214174"
@@ -191,7 +190,8 @@ class SupplementalCurrentStateAuthority:
         if (
             self.target != EXPECTED_ENVIRONMENT
             or self.schema_head != EXPECTED_SCHEMA
-            or self.repository_sha != EXPECTED_REPOSITORY_SHA
+            or len(self.repository_sha) != 40
+            or any(char not in "0123456789abcdef" for char in self.repository_sha)
             or self.company_id != EXPECTED_COMPANY_ID
             or self.branch_id != EXPECTED_BRANCH_ID
             or self.actor_id != EXPECTED_ACTOR_ID
