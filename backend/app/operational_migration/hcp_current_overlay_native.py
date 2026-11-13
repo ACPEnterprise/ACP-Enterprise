@@ -109,6 +109,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         financials: FinancialService | None = None,
         repository: OperationalMigrationRepository | None = None,
         qualified_targets: Mapping[OverlayKey, UUID] | None = None,
+        allow_clean_baseline_bootstrap: bool = False,
     ) -> None:
         if context.active_branch is None:
             raise ValueError("overlay requires active Branch scope")
@@ -129,6 +130,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         self._update_records: dict[OverlayKey, OverlayRecord] = {}
         self._records: dict[OverlayKey, OverlayRecord] = {}
         self._qualified_targets = dict(qualified_targets or {})
+        self._allow_clean_baseline_bootstrap = allow_clean_baseline_bootstrap
 
     def bind_lineage(
         self, *, master_run_id: UUID, customer_run_id: UUID, operational_run_id: UUID
@@ -159,6 +161,11 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             if record.assertion.value == "update"
             and record.key not in self._qualified_targets
         }
+        if self._allow_clean_baseline_bootstrap:
+            # An empty Preview baseline has no legacy native successor to bind.
+            # The executor will apply the explicit authority-bound bootstrap
+            # action through the normal native CREATE path.
+            return {"clean_baseline_bootstrap": {"UPDATE": len(self._update_records)}}
         remaining = tuple(
             record for record in records if record.key not in self._qualified_targets
         )
@@ -173,6 +180,8 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             target = await self._target(session, key)
         update = self._update_records.get(key)
         if target is None and update is not None:
+            if self._allow_clean_baseline_bootstrap:
+                return None
             if self._binding_bootstrap is None:
                 raise ValueError("overlay UPDATE binding bootstrap is unavailable")
             await self._binding_bootstrap.bind_for_update(session, update)

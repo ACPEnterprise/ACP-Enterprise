@@ -544,6 +544,7 @@ async def run_supplemental_current_state_qualification(
                 record.key: record.prior_source_digest or record.source_digest
                 for record in authority.packet.overlay_manifest.records
             },
+            allow_clean_baseline_bootstrap=True,
         )
         bootstrap = CurrentOverlayLineageBootstrap(binding, authority.packet.overlay_manifest)
         repository = SqlAlchemyCurrentOverlayRepository(
