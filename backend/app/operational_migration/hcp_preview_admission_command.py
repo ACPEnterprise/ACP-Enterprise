@@ -447,6 +447,7 @@ async def run_supplemental_current_state_qualification(
     authority_path: Path,
     *,
     dry_run: bool = False,
+    execute: bool = False,
 ) -> dict[str, object]:
     """Validate a current-state authority and the live Preview boundary read-only."""
     validate_runtime_boundary(
@@ -485,7 +486,7 @@ async def run_supplemental_current_state_qualification(
         "lineage_gaps": authority.lineage_gaps,
         "held_parent_executable_edges": inventory["held_parent_executable_edges"],
     }
-    if not dry_run:
+    if not dry_run and not execute:
         return result
 
     runtime_authority = NovemberQualificationAuthority(
@@ -556,23 +557,22 @@ async def run_supplemental_current_state_qualification(
                 "execution_packet_digest": authority.packet_digest,
                 "execution_packet_sha256": authority.packet_sha256,
             },
-            dry_run=True,
+            dry_run=dry_run,
         )
         receipt = await NovemberBoundedExecutor().execute(
             repository,
             authority=runtime_authority,
             packet=authority.packet,
-            qualified_packet={
-                "unexplained_omissions": 0,
-                "missing_lineage": 0,
-                "ambiguous_lineage": 0,
-            },
+            # The supplemental authority is the qualified boundary. Its
+            # packet carries the immutable qualification digest, not the
+            # legacy small-dictionary qualification projection.
+            qualified_packet=None,
             database_identity=database_identity,
             schema_head=authority.schema_head,
             clean_baseline_bootstrap=True,
         )
-    result["dry_run"] = {
-        "status": "PASS",
+    result["execution"] = {
+        "status": "PASS" if execute else "DRY_RUN_PASS",
         "receipt_digest": receipt.digest,
         "journal_count": len(receipt.journal),
         "outcomes": receipt.counts,
@@ -583,9 +583,10 @@ async def run_supplemental_current_state_qualification(
                 if item.native_action is not None
             )
         ),
-        "transaction_rolled_back": True,
+        "transaction_rolled_back": dry_run,
         "held_records_mutated": receipt.counts.get("held", 0) != inventory["total_held"],
     }
+    result["mode"] = "execute" if execute else "qualify"
     return result
 
 
@@ -602,21 +603,18 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, json.JSONDecodeError, AttributeError):
         authority_contract = None
     if authority_contract == "hcp-november-supplemental-current-state-authority/v1":
-        if args.mode == "execute":
-            print(
-                json.dumps(
-                    {
-                        "status": "rejected",
-                        "code": "supplemental_current_state_execution_requires_dry_run_and_owner_gate",
-                    }
-                )
-            )
+        if args.mode == "execute" and not args.authorize_execution:
+            print(json.dumps({
+                "status": "rejected",
+                "code": "explicit_execution_authorization_required",
+            }))
             return 2
         try:
             output = asyncio.run(
                 run_supplemental_current_state_qualification(
                     authority_path,
                     dry_run=args.dry_run,
+                    execute=args.mode == "execute",
                 )
             )
         except Exception as error:  # noqa: BLE001
