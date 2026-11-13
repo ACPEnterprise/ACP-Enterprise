@@ -678,8 +678,12 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
     async def _create_estimate(
         self, session: AsyncSession, record: OverlayRecord
     ) -> Estimate:
-        source = build_estimate(record.payload)
         parent = await self._job_identity(session, record.parent_keys)
+        payload = dict(record.payload)
+        payload.setdefault("_source_job_id", next(
+            key.source_id for key in record.parent_keys if key.domain == "job"
+        ))
+        source = build_estimate(payload)
         estimate, items = await self.financials.stage_migrated_estimate(
             session,
             context=self.context,
