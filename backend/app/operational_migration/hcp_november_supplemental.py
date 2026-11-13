@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -124,6 +125,29 @@ def _response_record(body: bytes, *, domain: str, source_id: str) -> dict[str, A
     return matches[0]
 
 
+def _page_request(locator: str, *, domain: str) -> tuple[str, int]:
+    relative = _locator_path(locator)
+    pattern = rf"^{re.escape(COLLECTIONS[domain])}-page-(\d{{4}})\.json$"
+    match = re.match(pattern, relative.name)
+    if match is None or relative.parent.name != "acquisition":
+        raise ValueError("supplemental locator is not an acquisition page locator")
+    return COLLECTIONS[domain], int(match.group(1))
+
+
+def _page_records(body: bytes, *, collection: str, page: int) -> list[dict[str, Any]]:
+    value = json.loads(body)
+    if not isinstance(value, dict) or not isinstance(value.get(collection), list):
+        raise ValueError("HCP acquisition page is invalid")
+    if value.get("page") != page:
+        raise ValueError("HCP acquisition page number mismatch")
+    if value.get("page_size") != 100:
+        raise ValueError("HCP acquisition page size mismatch")
+    records = value[collection]
+    if not all(isinstance(item, dict) and isinstance(item.get("id"), str) for item in records):
+        raise ValueError("HCP acquisition page contains invalid identities")
+    return records
+
+
 def _write_once(path: Path, body: bytes) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     _safe_mode(path.parent, 0o700)
@@ -158,53 +182,78 @@ def build_supplemental(
     # therefore cannot leave a partially sealed supplemental set.
     fetched: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
-    for row in sorted(rows, key=lambda item: (str(item["domain"]), str(item["source_id"]))):
-        domain = str(row["domain"])
-        source_id = str(row["source_id"])
-        identity = (domain, source_id)
-        if identity in seen:
-            raise ValueError("duplicate supplemental execution identity")
-        seen.add(identity)
-        response = transport.get(f"/{COLLECTIONS[domain]}/{source_id}")
-        if response.status != 200:
-            raise ValueError(f"HCP GET failed for {domain} without exposing response body")
-        record = _response_record(response.body, domain=domain, source_id=source_id)
-        actual_source_digest = _digest(record)
-        if actual_source_digest != row["source_digest"]:
-            raise ValueError(f"source digest mismatch for {domain}:{source_id}")
-        locator = str(row["payload_locator"])
-        _locator_path(locator)
-        fetched.append(
-            {
-                "domain": domain,
-                "source_id": source_id,
-                "source_digest": actual_source_digest,
-                "parent_keys": row.get("parent_keys", row.get("parent_lineage", [])),
-                "payload": record,
-                "raw_body": response.body,
-                "payload_locator": locator,
-                "request": f"GET /{COLLECTIONS[domain]}/{source_id}",
-            }
-        )
+    targets_by_domain: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for row in rows:
+        targets_by_domain[str(row["domain"])][str(row["source_id"])] = row
+    for domain, targets in sorted(targets_by_domain.items()):
+        collection = COLLECTIONS[domain]
+        page = 1
+        total_pages: int | None = None
+        while total_pages is None or page <= total_pages:
+            response = transport.get(
+                f"/{collection}", query={"page": page, "page_size": 100}
+            )
+            if response.status != 200:
+                raise ValueError(f"HCP GET failed for {domain} without exposing response body")
+            document = json.loads(response.body)
+            if not isinstance(document, dict) or not isinstance(document.get("total_pages"), int):
+                raise ValueError("HCP acquisition pagination is invalid")
+            total_pages = document["total_pages"]
+            page_rows = _page_records(response.body, collection=collection, page=page)
+            for record in page_rows:
+                source_id = str(record["id"])
+                row = targets.get(source_id)
+                if row is None:
+                    continue
+                identity = (domain, source_id)
+                if identity in seen:
+                    raise ValueError("duplicate supplemental execution identity")
+                seen.add(identity)
+                actual_source_digest = _digest(record)
+                if actual_source_digest != row["source_digest"]:
+                    raise ValueError(f"source digest mismatch for {domain}:{source_id}")
+                raw_body = (
+                    json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    + "\n"
+                ).encode()
+                raw_name = "raw/{}-{}.json".format(
+                    domain,
+                    hashlib.sha256(source_id.encode("utf-8")).hexdigest(),
+                )
+                fetched.append(
+                    {
+                        "domain": domain,
+                        "source_id": source_id,
+                        "source_digest": actual_source_digest,
+                        "parent_keys": row.get("parent_keys", row.get("parent_lineage", [])),
+                        "payload": record,
+                        "raw_body": raw_body,
+                        "raw_artifact": raw_name,
+                        "payload_locator": str(row["payload_locator"]),
+                        "request": f"GET /{collection}?page={page}&page_size=100",
+                    }
+                )
+            page += 1
+        missing = sorted(set(targets) - {source_id for target_domain, source_id in seen if target_domain == domain})
+        if missing:
+            raise ValueError(f"HCP acquisition did not return all requested {domain} identities")
 
     by_locator: dict[str, list[dict[str, Any]]] = defaultdict(list)
     raw_seals: list[dict[str, Any]] = []
+    raw_seen: set[str] = set()
     for item in fetched:
-        raw_name = "supplemental-raw-{}.json".format(
-            hashlib.sha256(f"{item['domain']}:{item['source_id']}".encode()).hexdigest()
-        )
-        raw_path = output_root / "raw" / raw_name
-        _write_once(raw_path, item["raw_body"])
-        raw_seals.append(
-            {
-                "artifact": str(raw_path.relative_to(output_root)),
-                "domain": item["domain"],
-                "source_id": item["source_id"],
-                "sha256": _sha256_bytes(item["raw_body"]),
-                "size_bytes": len(item["raw_body"]),
-                "request": item["request"],
-            }
-        )
+        raw_path = output_root / item["raw_artifact"]
+        if item["raw_artifact"] not in raw_seen:
+            _write_once(raw_path, item["raw_body"])
+            raw_seals.append(
+                {
+                    "artifact": item["raw_artifact"],
+                    "sha256": _sha256_bytes(item["raw_body"]),
+                    "size_bytes": len(item["raw_body"]),
+                    "request": item["request"],
+                }
+            )
+            raw_seen.add(item["raw_artifact"])
         by_locator[item["payload_locator"]].append(
             {
                 "domain": item["domain"],
@@ -220,7 +269,7 @@ def build_supplemental(
         body = (json.dumps({"records": records}, sort_keys=True, indent=2) + "\n").encode()
         _write_once(output_root / relative, body)
 
-    raw_seals.sort(key=lambda item: (item["domain"], item["source_id"]))
+    raw_seals.sort(key=lambda item: item["artifact"])
     fetched_at = fetched_at or _now()
     manifest: dict[str, Any] = {
         "contract": "hcp-november-supplemental-custody/v1",
@@ -236,6 +285,7 @@ def build_supplemental(
                 "source_id": item["source_id"],
                 "source_digest": item["source_digest"],
                 "payload_locator": item["payload_locator"],
+                "raw_artifact": item["raw_artifact"],
             }
             for item in fetched
         ],
