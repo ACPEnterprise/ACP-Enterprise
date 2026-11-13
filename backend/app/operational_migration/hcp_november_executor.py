@@ -532,6 +532,7 @@ class NovemberBoundedExecutor:
         schema_head: str,
         execution_timestamp: str | None = None,
         envelope: NovemberExecutionEnvelope | None = None,
+        clean_baseline_bootstrap: bool = False,
     ) -> OverlayExecutionReceipt:
         if database_identity.split(":", 1)[0] != authority.expected_database:
             _fail("hcp_november_execution_database_mismatch", database_identity)
@@ -610,7 +611,9 @@ class NovemberBoundedExecutor:
             execution_context=receipt_context,
             executable_domains=EXECUTABLE_DOMAINS,
             allow_clean_baseline_bootstrap=(
-                envelope.clean_baseline_bootstrap if envelope is not None else False
+                envelope.clean_baseline_bootstrap
+                if envelope is not None
+                else clean_baseline_bootstrap
             ),
         )
 
