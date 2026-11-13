@@ -6,7 +6,10 @@ import argparse
 import json
 from pathlib import Path
 
-from app.operational_migration.hcp_november_supplemental import build_supplemental
+from app.operational_migration.hcp_november_supplemental import (
+    build_paginated_current_state_supplemental,
+    build_supplemental,
+)
 from app.operational_migration.hcp_readonly_extractor import (
     HcpReadOnlyConfig,
     HcpReadOnlyTransport,
@@ -21,9 +24,16 @@ def main() -> int:
     parser.add_argument("--output-root", required=True, type=Path)
     parser.add_argument("--source-packet-sha256", required=True)
     parser.add_argument("--source-canonical-digest", required=True)
+    parser.add_argument("--paginated-target-scan", action="store_true")
+    parser.add_argument("--workers", type=int, choices=range(1, 9), default=1)
     args = parser.parse_args()
     config = HcpReadOnlyConfig.load(args.secret_file)
-    manifest = build_supplemental(
+    builder = (
+        build_paginated_current_state_supplemental
+        if args.paginated_target_scan
+        else build_supplemental
+    )
+    build_kwargs = dict(
         transport=HcpReadOnlyTransport(config),
         inventory_path=args.inventory,
         inventory_sha256=args.inventory_sha256,
@@ -31,6 +41,9 @@ def main() -> int:
         source_packet_sha256=args.source_packet_sha256,
         source_canonical_digest=args.source_canonical_digest,
     )
+    if args.paginated_target_scan:
+        build_kwargs["max_workers"] = args.workers
+    manifest = builder(**build_kwargs)
     print(
         json.dumps(
             {

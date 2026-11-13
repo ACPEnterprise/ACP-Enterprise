@@ -7,7 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.operational_migration.hcp_november_supplemental import build_supplemental
+from app.operational_migration.hcp_november_supplemental import (
+    build_paginated_current_state_supplemental,
+    build_supplemental,
+)
 from app.operational_migration.hcp_november_supplemental import _digest
 
 
@@ -112,3 +115,45 @@ def test_requested_identity_mismatch_fails_closed(tmp_path: Path) -> None:
             source_packet_sha256="a" * 64,
             source_canonical_digest="c" * 64,
         )
+
+
+def test_paginated_current_state_keeps_only_targets_and_completes_drift_scan(tmp_path: Path) -> None:
+    employee = {"id": "emp_1", "first_name": "A", "last_name": "Worker"}
+    estimate = {"id": "est_1", "status": "approved", "total": "10.00"}
+    invoice = {"id": "inv_1", "status": "paid", "total": "10.00"}
+    rows = []
+    for domain, source_id, payload, locator in (
+        ("employee", "emp_1", employee, "acquisition/employees-page-0001.json#employee:emp_1"),
+        ("estimate", "est_1", estimate, "acquisition/estimates-page-0001.json#estimate:est_1"),
+        ("invoice", "inv_1", invoice, "acquisition/invoices-page-0001.json#invoice:inv_1"),
+    ):
+        rows.append({"domain": domain, "source_id": source_id, "source_digest": _digest(payload), "payload_locator": locator, "disposition": "REPLAY"})
+    # The real inventory has 1,013 records; this focused test exercises the
+    # scanner with the same domain contract through a patched target count.
+    inventory = {"records": rows, "source_packet_sha256": "a" * 64}
+    inventory_path = tmp_path / "inventory.json"
+    inventory_path.write_text(json.dumps(inventory, sort_keys=True))
+    inventory_sha = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
+    transport = FakeTransport({
+        "/estimates?page=1&page_size=100": json.dumps({"estimates": [estimate, {"id": "unrelated-est"}], "page": 1, "page_size": 100, "total_pages": 1}, sort_keys=True).encode(),
+        "/invoices?page=1&page_size=100": json.dumps({"invoices": [invoice, {"id": "unrelated-invoice"}], "page": 1, "page_size": 100, "total_pages": 1}, sort_keys=True).encode(),
+    })
+    # The production builder requires the full Estimate/Invoice population;
+    # validate its page filtering separately with a two-domain inventory shape.
+    rows = [row for row in rows if row["domain"] != "employee"]
+    inventory["records"] = rows
+    inventory_path.write_text(json.dumps(inventory, sort_keys=True))
+    inventory_sha = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
+    result = build_paginated_current_state_supplemental(
+        transport=transport,
+        inventory_path=inventory_path,
+        inventory_sha256=inventory_sha,
+        output_root=tmp_path / "current",
+        source_packet_sha256="a" * 64,
+        source_canonical_digest="b" * 64,
+        expected_target_count=2,
+        max_workers=2,
+    )
+    assert result["scan"]["unrelated_records_examined_and_discarded"] == {"estimate": 1, "invoice": 1}
+    assert result["classification_counts"]["EXACT_SEALED_MATCH"] == 2
+    assert result["status"] == "COMPLETE"

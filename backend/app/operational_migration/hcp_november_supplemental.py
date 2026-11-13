@@ -13,7 +13,8 @@ import json
 import os
 import re
 import stat
-from collections import defaultdict
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Protocol
@@ -309,4 +310,199 @@ def build_supplemental(
         "status": "COMPLETE",
     }
     _write_once(output_root / "supplemental-custody-receipt.json", (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode())
+    return manifest
+
+
+def build_paginated_current_state_supplemental(
+    *,
+    transport: GetOnlyTransport,
+    inventory_path: Path,
+    inventory_sha256: str,
+    output_root: Path,
+    source_packet_sha256: str,
+    source_canonical_digest: str,
+    fetched_at: str | None = None,
+    expected_target_count: int = 1013,
+    max_workers: int = 1,
+) -> dict[str, Any]:
+    """Scan only Estimate/Invoice collection pages and retain target records.
+
+    Collection APIs return page peers, so peers are counted and discarded in
+    memory.  Only identities present in the sealed inventory are written to the
+    current-state custody set.  A digest mismatch is conservatively classified
+    as ``BUSINESS_STATE_CHANGED`` for execution safety; without the historical
+    body, this is not a claim that a particular business field changed.
+    """
+    inventory, rows = load_inventory(inventory_path, inventory_sha256)
+    targets_by_domain: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for row in rows:
+        if row["domain"] in {"employee", "estimate", "invoice"}:
+            targets_by_domain[str(row["domain"])][str(row["source_id"])] = row
+    if sum(len(value) for value in targets_by_domain.values()) != expected_target_count:
+        raise ValueError("paginated supplemental target population has an unexpected size")
+    if output_root.exists():
+        if output_root.is_symlink() or not output_root.is_dir():
+            raise ValueError("current supplemental output root is unsafe")
+    else:
+        output_root.mkdir(mode=0o700, parents=True)
+    _safe_mode(output_root, 0o700)
+
+    fetched: list[dict[str, Any]] = []
+    pages_requested: dict[str, int] = {}
+    records_examined: dict[str, int] = {}
+    unrelated_discarded: dict[str, int] = {}
+    found: dict[str, set[str]] = defaultdict(set)
+    duplicate_targets: set[tuple[str, str]] = set()
+    for domain, targets in sorted(targets_by_domain.items()):
+        collection = COLLECTIONS[domain]
+        def fetch_page(page: int) -> tuple[int, bytes, dict[str, Any]]:
+            response = transport.get(
+                f"/{collection}", query={"page": page, "page_size": 100}
+            )
+            if response.status != 200:
+                raise ValueError(f"HCP GET failed for {domain} without exposing response body")
+            document = json.loads(response.body)
+            if not isinstance(document, dict) or not isinstance(document.get("total_pages"), int):
+                raise ValueError("HCP acquisition pagination is invalid")
+            return page, response.body, document
+
+        def consume_page(page: int, body: bytes) -> None:
+            page_rows = _page_records(body, collection=collection, page=page)
+            pages_requested[domain] = pages_requested.get(domain, 0) + 1
+            records_examined[domain] = records_examined.get(domain, 0) + len(page_rows)
+            for record in page_rows:
+                source_id = str(record["id"])
+                row = targets.get(source_id)
+                if row is None:
+                    unrelated_discarded[domain] = unrelated_discarded.get(domain, 0) + 1
+                    continue
+                identity = (domain, source_id)
+                if identity in duplicate_targets or source_id in found[domain]:
+                    duplicate_targets.add(identity)
+                    continue
+                found[domain].add(source_id)
+                current_digest = _digest(record)
+                classification = (
+                    "EXACT_SEALED_MATCH"
+                    if current_digest == row["source_digest"]
+                    else "BUSINESS_STATE_CHANGED"
+                )
+                raw_body = (
+                    json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    + "\n"
+                ).encode()
+                raw_artifact = "raw/{}-{}.json".format(
+                    domain,
+                    hashlib.sha256(source_id.encode("utf-8")).hexdigest(),
+                )
+                fetched.append(
+                    {
+                        "domain": domain,
+                        "source_id": source_id,
+                        "original_disposition": row["disposition"],
+                        "original_source_digest": row["source_digest"],
+                        "current_source_digest": current_digest,
+                        "classification": classification,
+                        "comparison_limitation": (
+                            None
+                            if classification == "EXACT_SEALED_MATCH"
+                            else "historical November body unavailable; digest mismatch is conservatively held and is not field-level proof of business change"
+                        ),
+                        "payload_locator": row["payload_locator"],
+                        "raw_body": raw_body,
+                        "raw_artifact": raw_artifact,
+                        "request": f"GET /{collection}?page={page}&page_size=100",
+                        "acquired_at": fetched_at or _now(),
+                    }
+                )
+        first_page, first_body, first_document = fetch_page(1)
+        total_pages = first_document["total_pages"]
+        consume_page(first_page, first_body)
+        if found[domain] < set(targets):
+            remaining_pages = range(2, total_pages + 1)
+            if max_workers <= 1:
+                for page in remaining_pages:
+                    _, body, _ = fetch_page(page)
+                    consume_page(page, body)
+                    if found[domain] >= set(targets):
+                        break
+            else:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(fetch_page, page): page for page in remaining_pages}
+                    for future in as_completed(futures):
+                        page, body, _ = future.result()
+                        consume_page(page, body)
+    missing = {
+        domain: sorted(set(targets) - found[domain])
+        for domain, targets in targets_by_domain.items()
+        if set(targets) - found[domain]
+    }
+    if duplicate_targets:
+        for domain, source_id in duplicate_targets:
+            missing.setdefault(domain, []).append(source_id)
+    raw_seals: list[dict[str, Any]] = []
+    by_artifact: dict[str, dict[str, Any]] = {}
+    for item in fetched:
+        by_artifact[item["raw_artifact"]] = item
+    for artifact, item in sorted(by_artifact.items()):
+        path = output_root / artifact
+        _write_once(path, item["raw_body"])
+        raw_seals.append(
+            {
+                "artifact": artifact,
+                "sha256": _sha256_bytes(item["raw_body"]),
+                "size_bytes": len(item["raw_body"]),
+                "domain": item["domain"],
+                "source_id": item["source_id"],
+                "request": item["request"],
+            }
+        )
+    counts = Counter(item["classification"] for item in fetched)
+    manifest: dict[str, Any] = {
+        "contract": "hcp-november-supplemental-current-state-custody/v1",
+        "http_method_allowlist": ["GET"],
+        "inventory_sha256": inventory_sha256,
+        "inventory_metadata": {
+            key: inventory[key]
+            for key in ("contract", "source_packet_sha256", "derived_packet_sha256")
+            if key in inventory
+        },
+        "source_packet_sha256": source_packet_sha256,
+        "source_canonical_digest": source_canonical_digest,
+        "fetched_at": fetched_at or _now(),
+        "scan": {
+            "pages_requested": pages_requested,
+            "records_examined": records_examined,
+            "target_found": {domain: len(found[domain]) for domain in targets_by_domain},
+            "target_missing": {domain: len(values) for domain, values in missing.items()},
+            "unrelated_records_examined_and_discarded": unrelated_discarded,
+            "stop_policy": "all_targets_found_or_pagination_exhausted",
+        },
+        "classification_counts": {
+            name: counts.get(name, 0)
+            for name in (
+                "EXACT_SEALED_MATCH",
+                "REPRESENTATION_DRIFT",
+                "BUSINESS_STATE_CHANGED",
+                "IDENTITY_CONFLICT",
+                "MISSING_CURRENT",
+            )
+        },
+        "records": [
+            {
+                key: value
+                for key, value in item.items()
+                if key not in {"raw_body"}
+            }
+            for item in sorted(fetched, key=lambda value: (value["domain"], value["source_id"]))
+        ],
+        "raw_artifacts": raw_seals,
+        "missing": missing,
+        "status": "COMPLETE" if not missing and not duplicate_targets else "INCOMPLETE",
+    }
+    manifest["digest"] = _digest(manifest)
+    _write_once(
+        output_root / "supplemental-current-state-manifest.json",
+        (json.dumps(manifest, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode(),
+    )
     return manifest
