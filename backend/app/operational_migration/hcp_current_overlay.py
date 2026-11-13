@@ -338,11 +338,7 @@ class CurrentOverlayExecutor:
                     if state.source_digest != record.source_digest:
                         raise ValueError("overlay create conflicts with native truth")
                     outcome = "idempotent_replay"
-                    action = (
-                        "REPLAY_NOOP"
-                        if (record.source_disposition or "").upper() == "REPLAY"
-                        else "CREATE_NATIVE"
-                    )
+                    action = "REPLAY_NOOP"
                     after = state
                 else:
                     source_disposition = (record.source_disposition or "CREATE").upper()

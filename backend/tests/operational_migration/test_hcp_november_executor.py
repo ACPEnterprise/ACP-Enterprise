@@ -585,3 +585,41 @@ async def test_clean_baseline_bootstrap_preserves_update_replay_and_is_idempoten
     )
     assert replay.digest == receipt.digest
     assert len(repo.states) == 2
+
+
+@pytest.mark.asyncio
+async def test_identical_existing_create_is_labeled_replay_noop() -> None:
+    record = OverlayRecord(
+        domain="customer",
+        source_id="cus-create",
+        assertion=OverlayAssertion.CREATE,
+        source_digest="4" * 64,
+        acquired_at=ACQUIRED,
+        payload={"first_name": "Create", "last_name": "Source"},
+        source_disposition="CREATE",
+    )
+    manifest = CurrentOverlayManifest.build(
+        base_source4_digest=BUNDLE,
+        delta_digest=POLICY,
+        company_id=COMPANY,
+        branch_id=BRANCH,
+        acquired_at=ACQUIRED,
+        records=(record,),
+    )
+    repo = MemoryRepository()
+    await CurrentOverlayExecutor().execute(
+        repo,
+        manifest=manifest,
+        expected_base_source4_digest=BUNDLE,
+        rollback_backup_digest=BACKUP,
+        executable_domains=frozenset({"customer"}),
+    )
+    repo.receipts.clear()
+    receipt = await CurrentOverlayExecutor().execute(
+        repo,
+        manifest=manifest,
+        expected_base_source4_digest=BUNDLE,
+        rollback_backup_digest=BACKUP,
+        executable_domains=frozenset({"customer"}),
+    )
+    assert receipt.journal[0].native_action == "REPLAY_NOOP"
