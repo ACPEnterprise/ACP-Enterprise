@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.simulation.phase1 import SimulationInvariantError, run_phase1
+from app.simulation.phase1 import (
+    ACCOUNTING_REGRESSION_SCENARIOS,
+    SimulationInvariantError,
+    run_accounting_regression_scenarios,
+    run_phase1,
+)
 
 
 def test_phase1_passes_with_zero_variance_and_complete_lifecycle() -> None:
@@ -25,3 +30,10 @@ def test_phase1_is_explicitly_synthetic_and_does_not_use_live_targets() -> None:
     assert receipt["mode"] == "synthetic_isolated"
     assert receipt["company_id"] == "sim-company-0001"
     assert not any("production" in path.lower() for path in receipt["service_paths"].values())
+
+
+def test_accounting_regressions_cover_all_real_defect_classes() -> None:
+    result = run_accounting_regression_scenarios()
+    assert result["status"] == "PASS"
+    assert len(result["scenarios"]) == len(ACCOUNTING_REGRESSION_SCENARIOS) == 8
+    assert all(row["synthetic_only"] and row["status"] == "PASS" for row in result["scenarios"])

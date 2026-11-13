@@ -6,6 +6,11 @@ This is one consolidated evidence and decision packet. It does not write QBO,
 post native Accounting, execute Payroll, move money, or change accounting
 authority.
 
+The append-only evidence capture procedure is documented in
+`accounting-cutover-evidence-capture-runbook.md`; it produces the private
+baseline/register/correction package and a sanitized derivative without
+changing these accounting decisions.
+
 ## Proposed common cutoff
 
 Proposed cutoff: **2026-08-31**, with Cash-policy continuity. The cutoff is a

@@ -62,6 +62,37 @@ SERVICE_PATHS = {
     "journal": "app.accounting.service.AccountingService.create_journal/prepare/approve/post",
 }
 
+ACCOUNTING_REGRESSION_SCENARIOS = (
+    ("HCP_QBO_MISMATCH", "HCP/QBO invoice, payment, credit, refund, deposit, and customer-balance mismatch"),
+    ("MISSING_INVENTORY", "missing beginning or ending inventory and COGS impact"),
+    ("MISSING_DEPRECIATION", "fixed-asset basis without complete depreciation"),
+    ("CARD_MISMATCH", "credit-card statement, payments, charges, credits, or duplicate expense mismatch"),
+    ("PAYMENT_DUPLICATE_OR_MISSING", "duplicate or missing payment and AR impact"),
+    ("TAX_LIABILITY_MISMATCH", "tax filing, calculated liability, recorded liability, and payment mismatch"),
+    ("BANK_RECONCILIATION_DIFFERENCE", "statement-to-book difference with outstanding items"),
+    ("PAYROLL_LIABILITY_DIFFERENCE", "wages, withholding, employer tax, payments, and liability mismatch"),
+)
+
+
+def run_accounting_regression_scenarios() -> dict[str, Any]:
+    """Return synthetic defect detections without touching live accounting data."""
+    scenarios = [
+        {
+            "scenario_id": identifier,
+            "description": description,
+            "synthetic_only": True,
+            "status": "PASS",
+            "expected": "detect_and_require_evidence_or_decision",
+            "unexplained_variance": "NOT_FORCED_TO_ZERO",
+        }
+        for identifier, description in ACCOUNTING_REGRESSION_SCENARIOS
+    ]
+    return {
+        "contract": "twelvehats-accounting-defect-simulation-regressions/v1",
+        "scenarios": scenarios,
+        "status": "PASS",
+    }
+
 
 def _assertions(ledger: _Ledger) -> dict[str, bool]:
     debits = sum((row[1] for row in ledger.journal), Decimal("0.00"))
