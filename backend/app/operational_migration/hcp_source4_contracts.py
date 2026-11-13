@@ -255,12 +255,20 @@ def _exact_object(
 
 
 def _exact_list(
-    row: Mapping[str, object], key: str, expected: frozenset[str]
+    row: Mapping[str, object],
+    key: str,
+    expected: frozenset[str],
+    *,
+    allow_extra: bool = False,
 ) -> list[object]:
     value = row[key]
     if not isinstance(value, list):
         raise TransformationValidationError("changed_nested_layout", fields=(key,))
-    if any(not isinstance(item, Mapping) or set(item) != expected for item in value):
+    if any(
+        not isinstance(item, Mapping)
+        or (set(item) != expected if not allow_extra else not expected.issubset(item))
+        for item in value
+    ):
         raise TransformationValidationError("changed_nested_layout", fields=(key,))
     return value
 
@@ -425,6 +433,7 @@ def build_estimate(row: Mapping[str, object]) -> EstimateMigrationRecord:
                 "updated_at",
             }
         ),
+        allow_extra=True,
     )
     selected_id = _id(row["_selected_option_id"], "_selected_option_id", "est_")
     selected = next(
