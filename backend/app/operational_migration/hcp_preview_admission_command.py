@@ -39,7 +39,9 @@ from app.operational_migration.hcp_november_bundle import (
 )
 from app.operational_migration.hcp_november_executor import (
     NovemberExecutionEnvelope,
+    _packet_inventory,
     run_november_execution,
+    validate_supplemental_current_state_authority,
     validate_runtime_boundary,
 )
 from app.operational_migration.hcp_successor_reuse import (
@@ -428,6 +430,48 @@ async def run_november_bundle(
     return packet
 
 
+async def run_supplemental_current_state_qualification(
+    authority_path: Path,
+) -> dict[str, object]:
+    """Validate a current-state authority and the live Preview boundary read-only."""
+    validate_runtime_boundary(
+        os.getenv("TARGET_ENVIRONMENT", ""),
+        os.getenv("PRODUCTION_ACCESS_ENABLED", "false").lower() == "true",
+        os.getenv("PREVIEW_ACCESS_ENABLED", "false").lower() == "true",
+        {
+            name: os.getenv(name, "false")
+            for name in (
+                "HCP_PROVIDER_WRITE_ENABLED",
+                "HCP_LIVE_ACCESS_ENABLED",
+                "QBO_PRODUCTION_ENABLED",
+                "PAYROLL_EXECUTION_ENABLED",
+            )
+        },
+    )
+    authority = validate_supplemental_current_state_authority(authority_path)
+    if os.getenv("APP_VERSION", "") != authority.repository_sha:
+        raise SafeEvidenceError("hcp_november_supplemental_repository_authority_mismatch", "0" * 64)
+    async with AsyncSessionFactory() as session:
+        schema = tuple((await session.scalars(text("SELECT version_num FROM alembic_version"))).all())
+        database = str(await session.scalar(text("SELECT current_database()")))
+    if schema != (authority.schema_head,) or database != "acp_enterprise_preview":
+        raise SafeEvidenceError("hcp_november_supplemental_database_authority_mismatch", "0" * 64)
+    inventory = _packet_inventory(authority.packet.records)
+    return {
+        "contract": "hcp-november-supplemental-current-state-authority/v1",
+        "status": "PASS",
+        "mode": "qualify",
+        "authority_digest": authority.authority_digest,
+        "packet_digest": authority.packet_digest,
+        "counts": inventory["counts"],
+        "executable_count": inventory["executable"],
+        "total_held": inventory["total_held"],
+        "unexplained_omissions": authority.unexplained_omissions,
+        "lineage_gaps": authority.lineage_gaps,
+        "held_parent_executable_edges": inventory["held_parent_executable_edges"],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("qualify", "execute"))
@@ -439,6 +483,31 @@ def main(argv: list[str] | None = None) -> int:
         authority_contract = json.loads(authority_path.read_bytes()).get("contract")
     except (OSError, json.JSONDecodeError, AttributeError):
         authority_contract = None
+    if authority_contract == "hcp-november-supplemental-current-state-authority/v1":
+        if args.mode == "execute":
+            print(
+                json.dumps(
+                    {
+                        "status": "rejected",
+                        "code": "supplemental_current_state_execution_requires_dry_run_and_owner_gate",
+                    }
+                )
+            )
+            return 2
+        try:
+            output = asyncio.run(
+                run_supplemental_current_state_qualification(authority_path)
+            )
+        except Exception as error:  # noqa: BLE001
+            code = (
+                error.code
+                if isinstance(error, SafeEvidenceError)
+                else "hcp_november_supplemental_qualification_failed"
+            )
+            print(json.dumps({"status": "rejected", "code": code}))
+            return 2
+        print(json.dumps(output, sort_keys=True))
+        return 0
     if authority_contract == NOVEMBER_AUTHORITY_CONTRACT:
         if args.mode == "execute" and not args.authorize_execution:
             print(

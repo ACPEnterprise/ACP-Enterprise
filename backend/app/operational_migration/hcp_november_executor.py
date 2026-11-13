@@ -79,6 +79,15 @@ def validate_runtime_boundary(environment: str, production: bool, preview: bool,
             _fail("hcp_november_external_write_boundary_invalid", name)
 
 
+def validate_supplemental_current_state_authority(path: Path) -> Any:
+    """Load the explicit current-state authority without touching application data."""
+    from app.operational_migration.hcp_november_supplemental_authority import (
+        SupplementalCurrentStateAuthority,
+    )
+
+    return SupplementalCurrentStateAuthority.load(path)
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
