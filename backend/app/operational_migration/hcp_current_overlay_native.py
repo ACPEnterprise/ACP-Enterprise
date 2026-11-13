@@ -418,7 +418,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         payload = record.payload
         first = _text(payload.get("first_name"))
         last = _text(payload.get("last_name"))
-        company = _text(payload.get("company"))
+        company = _text(payload.get("company") or payload.get("company_name"))
         display_name = company or " ".join(value for value in (first, last) if value)
         if not display_name:
             raise ValueError("source Customer has no authoritative display name")
