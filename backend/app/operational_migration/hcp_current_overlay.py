@@ -59,6 +59,8 @@ class OverlayRecord:
     parent_keys: tuple[OverlayKey, ...] = ()
     native_fingerprint: str | None = None
     reason: str = ""
+    # Preserve the source disposition separately from the native assertion.
+    source_disposition: str | None = None
 
     @property
     def key(self) -> OverlayKey:
@@ -151,6 +153,7 @@ class CurrentOverlayManifest:
                 ),
                 native_fingerprint=item.get("native_fingerprint"),
                 reason=item.get("reason", ""),
+                source_disposition=item.get("source_disposition"),
             )
             for item in value["records"]
         )
@@ -196,6 +199,7 @@ class OverlayJournalEntry:
     before_digest: str | None
     after_digest: str | None
     native_id: str | None
+    native_action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -252,6 +256,7 @@ class CurrentOverlayExecutor:
         | Callable[[OverlayExecutionReceipt], Mapping[str, object]]
         | None = None,
         executable_domains: frozenset[str] | None = None,
+        allow_clean_baseline_bootstrap: bool = False,
     ) -> OverlayExecutionReceipt:
         manifest.verify()
         if manifest.base_source4_digest != expected_base_source4_digest:
@@ -269,6 +274,7 @@ class CurrentOverlayExecutor:
                 rollback_backup_digest,
                 require_non_mutating_parents=require_non_mutating_parents,
                 executable_domains=executable_domains,
+                allow_clean_baseline_bootstrap=allow_clean_baseline_bootstrap,
             )
             if execution_context is not None:
                 context = (
@@ -288,6 +294,7 @@ class CurrentOverlayExecutor:
         *,
         require_non_mutating_parents: bool,
         executable_domains: frozenset[str] | None,
+        allow_clean_baseline_bootstrap: bool,
     ) -> OverlayExecutionReceipt:
         keys = {item.key for item in manifest.records}
         blocked_keys = {
@@ -326,12 +333,29 @@ class CurrentOverlayExecutor:
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
                 after: OverlaySourceState | None
+                action: str | None
                 if state is not None:
                     if state.source_digest != record.source_digest:
                         raise ValueError("overlay create conflicts with native truth")
                     outcome = "idempotent_replay"
+                    action = (
+                        "REPLAY_NOOP"
+                        if (record.source_disposition or "").upper() == "REPLAY"
+                        else "CREATE_NATIVE"
+                    )
                     after = state
                 else:
+                    source_disposition = (record.source_disposition or "CREATE").upper()
+                    if source_disposition in {"UPDATE", "REPLAY"}:
+                        if not allow_clean_baseline_bootstrap:
+                            raise ValueError("clean-baseline bootstrap authority is required")
+                        action = (
+                            "BOOTSTRAP_CREATE_FROM_UPDATE"
+                            if source_disposition == "UPDATE"
+                            else "BOOTSTRAP_CREATE_FROM_REPLAY"
+                        )
+                    else:
+                        action = "CREATE_NATIVE"
                     if record.native_fingerprint:
                         owners = await repository.fingerprint_owners(
                             record.domain, record.native_fingerprint
@@ -353,6 +377,7 @@ class CurrentOverlayExecutor:
                         blocked_keys.add(record.key)
                         after = state
                         outcome = "held"
+                        action = None
                 journal.append(
                     OverlayJournalEntry(
                         record.key,
@@ -361,9 +386,37 @@ class CurrentOverlayExecutor:
                         state.source_digest if state else None,
                         after.source_digest if after else None,
                         after.native_id if after else None,
+                        action,
                     )
                 )
             elif record.assertion is OverlayAssertion.UPDATE:
+                if state is None and (record.source_disposition or "").upper() == "UPDATE":
+                    if not allow_clean_baseline_bootstrap:
+                        raise ValueError("clean-baseline bootstrap authority is required")
+                    try:
+                        after = await repository.create(record)
+                        outcome = "bootstrapped"
+                        action = "BOOTSTRAP_CREATE_FROM_UPDATE"
+                    except OverlayDomainHold as error:
+                        await repository.record_non_mutating_assertion(
+                            replace(record, assertion=OverlayAssertion.HOLD, payload={}, reason=str(error))
+                        )
+                        blocked_keys.add(record.key)
+                        after = state
+                        outcome = "held"
+                        action = None
+                    journal.append(
+                        OverlayJournalEntry(
+                            record.key,
+                            record.assertion,
+                            outcome,
+                            None,
+                            after.source_digest if after else None,
+                            after.native_id if after else None,
+                            action,
+                        )
+                    )
+                    continue
                 if state is None or record.prior_source_digest != state.source_digest:
                     raise ValueError("overlay update compare-before-write mismatch")
                 if record.native_fingerprint:
@@ -375,6 +428,7 @@ class CurrentOverlayExecutor:
                 if state.source_digest == record.source_digest:
                     after = state
                     outcome = "idempotent_replay"
+                    action = "REPLAY_NOOP"
                 else:
                     try:
                         after = await repository.update(state, record)
@@ -391,6 +445,9 @@ class CurrentOverlayExecutor:
                         blocked_keys.add(record.key)
                         after = state
                         outcome = "held"
+                        action = None
+                    else:
+                        action = "UPDATE_NATIVE"
                 journal.append(
                     OverlayJournalEntry(
                         record.key,
@@ -399,6 +456,7 @@ class CurrentOverlayExecutor:
                         state.source_digest,
                         after.source_digest,
                         after.native_id,
+                        action,
                     )
                 )
             else:
@@ -413,6 +471,7 @@ class CurrentOverlayExecutor:
                         state.source_digest if state else None,
                         state.source_digest if state else None,
                         state.native_id if state else None,
+                        None,
                     )
                 )
 

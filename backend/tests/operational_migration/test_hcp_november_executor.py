@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from app.operational_migration.hcp_current_overlay import (
+    CurrentOverlayExecutor,
     CurrentOverlayManifest,
     OverlayAssertion,
     OverlayKey,
@@ -520,3 +521,67 @@ def test_execution_envelope_authority_mismatch_fails_closed(tmp_path: Path) -> N
     envelope = NovemberExecutionEnvelope.load(envelope_path)
     with pytest.raises(SafeEvidenceError, match="hcp_november_execution_authority_mismatch"):
         envelope.verify_against(stale)
+
+
+@pytest.mark.asyncio
+async def test_clean_baseline_bootstrap_preserves_update_replay_and_is_idempotent() -> None:
+    records = (
+        OverlayRecord(
+            domain="customer",
+            source_id="cus-update",
+            assertion=OverlayAssertion.UPDATE,
+            source_digest="1" * 64,
+            acquired_at=ACQUIRED,
+            payload={"first_name": "Update", "last_name": "Source"},
+            prior_source_digest="2" * 64,
+            source_disposition="UPDATE",
+        ),
+        OverlayRecord(
+            domain="customer",
+            source_id="cus-replay",
+            assertion=OverlayAssertion.CREATE,
+            source_digest="3" * 64,
+            acquired_at=ACQUIRED,
+            payload={"first_name": "Replay", "last_name": "Source"},
+            source_disposition="REPLAY",
+        ),
+    )
+    manifest = CurrentOverlayManifest.build(
+        base_source4_digest=BUNDLE,
+        delta_digest=POLICY,
+        company_id=COMPANY,
+        branch_id=BRANCH,
+        acquired_at=ACQUIRED,
+        records=records,
+    )
+    repo = MemoryRepository()
+    with pytest.raises(ValueError, match="clean-baseline bootstrap authority"):
+        await CurrentOverlayExecutor().execute(
+            repo,
+            manifest=manifest,
+            expected_base_source4_digest=BUNDLE,
+            rollback_backup_digest=BACKUP,
+            executable_domains=frozenset({"customer"}),
+        )
+    receipt = await CurrentOverlayExecutor().execute(
+        repo,
+        manifest=manifest,
+        expected_base_source4_digest=BUNDLE,
+        rollback_backup_digest=BACKUP,
+        executable_domains=frozenset({"customer"}),
+        allow_clean_baseline_bootstrap=True,
+    )
+    assert {entry.native_action for entry in receipt.journal} == {
+        "BOOTSTRAP_CREATE_FROM_UPDATE",
+        "BOOTSTRAP_CREATE_FROM_REPLAY",
+    }
+    replay = await CurrentOverlayExecutor().execute(
+        repo,
+        manifest=manifest,
+        expected_base_source4_digest=BUNDLE,
+        rollback_backup_digest=BACKUP,
+        executable_domains=frozenset({"customer"}),
+        allow_clean_baseline_bootstrap=True,
+    )
+    assert replay.digest == receipt.digest
+    assert len(repo.states) == 2

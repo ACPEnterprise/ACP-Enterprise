@@ -182,6 +182,7 @@ class NovemberExecutionPacket:
                         parent_keys=parents,
                         native_fingerprint=item.get("native_fingerprint"),
                         reason=str(item.get("reason", "")),
+                        source_disposition=str(item.get("disposition", "")).upper(),
                     )
                 )
             overlay = CurrentOverlayManifest.build(
@@ -342,6 +343,7 @@ class NovemberExecutionEnvelope:
     operational_hold_source_ids: dict[str, tuple[str, ...]]
     authority_digest: str
     packet: NovemberExecutionPacket
+    clean_baseline_bootstrap: bool = False
 
     @classmethod
     def load(cls, path: Path) -> NovemberExecutionEnvelope:
@@ -392,6 +394,7 @@ class NovemberExecutionEnvelope:
                 },
                 authority_digest=str(value["authority_digest"]),
                 packet=packet,
+                clean_baseline_bootstrap=bool(value.get("clean_baseline_bootstrap", False)),
             )
             envelope.verify()
             return envelope
@@ -425,6 +428,7 @@ class NovemberExecutionEnvelope:
             "held_parent_executable_edges": self.held_parent_executable_edges,
             "operational_hold_policy": self.operational_hold_policy,
             "operational_hold_source_ids": self.operational_hold_source_ids,
+            "clean_baseline_bootstrap": self.clean_baseline_bootstrap,
         }
 
     def verify(self) -> None:
@@ -562,6 +566,13 @@ class NovemberBoundedExecutor:
                     "idempotent_replay": outcomes.get("idempotent_replay", 0),
                     "held": outcomes.get("held", 0),
                 },
+                "native_actions": dict(
+                    Counter(
+                        item.native_action
+                        for item in receipt.journal
+                        if item.native_action is not None
+                    )
+                ),
                 "packet_record_count": inventory["total"],
                 "executable_count": inventory["executable"],
                 "total_held": inventory["total_held"],
@@ -589,6 +600,9 @@ class NovemberBoundedExecutor:
             require_non_mutating_parents=True,
             execution_context=receipt_context,
             executable_domains=EXECUTABLE_DOMAINS,
+            allow_clean_baseline_bootstrap=(
+                envelope.clean_baseline_bootstrap if envelope is not None else False
+            ),
         )
 
 

@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.customer_migration.models import (
     CustomerSourceIdentity,
     ServiceLocationSourceIdentity,
+)
+from app.financials.service import (
+    FinancialService,
+    MigrateEstimate,
+    MigrateInvoice,
+    MigratedLineItem,
 )
 from app.customers.models import Customer, ServiceLocation
 from app.customers.schemas import (
@@ -45,12 +51,27 @@ from app.operational_migration.hcp_source4_contracts import JOB_STATUS
 from app.operational_migration.hcp_source4_native_binding import (
     HcpSource4NativeBindingBootstrap,
 )
+from app.operational_migration.hcp_migration2b import (
+    EmployeeCrosswalkCommand,
+    persist_employee_crosswalk,
+)
+from app.operational_migration.hcp_source4_contracts import (
+    build_estimate,
+    build_invoice,
+)
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
+    EstimateLineItemSourceIdentity,
+    EstimateSourceIdentity,
+    HcpEmployeeSourceCrosswalk,
     HcpMigrationHold,
+    InvoiceLineItemSourceIdentity,
+    InvoiceSourceIdentity,
     JobSourceIdentity,
 )
 from app.operational_migration.repository import OperationalMigrationRepository
+from app.financials.models import Estimate, Invoice
+from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.models import Appointment
 from app.scheduling.service import (
@@ -66,6 +87,7 @@ from app.scheduling.types import (
 
 SOURCE_SYSTEM = "housecall_pro_source4"
 TRANSFORMATION_VERSION = "hcp-current-native-overlay/v1"
+EMPLOYEE_NAMESPACE = UUID("82f43837-ceec-5d02-bb92-cf65b9ac6af8")
 
 
 class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
@@ -84,6 +106,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         customer_updates: CustomerUpdateService = customer_update_service,
         jobs: JobService | None = None,
         scheduling: SchedulingService | None = None,
+        financials: FinancialService | None = None,
         repository: OperationalMigrationRepository | None = None,
         qualified_targets: Mapping[OverlayKey, UUID] | None = None,
     ) -> None:
@@ -100,6 +123,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         self.customer_updates = customer_updates
         self.jobs = jobs or JobService()
         self.scheduling = scheduling or SchedulingService()
+        self.financials = financials or FinancialService()
         self.repository = repository or OperationalMigrationRepository()
         self._binding_bootstrap: HcpSource4NativeBindingBootstrap | None = None
         self._update_records: dict[OverlayKey, OverlayRecord] = {}
@@ -243,6 +267,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             "service_location": ServiceLocation,
             "job": Job,
             "appointment": Appointment,
+            "employee": Employee,
+            "estimate": Estimate,
+            "invoice": Invoice,
         }.get(domain)
         if model is None:
             return None
@@ -252,6 +279,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         if domain == "service_location":
             customer = await session.get(Customer, native.customer_id)
             if customer is None or customer.company_id != self.context.company.id:
+                return None
+        elif domain in {"estimate", "invoice"}:
+            if native.company_id != self.context.company.id or native.branch_id != self.branch.id:
                 return None
         elif native.company_id != self.context.company.id:
             return None
@@ -306,6 +336,12 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             native = await self._create_job(session, record)
         elif record.domain == "appointment":
             native = await self._create_appointment(session, record)
+        elif record.domain == "employee":
+            native = await self._create_employee(session, record)
+        elif record.domain == "estimate":
+            native = await self._create_estimate(session, record)
+        elif record.domain == "invoice":
+            native = await self._create_invoice(session, record)
         else:
             raise ValueError("financial overlay mutation is prohibited")
         return OverlaySourceState(record.source_digest, str(native.id), record.payload)
@@ -573,6 +609,173 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         await session.flush()
         return appointment
 
+    async def _create_employee(
+        self, session: AsyncSession, record: OverlayRecord
+    ) -> Employee:
+        payload = record.payload
+        first = _text(payload.get("first_name"))
+        last = _text(payload.get("last_name"))
+        if not first or not last:
+            raise ValueError("source Employee has no authoritative name")
+        employee_id = uuid5(
+            EMPLOYEE_NAMESPACE, f"{self.context.company.id}:{record.source_id}"
+        )
+        if await session.get(Employee, employee_id) is not None:
+            raise ValueError("deterministic Employee exists without source crosswalk")
+        employee = Employee(
+            id=employee_id,
+            company_id=self.context.company.id,
+            home_branch_id=self.branch.id,
+            employee_number=record.source_id,
+            first_name=first,
+            last_name=last,
+            display_name=_text(payload.get("display_name")) or f"{first} {last}",
+            phone=_text(payload.get("mobile_number")),
+            job_title=_text(payload.get("role")),
+            employee_type="employee",
+            status="active",
+        )
+        session.add(employee)
+        command = EmployeeCrosswalkCommand(
+            native_employee_id=record.source_id,
+            disposition="CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+            source_digest=record.source_digest,
+            owner_receipt_digest=record.source_digest,
+            employee_id=employee_id,
+        )
+        await persist_employee_crosswalk(
+            session,
+            context=self.context,
+            master_run_id=self.master_run_id,
+            command=command,
+        )
+        await session.flush()
+        return employee
+
+    async def _job_identity(self, session: AsyncSession, parents: tuple[OverlayKey, ...]):
+        key = next((item for item in parents if item.domain == "job"), None)
+        if key is None:
+            raise ValueError("financial record Job parent is missing")
+        identity = await self.repository.get_job_identity(
+            session,
+            company_id=self.context.company.id,
+            source_system=SOURCE_SYSTEM,
+            source_job_id=key.source_id,
+        )
+        if identity is None:
+            raise ValueError("financial record Job parent identity is missing")
+        return identity
+
+    async def _create_estimate(
+        self, session: AsyncSession, record: OverlayRecord
+    ) -> Estimate:
+        source = build_estimate(record.payload)
+        parent = await self._job_identity(session, record.parent_keys)
+        estimate, items = await self.financials.stage_migrated_estimate(
+            session,
+            context=self.context,
+            command=MigrateEstimate(
+                branch_id=self.branch.id,
+                job_id=parent.job_id,
+                status=source.status,
+                currency=source.currency,
+                subtotal_amount=source.subtotal_amount,
+                tax_amount=source.tax_amount,
+                total_amount=source.total_amount,
+                line_items=tuple(MigratedLineItem(**vars(item)) for item in source.line_items),
+                presented_at=source.presented_at,
+                expires_on=source.expires_on,
+            ),
+        )
+        identity = EstimateSourceIdentity(
+            id=uuid4(),
+            company_id=self.context.company.id,
+            branch_id=self.branch.id,
+            estimate_id=estimate.id,
+            job_source_identity_id=parent.id,
+            job_id=parent.job_id,
+            customer_id=estimate.customer_id,
+            service_location_id=estimate.service_location_id,
+            source_system=SOURCE_SYSTEM,
+            source_estimate_id=record.source_id,
+            source_status=source.status,
+            external_metadata={
+                **dict(source.external_metadata or {}),
+                **_metadata(record),
+            },
+            first_run_id=self.operational_run_id,
+        )
+        session.add(identity)
+        session.add_all(
+            EstimateLineItemSourceIdentity(
+                company_id=self.context.company.id,
+                estimate_source_identity_id=identity.id,
+                estimate_id=estimate.id,
+                estimate_line_item_id=item.id,
+                source_system=SOURCE_SYSTEM,
+                source_line_item_id=source_item.source_id,
+                first_run_id=self.operational_run_id,
+            )
+            for source_item, item in zip(source.line_items, items, strict=True)
+        )
+        await session.flush()
+        return estimate
+
+    async def _create_invoice(
+        self, session: AsyncSession, record: OverlayRecord
+    ) -> Invoice:
+        source = build_invoice(record.payload)
+        parent = await self._job_identity(session, record.parent_keys)
+        invoice, items = await self.financials.stage_migrated_invoice(
+            session,
+            context=self.context,
+            command=MigrateInvoice(
+                branch_id=self.branch.id,
+                job_id=parent.job_id,
+                status=source.status,
+                currency=source.currency,
+                subtotal_amount=source.subtotal_amount,
+                tax_amount=source.tax_amount,
+                total_amount=source.total_amount,
+                line_items=tuple(MigratedLineItem(**vars(item)) for item in source.line_items),
+                issued_at=source.issued_at,
+                due_on=source.due_on,
+            ),
+        )
+        identity = InvoiceSourceIdentity(
+            id=uuid4(),
+            company_id=self.context.company.id,
+            branch_id=self.branch.id,
+            invoice_id=invoice.id,
+            job_source_identity_id=parent.id,
+            job_id=parent.job_id,
+            customer_id=invoice.customer_id,
+            service_location_id=invoice.service_location_id,
+            source_system=SOURCE_SYSTEM,
+            source_invoice_id=record.source_id,
+            source_status=source.status,
+            external_metadata={
+                **dict(source.external_metadata or {}),
+                **_metadata(record),
+            },
+            first_run_id=self.operational_run_id,
+        )
+        session.add(identity)
+        session.add_all(
+            InvoiceLineItemSourceIdentity(
+                company_id=self.context.company.id,
+                invoice_source_identity_id=identity.id,
+                invoice_id=invoice.id,
+                invoice_line_item_id=item.id,
+                source_system=SOURCE_SYSTEM,
+                source_line_item_id=source_item.source_id,
+                first_run_id=self.operational_run_id,
+            )
+            for source_item, item in zip(source.line_items, items, strict=True)
+        )
+        await session.flush()
+        return invoice
+
     async def _update_customer(
         self, session: AsyncSession, state: OverlaySourceState, record: OverlayRecord
     ):
@@ -746,6 +949,45 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                     await session.get(Appointment, appointment_identity.appointment_id),
                 )
                 if appointment_identity
+                else None
+            )
+        if key.domain == "employee":
+            crosswalk = await session.scalar(
+                select(HcpEmployeeSourceCrosswalk).where(
+                    HcpEmployeeSourceCrosswalk.company_id == company_id,
+                    HcpEmployeeSourceCrosswalk.native_employee_id == key.source_id,
+                    HcpEmployeeSourceCrosswalk.employee_id.is_not(None),
+                )
+            )
+            return (
+                (crosswalk, await session.get(Employee, crosswalk.employee_id))
+                if crosswalk is not None
+                else None
+            )
+        if key.domain == "estimate":
+            identity = await session.scalar(
+                select(EstimateSourceIdentity).where(
+                    EstimateSourceIdentity.company_id == company_id,
+                    EstimateSourceIdentity.source_system == SOURCE_SYSTEM,
+                    EstimateSourceIdentity.source_estimate_id == key.source_id,
+                )
+            )
+            return (
+                (identity, await session.get(Estimate, identity.estimate_id))
+                if identity
+                else None
+            )
+        if key.domain == "invoice":
+            identity = await session.scalar(
+                select(InvoiceSourceIdentity).where(
+                    InvoiceSourceIdentity.company_id == company_id,
+                    InvoiceSourceIdentity.source_system == SOURCE_SYSTEM,
+                    InvoiceSourceIdentity.source_invoice_id == key.source_id,
+                )
+            )
+            return (
+                (identity, await session.get(Invoice, identity.invoice_id))
+                if identity
                 else None
             )
         return None
