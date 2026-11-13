@@ -21,6 +21,7 @@ from app.operational_migration.hcp_current_overlay import (
     EXECUTOR_CONTRACT,
     CurrentOverlayRepository,
     OverlayExecutionReceipt,
+    OverlayAssertion,
     OverlayJournalEntry,
     OverlayKey,
     OverlayRecord,
@@ -251,11 +252,12 @@ def _receipt(value: object) -> OverlayExecutionReceipt:
     journal = tuple(
         OverlayJournalEntry(
             key=OverlayKey(**item["key"]),
-            assertion=item["assertion"],
+            assertion=OverlayAssertion(item["assertion"]),
             outcome=item["outcome"],
             before_digest=item.get("before_digest"),
             after_digest=item.get("after_digest"),
             native_id=item.get("native_id"),
+            native_action=item.get("native_action"),
         )
         for item in value["journal"]
     )
