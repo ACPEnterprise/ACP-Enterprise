@@ -104,6 +104,20 @@ def _derive_records(
         payload = item.get("payload") or {}
         status = str(payload.get("work_status") or "").lower()
         timestamps = payload.get("work_timestamps") or {}
+        created_at = _parse_datetime(payload.get("created_at"))
+        started_at = _parse_datetime(timestamps.get("started_at"))
+        completed_at = _parse_datetime(timestamps.get("completed_at"))
+        ordered = [value for value in (created_at, started_at, completed_at) if value]
+        job_invalid = (
+            status not in {"draft", ""}
+            and created_at is None
+        ) or (
+            status in {"in progress", "complete rated", "complete unrated"}
+            and started_at is None
+        ) or (
+            status in {"complete rated", "complete unrated"}
+            and completed_at is None
+        ) or ordered != sorted(ordered)
         if (
             item.get("domain") == "job"
             and str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
@@ -112,8 +126,7 @@ def _derive_records(
                     {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
                 )
                 or status in {"pro canceled", "user canceled"}
-                or status in {"in progress", "complete rated", "complete unrated"}
-                and not _parse_datetime(timestamps.get("started_at"))
+                or job_invalid
             )
         ):
             blocked_jobs.add(str(item["source_id"]))
@@ -150,10 +163,21 @@ def _derive_records(
         if item.get("domain") == "job" and is_executable:
             status = str((item.get("payload") or {}).get("work_status") or "").lower()
             timestamps = (item.get("payload") or {}).get("work_timestamps") or {}
+            payload = item.get("payload") or {}
+            created_at = _parse_datetime(payload.get("created_at"))
+            started_at = _parse_datetime(timestamps.get("started_at"))
+            completed_at = _parse_datetime(timestamps.get("completed_at"))
+            ordered = [value for value in (created_at, started_at, completed_at) if value]
             if status in {"pro canceled", "user canceled"} or (
+                status not in {"draft", ""}
+                and created_at is None
+            ) or (
                 status in {"in progress", "complete rated", "complete unrated"}
-                and not _parse_datetime(timestamps.get("started_at"))
-            ):
+                and started_at is None
+            ) or (
+                status in {"complete rated", "complete unrated"}
+                and completed_at is None
+            ) or ordered != sorted(ordered):
                 job_payload_invalid = True
         appointment_schedule_invalid = False
         if item.get("domain") == "appointment" and is_executable:
