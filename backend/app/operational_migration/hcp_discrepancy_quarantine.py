@@ -28,7 +28,7 @@ from app.operational_migration.hcp_november_executor import (
 from app.operational_migration.hcp_november_supplemental_authority import (
     SupplementalCurrentStateAuthority,
 )
-from app.operational_migration.hcp_source4_contracts import build_invoice
+from app.operational_migration.hcp_source4_contracts import JOB_STATUS, build_estimate, build_invoice
 
 
 CONTRACT = "hcp-november-discrepancy-quarantine-authority/v1"
@@ -37,6 +37,10 @@ QUARANTINE_DOMAIN = "estimate"
 QUARANTINE_REASONS = frozenset(
     {
         "estimate_job_lineage_missing",
+        "estimate_payload_not_normalizable",
+        "service_location_payload_not_normalizable",
+        "customer_payload_not_normalizable",
+        "employee_payload_not_normalizable",
         "job_service_location_lineage_missing",
         "parent_job_quarantined",
         "invoice_payload_not_normalizable",
@@ -99,6 +103,59 @@ def _packet_payload(value: dict[str, Any]) -> dict[str, Any]:
 def _derive_records(
     records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    def is_write(item: dict[str, Any]) -> bool:
+        return str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
+
+    def customer_invalid(item: dict[str, Any]) -> bool:
+        payload = item.get("payload") or {}
+        first = str(payload.get("first_name") or "").strip()
+        last = str(payload.get("last_name") or "").strip()
+        company = str(payload.get("company") or payload.get("company_name") or "").strip()
+        return not (company or (first and last))
+
+    def location_invalid(item: dict[str, Any]) -> bool:
+        payload = item.get("payload") or {}
+        return not all(payload.get(key) for key in ("street", "city", "state", "zip"))
+
+    def employee_invalid(item: dict[str, Any]) -> bool:
+        payload = item.get("payload") or {}
+        return not str(payload.get("first_name") or "").strip() or not str(
+            payload.get("last_name") or ""
+        ).strip()
+
+    def estimate_invalid(item: dict[str, Any]) -> bool:
+        payload = dict(item.get("payload") or {})
+        payload.setdefault("_source_digest", item.get("source_digest"))
+        payload.setdefault("_owner_disposition", item.get("disposition"))
+        payload.setdefault(
+            "_source_job_id",
+            next(
+                (
+                    str(parent.get("source_id"))
+                    for parent in item.get("parent_keys", [])
+                    if str(parent.get("domain")) == "job"
+                ),
+                "",
+            ),
+        )
+        try:
+            build_estimate(payload)
+        except Exception:  # noqa: BLE001 - quarantine unsupported source payloads
+            return True
+        return False
+
+    invalid_customers = {
+        str(item["source_id"])
+        for item in records
+        if item.get("domain") == "customer" and is_write(item) and customer_invalid(item)
+    }
+    invalid_locations = {
+        str(item["source_id"])
+        for item in records
+        if item.get("domain") == "service_location"
+        and is_write(item)
+        and location_invalid(item)
+    }
     blocked_jobs: set[str] = set()
     for item in records:
         payload = item.get("payload") or {}
@@ -120,10 +177,20 @@ def _derive_records(
         ) or ordered != sorted(ordered)
         if (
             item.get("domain") == "job"
-            and str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
+            and is_write(item)
             and (
                 not {"customer", "service_location"}.issubset(
                     {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
+                )
+                or any(
+                    str(parent.get("domain")) == "customer"
+                    and str(parent.get("source_id")) in invalid_customers
+                    for parent in item.get("parent_keys", [])
+                )
+                or any(
+                    str(parent.get("domain")) == "service_location"
+                    and str(parent.get("source_id")) in invalid_locations
+                    for parent in item.get("parent_keys", [])
                 )
                 or status in {"pro canceled", "user canceled"}
                 or job_invalid
@@ -135,13 +202,13 @@ def _derive_records(
     for original in records:
         item = dict(original)
         is_executable = str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
-        is_executable_estimate = (
-            item.get("domain") == QUARANTINE_DOMAIN
-            and is_executable
-        )
+        is_executable_estimate = item.get("domain") == QUARANTINE_DOMAIN and is_executable
         is_executable_job = item.get("domain") == "job" and is_executable
+        is_executable_location = item.get("domain") == "service_location" and is_executable
+        is_executable_customer = item.get("domain") == "customer" and is_executable
+        is_executable_employee = item.get("domain") == "employee" and is_executable
         is_child_of_blocked_job = (
-            item.get("domain") in {"appointment", "invoice"}
+            item.get("domain") in {"appointment", "estimate", "invoice"}
             and is_executable
             and any(
                 str(parent.get("domain")) == "job"
@@ -169,6 +236,8 @@ def _derive_records(
             completed_at = _parse_datetime(timestamps.get("completed_at"))
             ordered = [value for value in (created_at, started_at, completed_at) if value]
             if status in {"pro canceled", "user canceled"} or (
+                status not in JOB_STATUS
+            ) or (
                 status not in {"draft", ""}
                 and created_at is None
             ) or (
@@ -184,7 +253,9 @@ def _derive_records(
             payload = item.get("payload") or {}
             start = _parse_datetime(payload.get("start_time"))
             end = _parse_datetime(payload.get("end_time"))
-            if start and end:
+            if (payload.get("start_time") and not start) or (payload.get("end_time") and not end):
+                appointment_schedule_invalid = True
+            elif start and end:
                 duration = int((end - start).total_seconds() // 60)
                 appointment_schedule_invalid = bool(
                     start.tzinfo is None
@@ -203,8 +274,16 @@ def _derive_records(
             str(parent.get("domain")) == "job"
             for parent in item.get("parent_keys", [])
         )
-        if is_executable_estimate and not has_job_parent:
+        if is_executable_customer and str(item["source_id"]) in invalid_customers:
+            reason = "customer_payload_not_normalizable"
+        elif is_executable_location and str(item["source_id"]) in invalid_locations:
+            reason = "service_location_payload_not_normalizable"
+        elif is_executable_employee and employee_invalid(item):
+            reason = "employee_payload_not_normalizable"
+        elif is_executable_estimate and not has_job_parent:
             reason = "estimate_job_lineage_missing"
+        elif is_executable_estimate and estimate_invalid(item):
+            reason = "estimate_payload_not_normalizable"
         elif is_executable_job and str(item["source_id"]) in blocked_jobs:
             reason = "job_service_location_lineage_missing"
         elif is_child_of_blocked_job:
