@@ -110,7 +110,7 @@ def _derive_records(
                 not {"customer", "service_location"}.issubset(
                     {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
                 )
-                or status in {"in progress", "complete rated", "complete unrated"}
+                or status in {"pro canceled", "user canceled", "in progress", "complete rated", "complete unrated"}
                 and not _parse_datetime(timestamps.get("started_at"))
             )
         ):
@@ -147,7 +147,10 @@ def _derive_records(
         if item.get("domain") == "job" and is_executable:
             status = str((item.get("payload") or {}).get("work_status") or "").lower()
             timestamps = (item.get("payload") or {}).get("work_timestamps") or {}
-            if status in {"in progress", "complete rated", "complete unrated"} and not _parse_datetime(timestamps.get("started_at")):
+            if status in {"pro canceled", "user canceled"} or (
+                status in {"in progress", "complete rated", "complete unrated"}
+                and not _parse_datetime(timestamps.get("started_at"))
+            ):
                 job_payload_invalid = True
         has_job_parent = any(
             str(parent.get("domain")) == "job"
