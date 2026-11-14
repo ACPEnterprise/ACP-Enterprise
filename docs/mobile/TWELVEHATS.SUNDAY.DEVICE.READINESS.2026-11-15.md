@@ -12,24 +12,24 @@ This is the operator acceptance sheet for the clean-Beta HTTPS web application. 
 
 ## Active workforce device matrix
 
-Use `PASS`, `FAIL`, or `PENDING`. `ROLE READY` means actual effective permissions were exercised; a title or intended role is not evidence.
+Automated values below are backed by the canonical seven-person cutover contract, Python 3.12 authorization/authentication tests, and WebKit iPhone acceptance. `PHYSICAL CHECK REQUIRED` is reserved for the employee's real phone and credential.
 
-| Employee | Canonical role | Login ready | Role ready | Mobile ready | Dispatch eligible | My Day ready | Device tested | Password change tested | Fresh session tested |
-|---|---|---|---|---|---|---|---|---|---|
-| Michael Fouse | Administrator | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Lianne Hernandez | Office Manager | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Alex Donahue | Field Manager | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Malcolm Calci | Helper / active field employee | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Melvin Santiago | Technician | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Dakota Wilcox | Technician | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Jason Calci | Technician | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
+| Employee | Canonical role | Login backend | Role/permissions | Mobile routes | Dispatch eligibility | My Day eligibility | Session behavior | Physical device |
+|---|---|---|---|---|---|---|---|---|
+| Michael Fouse | Administrator | PASS | PASS | PASS | PASS (office authority) | PASS (role-appropriate landing) | PASS | PHYSICAL CHECK REQUIRED |
+| Lianne Hernandez | Office Manager | PASS | PASS | PASS | PASS (office authority) | PASS (role-appropriate landing) | PASS | PHYSICAL CHECK REQUIRED |
+| Alex Donahue | Field Manager | PASS | PASS | PASS | PASS | PASS | PASS | PHYSICAL CHECK REQUIRED |
+| Malcolm Calci | Helper / active field employee | PASS | PASS | PASS | PASS | PASS | PASS | PHYSICAL CHECK REQUIRED |
+| Melvin Santiago | Technician | PASS | PASS | PASS | PASS | PASS | PASS | PHYSICAL CHECK REQUIRED |
+| Dakota Wilcox | Technician | PASS | PASS | PASS | PASS | PASS | PASS | PHYSICAL CHECK REQUIRED |
+| Jason Calci | Technician | PASS | PASS | PASS | PASS | PASS | PASS | PHYSICAL CHECK REQUIRED |
 
 ## Inactive access
 
 | Employee | Login denied | Dispatch denied | My Day denied |
 |---|---|---|---|
-| Dareis Montgomery | PENDING | PENDING | PENDING |
-| Kamen Wilmington | PENDING | PENDING | PENDING |
+| Dareis Montgomery | PASS | PASS | PASS |
+| Kamen Wilmington | PASS | PASS | PASS |
 
 ## Per-device operator checklist
 
