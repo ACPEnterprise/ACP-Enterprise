@@ -101,6 +101,15 @@ def _derive_records(
         )
         if is_executable_estimate and not has_job_parent:
             original_disposition = str(item["disposition"]).upper()
+            # Overlay HOLD assertions are intentionally non-mutating and may
+            # not carry a write payload.  Retain the original source body in
+            # the private discrepancy evidence envelope instead.
+            item["discrepancy_evidence"] = {
+                "source_payload": item.get("payload", {}),
+                "source_disposition": original_disposition,
+                "source_digest": item.get("source_digest"),
+            }
+            item["payload"] = {}
             item["source_disposition"] = original_disposition
             item["disposition"] = "HOLD"
             item["assertion"] = "hold"
