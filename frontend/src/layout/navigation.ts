@@ -71,7 +71,14 @@ export const navigationCatalog = [
     availability: "available",
     requiredPermission: "COMPANY_PIPELINE_READ",
   },
-  { id: "service-agreements", label: "Service Agreements", path: "/service-agreements", icon: BadgeCheck, availability: "available", requiredPermission: "COMPANY_SERVICE_AGREEMENT_READ" },
+  {
+    id: "service-agreements",
+    label: "Service Agreements",
+    path: "/service-agreements",
+    icon: BadgeCheck,
+    availability: "available",
+    requiredPermission: "COMPANY_SERVICE_AGREEMENT_READ",
+  },
   {
     id: "workday",
     label: "My time clock",
@@ -189,6 +196,14 @@ export const navigationCatalog = [
     icon: Workflow,
     availability: "available",
     requiredPermission: "COMPANY_JOB_READ",
+  },
+  {
+    id: "accounting",
+    label: "Accounting",
+    path: "/accounting",
+    icon: BookOpen,
+    availability: "available",
+    requiredPermission: "COMPANY_ACCOUNTING_READ",
   },
   {
     id: "financial-reports",

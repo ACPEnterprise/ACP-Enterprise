@@ -36,6 +36,7 @@ export type NavigationItemId =
   | "payments"
   | "revenue-cycle"
   | "accounts-payable"
+  | "accounting"
   | "financial-reports"
   | "banking"
   | "qbo-migration"

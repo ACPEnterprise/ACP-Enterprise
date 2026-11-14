@@ -6,6 +6,7 @@ import { CommandCenterRouteGuard } from "../auth/CommandCenterRouteGuard";
 import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuard";
 import {
   accountsPayableHandle,
+  accountingHandle,
   bankingHandle,
   financialReportsHandle,
   qboMigrationHandle,
@@ -109,7 +110,9 @@ export const appRoutes: RouteObject[] = [
           {
             path: "lia",
             handle: liaHandle,
-            lazy: async () => ({ Component: (await import("../routes/LiaRoute")).LiaRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/LiaRoute")).LiaRoute,
+            }),
           },
           {
             path: "mission-control",
@@ -140,21 +143,35 @@ export const appRoutes: RouteObject[] = [
           {
             path: "pipeline",
             handle: pipelineHandle,
-            lazy: async () => ({ Component: (await import("../routes/PipelineRoute")).PipelineRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/PipelineRoute"))
+                .PipelineRoute,
+            }),
           },
           {
             path: "marketing/provider-connections/google-ads",
             handle: marketingProviderConnectionsHandle,
             lazy: async () => ({
-              Component: (await import("../routes/MarketingProviderConnectionsRoute"))
-                .MarketingProviderConnectionsRoute,
+              Component: (
+                await import("../routes/MarketingProviderConnectionsRoute")
+              ).MarketingProviderConnectionsRoute,
             }),
           },
-          { path: "service-agreements", handle: serviceAgreementsHandle, lazy: async () => ({ Component: (await import("../routes/ServiceAgreementsRoute")).ServiceAgreementsRoute }) },
+          {
+            path: "service-agreements",
+            handle: serviceAgreementsHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/ServiceAgreementsRoute"))
+                .ServiceAgreementsRoute,
+            }),
+          },
           {
             path: "scheduling",
             handle: schedulingHandle,
-            lazy: async () => ({ Component: (await import("../routes/SchedulingRoute")).SchedulingRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/SchedulingRoute"))
+                .SchedulingRoute,
+            }),
           },
           {
             Component: TechnicianRouteGuard,
@@ -163,28 +180,32 @@ export const appRoutes: RouteObject[] = [
                 path: "technician",
                 handle: technicianHandle,
                 lazy: async () => ({
-                  Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
+                  Component: (await import("../routes/TechnicianRoute"))
+                    .TechnicianRoute,
                 }),
               },
               {
                 path: "technician/schedule",
                 handle: technicianHandle,
                 lazy: async () => ({
-                  Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
+                  Component: (await import("../routes/TechnicianRoute"))
+                    .TechnicianRoute,
                 }),
               },
               {
                 path: "technician/jobs",
                 handle: technicianHandle,
                 lazy: async () => ({
-                  Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
+                  Component: (await import("../routes/TechnicianRoute"))
+                    .TechnicianRoute,
                 }),
               },
               {
                 path: "technician/jobs/:jobId",
                 handle: technicianHandle,
                 lazy: async () => ({
-                  Component: (await import("../routes/TechnicianJobRoute")).TechnicianJobRoute,
+                  Component: (await import("../routes/TechnicianJobRoute"))
+                    .TechnicianJobRoute,
                 }),
               },
             ],
@@ -199,7 +220,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: "employees",
             handle: workforceHandle,
-            lazy: async () => ({ Component: (await import("../routes/WorkforceRoute")).WorkforceRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/WorkforceRoute"))
+                .WorkforceRoute,
+            }),
           },
           {
             path: "dispatch",
@@ -233,17 +257,25 @@ export const appRoutes: RouteObject[] = [
           {
             path: "payments",
             handle: paymentsHandle,
-            lazy: async () => ({ Component: (await import("../routes/PaymentsRoute")).PaymentsRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/PaymentsRoute"))
+                .PaymentsRoute,
+            }),
           },
           {
             path: "payments/:receiptId",
             handle: paymentsHandle,
-            lazy: async () => ({ Component: (await import("../routes/PaymentDetailRoute")).PaymentDetailRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/PaymentDetailRoute"))
+                .PaymentDetailRoute,
+            }),
           },
           {
             path: "payroll",
             handle: payrollHandle,
-            lazy: async () => ({ Component: (await import("../routes/PayrollRoute")).PayrollRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/PayrollRoute")).PayrollRoute,
+            }),
           },
           {
             path: "revenue-cycle",
@@ -256,47 +288,83 @@ export const appRoutes: RouteObject[] = [
           {
             path: "accounts-payable",
             handle: accountsPayableHandle,
-            lazy: async () => ({ Component: (await import("../routes/AccountsPayableRoute")).AccountsPayableRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/AccountsPayableRoute"))
+                .AccountsPayableRoute,
+            }),
           },
           {
             path: "financial-reports",
             handle: financialReportsHandle,
-            lazy: async () => ({ Component: (await import("../routes/FinancialReportsRoute")).FinancialReportsRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/FinancialReportsRoute"))
+                .FinancialReportsRoute,
+            }),
+          },
+          {
+            path: "accounting",
+            handle: accountingHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/AccountingRoute"))
+                .AccountingRoute,
+            }),
           },
           {
             path: "accounting/banking",
             handle: bankingHandle,
-            lazy: async () => ({ Component: (await import("../routes/BankingRoute")).BankingRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/BankingRoute")).BankingRoute,
+            }),
           },
           {
             path: "accounting/quickbooks-migration",
             handle: qboMigrationHandle,
-            lazy: async () => ({ Component: (await import("../routes/QboMigrationRoute")).QboMigrationRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/QboMigrationRoute"))
+                .QboMigrationRoute,
+            }),
           },
           {
             path: "accounting/quickbooks-cutover",
             handle: qboCutoverHandle,
-            lazy: async () => ({ Component: (await import("../routes/QboCutoverRoute")).QboCutoverRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/QboCutoverRoute"))
+                .QboCutoverRoute,
+            }),
           },
           {
             path: "accounting/close",
             handle: accountingCloseHandle,
-            lazy: async () => ({ Component: (await import("../routes/AccountingCloseWorkspaceRoute")).AccountingCloseWorkspaceRoute }),
+            lazy: async () => ({
+              Component: (
+                await import("../routes/AccountingCloseWorkspaceRoute")
+              ).AccountingCloseWorkspaceRoute,
+            }),
           },
           {
             path: "business-economics",
             handle: businessEconomicsHandle,
-            lazy: async () => ({ Component: (await import("../routes/BusinessEconomicsRoute")).BusinessEconomicsRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/BusinessEconomicsRoute"))
+                .BusinessEconomicsRoute,
+            }),
           },
           {
             path: "business-economics/administration",
             handle: economicsAdministrationHandle,
-            lazy: async () => ({ Component: (await import("../routes/EconomicsPolicyAdministrationRoute")).EconomicsPolicyAdministrationRoute }),
+            lazy: async () => ({
+              Component: (
+                await import("../routes/EconomicsPolicyAdministrationRoute")
+              ).EconomicsPolicyAdministrationRoute,
+            }),
           },
           {
             path: "luminary",
             handle: luminaryHandle,
-            lazy: async () => ({ Component: (await import("../routes/LuminaryRoute")).LuminaryRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/LuminaryRoute"))
+                .LuminaryRoute,
+            }),
           },
           {
             path: "price-book",
@@ -314,7 +382,13 @@ export const appRoutes: RouteObject[] = [
                 .InventoryRoute,
             }),
           },
-          { path: "assets", handle: assetsHandle, lazy: async () => ({ Component: (await import("../routes/AssetsRoute")).AssetsRoute }) },
+          {
+            path: "assets",
+            handle: assetsHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/AssetsRoute")).AssetsRoute,
+            }),
+          },
           {
             path: "purchasing",
             handle: purchasingHandle,
@@ -351,7 +425,9 @@ export const appRoutes: RouteObject[] = [
             handle: engineeringHandle,
             lazy: async () => ({
               Component: (
-                await import("../features/engineering-mobile/MobileEngineeringListPage")
+                await import(
+                  "../features/engineering-mobile/MobileEngineeringListPage"
+                )
               ).MobileEngineeringListPage,
             }),
           },
@@ -360,34 +436,50 @@ export const appRoutes: RouteObject[] = [
             handle: engineeringHandle,
             lazy: async () => ({
               Component: (
-                await import("../features/engineering-mobile/MobileEngineeringDetailPage")
+                await import(
+                  "../features/engineering-mobile/MobileEngineeringDetailPage"
+                )
               ).MobileEngineeringDetailPage,
             }),
           },
           {
             path: "owner-operations",
             handle: ownerOperationsHandle,
-            lazy: async () => ({ Component: (await import("../routes/OwnerOperationsRoute")).OwnerOperationsRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/OwnerOperationsRoute"))
+                .OwnerOperationsRoute,
+            }),
           },
           {
             path: "data-quality",
             handle: dataQualityHandle,
-            lazy: async () => ({ Component: (await import("../routes/DataQualityRoute")).DataQualityRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/DataQualityRoute"))
+                .DataQualityRoute,
+            }),
           },
           {
             path: "audit",
             handle: auditHandle,
-            lazy: async () => ({ Component: (await import("../routes/AuditRoute")).AuditRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/AuditRoute")).AuditRoute,
+            }),
           },
           {
             path: "reports",
             handle: reportsHandle,
-            lazy: async () => ({ Component: (await import("../routes/ReportCenterRoute")).ReportCenterRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/ReportCenterRoute"))
+                .ReportCenterRoute,
+            }),
           },
           {
             path: "operator-guide",
             handle: operatorGuideHandle,
-            lazy: async () => ({ Component: (await import("../routes/OperatorGuideRoute")).OperatorGuideRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/OperatorGuideRoute"))
+                .OperatorGuideRoute,
+            }),
           },
           {
             path: "administration",
@@ -402,14 +494,16 @@ export const appRoutes: RouteObject[] = [
             path: "administration/factory-control",
             handle: factoryControlHandle,
             lazy: async () => ({
-              Component: (await import("../routes/FactoryControlRoute")).FactoryControlRoute,
+              Component: (await import("../routes/FactoryControlRoute"))
+                .FactoryControlRoute,
             }),
           },
           {
             path: "admin/factory-control",
             handle: factoryControlHandle,
             lazy: async () => ({
-              Component: (await import("../routes/FactoryControlRoute")).FactoryControlRoute,
+              Component: (await import("../routes/FactoryControlRoute"))
+                .FactoryControlRoute,
             }),
           },
           {
