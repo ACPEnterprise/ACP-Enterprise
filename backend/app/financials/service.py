@@ -284,7 +284,14 @@ class FinancialService:
                 company_id=context.company.id,
                 invoice_id=invoice.id,
                 position=position,
-                title=item.description.strip(),
+                # The native title is bounded by the schema; retain the full
+                # source description in the Text column and use a deterministic
+                # abbreviated title when inherited source text is longer.
+                title=(
+                    item.description.strip()
+                    if len(item.description.strip()) <= 240
+                    else item.description.strip()[:237] + "..."
+                ),
                 description=item.description.strip(),
                 quantity=item.quantity,
                 unit_price=item.unit_price,
