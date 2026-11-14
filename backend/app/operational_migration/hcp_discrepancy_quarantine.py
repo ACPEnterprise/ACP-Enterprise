@@ -143,6 +143,7 @@ def _derive_records(
             payload.setdefault("_owner_disposition", item.get("disposition"))
             try:
                 build_invoice(payload)
+                invoice_payload_invalid = not isinstance(payload.get("items"), list) or not payload["items"]
             except Exception:  # noqa: BLE001 - quarantine every unsupported source payload
                 invoice_payload_invalid = True
         job_payload_invalid = False
