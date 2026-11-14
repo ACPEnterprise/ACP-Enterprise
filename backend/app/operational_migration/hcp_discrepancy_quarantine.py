@@ -41,6 +41,7 @@ QUARANTINE_REASONS = frozenset(
         "parent_job_quarantined",
         "invoice_payload_not_normalizable",
         "job_payload_not_normalizable",
+        "appointment_schedule_not_normalizable",
     }
 )
 
@@ -153,6 +154,13 @@ def _derive_records(
                 and not _parse_datetime(timestamps.get("started_at"))
             ):
                 job_payload_invalid = True
+        appointment_schedule_invalid = False
+        if item.get("domain") == "appointment" and is_executable:
+            payload = item.get("payload") or {}
+            start = _parse_datetime(payload.get("start_time"))
+            end = _parse_datetime(payload.get("end_time"))
+            if start and end and (start.minute % 15 or end.minute % 15):
+                appointment_schedule_invalid = True
         has_job_parent = any(
             str(parent.get("domain")) == "job"
             for parent in item.get("parent_keys", [])
@@ -167,6 +175,8 @@ def _derive_records(
             reason = "invoice_payload_not_normalizable"
         elif job_payload_invalid:
             reason = "job_payload_not_normalizable"
+        elif appointment_schedule_invalid:
+            reason = "appointment_schedule_not_normalizable"
         else:
             reason = ""
         if reason:
