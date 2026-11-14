@@ -719,11 +719,7 @@ async def run_discrepancy_quarantine_qualification(
             repository,
             authority=runtime_authority,
             packet=authority.packet,
-            qualified_packet={
-                "unexplained_omissions": authority.unexplained_omissions,
-                "missing_lineage": authority.lineage_gaps,
-                "ambiguous_lineage": authority.ambiguous_lineage,
-            },
+            qualified_packet=None,
             database_identity=database_identity,
             schema_head=authority.schema_head,
             clean_baseline_bootstrap=True,

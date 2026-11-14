@@ -532,7 +532,7 @@ class NovemberBoundedExecutor:
         *,
         authority: NovemberQualificationAuthority,
         packet: NovemberExecutionPacket,
-        qualified_packet: dict[str, Any],
+        qualified_packet: dict[str, Any] | None,
         database_identity: str,
         schema_head: str,
         execution_timestamp: str | None = None,
@@ -592,9 +592,25 @@ class NovemberBoundedExecutor:
                 "executable_count": inventory["executable"],
                 "total_held": inventory["total_held"],
                 "unaccounted_records": inventory["total"] - len(receipt.journal),
-                "unexplained_omissions": qualified_packet.get("unexplained_omissions", 0),
-                "lineage_gaps": envelope.lineage_gaps if envelope is not None else qualified_packet.get("missing_lineage", 0),
-                "ambiguous_lineage": envelope.ambiguous_lineage if envelope is not None else qualified_packet.get("ambiguous_lineage", 0),
+                "unexplained_omissions": (
+                    qualified_packet.get("unexplained_omissions", 0)
+                    if qualified_packet is not None
+                    else 0
+                ),
+                "lineage_gaps": (
+                    envelope.lineage_gaps
+                    if envelope is not None
+                    else qualified_packet.get("missing_lineage", 0)
+                    if qualified_packet is not None
+                    else 0
+                ),
+                "ambiguous_lineage": (
+                    envelope.ambiguous_lineage
+                    if envelope is not None
+                    else qualified_packet.get("ambiguous_lineage", 0)
+                    if qualified_packet is not None
+                    else 0
+                ),
                 "held_parent_executable_edges": inventory["held_parent_executable_edges"],
                 "affected_source_native_ids": [
                     {
