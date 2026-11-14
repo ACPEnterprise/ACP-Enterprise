@@ -354,7 +354,7 @@ export function EstimatesRoute() {
         ) : estimate.isError ? (
           <Alert variant="danger">Estimate could not be loaded.</Alert>
         ) : (
-          estimate.data && (
+          estimate.data && estimate.data.current_revision && (
             <Card>
               <CardHeader>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
