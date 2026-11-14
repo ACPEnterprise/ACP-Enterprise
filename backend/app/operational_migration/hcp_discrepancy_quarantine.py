@@ -155,7 +155,7 @@ def _derive_records(
                     "domain": str(item["domain"]),
                     "source_id": str(item["source_id"]),
                     "original_disposition": original_disposition,
-                    "reason": QUARANTINE_REASON,
+                    "reason": reason,
                     "source_digest": str(item["source_digest"]),
                 }
             )
