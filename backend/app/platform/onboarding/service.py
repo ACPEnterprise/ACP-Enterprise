@@ -494,9 +494,15 @@ class IdentityOnboardingService:
                     )
                     if (
                         user is None
-                        or user.status != "active"
                         or user.archived_at is not None
                         or user.email_verified_at is None
+                        or (
+                            user.status != "active"
+                            and not (
+                                user.status == "disabled"
+                                and command.existing_employee_id is not None
+                            )
+                        )
                     ):
                         raise OnboardingConflictError(
                             "Eligible existing User was not found."
@@ -506,7 +512,6 @@ class IdentityOnboardingService:
                         .where(
                             Membership.user_id == user.id,
                             Membership.company_id == context.company.id,
-                            Membership.status == "active",
                         )
                         .with_for_update()
                     )
@@ -514,6 +519,22 @@ class IdentityOnboardingService:
                         raise OnboardingConflictError(
                             "Eligible existing Membership was not found."
                         )
+                    if user.status != "active" or membership.status != "active":
+                        if (
+                            source_employee is None
+                            or user.status != "disabled"
+                            or membership.status != "revoked"
+                        ):
+                            raise OnboardingConflictError(
+                                "Eligible existing User and Membership were not found."
+                            )
+                        user.status = "active"
+                        user.disabled_at = None
+                        user.authorization_version += 1
+                        membership.status = "active"
+                        membership.revoked_at = None
+                        membership.revoked_by_user_id = None
+                        membership.accepted_at = membership.accepted_at or now
                     if not await session.scalar(
                         select(UserCredential.id).where(
                             UserCredential.user_id == user.id
@@ -522,14 +543,33 @@ class IdentityOnboardingService:
                         raise OnboardingConflictError(
                             "Eligible existing credential was not found."
                         )
-                    if await session.scalar(
+                    linked_employee = await session.scalar(
                         select(Employee.id).where(
                             Employee.membership_id == membership.id
                         )
-                    ):
-                        raise OnboardingConflictError(
-                            "Membership is already linked to an Employee."
+                    )
+                    if linked_employee is not None:
+                        linked_record = await session.scalar(
+                            select(Employee)
+                            .where(Employee.id == linked_employee)
+                            .with_for_update()
                         )
+                        if (
+                            source_employee is None
+                            or linked_record is None
+                            or linked_record.id == source_employee.id
+                            or linked_record.status != "inactive"
+                            or linked_record.company_id != source_employee.company_id
+                            or linked_record.home_branch_id != source_employee.home_branch_id
+                            or linked_record.display_name != source_employee.display_name
+                        ):
+                            raise OnboardingConflictError(
+                                "Membership is already linked to an Employee."
+                            )
+                        # Preserve the inactive historical/diagnostic row while
+                        # atomically reusing the explicitly matched canonical
+                        # Employee identity for this login.
+                        linked_record.membership_id = None
                     issue_invitation = False
                 else:
                     assert email is not None
