@@ -78,6 +78,19 @@ class FieldJobState(FieldSchema):
     job_id: UUID
     assignment_id: UUID
     appointment_id: UUID
+    job_number: str = ""
+    job_status: str = ""
+    job_type_code: str | None = None
+    priority: str = "normal"
+    customer_display_name: str = "Customer unavailable"
+    contact_display_name: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    service_location_label: str = "Location unavailable"
+    customer_reported_problem: str | None = None
+    internal_description: str | None = None
+    window_start_at: datetime | None = None
+    window_end_at: datetime | None = None
     job_version: int
     appointment_version: int
     active_activity: Literal["working", "parts_run"] | None = None
