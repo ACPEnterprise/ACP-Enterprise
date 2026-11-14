@@ -152,7 +152,7 @@ def _derive_records(
             item["reason"] = reason
             quarantined.append(
                 {
-                    "domain": QUARANTINE_DOMAIN,
+                    "domain": str(item["domain"]),
                     "source_id": str(item["source_id"]),
                     "original_disposition": original_disposition,
                     "reason": QUARANTINE_REASON,
