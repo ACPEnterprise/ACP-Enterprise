@@ -39,6 +39,7 @@ QUARANTINE_REASONS = frozenset(
         "job_service_location_lineage_missing",
         "parent_job_quarantined",
         "invoice_payload_not_normalizable",
+        "job_payload_not_normalizable",
     }
 )
 
@@ -98,11 +99,18 @@ def _derive_records(
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     blocked_jobs: set[str] = set()
     for item in records:
+        payload = item.get("payload") or {}
+        status = str(payload.get("work_status") or "").lower()
+        timestamps = payload.get("work_timestamps") or {}
         if (
             item.get("domain") == "job"
             and str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
-            and not {"customer", "service_location"}.issubset(
-                {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
+            and (
+                not {"customer", "service_location"}.issubset(
+                    {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
+                )
+                or status in {"in_progress", "completed"}
+                and not timestamps.get("started_at")
             )
         ):
             blocked_jobs.add(str(item["source_id"]))
@@ -134,6 +142,12 @@ def _derive_records(
                 build_invoice(payload)
             except Exception:  # noqa: BLE001 - quarantine every unsupported source payload
                 invoice_payload_invalid = True
+        job_payload_invalid = False
+        if item.get("domain") == "job" and is_executable:
+            status = str((item.get("payload") or {}).get("work_status") or "").lower()
+            timestamps = (item.get("payload") or {}).get("work_timestamps") or {}
+            if status in {"in_progress", "completed"} and not timestamps.get("started_at"):
+                job_payload_invalid = True
         has_job_parent = any(
             str(parent.get("domain")) == "job"
             for parent in item.get("parent_keys", [])
@@ -146,6 +160,8 @@ def _derive_records(
             reason = "parent_job_quarantined"
         elif invoice_payload_invalid:
             reason = "invoice_payload_not_normalizable"
+        elif job_payload_invalid:
+            reason = "job_payload_not_normalizable"
         else:
             reason = ""
         if reason:
