@@ -74,7 +74,7 @@ def projected_day(items=None):
     )
 
 
-def test_permission_is_explicit_and_only_mobile_role_receives_it() -> None:
+def test_permission_is_explicit_and_only_mobile_and_field_manager_roles_receive_it() -> None:
     permission_catalog.validate()
     definition = next(
         item
@@ -88,14 +88,9 @@ def test_permission_is_explicit_and_only_mobile_role_receives_it() -> None:
         for role in LAUNCH_ROLE_MATRIX
         if EmployeeOperationsPermission.OWN_LIA_READ in role.permission_codes
     }
-    assert roles == {
-        LaunchRoleCode.ACP_EMPLOYEE_MOBILE: frozenset(
-            next(
-                role.permission_codes
-                for role in LAUNCH_ROLE_MATRIX
-                if role.code is LaunchRoleCode.ACP_EMPLOYEE_MOBILE
-            )
-        )
+    assert set(roles) == {
+        LaunchRoleCode.ACP_EMPLOYEE_MOBILE,
+        LaunchRoleCode.FIELD_MANAGER,
     }
 
 

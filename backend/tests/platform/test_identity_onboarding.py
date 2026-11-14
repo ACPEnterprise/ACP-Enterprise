@@ -13,7 +13,7 @@ import pytest_asyncio
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
-from app.platform.auth.errors import PasswordPolicyError
+from app.platform.auth.errors import PasswordChangeRequiredError, PasswordPolicyError
 from app.platform.auth.models import EmailVerificationToken  # noqa: F401
 from app.platform.auth.passwords import PasswordService
 from app.platform.auth.services import CredentialService, authentication_service
@@ -199,6 +199,58 @@ def command(
         existing_user_id=existing_user_id,
         existing_employee_id=existing_employee_id,
     )
+
+
+@pytest.mark.asyncio
+async def test_admin_managed_onboarding_activates_without_invitation_and_requires_change(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    email = f"managed-{uuid4()}@example.test"
+    password = "Managed-temporary-passphrase-42!"
+    managed = replace(
+        command(context, request_key=f"managed-{uuid4()}", email=email),
+        admin_password=password,
+        require_password_change=True,
+    )
+    async with factory() as session:
+        record = await service.initiate(session, context=context, command=managed)
+        replay = await service.initiate(session, context=context, command=managed)
+        assert replay.id == record.id
+        assert record.status == "activated"
+        user = await session.get(User, record.user_id)
+        membership = await session.get(Membership, record.membership_id)
+        credential = await session.scalar(
+            select(UserCredential).where(UserCredential.user_id == record.user_id)
+        )
+        invitation_count = await session.scalar(
+            select(func.count(IdentityOnboardingInvitation.id)).where(
+                IdentityOnboardingInvitation.onboarding_request_id == record.id
+            )
+        )
+        assert user is not None and user.status == "active"
+        assert user.email_verified_at is not None
+        assert membership is not None and membership.status == "active"
+        assert credential is not None and credential.password_change_required
+        assert invitation_count == 0
+        user_id = record.user_id
+        await session.rollback()
+        with pytest.raises(PasswordChangeRequiredError):
+            await authentication_service.authenticate(
+                session, email=email, password=password
+            )
+        await CredentialService(PasswordService()).change_password(
+            session,
+            user_id=user_id,
+            current_password=password,
+            new_password="Employee-selected-passphrase-43!",
+        )
+        authenticated = await authentication_service.authenticate(
+            session, email=email, password="Employee-selected-passphrase-43!"
+        )
+        assert authenticated.user.id == user_id
 
 
 @pytest.mark.asyncio

@@ -276,7 +276,7 @@ async def correct_job_worked_interval(
 async def payroll_input_projection(
     pay_period_id: UUID,
     employee_id: UUID,
-    context: PayPeriodManage,
+    context: Approve,
     session: Session,
 ) -> PayrollInputProjectionView:
     period = await timekeeping_repository.pay_period_by_id(

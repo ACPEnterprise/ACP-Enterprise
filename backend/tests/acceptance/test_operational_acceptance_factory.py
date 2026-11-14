@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 from scripts.operational_acceptance_factory import (
@@ -28,6 +29,26 @@ def test_every_test_node_binds_to_a_repository_test_file() -> None:
             relative_path = node.split("::", 1)[0]
             assert relative_path.startswith("tests/")
             assert (backend_root / relative_path).is_file(), node
+
+
+def test_every_explicit_test_node_names_a_repository_test() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    parsed_files: dict[Path, set[str]] = {}
+    for scenario in SCENARIOS:
+        for node in scenario.test_nodes:
+            parts = node.split("::")
+            if len(parts) != 2:
+                continue
+            path = backend_root / parts[0]
+            names = parsed_files.setdefault(
+                path,
+                {
+                    item.name
+                    for item in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                },
+            )
+            assert parts[1] in names, node
 
 
 def test_catalog_contains_no_real_provider_or_production_execution() -> None:
