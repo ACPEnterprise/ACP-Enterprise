@@ -680,6 +680,8 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
     ) -> Estimate:
         parent = await self._job_identity(session, record.parent_keys)
         payload = dict(record.payload)
+        payload.setdefault("_source_digest", record.source_digest)
+        payload.setdefault("_owner_disposition", record.source_disposition or "CREATE")
         payload.setdefault("_source_job_id", next(
             key.source_id for key in record.parent_keys if key.domain == "job"
         ))
@@ -737,7 +739,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
     async def _create_invoice(
         self, session: AsyncSession, record: OverlayRecord
     ) -> Invoice:
-        source = build_invoice(record.payload)
+        payload = dict(record.payload)
+        payload.setdefault("_source_digest", record.source_digest)
+        payload.setdefault("_owner_disposition", record.source_disposition or "CREATE")
+        source = build_invoice(payload)
         parent = await self._job_identity(session, record.parent_keys)
         invoice, items = await self.financials.stage_migrated_invoice(
             session,
