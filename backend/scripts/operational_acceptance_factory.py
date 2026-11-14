@@ -74,7 +74,7 @@ SCENARIOS: Final[tuple[Scenario, ...]] = (
         "assignment readiness, audit and release",
         (
             "tests/dispatch/test_dispatch_service.py::test_assignment_is_idempotent_audited_and_releasable",
-            "tests/dispatch/test_dispatch_service.py::test_missing_availability_is_reported_unknown",
+            "tests/dispatch/test_dispatch_service.py::test_employee_inherits_branch_schedule_without_copied_availability",
         ),
     ),
     Scenario(
@@ -83,6 +83,7 @@ SCENARIOS: Final[tuple[Scenario, ...]] = (
         "explicit role, Branch, capability and credential evidence",
         (
             "tests/workforce/test_operations_projection.py::test_readiness_uses_explicit_capability_credential_and_branch_evidence",
+            "tests/platform/test_identity_onboarding.py::test_admin_managed_onboarding_activates_without_invitation_and_requires_change",
         ),
     ),
     Scenario(
@@ -462,6 +463,24 @@ SCENARIOS: Final[tuple[Scenario, ...]] = (
         ),
     ),
     Scenario(
+        "persisted_release_lifecycle",
+        "CSR_FIELD_TECHNICIAN_AND_FINANCE",
+        "database-backed Customer-to-field-to-accounting lifecycle, replay safety, quarantine isolation, balanced statements, and closed-period control",
+        (
+            "tests/estimates/test_estimate_foundation.py::test_create_uses_immutable_price_book_snapshot",
+            "tests/estimates/test_estimate_conversion.py::test_approved_estimate_converts_once_with_snapshot_lineage",
+            "tests/dispatch/test_dispatch_service.py::test_csr_cutover_path_reaches_technician_my_day_and_fresh_readback",
+            "tests/field_service/test_field_service_conformance.py::test_field_evidence_snapshot_replay_events_and_non_billable_completion",
+            "tests/invoicing/test_invoice_ar.py::test_accepted_work_creates_and_issues_one_exact_receivable",
+            "tests/invoicing/test_invoice_ar.py::test_verified_receipt_application_and_accounting_receipt_seams",
+            "tests/accounting/test_operations.py::test_all_current_accounting_workflows_are_registered_and_ledger_bound",
+            "tests/accounting/test_operations.py::test_operation_replay_scope_and_validation_fail_closed",
+            "tests/accounting/test_operations.py::test_database_backed_first_native_close_and_later_correction_pass",
+            "tests/payroll/test_accounting_posting_authority.py::test_approved_run_projects_balanced_native_posting_fact",
+            "tests/operational_migration/test_hcp_discrepancy_quarantine.py",
+        ),
+    ),
+    Scenario(
         "redis_failure",
         "COMPANY_ADMINISTRATOR",
         "rate limiting fails closed without required Redis",
@@ -549,6 +568,9 @@ def run(*, authority_sha: str, schema_head: str, output_path: Path) -> int:
                 "actual_result": result,
                 "duration_ms": duration_ms,
                 "evidence_digest": evidence_digest,
+                "failure_context": (
+                    combined[-12000:].strip() if result == "FAIL" else None
+                ),
             }
         )
     evidence = {
