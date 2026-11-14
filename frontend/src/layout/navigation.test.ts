@@ -41,4 +41,12 @@ describe("employee mobile navigation", () => {
     });
     expect(operations?.items).toContain(purchasing);
   });
+
+  it("keeps both dispatch and scheduling reachable in Operations", () => {
+    const operations = navigationGroups.find((group) => group.id === "operations");
+
+    expect(operations?.items.map((item) => item.id)).toEqual(
+      expect.arrayContaining(["dispatch", "scheduling"]),
+    );
+  });
 });
