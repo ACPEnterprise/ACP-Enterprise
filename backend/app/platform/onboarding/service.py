@@ -575,14 +575,22 @@ class IdentityOnboardingService:
                             .where(Employee.id == linked_employee)
                             .with_for_update()
                         )
-                        if (
-                            source_employee is None
-                            or linked_record is None
-                            or linked_record.id == source_employee.id
-                            or linked_record.status != "inactive"
-                            or linked_record.company_id != source_employee.company_id
-                            or linked_record.home_branch_id != source_employee.home_branch_id
-                            or linked_record.display_name != source_employee.display_name
+                        same_canonical_employee = (
+                            source_employee is not None
+                            and linked_record is not None
+                            and linked_record.id == source_employee.id
+                        )
+                        inactive_duplicate_is_compatible = (
+                            source_employee is not None
+                            and linked_record is not None
+                            and linked_record.status == "inactive"
+                            and linked_record.company_id == source_employee.company_id
+                            and linked_record.home_branch_id == source_employee.home_branch_id
+                            and linked_record.display_name == source_employee.display_name
+                        )
+                        if not (
+                            same_canonical_employee
+                            or inactive_duplicate_is_compatible
                         ):
                             raise OnboardingConflictError(
                                 "Membership is already linked to an Employee."
@@ -590,8 +598,9 @@ class IdentityOnboardingService:
                         # Preserve the inactive historical/diagnostic row while
                         # atomically reusing the explicitly matched canonical
                         # Employee identity for this login.
-                        linked_record.membership_id = None
-                        await session.flush()
+                        if not same_canonical_employee:
+                            linked_record.membership_id = None
+                            await session.flush()
                     issue_invitation = False
                 else:
                     assert email is not None
