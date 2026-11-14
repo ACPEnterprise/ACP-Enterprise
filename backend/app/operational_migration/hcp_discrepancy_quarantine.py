@@ -32,6 +32,13 @@ from app.operational_migration.hcp_november_supplemental_authority import (
 CONTRACT = "hcp-november-discrepancy-quarantine-authority/v1"
 QUARANTINE_REASON = "estimate_job_lineage_missing"
 QUARANTINE_DOMAIN = "estimate"
+QUARANTINE_REASONS = frozenset(
+    {
+        "estimate_job_lineage_missing",
+        "job_service_location_lineage_missing",
+        "parent_job_quarantined",
+    }
+)
 
 
 def _digest(value: object) -> str:
@@ -87,19 +94,48 @@ def _packet_payload(value: dict[str, Any]) -> dict[str, Any]:
 def _derive_records(
     records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    blocked_jobs: set[str] = set()
+    for item in records:
+        if (
+            item.get("domain") == "job"
+            and str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
+            and not {"customer", "service_location"}.issubset(
+                {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
+            )
+        ):
+            blocked_jobs.add(str(item["source_id"]))
     derived: list[dict[str, Any]] = []
     quarantined: list[dict[str, str]] = []
     for original in records:
         item = dict(original)
+        is_executable = str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
         is_executable_estimate = (
             item.get("domain") == QUARANTINE_DOMAIN
-            and str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
+            and is_executable
+        )
+        is_executable_job = item.get("domain") == "job" and is_executable
+        is_child_of_blocked_job = (
+            item.get("domain") in {"appointment", "invoice"}
+            and is_executable
+            and any(
+                str(parent.get("domain")) == "job"
+                and str(parent.get("source_id")) in blocked_jobs
+                for parent in item.get("parent_keys", [])
+            )
         )
         has_job_parent = any(
             str(parent.get("domain")) == "job"
             for parent in item.get("parent_keys", [])
         )
         if is_executable_estimate and not has_job_parent:
+            reason = "estimate_job_lineage_missing"
+        elif is_executable_job and str(item["source_id"]) in blocked_jobs:
+            reason = "job_service_location_lineage_missing"
+        elif is_child_of_blocked_job:
+            reason = "parent_job_quarantined"
+        else:
+            reason = ""
+        if reason:
             original_disposition = str(item["disposition"]).upper()
             # Overlay HOLD assertions are intentionally non-mutating and may
             # not carry a write payload.  Retain the original source body in
@@ -113,7 +149,7 @@ def _derive_records(
             item["source_disposition"] = original_disposition
             item["disposition"] = "HOLD"
             item["assertion"] = "hold"
-            item["reason"] = QUARANTINE_REASON
+            item["reason"] = reason
             quarantined.append(
                 {
                     "domain": QUARANTINE_DOMAIN,
@@ -236,13 +272,16 @@ class DiscrepancyQuarantineAuthority:
         actual = {
             str(item["source_id"])
             for item in self.packet.records
-            if str(item.get("reason")) == QUARANTINE_REASON
+            if str(item.get("reason")) in QUARANTINE_REASONS
         }
-        if expected != actual or any(item.get("domain") != QUARANTINE_DOMAIN for item in self.quarantined_records):
+        if expected != actual or any(
+            item.get("domain") not in {"estimate", "job", "appointment", "invoice"}
+            for item in self.quarantined_records
+        ):
             _fail("hcp_discrepancy_quarantine_inventory_mismatch")
         for item in self.quarantined_records:
             matches = [record for record in self.packet.records if record["source_id"] == item["source_id"]]
-            if len(matches) != 1 or matches[0].get("disposition") != "HOLD" or matches[0].get("source_disposition") not in WRITE_DISPOSITIONS:
+            if len(matches) != 1 or matches[0].get("disposition") != "HOLD" or matches[0].get("reason") not in QUARANTINE_REASONS or matches[0].get("source_disposition") not in WRITE_DISPOSITIONS:
                 _fail("hcp_discrepancy_hold_policy_mismatch", item)
         if any(record.get("disposition") in WRITE_DISPOSITIONS and any(parent.get("source_id") in expected for parent in record.get("parent_keys", [])) for record in self.packet.records):
             _fail("hcp_discrepancy_held_parent_edge")
