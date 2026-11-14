@@ -191,7 +191,12 @@ class NovemberExecutionPacket:
                         parent_keys=parents,
                         native_fingerprint=item.get("native_fingerprint"),
                         reason=str(item.get("reason", "")),
-                        source_disposition=str(item.get("disposition", "")).upper(),
+                        # A discrepancy quarantine changes only the native
+                        # assertion.  Keep the original packet classification
+                        # available to lineage/audit consumers.
+                        source_disposition=str(
+                            item.get("source_disposition", item.get("disposition", ""))
+                        ).upper(),
                     )
                 )
             overlay = CurrentOverlayManifest.build(
