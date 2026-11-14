@@ -4,6 +4,7 @@ set -eu
 preview_url=https://preview.allcountyhomeservices.com
 beta_url=https://beta.twelve-hats.com
 expected_beta_ipv4=${EXPECTED_BETA_IPV4:-162.243.234.193}
+verify_preview_beta_parity=${VERIFY_PREVIEW_BETA_PARITY:-1}
 
 temporary_headers=$(mktemp)
 temporary_body=$(mktemp)
@@ -112,7 +113,7 @@ require_https_redirect beta.twelve-hats.com
 
 curl --fail --silent --show-error --max-time 15 "$preview_url/backend-health" >"$preview_health"
 curl --fail --silent --show-error --max-time 15 "$beta_url/backend-health" >"$beta_health"
-if ! cmp -s "$preview_health" "$beta_health"; then
+if [ "$verify_preview_beta_parity" = "1" ] && ! cmp -s "$preview_health" "$beta_health"; then
   echo "Preview and Beta backend health projections differ." >&2
   exit 1
 fi

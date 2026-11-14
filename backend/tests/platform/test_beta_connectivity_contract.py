@@ -64,6 +64,7 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "openssl s_client" in verifier
     assert 'openssl x509 -in "$certificate_file" -noout -checkend 1209600' in verifier
     assert "Preview and Beta backend health projections differ" in verifier
+    assert "VERIFY_PREVIEW_BETA_PARITY" in verifier
     assert "https://untrusted.invalid" in verifier
     assert "require_single_header content-security-policy" in verifier
     for directive in (
