@@ -502,13 +502,15 @@ async def list_journals(
             .limit(limit)
         )
     ).all()
-    return tuple(
-        response(
-            row,
-            await accounting_repository.lines(session, context.company.id, row.id),
+    items: list[JournalResponse] = []
+    for row in rows:
+        items.append(
+            response(
+                row,
+                await accounting_repository.lines(session, context.company.id, row.id),
+            )
         )
-        for row in rows
-    )
+    return tuple(items)
 
 
 @router.get("/journals/{journal_id}", response_model=JournalResponse)
