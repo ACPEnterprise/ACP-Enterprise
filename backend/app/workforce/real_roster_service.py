@@ -128,6 +128,21 @@ class RealRosterService:
                 == self._onboarding_request_key(person.source_employee_id),
             )
         )
+        same_active_canonical_login = False
+        if employee is not None and employee.membership_id is not None:
+            membership = await session.scalar(
+                select(Membership).where(
+                    Membership.company_id == context.company.id,
+                    Membership.id == employee.membership_id,
+                )
+            )
+            if membership is not None:
+                user = await session.get(User, membership.user_id)
+                same_active_canonical_login = bool(
+                    user is not None
+                    and user.normalized_email
+                    == normalize_email(person.owner_login_email)
+                )
         if employee is not None:
             if employee.membership_id is None and employee.status not in {
                 "active",
@@ -135,9 +150,14 @@ class RealRosterService:
             }:
                 blockers.append("SOURCE_EMPLOYEE_NOT_LINKABLE")
             elif employee.membership_id is not None and (
-                existing_request is None
-                or existing_request.employee_id != employee.id
-                or employee.status != "active"
+                not (
+                    same_active_canonical_login
+                    or (
+                        existing_request is not None
+                        and existing_request.employee_id == employee.id
+                        and employee.status == "active"
+                    )
+                )
             ):
                 blockers.append("SOURCE_EMPLOYEE_ALREADY_LINKED")
         assert person.source_employee_id is not None
