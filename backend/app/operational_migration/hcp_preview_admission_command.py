@@ -9,6 +9,7 @@ import json
 import os
 import stat
 import subprocess
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,34 @@ from app.operational_migration.hcp_migration2_runner import (
     HcpMigration2Runner,
     SafeEvidenceError,
 )
+from app.operational_migration.hcp_november_bundle import (
+    AUTHORITY_CONTRACT as NOVEMBER_AUTHORITY_CONTRACT,
+    NovemberQualificationAuthority,
+    qualification_digest,
+)
+from app.operational_migration.hcp_november_executor import (
+    NovemberBoundedExecutor,
+    NovemberExecutionEnvelope,
+    _packet_inventory,
+    run_november_execution,
+    validate_supplemental_current_state_authority,
+    validate_runtime_boundary,
+)
+from app.operational_migration.hcp_discrepancy_quarantine import (
+    CONTRACT as DISCREPANCY_AUTHORITY_CONTRACT,
+    DiscrepancyQuarantineAuthority,
+)
+from app.operational_migration.hcp_current_overlay_adapter import (
+    SqlAlchemyCurrentOverlayRepository,
+)
+from app.operational_migration.hcp_current_overlay_lineage import (
+    CurrentOverlayLineageBinding,
+    CurrentOverlayLineageBootstrap,
+)
+from app.operational_migration.hcp_current_overlay_native import (
+    HcpCurrentOverlayNativeServices,
+)
+from app.platform.permissions.codes import MigrationPermission
 from app.operational_migration.hcp_successor_reuse import (
     AdmissionGuardEvidence,
     QualifiedSuccessorManifest,
@@ -349,12 +378,448 @@ async def run(
     return {**packet, "result": result}
 
 
+async def run_november_bundle(
+    authority: NovemberQualificationAuthority,
+    *,
+    execute: bool,
+) -> dict[str, object]:
+    """Qualify or execute the bounded November Preview handoff."""
+    if execute:
+        return await run_november_execution(authority, factory=AsyncSessionFactory)
+    validate_runtime_boundary(
+        os.getenv("TARGET_ENVIRONMENT", ""),
+        os.getenv("PRODUCTION_ACCESS_ENABLED", "false").lower() == "true",
+        os.getenv("PREVIEW_ACCESS_ENABLED", "false").lower() == "true",
+        {
+            name: os.getenv(name, "false")
+            for name in (
+                "HCP_PROVIDER_WRITE_ENABLED",
+                "HCP_LIVE_ACCESS_ENABLED",
+                "QBO_PRODUCTION_ENABLED",
+                "PAYROLL_EXECUTION_ENABLED",
+            )
+        },
+    )
+    packet = authority.verify()
+    packet["qualification_status"] = "PASS"
+    packet["qualification_digest"] = qualification_digest(authority.verify())
+    target = PreviewAdmissionTarget(
+        "preview", settings.database_url, "acp_enterprise_preview"
+    )
+    try:
+        packet["target_digest"] = target.validate()
+    except ValueError as error:
+        raise SafeEvidenceError("preview_database_target_invalid", "0" * 64) from error
+    async with AsyncSessionFactory() as session:
+        schemas = tuple(
+            (await session.scalars(text("SELECT version_num FROM alembic_version"))).all()
+        )
+    if schemas != (authority.expected_schema_head,):
+        raise SafeEvidenceError("preview_schema_authority_mismatch", "0" * 64)
+    packet["schema_current"] = authority.expected_schema_head
+    packet["schema_head"] = authority.expected_schema_head
+    if (
+        authority.execution_packet_path is not None
+        and authority.execution_packet_sha256
+        and authority.execution_packet_digest
+    ):
+        if _sha256(authority.execution_packet_path) != authority.execution_packet_sha256:
+            raise SafeEvidenceError("hcp_november_execution_packet_sha256_mismatch", "0" * 64)
+        envelope = NovemberExecutionEnvelope.load(authority.execution_packet_path)
+        envelope.verify_against(authority)
+        envelope.packet.verify_against(authority, None)
+        packet["execution_envelope"] = {
+            "contract": "hcp-november-preview-execution-envelope/v1",
+            "authority_digest": envelope.authority_digest,
+            "source_packet_sha256": envelope.source_packet_sha256,
+            "source_packet_digest": envelope.source_packet_digest,
+            "packet_counts": envelope.packet_counts,
+            "total_held": envelope.total_held,
+            "executable_count": envelope.executable_count,
+            "unexplained_omissions": envelope.unexplained_omissions,
+            "lineage_gaps": envelope.lineage_gaps,
+            "ambiguous_lineage": envelope.ambiguous_lineage,
+            "held_parent_executable_edges": envelope.held_parent_executable_edges,
+            "operational_hold_policy": envelope.operational_hold_policy,
+            "operational_hold_source_ids": envelope.operational_hold_source_ids,
+        }
+    packet["mode"] = "qualify"
+    return packet
+
+
+async def run_supplemental_current_state_qualification(
+    authority_path: Path,
+    *,
+    dry_run: bool = False,
+    execute: bool = False,
+) -> dict[str, object]:
+    """Validate a current-state authority and the live Preview boundary read-only."""
+    validate_runtime_boundary(
+        os.getenv("TARGET_ENVIRONMENT", ""),
+        os.getenv("PRODUCTION_ACCESS_ENABLED", "false").lower() == "true",
+        os.getenv("PREVIEW_ACCESS_ENABLED", "false").lower() == "true",
+        {
+            name: os.getenv(name, "false")
+            for name in (
+                "HCP_PROVIDER_WRITE_ENABLED",
+                "HCP_LIVE_ACCESS_ENABLED",
+                "QBO_PRODUCTION_ENABLED",
+                "PAYROLL_EXECUTION_ENABLED",
+            )
+        },
+    )
+    authority = validate_supplemental_current_state_authority(authority_path)
+    if os.getenv("APP_VERSION", "") != authority.repository_sha:
+        raise SafeEvidenceError("hcp_november_supplemental_repository_authority_mismatch", "0" * 64)
+    async with AsyncSessionFactory() as session:
+        schema = tuple((await session.scalars(text("SELECT version_num FROM alembic_version"))).all())
+        database = str(await session.scalar(text("SELECT current_database()")))
+    if schema != (authority.schema_head,) or database != "acp_enterprise_preview":
+        raise SafeEvidenceError("hcp_november_supplemental_database_authority_mismatch", "0" * 64)
+    inventory = _packet_inventory(authority.packet.records)
+    result: dict[str, object] = {
+        "contract": "hcp-november-supplemental-current-state-authority/v1",
+        "status": "PASS",
+        "mode": "qualify",
+        "authority_digest": authority.authority_digest,
+        "packet_digest": authority.packet_digest,
+        "counts": inventory["counts"],
+        "executable_count": inventory["executable"],
+        "total_held": inventory["total_held"],
+        "unexplained_omissions": authority.unexplained_omissions,
+        "lineage_gaps": authority.lineage_gaps,
+        "held_parent_executable_edges": inventory["held_parent_executable_edges"],
+    }
+    if not dry_run and not execute:
+        return result
+
+    runtime_authority = NovemberQualificationAuthority(
+        bundle_path=Path("/run/hcp-admission/immutable-november-bundle.tar.gz"),
+        bundle_sha256=authority.bundle_sha256,
+        expected_repository_sha=authority.repository_sha,
+        expected_schema_head=authority.schema_head,
+        expected_company_id=authority.company_id,
+        expected_branch_id=authority.branch_id,
+        expected_actor_id=authority.actor_id,
+        expected_hcp_provider_company_id=authority.provider_company_id,
+        expected_environment=authority.target,
+        expected_acquisition_digest=authority.immutable_source_packet_digest,
+        expected_reconciliation_digest=authority.reconciliation_digest,
+        expected_attachment_custody_digest=authority.supplemental_manifest_digest,
+        expected_policy_digest=authority.policy_digest,
+        qualification_status="PASS",
+        qualification_digest=authority.packet.qualification_digest,
+        rollback_backup_digest=authority.rollback_backup_digest,
+    )
+    async with AsyncSessionFactory() as session:
+        context = await resolve_rehearsal_context(session, runtime_authority, credentialed=True)
+        if (
+            context.company.id != runtime_authority.company_id
+            or context.active_branch is None
+            or context.active_branch.id != runtime_authority.branch_id
+            or context.user.id != runtime_authority.actor_id
+            or not context.has_permission(MigrationPermission.EXECUTE_REHEARSAL)
+        ):
+            raise SafeEvidenceError("hcp_november_supplemental_execution_scope_invalid", "0" * 64)
+        database_identity = str(
+            await session.scalar(text("SELECT current_database() || ':' || current_user"))
+        )
+        await session.rollback()
+        binding = CurrentOverlayLineageBinding(
+            company_id=runtime_authority.company_id,
+            branch_id=runtime_authority.branch_id,
+            actor_id=runtime_authority.actor_id,
+            source4_package_identity="hcp-clean-beta-november-supplemental-current-state",
+            base_source4_digest=runtime_authority.bundle_sha256,
+            overlay_manifest_digest=authority.packet.overlay_manifest.digest,
+            overlay_file_digest=authority.packet_digest,
+            hold_digest=runtime_authority.expected_policy_digest or "",
+            canonical_hold_count=authority.held_count,
+            authority_sha=runtime_authority.expected_repository_sha,
+            schema_head=runtime_authority.expected_schema_head,
+        )
+        services = HcpCurrentOverlayNativeServices(
+            context=context,
+            master_run_id=binding.master_run_id,
+            customer_run_id=binding.master_run_id,
+            operational_run_id=binding.master_run_id,
+            package_digest=runtime_authority.bundle_sha256,
+            base_source_digests={
+                record.key: record.prior_source_digest or record.source_digest
+                for record in authority.packet.overlay_manifest.records
+            },
+            allow_clean_baseline_bootstrap=True,
+        )
+        bootstrap = CurrentOverlayLineageBootstrap(binding, authority.packet.overlay_manifest)
+        repository = SqlAlchemyCurrentOverlayRepository(
+            session,
+            master_run_id=binding.master_run_id,
+            services=services,
+            lineage_bootstrap=bootstrap,
+            overlay_records=authority.packet.overlay_manifest.records,
+            advisory_lock_identity=f"hcp-november:{runtime_authority.company_id}:{runtime_authority.branch_id}",
+            execution_context={
+                "execution_packet_digest": authority.packet_digest,
+                "execution_packet_sha256": authority.packet_sha256,
+            },
+            dry_run=dry_run,
+        )
+        receipt = await NovemberBoundedExecutor().execute(
+            repository,
+            authority=runtime_authority,
+            packet=authority.packet,
+            # The supplemental authority is the qualified boundary. Its
+            # packet carries the immutable qualification digest, not the
+            # legacy small-dictionary qualification projection.
+            qualified_packet=None,
+            database_identity=database_identity,
+            schema_head=authority.schema_head,
+            clean_baseline_bootstrap=True,
+        )
+    result["execution"] = {
+        "status": "PASS" if execute else "DRY_RUN_PASS",
+        "receipt_digest": receipt.digest,
+        "journal_count": len(receipt.journal),
+        "outcomes": receipt.counts,
+        "native_actions": dict(
+            Counter(
+                item.native_action
+                for item in receipt.journal
+                if item.native_action is not None
+            )
+        ),
+        "transaction_rolled_back": dry_run,
+        "held_records_mutated": receipt.counts.get("held", 0) != inventory["total_held"],
+    }
+    result["mode"] = "execute" if execute else "qualify"
+    return result
+
+
+async def run_discrepancy_quarantine_qualification(
+    authority_path: Path,
+    *,
+    dry_run: bool = False,
+    execute: bool = False,
+) -> dict[str, object]:
+    """Qualify or execute the policy's non-authoritative discrepancy subset."""
+    validate_runtime_boundary(
+        os.getenv("TARGET_ENVIRONMENT", ""),
+        os.getenv("PRODUCTION_ACCESS_ENABLED", "false").lower() == "true",
+        os.getenv("PREVIEW_ACCESS_ENABLED", "false").lower() == "true",
+        {
+            name: os.getenv(name, "false")
+            for name in (
+                "HCP_PROVIDER_WRITE_ENABLED",
+                "HCP_LIVE_ACCESS_ENABLED",
+                "QBO_PRODUCTION_ENABLED",
+                "PAYROLL_EXECUTION_ENABLED",
+            )
+        },
+    )
+    authority = DiscrepancyQuarantineAuthority.load(authority_path)
+    if os.getenv("APP_VERSION", "") != authority.repository_sha:
+        raise SafeEvidenceError("hcp_discrepancy_repository_authority_mismatch", "0" * 64)
+    async with AsyncSessionFactory() as session:
+        schema = tuple((await session.scalars(text("SELECT version_num FROM alembic_version"))).all())
+        database = str(await session.scalar(text("SELECT current_database()")))
+    if schema != (authority.schema_head,) or database != "acp_enterprise_preview":
+        raise SafeEvidenceError("hcp_discrepancy_database_authority_mismatch", "0" * 64)
+    inventory = _packet_inventory(authority.packet.records)
+    result: dict[str, object] = {
+        "contract": DISCREPANCY_AUTHORITY_CONTRACT,
+        "status": "PASS",
+        "mode": "qualify",
+        "authority_digest": authority.authority_digest,
+        "packet_digest": authority.packet_digest,
+        "counts": inventory["counts"],
+        "executable_count": inventory["executable"],
+        "total_held": inventory["total_held"],
+        "quarantined_records": len(authority.quarantined_records),
+        "unexplained_omissions": authority.unexplained_omissions,
+        "lineage_gaps": authority.lineage_gaps,
+        "held_parent_executable_edges": inventory["held_parent_executable_edges"],
+    }
+    if not dry_run and not execute:
+        return result
+
+    from app.operational_migration.hcp_november_supplemental_authority import SupplementalCurrentStateAuthority
+
+    base = SupplementalCurrentStateAuthority.load(authority.base_authority_path)
+    runtime_authority = NovemberQualificationAuthority(
+        bundle_path=Path("/run/hcp-admission/immutable-november-bundle.tar.gz"),
+        bundle_sha256=authority.bundle_sha256,
+        expected_repository_sha=authority.repository_sha,
+        expected_schema_head=authority.schema_head,
+        expected_company_id=authority.company_id,
+        expected_branch_id=authority.branch_id,
+        expected_actor_id=authority.actor_id,
+        expected_hcp_provider_company_id=authority.provider_company_id,
+        expected_environment=authority.target,
+        expected_acquisition_digest=authority.source_packet_digest,
+        expected_reconciliation_digest=authority.reconciliation_digest,
+        expected_attachment_custody_digest=base.supplemental_manifest_digest,
+        expected_policy_digest=authority.policy_digest,
+        qualification_status="PASS",
+        qualification_digest=authority.packet.qualification_digest,
+        rollback_backup_digest=authority.rollback_backup_digest,
+    )
+    async with AsyncSessionFactory() as session:
+        context = await resolve_rehearsal_context(session, runtime_authority, credentialed=True)
+        if (
+            context.company.id != runtime_authority.company_id
+            or context.active_branch is None
+            or context.active_branch.id != runtime_authority.branch_id
+            or context.user.id != runtime_authority.actor_id
+            or not context.has_permission(MigrationPermission.EXECUTE_REHEARSAL)
+        ):
+            raise SafeEvidenceError("hcp_discrepancy_execution_scope_invalid", "0" * 64)
+        database_identity = str(await session.scalar(text("SELECT current_database() || ':' || current_user")))
+        await session.rollback()
+        binding = CurrentOverlayLineageBinding(
+            company_id=runtime_authority.company_id,
+            branch_id=runtime_authority.branch_id,
+            actor_id=runtime_authority.actor_id,
+            source4_package_identity="hcp-clean-beta-november-discrepancy-quarantine",
+            base_source4_digest=runtime_authority.bundle_sha256,
+            overlay_manifest_digest=authority.packet.overlay_manifest.digest,
+            overlay_file_digest=authority.packet_sha256,
+            hold_digest=authority.policy_digest,
+            canonical_hold_count=authority.held_count,
+            authority_sha=authority.repository_sha,
+            schema_head=authority.schema_head,
+        )
+        services = HcpCurrentOverlayNativeServices(
+            context=context,
+            master_run_id=binding.master_run_id,
+            customer_run_id=binding.master_run_id,
+            operational_run_id=binding.master_run_id,
+            package_digest=runtime_authority.bundle_sha256,
+            base_source_digests={
+                record.key: record.prior_source_digest or record.source_digest
+                for record in authority.packet.overlay_manifest.records
+            },
+            allow_clean_baseline_bootstrap=True,
+        )
+        bootstrap = CurrentOverlayLineageBootstrap(binding, authority.packet.overlay_manifest)
+        repository = SqlAlchemyCurrentOverlayRepository(
+            session,
+            master_run_id=binding.master_run_id,
+            services=services,
+            lineage_bootstrap=bootstrap,
+            overlay_records=authority.packet.overlay_manifest.records,
+            advisory_lock_identity=f"hcp-november:{authority.company_id}:{authority.branch_id}",
+            execution_context={
+                "execution_packet_digest": authority.packet_digest,
+                "execution_packet_sha256": authority.packet_sha256,
+                "quarantine_policy": "preserve-quarantine-surface-resolve-later/v1",
+            },
+            dry_run=dry_run,
+        )
+        receipt = await NovemberBoundedExecutor().execute(
+            repository,
+            authority=runtime_authority,
+            packet=authority.packet,
+            qualified_packet=None,
+            database_identity=database_identity,
+            schema_head=authority.schema_head,
+            clean_baseline_bootstrap=True,
+        )
+    result["execution"] = {
+        "status": "PASS" if execute else "DRY_RUN_PASS",
+        "receipt_digest": receipt.digest,
+        "journal_count": len(receipt.journal),
+        "outcomes": receipt.counts,
+        "native_actions": dict(Counter(item.native_action for item in receipt.journal if item.native_action is not None)),
+        "transaction_rolled_back": dry_run,
+        "held_records_mutated": False,
+    }
+    result["mode"] = "execute" if execute else "qualify"
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("qualify", "execute"))
     parser.add_argument("--authority-file", required=True, type=Path)
     parser.add_argument("--authorize-execution", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+    authority_path = args.authority_file
+    try:
+        authority_contract = json.loads(authority_path.read_bytes()).get("contract")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        authority_contract = None
+    if authority_contract == "hcp-november-supplemental-current-state-authority/v1":
+        if args.mode == "execute" and not args.authorize_execution:
+            print(json.dumps({
+                "status": "rejected",
+                "code": "explicit_execution_authorization_required",
+            }))
+            return 2
+        try:
+            output = asyncio.run(
+                run_supplemental_current_state_qualification(
+                    authority_path,
+                    dry_run=args.dry_run,
+                    execute=args.mode == "execute",
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            code = (
+                error.code
+                if isinstance(error, SafeEvidenceError)
+                else "hcp_november_supplemental_qualification_failed"
+            )
+            print(json.dumps({"status": "rejected", "code": code}))
+            return 2
+        print(json.dumps(output, sort_keys=True))
+        return 0
+    if authority_contract == DISCREPANCY_AUTHORITY_CONTRACT:
+        if args.mode == "execute" and not args.authorize_execution:
+            print(json.dumps({"status": "rejected", "code": "explicit_execution_authorization_required"}))
+            return 2
+        try:
+            output = asyncio.run(
+                run_discrepancy_quarantine_qualification(
+                    authority_path,
+                    dry_run=args.dry_run,
+                    execute=args.mode == "execute",
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            code = error.code if isinstance(error, SafeEvidenceError) else "hcp_discrepancy_qualification_failed"
+            print(json.dumps({"status": "rejected", "code": code}))
+            return 2
+        print(json.dumps(output, sort_keys=True))
+        return 0
+    if authority_contract == NOVEMBER_AUTHORITY_CONTRACT:
+        if args.mode == "execute" and not args.authorize_execution:
+            print(
+                json.dumps(
+                    {
+                        "status": "rejected",
+                        "code": "explicit_execution_authorization_required",
+                    }
+                )
+            )
+            return 2
+        try:
+            output = asyncio.run(
+                run_november_bundle(
+                    NovemberQualificationAuthority.load(authority_path),
+                    execute=args.mode == "execute",
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            code = (
+                error.code
+                if isinstance(error, SafeEvidenceError)
+                else "hcp_november_qualification_failed"
+            )
+            print(json.dumps({"status": "rejected", "code": code}))
+            return 2
+        print(json.dumps(output, sort_keys=True))
+        return 0
     if args.mode == "execute" and not args.authorize_execution:
         print(
             json.dumps(

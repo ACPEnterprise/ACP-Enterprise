@@ -65,6 +65,10 @@ def test_accounting_api_is_company_authenticated_and_bounded() -> None:
     assert paths == {
         "/api/v1/accounting/charts",
         "/api/v1/accounting/accounts",
+        "/api/v1/accounting/accounts/{account_id}",
+        "/api/v1/accounting/accounts/{account_id}/status",
+        "/api/v1/accounting/dashboard",
+        "/api/v1/accounting/operations",
         "/api/v1/accounting/control-accounts",
         "/api/v1/accounting/periods",
         "/api/v1/accounting/periods/{period_id}/report-comparisons",
@@ -76,6 +80,7 @@ def test_accounting_api_is_company_authenticated_and_bounded() -> None:
         "/api/v1/accounting/periods/{period_id}/reopen-approval",
         "/api/v1/accounting/journals",
         "/api/v1/accounting/journals/{journal_id}/prepare",
+        "/api/v1/accounting/journals/{journal_id}",
         "/api/v1/accounting/journals/{journal_id}/approve",
         "/api/v1/accounting/journals/{journal_id}/post",
         "/api/v1/accounting/journals/{journal_id}/reversals",

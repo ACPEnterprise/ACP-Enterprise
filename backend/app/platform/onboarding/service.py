@@ -426,7 +426,7 @@ class IdentityOnboardingService:
                     if (
                         source_employee is None
                         or source_employee.membership_id is not None
-                        or source_employee.status != "inactive"
+                        or source_employee.status not in {"active", "inactive"}
                         or source_employee.archived_at is not None
                         or source_employee.home_branch_id != branch.id
                         or source_employee.employee_type != command.employee_type
@@ -434,7 +434,10 @@ class IdentityOnboardingService:
                         or source_employee.last_name != command.last_name.strip()
                         or source_employee.display_name != command.display_name.strip()
                     ):
-                        if source_employee is not None and source_employee.status != "inactive":
+                        if source_employee is not None and source_employee.status not in {
+                            "active",
+                            "inactive",
+                        }:
                             raise OnboardingConflictError(
                                 "Eligible existing Employee is not available for onboarding."
                             )

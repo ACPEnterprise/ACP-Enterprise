@@ -631,6 +631,76 @@ class Journal(Base):
     )
 
 
+class AccountingOperation(Base):
+    """Provider-neutral operational accounting register bound to a journal."""
+
+    __tablename__ = "accounting_operations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "journal_id"],
+            ["accounting_journals.company_id", "accounting_journals.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "related_operation_id"],
+            ["accounting_operations.company_id", "accounting_operations.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "kind IN ('undeposited_receipt','deposit','card_account','card_charge','card_credit','card_payment','fixed_asset','depreciation','tax_accrual','tax_payment','inventory_valuation','inventory_purchase','inventory_usage','inventory_adjustment','job_cost','cutover_activation')",
+            name="ck_accounting_operation_kind",
+        ),
+        CheckConstraint(
+            "status IN ('draft','active','posted','reversed')",
+            name="ck_accounting_operation_status",
+        ),
+        CheckConstraint("amount >= 0", name="ck_accounting_operation_amount"),
+        CheckConstraint(
+            "currency ~ '^[A-Z]{3}$'", name="ck_accounting_operation_currency"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_accounting_operation_company_id"),
+        UniqueConstraint(
+            "company_id", "kind", "reference", name="uq_accounting_operation_reference"
+        ),
+        Index(
+            "ix_accounting_operation_company_kind_date",
+            "company_id",
+            "kind",
+            "effective_date",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    journal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    related_operation_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    payload: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    provenance: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class JournalLine(Base):
     __tablename__ = "accounting_journal_lines"
     __table_args__ = (
@@ -780,6 +850,7 @@ class PostingFailure(Base):
         DateTime(timezone=True), nullable=False, default=utc_now
     )
 
+
 class OpeningControlPackage(Base):
     """Immutable cutoff control evidence before governed opening application."""
 
@@ -795,29 +866,35 @@ class OpeningControlPackage(Base):
         ),
         CheckConstraint("version >= 1", name="ck_opening_control_package_version"),
         UniqueConstraint(
-            "company_id", "realm_id", "package_identity",
+            "company_id",
+            "realm_id",
+            "package_identity",
             name="uq_opening_control_package_identity",
         ),
         UniqueConstraint(
             "company_id", "id", name="uq_opening_control_package_company_id"
         ),
-        Index(
-            "ix_opening_control_package_cutoff", "company_id", "cutoff_at", "status"
-        ),
+        Index("ix_opening_control_package_cutoff", "company_id", "cutoff_at", "status"),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     company_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     realm_id: Mapped[str] = mapped_column(String(160), nullable=False)
     package_identity: Mapped[str] = mapped_column(String(200), nullable=False)
     source_version: Mapped[str] = mapped_column(String(80), nullable=False)
     cutoff_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     cutoff_timezone: Mapped[str] = mapped_column(String(80), nullable=False)
-    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    source_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    source_as_of: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     source_manifest_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -831,7 +908,9 @@ class OpeningControlPackage(Base):
         JSONB, nullable=False, default=dict
     )
     prepared_by_user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     approved_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
@@ -857,11 +936,16 @@ class OpeningControlException(Base):
         ),
         ForeignKeyConstraint(
             ["company_id", "package_id"],
-            ["accounting_opening_control_packages.company_id", "accounting_opening_control_packages.id"],
+            [
+                "accounting_opening_control_packages.company_id",
+                "accounting_opening_control_packages.id",
+            ],
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
-            "company_id", "package_id", "exception_identity",
+            "company_id",
+            "package_id",
+            "exception_identity",
             name="uq_opening_control_exception_identity",
         ),
     )

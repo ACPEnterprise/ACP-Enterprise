@@ -255,12 +255,20 @@ def _exact_object(
 
 
 def _exact_list(
-    row: Mapping[str, object], key: str, expected: frozenset[str]
+    row: Mapping[str, object],
+    key: str,
+    expected: frozenset[str],
+    *,
+    allow_extra: bool = False,
 ) -> list[object]:
     value = row[key]
     if not isinstance(value, list):
         raise TransformationValidationError("changed_nested_layout", fields=(key,))
-    if any(not isinstance(item, Mapping) or set(item) != expected for item in value):
+    if any(
+        not isinstance(item, Mapping)
+        or (set(item) != expected if not allow_extra else not expected.issubset(item))
+        for item in value
+    ):
         raise TransformationValidationError("changed_nested_layout", fields=(key,))
     return value
 
@@ -425,8 +433,29 @@ def build_estimate(row: Mapping[str, object]) -> EstimateMigrationRecord:
                 "updated_at",
             }
         ),
+        allow_extra=True,
     )
-    selected_id = _id(row["_selected_option_id"], "_selected_option_id", "est_")
+    selected_id_value = row.get("_selected_option_id")
+    if selected_id_value is None:
+        candidates = [
+            item
+            for item in options
+            if str(item.get("status") or "").lower()
+            not in {"deleted", "cancelled", "canceled"}
+        ]
+        if not candidates:
+            raise TransformationValidationError(
+                "authoritative_estimate_option_missing", fields=("options",)
+            )
+        selected_id_value = max(
+            candidates,
+            key=lambda item: (
+                str(item.get("updated_at") or ""),
+                str(item.get("option_number") or ""),
+                str(item.get("id") or ""),
+            ),
+        ).get("id")
+    selected_id = _id(selected_id_value, "_selected_option_id", "est_")
     selected = next(
         (
             item

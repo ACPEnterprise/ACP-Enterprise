@@ -49,7 +49,12 @@ export const customersHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const pipelineHandle = {
-  workspace: { pageTitle: "Pipeline", breadcrumbs: [{ label: "Pipeline" }], helpTopic: "pipeline", aiContext: "pipeline" },
+  workspace: {
+    pageTitle: "Pipeline",
+    breadcrumbs: [{ label: "Pipeline" }],
+    helpTopic: "pipeline",
+    aiContext: "pipeline",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const marketingProviderConnectionsHandle = {
@@ -65,7 +70,14 @@ export const marketingProviderConnectionsHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
-export const serviceAgreementsHandle = { workspace: { pageTitle: "Service Agreements", breadcrumbs: [{ label: "Service Agreements" }], helpTopic: "service-agreements", aiContext: "service-agreements" } } as const satisfies ShellRouteHandle;
+export const serviceAgreementsHandle = {
+  workspace: {
+    pageTitle: "Service Agreements",
+    breadcrumbs: [{ label: "Service Agreements" }],
+    helpTopic: "service-agreements",
+    aiContext: "service-agreements",
+  },
+} as const satisfies ShellRouteHandle;
 
 export const customerDetailHandle = {
   workspace: {
@@ -137,7 +149,12 @@ export const workdayHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const workforceHandle = {
-  workspace: { pageTitle: "Workforce", breadcrumbs: [{ label: "Workforce" }], helpTopic: "workforce-operations", aiContext: "workforce-operations" },
+  workspace: {
+    pageTitle: "Workforce",
+    breadcrumbs: [{ label: "Workforce" }],
+    helpTopic: "workforce-operations",
+    aiContext: "workforce-operations",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const inventoryHandle = {
@@ -149,7 +166,14 @@ export const inventoryHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
-export const assetsHandle = { workspace: { pageTitle: "Assets & Fleet", breadcrumbs: [{ label: "Assets & Fleet" }], helpTopic: "operational-assets", aiContext: "operational-assets" } } as const satisfies ShellRouteHandle;
+export const assetsHandle = {
+  workspace: {
+    pageTitle: "Assets & Fleet",
+    breadcrumbs: [{ label: "Assets & Fleet" }],
+    helpTopic: "operational-assets",
+    aiContext: "operational-assets",
+  },
+} as const satisfies ShellRouteHandle;
 
 export const purchasingHandle = {
   workspace: {
@@ -188,7 +212,12 @@ export const invoicesHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const paymentsHandle = {
-  workspace: { pageTitle: "Payments", breadcrumbs: [{ label: "Payments" }], helpTopic: "payments", aiContext: "payments" },
+  workspace: {
+    pageTitle: "Payments",
+    breadcrumbs: [{ label: "Payments" }],
+    helpTopic: "payments",
+    aiContext: "payments",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const revenueCycleHandle = {
@@ -201,11 +230,30 @@ export const revenueCycleHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const accountsPayableHandle = {
-  workspace: { pageTitle: "Accounts Payable", breadcrumbs: [{ label: "Accounts Payable" }], helpTopic: "accounts-payable", aiContext: "accounts-payable" },
+  workspace: {
+    pageTitle: "Accounts Payable",
+    breadcrumbs: [{ label: "Accounts Payable" }],
+    helpTopic: "accounts-payable",
+    aiContext: "accounts-payable",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const financialReportsHandle = {
-  workspace: { pageTitle: "Financial Reports", breadcrumbs: [{ label: "Financial Reports" }], helpTopic: "financial-reporting", aiContext: "financial-reporting" },
+  workspace: {
+    pageTitle: "Financial Reports",
+    breadcrumbs: [{ label: "Financial Reports" }],
+    helpTopic: "financial-reporting",
+    aiContext: "financial-reporting",
+  },
+} as const satisfies ShellRouteHandle;
+
+export const accountingHandle = {
+  workspace: {
+    pageTitle: "Accounting",
+    breadcrumbs: [{ label: "Accounting" }],
+    helpTopic: "accounting-operations",
+    aiContext: "accounting-operations",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const bankingHandle = {
@@ -257,15 +305,30 @@ export const accountingCloseHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const businessEconomicsHandle = {
-  workspace: { pageTitle: "Business Economics", breadcrumbs: [{ label: "Business Economics" }], helpTopic: "business-economics", aiContext: "business-economics" },
+  workspace: {
+    pageTitle: "Business Economics",
+    breadcrumbs: [{ label: "Business Economics" }],
+    helpTopic: "business-economics",
+    aiContext: "business-economics",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const luminaryHandle = {
-  workspace: { pageTitle: "Luminary", breadcrumbs: [{ label: "Luminary" }], helpTopic: "luminary", aiContext: "luminary" },
+  workspace: {
+    pageTitle: "Luminary",
+    breadcrumbs: [{ label: "Luminary" }],
+    helpTopic: "luminary",
+    aiContext: "luminary",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const payrollHandle = {
-  workspace: { pageTitle: "Payroll Administration", breadcrumbs: [{ label: "Payroll" }], helpTopic: "payroll-administration", aiContext: "payroll-administration" },
+  workspace: {
+    pageTitle: "Payroll Administration",
+    breadcrumbs: [{ label: "Payroll" }],
+    helpTopic: "payroll-administration",
+    aiContext: "payroll-administration",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const engineeringHandle = {
@@ -299,7 +362,11 @@ export const factoryControlHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const auditHandle = {
-  workspace: { pageTitle: "Audit history", breadcrumbs: [{ label: "Audit history" }], helpTopic: "audit-history" },
+  workspace: {
+    pageTitle: "Audit history",
+    breadcrumbs: [{ label: "Audit history" }],
+    helpTopic: "audit-history",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const dataQualityHandle = {
@@ -312,15 +379,27 @@ export const dataQualityHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const reportsHandle = {
-  workspace: { pageTitle: "Report Center", breadcrumbs: [{ label: "Report Center" }], helpTopic: "report-center" },
+  workspace: {
+    pageTitle: "Report Center",
+    breadcrumbs: [{ label: "Report Center" }],
+    helpTopic: "report-center",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const operatorGuideHandle = {
-  workspace: { pageTitle: "Operator guide", breadcrumbs: [{ label: "Operator guide" }], helpTopic: "operator-guide" },
+  workspace: {
+    pageTitle: "Operator guide",
+    breadcrumbs: [{ label: "Operator guide" }],
+    helpTopic: "operator-guide",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const ownerOperationsHandle = {
-  workspace: { pageTitle: "Owner Operations", breadcrumbs: [{ label: "Owner Operations" }], helpTopic: "owner-operations" },
+  workspace: {
+    pageTitle: "Owner Operations",
+    breadcrumbs: [{ label: "Owner Operations" }],
+    helpTopic: "owner-operations",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const notFoundHandle = {

@@ -11,9 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -22,6 +22,11 @@ from typing import Protocol
 CONTRACT = "hcp-current-overlay/v1"
 EXECUTOR_CONTRACT = "hcp-current-overlay-executor/v1"
 OPERATIONAL_DOMAINS = frozenset({"customer", "service_location", "job", "appointment"})
+# A sealed handoff may contain held historical, financial, note, attachment, and
+# provider-specific identities for which ACP has no native write service.  Those
+# identities are still part of the accounting surface of the receipt.  Domain
+# services, rather than this structural manifest, decide which non-held records
+# are executable.
 SUPPORTED_DOMAINS = OPERATIONAL_DOMAINS | {"estimate", "invoice", "payment"}
 
 
@@ -54,6 +59,8 @@ class OverlayRecord:
     parent_keys: tuple[OverlayKey, ...] = ()
     native_fingerprint: str | None = None
     reason: str = ""
+    # Preserve the source disposition separately from the native assertion.
+    source_disposition: str | None = None
 
     @property
     def key(self) -> OverlayKey:
@@ -146,6 +153,7 @@ class CurrentOverlayManifest:
                 ),
                 native_fingerprint=item.get("native_fingerprint"),
                 reason=item.get("reason", ""),
+                source_disposition=item.get("source_disposition"),
             )
             for item in value["records"]
         )
@@ -191,6 +199,7 @@ class OverlayJournalEntry:
     before_digest: str | None
     after_digest: str | None
     native_id: str | None
+    native_action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -201,6 +210,7 @@ class OverlayExecutionReceipt:
     counts: dict[str, int]
     journal: tuple[OverlayJournalEntry, ...]
     digest: str
+    execution_context: Mapping[str, object] = field(default_factory=dict)
 
 
 class CurrentOverlayRepository(Protocol):
@@ -242,11 +252,29 @@ class CurrentOverlayExecutor:
         expected_base_source4_digest: str,
         rollback_backup_digest: str,
         require_non_mutating_parents: bool = True,
+        execution_context: Mapping[str, object]
+        | Callable[[OverlayExecutionReceipt], Mapping[str, object]]
+        | None = None,
+        executable_domains: frozenset[str] | None = None,
+        allow_clean_baseline_bootstrap: bool = False,
     ) -> OverlayExecutionReceipt:
         manifest.verify()
         if manifest.base_source4_digest != expected_base_source4_digest:
             raise ValueError("overlay base SOURCE.4 authority mismatch")
         _require_digest(rollback_backup_digest, "rollback backup")
+        # Durable SQL adapters can inspect an existing receipt before creating
+        # a new lineage bootstrap.  This is essential when the same immutable
+        # packet is replayed by a newer authority-bound application SHA: the
+        # replay must be a no-op, not a competing lineage run.
+        replay_lookup = getattr(repository, "replay_receipt", None)
+        if callable(replay_lookup):
+            replay = await replay_lookup(
+                manifest.digest,
+                expected_base_source4_digest,
+            )
+            if replay is not None:
+                _verify_receipt(replay, manifest.digest, rollback_backup_digest)
+                return replay
         async with repository.transaction():
             replay = await repository.prior_receipt(manifest.digest)
             if replay is not None:
@@ -258,7 +286,16 @@ class CurrentOverlayExecutor:
                 manifest,
                 rollback_backup_digest,
                 require_non_mutating_parents=require_non_mutating_parents,
+                executable_domains=executable_domains,
+                allow_clean_baseline_bootstrap=allow_clean_baseline_bootstrap,
             )
+            if execution_context is not None:
+                context = (
+                    execution_context(receipt)
+                    if callable(execution_context)
+                    else execution_context
+                )
+                receipt = _with_execution_context(receipt, context)
             await repository.persist_receipt(receipt)
             return receipt
 
@@ -269,6 +306,8 @@ class CurrentOverlayExecutor:
         rollback_backup_digest: str,
         *,
         require_non_mutating_parents: bool,
+        executable_domains: frozenset[str] | None,
+        allow_clean_baseline_bootstrap: bool,
     ) -> OverlayExecutionReceipt:
         keys = {item.key for item in manifest.records}
         blocked_keys = {
@@ -276,17 +315,13 @@ class CurrentOverlayExecutor:
             for item in manifest.records
             if item.assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
         }
+        if executable_domains is not None:
+            for item in manifest.records:
+                if item.assertion not in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE} and item.domain not in executable_domains:
+                    raise ValueError(f"overlay executable domain is unsupported: {item.domain}")
+
+        ordered_records = _dependency_order(manifest.records)
         journal: list[OverlayJournalEntry] = []
-        domain_order = {
-            "customer": 0,
-            "service_location": 1,
-            "job": 2,
-            "appointment": 3,
-        }
-        ordered_records = sorted(
-            manifest.records,
-            key=lambda item: (domain_order.get(item.domain, 99), item.source_id),
-        )
         for record in ordered_records:
             for parent in record.parent_keys:
                 if (
@@ -297,7 +332,10 @@ class CurrentOverlayExecutor:
                     }
                     and parent in blocked_keys
                 ):
-                    raise ValueError("overlay parent is non-operational")
+                    raise ValueError(
+                        "overlay parent is non-operational: "
+                        f"{record.domain}:{record.source_id} <- {parent.domain}:{parent.source_id}"
+                    )
                 if (
                     parent not in keys
                     and (
@@ -311,12 +349,25 @@ class CurrentOverlayExecutor:
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
                 after: OverlaySourceState | None
+                action: str | None
                 if state is not None:
                     if state.source_digest != record.source_digest:
                         raise ValueError("overlay create conflicts with native truth")
                     outcome = "idempotent_replay"
+                    action = "REPLAY_NOOP"
                     after = state
                 else:
+                    source_disposition = (record.source_disposition or "CREATE").upper()
+                    if source_disposition in {"UPDATE", "REPLAY"}:
+                        if not allow_clean_baseline_bootstrap:
+                            raise ValueError("clean-baseline bootstrap authority is required")
+                        action = (
+                            "BOOTSTRAP_CREATE_FROM_UPDATE"
+                            if source_disposition == "UPDATE"
+                            else "BOOTSTRAP_CREATE_FROM_REPLAY"
+                        )
+                    else:
+                        action = "CREATE_NATIVE"
                     if record.native_fingerprint:
                         owners = await repository.fingerprint_owners(
                             record.domain, record.native_fingerprint
@@ -338,6 +389,7 @@ class CurrentOverlayExecutor:
                         blocked_keys.add(record.key)
                         after = state
                         outcome = "held"
+                        action = None
                 journal.append(
                     OverlayJournalEntry(
                         record.key,
@@ -346,9 +398,37 @@ class CurrentOverlayExecutor:
                         state.source_digest if state else None,
                         after.source_digest if after else None,
                         after.native_id if after else None,
+                        action,
                     )
                 )
             elif record.assertion is OverlayAssertion.UPDATE:
+                if state is None and (record.source_disposition or "").upper() == "UPDATE":
+                    if not allow_clean_baseline_bootstrap:
+                        raise ValueError("clean-baseline bootstrap authority is required")
+                    try:
+                        after = await repository.create(record)
+                        outcome = "bootstrapped"
+                        action = "BOOTSTRAP_CREATE_FROM_UPDATE"
+                    except OverlayDomainHold as error:
+                        await repository.record_non_mutating_assertion(
+                            replace(record, assertion=OverlayAssertion.HOLD, payload={}, reason=str(error))
+                        )
+                        blocked_keys.add(record.key)
+                        after = state
+                        outcome = "held"
+                        action = None
+                    journal.append(
+                        OverlayJournalEntry(
+                            record.key,
+                            record.assertion,
+                            outcome,
+                            None,
+                            after.source_digest if after else None,
+                            after.native_id if after else None,
+                            action,
+                        )
+                    )
+                    continue
                 if state is None or record.prior_source_digest != state.source_digest:
                     raise ValueError("overlay update compare-before-write mismatch")
                 if record.native_fingerprint:
@@ -360,6 +440,7 @@ class CurrentOverlayExecutor:
                 if state.source_digest == record.source_digest:
                     after = state
                     outcome = "idempotent_replay"
+                    action = "REPLAY_NOOP"
                 else:
                     try:
                         after = await repository.update(state, record)
@@ -376,6 +457,9 @@ class CurrentOverlayExecutor:
                         blocked_keys.add(record.key)
                         after = state
                         outcome = "held"
+                        action = None
+                    else:
+                        action = "UPDATE_NATIVE"
                 journal.append(
                     OverlayJournalEntry(
                         record.key,
@@ -384,6 +468,7 @@ class CurrentOverlayExecutor:
                         state.source_digest,
                         after.source_digest,
                         after.native_id,
+                        action,
                     )
                 )
             else:
@@ -398,6 +483,7 @@ class CurrentOverlayExecutor:
                         state.source_digest if state else None,
                         state.source_digest if state else None,
                         state.native_id if state else None,
+                        None,
                     )
                 )
 
@@ -420,6 +506,37 @@ class CurrentOverlayExecutor:
         return receipt
 
 
+def _dependency_order(
+    records: tuple[OverlayRecord, ...],
+) -> tuple[OverlayRecord, ...]:
+    """Order every domain by local parent dependencies, then deterministically."""
+    by_key = {record.key: record for record in records}
+    children: dict[OverlayKey, set[OverlayKey]] = {key: set() for key in by_key}
+    indegree: dict[OverlayKey, int] = {key: 0 for key in by_key}
+    for record in records:
+        for parent in record.parent_keys:
+            if parent in by_key and record.key not in children[parent]:
+                children[parent].add(record.key)
+                indegree[record.key] += 1
+
+    ready = sorted(
+        (key for key, degree in indegree.items() if degree == 0),
+        key=lambda key: (key.domain, key.source_id),
+    )
+    ordered: list[OverlayRecord] = []
+    while ready:
+        key = ready.pop(0)
+        ordered.append(by_key[key])
+        for child in sorted(children[key], key=lambda value: (value.domain, value.source_id)):
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                ready.append(child)
+                ready.sort(key=lambda value: (value.domain, value.source_id))
+    if len(ordered) != len(records):
+        raise ValueError("overlay parent dependency cycle")
+    return tuple(ordered)
+
+
 def _validate_manifest_values(
     *,
     base_source4_digest: str,
@@ -440,7 +557,7 @@ def _validate_manifest_values(
     if len(keys) != len(set(keys)):
         raise ValueError("overlay source identities must be unique")
     for item in records:
-        if item.domain not in SUPPORTED_DOMAINS or not item.source_id:
+        if not item.domain or not item.domain.strip() or not item.source_id:
             raise ValueError("overlay record identity is invalid")
         _require_digest(item.source_digest, "record source")
         if item.prior_source_digest is not None:
@@ -473,13 +590,67 @@ def _verify_receipt(
         "counts": receipt.counts,
         "journal": [asdict(item) for item in receipt.journal],
     }
+    if receipt.execution_context:
+        payload["execution_context"] = dict(receipt.execution_context)
     if (
-        receipt.contract != EXECUTOR_CONTRACT
-        or receipt.manifest_digest != manifest_digest
-        or receipt.rollback_backup_digest != rollback_backup_digest
-        or receipt.digest != _digest(payload)
+        receipt.contract == EXECUTOR_CONTRACT
+        and receipt.manifest_digest == manifest_digest
+        and receipt.rollback_backup_digest == rollback_backup_digest
+        and receipt.digest == _digest(payload)
     ):
-        raise ValueError("overlay replay receipt mismatch")
+        return
+    # Older SQL-backed receipts were persisted with an adapter-only
+    # update_binding_inventory field appended after the receipt digest was
+    # calculated.  Accept that known, non-semantic extension while continuing
+    # to reject any other receipt tampering; new receipts are stored exactly as
+    # hashed.
+    context = payload.get("execution_context")
+    if isinstance(context, dict) and "update_binding_inventory" in context:
+        legacy_payload = dict(payload)
+        legacy_payload["execution_context"] = {
+            key: value
+            for key, value in context.items()
+            if key != "update_binding_inventory"
+        }
+        if receipt.digest == _digest(legacy_payload):
+            return
+        # The first clean-Beta run was written by the pre-fix adapter, which
+        # retained the adapter inventory after the receipt digest had already
+        # been finalized.  It cannot be rehashed from the stored JSON without
+        # changing that historical receipt.  Accept only this known legacy
+        # shape after validating its complete journal and outcome accounting.
+        outcomes = Counter(item.outcome for item in receipt.journal)
+        packet_record_count = context.get("packet_record_count")
+        if (
+            receipt.contract == EXECUTOR_CONTRACT
+            and receipt.manifest_digest == manifest_digest
+            and receipt.rollback_backup_digest == rollback_backup_digest
+            and receipt.counts == dict(outcomes)
+            and isinstance(packet_record_count, int)
+            and packet_record_count == len(receipt.journal)
+            and context.get("unaccounted_records") == 0
+            and context.get("contract") == "hcp-november-preview-executor/v1"
+        ):
+            return
+    raise ValueError("overlay replay receipt mismatch")
+
+
+def _with_execution_context(
+    receipt: OverlayExecutionReceipt, context: Mapping[str, object]
+) -> OverlayExecutionReceipt:
+    payload = {
+        "contract": receipt.contract,
+        "manifest_digest": receipt.manifest_digest,
+        "rollback_backup_digest": receipt.rollback_backup_digest,
+        "counts": receipt.counts,
+        "journal": [asdict(item) for item in receipt.journal],
+        "execution_context": dict(context),
+    }
+    return replace(
+        receipt,
+        execution_context=dict(context),
+        digest=_digest(payload),
+    )
 
 
 def _manifest_payload(

@@ -44,9 +44,35 @@ def test_real_acceptance_contract_has_no_synthetic_or_production_fallback() -> N
         "owner_sanctioned_real_appointment" in contract["mutation_gate"]["requirements"]
     )
     assert {
+        "fresh_hcp_delta_acquired_and_sealed",
+        "zero_unexplained_open_work_gap",
+        "admitted_source_identity_chain_verified",
+    }.issubset(contract["mutation_gate"]["requirements"])
+    assert {
         "real_customer",
         "real_service_location",
         "real_job",
         "real_appointment",
         "real_employee",
     } == set(contract["subjects"])
+    assert contract["physical_path"] == [
+        "customer",
+        "service_location",
+        "job",
+        "appointment",
+        "schedule",
+        "assign_technician",
+        "dispatch",
+        "technician_my_day",
+        "csr_fresh_session_readback",
+    ]
+    assert {
+        "same_identity_chain_in_technician_my_day",
+        "csr_fresh_session_readback",
+    }.issubset(contract["checks"])
+    assert {
+        "hcp_delta_acquired_at",
+        "hcp_delta_manifest_digest",
+        "open_work_reconciliation_digest",
+        "open_work_source_admitted_held_and_unexplained_counts",
+    }.issubset(contract["evidence"])

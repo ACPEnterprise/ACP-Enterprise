@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+
 from scripts.real_workforce_cutover_acceptance import _get, evaluate
 
 CONTRACT = json.loads(
@@ -51,6 +52,32 @@ def _ready_item(policy):
     }
 
 
+def test_mobile_cutover_contract_requires_assignment_scoped_job_access_only() -> None:
+    assert set(CONTRACT["mobile_permissions"]) == {
+        "COMPANY_TIMEKEEPING_OWN_READ",
+        "COMPANY_TIMEKEEPING_OWN_PUNCH",
+        "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+        "COMPANY_JOB_EXECUTE",
+    }
+    assert "COMPANY_JOB_READ" not in CONTRACT["mobile_permissions"]
+
+
+def test_cutover_role_boundaries_remain_canonical() -> None:
+    policies = {item["classification"]: item for item in CONTRACT["expected_roster"]}
+    assert policies["ADMIN"]["required_roles"] == ["COMPANY_ADMINISTRATOR"]
+    assert policies["OFFICE_MANAGER"]["required_roles"] == ["OFFICE_MANAGER"]
+    assert set(policies["FIELD_MANAGER"]["required_roles"]) == {
+        "FIELD_MANAGER",
+        "TECHNICIAN",
+        "ACP_EMPLOYEE_MOBILE",
+        "DISPATCHER",
+    }
+    assert set(policies["FIELD_TECH"]["required_roles"]) == {
+        "TECHNICIAN",
+        "ACP_EMPLOYEE_MOBILE",
+    }
+
+
 def test_acceptance_passes_only_for_exact_ready_roster() -> None:
     items = [_ready_item(policy) for policy in CONTRACT["expected_roster"]]
     administration = {
@@ -94,6 +121,13 @@ def test_acceptance_passes_only_for_exact_ready_roster() -> None:
     )
     assert result["status"] == "PASS"
     assert result["actual_roster_count"] == 7
+    field_results = {
+        item["roster_key"]: item
+        for item in result["employees"]
+        if item["roster_key"] in {"melvin-santiago", "dakota-wilcox", "jason-calci"}
+    }
+    assert field_results
+    assert all(item["status"] == "PASS" for item in field_results.values())
 
 
 def test_acceptance_fails_closed_for_unbound_synthetic_and_privilege_leak() -> None:
@@ -158,5 +192,14 @@ def test_acceptance_fails_closed_when_terminated_access_is_not_closed() -> None:
     assert result["status"] == "FAIL"
     assert all(
         "OPERATIONAL_ACCESS_NOT_DISABLED" in employee["failures"]
+        for employee in result["terminated_historical_employees"]
+    )
+    assert all(
+        {
+            "OPERATIONAL_ACCESS_NOT_DISABLED",
+            "MEMBERSHIP_STILL_ACTIVE",
+            "MOBILE_STILL_READY",
+            "DISPATCH_ASSIGNMENTS_REMAIN",
+        }.issubset(employee["failures"])
         for employee in result["terminated_historical_employees"]
     )

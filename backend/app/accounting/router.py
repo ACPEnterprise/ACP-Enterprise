@@ -19,7 +19,9 @@ from app.accounting.errors import (
     AccountingValidation,
 )
 from app.accounting.models import (
+    AccountingOperation,
     AccountingPeriod,
+    Journal,
     OpeningControlException,
     OpeningControlPackage,
 )
@@ -37,10 +39,15 @@ from app.accounting.opening_controls import (
     preview_opening_controls,
 )
 from app.accounting.opening_source_adapter import SealedOpeningPackageAdapter
+from app.accounting.operations import accounting_operation_service
 from app.accounting.repository import accounting_repository
 from app.accounting.schemas import (
     AccountCreate,
+    AccountingDashboardResponse,
+    AccountingOperationCreate,
+    AccountingOperationResponse,
     AccountResponse,
+    AccountStatusUpdate,
     ChartCreate,
     ChartResponse,
     ControlAssignmentCreate,
@@ -95,6 +102,68 @@ OpeningApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(AccountingPermission.OPENING_STATE_APPROVE)),
 ]
+
+
+def operation_response(
+    row: AccountingOperation, journal_status: str | None = None
+) -> AccountingOperationResponse:
+    values = {
+        name: getattr(row, name)
+        for name in AccountingOperationResponse.model_fields
+        if name != "journal_status"
+    }
+    return AccountingOperationResponse(**values, journal_status=journal_status)
+
+
+@router.get("/dashboard", response_model=AccountingDashboardResponse)
+async def accounting_dashboard(
+    context: ReadContext, session: DatabaseSession
+) -> AccountingDashboardResponse:
+    return AccountingDashboardResponse.model_validate(
+        await accounting_operation_service.dashboard(session, context=context)
+    )
+
+
+@router.get("/operations", response_model=tuple[AccountingOperationResponse, ...])
+async def list_accounting_operations(
+    context: ReadContext,
+    session: DatabaseSession,
+    kind: str | None = Query(default=None),
+) -> tuple[AccountingOperationResponse, ...]:
+    try:
+        rows = await accounting_operation_service.list(
+            session, context=context, kind=kind
+        )
+        return tuple(operation_response(row, status) for row, status in rows)
+    except AccountingValidation as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/operations",
+    response_model=AccountingOperationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_accounting_operation(
+    data: AccountingOperationCreate,
+    context: PrepareContext,
+    session: DatabaseSession,
+) -> AccountingOperationResponse:
+    try:
+        row = await accounting_operation_service.create(
+            session, context=context, data=data
+        )
+        journal_status = None
+        if row.journal_id:
+            journal_status = await session.scalar(
+                select(Journal.status).where(
+                    Journal.company_id == context.company.id,
+                    Journal.id == row.journal_id,
+                )
+            )
+        return operation_response(row, journal_status)
+    except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
+        raise translate(error) from error
 
 
 def translate(error: Exception) -> HTTPException:
@@ -170,6 +239,33 @@ async def list_accounts(
             session, context.company.id
         )
     )
+
+
+@router.get("/accounts/{account_id}", response_model=AccountResponse)
+async def account_detail(
+    account_id: UUID, context: ReadContext, session: DatabaseSession
+) -> AccountResponse:
+    row = await accounting_repository.account(session, context.company.id, account_id)
+    if row is None:
+        raise translate(AccountingNotFound("Accounting account was not found"))
+    return AccountResponse.model_validate(row)
+
+
+@router.patch("/accounts/{account_id}/status", response_model=AccountResponse)
+async def update_account_status(
+    account_id: UUID,
+    data: AccountStatusUpdate,
+    context: PeriodContext,
+    session: DatabaseSession,
+) -> AccountResponse:
+    try:
+        return AccountResponse.model_validate(
+            await accounting_service.update_account_status(
+                session, context=context, account_id=account_id, data=data
+            )
+        )
+    except (AccountingNotFound, AccountingValidation) as error:
+        raise translate(error) from error
 
 
 @router.post(
@@ -390,6 +486,41 @@ async def create_journal(
         )
     except (AccountingNotFound, AccountingConflict, AccountingValidation) as error:
         raise translate(error) from error
+
+
+@router.get("/journals", response_model=tuple[JournalResponse, ...])
+async def list_journals(
+    context: ReadContext,
+    session: DatabaseSession,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> tuple[JournalResponse, ...]:
+    rows = (
+        await session.scalars(
+            select(Journal)
+            .where(Journal.company_id == context.company.id)
+            .order_by(Journal.effective_date.desc(), Journal.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    return tuple(
+        response(
+            row,
+            await accounting_repository.lines(session, context.company.id, row.id),
+        )
+        for row in rows
+    )
+
+
+@router.get("/journals/{journal_id}", response_model=JournalResponse)
+async def journal_detail(
+    journal_id: UUID, context: ReadContext, session: DatabaseSession
+) -> JournalResponse:
+    row = await accounting_repository.journal(session, context.company.id, journal_id)
+    if row is None:
+        raise translate(AccountingNotFound("Accounting journal was not found"))
+    return response(
+        row, await accounting_repository.lines(session, context.company.id, row.id)
+    )
 
 
 @router.post("/journals/{journal_id}/prepare", response_model=JournalResponse)

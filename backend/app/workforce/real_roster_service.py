@@ -129,8 +129,11 @@ class RealRosterService:
             )
         )
         if employee is not None:
-            if employee.membership_id is None and employee.status != "inactive":
-                blockers.append("SOURCE_EMPLOYEE_NOT_INACTIVE")
+            if employee.membership_id is None and employee.status not in {
+                "active",
+                "inactive",
+            }:
+                blockers.append("SOURCE_EMPLOYEE_NOT_LINKABLE")
             elif employee.membership_id is not None and (
                 existing_request is None
                 or existing_request.employee_id != employee.id

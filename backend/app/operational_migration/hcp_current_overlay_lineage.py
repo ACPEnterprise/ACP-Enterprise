@@ -114,12 +114,7 @@ class CurrentOverlayLineageBootstrap:
                 },
                 schema_head=binding.schema_head,
                 implementation_version=LINEAGE_CONTRACT,
-                supported_entities=[
-                    "customer",
-                    "service_location",
-                    "job",
-                    "appointment",
-                ],
+                supported_entities=sorted(_domain_counts(self.manifest)),
                 baseline_counts={},
                 source_counts=_domain_counts(self.manifest),
                 transformed_counts={},
@@ -308,7 +303,7 @@ class CurrentOverlayLineageBootstrap:
 def _domain_counts(manifest: CurrentOverlayManifest) -> dict[str, int]:
     return {
         domain: sum(r.domain == domain for r in manifest.records)
-        for domain in ("customer", "service_location", "job", "appointment")
+        for domain in sorted({record.domain for record in manifest.records})
     }
 
 
