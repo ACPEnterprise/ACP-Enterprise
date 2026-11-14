@@ -13,6 +13,7 @@ import json
 import os
 import stat
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -109,8 +110,8 @@ def _derive_records(
                 not {"customer", "service_location"}.issubset(
                     {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
                 )
-                or status in {"in_progress", "completed"}
-                and not timestamps.get("started_at")
+                or status in {"in progress", "complete rated", "complete unrated"}
+                and not _parse_datetime(timestamps.get("started_at"))
             )
         ):
             blocked_jobs.add(str(item["source_id"]))
@@ -146,7 +147,7 @@ def _derive_records(
         if item.get("domain") == "job" and is_executable:
             status = str((item.get("payload") or {}).get("work_status") or "").lower()
             timestamps = (item.get("payload") or {}).get("work_timestamps") or {}
-            if status in {"in_progress", "completed"} and not timestamps.get("started_at"):
+            if status in {"in progress", "complete rated", "complete unrated"} and not _parse_datetime(timestamps.get("started_at")):
                 job_payload_invalid = True
         has_job_parent = any(
             str(parent.get("domain")) == "job"
@@ -190,6 +191,15 @@ def _derive_records(
             )
         derived.append(item)
     return derived, quarantined
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True)
