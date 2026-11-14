@@ -14,7 +14,10 @@ from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.permissions.codes import (
+    CustomerPermission,
     DispatchPermission,
+    EstimatePermission,
+    JobPermission,
     MigrationPermission,
     SchedulingPermission,
     WorkforcePermission,
@@ -209,7 +212,10 @@ async def reconcile_clean_beta_authority(
         # deliberately outside this authority chain.
         required_codes.update(
             {
+                CustomerPermission.MANAGE,
                 DispatchPermission.MANAGE,
+                EstimatePermission.MANAGE,
+                JobPermission.MANAGE,
                 SchedulingPermission.MANAGE,
                 WorkforcePermission.MANAGE,
             }

@@ -151,7 +151,7 @@ class SimpleEmployeeOnboardingService:
                 ):
                     candidates[employee.id] = MatchCandidate(employee.id, None, None)
                 continue
-            if employee.status != "inactive" or employee.membership_id is not None:
+            if employee.status not in {"active", "inactive"} or employee.membership_id is not None:
                 continue
             source = await session.scalar(
                 select(HcpEmployeeSourceCrosswalk)
