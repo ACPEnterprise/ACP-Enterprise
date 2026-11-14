@@ -159,8 +159,21 @@ def _derive_records(
             payload = item.get("payload") or {}
             start = _parse_datetime(payload.get("start_time"))
             end = _parse_datetime(payload.get("end_time"))
-            if start and end and (start.minute % 15 or end.minute % 15):
-                appointment_schedule_invalid = True
+            if start and end:
+                duration = int((end - start).total_seconds() // 60)
+                appointment_schedule_invalid = bool(
+                    start.tzinfo is None
+                    or end.tzinfo is None
+                    or end <= start
+                    or start.minute % 15
+                    or end.minute % 15
+                    or start.second
+                    or end.second
+                    or start.microsecond
+                    or end.microsecond
+                    or duration <= 0
+                    or duration % 15
+                )
         has_job_parent = any(
             str(parent.get("domain")) == "job"
             for parent in item.get("parent_keys", [])
