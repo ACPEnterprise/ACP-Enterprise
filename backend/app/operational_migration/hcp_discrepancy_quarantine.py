@@ -445,7 +445,16 @@ class DiscrepancyQuarantineAuthority:
             if str(item.get("reason")) in QUARANTINE_REASONS
         }
         if expected != actual or any(
-            item.get("domain") not in {"estimate", "job", "appointment", "invoice"}
+            item.get("domain")
+            not in {
+                "customer",
+                "service_location",
+                "employee",
+                "estimate",
+                "job",
+                "appointment",
+                "invoice",
+            }
             for item in self.quarantined_records
         ):
             _fail("hcp_discrepancy_quarantine_inventory_mismatch")
