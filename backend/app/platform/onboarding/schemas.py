@@ -20,6 +20,8 @@ class OnboardingInitiateRequest(BaseModel):
     login_email: SecretStr | None = None
     existing_user_id: UUID | None = None
     existing_employee_id: UUID | None = None
+    admin_password: SecretStr | None = None
+    require_password_change: bool = False
 
     @model_validator(mode="after")
     def one_login_source(self) -> "OnboardingInitiateRequest":

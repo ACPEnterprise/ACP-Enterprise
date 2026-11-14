@@ -120,6 +120,12 @@ async def initiate(
                 ),
                 existing_user_id=data.existing_user_id,
                 existing_employee_id=data.existing_employee_id,
+                admin_password=(
+                    data.admin_password.get_secret_value()
+                    if data.admin_password is not None
+                    else None
+                ),
+                require_password_change=data.require_password_change,
             ),
         )
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:

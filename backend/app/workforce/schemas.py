@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
 class WorkforceSchema(BaseModel):
@@ -205,6 +205,8 @@ class RealRosterOnboardingRequest(WorkforceSchema):
     confirmed_source_employee_id: str = Field(min_length=1, max_length=191)
     confirmed_login_email: str = Field(min_length=3, max_length=320)
     confirm_access_profile: bool
+    admin_password: SecretStr | None = None
+    require_password_change: bool = False
 
 
 class RealRosterOnboardingPreview(WorkforceSchema):

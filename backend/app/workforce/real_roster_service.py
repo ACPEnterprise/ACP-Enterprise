@@ -239,6 +239,12 @@ class RealRosterService:
                     ),
                     existing_user_id=existing_user_id,
                     existing_employee_id=preview.source_candidate_employee_id,
+                admin_password=(
+                    command.admin_password.get_secret_value()
+                    if command.admin_password is not None
+                    else None
+                ),
+                require_password_change=command.require_password_change,
                 ),
             )
         except OnboardingConflictError as error:

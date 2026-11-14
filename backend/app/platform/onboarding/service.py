@@ -72,6 +72,8 @@ class OnboardingCommand:
     existing_user_id: UUID | None = None
     existing_employee_id: UUID | None = None
     phone: str | None = None
+    admin_password: str | None = field(default=None, repr=False)
+    require_password_change: bool = False
 
 
 @dataclass(frozen=True)
@@ -349,6 +351,10 @@ class IdentityOnboardingService:
             raise OnboardingConflictError(
                 "Exactly one login identity source is required."
             )
+        if command.admin_password is not None and command.existing_user_id is not None:
+            raise OnboardingConflictError(
+                "Administrator-created credentials require a new login identity."
+            )
         if not context.can_access_branch(command.branch_id):
             raise OnboardingConflictError("Active Company Branch was not found.")
         email = normalize_email(command.login_email) if command.login_email else None
@@ -376,6 +382,8 @@ class IdentityOnboardingService:
             if command.existing_employee_id
             else None,
             "phone": command.phone,
+            "admin_managed_credential": command.admin_password is not None,
+            "require_password_change": command.require_password_change,
         }
         request_digest = _digest(facts)
         now = datetime.now(timezone.utc)
@@ -528,17 +536,19 @@ class IdentityOnboardingService:
                         first_name=command.first_name.strip(),
                         last_name=command.last_name.strip(),
                         display_name=command.display_name.strip(),
-                        status="invited",
+                        status="active" if command.admin_password is not None else "invited",
+                        email_verified_at=now if command.admin_password is not None else None,
                     )
                     session.add(user)
                     await session.flush()
                     membership = Membership(
                         user_id=user.id,
                         company_id=context.company.id,
-                        status="invited",
+                        status="active" if command.admin_password is not None else "invited",
                         default_branch_id=branch.id,
                         has_all_branch_access=False,
                         invited_at=now,
+                        accepted_at=now if command.admin_password is not None else None,
                     )
                     session.add(membership)
                     await session.flush()
@@ -549,7 +559,26 @@ class IdentityOnboardingService:
                             assigned_by_user_id=context.user.id,
                         )
                     )
-                    issue_invitation = True
+                    issue_invitation = command.admin_password is None
+                    if command.admin_password is not None:
+                        credential = credential_service.build_initial_credential(
+                            user_id=user.id,
+                            password=command.admin_password,
+                            now=now,
+                        )
+                        if command.require_password_change:
+                            credential.password_change_required = True
+                            credential.password_change_required_at = now
+                            credential.password_change_required_reason_code = (
+                                "administrator_required"
+                            )
+                            credential.password_change_required_by_user_id = (
+                                context.user.id
+                            )
+                            credential.password_change_required_company_id = (
+                                context.company.id
+                            )
+                        session.add(credential)
                 if source_employee is None:
                     assert employee_number is not None
                     employee = Employee(
