@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from app.core.config import Settings, settings
+from app.customers.models import Customer  # noqa: F401
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
 from app.platform.auth.errors import PasswordChangeRequiredError, PasswordPolicyError
