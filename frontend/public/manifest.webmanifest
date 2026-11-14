@@ -1,0 +1,18 @@
+{
+  "name": "TwelveHats by ACP Enterprise",
+  "short_name": "TwelveHats",
+  "description": "Secure office and field operations for ACP Enterprise.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fa",
+  "theme_color": "#17324d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

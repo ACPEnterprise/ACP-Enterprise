@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.customers.models import Customer, ServiceLocation
+from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.dispatch.models import (
     DispatchAssignment,
     DispatchAssignmentHistory,
@@ -173,6 +173,30 @@ class FieldService:
         )
         if job is None or appointment is None:
             raise FieldServiceNotFound("Assigned Job visit authority was not found.")
+        customer = await session.scalar(
+            select(Customer).where(
+                Customer.company_id == context.company.id,
+                Customer.id == job.customer_id,
+            )
+        )
+        location = await session.scalar(
+            select(ServiceLocation).where(
+                ServiceLocation.id == job.service_location_id,
+                ServiceLocation.customer_id == job.customer_id,
+            )
+        )
+        contact = await session.scalar(
+            select(CustomerContact)
+            .where(
+                CustomerContact.customer_id == job.customer_id,
+                CustomerContact.active.is_(True),
+                CustomerContact.archived_at.is_(None),
+            )
+            .order_by(
+                CustomerContact.is_preferred.desc(), CustomerContact.created_at
+            )
+            .limit(1)
+        )
         latest_activity = await session.scalar(
             select(FieldJobActivityEvent)
             .where(
@@ -240,6 +264,29 @@ class FieldService:
             job_id=job_id,
             assignment_id=assignment.id,
             appointment_id=appointment.id,
+            job_number=job.job_number,
+            job_status=job.status,
+            job_type_code=job.job_type_code,
+            priority=job.priority,
+            customer_display_name=(
+                customer.display_name if customer else "Customer unavailable"
+            ),
+            contact_display_name=(
+                f"{contact.first_name} {contact.last_name}".strip()
+                if contact
+                else None
+            ),
+            contact_phone=(contact.mobile_phone or contact.office_phone)
+            if contact
+            else None,
+            contact_email=contact.email if contact else None,
+            service_location_label=(
+                self._location_label(location) if location else "Location unavailable"
+            ),
+            customer_reported_problem=job.customer_reported_problem,
+            internal_description=job.internal_description,
+            window_start_at=appointment.arrival_window_start_at,
+            window_end_at=appointment.arrival_window_end_at,
             job_version=job.concurrency_version,
             appointment_version=appointment.concurrency_version,
             active_activity=(

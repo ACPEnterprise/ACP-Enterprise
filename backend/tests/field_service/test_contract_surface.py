@@ -37,6 +37,25 @@ def test_mobile_field_contract_never_exposes_sensitive_asset_or_workforce_fields
         assert forbidden not in mobile_contract
 
 
+def test_assigned_job_contract_contains_mobile_operating_context() -> None:
+    properties = app.openapi()["components"]["schemas"]["FieldJobState"]["properties"]
+    assert {
+        "job_number",
+        "job_status",
+        "customer_display_name",
+        "contact_display_name",
+        "contact_phone",
+        "contact_email",
+        "service_location_label",
+        "customer_reported_problem",
+        "internal_description",
+        "window_start_at",
+        "window_end_at",
+        "completion_ready",
+        "invoice_handoff_status",
+    }.issubset(properties)
+
+
 @pytest.mark.asyncio
 async def test_field_service_fails_closed_without_authentication() -> None:
     async with httpx.AsyncClient(
