@@ -340,7 +340,7 @@ class IdentityOnboardingService:
     ) -> IdentityOnboardingRequest:
         self._require_admin(context)
         key_id = cipher = None
-        if command.admin_password is None:
+        if command.admin_password is None and command.existing_user_id is None:
             key_id, cipher = self._delivery_cipher()
         request_key = command.request_key.strip()
         if (
