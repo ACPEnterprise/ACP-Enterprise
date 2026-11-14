@@ -339,7 +339,9 @@ class IdentityOnboardingService:
         command: OnboardingCommand,
     ) -> IdentityOnboardingRequest:
         self._require_admin(context)
-        key_id, cipher = self._delivery_cipher()
+        key_id = cipher = None
+        if command.admin_password is None:
+            key_id, cipher = self._delivery_cipher()
         request_key = command.request_key.strip()
         if (
             not request_key
@@ -694,6 +696,7 @@ class IdentityOnboardingService:
                 session.add(record)
                 await session.flush()
                 if issue_invitation:
+                    assert key_id is not None and cipher is not None
                     secret = self.tokens.generate_token()
                     token_hash = self.tokens.hash_token(secret)
                     invitation = IdentityOnboardingInvitation(
