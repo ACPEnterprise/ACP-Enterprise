@@ -24,9 +24,9 @@ from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.auth.models import AuthenticationSession
 from app.platform.auth.services import access_token_service
 from app.platform.branch.models import Branch
-from app.platform.company.membership_models import Membership, MembershipRole
+from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
-from app.platform.permissions.models import Role
+from app.platform.permissions.models import MembershipRole, Role
 from app.platform.service_principals.models import (
     AcceptanceServicePrincipal,
     ReleaseServicePrincipal,
