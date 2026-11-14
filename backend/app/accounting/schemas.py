@@ -53,6 +53,10 @@ class AccountResponse(AccountingSchema):
     effective_to: date | None
 
 
+class AccountStatusUpdate(AccountingSchema):
+    status: str
+
+
 class ControlAssignmentCreate(AccountingSchema):
     account_id: UUID
     control_role: str
@@ -174,4 +178,46 @@ class TrialBalanceResponse(AccountingSchema):
     total_debits: Decimal
     total_credits: Decimal
     net: Decimal
+    balanced: bool
+
+
+class AccountingOperationCreate(AccountingSchema):
+    kind: str
+    reference: str = Field(min_length=1, max_length=200)
+    effective_date: date
+    amount: Decimal = Field(ge=0, max_digits=20, decimal_places=4)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    related_operation_id: UUID | None = None
+    payload: dict[str, object] = Field(default_factory=dict)
+    provenance: dict[str, object]
+    journal: JournalCreate | None = None
+
+
+class AccountingOperationResponse(AccountingSchema):
+    id: UUID
+    company_id: UUID
+    kind: str
+    reference: str
+    status: str
+    effective_date: date
+    amount: Decimal
+    currency: str
+    journal_id: UUID | None
+    journal_status: str | None = None
+    related_operation_id: UUID | None
+    payload: dict[str, object]
+    provenance: dict[str, object]
+    created_by_user_id: UUID
+    created_at: datetime
+
+
+class AccountingDashboardResponse(AccountingSchema):
+    account_count: int
+    active_account_count: int
+    open_period_count: int
+    close_status: str
+    discrepancy_count: int
+    operation_counts: dict[str, int]
+    trial_balance_debits: Decimal
+    trial_balance_credits: Decimal
     balanced: bool
