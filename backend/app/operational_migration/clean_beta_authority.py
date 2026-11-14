@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
-from app.platform.permissions.codes import MigrationPermission
+from app.platform.permissions.codes import (
+    DispatchPermission,
+    MigrationPermission,
+    SchedulingPermission,
+    WorkforcePermission,
+)
 from app.platform.permissions.models import MembershipRole, Permission, Role, RolePermission
 from app.platform.launch_controls import COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
 from app.platform.users.models import User, UserCredential
@@ -198,6 +203,17 @@ async def reconcile_clean_beta_authority(
 
         required_codes = set(COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS)
         required_codes.add(MigrationPermission.EXECUTE_REHEARSAL)
+        # Clean-Beta owner acceptance needs only the bounded operational
+        # mutation surfaces used by the scheduling/dispatch acceptance path.
+        # Financial, payroll, payment, and provider-write permissions remain
+        # deliberately outside this authority chain.
+        required_codes.update(
+            {
+                DispatchPermission.MANAGE,
+                SchedulingPermission.MANAGE,
+                WorkforcePermission.MANAGE,
+            }
+        )
         permissions = {
             permission.code: permission
             for permission in (
