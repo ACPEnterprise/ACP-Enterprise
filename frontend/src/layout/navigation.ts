@@ -407,6 +407,7 @@ export const navigationGroups = [
       item("my-jobs"),
       item("jobs"),
       item("dispatch"),
+      item("scheduling"),
       item("estimates"),
       item("price-book"),
       item("invoices"),

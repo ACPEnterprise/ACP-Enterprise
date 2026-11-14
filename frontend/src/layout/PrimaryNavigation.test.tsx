@@ -13,7 +13,7 @@ describe("PrimaryNavigation", () => {
     expect(screen.getByRole("link", { name: "Mission Control" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("href", "/scheduling?view=day&perspective=dispatch");
     expect(screen.getByRole("link", { name: "Engineering Factory" })).toHaveAttribute("href", "/engineering");
-    expect(screen.queryByRole("link", { name: "Scheduling" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Scheduling" })).toHaveAttribute("href", "/scheduling");
   });
 
   it("retains accessible names when collapsed", () => {
