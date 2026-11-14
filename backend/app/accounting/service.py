@@ -27,6 +27,7 @@ from app.accounting.models import (
 from app.accounting.repository import AccountingRepository, accounting_repository
 from app.accounting.schemas import (
     AccountCreate,
+    AccountStatusUpdate,
     ChartCreate,
     ControlAssignmentCreate,
     JournalCreate,
@@ -218,6 +219,33 @@ class AccountingService:
             )
         return assignment
 
+    async def update_account_status(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        account_id: UUID,
+        data: AccountStatusUpdate,
+    ) -> Account:
+        if data.status not in {"active", "archived"}:
+            raise AccountingValidation("Account status is invalid")
+        async with session.begin():
+            account = await self.repository.account(
+                session, context.company.id, account_id
+            )
+            if account is None:
+                raise AccountingNotFound("Accounting account was not found")
+            account.status = data.status
+            self._audit(
+                session,
+                context,
+                "accounting.account.status_changed",
+                "accounting_account",
+                account.id,
+                {"status": data.status},
+            )
+        return account
+
     async def create_period(
         self,
         session: AsyncSession,
@@ -264,13 +292,15 @@ class AccountingService:
         context: AuthorizationContext,
         data: JournalCreate,
         allow_control_override: bool = False,
+        manage_transaction: bool = True,
     ) -> Journal:
         try:
             journal_type = JournalType(data.journal_type)
         except ValueError as error:
             raise AccountingValidation("Journal type is invalid") from error
         debits, credits = self.validate_lines(data.lines)
-        async with session.begin():
+
+        async def create() -> Journal:
             await self._lock_identities(
                 session,
                 (
@@ -412,7 +442,12 @@ class AccountingService:
                 "accounting_journal",
                 journal.id,
             )
-        return journal
+            return journal
+
+        if manage_transaction:
+            async with session.begin():
+                return await create()
+        return await create()
 
     async def prepare_journal(
         self,
