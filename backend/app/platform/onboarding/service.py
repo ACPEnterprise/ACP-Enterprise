@@ -591,6 +591,7 @@ class IdentityOnboardingService:
                         # atomically reusing the explicitly matched canonical
                         # Employee identity for this login.
                         linked_record.membership_id = None
+                        await session.flush()
                     issue_invitation = False
                 else:
                     assert email is not None
