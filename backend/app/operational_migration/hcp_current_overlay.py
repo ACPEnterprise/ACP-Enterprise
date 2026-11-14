@@ -580,12 +580,28 @@ def _verify_receipt(
     if receipt.execution_context:
         payload["execution_context"] = dict(receipt.execution_context)
     if (
-        receipt.contract != EXECUTOR_CONTRACT
-        or receipt.manifest_digest != manifest_digest
-        or receipt.rollback_backup_digest != rollback_backup_digest
-        or receipt.digest != _digest(payload)
+        receipt.contract == EXECUTOR_CONTRACT
+        and receipt.manifest_digest == manifest_digest
+        and receipt.rollback_backup_digest == rollback_backup_digest
+        and receipt.digest == _digest(payload)
     ):
-        raise ValueError("overlay replay receipt mismatch")
+        return
+    # Older SQL-backed receipts were persisted with an adapter-only
+    # update_binding_inventory field appended after the receipt digest was
+    # calculated.  Accept that known, non-semantic extension while continuing
+    # to reject any other receipt tampering; new receipts are stored exactly as
+    # hashed.
+    context = payload.get("execution_context")
+    if isinstance(context, dict) and "update_binding_inventory" in context:
+        legacy_payload = dict(payload)
+        legacy_payload["execution_context"] = {
+            key: value
+            for key, value in context.items()
+            if key != "update_binding_inventory"
+        }
+        if receipt.digest == _digest(legacy_payload):
+            return
+    raise ValueError("overlay replay receipt mismatch")
 
 
 def _with_execution_context(

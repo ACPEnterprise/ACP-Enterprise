@@ -207,10 +207,6 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
             raise ValueError("overlay receipt contract mismatch")
         receipts = self._state()["receipts"]
         value = asdict(receipt)
-        value["execution_context"] = {
-            **dict(value.get("execution_context", {})),
-            **self._execution_context,
-        }
         existing = receipts.get(receipt.manifest_digest)
         if existing is not None and existing != value:
             raise ValueError("overlay receipt replay conflict")
