@@ -721,6 +721,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             first_run_id=self.operational_run_id,
         )
         session.add(identity)
+        # The line-item identity has a composite FK to this parent.  Flush the
+        # parent explicitly because these legacy lineage models do not expose
+        # an ORM relationship for dependency ordering.
+        await session.flush()
         session.add_all(
             EstimateLineItemSourceIdentity(
                 company_id=self.context.company.id,
@@ -779,6 +783,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             first_run_id=self.operational_run_id,
         )
         session.add(identity)
+        # The line-item identity has a composite FK to this parent.  Flush the
+        # parent explicitly because these legacy lineage models do not expose
+        # an ORM relationship for dependency ordering.
+        await session.flush()
         session.add_all(
             InvoiceLineItemSourceIdentity(
                 company_id=self.context.company.id,
