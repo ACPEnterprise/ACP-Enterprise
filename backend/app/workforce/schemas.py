@@ -205,6 +205,7 @@ class RealRosterOnboardingRequest(WorkforceSchema):
     confirmed_source_employee_id: str = Field(min_length=1, max_length=191)
     confirmed_login_email: str = Field(min_length=3, max_length=320)
     confirm_access_profile: bool
+    request_key: str | None = Field(default=None, min_length=8, max_length=160)
     admin_password: SecretStr | None = None
     require_password_change: bool = False
 

@@ -240,8 +240,9 @@ class RealRosterService:
                 session,
                 context=context,
                 command=OnboardingCommand(
-                    request_key=self._onboarding_request_key(
-                        preview.source_employee_id
+                    request_key=(
+                        command.request_key
+                        or self._onboarding_request_key(preview.source_employee_id)
                     ),
                     branch_id=preview.source_branch_id,
                     first_name=preview.first_name,
