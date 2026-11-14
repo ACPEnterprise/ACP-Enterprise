@@ -27,6 +27,7 @@ from app.operational_migration.hcp_november_executor import (
 from app.operational_migration.hcp_november_supplemental_authority import (
     SupplementalCurrentStateAuthority,
 )
+from app.operational_migration.hcp_source4_contracts import build_invoice
 
 
 CONTRACT = "hcp-november-discrepancy-quarantine-authority/v1"
@@ -37,6 +38,7 @@ QUARANTINE_REASONS = frozenset(
         "estimate_job_lineage_missing",
         "job_service_location_lineage_missing",
         "parent_job_quarantined",
+        "invoice_payload_not_normalizable",
     }
 )
 
@@ -123,6 +125,15 @@ def _derive_records(
                 for parent in item.get("parent_keys", [])
             )
         )
+        invoice_payload_invalid = False
+        if item.get("domain") == "invoice" and is_executable:
+            payload = dict(item.get("payload") or {})
+            payload.setdefault("_source_digest", item.get("source_digest"))
+            payload.setdefault("_owner_disposition", item.get("disposition"))
+            try:
+                build_invoice(payload)
+            except Exception:  # noqa: BLE001 - quarantine every unsupported source payload
+                invoice_payload_invalid = True
         has_job_parent = any(
             str(parent.get("domain")) == "job"
             for parent in item.get("parent_keys", [])
@@ -133,6 +144,8 @@ def _derive_records(
             reason = "job_service_location_lineage_missing"
         elif is_child_of_blocked_job:
             reason = "parent_job_quarantined"
+        elif invoice_payload_invalid:
+            reason = "invoice_payload_not_normalizable"
         else:
             reason = ""
         if reason:
