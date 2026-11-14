@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
