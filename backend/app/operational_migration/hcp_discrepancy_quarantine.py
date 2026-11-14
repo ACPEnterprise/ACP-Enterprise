@@ -110,7 +110,8 @@ def _derive_records(
                 not {"customer", "service_location"}.issubset(
                     {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
                 )
-                or status in {"pro canceled", "user canceled", "in progress", "complete rated", "complete unrated"}
+                or status in {"pro canceled", "user canceled"}
+                or status in {"in progress", "complete rated", "complete unrated"}
                 and not _parse_datetime(timestamps.get("started_at"))
             )
         ):
