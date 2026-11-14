@@ -389,6 +389,10 @@ class IdentityOnboardingService:
         }
         request_digest = _digest(facts)
         now = datetime.now(timezone.utc)
+        # Authorization/context reads may have opened an implicit read
+        # transaction on the shared session.  The onboarding mutation owns its
+        # own atomic transaction and must begin from a clean boundary.
+        await session.rollback()
         try:
             async with session.begin():
                 company_lock = int.from_bytes(
