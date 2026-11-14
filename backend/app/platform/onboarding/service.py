@@ -433,9 +433,28 @@ class IdentityOnboardingService:
                         )
                         .with_for_update()
                     )
+                    same_requested_employee_membership = False
+                    if (
+                        source_employee is not None
+                        and source_employee.membership_id is not None
+                        and command.existing_user_id is not None
+                    ):
+                        same_requested_employee_membership = bool(
+                            await session.scalar(
+                                select(Membership.id).where(
+                                    Membership.id == source_employee.membership_id,
+                                    Membership.company_id == context.company.id,
+                                    Membership.user_id == command.existing_user_id,
+                                    Membership.status == "active",
+                                )
+                            )
+                        )
                     if (
                         source_employee is None
-                        or source_employee.membership_id is not None
+                        or (
+                            source_employee.membership_id is not None
+                            and not same_requested_employee_membership
+                        )
                         or source_employee.status not in {"active", "inactive"}
                         or source_employee.archived_at is not None
                         or source_employee.home_branch_id != branch.id
