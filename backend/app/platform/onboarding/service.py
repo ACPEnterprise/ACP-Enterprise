@@ -353,10 +353,6 @@ class IdentityOnboardingService:
             raise OnboardingConflictError(
                 "Exactly one login identity source is required."
             )
-        if command.admin_password is not None and command.existing_user_id is not None:
-            raise OnboardingConflictError(
-                "Administrator-created credentials require a new login identity."
-            )
         if not context.can_access_branch(command.branch_id):
             raise OnboardingConflictError("Active Company Branch was not found.")
         email = normalize_email(command.login_email) if command.login_email else None
@@ -535,14 +531,39 @@ class IdentityOnboardingService:
                         membership.revoked_at = None
                         membership.revoked_by_user_id = None
                         membership.accepted_at = membership.accepted_at or now
-                    if not await session.scalar(
-                        select(UserCredential.id).where(
-                            UserCredential.user_id == user.id
-                        )
-                    ):
+                    credential = await session.scalar(
+                        select(UserCredential)
+                        .where(UserCredential.user_id == user.id)
+                        .with_for_update()
+                    )
+                    if credential is None:
                         raise OnboardingConflictError(
                             "Eligible existing credential was not found."
                         )
+                    if command.admin_password is not None:
+                        replacement = credential_service.build_initial_credential(
+                            user_id=user.id,
+                            password=command.admin_password,
+                            now=now,
+                        )
+                        credential.password_hash = replacement.password_hash
+                        credential.password_changed_at = replacement.password_changed_at
+                        credential.failed_login_count = 0
+                        credential.last_failed_login_at = None
+                        credential.locked_until = None
+                        credential.credential_version += 1
+                        if command.require_password_change:
+                            credential.password_change_required = True
+                            credential.password_change_required_at = now
+                            credential.password_change_required_reason_code = (
+                                "administrator_required"
+                            )
+                            credential.password_change_required_by_user_id = (
+                                context.user.id
+                            )
+                            credential.password_change_required_company_id = (
+                                context.company.id
+                            )
                     linked_employee = await session.scalar(
                         select(Employee.id).where(
                             Employee.membership_id == membership.id
