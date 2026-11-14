@@ -155,6 +155,24 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
             return None
         return _receipt(value)
 
+    async def replay_receipt(
+        self, manifest_digest: str, package_digest: str
+    ) -> OverlayExecutionReceipt | None:
+        """Read a prior receipt before any new lineage bootstrap is attempted."""
+        masters = await self._session.scalars(
+            select(HcpMigrationMasterRun).where(
+                HcpMigrationMasterRun.package_digest == package_digest
+            )
+        )
+        for master in masters:
+            root = master.replay_state if isinstance(master.replay_state, dict) else {}
+            state = root.get(STATE_KEY)
+            receipts = state.get("receipts") if isinstance(state, dict) else None
+            value = receipts.get(manifest_digest) if isinstance(receipts, dict) else None
+            if value is not None:
+                return _receipt(value)
+        return None
+
     async def source_state(self, key: OverlayKey) -> OverlaySourceState | None:
         cached = self._state()["source_states"].get(_key(key))
         if cached is not None:

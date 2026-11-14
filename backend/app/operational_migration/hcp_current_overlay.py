@@ -262,6 +262,19 @@ class CurrentOverlayExecutor:
         if manifest.base_source4_digest != expected_base_source4_digest:
             raise ValueError("overlay base SOURCE.4 authority mismatch")
         _require_digest(rollback_backup_digest, "rollback backup")
+        # Durable SQL adapters can inspect an existing receipt before creating
+        # a new lineage bootstrap.  This is essential when the same immutable
+        # packet is replayed by a newer authority-bound application SHA: the
+        # replay must be a no-op, not a competing lineage run.
+        replay_lookup = getattr(repository, "replay_receipt", None)
+        if callable(replay_lookup):
+            replay = await replay_lookup(
+                manifest.digest,
+                expected_base_source4_digest,
+            )
+            if replay is not None:
+                _verify_receipt(replay, manifest.digest, rollback_backup_digest)
+                return replay
         async with repository.transaction():
             replay = await repository.prior_receipt(manifest.digest)
             if replay is not None:
