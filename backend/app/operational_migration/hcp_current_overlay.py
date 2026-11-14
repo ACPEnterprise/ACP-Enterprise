@@ -319,7 +319,10 @@ class CurrentOverlayExecutor:
                     }
                     and parent in blocked_keys
                 ):
-                    raise ValueError("overlay parent is non-operational")
+                    raise ValueError(
+                        "overlay parent is non-operational: "
+                        f"{record.domain}:{record.source_id} <- {parent.domain}:{parent.source_id}"
+                    )
                 if (
                     parent not in keys
                     and (
