@@ -23,6 +23,7 @@ import {
 interface LoginLocationState {
   from?: string;
   authorizationChanged?: boolean;
+  passwordChanged?: boolean;
 }
 
 function destinationFromState(state: unknown): string {
@@ -42,6 +43,7 @@ export function LoginRoute() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const authorizationChanged = Boolean((location.state as LoginLocationState | null)?.authorizationChanged);
+  const passwordChanged = Boolean((location.state as LoginLocationState | null)?.passwordChanged);
 
   if (status === "authenticated") {
     return <Navigate to={destinationFromState(location.state)} replace />;
@@ -96,6 +98,7 @@ export function LoginRoute() {
               <form onSubmit={submit} noValidate>
                 <Stack space="large">
                   {authorizationChanged && <Alert variant="information">The role permission changed. Sign in again to refresh your authorization, then you will return to Administration.</Alert>}
+                  {passwordChanged && <Alert variant="success">Your password changed successfully. Sign in with your new password.</Alert>}
                   {error && <Alert variant="danger" announcement="assertive">{error}</Alert>}
                   <Field label="Email address" controlId="login-email" required>
                     <Input

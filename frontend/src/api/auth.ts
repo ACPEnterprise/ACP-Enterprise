@@ -23,3 +23,11 @@ export async function logout(): Promise<void> {
 export async function logoutAll(): Promise<void> {
   await apiClient.post("/api/v1/auth/logout-all");
 }
+
+export async function changePassword(input: {
+  current_password: string;
+  new_password: string;
+  confirm_new_password: string;
+}): Promise<void> {
+  await apiClient.post("/api/v1/auth/password-change", input);
+}

@@ -18,6 +18,15 @@ export const liaHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const accountSecurityHandle = {
+  workspace: {
+    pageTitle: "Account & Security",
+    breadcrumbs: [{ label: "Account & Security" }],
+    helpTopic: "account-security",
+    aiContext: "account-security",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const economicsAdministrationHandle = {
   workspace: {
     pageTitle: "Economics Administration",

@@ -1,4 +1,4 @@
-import { CircleCheck, LogOut, Menu, Search } from "lucide-react";
+import { CircleCheck, LogOut, Menu, Search, UserRound } from "lucide-react";
 import type { RefObject } from "react";
 import { Link } from "react-router";
 
@@ -87,6 +87,14 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
             </Select>
           </label>
           {brand.environment && <span className="hidden text-caption text-content-muted xl:inline">{brand.environment}</span>}
+          <Link
+            to="/account/security"
+            className="inline-flex items-center gap-ui-2 rounded-[var(--radius-control)] px-ui-2 py-ui-2 text-body-s font-semibold text-content-secondary hover:bg-surface-muted hover:text-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-primary"
+          >
+            <UserRound aria-hidden="true" className="size-4" />
+            <span className="hidden sm:inline">Account</span>
+            <span className="sr-only">Account and security</span>
+          </Link>
           {user && <span className="sr-only">Signed in as {user.display_name}</span>}
           <IconButton icon={<LogOut />} label="Sign out" variant="ghost" onClick={() => void signOut()} />
         </div>

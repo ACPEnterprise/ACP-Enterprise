@@ -39,6 +39,12 @@ class PasswordResetConfirmRequest(StrictSchema):
     new_password: str = Field(min_length=1, max_length=1024)
 
 
+class ChangePasswordRequest(StrictSchema):
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=1, max_length=1024)
+    confirm_new_password: str = Field(min_length=1, max_length=1024)
+
+
 class EmailVerificationConfirmRequest(StrictSchema):
     token: str = Field(min_length=32, max_length=1024)
 

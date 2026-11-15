@@ -206,6 +206,7 @@ async def test_login_failure_lockout_and_authentication_boundary(
     assert claims.credential_version == 1
     assert claims.authorization_version == 1
 
+
     async with factory() as session:
         credential = await session.scalar(
             select(UserCredential).where(UserCredential.user_id == user_id)
@@ -289,6 +290,54 @@ async def test_login_failure_lockout_and_authentication_boundary(
                 email="inactive-service@example.com",
                 password="correct horse battery staple",
             )
+
+
+@pytest.mark.asyncio
+async def test_change_password_requires_current_credential_and_revokes_old_sessions(
+    service_stack: tuple[
+        AsyncEngine,
+        async_sessionmaker[AsyncSession],
+        PasswordService,
+        CredentialService,
+        AuthenticationService,
+        RecoveryService,
+    ],
+) -> None:
+    _, factory, _, credential_service, auth_service, _ = service_stack
+    user_id = await create_user(factory, email="password-change@example.com")
+    await set_password(factory, credential_service, user_id, "current-passphrase-123")
+
+    async with factory() as session:
+        first = await auth_service.authenticate(
+            session,
+            email="password-change@example.com",
+            password="current-passphrase-123",
+        )
+        await credential_service.change_password(
+            session,
+            user_id=user_id,
+            current_password="current-passphrase-123",
+            new_password="new-passphrase-456",
+        )
+
+    with pytest.raises(InvalidCredentialsError):
+        async with factory() as session:
+            await auth_service.authenticate(
+                session,
+                email="password-change@example.com",
+                password="current-passphrase-123",
+            )
+
+    async with factory() as session:
+        replacement = await auth_service.authenticate(
+            session,
+            email="password-change@example.com",
+            password="new-passphrase-456",
+        )
+        assert replacement.user.id == user_id
+        old_session = await session.get(AuthenticationSession, first.session_id)
+        assert old_session is not None
+        assert old_session.status == "revoked"
 
 
 @pytest.mark.asyncio

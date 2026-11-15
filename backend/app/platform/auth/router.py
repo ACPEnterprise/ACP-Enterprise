@@ -19,6 +19,7 @@ from app.platform.auth.rate_limit import AuthenticationRateLimiter
 from app.platform.auth.recovery_delivery import employee_recovery_delivery_service
 from app.platform.auth.schemas import (
     AuthenticationResponse,
+    ChangePasswordRequest,
     EmailVerificationConfirmRequest,
     GenericResponse,
     LoginRequest,
@@ -30,6 +31,7 @@ from app.platform.auth.schemas import (
 )
 from app.platform.auth.services import (
     authentication_service,
+    credential_service,
     recovery_service,
     security_token_service,
 )
@@ -223,6 +225,47 @@ async def logout_all(
 ) -> GenericResponse:
     await authentication_service.logout_all(session, user_id=context.user.id)
     return GenericResponse(message="All sessions logged out.")
+
+
+@router.post("/password-change", response_model=GenericResponse)
+async def change_password(
+    data: ChangePasswordRequest,
+    request: Request,
+    context: AuthenticatedIdentity,
+    session: DatabaseSession,
+) -> GenericResponse:
+    ip_address, _ = client_metadata(request)
+    await enforce_rate_limit(
+        bucket="password-change",
+        identifier=f"{ip_address}:{context.user.id}",
+        limit=5,
+        window_seconds=900,
+    )
+    if data.new_password != data.confirm_new_password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="New passwords do not match.",
+        )
+    try:
+        await credential_service.change_password(
+            session,
+            user_id=context.user.id,
+            current_password=data.current_password,
+            new_password=data.new_password,
+        )
+    except PasswordPolicyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The new password does not satisfy the configured password policy.",
+        ) from error
+    except InvalidCredentialsError as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="The current password is incorrect.",
+        ) from error
+    return GenericResponse(
+        message="Password changed. Sign in again with your new password."
+    )
 
 
 @router.post("/password-reset/request", response_model=GenericResponse)

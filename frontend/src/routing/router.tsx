@@ -6,6 +6,7 @@ import { CommandCenterRouteGuard } from "../auth/CommandCenterRouteGuard";
 import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuard";
 import {
   accountsPayableHandle,
+  accountSecurityHandle,
   accountingHandle,
   bankingHandle,
   financialReportsHandle,
@@ -92,6 +93,13 @@ export const appRoutes: RouteObject[] = [
             lazy: async () => ({
               Component: (await import("../routes/AuthenticatedLandingRoute"))
                 .AuthenticatedLandingRoute,
+            }),
+          },
+          {
+            path: "account/security",
+            handle: accountSecurityHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/AccountSecurityRoute")).AccountSecurityRoute,
             }),
           },
           {
