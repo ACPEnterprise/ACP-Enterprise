@@ -1450,6 +1450,46 @@ async def test_existing_verified_user_is_reused_without_credential_change(
 
 
 @pytest.mark.asyncio
+async def test_existing_verified_user_admin_password_reset_clears_forced_reset(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    password_service = PasswordService()
+    async with factory() as session:
+        credential = CredentialService(password_service).build_initial_credential(
+            user_id=context.user.id,
+            password="Existing-secure-passphrase-42!",
+            now=datetime.now(timezone.utc),
+        )
+        credential.password_change_required = True
+        credential.password_change_required_at = datetime.now(timezone.utc)
+        credential.password_change_required_reason_code = "administrator_required"
+        credential.password_change_required_by_user_id = context.user.id
+        credential.password_change_required_company_id = context.company.id
+        session.add(credential)
+        await session.commit()
+        record = await service.initiate(
+            session,
+            context=context,
+            command=replace(
+                command(context, existing_user_id=context.user.id),
+                admin_password="New-secure-passphrase-42!",
+                require_password_change=False,
+            ),
+        )
+        assert record.user_id == context.user.id
+        stored = await session.scalar(
+            select(UserCredential).where(UserCredential.user_id == context.user.id)
+        )
+        assert stored is not None
+        assert stored.password_change_required is False
+        assert stored.password_change_required_at is None
+        assert stored.password_change_required_reason_code is None
+
+
+@pytest.mark.asyncio
 async def test_source_backed_employee_is_reused_with_phone_and_exact_replay(
     onboarding_db: tuple[
         async_sessionmaker[AsyncSession], Context, IdentityOnboardingService

@@ -13,7 +13,7 @@ import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useT
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
-  return <Badge variant={state === "READY" ? "success" : "danger"}>{state === "READY" ? "EMPLOYMENT READY" : "EMPLOYMENT BLOCKED"}</Badge>;
+  return <Badge variant={state === "READY" ? "success" : "danger"}>{state === "READY" ? "EMPLOYEE READY" : "EMPLOYEE BLOCKED"}</Badge>;
 }
 
 function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {

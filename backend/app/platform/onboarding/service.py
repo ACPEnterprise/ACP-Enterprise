@@ -583,6 +583,13 @@ class IdentityOnboardingService:
                             credential.password_change_required_company_id = (
                                 context.company.id
                             )
+                        else:
+                            credential.password_change_required = False
+                            credential.password_change_required_at = None
+                            credential.password_change_required_reason_code = None
+                            credential.password_change_required_by_user_id = None
+                            credential.password_change_required_company_id = None
+                            credential.password_change_required_cleared_at = None
                     linked_employee = await session.scalar(
                         select(Employee.id).where(
                             Employee.membership_id == membership.id
