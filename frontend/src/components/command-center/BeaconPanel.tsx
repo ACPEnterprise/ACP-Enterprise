@@ -54,9 +54,12 @@ function factValue(fact: BeaconSupportingFact): string {
 }
 
 function sourcePath(entityType: string, entityId: string): string | null {
+  if (entityType === "customer") return `/customers/${entityId}`;
+  if (entityType === "estimate") return `/estimates/${entityId}`;
   if (entityType === "job") return `/jobs/${entityId}`;
   if (entityType === "invoice") return `/invoices/${entityId}`;
   if (entityType === "appointment") return `/appointments/${entityId}`;
+  if (entityType === "payment") return `/payments/${entityId}`;
   return null;
 }
 
@@ -135,7 +138,7 @@ function SignalRow({
   };
 
   return (
-    <li className="border-b border-stroke py-ui-4 first:pt-0 last:border-0 last:pb-0">
+    <li className="beacon-signal border-b border-stroke p-ui-4 first:pt-ui-4 last:border-0 last:pb-ui-4 sm:p-ui-5">
       {signal.priority.rank === 1 && (
         <p className="mb-ui-2 text-overline uppercase text-accent">
           First for owner attention
@@ -172,7 +175,7 @@ function SignalRow({
         {signal.priority.explanation}
       </p>
       {signal.evidence_quality && (
-        <div className="mt-ui-3 rounded-md border border-stroke p-ui-3 text-body-s">
+        <div className="beacon-evidence mt-ui-3 rounded-md border border-stroke p-ui-3 text-body-s">
           <h4 className="font-semibold text-content">Evidence readiness</h4>
           <div className="mt-ui-2 flex flex-wrap gap-ui-2">
             <Badge variant="neutral">
@@ -220,9 +223,9 @@ function SignalRow({
           </div>
         ))}
       </dl>
-      <details className="mt-ui-3 text-body-s">
+      <details className="beacon-evidence mt-ui-3 rounded-md p-ui-3 text-body-s">
         <summary className="cursor-pointer font-semibold text-content">
-          Evidence and source drillback
+          Review evidence and source drillback
         </summary>
         <ul className="mt-ui-2 space-y-ui-2">
           {signal.supporting_facts.flatMap((fact) =>
@@ -251,7 +254,7 @@ function SignalRow({
           )}
         </ul>
       </details>
-      <div className="mt-ui-3 rounded-md border border-stroke p-ui-3 text-body-s text-content-secondary">
+      <div className="mt-ui-3 rounded-md border border-stroke bg-surface-muted p-ui-3 text-body-s text-content-secondary">
         <h4 className="font-semibold text-content">Recommended human action</h4>
         <p className="mt-ui-1">{signal.recommended_action}</p>
         <p className="mt-ui-1 text-content-muted">
@@ -529,6 +532,7 @@ export function BeaconPanel({
   );
   return (
     <CommandCenterPanel
+      className="beacon-panel"
       title="Beacon"
       description="Deterministic operational signals measured from authoritative Company data."
       action={
@@ -570,7 +574,7 @@ export function BeaconPanel({
         </Alert>
       )}
       {!loading && !error && recommendationCoverage && (
-        <details className="mb-ui-4 rounded-md border border-stroke p-ui-3">
+        <details className="beacon-evidence mb-ui-4 rounded-lg border border-stroke p-ui-4">
           <summary className="cursor-pointer font-semibold text-content">
             Recommendation coverage · {activeCoverage?.length ?? 0} active ·{" "}
             {gatedCoverage?.length ?? 0} not yet evaluable
@@ -626,26 +630,26 @@ export function BeaconPanel({
         </div>
       )}
       {!loading && !error && visibleSignals.length > 0 && (
-        <dl className="mb-ui-4 grid gap-ui-2 text-body-s sm:grid-cols-4">
-          <div className="rounded-md border border-stroke p-ui-3">
+        <dl className="mb-ui-4 grid gap-ui-2 text-body-s sm:grid-cols-2 xl:grid-cols-4">
+          <div className="beacon-metric rounded-lg p-ui-3">
             <dt className="text-content-muted">Requires attention</dt>
             <dd className="mt-ui-1 text-title-m font-semibold text-content">
               {visibleSignals.length}
             </dd>
           </div>
-          <div className="rounded-md border border-stroke p-ui-3">
+          <div className="beacon-metric rounded-lg p-ui-3">
             <dt className="text-content-muted">Acknowledged</dt>
             <dd className="mt-ui-1 text-title-m font-semibold text-content">
               {acknowledgedCount}
             </dd>
           </div>
-          <div className="rounded-md border border-stroke p-ui-3">
+          <div className="beacon-metric rounded-lg p-ui-3">
             <dt className="text-content-muted">Owned</dt>
             <dd className="mt-ui-1 text-title-m font-semibold text-content">
               {ownedCount}
             </dd>
           </div>
-          <div className="rounded-md border border-stroke p-ui-3">
+          <div className="beacon-metric rounded-lg p-ui-3">
             <dt className="text-content-muted">Evidence needs review</dt>
             <dd className="mt-ui-1 text-title-m font-semibold text-content">
               {evidenceAttentionCount}
@@ -670,7 +674,7 @@ export function BeaconPanel({
             );
             if (items.length === 0) return null;
             return <section key={window} aria-labelledby={`beacon-${window.replaceAll(" ", "-").toLowerCase()}`}>
-              <div className="border-b border-stroke pb-ui-2">
+              <div className="border-b border-stroke pb-ui-3">
                 <h3 className="text-title-s font-semibold text-content" id={`beacon-${window.replaceAll(" ", "-").toLowerCase()}`}>{window}</h3>
                 <p className="text-body-s text-content-muted">
                   {window === "NOW" && "Critical or immediate evidence requiring prompt human review."}

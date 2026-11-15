@@ -1,19 +1,19 @@
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
-  --semantic-background: var(--acp-slate-950);
-  --semantic-surface: var(--acp-slate-900);
-  --semantic-surface-raised: var(--acp-slate-800);
-  --semantic-surface-muted: var(--acp-steel-900);
+  --semantic-background: var(--acp-navy-950);
+  --semantic-surface: var(--acp-navy-850);
+  --semantic-surface-raised: var(--acp-cobalt-850);
+  --semantic-surface-muted: var(--acp-navy-800);
   --semantic-text-primary: var(--acp-slate-50);
   --semantic-text-secondary: var(--acp-slate-300);
   --semantic-text-muted: var(--acp-slate-400);
-  --semantic-text-inverse: var(--acp-slate-950);
-  --semantic-border: var(--acp-slate-800);
-  --semantic-border-strong: var(--acp-slate-600);
-  --semantic-action-primary: var(--acp-liberty-blue-500);
-  --semantic-action-primary-hover: var(--acp-liberty-blue-400);
-  --semantic-action-primary-active: var(--acp-liberty-blue-600);
+  --semantic-text-inverse: var(--acp-navy-950);
+  --semantic-border: var(--acp-cobalt-700);
+  --semantic-border-strong: var(--acp-cobalt-500);
+  --semantic-action-primary: var(--acp-liberty-blue-400);
+  --semantic-action-primary-hover: var(--acp-liberty-blue-300);
+  --semantic-action-primary-active: var(--acp-liberty-blue-500);
   --semantic-action-secondary: var(--acp-steel-700);
   --semantic-accent: var(--acp-heritage-red-500);
   --semantic-focus-ring: var(--acp-liberty-blue-300);
@@ -22,30 +22,32 @@
   --semantic-warning: var(--palette-warning-500);
   --semantic-danger: var(--palette-error-500);
   --semantic-information: var(--palette-information-500);
-  --semantic-disabled-background: var(--acp-slate-800);
+  --semantic-disabled-background: var(--acp-navy-800);
   --semantic-disabled-content: var(--acp-slate-500);
   --semantic-overlay: rgb(2 6 23 / 0.72);
   --semantic-scrim: rgb(2 6 23 / 0.86);
-  --semantic-navigation-background: var(--acp-slate-950);
-  --semantic-navigation-active: var(--acp-liberty-blue-600);
-  --semantic-navigation-text: var(--acp-slate-200);
-  --semantic-header-background: var(--acp-slate-950);
+  --semantic-navigation-background: var(--acp-navigation-navy);
+  --semantic-navigation-active: var(--acp-liberty-blue-500);
+  --semantic-navigation-text: var(--acp-slate-100);
+  --semantic-header-background: var(--acp-header-navy);
   --semantic-command-center-accent: var(--acp-liberty-blue-400);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
+  --semantic-flag-overlay-opacity: 0.1;
+  --semantic-panel-shadow: 0 12px 32px rgb(3 19 56 / 0.24);
 }
 
 [data-theme="light"] {
   color-scheme: light;
-  --semantic-background: var(--acp-slate-100);
+  --semantic-background: var(--acp-light-blue-50);
   --semantic-surface: var(--acp-white);
-  --semantic-surface-raised: var(--acp-white);
-  --semantic-surface-muted: var(--acp-steel-100);
+  --semantic-surface-raised: var(--acp-light-blue-25);
+  --semantic-surface-muted: var(--acp-light-blue-100);
   --semantic-text-primary: var(--acp-slate-950);
   --semantic-text-secondary: var(--acp-slate-700);
   --semantic-text-muted: var(--acp-slate-500);
   --semantic-text-inverse: var(--acp-white);
-  --semantic-border: var(--acp-slate-200);
-  --semantic-border-strong: var(--acp-slate-400);
+  --semantic-border: var(--acp-light-blue-200);
+  --semantic-border-strong: var(--acp-liberty-blue-400);
   --semantic-action-primary: var(--acp-liberty-blue-700);
   --semantic-action-primary-hover: var(--acp-liberty-blue-800);
   --semantic-action-primary-active: var(--acp-liberty-blue-900);
@@ -61,10 +63,12 @@
   --semantic-disabled-content: var(--acp-slate-500);
   --semantic-overlay: rgb(15 23 42 / 0.48);
   --semantic-scrim: rgb(15 23 42 / 0.68);
-  --semantic-navigation-background: var(--acp-slate-950);
-  --semantic-navigation-active: var(--acp-liberty-blue-600);
-  --semantic-navigation-text: var(--acp-slate-100);
+  --semantic-navigation-background: var(--acp-light-blue-25);
+  --semantic-navigation-active: var(--acp-liberty-blue-700);
+  --semantic-navigation-text: var(--acp-slate-800);
   --semantic-header-background: var(--acp-white);
   --semantic-command-center-accent: var(--acp-liberty-blue-700);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
+  --semantic-flag-overlay-opacity: 0.045;
+  --semantic-panel-shadow: 0 10px 28px rgb(25 65 120 / 0.1);
 }

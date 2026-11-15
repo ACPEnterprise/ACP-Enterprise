@@ -65,7 +65,7 @@ export function ApplicationShell() {
   };
 
   return (
-    <div className="flex min-h-screen min-h-dvh bg-app-background text-content">
+    <div className="theme-shell flex min-h-screen min-h-dvh bg-app-background text-content">
       <SkipLink />
       <Sidebar
         brand={brandConfig}

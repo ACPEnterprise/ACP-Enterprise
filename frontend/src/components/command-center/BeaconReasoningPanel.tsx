@@ -30,7 +30,7 @@ export function BeaconReasoningPanel({
   readonly readinessAdapters?: ActiveBeaconRecommendationPage["readiness_adapters"];
 }) {
   return (
-    <Card className="bg-surface">
+    <Card className="beacon-panel bg-surface">
       <CardHeader>
         <div className="flex items-center gap-2 text-action-primary">
           <Lightbulb aria-hidden="true" size={20} />
@@ -43,7 +43,7 @@ export function BeaconReasoningPanel({
       </CardHeader>
       <CardContent>
         {!!readinessAdapters?.length && (
-          <section className="mb-5" aria-labelledby="beacon-readiness-coverage">
+          <section className="beacon-evidence mb-5 rounded-lg border border-stroke p-ui-4" aria-labelledby="beacon-readiness-coverage">
             <h3 className="text-sm font-semibold text-content" id="beacon-readiness-coverage">
               Direct readiness coverage
             </h3>
@@ -98,7 +98,7 @@ export function BeaconReasoningPanel({
                   <ol className="grid gap-4 xl:grid-cols-2">
                     {group.map((recommendation) => (
                       <li
-                        className="rounded-lg border border-stroke bg-surface-muted p-4"
+                        className="beacon-signal rounded-lg border border-stroke bg-surface-muted p-4"
                         key={recommendation.recommendation_id}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-2">

@@ -20,6 +20,23 @@
   --acp-liberty-blue-900: oklch(0.29 0.1 257);
   --acp-liberty-blue-950: oklch(0.2 0.07 258);
 
+  /* Layered TwelveHats navy/cobalt surfaces. */
+  --acp-navy-950: oklch(0.13 0.055 258);
+  --acp-navy-900: oklch(0.17 0.07 258);
+  --acp-navy-850: oklch(0.2 0.085 258);
+  --acp-navy-800: oklch(0.24 0.1 258);
+  --acp-cobalt-850: oklch(0.25 0.12 258);
+  --acp-cobalt-700: oklch(0.34 0.15 256);
+  --acp-cobalt-500: oklch(0.51 0.2 252);
+  --acp-navigation-navy: oklch(0.22 0.105 257);
+  --acp-header-navy: oklch(0.18 0.08 258);
+
+  /* Cool-white surfaces keep light mode bright without going flat. */
+  --acp-light-blue-25: oklch(0.995 0.004 250);
+  --acp-light-blue-50: oklch(0.975 0.014 250);
+  --acp-light-blue-100: oklch(0.945 0.026 250);
+  --acp-light-blue-200: oklch(0.89 0.05 250);
+
   --acp-heritage-red-50: oklch(0.97 0.014 22);
   --acp-heritage-red-100: oklch(0.93 0.035 22);
   --acp-heritage-red-200: oklch(0.86 0.07 23);

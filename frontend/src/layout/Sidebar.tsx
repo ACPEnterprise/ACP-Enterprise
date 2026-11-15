@@ -48,8 +48,8 @@ export function Sidebar({
     <aside
       aria-label={mobile ? "Mobile application navigation" : "Application navigation"}
       className={mobile
-        ? "safe-area-drawer fixed inset-y-0 left-0 z-[var(--layer-overlay)] flex h-dvh w-72 max-w-[calc(100vw-var(--space-8))] flex-col border-r border-stroke bg-navigation shadow-lg"
-        : `hidden shrink-0 flex-col border-r border-stroke bg-navigation lg:flex ${collapsed ? "w-20" : "w-72"}`}
+        ? "theme-navigation safe-area-drawer fixed inset-y-0 left-0 z-[var(--layer-overlay)] flex h-dvh w-72 max-w-[calc(100vw-var(--space-8))] flex-col border-r border-stroke bg-navigation shadow-lg"
+        : `theme-navigation hidden shrink-0 flex-col border-r border-stroke bg-navigation lg:flex ${collapsed ? "w-20" : "w-72"}`}
     >
       <div className="relative">
         <BrandRegion brand={brand} compact={collapsed} />

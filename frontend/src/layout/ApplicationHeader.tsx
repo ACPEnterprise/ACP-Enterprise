@@ -21,7 +21,7 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
   const { activeCompany, signOut, user } = useAuth();
 
   return (
-    <header className="safe-area-header sticky top-0 z-[var(--layer-sticky)] border-b border-stroke bg-header">
+    <header className="theme-header safe-area-header sticky top-0 z-[var(--layer-sticky)] border-b border-stroke bg-header">
       <div className="flex min-h-14 items-center justify-between gap-ui-4">
         <div className="flex min-w-0 items-center gap-ui-3">
           <IconButton
