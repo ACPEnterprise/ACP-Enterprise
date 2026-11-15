@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.auth.errors import PasswordPolicyError
 from app.platform.onboarding.schemas import OnboardingView
 from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.authorization import AuthorizationContext
@@ -142,6 +143,8 @@ async def match_employee_for_onboarding(data: SimpleEmployeeMatchRequest, contex
 async def onboard_employee(data: SimpleEmployeeOnboardingRequest, context: OnboardingManageContext, session: Session) -> SimpleEmployeeOnboardingResponse:
     try:
         result = await simple_employee_onboarding_service.onboard(session, context=context, request_key=data.request_key, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone, access_profile=AccessProfile(data.access_profile), temporary_password=data.temporary_password, confirm_temporary_password=data.confirm_temporary_password, require_password_change=data.require_password_change)
+    except PasswordPolicyError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
     except SimpleOnboardingConflict as error:
         raise _workforce_conflict(error) from error
     record = result.record
