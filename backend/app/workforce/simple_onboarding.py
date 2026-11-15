@@ -213,7 +213,12 @@ class SimpleEmployeeOnboardingService:
         email: str,
         phone: str | None,
         access_profile: AccessProfile,
+        temporary_password: str,
+        confirm_temporary_password: str,
+        require_password_change: bool,
     ) -> SimpleOnboardingResult:
+        if temporary_password != confirm_temporary_password:
+            raise SimpleOnboardingConflict("Temporary password and confirmation must match.")
         existing_request = await session.scalar(
             select(IdentityOnboardingRequest).where(
                 IdentityOnboardingRequest.company_id == context.company.id,
@@ -263,7 +268,7 @@ class SimpleEmployeeOnboardingService:
             if match.outcome is MatchOutcome.SINGLE
             else None
         )
-        temporary_password = generate_temporary_password()
+        role_ids = tuple(sorted((item.id for item in roles), key=str))
         await session.rollback()
         record = await identity_onboarding_service.initiate(
             session,
@@ -277,12 +282,12 @@ class SimpleEmployeeOnboardingService:
                 employee_type="employee",
                 employee_number_prefix="EMP-",
                 employee_number_width=4,
-                role_ids=tuple(sorted((item.id for item in roles), key=str)),
+                role_ids=role_ids,
                 login_email=email,
                 existing_employee_id=existing_employee_id,
                 phone=normalize_phone(phone),
                 admin_password=temporary_password,
-                require_password_change=True,
+                require_password_change=require_password_change,
             ),
         )
         return SimpleOnboardingResult(

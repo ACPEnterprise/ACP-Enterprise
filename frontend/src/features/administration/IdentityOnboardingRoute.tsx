@@ -62,6 +62,11 @@ type Preparation =
 function submissionMessage(error: unknown): string {
   if (axios.isAxiosError(error) && error.response?.status === 403) return "You are not authorized to add employees.";
   if (axios.isAxiosError(error) && error.response?.status === 409) return "This employee conflicts with an existing Company identity. Review the existing Team record before retrying.";
+  if (axios.isAxiosError(error) && error.response?.status === 422) {
+    const detail = error.response.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) return detail.map((item) => typeof item?.msg === "string" ? item.msg : "Invalid employee details.").join(" ");
+  }
   return "The employee could not be created. Please retry or review the existing Team record.";
 }
 
@@ -81,6 +86,9 @@ export function IdentityOnboardingRoute() {
   const [lastName, setLastName] = useState(nameParts.at(-1) ?? "");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [temporaryPasswordInput, setTemporaryPasswordInput] = useState("");
+  const [confirmTemporaryPassword, setConfirmTemporaryPassword] = useState("");
+  const [requirePasswordChange, setRequirePasswordChange] = useState(true);
   const [profileLabel, setProfileLabel] = useState(searchParams.get("profile") ?? "FIELD_TECH");
   const [requestKey, setRequestKey] = useState(() => `employee-admin-${crypto.randomUUID()}`);
   const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
@@ -164,7 +172,7 @@ export function IdentityOnboardingRoute() {
     const selectedProfile = preparation.state === "ready"
       ? preparation.profiles.find((profile) => profile.label === profileLabel)
       : undefined;
-    if (!selectedProfile || !branchId || !email.trim() || !firstName.trim() || !lastName.trim()) return;
+    if (!selectedProfile || !branchId || !email.trim() || !firstName.trim() || !lastName.trim() || !temporaryPasswordInput || temporaryPasswordInput !== confirmTemporaryPassword) return;
     setSubmitting(true);
     setMessage(null);
     try {
@@ -201,12 +209,16 @@ export function IdentityOnboardingRoute() {
         email: email.trim(),
         phone: phone.trim() || undefined,
         access_profile: accessProfileValue(profileLabel),
+        temporary_password: temporaryPasswordInput,
+        confirm_temporary_password: confirmTemporaryPassword,
+        require_password_change: requirePasswordChange,
       });
       const view: IdentityOnboardingView = { id: created.onboarding_request_id, employee_id: created.employee_id, membership_id: created.membership_id, branch_id: created.branch_id, masked_login: email.trim(), status: created.status };
       setOnboarding(view);
       setTemporaryPassword(created.temporary_password);
       setDelivery(null);
       setFirstName(""); setLastName(""); setEmail(""); setPhone("");
+      setTemporaryPasswordInput(""); setConfirmTemporaryPassword("");
       setRequestKey(`employee-admin-${crypto.randomUUID()}`);
       setMessage({ kind: "success", text: "Employee created and activated. The temporary password is shown once below." });
     } catch (error) {
@@ -228,6 +240,9 @@ export function IdentityOnboardingRoute() {
         email: email.trim(),
         phone: phone.trim() || undefined,
         access_profile: accessProfileValue(profileLabel),
+        temporary_password: temporaryPasswordInput,
+        confirm_temporary_password: confirmTemporaryPassword,
+        require_password_change: requirePasswordChange,
       });
       const view: IdentityOnboardingView = { id: linked.onboarding_request_id, employee_id: linked.employee_id, membership_id: linked.membership_id, branch_id: linked.branch_id, masked_login: email.trim(), status: linked.status };
       setOnboarding(view);
@@ -282,10 +297,13 @@ export function IdentityOnboardingRoute() {
             <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => { invalidateMatch(); setLastName(event.target.value); }} readOnly={Boolean(rosterPreview)} required /></label>
           </div>
           <div className="grid gap-ui-3 sm:grid-cols-2"><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Email</span><Input aria-label="Email" type="email" autoComplete="off" value={email} onChange={(event) => { invalidateMatch(); setEmail(event.target.value); }} required /></label><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Phone</span><Input aria-label="Phone" type="tel" autoComplete="tel" value={phone} onChange={(event) => { invalidateMatch(); setPhone(event.target.value); }} placeholder="(555) 555-5555" /></label></div>
+          <div className="grid gap-ui-3 sm:grid-cols-2"><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Temporary password</span><Input aria-label="Temporary password" type="password" autoComplete="new-password" value={temporaryPasswordInput} onChange={(event) => setTemporaryPasswordInput(event.target.value)} required /></label><label className="block space-y-ui-2"><span className="text-body-s font-semibold">Confirm temporary password</span><Input aria-label="Confirm temporary password" type="password" autoComplete="new-password" value={confirmTemporaryPassword} onChange={(event) => setConfirmTemporaryPassword(event.target.value)} required aria-invalid={Boolean(confirmTemporaryPassword && temporaryPasswordInput !== confirmTemporaryPassword)} /></label></div>
+          <label className="flex items-center gap-ui-2 text-body-s"><input type="checkbox" checked={requirePasswordChange} onChange={(event) => setRequirePasswordChange(event.target.checked)} />Require password change on next login</label>
+          {confirmTemporaryPassword && temporaryPasswordInput !== confirmTemporaryPassword && <p className="text-body-xs text-danger">Temporary passwords must match.</p>}
           <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Access profile</span><select aria-label="Access profile" className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={profileLabel} onChange={(event) => { invalidateMatch(); setProfileLabel(event.target.value); }} disabled={Boolean(rosterPreview)} required>{preparation.profiles.map((profile) => <option key={profile.label} value={profile.label}>{profileDisplayName(profile.label)}</option>)}</select></label>
           <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Branch</span><select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={branchId} onChange={(event) => { invalidateMatch(); setBranchId(event.target.value); }} disabled={Boolean(rosterPreview)} required><option value="" disabled>Select a Branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.code === "MAIN" ? " (MAIN)" : ""}</option>)}</select></label>
           {rosterPreview && <label className="flex items-start gap-ui-3 rounded-lg border border-stroke p-ui-3 text-body-s"><input className="mt-1" type="checkbox" checked={confirmAccessProfile} onChange={(event) => setConfirmAccessProfile(event.target.checked)} /><span>I confirm the <strong>{rosterPreview.operating_role.replaceAll("_", " ")}</strong> access profile ({rosterPreview.required_role_codes.join(", ")}) for this exact source Employee.</span></label>}
-          <Button type="submit" loading={submitting} loadingLabel="Creating employee" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim() || (Boolean(rosterPreview) && !confirmAccessProfile)}>{rosterPreview ? "Confirm Source & Send Invite" : "Create Employee"}</Button>
+          <Button type="submit" loading={submitting} loadingLabel="Creating employee" disabled={submitting || !branchId || !profileLabel || !firstName.trim() || !lastName.trim() || !email.trim() || !temporaryPasswordInput || temporaryPasswordInput !== confirmTemporaryPassword || (Boolean(rosterPreview) && !confirmAccessProfile)}>{rosterPreview ? "Confirm Source & Send Invite" : "Create Employee"}</Button>
         </form>}
     </CardContent></Card>
     {matchPlan && <Card className="border-action-primary"><CardHeader><CardTitle>{matchPlan.outcome === "SINGLE" ? "Existing employee history found" : "Multiple existing employee records found"}</CardTitle><CardDescription>{matchPlan.outcome === "SINGLE" ? "Would you like to link this employee to the existing history?" : "This employee needs a quick identity choice before an invitation can be sent."}</CardDescription></CardHeader><CardContent className="space-y-ui-3">{matchPlan.outcome === "AMBIGUOUS" && <ul className="list-disc pl-5 text-body-s">{matchPlan.candidates.map((candidate) => <li key={candidate.employee_id}>Existing Employee {candidate.employee_id}{candidate.source_employee_id ? ` · source ${candidate.source_employee_id}` : ""}</li>)}</ul>}<div className="flex gap-ui-3">{matchPlan.outcome === "SINGLE" && <Button loading={submitting} onClick={() => void confirmExistingHistory()}>Link &amp; Continue</Button>}<Button variant="secondary" disabled={submitting} onClick={() => setMatchPlan(null)}>Cancel</Button></div></CardContent></Card>}

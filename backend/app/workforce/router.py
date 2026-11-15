@@ -141,7 +141,7 @@ async def match_employee_for_onboarding(data: SimpleEmployeeMatchRequest, contex
 @router.post("/administration/employee-onboarding", response_model=SimpleEmployeeOnboardingResponse, status_code=status.HTTP_201_CREATED)
 async def onboard_employee(data: SimpleEmployeeOnboardingRequest, context: OnboardingManageContext, session: Session) -> SimpleEmployeeOnboardingResponse:
     try:
-        result = await simple_employee_onboarding_service.onboard(session, context=context, request_key=data.request_key, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone, access_profile=AccessProfile(data.access_profile))
+        result = await simple_employee_onboarding_service.onboard(session, context=context, request_key=data.request_key, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone, access_profile=AccessProfile(data.access_profile), temporary_password=data.temporary_password, confirm_temporary_password=data.confirm_temporary_password, require_password_change=data.require_password_change)
     except SimpleOnboardingConflict as error:
         raise _workforce_conflict(error) from error
     record = result.record

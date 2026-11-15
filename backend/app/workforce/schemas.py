@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 
 class WorkforceSchema(BaseModel):
@@ -472,6 +472,15 @@ class SimpleEmployeeOnboardingRequest(SimpleEmployeeMatchRequest):
     access_profile: Literal[
         "ADMINISTRATOR", "OFFICE_MANAGER", "OFFICE_STAFF", "FIELD_TECHNICIAN", "HELPER", "FIELD_MANAGER"
     ]
+    temporary_password: str = Field(min_length=1, max_length=1024, repr=False)
+    confirm_temporary_password: str = Field(min_length=1, max_length=1024, repr=False)
+    require_password_change: bool = True
+
+    @model_validator(mode="after")
+    def validate_temporary_password_confirmation(self) -> "SimpleEmployeeOnboardingRequest":
+        if self.temporary_password != self.confirm_temporary_password:
+            raise ValueError("Temporary password and confirmation must match.")
+        return self
 
 
 class SimpleEmployeeOnboardingResponse(WorkforceSchema):

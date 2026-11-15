@@ -11,6 +11,7 @@ vi.mock("../../api/workforce");
 const roles = [["company-admin", "COMPANY_ADMINISTRATOR", "Company Administrator"], ["manager", "OFFICE_MANAGER", "Office Manager"], ["csr", "SERVICE_CSR", "Service CSR"], ["technician", "TECHNICIAN", "Technician"], ["mobile", "ACP_EMPLOYEE_MOBILE", "ACP Employee Mobile"], ["dispatcher", "DISPATCHER", "Dispatcher"], ["field-manager", "FIELD_MANAGER", "Field Manager"]].map(([id, code, name]) => ({ id, code, name, company_id: "company-1", description: null, status: "active", is_system: true }));
 const context: AuthenticationContextValue = { status: "authenticated", activeCompany: { id: "company-1", code: "ACP", name: "All County", membership_id: "membership-1", default_branch_id: "main", has_all_branch_access: false, branches: [{ id: "main", code: "MAIN", name: "Main Branch", is_primary: true }] }, permissionCodes: ["COMPANY_IDENTITY_ONBOARDING_MANAGE"], user: null, signIn: vi.fn(), signOut: vi.fn(), signOutAll: vi.fn(), refreshAuthorization: vi.fn(), requireReauthentication: vi.fn() };
 function renderPage(authentication = context, entry = "/administration/identity-onboarding") { const router = createMemoryRouter([{ path: "/administration/identity-onboarding", Component: IdentityOnboardingRoute }], { initialEntries: [entry] }); render(<AuthenticationContext.Provider value={authentication}><RouterProvider router={router} /></AuthenticationContext.Provider>); }
+async function fillTemporaryPassword(user: ReturnType<typeof userEvent.setup>) { await user.type(await screen.findByLabelText("Temporary password"), "Temp-1234-Abcd!"); await user.type(screen.getByLabelText("Confirm temporary password"), "Temp-1234-Abcd!"); }
 describe("IdentityOnboardingRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks(); vi.mocked(api.listRoles).mockResolvedValue(roles);
@@ -29,7 +30,7 @@ describe("IdentityOnboardingRoute", () => {
     const [role, branch] = screen.getAllByRole("combobox");
     expect(role).toHaveValue("FIELD_TECH"); expect(branch).toHaveValue("main");
     expect(screen.queryByText(/Membership UUID/i)).not.toBeInTheDocument(); expect(screen.queryByText(/Effective permission preview/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create Employee" }));
+    await fillTemporaryPassword(user); await user.click(screen.getByRole("button", { name: "Create Employee" }));
     expect(api.matchSimpleEmployee).toHaveBeenCalledWith(expect.objectContaining({ branch_id: "main", email: "lianne@example.com" }));
     expect(api.onboardSimpleEmployee).toHaveBeenCalledWith(expect.objectContaining({ access_profile: "FIELD_TECHNICIAN", branch_id: "main" })); expect(await screen.findByText("Employee created and activated. The temporary password is shown once below.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View Team" })).toHaveAttribute("href", "/employees");
@@ -55,7 +56,7 @@ describe("IdentityOnboardingRoute", () => {
     expect(screen.getByText(/HCP pro_23be6c33b14a4127bd737529180a56a1/)).toBeVisible();
     await user.clear(screen.getByLabelText("Email"));
     await user.type(screen.getByLabelText("Email"), "owner-confirmed@example.com");
-    await user.click(screen.getByRole("checkbox"));
+    await fillTemporaryPassword(user); await user.click(screen.getAllByRole("checkbox")[1]);
     await user.click(screen.getByRole("button", { name: "Confirm Source & Send Invite" }));
     expect(workforceApi.onboardRealRosterEmployee).toHaveBeenCalledTimes(1);
     expect(workforceApi.onboardRealRosterEmployee).toHaveBeenCalledWith("melvin-santiago", {
@@ -68,7 +69,7 @@ describe("IdentityOnboardingRoute", () => {
   });
   it("does not mutate when identity planning finds a conflict", async () => {
     vi.mocked(api.matchSimpleEmployee).mockResolvedValue({ outcome: "AMBIGUOUS", candidates: [{ employee_id: "employee-1", source_system: "HOUSECALL_PRO", source_employee_id: "source-1" }, { employee_id: "employee-2", source_system: null, source_employee_id: null }] });
-    const user = userEvent.setup(); renderPage(); await user.type(await screen.findByLabelText("First name"), "Lianne"); await user.type(screen.getByLabelText("Last name"), "Hernandez"); await user.type(screen.getByLabelText("Email"), "lianne@example.com"); await user.click(screen.getByRole("button", { name: "Create Employee" }));
+    const user = userEvent.setup(); renderPage(); await user.type(await screen.findByLabelText("First name"), "Lianne"); await user.type(screen.getByLabelText("Last name"), "Hernandez"); await user.type(screen.getByLabelText("Email"), "lianne@example.com"); await fillTemporaryPassword(user); await user.click(screen.getByRole("button", { name: "Create Employee" }));
     expect(await screen.findByText(/multiple existing employee records/i)).toBeInTheDocument(); expect(api.onboardSimpleEmployee).not.toHaveBeenCalled();
   });
   it("asks before linking a single existing employee history", async () => {
@@ -76,7 +77,7 @@ describe("IdentityOnboardingRoute", () => {
     vi.mocked(api.onboardSimpleEmployee).mockResolvedValue({ onboarding_request_id: "request-linked", employee_id: "employee-linked", membership_id: "membership-1", branch_id: "main", status: "activated", invitation_eligible: false, temporary_password: "Temp-1234-Abcd" });
     const user = userEvent.setup(); renderPage();
     await user.type(await screen.findByLabelText("First name"), "Alex"); await user.type(screen.getByLabelText("Last name"), "Donahue"); await user.type(screen.getByLabelText("Email"), "alex@example.com");
-    await user.click(screen.getByRole("button", { name: "Create Employee" }));
+    await fillTemporaryPassword(user); await user.click(screen.getByRole("button", { name: "Create Employee" }));
     expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Link & Continue" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Link & Continue" }));
@@ -89,7 +90,7 @@ describe("IdentityOnboardingRoute", () => {
       .mockResolvedValueOnce({ outcome: "SINGLE", candidates: [{ employee_id: "7501498f-3183-491a-ac7d-81af9278730c", source_system: null, source_employee_id: null }] });
     const user = userEvent.setup(); renderPage();
     await user.type(await screen.findByLabelText("First name"), "Alex"); await user.type(screen.getByLabelText("Last name"), "Donahue"); await user.type(screen.getByLabelText("Email"), "old@example.com");
-    await user.click(screen.getByRole("button", { name: "Create Employee" }));
+    await fillTemporaryPassword(user); await user.click(screen.getByRole("button", { name: "Create Employee" }));
     expect(await screen.findByText("Existing Employee stale-1")).toBeInTheDocument();
     await user.clear(screen.getByLabelText("Email")); await user.type(screen.getByLabelText("Email"), "alexallcountyplumbingandleak@gmail.com");
     expect(screen.queryByText("Existing Employee stale-1")).not.toBeInTheDocument();
@@ -113,7 +114,7 @@ describe("IdentityOnboardingRoute", () => {
     await user.type(await screen.findByLabelText("First name"), "Alex");
     await user.type(screen.getByLabelText("Last name"), "Donahue");
     await user.type(screen.getByLabelText("Email"), "alexallcountyplumbingandleak@gmail.com");
-    await user.click(screen.getByRole("button", { name: "Create Employee" }));
+    await fillTemporaryPassword(user); await user.click(screen.getByRole("button", { name: "Create Employee" }));
     expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Access profile"), "FIELD_MANAGER");
@@ -133,7 +134,7 @@ describe("IdentityOnboardingRoute", () => {
     await user.type(await screen.findByLabelText("First name"), "Alex");
     await user.type(screen.getByLabelText("Last name"), "Donahue");
     await user.type(screen.getByLabelText("Email"), "legacy@example.com");
-    await user.click(screen.getByRole("button", { name: "Create Employee" }));
+    await fillTemporaryPassword(user); await user.click(screen.getByRole("button", { name: "Create Employee" }));
     await user.clear(screen.getByLabelText("Email"));
     await user.type(screen.getByLabelText("Email"), "alexallcountyplumbingandleak@gmail.com");
     resolveStale?.({ outcome: "NONE", candidates: [] });
@@ -152,7 +153,7 @@ describe("IdentityOnboardingRoute", () => {
     await user.type(await screen.findByLabelText("First name"), "Alex");
     await user.type(screen.getByLabelText("Last name"), "Donahue");
     await user.type(screen.getByLabelText("Email"), "alex@example.com");
-    await user.click(screen.getByRole("button", { name: "Create Employee" }));
+    await fillTemporaryPassword(user); await user.click(screen.getByRole("button", { name: "Create Employee" }));
     expect(await screen.findByText("Existing employee history found")).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText("Email"));

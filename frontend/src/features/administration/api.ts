@@ -144,6 +144,9 @@ export interface SimpleEmployeeMatchResponse {
 export interface SimpleEmployeeOnboardingRequest extends SimpleEmployeeMatchRequest {
   request_key: string;
   access_profile: "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECHNICIAN" | "HELPER" | "FIELD_MANAGER";
+  temporary_password: string;
+  confirm_temporary_password: string;
+  require_password_change: boolean;
 }
 
 export interface SimpleEmployeeOnboardingResponse {

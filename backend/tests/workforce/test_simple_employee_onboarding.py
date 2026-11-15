@@ -18,6 +18,7 @@ from app.workforce.simple_onboarding import (
     SimpleOnboardingConflict,
     normalize_phone,
 )
+from app.workforce.schemas import SimpleEmployeeOnboardingRequest
 
 
 def context(company_id, branch_id):  # type: ignore[no-untyped-def]
@@ -183,3 +184,22 @@ def test_phone_and_access_profiles_are_canonical() -> None:
         "ACP_EMPLOYEE_MOBILE",
         "DISPATCHER",
     }
+
+
+def test_managed_onboarding_requires_matching_temporary_passwords() -> None:
+    values = {
+        "request_key": "managed-test",
+        "branch_id": uuid4(),
+        "first_name": "Test",
+        "last_name": "Employee",
+        "email": "test.employee@example.test",
+        "access_profile": "OFFICE_MANAGER",
+        "temporary_password": "Temp-1234-Abcd!",
+        "confirm_temporary_password": "Temp-1234-Abcd!",
+    }
+    request = SimpleEmployeeOnboardingRequest(**values)
+    assert request.require_password_change is True
+    with pytest.raises(ValueError, match="Temporary password and confirmation"):
+        SimpleEmployeeOnboardingRequest(
+            **{**values, "confirm_temporary_password": "Different-1234!"}
+        )
