@@ -22,10 +22,19 @@ from .contracts import (
 from .employee_safe import employee_safe_lia_service
 from .foundation import FoundationReadiness, foundation_readiness
 from .service import POLICY_VERSION, lia_service
+from app.workforce.historical_identity import historical_workforce_identity_service
+from app.workforce.schemas import (
+    HistoricalWorkforceDirectory,
+    HistoricalWorkforceIdentityItem,
+)
 
 router = APIRouter(prefix="/api/v1/lia", tags=["LIA"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
 EmployeeSafeLiaRead = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(EmployeeOperationsPermission.OWN_LIA_READ)),
+]
+LiaReadContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(EmployeeOperationsPermission.OWN_LIA_READ)),
 ]
@@ -46,6 +55,29 @@ async def readiness(context: ResolvedAuthorization) -> LiaReadiness:
         generative_capabilities=(),
         policy_version=POLICY_VERSION,
         retention_state="TRANSCRIPT_RETENTION_POLICY_REQUIRED",
+    )
+
+
+@router.get(
+    "/historical-workforce",
+    response_model=HistoricalWorkforceDirectory,
+)
+async def historical_workforce(
+    context: LiaReadContext,
+    session: Session,
+) -> HistoricalWorkforceDirectory:
+    """Expose non-operational workforce provenance through the LIA surface.
+
+    This is read-only evidence.  The route deliberately shares the same
+    company-scoped authorization as LIA and never exposes a mutation path.
+    """
+    rows = await historical_workforce_identity_service.list(session, context=context)
+    return HistoricalWorkforceDirectory(
+        items=tuple(
+            HistoricalWorkforceIdentityItem.model_validate(row, from_attributes=True)
+            for row in rows
+        ),
+        total=len(rows),
     )
 
 
