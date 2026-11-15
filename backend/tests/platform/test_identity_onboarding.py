@@ -1470,15 +1470,22 @@ async def test_existing_verified_user_admin_password_reset_clears_forced_reset(
         credential.password_change_required_company_id = context.company.id
         session.add(credential)
         await session.commit()
+        initial = await service.initiate(
+            session,
+            context=context,
+            command=replace(command(context, existing_user_id=context.user.id), admin_password="Initial-secure-passphrase-42!", require_password_change=True),
+        )
         record = await service.initiate(
             session,
             context=context,
             command=replace(
                 command(context, existing_user_id=context.user.id),
+                request_key=f"credential-reset-{uuid4()}",
                 admin_password="New-secure-passphrase-42!",
                 require_password_change=False,
             ),
         )
+        assert record.id == initial.id
         assert record.user_id == context.user.id
         stored = await session.scalar(
             select(UserCredential).where(UserCredential.user_id == context.user.id)

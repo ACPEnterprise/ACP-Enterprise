@@ -781,6 +781,22 @@ class IdentityOnboardingService:
                         )
                     )
                     user.authorization_version += 1
+                existing_employee_request = None
+                if (
+                    command.existing_user_id is not None
+                    and command.existing_employee_id is not None
+                ):
+                    existing_employee_request = await session.scalar(
+                        select(IdentityOnboardingRequest)
+                        .where(
+                            IdentityOnboardingRequest.company_id == context.company.id,
+                            IdentityOnboardingRequest.employee_id == employee.id,
+                        )
+                        .order_by(IdentityOnboardingRequest.created_at.desc())
+                        .limit(1)
+                    )
+                if existing_employee_request is not None:
+                    return existing_employee_request
                 record = IdentityOnboardingRequest(
                     company_id=context.company.id,
                     branch_id=branch.id,
