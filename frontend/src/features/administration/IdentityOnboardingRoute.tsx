@@ -5,6 +5,7 @@ import { Link, useSearchParams } from "react-router";
 import {
   getRealRosterOnboardingPreview,
   onboardRealRosterEmployee,
+  listWorkforceEmployees,
   type RealRosterOnboardingPreview,
 } from "../../api/workforce";
 import { useAuth } from "../../auth";
@@ -98,12 +99,26 @@ export function IdentityOnboardingRoute() {
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [onboarding, setOnboarding] = useState<IdentityOnboardingView | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+  const [createdEmployeeName, setCreatedEmployeeName] = useState<string | null>(null);
+  const [teamRefresh, setTeamRefresh] = useState<"idle" | "loading" | "found" | "missing" | "failed">("idle");
   const [delivery, setDelivery] = useState<IdentityOnboardingDeliveryView | null>(null);
   const [rosterPreview, setRosterPreview] = useState<RealRosterOnboardingPreview | null>(null);
   const [rosterPreviewError, setRosterPreviewError] = useState(false);
   const [confirmAccessProfile, setConfirmAccessProfile] = useState(false);
   const [matchPlan, setMatchPlan] = useState<import("./api").SimpleEmployeeMatchResponse | null>(null);
   const matchRequestSequence = useRef(0);
+
+  const refreshCreatedEmployee = async (employeeId: string, displayName: string) => {
+    setTeamRefresh("loading");
+    try {
+      const employees = await listWorkforceEmployees();
+      const found = employees.some((employee) => employee.employee_id === employeeId);
+      setTeamRefresh(found ? "found" : "missing");
+      setCreatedEmployeeName(displayName);
+    } catch {
+      setTeamRefresh("failed");
+    }
+  };
 
   const invalidateMatch = () => {
     matchRequestSequence.current += 1;
@@ -216,11 +231,14 @@ export function IdentityOnboardingRoute() {
       const view: IdentityOnboardingView = { id: created.onboarding_request_id, employee_id: created.employee_id, membership_id: created.membership_id, branch_id: created.branch_id, masked_login: email.trim(), status: created.status };
       setOnboarding(view);
       setTemporaryPassword(created.temporary_password);
+      setCreatedEmployeeName(`${firstName.trim()} ${lastName.trim()}`);
+      setTeamRefresh("idle");
       setDelivery(null);
       setFirstName(""); setLastName(""); setEmail(""); setPhone("");
       setTemporaryPasswordInput(""); setConfirmTemporaryPassword("");
       setRequestKey(`employee-admin-${crypto.randomUUID()}`);
       setMessage({ kind: "success", text: "Employee created and activated. The temporary password is shown once below." });
+      void refreshCreatedEmployee(created.employee_id, `${firstName.trim()} ${lastName.trim()}`);
     } catch (error) {
       setMessage({ kind: "error", text: submissionMessage(error) });
     } finally {
@@ -247,9 +265,12 @@ export function IdentityOnboardingRoute() {
       const view: IdentityOnboardingView = { id: linked.onboarding_request_id, employee_id: linked.employee_id, membership_id: linked.membership_id, branch_id: linked.branch_id, masked_login: email.trim(), status: linked.status };
       setOnboarding(view);
       setTemporaryPassword(linked.temporary_password);
+      setCreatedEmployeeName(`${firstName.trim()} ${lastName.trim()}`);
+      setTeamRefresh("idle");
       setDelivery(null);
       setMatchPlan(null);
       setMessage({ kind: "success", text: "Employee created and activated. The temporary password is shown once below." });
+      void refreshCreatedEmployee(linked.employee_id, `${firstName.trim()} ${lastName.trim()}`);
     } catch (error) {
       setMessage({ kind: "error", text: submissionMessage(error) });
     } finally { setSubmitting(false); }
@@ -307,7 +328,7 @@ export function IdentityOnboardingRoute() {
         </form>}
     </CardContent></Card>
     {matchPlan && <Card className="border-action-primary"><CardHeader><CardTitle>{matchPlan.outcome === "SINGLE" ? "Existing employee history found" : "Multiple existing employee records found"}</CardTitle><CardDescription>{matchPlan.outcome === "SINGLE" ? "Would you like to link this employee to the existing history?" : "This employee needs a quick identity choice before an invitation can be sent."}</CardDescription></CardHeader><CardContent className="space-y-ui-3">{matchPlan.outcome === "AMBIGUOUS" && <ul className="list-disc pl-5 text-body-s">{matchPlan.candidates.map((candidate) => <li key={candidate.employee_id}>Existing Employee {candidate.employee_id}{candidate.source_employee_id ? ` · source ${candidate.source_employee_id}` : ""}</li>)}</ul>}<div className="flex gap-ui-3">{matchPlan.outcome === "SINGLE" && <Button loading={submitting} onClick={() => void confirmExistingHistory()}>Link &amp; Continue</Button>}<Button variant="secondary" disabled={submitting} onClick={() => setMatchPlan(null)}>Cancel</Button></div></CardContent></Card>}
-    {onboarding && <Card><CardHeader><CardTitle>Employee created and activated</CardTitle><CardDescription>The employee can sign in immediately. No invitation or email delivery is required.</CardDescription></CardHeader><CardContent className="space-y-ui-3"><p><strong>Branch:</strong> {branches.find((branch) => branch.id === onboarding.branch_id)?.name ?? "Selected branch"}</p><p><strong>Access profile:</strong> {profileDisplayName(profileLabel)}</p>{temporaryPassword && <div className="rounded-lg border border-action-primary bg-surface p-ui-3"><p className="font-semibold">Temporary password — shown once</p><p className="mt-ui-1 text-body-xs text-content-muted">Share this securely with the employee. It is not stored or sent by email. The employee can change it in Account / Security.</p><code className="mt-ui-2 block break-all text-heading-s">{temporaryPassword}</code></div>}<div className="flex flex-wrap gap-ui-3"><Link className="text-link" to={`/employees?employee=${onboarding.employee_id}`}>View Employee</Link><Button variant="secondary" onClick={() => { setOnboarding(null); setTemporaryPassword(null); setDelivery(null); setMessage(null); setMatchPlan(null); setFirstName(""); setLastName(""); setEmail(""); setPhone(""); }}>Add Another Employee</Button></div></CardContent></Card>}
+    {onboarding && <Card><CardHeader><CardTitle>Employee created and activated</CardTitle><CardDescription>The employee can sign in immediately. No invitation or email delivery is required.</CardDescription></CardHeader><CardContent className="space-y-ui-3"><p><strong>Branch:</strong> {branches.find((branch) => branch.id === onboarding.branch_id)?.name ?? "Selected branch"}</p><p><strong>Access profile:</strong> {profileDisplayName(profileLabel)}</p>{teamRefresh === "loading" && <p role="status" className="text-body-s">Refreshing Employee list…</p>}{teamRefresh === "found" && <p role="status" className="text-body-s text-status-success"><strong>Employee list refreshed:</strong> {createdEmployeeName} is visible in Team.</p>}{teamRefresh === "missing" && <Alert variant="danger">The create transaction succeeded, but the Employee list did not return the new Employee. Do not retry; refresh Team and review the onboarding receipt.</Alert>}{teamRefresh === "failed" && <Alert variant="danger">The create transaction succeeded, but Team could not be refreshed. The Employee remains committed; review the onboarding receipt before retrying.</Alert>}{temporaryPassword && <div className="rounded-lg border border-action-primary bg-surface p-ui-3"><p className="font-semibold">Temporary password — shown once</p><p className="mt-ui-1 text-body-xs text-content-muted">Share this securely with the employee. It is not stored or sent by email. The employee can change it in Account / Security.</p><code className="mt-ui-2 block break-all text-heading-s">{temporaryPassword}</code></div>}<div className="flex flex-wrap gap-ui-3"><Link className="text-link" to={`/employees?employee=${onboarding.employee_id}`}>View Employee</Link><Button variant="secondary" onClick={() => { setOnboarding(null); setTemporaryPassword(null); setCreatedEmployeeName(null); setTeamRefresh("idle"); setDelivery(null); setMessage(null); setMatchPlan(null); setFirstName(""); setLastName(""); setEmail(""); setPhone(""); }}>Add Another Employee</Button></div></CardContent></Card>}
     {onboarding && delivery && <Card><CardHeader><CardTitle>Invitation status</CardTitle><CardDescription>Invitation and email delivery are tracked separately. Queued is not delivered.</CardDescription></CardHeader><CardContent className="space-y-ui-4"><dl className="grid gap-ui-3 text-body-s sm:grid-cols-2"><div><dt className="text-content-muted">Account</dt><dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Invitation</dt><dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Email delivery</dt><dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd></div><div><dt className="text-content-muted">Provider</dt><dd className="font-semibold">{delivery.provider_reference_present ? "Accepted" : "Not accepted"}</dd></div></dl>{delivery.last_error_code && <Alert variant="warning">Invitation delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.</Alert>}<p className="text-body-xs text-content-muted">The employee receives an expiring, single-use activation link and creates their own password.</p><div className="flex gap-ui-3"><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>Reissue invitation</Button><Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>Revoke invitation</Button></div></CardContent></Card>}
     <div className="flex gap-ui-4"><Link className="text-link" to="/employees">View Team</Link><Link className="text-link" to="/administration">Advanced Administration</Link></div>
   </div>;
