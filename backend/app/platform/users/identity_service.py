@@ -10,7 +10,8 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
-from app.platform.auth.services import AuthenticationService
+from app.platform.auth.services import AuthenticationService, credential_service
+from app.platform.auth.errors import PasswordPolicyError
 from app.platform.auth.tokens import SecurityTokenService
 from app.platform.notifications.repository import (
     NotificationOutboxRepository,
@@ -383,6 +384,74 @@ class IdentityAdministrationService:
                     payload={"reason_code": reason_code},
                 )
             return credential, changed
+
+    async def reset_password(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        target_user_id: UUID,
+        temporary_password: str,
+        require_password_change: bool,
+    ) -> tuple[UserCredential, bool]:
+        """Rotate one company User credential without changing identity state."""
+        self._require_administrator(context)
+        now = utc_now()
+        async with session.begin():
+            await self._require_company_user(
+                session,
+                context=context,
+                user_id=target_user_id,
+            )
+            credential = await self.repository.get_credential_for_update(
+                session, target_user_id
+            )
+            if credential is None:
+                raise IdentityAdministrationNotFoundError(
+                    "Identity credential was not found."
+                )
+            replacement = credential_service.build_initial_credential(
+                user_id=target_user_id,
+                password=temporary_password,
+                now=now,
+            )
+            credential.password_hash = replacement.password_hash
+            credential.password_changed_at = replacement.password_changed_at
+            credential.failed_login_count = 0
+            credential.last_failed_login_at = None
+            credential.locked_until = None
+            credential.credential_version += 1
+            if require_password_change:
+                credential.password_change_required = True
+                credential.password_change_required_at = now
+                credential.password_change_required_reason_code = (
+                    "administrator_required"
+                )
+                credential.password_change_required_by_user_id = context.user.id
+                credential.password_change_required_company_id = context.company.id
+                credential.password_change_required_cleared_at = None
+            else:
+                credential.password_change_required = False
+                credential.password_change_required_at = None
+                credential.password_change_required_reason_code = None
+                credential.password_change_required_by_user_id = None
+                credential.password_change_required_company_id = None
+                credential.password_change_required_cleared_at = None
+            await AuthenticationService.revoke_user_sessions(
+                session,
+                user_id=target_user_id,
+                reason="administrator_password_reset",
+                now=now,
+            )
+            self._stage_events(
+                session,
+                context=context,
+                event_type=EventType.IDENTITY_PASSWORD_RESET_COMPLETED,
+                audit_action="identity.password_reset_completed",
+                resource_id=target_user_id,
+                payload={"require_password_change": require_password_change},
+            )
+            return credential, True
 
     async def clear_password_reset_after_change(
         self,

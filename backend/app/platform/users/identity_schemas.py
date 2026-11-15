@@ -99,6 +99,11 @@ class ForcedPasswordResetRequest(IdentityApiSchema):
     )
 
 
+class AdministrativePasswordResetRequest(IdentityApiSchema):
+    temporary_password: SecretStr = Field(min_length=1, max_length=256)
+    require_password_change: bool = False
+
+
 class ForcedPasswordResetResponse(IdentityApiSchema):
     required: bool
     changed: bool

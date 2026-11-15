@@ -299,6 +299,7 @@ class EventType(str, Enum):
     IDENTITY_EMAIL_CHANGE_REVOKED = "identity.email_change_revoked"
     IDENTITY_PASSWORD_RESET_REQUIRED = "identity.password_reset_required"
     IDENTITY_PASSWORD_RESET_CLEARED = "identity.password_reset_cleared"
+    IDENTITY_PASSWORD_RESET_COMPLETED = "identity.password_reset_completed"
 
     # Engineering Control
     ENGINEERING_COMMAND_CREATED = "engineering.command_created"

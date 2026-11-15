@@ -11,6 +11,7 @@ from app.platform.auth.recovery_delivery import (
     RecoveryDeliveryStatus,
     employee_recovery_delivery_service,
 )
+from app.platform.auth.errors import PasswordPolicyError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import (
@@ -30,6 +31,7 @@ from app.platform.users.identity_schemas import (
     EmailAvailabilityResponse,
     EmailChangeConfirmationRequest,
     EmailChangeRequestResponse,
+    AdministrativePasswordResetRequest,
     ForcedPasswordResetRequest,
     ForcedPasswordResetResponse,
     IdentityMutationResponse,
@@ -295,6 +297,35 @@ async def require_forced_password_reset(
             target_user_id=user_id,
             reason_code=data.reason_code,
         )
+    except IdentityAdministrationError as error:
+        raise translate_identity_error(error) from error
+    return forced_reset_response(credential, changed=changed)
+
+
+@administration_router.post(
+    "/users/{user_id}/password-reset",
+    response_model=ForcedPasswordResetResponse,
+    summary="Set a company-managed temporary password for an existing identity",
+)
+async def reset_administrative_password(
+    user_id: UUID,
+    data: AdministrativePasswordResetRequest,
+    context: AdministrationContext,
+    session: DatabaseSession,
+) -> ForcedPasswordResetResponse:
+    try:
+        credential, changed = await identity_administration_service.reset_password(
+            session,
+            context=context,
+            target_user_id=user_id,
+            temporary_password=data.temporary_password.get_secret_value(),
+            require_password_change=data.require_password_change,
+        )
+    except PasswordPolicyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The temporary password does not satisfy the configured password policy.",
+        ) from error
     except IdentityAdministrationError as error:
         raise translate_identity_error(error) from error
     return forced_reset_response(credential, changed=changed)
