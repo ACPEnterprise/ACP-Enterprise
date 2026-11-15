@@ -282,6 +282,7 @@ class SimpleEmployeeOnboardingService:
                 existing_employee_id=existing_employee_id,
                 phone=normalize_phone(phone),
                 admin_password=temporary_password,
+                require_password_change=True,
             ),
         )
         return SimpleOnboardingResult(
