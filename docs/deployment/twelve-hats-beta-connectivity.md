@@ -6,13 +6,14 @@ Leak remains the tenant and owns its business data. `beta.twelve-hats.com` is th
 Twelve Hats-owned public beta entry point. This packet does not touch
 `app.twelve-hats.com` and creates no Production resource.
 
-## Current evidence — 2026-09-17
+## Current evidence — 2026-11-15
 
-- Preview resolves to `162.243.234.193` and terminates valid Let's Encrypt TLS in
+- Preview remains on its preserved host; Beta resolves to the clean Beta Droplet
+  `162.243.232.59` and terminates valid Let's Encrypt TLS in
   Caddy before proxying to loopback frontend Nginx on port 8080.
 - Frontend, backend, PostgreSQL and Redis containers are healthy. The backend health
   projection reports database, schema and Redis healthy.
-- `beta.twelve-hats.com` resolves only to `162.243.234.193` with the approved A
+- `beta.twelve-hats.com` resolves only to `162.243.232.59` with the approved A
   record. Preserve that record and do not create or change `app.twelve-hats.com`.
 - The host Caddy service is active and automatically owns certificate issuance and
   renewal. Its current Preview certificate is valid through 2026-10-18.
@@ -47,7 +48,7 @@ Twelve Hats-owned public beta entry point. This packet does not touch
    Save the previous file mode-0600 under the existing configuration-backup boundary.
 3. At the authoritative DNS provider, preserve only:
 
-   `beta  A  162.243.234.193  TTL 600`
+   `beta  A  162.243.232.59  TTL 600`
 
 4. Verify authoritative and public resolution. Caddy owns the Beta certificate
    lifecycle automatically. Do not use a temporary certificate or disable TLS

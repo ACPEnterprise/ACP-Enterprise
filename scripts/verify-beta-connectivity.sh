@@ -3,7 +3,7 @@ set -eu
 
 preview_url=https://preview.allcountyhomeservices.com
 beta_url=https://beta.twelve-hats.com
-expected_beta_ipv4=${EXPECTED_BETA_IPV4:-162.243.234.193}
+expected_beta_ipv4=${EXPECTED_BETA_IPV4:-162.243.232.59}
 verify_preview_beta_parity=${VERIFY_PREVIEW_BETA_PARITY:-1}
 
 temporary_headers=$(mktemp)
