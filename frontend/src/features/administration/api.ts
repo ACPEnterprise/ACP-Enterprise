@@ -143,7 +143,7 @@ export interface SimpleEmployeeMatchResponse {
 
 export interface SimpleEmployeeOnboardingRequest extends SimpleEmployeeMatchRequest {
   request_key: string;
-  access_profile: "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECHNICIAN" | "FIELD_MANAGER";
+  access_profile: "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_TECHNICIAN" | "HELPER" | "FIELD_MANAGER";
 }
 
 export interface SimpleEmployeeOnboardingResponse {
@@ -153,6 +153,7 @@ export interface SimpleEmployeeOnboardingResponse {
   branch_id: string;
   status: string;
   invitation_eligible: boolean;
+  temporary_password: string;
 }
 
 interface IdentityOnboardingOwnerClaimView {

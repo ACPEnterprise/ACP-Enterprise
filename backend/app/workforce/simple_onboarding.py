@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
@@ -41,6 +42,7 @@ class AccessProfile(StrEnum):
     OFFICE_MANAGER = "OFFICE_MANAGER"
     OFFICE_STAFF = "OFFICE_STAFF"
     FIELD_TECHNICIAN = "FIELD_TECHNICIAN"
+    HELPER = "HELPER"
     FIELD_MANAGER = "FIELD_MANAGER"
 
 
@@ -49,6 +51,7 @@ ROLE_CODES = {
     AccessProfile.OFFICE_MANAGER: frozenset({"OFFICE_MANAGER"}),
     AccessProfile.OFFICE_STAFF: frozenset({"SERVICE_CSR"}),
     AccessProfile.FIELD_TECHNICIAN: frozenset({"TECHNICIAN", "ACP_EMPLOYEE_MOBILE"}),
+    AccessProfile.HELPER: frozenset({"TECHNICIAN", "ACP_EMPLOYEE_MOBILE"}),
     # Field Manager is a reusable composite profile: assigned field execution
     # plus the existing dispatcher supervision authority. It deliberately
     # excludes administration, Payroll, accounting, and security roles.
@@ -56,6 +59,16 @@ ROLE_CODES = {
         {"FIELD_MANAGER", "TECHNICIAN", "ACP_EMPLOYEE_MOBILE", "DISPATCHER"}
     ),
 }
+
+_TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+
+
+def generate_temporary_password() -> str:
+    """Generate a one-time, human-typable credential without persisting it."""
+    return "-".join(
+        "".join(secrets.choice(_TEMPORARY_PASSWORD_ALPHABET) for _ in range(4))
+        for _ in range(3)
+    )
 
 
 @dataclass(frozen=True)
@@ -69,6 +82,12 @@ class MatchCandidate:
 class MatchResult:
     outcome: MatchOutcome
     candidates: tuple[MatchCandidate, ...]
+
+
+@dataclass(frozen=True)
+class SimpleOnboardingResult:
+    record: IdentityOnboardingRequest
+    temporary_password: str
 
 
 def normalize_phone(value: str | None) -> str | None:
@@ -194,7 +213,17 @@ class SimpleEmployeeOnboardingService:
         email: str,
         phone: str | None,
         access_profile: AccessProfile,
-    ) -> IdentityOnboardingRequest:
+    ) -> SimpleOnboardingResult:
+        existing_request = await session.scalar(
+            select(IdentityOnboardingRequest).where(
+                IdentityOnboardingRequest.company_id == context.company.id,
+                IdentityOnboardingRequest.request_key == request_key,
+            )
+        )
+        if existing_request is not None:
+            raise SimpleOnboardingConflict(
+                "Employee creation request already exists; refresh the Team record."
+            )
         match = await self.match(
             session,
             context=context,
@@ -234,8 +263,9 @@ class SimpleEmployeeOnboardingService:
             if match.outcome is MatchOutcome.SINGLE
             else None
         )
+        temporary_password = generate_temporary_password()
         await session.rollback()
-        return await identity_onboarding_service.initiate(
+        record = await identity_onboarding_service.initiate(
             session,
             context=context,
             command=OnboardingCommand(
@@ -251,7 +281,12 @@ class SimpleEmployeeOnboardingService:
                 login_email=email,
                 existing_employee_id=existing_employee_id,
                 phone=normalize_phone(phone),
+                admin_password=temporary_password,
             ),
+        )
+        return SimpleOnboardingResult(
+            record=record,
+            temporary_password=temporary_password,
         )
 
 

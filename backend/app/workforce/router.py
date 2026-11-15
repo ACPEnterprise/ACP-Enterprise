@@ -141,10 +141,11 @@ async def match_employee_for_onboarding(data: SimpleEmployeeMatchRequest, contex
 @router.post("/administration/employee-onboarding", response_model=SimpleEmployeeOnboardingResponse, status_code=status.HTTP_201_CREATED)
 async def onboard_employee(data: SimpleEmployeeOnboardingRequest, context: OnboardingManageContext, session: Session) -> SimpleEmployeeOnboardingResponse:
     try:
-        record = await simple_employee_onboarding_service.onboard(session, context=context, request_key=data.request_key, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone, access_profile=AccessProfile(data.access_profile))
+        result = await simple_employee_onboarding_service.onboard(session, context=context, request_key=data.request_key, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone, access_profile=AccessProfile(data.access_profile))
     except SimpleOnboardingConflict as error:
         raise _workforce_conflict(error) from error
-    return SimpleEmployeeOnboardingResponse(onboarding_request_id=record.id, employee_id=record.employee_id, membership_id=record.membership_id, branch_id=record.branch_id, status=record.status, invitation_eligible=record.status == "invited")
+    record = result.record
+    return SimpleEmployeeOnboardingResponse(onboarding_request_id=record.id, employee_id=record.employee_id, membership_id=record.membership_id, branch_id=record.branch_id, status=record.status, invitation_eligible=False, temporary_password=result.temporary_password)
 
 
 def _functional_access_response(
