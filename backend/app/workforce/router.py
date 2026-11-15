@@ -58,6 +58,8 @@ from app.workforce.schemas import (
     SourceCertificationDecisionRequest,
     SourceCertificationLedger,
     WorkforceDirectory,
+    HistoricalWorkforceDirectory,
+    HistoricalWorkforceIdentityItem,
     WorkforceEligibilityRequest,
     WorkforceEligibilityResponse,
     WorkforceEmployeeDetail,
@@ -65,6 +67,7 @@ from app.workforce.schemas import (
     WorkforceProfileResponse,
 )
 from app.workforce.service import workforce_operations_service
+from app.workforce.historical_identity import historical_workforce_identity_service
 from app.workforce.simple_onboarding import (
     AccessProfile,
     SimpleOnboardingConflict,
@@ -237,6 +240,22 @@ async def revoke_functional_access(
 @router.get("/employees", response_model=WorkforceDirectory)
 async def directory(context: ReadContext, session: Session) -> WorkforceDirectory:
     return await workforce_operations_service.directory(session, context=context)
+
+
+@router.get(
+    "/historical-identities", response_model=HistoricalWorkforceDirectory
+)
+async def historical_identities(
+    context: ReadContext, session: Session
+) -> HistoricalWorkforceDirectory:
+    rows = await historical_workforce_identity_service.list(session, context=context)
+    return HistoricalWorkforceDirectory(
+        items=tuple(
+            HistoricalWorkforceIdentityItem.model_validate(row, from_attributes=True)
+            for row in rows
+        ),
+        total=len(rows),
+    )
 
 
 @router.get("/real-roster", response_model=RealRosterReadiness)

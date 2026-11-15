@@ -1,3 +1,3 @@
-from app.workforce.models import WorkforceCapabilityProfile
+from app.workforce.models import HistoricalWorkforceIdentity, WorkforceCapabilityProfile
 
-__all__ = ["WorkforceCapabilityProfile"]
+__all__ = ["HistoricalWorkforceIdentity", "WorkforceCapabilityProfile"]

@@ -12,9 +12,11 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    Text,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -64,6 +66,71 @@ class WorkforceCapabilityProfile(Base):
     employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     concurrency_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+
+class HistoricalWorkforceIdentity(Base):
+    """Non-operational source identity retained for workforce history.
+
+    This ledger deliberately does not grant login, dispatch, timekeeping, or
+    payroll authority.  A row can point at a native Employee for provenance,
+    but its lifecycle state remains the evidence disposition, not an access
+    decision.
+    """
+
+    __tablename__ = "historical_workforce_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_identity",
+            name="uq_historical_workforce_source_identity",
+        ),
+        CheckConstraint(
+            "lifecycle_state IN ('VERIFIED','PARTIAL','QUARANTINED','UNRESOLVED')",
+            name="ck_historical_workforce_lifecycle_state",
+        ),
+        CheckConstraint(
+            "operational_access_enabled = false",
+            name="ck_historical_workforce_non_operational",
+        ),
+        Index(
+            "ix_historical_workforce_company_state",
+            "company_id",
+            "lifecycle_state",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    native_employee_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT")
+    )
+    source_system: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_identity: Mapped[str] = mapped_column(String(191), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_status: Mapped[str | None] = mapped_column(String(80))
+    lifecycle_state: Mapped[str] = mapped_column(String(20), nullable=False)
+    provenance_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    evidence_digest: Mapped[str | None] = mapped_column(String(64))
+    unresolved_reason: Mapped[str | None] = mapped_column(Text)
+    operational_access_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    evidence_metadata: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

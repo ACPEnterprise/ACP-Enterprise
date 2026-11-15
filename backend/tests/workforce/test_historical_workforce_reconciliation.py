@@ -1,0 +1,30 @@
+from backend.scripts.reconcile_historical_workforce import _historical_rows
+
+
+def test_historical_rows_preserve_known_ids_without_granting_access() -> None:
+    native = {name: __import__("uuid").uuid4() for name in (
+        "Michael Fouse", "Alex Donahue", "Melvin Santiago", "Dakota Wilcox",
+        "Jason Calci", "Alex Donahue (stale)",
+    )}
+    rows = _historical_rows(native)
+    assert len(rows) == 10
+    assert {row["source_identity"] for row in rows} >= {
+        "pro_23be6c33b14a4127bd737529180a56a1",
+        "pro_2edf25dd14494b1885a50fa134b44fd8",
+        "pro_4f1d81e3d31b4ffa9072dd6a32906586",
+        "pro_8646a77e7dc649ba96259ce8ef68acb2",
+        "name:kamen-wilmington",
+    }
+    assert all(row["lifecycle_state"] in {"VERIFIED", "PARTIAL", "QUARANTINED", "UNRESOLVED"} for row in rows)
+
+
+def test_melvin_and_dakota_are_preserved_as_non_authoritative_when_unresolved() -> None:
+    from uuid import uuid4
+
+    native = {name: uuid4() for name in (
+        "Michael Fouse", "Alex Donahue", "Melvin Santiago", "Dakota Wilcox",
+        "Jason Calci", "Alex Donahue (stale)",
+    )}
+    rows = {row["display_name"]: row for row in _historical_rows(native)}
+    assert rows["Melvin Santiago"]["lifecycle_state"] == "PARTIAL"
+    assert rows["Dakota Wilcox"]["lifecycle_state"] == "QUARANTINED"

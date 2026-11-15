@@ -83,6 +83,28 @@ class WorkforceDirectory(WorkforceSchema):
     total: int
 
 
+class HistoricalWorkforceIdentityItem(WorkforceSchema):
+    id: UUID
+    native_employee_id: UUID | None
+    source_system: str
+    source_identity: str
+    display_name: str
+    source_status: str | None
+    lifecycle_state: Literal["VERIFIED", "PARTIAL", "QUARANTINED", "UNRESOLVED"]
+    provenance_reference: str
+    evidence_digest: str | None
+    unresolved_reason: str | None
+    operational_access_enabled: bool
+    evidence_metadata: dict[str, object]
+    created_at: datetime
+    updated_at: datetime
+
+
+class HistoricalWorkforceDirectory(WorkforceSchema):
+    items: tuple[HistoricalWorkforceIdentityItem, ...]
+    total: int
+
+
 class WorkforceEligibilityRequest(WorkforceSchema):
     branch_id: UUID
     window_start_at: datetime
