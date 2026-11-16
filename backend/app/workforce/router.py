@@ -24,6 +24,10 @@ from app.workforce.administration_commands import (
 )
 from app.workforce.employee_administration import employee_administration_service
 from app.workforce.employee_timeline import employee_timeline_service
+from app.workforce.permission_editor import (
+    EmployeePermissionEditorConflict,
+    employee_permission_editor_service,
+)
 from app.workforce.functional_access import (
     FunctionalAccessConflict,
     FunctionalAccessView,
@@ -38,6 +42,7 @@ from app.workforce.schemas import (
     EmployeeAccessLockRequest,
     EmployeeAdministrationDetail,
     EmployeeNotificationTarget,
+    EmployeePermissionUpdateRequest,
     EmployeeTimeline,
     FieldReadinessRequest,
     FieldReadinessResponse,
@@ -411,6 +416,41 @@ async def administration_detail(
     session: Session,
 ) -> EmployeeAdministrationDetail:
     _require_employee_administration(context)
+    result = await employee_administration_service.detail(
+        session, context=context, employee_id=employee_id
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
+    return result
+
+
+@router.put(
+    "/administration/employees/{employee_id}/permissions",
+    response_model=EmployeeAdministrationDetail,
+)
+async def update_employee_permissions(
+    employee_id: UUID,
+    data: EmployeePermissionUpdateRequest,
+    context: ManageContext,
+    session: Session,
+) -> EmployeeAdministrationDetail:
+    _require_employee_administration(context)
+    required = {
+        AdministrationPermission.COMPANY_ADMINISTER,
+        AdministrationPermission.MEMBERSHIP_MANAGE,
+        AdministrationPermission.ROLE_MANAGE,
+    }
+    if not required.issubset(context.permission_codes):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Company Administrator permission management authority is required.",
+        )
+    try:
+        await employee_permission_editor_service.update(
+            session, context=context, employee_id=employee_id, data=data
+        )
+    except EmployeePermissionEditorConflict as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     result = await employee_administration_service.detail(
         session, context=context, employee_id=employee_id
     )

@@ -19,6 +19,7 @@ from app.platform.onboarding.models import (
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.models import (
+    MembershipPermissionOverride,
     MembershipRole,
     Permission,
     Role,
@@ -165,31 +166,61 @@ class EmployeeAdministrationService:
             )
         ).all()
         role_codes_by_permission: dict[str, list[str]] = defaultdict(list)
-        permission_by_code: dict[str, Permission] = {}
         for permission, role_code in rows:
-            permission_by_code[permission.code] = permission
             role_codes_by_permission[permission.code].append(role_code)
+        override_rows = (
+            await session.execute(
+                select(MembershipPermissionOverride, Permission)
+                .join(Permission, Permission.id == MembershipPermissionOverride.permission_id)
+                .where(
+                    MembershipPermissionOverride.company_id == context.company.id,
+                    MembershipPermissionOverride.membership_id == summary.membership_id,
+                    Permission.status == "active",
+                    Permission.retired_at.is_(None),
+                )
+            )
+        ).all()
+        overrides_by_code = {
+            permission.code: override.effect for override, permission in override_rows
+        }
+        all_permissions = tuple(
+            await session.scalars(
+                select(Permission)
+                .where(
+                    Permission.status == "active",
+                    Permission.retired_at.is_(None),
+                    Permission.code.like("COMPANY\\_%", escape="\\"),
+                )
+                .order_by(Permission.code, Permission.id)
+            )
+        )
         definitions = {
             definition.code: definition for definition in permission_catalog.definitions
         }
         explanations = tuple(
             EmployeePermissionExplanation(
-                code=code,
+                code=permission.code,
                 name=(
-                    definitions[code].name
-                    if code in definitions
-                    else permission_by_code[code].name
+                    definitions[permission.code].name
+                    if permission.code in definitions
+                    else permission.name
                 ),
-                business_area=_business_area(code),
+                business_area=_business_area(permission.code),
                 authority=(
-                    "OWN_DATA_ONLY"
-                    if "_OWN_" in code or code.endswith("_OWN_READ")
+                    "DENIED"
+                    if overrides_by_code.get(permission.code) == "deny"
+                    or (
+                        permission.code not in role_codes_by_permission
+                        and overrides_by_code.get(permission.code) != "grant"
+                    )
+                    else "OWN_DATA_ONLY"
+                    if "_OWN_" in permission.code or permission.code.endswith("_OWN_READ")
                     else "ROLE_DERIVED"
                 ),
-                role_codes=tuple(sorted(set(role_codes))),
+                role_codes=tuple(sorted(set(role_codes_by_permission.get(permission.code, ())))),
                 branch_scoped=summary.branch_ids != (),
             )
-            for code, role_codes in sorted(role_codes_by_permission.items())
+            for permission in all_permissions
         )
         return EmployeeAdministrationDetail(
             **summary.model_dump(), permissions=explanations, workforce=workforce
@@ -259,6 +290,33 @@ class EmployeeAdministrationService:
                         Permission.status == "active",
                     )
                 )
+            )
+            override_rows = (
+                await session.execute(
+                    select(MembershipPermissionOverride, Permission)
+                    .join(Permission, Permission.id == MembershipPermissionOverride.permission_id)
+                    .where(
+                        MembershipPermissionOverride.company_id == context.company.id,
+                        MembershipPermissionOverride.membership_id == membership.id,
+                        Permission.status == "active",
+                        Permission.retired_at.is_(None),
+                    )
+                )
+            ).all()
+            effective_permission_codes = frozenset(
+                {
+                    *effective_permission_codes,
+                    *(
+                        permission.code
+                        for override, permission in override_rows
+                        if override.effect == "grant"
+                    ),
+                }
+                - {
+                    permission.code
+                    for override, permission in override_rows
+                    if override.effect == "deny"
+                }
             )
         onboarding = await session.scalar(
             select(IdentityOnboardingRequest)

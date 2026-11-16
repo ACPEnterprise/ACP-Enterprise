@@ -17,6 +17,7 @@ import {
   setEmployeeBranchGrant,
   setEmployeeMembershipStatus,
   setEmployeeRole,
+  updateEmployeePermissions,
   sendEmployeePasswordReset,
   setEmployeeAccessLock,
   revokeEmployeeFunctionalAccess,
@@ -148,6 +149,21 @@ export function useEmployeeAdministration(
     queryKey: ["employee-administration", employeeId],
     queryFn: () => getEmployeeAdministration(employeeId as string),
     enabled: enabled && Boolean(employeeId),
+  });
+}
+
+export function useEmployeePermissionUpdate(employeeId: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof updateEmployeePermissions>[1]) =>
+      updateEmployeePermissions(employeeId as string, input),
+    onSuccess: async (data) => {
+      client.setQueryData(["employee-administration", employeeId], data);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+      ]);
+    },
   });
 }
 

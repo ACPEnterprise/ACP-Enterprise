@@ -47,6 +47,10 @@ vi.mock("../hooks/useWorkforce", () => ({
     isLoading: false,
     isError: false,
   }),
+  useEmployeePermissionUpdate: () => ({
+    isPending: false,
+    mutate: vi.fn(),
+  }),
   useEmployeeFunctionalAccess: () => ({
     query: { data: [], isLoading: false, isError: false },
     grant: { mutate: vi.fn(), isPending: false, isError: false },

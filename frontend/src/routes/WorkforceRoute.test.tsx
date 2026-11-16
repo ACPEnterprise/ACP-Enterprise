@@ -60,6 +60,10 @@ const summary = {
 describe("WorkforceRoute", () => {
   afterEach(() => { authState.permissionCodes = []; });
   function mockEligibility() {
+    vi.mocked(workforceHooks.useEmployeePermissionUpdate).mockReturnValue({
+      isPending: false,
+      mutate: vi.fn(),
+    } as never);
     vi.mocked(workforceHooks.useEmployeeFunctionalAccess).mockReturnValue({
       query: { data: [], isLoading: false, isError: false },
       grant: { isPending: false, isError: false, mutate: vi.fn() },

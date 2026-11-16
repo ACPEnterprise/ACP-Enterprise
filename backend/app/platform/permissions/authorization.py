@@ -12,6 +12,7 @@ from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.models import (
     MembershipRole,
+    MembershipPermissionOverride,
     Permission,
     Role,
     RolePermission,
@@ -423,14 +424,12 @@ class AuthorizationService:
             .unique()
             .all()
         )
-        effective_permissions = tuple(
-            (
+        effective_permissions_by_id = {
+            permission.id: permission
+            for permission in (
                 await session.scalars(
                     select(Permission)
-                    .join(
-                        RolePermission,
-                        RolePermission.permission_id == Permission.id,
-                    )
+                    .join(RolePermission, RolePermission.permission_id == Permission.id)
                     .join(Role, Role.id == RolePermission.role_id)
                     .join(MembershipRole, MembershipRole.role_id == Role.id)
                     .where(
@@ -454,8 +453,26 @@ class AuthorizationService:
                     .order_by(Permission.code, Permission.id)
                 )
             )
-            .unique()
-            .all()
+        }
+        overrides = (
+            await session.execute(
+                select(MembershipPermissionOverride, Permission)
+                .join(Permission, Permission.id == MembershipPermissionOverride.permission_id)
+                .where(
+                    MembershipPermissionOverride.company_id == company.id,
+                    MembershipPermissionOverride.membership_id == membership.id,
+                    Permission.status == "active",
+                    Permission.retired_at.is_(None),
+                )
+            )
+        ).all()
+        for override, permission in overrides:
+            if override.effect == "grant":
+                effective_permissions_by_id[permission.id] = permission
+            else:
+                effective_permissions_by_id.pop(permission.id, None)
+        effective_permissions = tuple(
+            sorted(effective_permissions_by_id.values(), key=lambda item: (item.code, item.id))
         )
 
         if (

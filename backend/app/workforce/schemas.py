@@ -373,6 +373,12 @@ class EmployeeAdministrationDetail(EmployeeAdministrationSummary):
     workforce: WorkforceEmployeeDetail
 
 
+class EmployeePermissionUpdateRequest(WorkforceSchema):
+    access_profile: str = Field(min_length=1, max_length=50)
+    permission_codes: tuple[str, ...]
+    expected_authorization_version: int = Field(ge=1)
+
+
 class EmployeeAccessLockRequest(WorkforceSchema):
     locked: bool
     reason: str = Field(min_length=3, max_length=500)

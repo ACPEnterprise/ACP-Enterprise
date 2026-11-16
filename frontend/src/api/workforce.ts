@@ -259,6 +259,12 @@ export interface EmployeeAdministrationDetail extends EmployeeAdministrationSumm
   workforce: WorkforceEmployeeDetail;
 }
 
+export interface EmployeePermissionUpdateInput {
+  access_profile: string;
+  permission_codes: string[];
+  expected_authorization_version: number;
+}
+
 export interface FunctionalAccessItem {
   assignment_id: string;
   employee_id: string;
@@ -279,6 +285,18 @@ export async function getEmployeeFunctionalAccess(employeeId: string) {
       `/api/v1/workforce/administration/employees/${employeeId}/functional-access`,
     )
   ).data.items;
+}
+
+export async function updateEmployeePermissions(
+  employeeId: string,
+  input: EmployeePermissionUpdateInput,
+) {
+  return (
+    await apiClient.put<EmployeeAdministrationDetail>(
+      `/api/v1/workforce/administration/employees/${employeeId}/permissions`,
+      input,
+    )
+  ).data;
 }
 
 export async function grantEmployeeFunctionalAccess(employeeId: string, input: {

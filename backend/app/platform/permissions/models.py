@@ -340,3 +340,55 @@ class MembershipRole(Base):
         back_populates="membership_role_assignments",
         foreign_keys=[assigned_by_user_id],
     )
+
+
+class MembershipPermissionOverride(Base):
+    """Employee-specific permission delta layered over role permissions."""
+
+    __tablename__ = "membership_permission_overrides"
+    __table_args__ = (
+        CheckConstraint(
+            "effect IN ('grant', 'deny')",
+            name="ck_membership_permission_overrides_effect",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "membership_id"],
+            ["memberships.company_id", "memberships.id"],
+            name="fk_membership_permission_overrides_company_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "membership_id",
+            "permission_id",
+            name="uq_membership_permission_overrides_membership_permission",
+        ),
+        Index(
+            "ix_membership_permission_overrides_company_membership",
+            "company_id",
+            "membership_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    membership_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    permission_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("permissions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    effect: Mapped[str] = mapped_column(String(10), nullable=False)
+    assigned_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="Employee access editor"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )

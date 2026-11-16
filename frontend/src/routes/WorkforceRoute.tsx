@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Award, Languages, Search, ShieldCheck, UserRoundCheck, UsersRound } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 
@@ -8,9 +8,10 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
-import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeePermissionUpdate, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { useRoles } from "../features/administration/hooks";
+import { listPermissions } from "../features/administration/api";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
@@ -51,17 +52,17 @@ const ACCESS_PROFILES = [
 ] as const;
 
 const PERMISSION_GROUPS = [
-  ["Customers", ["View", "Create / Edit", "Delete"]],
-  ["Estimates", ["View", "Create / Edit", "Approve discounts"]],
-  ["Jobs", ["View assigned", "Update", "View all company jobs"]],
-  ["Scheduling", ["View schedule", "Schedule others", "Modify company schedule"]],
-  ["Dispatch", ["View assigned", "Dispatch technicians", "Reassign jobs"]],
-  ["Invoices", ["View", "Create / Edit", "Refund"]],
-  ["Employees", ["View", "Add / Edit", "Terminate"]],
-  ["Accounting", ["View", "Edit", "Reconcile"]],
-  ["Payroll", ["View own", "Review workforce", "Run payroll"]],
-  ["Inventory", ["View", "Use materials", "Adjust inventory"]],
-  ["LIA / Beacon / Luminary", ["Use", "Management actions"]],
+  { label: "Customers", area: "Customers", options: [{ label: "View", code: "COMPANY_CUSTOMER_READ" }, { label: "Create / Edit", code: "COMPANY_CUSTOMER_MANAGE" }] },
+  { label: "Estimates", area: "Estimates", options: [{ label: "View", code: "COMPANY_ESTIMATE_READ" }, { label: "Create / Edit", code: "COMPANY_ESTIMATE_MANAGE" }] },
+  { label: "Jobs", area: "Jobs", options: [{ label: "View assigned", code: "COMPANY_JOB_READ" }, { label: "Update", code: "COMPANY_JOB_MANAGE" }, { label: "Complete work", code: "COMPANY_JOB_EXECUTE" }] },
+  { label: "Scheduling", area: "Scheduling", options: [{ label: "View schedule", code: "COMPANY_SCHEDULING_READ" }, { label: "Schedule others", code: "COMPANY_SCHEDULING_MANAGE" }] },
+  { label: "Dispatch", area: "Dispatch", options: [{ label: "View assigned", code: "COMPANY_DISPATCH_READ" }, { label: "Dispatch technicians", code: "COMPANY_DISPATCH_MANAGE" }] },
+  { label: "Invoices", area: "Invoices", options: [{ label: "View", code: "COMPANY_INVOICE_READ" }, { label: "Create / Edit", code: "COMPANY_INVOICE_MANAGE" }, { label: "Issue", code: "COMPANY_INVOICE_ISSUE" }, { label: "Adjust", code: "COMPANY_INVOICE_ADJUST" }] },
+  { label: "Employees", area: "Workforce", options: [{ label: "View", code: "COMPANY_WORKFORCE_READ" }, { label: "Add / Edit", code: "COMPANY_WORKFORCE_MANAGE" }, { label: "Capability setup", code: "COMPANY_WORKFORCE_CAPABILITY_MANAGE" }] },
+  { label: "Accounting", area: "Accounting", options: [{ label: "View", code: "COMPANY_ACCOUNTING_READ" }, { label: "Post journals", code: "COMPANY_ACCOUNTING_JOURNAL_POST" }, { label: "Reconcile", code: "COMPANY_ACCOUNTING_RECONCILE" }] },
+  { label: "Payroll", area: "Payroll", options: [{ label: "View own", code: "COMPANY_PAYROLL_STATEMENT_OWN_READ" }, { label: "Review workforce", code: "COMPANY_PAYROLL_REPORTING_READ" }] },
+  { label: "Inventory", area: "Inventory", options: [{ label: "View", code: "COMPANY_INVENTORY_READ" }, { label: "Use materials", code: "COMPANY_INVENTORY_MOVE" }, { label: "Adjust inventory", code: "COMPANY_INVENTORY_ADJUST" }] },
+  { label: "LIA / Beacon / Luminary", area: "Intelligence", options: [{ label: "Use", code: "COMPANY_BEACON_REVIEW" }, { label: "Management actions", code: "COMPANY_BEACON_ASSIGN" }] },
 ] as const;
 
 function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {
@@ -97,9 +98,15 @@ export function WorkforceRoute() {
   const [viewMode, setViewMode] = useState<"list" | "org-chart">("list");
   const [detailTab, setDetailTab] = useState<"overview" | "access" | "time" | "payroll" | "history">("overview");
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
+  const [permissionDrafts, setPermissionDrafts] = useState<Record<string, string[]>>({});
+  const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [permissionPresetPending, setPermissionPresetPending] = useState(false);
+  const [pendingPermissionNavigation, setPendingPermissionNavigation] = useState<(() => void) | null>(null);
   const detail = useWorkforceEmployee(selected);
   const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
+  const permissionUpdate = useEmployeePermissionUpdate(selected);
   const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
   const functionalAccess = useEmployeeFunctionalAccess(selected, canAdministerIdentity);
   const [functionalArea, setFunctionalArea] = useState("FIELD_OPERATIONS");
@@ -177,42 +184,113 @@ export function WorkforceRoute() {
     activeCompany?.branches?.find((branch) => branch.id === branchId)?.name ??
     (branchId ? "Authorized Branch" : "Company-wide / unassigned");
   const openEmployee = (employeeId: string) => {
-    setSelected(employeeId);
-    setDetailTab("overview");
-    setSelectedProfile(null);
-    const next = new URLSearchParams(searchParams);
-    next.set("employee", employeeId);
-    setSearchParams(next, { replace: true });
+    const navigate = () => {
+      setSelected(employeeId);
+      setDetailTab("overview");
+      setSelectedProfile(null);
+      setPermissionMessage(null);
+      setPermissionError(null);
+      const next = new URLSearchParams(searchParams);
+      next.set("employee", employeeId);
+      setSearchParams(next, { replace: true });
+    };
+    if (permissionDraftDirty) setPendingPermissionNavigation(() => navigate);
+    else navigate();
   };
   const closeEmployee = () => {
-    setSelected(null);
-    setDetailTab("overview");
-    setSelectedProfile(null);
-    const next = new URLSearchParams(searchParams);
-    next.delete("employee");
-    setSearchParams(next, { replace: true });
+    const navigate = () => {
+      setSelected(null);
+      setDetailTab("overview");
+      setSelectedProfile(null);
+      setPermissionMessage(null);
+      setPermissionError(null);
+      const next = new URLSearchParams(searchParams);
+      next.delete("employee");
+      setSearchParams(next, { replace: true });
+    };
+    if (permissionDraftDirty) setPendingPermissionNavigation(() => navigate);
+    else navigate();
   };
   const inferredProfile = administration.data?.role_codes
     .map((roleCode) => ACCESS_PROFILES.find((profile) => profile.aliases.includes(roleCode as never)))
     .find(Boolean)?.code ?? null;
   const activeProfile = selectedProfile ?? inferredProfile;
+  const savedPermissionCodes = useMemo(
+    () => new Set((administration.data?.permissions ?? []).filter((permission) => permission.authority !== "DENIED").map((permission) => permission.code)),
+    [administration.data?.permissions],
+  );
+  const draftPermissionCodes = selected && permissionDrafts[selected]
+    ? new Set(permissionDrafts[selected])
+    : savedPermissionCodes;
+  const permissionDraftDirty = Boolean(selected && permissionDrafts[selected]
+    && [...draftPermissionCodes].sort().join("|") !== [...savedPermissionCodes].sort().join("|"));
+  useEffect(() => {
+    if (!permissionDraftDirty) return undefined;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "You have unsaved permission changes.";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [permissionDraftDirty]);
+  const setPermissionDraft = (codes: Set<string>) => {
+    if (!selected) return;
+    setPermissionDrafts((current) => ({ ...current, [selected]: [...codes].sort() }));
+    setPermissionMessage(null);
+    setPermissionError(null);
+  };
   const applyAccessProfile = async (profileCode: string) => {
     setSelectedProfile(profileCode);
-    const membershipId = administration.data?.membership_id;
-    if (!membershipId || !roles.data || !accessMutation.mutateAsync) return;
+    if (profileCode === "CUSTOM") return;
     const profile = ACCESS_PROFILES.find((item) => item.code === profileCode);
-    if (!profile) return;
-    const presetCodes = new Set<string>(ACCESS_PROFILES.flatMap((item) => item.aliases));
-    const currentRoleCodes = administration.data?.role_codes ?? [];
-    const targetRole = roles.data.find((role) => profile.aliases.some((alias) => alias === role.code));
-    if (targetRole && !currentRoleCodes.includes(targetRole.code)) {
-      await accessMutation.mutateAsync({ type: "role", membershipId, roleId: targetRole.id, enabled: true });
+    const targetRole = roles.data?.find((role) => profile?.aliases.some((alias) => alias === role.code));
+    if (!targetRole) return;
+    setPermissionPresetPending(true);
+    try {
+      const catalog = await listPermissions(targetRole.id);
+      setPermissionDraft(new Set(catalog.filter((permission) => permission.assigned).map((permission) => permission.code)));
+    } catch {
+      setPermissionError("The selected Access Profile could not be loaded. Your saved permissions are unchanged.");
+    } finally {
+      setPermissionPresetPending(false);
     }
-    for (const roleCode of currentRoleCodes) {
-      if (!presetCodes.has(roleCode) || profile.aliases.some((alias) => alias === roleCode)) continue;
-      const currentRole = roles.data.find((role) => role.code === roleCode);
-      if (currentRole) await accessMutation.mutateAsync({ type: "role", membershipId, roleId: currentRole.id, enabled: false });
-    }
+  };
+  const savePermissionDraft = () => {
+    if (!selected || !administration.data?.authorization_version || !activeProfile) return;
+    setPermissionMessage(null);
+    setPermissionError(null);
+    permissionUpdate.mutate(
+      {
+        access_profile: activeProfile,
+        permission_codes: [...draftPermissionCodes].sort(),
+        expected_authorization_version: administration.data.authorization_version,
+      },
+      {
+        onSuccess: () => {
+          setPermissionDrafts((current) => {
+            const next = { ...current };
+            delete next[selected];
+            return next;
+          });
+          setPermissionMessage("Permissions updated");
+          const navigate = pendingPermissionNavigation;
+          setPendingPermissionNavigation(null);
+          navigate?.();
+        },
+        onError: () => setPermissionError("Permissions could not be saved. Your draft remains available; refresh and retry if another administrator changed access."),
+      },
+    );
+  };
+  const cancelPermissionDraft = () => {
+    if (!selected) return;
+    setPermissionDrafts((current) => {
+      const next = { ...current };
+      delete next[selected];
+      return next;
+    });
+    setSelectedProfile(null);
+    setPermissionMessage("Draft changes discarded");
+    setPermissionError(null);
   };
 
   return (
@@ -854,16 +932,21 @@ export function WorkforceRoute() {
             </section>}
             {detailTab === "access" && <section className="mt-5 space-y-5" aria-label="Employee access editor">
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-semibold">Access profile</h4>{selectedProfile && selectedProfile !== inferredProfile && <Badge variant="warning">CUSTOMIZED</Badge>}</div>
-                <p className="mt-1 text-sm text-content-muted">Choose a standard profile first. Fine-grained permissions stay company-scoped and never expose internal permission codes.</p>
+                <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-semibold">Access profile</h4>{permissionDraftDirty && <Badge variant="warning">UNSAVED CHANGES</Badge>}{selectedProfile === "CUSTOM" && <Badge variant="warning">CUSTOMIZED</Badge>}</div>
+                <p className="mt-1 text-sm text-content-muted">Choose a standard profile, then adjust individual permissions. Nothing is saved until you choose Save changes.</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {ACCESS_PROFILES.map((profile) => <button key={profile.code} type="button" aria-pressed={activeProfile === profile.code} disabled={!canManageMembership || accessMutation.isPending} onClick={() => void applyAccessProfile(profile.code)} className={`rounded-xl border p-3 text-left transition ${activeProfile === profile.code ? "border-action-primary bg-action-primary/10" : "border-stroke bg-surface-subtle hover:border-action-primary"}`}><span className="block font-semibold">{profile.label}</span><span className="mt-1 block text-xs text-content-muted">{activeProfile === profile.code ? "Selected" : "Use standard profile"}</span></button>)}
-                  <button type="button" aria-pressed={activeProfile === "CUSTOM"} onClick={() => setSelectedProfile("CUSTOM")} className={`rounded-xl border p-3 text-left ${activeProfile === "CUSTOM" ? "border-action-primary bg-action-primary/10" : "border-stroke bg-surface-subtle hover:border-action-primary"}`}><span className="block font-semibold">Custom</span><span className="mt-1 block text-xs text-content-muted">Adjust after selecting a profile</span></button>
+                  {ACCESS_PROFILES.map((profile) => <button key={profile.code} type="button" aria-pressed={activeProfile === profile.code} disabled={!canManageMembership || permissionPresetPending || permissionUpdate.isPending} onClick={() => void applyAccessProfile(profile.code)} className={`rounded-xl border p-3 text-left transition ${activeProfile === profile.code ? "border-action-primary bg-action-primary/10" : "border-stroke bg-surface-subtle hover:border-action-primary"}`}><span className="block font-semibold">{profile.label}</span><span className="mt-1 block text-xs text-content-muted">{activeProfile === profile.code ? "Selected" : "Use standard profile"}</span></button>)}
+                  <button type="button" aria-pressed={activeProfile === "CUSTOM"} disabled={!canManageMembership || permissionUpdate.isPending} onClick={() => setSelectedProfile("CUSTOM")} className={`rounded-xl border p-3 text-left ${activeProfile === "CUSTOM" ? "border-action-primary bg-action-primary/10" : "border-stroke bg-surface-subtle hover:border-action-primary"}`}><span className="block font-semibold">Custom</span><span className="mt-1 block text-xs text-content-muted">Adjust after selecting a profile</span></button>
                 </div>
               </div>
               <div><h4 className="text-lg font-semibold">Permissions</h4><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {PERMISSION_GROUPS.map(([group, actions]) => { const groupPermissions = administration.data?.permissions.filter((item) => item.business_area === group) ?? []; return <section className="rounded-xl border border-stroke bg-surface-subtle p-3" key={group}><h5 className="font-semibold">{group}</h5><div className="mt-2 space-y-2">{actions.map((action, index) => <label className="flex items-center gap-2 text-sm" key={action}><input type="checkbox" checked={groupPermissions.length > 0 && index === 0} readOnly /> <span>{action}</span></label>)}</div></section>; })}
+                {PERMISSION_GROUPS.map((group) => <section className="rounded-xl border border-stroke bg-surface-subtle p-3" key={group.label}><h5 className="font-semibold">{group.label}</h5><div className="mt-2 space-y-2">{group.options.map((option) => { const available = administration.data?.permissions.some((permission) => permission.code === option.code); const checked = draftPermissionCodes.has(option.code); return <label className={`flex min-h-9 items-center gap-2 text-sm ${available ? "cursor-pointer" : "cursor-not-allowed text-content-muted"}`} key={option.code}><input type="checkbox" checked={checked} disabled={!canManageMembership || !available || permissionUpdate.isPending} onChange={() => { const next = new Set(draftPermissionCodes); if (next.has(option.code)) next.delete(option.code); else next.add(option.code); setSelectedProfile("CUSTOM"); setPermissionDraft(next); }} /><span>{option.label}</span>{!available && <span className="text-xs text-content-muted">Unavailable</span>}</label>; })}</div></section>)}
               </div></div>
+              {(permissionMessage || permissionError) && <Alert className="mt-4" variant={permissionError ? "danger" : "success"}>{permissionError ?? permissionMessage}</Alert>}
+              <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stroke bg-surface p-3 shadow-lg" aria-label="Permission editor actions">
+                <span className="text-sm text-content-muted">{permissionDraftDirty ? "You have unsaved permission changes." : "Saved permissions"}</span>
+                <div className="flex gap-2"><Button variant="outline" disabled={!permissionDraftDirty || permissionUpdate.isPending} onClick={cancelPermissionDraft}>Cancel</Button><Button variant="primary" disabled={!permissionDraftDirty || permissionUpdate.isPending || permissionPresetPending} onClick={savePermissionDraft}>{permissionUpdate.isPending ? "Saving…" : "Save changes"}</Button></div>
+              </div>
             </section>}
             {detailTab === "time" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">Time</h4><p className="mt-1 text-sm text-content-muted">Review current time and attendance from the Time workspace.</p>{canReviewTime ? <a className="mt-3 inline-block font-semibold text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Open time review</a> : <p className="mt-3 text-sm text-content-muted">Time review is not available for this account.</p>}</section>}
             {detailTab === "payroll" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">Payroll</h4><p className="mt-1 text-sm text-content-muted">Payroll readiness is reviewed separately from access. No payroll action is performed from this summary.</p>{permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="mt-3 inline-block font-semibold text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Open payroll setup</Link>}</section>}
@@ -1214,6 +1297,15 @@ export function WorkforceRoute() {
             </details>
       </Card>
         )}
+      {pendingPermissionNavigation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="unsaved-permission-title">
+          <div className="w-full max-w-md rounded-2xl border border-stroke bg-surface p-5 shadow-2xl">
+            <h3 id="unsaved-permission-title" className="text-lg font-semibold">You have unsaved permission changes.</h3>
+            <p className="mt-2 text-sm text-content-muted">Save them before leaving, discard the draft, or stay on this employee.</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => setPendingPermissionNavigation(null)}>Stay</Button><Button variant="outline" onClick={() => { const navigate = pendingPermissionNavigation; setPendingPermissionNavigation(null); cancelPermissionDraft(); navigate?.(); }}>Discard</Button><Button variant="primary" disabled={permissionUpdate.isPending} onClick={savePermissionDraft}>Save</Button></div>
+          </div>
+        </div>
+      )}
       {confirmPasswordReset && administration.data?.user_id && (
         <ConfirmationDialog
           title="Send password reset?"

@@ -3,6 +3,7 @@ from app.platform.permissions.authorization import (
     AuthorizationService,
 )
 from app.platform.permissions.models import (
+    MembershipPermissionOverride,
     MembershipRole,
     Permission,
     Role,
@@ -13,6 +14,7 @@ __all__ = [
     "AuthorizationContext",
     "AuthorizationService",
     "MembershipRole",
+    "MembershipPermissionOverride",
     "Permission",
     "Role",
     "RolePermission",
