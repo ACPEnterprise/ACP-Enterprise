@@ -394,6 +394,95 @@ describe("WorkforceRoute", () => {
     expect(screen.getAllByText("READY")).not.toHaveLength(0);
   });
 
+  it("keeps permission edits local until Save and restores persisted values on Cancel", async () => {
+    authState.permissionCodes = [
+      "COMPANY_WORKFORCE_MANAGE",
+      "COMPANY_MEMBERSHIP_READ",
+      "COMPANY_ROLE_READ",
+      "COMPANY_MEMBERSHIP_MANAGE",
+      "COMPANY_ADMINISTER",
+    ];
+    mockEligibility();
+    const administration = {
+      ...summary,
+      user_id: "user-1",
+      membership_id: "membership-1",
+      membership_status: "active",
+      user_status: "active",
+      authorization_version: 4,
+      branch_ids: ["branch-1"],
+      role_codes: ["TECHNICIAN"],
+      onboarding_status: "activated",
+      invitation_status: "not_required",
+      delivery_status: "not_required",
+      login_email: "employee@example.test",
+      masked_login: "e***@example.test",
+      access_status: "ACTIVE" as const,
+      access_locked_at: null,
+      access_locked_by_user_id: null,
+      access_locked_by_display_name: null,
+      access_lock_reason: null,
+      active_assignment_count: 0,
+      today_future_assignment_count: 0,
+      future_assignment_count: 0,
+      mobile_readiness: "READY" as const,
+      mobile_readiness_blockers: [],
+      permissions: [
+        { code: "COMPANY_CUSTOMER_READ", name: "View", business_area: "Customers", authority: "ROLE_DERIVED" as const, role_codes: ["TECHNICIAN"], branch_scoped: false },
+        { code: "COMPANY_BEACON_REVIEW", name: "Use", business_area: "Intelligence", authority: "DENIED" as const, role_codes: [], branch_scoped: false },
+      ],
+      workforce: { ...summary, capabilities: [], certifications: [], languages: [], branches: [], work_restrictions: [], equipment_capabilities: [], availability: [] },
+    };
+    vi.mocked(workforceHooks.useEmployeeAdministration).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: administration,
+    } as never);
+    vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({ data: [summary] } as never);
+    vi.mocked(workforceHooks.useWorkforceEmployee).mockReturnValue({
+      data: { ...summary, capabilities: [], certifications: [], languages: [], branches: [], work_restrictions: [], equipment_capabilities: [], availability: [] },
+    } as never);
+    const update = vi.fn((_input: unknown, callbacks?: { onSuccess?: (data: typeof administration) => void }) => callbacks?.onSuccess?.(administration));
+    vi.mocked(workforceHooks.useEmployeePermissionUpdate).mockReturnValue({
+      isPending: false,
+      mutate: update,
+    } as never);
+    vi.mocked(workforceHooks.useEmployeePasswordReset).mockReturnValue({
+      query: { data: { state: "RESET_NOT_REQUESTED" } },
+      mutation: { isPending: false, isError: false, mutate: vi.fn() },
+    } as never);
+
+    render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
+    await userEvent.click(screen.getByRole("tab", { name: "Access" }));
+    const customers = screen.getAllByRole("heading", { name: "Customers" })[0].closest("section");
+    expect(customers).not.toBeNull();
+    const customerRead = within(customers!).getByRole("checkbox", { name: "View" });
+    expect(customerRead).toBeChecked();
+
+    await userEvent.click(customerRead);
+    expect(customerRead).not.toBeChecked();
+    expect(screen.getByText("UNSAVED CHANGES")).toBeVisible();
+    expect(update).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(customerRead).toBeChecked();
+    expect(screen.getByText("Draft changes discarded")).toBeVisible();
+    expect(update).not.toHaveBeenCalled();
+
+    await userEvent.click(customerRead);
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(update).toHaveBeenCalledWith(
+      {
+        access_profile: "CUSTOM",
+        permission_codes: [],
+        expected_authorization_version: 4,
+      },
+      expect.any(Object),
+    );
+    expect(screen.getByText("Permissions updated")).toBeVisible();
+  });
+
   it("offers one confirmed emergency lock with assignment warning", async () => {
     authState.permissionCodes = [
       "COMPANY_WORKFORCE_MANAGE",
