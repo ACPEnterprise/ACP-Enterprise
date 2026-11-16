@@ -244,7 +244,7 @@ describe("WorkforceRoute", () => {
     expect(screen.getByText(/Trade credential/)).toBeInTheDocument();
     expect(screen.getAllByText(/MAIN/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Active/).length).toBeGreaterThan(0);
-    expect(screen.getByRole("navigation", { name: "Employee detail" })).toBeVisible();
+    expect(screen.getByRole("tablist", { name: "Employee detail" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP Employee Mobile role assigned");
     expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP NATIVE");
     expect(
@@ -291,6 +291,7 @@ describe("WorkforceRoute", () => {
     render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
 
     await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
+    await userEvent.click(screen.getByText("Advanced workforce operations"));
 
     await userEvent.type(screen.getByLabelText("Owner reason"), "Owner verified source packet");
     await userEvent.click(screen.getByRole("button", { name: "Confirm candidate" }));
@@ -379,7 +380,8 @@ describe("WorkforceRoute", () => {
       </MemoryRouter>,
     );
     await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
-    expect(screen.getByText("employee@example.test")).toBeVisible();
+    await userEvent.click(screen.getByText("Advanced / Evidence"));
+    expect(screen.getAllByText("employee@example.test")[0]).toBeVisible();
     expect(screen.getByText("ACP EMPLOYEE MOBILE, OFFICE MANAGER")).toBeVisible();
     expect(screen.getAllByText("MAIN").length).toBeGreaterThan(0);
     expect(screen.getByText("consumed")).toBeVisible();
@@ -426,6 +428,7 @@ describe("WorkforceRoute", () => {
 
     render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
     await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
+    await userEvent.click(screen.getByText("Advanced / Evidence"));
     expect(screen.getByText("ACCESS ACTIVE")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Lock Access" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("4 scheduled assignments");
@@ -509,6 +512,7 @@ describe("WorkforceRoute", () => {
 
     render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
     await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
+    await userEvent.click(screen.getByText("Advanced / Evidence"));
 
     expect(screen.getByRole("heading", { name: "Demonstrated capability / evidence" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Schedule / Availability" })).toBeVisible();

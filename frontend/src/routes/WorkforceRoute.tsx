@@ -10,6 +10,7 @@ import { RealRosterActivationConsole } from "../components/workforce/RealRosterA
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
+import { useRoles } from "../features/administration/hooks";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
@@ -30,6 +31,39 @@ function workforceGroup(employee: { job_title: string | null; employee_type: str
   return "Other explicit roles";
 }
 
+function visiblePosition(employee: { job_title: string | null; employee_type: string }) {
+  const title = (employee.job_title ?? "").trim();
+  const normalized = title.toLowerCase();
+  if (normalized.includes("technician") || normalized.includes("field tech")) return "Technician";
+  if (normalized.includes("helper")) return "Helper";
+  if (normalized.includes("field manager")) return "Field Manager";
+  if (normalized.includes("office manager")) return "Office Manager";
+  if (normalized.includes("administrator") || normalized === "owner") return "Owner / Administrator";
+  return title || employee.employee_type.replaceAll("_", " ");
+}
+
+const ACCESS_PROFILES = [
+  { label: "Company Administrator", code: "COMPANY_ADMINISTRATOR", aliases: ["COMPANY_ADMINISTRATOR", "OWNER"] },
+  { label: "Office Manager", code: "OFFICE_MANAGER", aliases: ["OFFICE_MANAGER"] },
+  { label: "Field Manager", code: "FIELD_MANAGER", aliases: ["FIELD_MANAGER"] },
+  { label: "Technician", code: "TECHNICIAN", aliases: ["TECHNICIAN"] },
+  { label: "Helper", code: "HELPER", aliases: ["HELPER"] },
+] as const;
+
+const PERMISSION_GROUPS = [
+  ["Customers", ["View", "Create / Edit", "Delete"]],
+  ["Estimates", ["View", "Create / Edit", "Approve discounts"]],
+  ["Jobs", ["View assigned", "Update", "View all company jobs"]],
+  ["Scheduling", ["View schedule", "Schedule others", "Modify company schedule"]],
+  ["Dispatch", ["View assigned", "Dispatch technicians", "Reassign jobs"]],
+  ["Invoices", ["View", "Create / Edit", "Refund"]],
+  ["Employees", ["View", "Add / Edit", "Terminate"]],
+  ["Accounting", ["View", "Edit", "Reconcile"]],
+  ["Payroll", ["View own", "Review workforce", "Run payroll"]],
+  ["Inventory", ["View", "Use materials", "Adjust inventory"]],
+  ["LIA / Beacon / Luminary", ["Use", "Management actions"]],
+] as const;
+
 function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {
   const start = Date.parse(`${periodStart}T00:00:00Z`);
   const weeks = new Map<number, { supported: number; accepted: number; needsReview: boolean }>();
@@ -49,6 +83,7 @@ export function WorkforceRoute() {
   const linkedEmployeeId = searchParams.get("employee");
   const { activeCompany, permissionCodes = [] } = useAuth();
   const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
+  const roles = useRoles(canAdministerEmployees);
   const directory = useWorkforceDirectory();
   const canCertifySources = permissionCodes.includes("COMPANY_WORKFORCE_CERTIFICATION_MANAGE");
   const sourceCertifications = useSourceCertification(canCertifySources);
@@ -60,6 +95,8 @@ export function WorkforceRoute() {
   const [statusFilter, setStatusFilter] = useState("active");
   const [readinessFilter, setReadinessFilter] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "org-chart">("list");
+  const [detailTab, setDetailTab] = useState<"overview" | "access" | "time" | "payroll" | "history">("overview");
+  const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const detail = useWorkforceEmployee(selected);
   const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
@@ -141,15 +178,41 @@ export function WorkforceRoute() {
     (branchId ? "Authorized Branch" : "Company-wide / unassigned");
   const openEmployee = (employeeId: string) => {
     setSelected(employeeId);
+    setDetailTab("overview");
+    setSelectedProfile(null);
     const next = new URLSearchParams(searchParams);
     next.set("employee", employeeId);
     setSearchParams(next, { replace: true });
   };
   const closeEmployee = () => {
     setSelected(null);
+    setDetailTab("overview");
+    setSelectedProfile(null);
     const next = new URLSearchParams(searchParams);
     next.delete("employee");
     setSearchParams(next, { replace: true });
+  };
+  const inferredProfile = administration.data?.role_codes
+    .map((roleCode) => ACCESS_PROFILES.find((profile) => profile.aliases.includes(roleCode as never)))
+    .find(Boolean)?.code ?? null;
+  const activeProfile = selectedProfile ?? inferredProfile;
+  const applyAccessProfile = async (profileCode: string) => {
+    setSelectedProfile(profileCode);
+    const membershipId = administration.data?.membership_id;
+    if (!membershipId || !roles.data || !accessMutation.mutateAsync) return;
+    const profile = ACCESS_PROFILES.find((item) => item.code === profileCode);
+    if (!profile) return;
+    const presetCodes = new Set<string>(ACCESS_PROFILES.flatMap((item) => item.aliases));
+    const currentRoleCodes = administration.data?.role_codes ?? [];
+    const targetRole = roles.data.find((role) => profile.aliases.some((alias) => alias === role.code));
+    if (targetRole && !currentRoleCodes.includes(targetRole.code)) {
+      await accessMutation.mutateAsync({ type: "role", membershipId, roleId: targetRole.id, enabled: true });
+    }
+    for (const roleCode of currentRoleCodes) {
+      if (!presetCodes.has(roleCode) || profile.aliases.some((alias) => alias === roleCode)) continue;
+      const currentRole = roles.data.find((role) => role.code === roleCode);
+      if (currentRole) await accessMutation.mutateAsync({ type: "role", membershipId, roleId: currentRole.id, enabled: false });
+    }
   };
 
   return (
@@ -171,7 +234,9 @@ export function WorkforceRoute() {
         {canReviewTime && <a className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" href="#timecard-operations">Time &amp; Attendance</a>}
         {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" to="/payroll">Payroll</Link>}
       </nav>
-      {selected ? <div className="space-y-6">
+      {selected ? <details open={Boolean(linkedEmployeeId && effectivePayPeriodId)} className="rounded-xl border border-stroke bg-surface-subtle p-4">
+      <summary className="cursor-pointer font-semibold">Advanced workforce operations</summary>
+      <div className="mt-4 space-y-6">
       <RealRosterActivationConsole />
       <Card className="p-4 sm:p-6">
         <h3 className="text-lg font-semibold">Source Employee certification</h3>
@@ -631,7 +696,8 @@ export function WorkforceRoute() {
           )}
         </Card>
       )}
-      </div> : null}
+      </div>
+      </details> : null}
       <div id="employee-roster" className={`scroll-mt-4 gap-6 ${selected ? "grid xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]" : "block"}`}>
         <Card className="min-w-0 overflow-hidden">
           <div className="space-y-3 border-b border-stroke p-4">
@@ -705,7 +771,7 @@ export function WorkforceRoute() {
                   <span className="flex flex-wrap items-start justify-between gap-3">
                     <span className="min-w-0">
                       <span className="block truncate font-semibold">{employee.display_name}</span>
-                      <span className="mt-1 block truncate text-sm text-content-muted">{employee.job_title ?? employee.employee_type} · {branchName(employee.home_branch_id)}</span>
+                      <span className="mt-1 block truncate text-sm text-content-muted">{visiblePosition(employee)} · {branchName(employee.home_branch_id)}</span>
                     </span>
                     <span className="flex flex-wrap gap-1">
                       <Badge variant={employee.employee_status === "active" ? "success" : "neutral"}>{employee.employee_status === "active" ? "ACTIVE" : employee.employee_status.toUpperCase()}</Badge>
@@ -713,9 +779,9 @@ export function WorkforceRoute() {
                     </span>
                   </span>
                   <span className="mt-3 grid gap-2 text-xs text-content-muted sm:grid-cols-3">
-                    <span><strong className="font-semibold text-content">Access profile</strong><br />{employee.profile_status === "active" ? "Configured" : "Needs setup"}</span>
-                    <span><strong className="font-semibold text-content">Mobile readiness</strong><br />{employee.technician ? "Field profile configured" : "Review in detail"}</span>
-                    <span><strong className="font-semibold text-content">Payroll readiness</strong><br />Review in detail</span>
+                    <span><strong className="font-semibold text-content">Login readiness</strong><br />{employee.profile_status === "active" ? "LOGIN READY" : "LOGIN NEEDS SETUP"}</span>
+                    <span><strong className="font-semibold text-content">Mobile readiness</strong><br />{employee.technician ? "MOBILE READY" : "REVIEW NEEDED"}</span>
+                    <span><strong className="font-semibold text-content">Payroll readiness</strong><br />PAYROLL REVIEW</span>
                   </span>
                 </button>
               ))}
@@ -730,7 +796,7 @@ export function WorkforceRoute() {
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                     {members.map((employee) => <button key={employee.employee_id} type="button" onClick={() => openEmployee(employee.employee_id)} className="rounded-xl border border-stroke bg-surface-subtle p-3 text-left hover:border-action-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
                       <div className="flex items-start justify-between gap-2"><strong>{employee.display_name}</strong><Badge variant={employee.employee_status === "active" ? "success" : "neutral"}>{employee.employee_status.toUpperCase()}</Badge></div>
-                      <p className="mt-1 text-sm text-content-muted">{employee.job_title ?? employee.employee_type} · {branchName(employee.home_branch_id)}</p>
+                      <p className="mt-1 text-sm text-content-muted">{visiblePosition(employee)} · {branchName(employee.home_branch_id)}</p>
                     </button>)}
                   </div>
                 </section>;
@@ -761,24 +827,50 @@ export function WorkforceRoute() {
               <div>
                 <p className="text-sm text-action-primary">{detail.data.employee_number}</p>
                 <h3 className="mt-1 text-2xl font-bold">{detail.data.display_name}</h3>
-                <p className="mt-1 text-content-muted">{detail.data.job_title ?? detail.data.employee_type}</p>
+                <p className="mt-1 text-content-muted">{visiblePosition(detail.data)}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2"><Readiness state={detail.data.readiness_state} /><button type="button" className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold hover:bg-surface-subtle" onClick={closeEmployee}>Back to Workforce</button></div>
             </div>
-            <nav aria-label="Employee detail" className="mt-4 flex flex-wrap gap-2 border-b border-stroke pb-3 text-sm font-semibold">
-              <a className="text-action-primary underline" href="#employee-personal">Personal</a>
-              <a className="text-action-primary underline" href="#employee-access-heading">Role / Permissions</a>
-              {canReviewTime && <a className="text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Time / Attendance</a>}
-              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Payroll setup</Link>}
-              <a className="text-action-primary underline" href="#employee-history">History</a>
+            <nav aria-label="Employee detail" className="mt-5 flex gap-1 overflow-x-auto border-b border-stroke pb-1" role="tablist">
+              {(["overview", "access", "time", "payroll", "history"] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={detailTab === tab} className={`whitespace-nowrap rounded-t-lg px-3 py-2 text-sm font-semibold ${detailTab === tab ? "border-b-2 border-action-primary text-action-primary" : "text-content-muted hover:bg-surface-subtle hover:text-content"}`} onClick={() => setDetailTab(tab)}>{tab === "overview" ? "Overview" : tab[0].toUpperCase() + tab.slice(1)}</button>)}
             </nav>
-            <section id="employee-personal" className="mt-4 scroll-mt-4" aria-label="Employee personal and work identity">
-              <dl className="grid gap-3 text-sm sm:grid-cols-3">
-                <div><dt className="text-content-muted">Standard role</dt><dd className="font-medium">{detail.data.job_title ?? detail.data.employee_type}</dd></div>
+            {detailTab === "overview" && <section id="employee-personal" className="mt-5 space-y-5" aria-label="Employee overview">
+              <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div><dt className="text-content-muted">Position</dt><dd className="font-medium">{visiblePosition(detail.data)}</dd></div>
+                <div><dt className="text-content-muted">Status</dt><dd className="font-medium">{detail.data.employee_status === "active" ? "ACTIVE" : detail.data.employee_status.toUpperCase()}</dd></div>
                 <div><dt className="text-content-muted">Branch</dt><dd className="font-medium">{branchName(detail.data.home_branch_id)}</dd></div>
-                <div><dt className="text-content-muted">Status</dt><dd className="font-medium">{detail.data.employee_status === "active" ? "Active" : "Disabled"}</dd></div>
+                <div><dt className="text-content-muted">Login</dt><dd className="break-all font-medium">{administration.data?.login_email ?? "Not configured"}</dd></div>
               </dl>
-            </section>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl bg-surface-subtle p-3"><p className="text-xs text-content-muted">Login</p><p className="mt-1 font-semibold">{administration.data?.access_status === "ACTIVE" ? "LOGIN READY" : "LOGIN NEEDS SETUP"}</p></div>
+                <div className="rounded-xl bg-surface-subtle p-3"><p className="text-xs text-content-muted">Mobile</p><p className="mt-1 font-semibold">{administration.data?.mobile_readiness === "READY" ? "MOBILE READY" : "REVIEW NEEDED"}</p></div>
+                <div className="rounded-xl bg-surface-subtle p-3"><p className="text-xs text-content-muted">Payroll</p><p className="mt-1 font-semibold">PAYROLL REVIEW</p></div>
+              </div>
+              <div className="flex flex-wrap gap-2" aria-label="Employee quick actions">
+                {canAdministerIdentity && administration.data?.user_id && administration.data.access_status === "ACTIVE" && <Button variant="secondary" onClick={() => setConfirmPasswordReset(true)}>Reset password</Button>}
+                {canAdministerIdentity && administration.data?.user_id && administration.data.authorization_version && <Button variant="outline" onClick={() => { setAccessLockReason(""); setConfirmAccessLock(true); }}>{administration.data.access_status === "LOCKED" ? "Unlock access" : "Lock access"}</Button>}
+                <Button variant="outline" disabled title="Employment termination remains subject to assignment and payroll review">Terminate employee</Button>
+              </div>
+            </section>}
+            {detailTab === "access" && <section className="mt-5 space-y-5" aria-label="Employee access editor">
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-semibold">Access profile</h4>{selectedProfile && selectedProfile !== inferredProfile && <Badge variant="warning">CUSTOMIZED</Badge>}</div>
+                <p className="mt-1 text-sm text-content-muted">Choose a standard profile first. Fine-grained permissions stay company-scoped and never expose internal permission codes.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {ACCESS_PROFILES.map((profile) => <button key={profile.code} type="button" aria-pressed={activeProfile === profile.code} disabled={!canManageMembership || accessMutation.isPending} onClick={() => void applyAccessProfile(profile.code)} className={`rounded-xl border p-3 text-left transition ${activeProfile === profile.code ? "border-action-primary bg-action-primary/10" : "border-stroke bg-surface-subtle hover:border-action-primary"}`}><span className="block font-semibold">{profile.label}</span><span className="mt-1 block text-xs text-content-muted">{activeProfile === profile.code ? "Selected" : "Use standard profile"}</span></button>)}
+                  <button type="button" aria-pressed={activeProfile === "CUSTOM"} onClick={() => setSelectedProfile("CUSTOM")} className={`rounded-xl border p-3 text-left ${activeProfile === "CUSTOM" ? "border-action-primary bg-action-primary/10" : "border-stroke bg-surface-subtle hover:border-action-primary"}`}><span className="block font-semibold">Custom</span><span className="mt-1 block text-xs text-content-muted">Adjust after selecting a profile</span></button>
+                </div>
+              </div>
+              <div><h4 className="text-lg font-semibold">Permissions</h4><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {PERMISSION_GROUPS.map(([group, actions]) => { const groupPermissions = administration.data?.permissions.filter((item) => item.business_area === group) ?? []; return <section className="rounded-xl border border-stroke bg-surface-subtle p-3" key={group}><h5 className="font-semibold">{group}</h5><div className="mt-2 space-y-2">{actions.map((action, index) => <label className="flex items-center gap-2 text-sm" key={action}><input type="checkbox" checked={groupPermissions.length > 0 && index === 0} readOnly /> <span>{action}</span></label>)}</div></section>; })}
+              </div></div>
+            </section>}
+            {detailTab === "time" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">Time</h4><p className="mt-1 text-sm text-content-muted">Review current time and attendance from the Time workspace.</p>{canReviewTime ? <a className="mt-3 inline-block font-semibold text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Open time review</a> : <p className="mt-3 text-sm text-content-muted">Time review is not available for this account.</p>}</section>}
+            {detailTab === "payroll" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">Payroll</h4><p className="mt-1 text-sm text-content-muted">Payroll readiness is reviewed separately from access. No payroll action is performed from this summary.</p>{permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="mt-3 inline-block font-semibold text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Open payroll setup</Link>}</section>}
+            {detailTab === "history" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">History</h4><p className="mt-1 text-sm text-content-muted">Source, audit, and evidence details are available only when deliberately expanded.</p><a className="mt-3 inline-block font-semibold text-action-primary underline" href="#employee-advanced">Open Source &amp; Audit</a></section>}
+            <details id="employee-advanced" className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4">
+              <summary className="cursor-pointer font-semibold">Advanced / Evidence</summary>
+              <div className="mt-4 space-y-5">
             {detail.data.readiness_blockers.length > 0 && (
               <section className="mt-5 rounded-xl border border-status-warning/40 bg-status-warning/5 p-4">
                 <h4 className="font-semibold">Employment blockers</h4>
@@ -1118,6 +1210,8 @@ export function WorkforceRoute() {
                 {timeline.data.items.length === 0 && <li className="text-sm text-content-muted">No canonical Employee history is available.</li>}
               </ol>}
             </section>
+              </div>
+            </details>
       </Card>
         )}
       {confirmPasswordReset && administration.data?.user_id && (
