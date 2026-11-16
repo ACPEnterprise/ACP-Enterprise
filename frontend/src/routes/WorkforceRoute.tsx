@@ -16,6 +16,20 @@ function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDE
   return <Badge variant={state === "READY" ? "success" : "danger"}>{state === "READY" ? "EMPLOYEE READY" : "EMPLOYEE BLOCKED"}</Badge>;
 }
 
+function OwnerAttention({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
+  return <Badge variant={state === "READY" ? "success" : "warning"}>{state === "READY" ? "READY" : "ATTENTION REQUIRED"}</Badge>;
+}
+
+function workforceGroup(employee: { job_title: string | null; employee_type: string }) {
+  const role = `${employee.job_title ?? ""} ${employee.employee_type}`.toUpperCase();
+  if (role.includes("ADMIN") || role.includes("OWNER")) return "Company administrators / owners";
+  if (role.includes("FIELD MANAGER")) return "Field managers";
+  if (role.includes("OFFICE") || role.includes("MANAGER")) return "Office / management";
+  if (role.includes("TECHNICIAN") || role.includes("TECH")) return "Technicians";
+  if (role.includes("HELPER")) return "Helpers";
+  return "Other explicit roles";
+}
+
 function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {
   const start = Date.parse(`${periodStart}T00:00:00Z`);
   const weeks = new Map<number, { supported: number; accepted: number; needsReview: boolean }>();
@@ -43,8 +57,9 @@ export function WorkforceRoute() {
   const [selected, setSelected] = useState<string | null>(linkedEmployeeId);
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("active");
   const [readinessFilter, setReadinessFilter] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "org-chart">("list");
   const detail = useWorkforceEmployee(selected);
   const timeline = useEmployeeTimeline(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
@@ -103,7 +118,14 @@ export function WorkforceRoute() {
   }, [administrationPermissions]);
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (directory.data ?? []).filter((item) => (!query || [item.display_name, item.employee_number, item.job_title ?? "", ...item.capability_codes, ...item.language_codes].some((value) => value.toLowerCase().includes(query))) && (!branchFilter || item.home_branch_id === branchFilter) && (!statusFilter || item.employee_status === statusFilter) && (!readinessFilter || item.readiness_state === readinessFilter));
+    return (directory.data ?? []).filter((item) => {
+      const statusMatches = !statusFilter
+        || (statusFilter === "inactive" ? ["inactive", "leave"].includes(item.employee_status) : item.employee_status === statusFilter);
+      return (!query || [item.display_name, item.employee_number, item.job_title ?? "", ...item.capability_codes, ...item.language_codes].some((value) => value.toLowerCase().includes(query)))
+        && (!branchFilter || item.home_branch_id === branchFilter)
+        && statusMatches
+        && (!readinessFilter || item.readiness_state === readinessFilter);
+    });
   }, [branchFilter, directory.data, readinessFilter, search, statusFilter]);
   const morningReview = useMemo(
     () => ({
@@ -117,6 +139,18 @@ export function WorkforceRoute() {
   const branchName = (branchId: string | null) =>
     activeCompany?.branches?.find((branch) => branch.id === branchId)?.name ??
     (branchId ? "Authorized Branch" : "Company-wide / unassigned");
+  const openEmployee = (employeeId: string) => {
+    setSelected(employeeId);
+    const next = new URLSearchParams(searchParams);
+    next.set("employee", employeeId);
+    setSearchParams(next, { replace: true });
+  };
+  const closeEmployee = () => {
+    setSelected(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("employee");
+    setSearchParams(next, { replace: true });
+  };
 
   return (
     <div className="space-y-6">
@@ -137,6 +171,7 @@ export function WorkforceRoute() {
         {canReviewTime && <a className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" href="#timecard-operations">Time &amp; Attendance</a>}
         {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" to="/payroll">Payroll</Link>}
       </nav>
+      {selected ? <div className="space-y-6">
       <RealRosterActivationConsole />
       <Card className="p-4 sm:p-6">
         <h3 className="text-lg font-semibold">Source Employee certification</h3>
@@ -596,9 +631,20 @@ export function WorkforceRoute() {
           )}
         </Card>
       )}
-      <div id="employee-roster" className="grid scroll-mt-4 gap-6 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]">
+      </div> : null}
+      <div id="employee-roster" className={`scroll-mt-4 gap-6 ${selected ? "grid xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]" : "block"}`}>
         <Card className="min-w-0 overflow-hidden">
           <div className="space-y-3 border-b border-stroke p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">Workforce</h3>
+                <p className="mt-1 text-sm text-content-muted">Current employees and access readiness. Select a person for their full profile and history.</p>
+              </div>
+              <div className="flex rounded-lg border border-stroke bg-surface-subtle p-1" aria-label="Workforce view">
+                <button type="button" className={`rounded-md px-3 py-2 text-sm font-semibold ${viewMode === "list" ? "bg-action-primary text-white" : "text-content-muted hover:text-content"}`} onClick={() => setViewMode("list")}>List</button>
+                <button type="button" className={`rounded-md px-3 py-2 text-sm font-semibold ${viewMode === "org-chart" ? "bg-action-primary text-white" : "text-content-muted hover:text-content"}`} onClick={() => setViewMode("org-chart")}>Org chart</button>
+              </div>
+            </div>
             <label className="relative block">
               <span className="sr-only">Search workforce</span>
               <Search size={17} className="absolute left-3 top-3 text-content-muted" />
@@ -607,7 +653,7 @@ export function WorkforceRoute() {
             <div className="grid gap-2 sm:grid-cols-3">
               <label className="text-xs text-content-muted">
                 Branch
-                <select aria-label="Filter by Branch" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
+                <select aria-label="Branch" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
                   <option value="">All authorized</option>
                   {(activeCompany?.branches ?? []).map((branch) => (
                     <option key={branch.id} value={branch.id}>
@@ -619,10 +665,10 @@ export function WorkforceRoute() {
               <label className="text-xs text-content-muted">
                 Employee status
                 <select aria-label="Filter by Employee status" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                  <option value="">All</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
-                  <option value="archived">Archived</option>
+                  <option value="terminated">Terminated</option>
+                  <option value="">All</option>
                 </select>
               </label>
               <label className="text-xs text-content-muted">
@@ -652,30 +698,53 @@ export function WorkforceRoute() {
                 </div>
               );
             })()}
-          <div className="divide-y divide-stroke">
-            {filtered.map((employee) => (
-              <button key={employee.employee_id} type="button" onClick={() => setSelected(employee.employee_id)} className="flex min-h-16 w-full items-center justify-between gap-3 p-4 text-left hover:bg-surface-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">{employee.display_name}</span>
-                  <span className="block truncate text-xs text-content-muted">
-                    {employee.employee_number} · {employee.job_title ?? employee.employee_type}
+          {viewMode === "list" ? (
+            <div className="divide-y divide-stroke">
+              {filtered.map((employee) => (
+                <button key={employee.employee_id} type="button" onClick={() => openEmployee(employee.employee_id)} className="block min-h-16 w-full p-4 text-left hover:bg-surface-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
+                  <span className="flex flex-wrap items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{employee.display_name}</span>
+                      <span className="mt-1 block truncate text-sm text-content-muted">{employee.job_title ?? employee.employee_type} · {branchName(employee.home_branch_id)}</span>
+                    </span>
+                    <span className="flex flex-wrap gap-1">
+                      <Badge variant={employee.employee_status === "active" ? "success" : "neutral"}>{employee.employee_status === "active" ? "ACTIVE" : employee.employee_status.toUpperCase()}</Badge>
+                      <OwnerAttention state={employee.readiness_state} />
+                    </span>
                   </span>
-                  <span className="mt-1 block truncate text-xs text-content-muted">
-                    {branchName(employee.home_branch_id)} · {employee.employee_status === "active" ? "Active" : "Disabled"}
+                  <span className="mt-3 grid gap-2 text-xs text-content-muted sm:grid-cols-3">
+                    <span><strong className="font-semibold text-content">Access profile</strong><br />{employee.profile_status === "active" ? "Configured" : "Needs setup"}</span>
+                    <span><strong className="font-semibold text-content">Mobile readiness</strong><br />{employee.technician ? "Field profile configured" : "Review in detail"}</span>
+                    <span><strong className="font-semibold text-content">Payroll readiness</strong><br />Review in detail</span>
                   </span>
-                </span>
-                <Readiness state={employee.readiness_state} />
-              </button>
-            ))}
-          </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4 p-4">
+              {["Company administrators / owners", "Office / management", "Field managers", "Technicians", "Helpers", "Other explicit roles"].map((group) => {
+                const members = filtered.filter((employee) => workforceGroup(employee) === group);
+                if (!members.length) return null;
+                return <section key={group} aria-labelledby={`workforce-group-${group.replaceAll(" ", "-")}`}>
+                  <h4 id={`workforce-group-${group.replaceAll(" ", "-")}`} className="mb-2 text-sm font-semibold text-content-muted">{group}</h4>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {members.map((employee) => <button key={employee.employee_id} type="button" onClick={() => openEmployee(employee.employee_id)} className="rounded-xl border border-stroke bg-surface-subtle p-3 text-left hover:border-action-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
+                      <div className="flex items-start justify-between gap-2"><strong>{employee.display_name}</strong><Badge variant={employee.employee_status === "active" ? "success" : "neutral"}>{employee.employee_status.toUpperCase()}</Badge></div>
+                      <p className="mt-1 text-sm text-content-muted">{employee.job_title ?? employee.employee_type} · {branchName(employee.home_branch_id)}</p>
+                    </button>)}
+                  </div>
+                </section>;
+              })}
+            </div>
+          )}
           {directory.isSuccess && filtered.length === 0 && <p className="p-5 text-sm text-content-muted">No authorized Employee profile matches this search.</p>}
         </Card>
         {!selected ? (
           <Card className="flex min-h-72 items-center justify-center p-8 text-center">
             <div>
               <UsersRound className="mx-auto text-action-primary" />
-              <h3 className="mt-3 text-xl font-semibold">Select an Employee</h3>
-              <p className="mt-2 text-sm text-content-muted">Inspect explicit readiness evidence without exposing Payroll or compensation data.</p>
+              <h3 className="mt-3 text-xl font-semibold">Choose an employee</h3>
+              <p className="mt-2 text-sm text-content-muted">Open a profile for contact, access, dispatch, payroll, and historical detail.</p>
             </div>
           </Card>
         ) : detail.isLoading ? (
@@ -694,7 +763,7 @@ export function WorkforceRoute() {
                 <h3 className="mt-1 text-2xl font-bold">{detail.data.display_name}</h3>
                 <p className="mt-1 text-content-muted">{detail.data.job_title ?? detail.data.employee_type}</p>
               </div>
-              <Readiness state={detail.data.readiness_state} />
+              <div className="flex flex-wrap items-center gap-2"><Readiness state={detail.data.readiness_state} /><button type="button" className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold hover:bg-surface-subtle" onClick={closeEmployee}>Back to Workforce</button></div>
             </div>
             <nav aria-label="Employee detail" className="mt-4 flex flex-wrap gap-2 border-b border-stroke pb-3 text-sm font-semibold">
               <a className="text-action-primary underline" href="#employee-personal">Personal</a>

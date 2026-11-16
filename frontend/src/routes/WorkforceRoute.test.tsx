@@ -290,6 +290,8 @@ describe("WorkforceRoute", () => {
     vi.mocked(workforceHooks.useWorkforceEmployee).mockReturnValue({ data: undefined } as never);
     render(<MemoryRouter><WorkforceRoute /></MemoryRouter>);
 
+    await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
+
     await userEvent.type(screen.getByLabelText("Owner reason"), "Owner verified source packet");
     await userEvent.click(screen.getByRole("button", { name: "Confirm candidate" }));
 
@@ -459,7 +461,7 @@ describe("WorkforceRoute", () => {
       "water_heater",
     );
     expect(screen.getByText("Marisol Rivera")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Branch" })).toHaveValue("branch-1");
+    expect(screen.getByRole("combobox", { name: "Branch" })).toHaveValue("");
     expect(screen.queryByPlaceholderText("Authorized Branch UUID")).not.toBeInTheDocument();
   });
 

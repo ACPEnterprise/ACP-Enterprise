@@ -20,7 +20,7 @@ body::before {
   z-index: -1;
   pointer-events: none;
   content: "";
-  opacity: var(--semantic-flag-overlay-opacity);
+  opacity: var(--flag-overlay-opacity);
   background-image:
     radial-gradient(circle at 12% 18%, rgb(255 255 255 / 0.9) 0 1px, transparent 1.7px),
     radial-gradient(circle at 72% 28%, rgb(255 255 255 / 0.7) 0 1px, transparent 1.8px),
@@ -39,8 +39,8 @@ body::before {
 
 .theme-shell {
   background:
-    radial-gradient(circle at 84% 8%, rgb(36 99 198 / 0.16), transparent 32rem),
-    linear-gradient(135deg, var(--semantic-background), var(--semantic-surface));
+    radial-gradient(circle at 84% 8%, rgb(36 99 198 / 0.2), transparent 32rem),
+    var(--gradient-primary);
 }
 
 .theme-workspace {
@@ -48,8 +48,7 @@ body::before {
 }
 
 .theme-navigation {
-  background:
-    linear-gradient(160deg, color-mix(in oklab, var(--semantic-navigation-background) 86%, var(--acp-liberty-blue-500)), var(--semantic-navigation-background));
+  background: var(--gradient-sidebar);
   box-shadow: 10px 0 32px rgb(3 19 56 / 0.12);
 }
 
@@ -57,6 +56,11 @@ body::before {
   background:
     linear-gradient(100deg, var(--semantic-header-background), color-mix(in oklab, var(--semantic-header-background) 82%, var(--acp-liberty-blue-700)));
   box-shadow: 0 4px 18px rgb(3 19 56 / 0.1);
+}
+
+.theme-workspace .twelve-hats-panel-outline,
+.theme-workspace [class*="bg-surface"] {
+  background-image: linear-gradient(145deg, rgb(255 255 255 / 0.045), transparent 52%);
 }
 
 html {
@@ -131,7 +135,7 @@ body {
 @media (max-width: 48rem) {
   /* Keep the decorative layer especially quiet behind dense mobile tables. */
   body::before {
-    opacity: calc(var(--semantic-flag-overlay-opacity) * 0.55);
+    opacity: calc(var(--flag-overlay-opacity) * 0.55);
   }
 
   .twelve-hats-panel-outline {

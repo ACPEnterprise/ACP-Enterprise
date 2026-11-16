@@ -34,6 +34,19 @@
   --semantic-panel-outline: var(--twelve-hats-panel-red);
   --semantic-flag-overlay-opacity: 0.1;
   --semantic-panel-shadow: 0 12px 32px rgb(3 19 56 / 0.24);
+  /* Shared product tokens used by shell and route surfaces. */
+  --page-bg: var(--semantic-background);
+  --sidebar-bg: var(--semantic-navigation-background);
+  --panel-bg: var(--semantic-surface);
+  --panel-bg-elevated: var(--semantic-surface-raised);
+  --border: var(--semantic-border);
+  --text-primary: var(--semantic-text-primary);
+  --text-secondary: var(--semantic-text-secondary);
+  --accent-blue: var(--semantic-action-primary);
+  --accent-red: var(--semantic-accent);
+  --flag-overlay-opacity: var(--semantic-flag-overlay-opacity);
+  --gradient-primary: linear-gradient(135deg, var(--acp-navy-950), var(--acp-cobalt-850));
+  --gradient-sidebar: linear-gradient(160deg, var(--acp-navigation-navy), var(--acp-liberty-blue-800));
 }
 
 [data-theme="light"] {
@@ -71,4 +84,17 @@
   --semantic-panel-outline: var(--twelve-hats-panel-red);
   --semantic-flag-overlay-opacity: 0.045;
   --semantic-panel-shadow: 0 10px 28px rgb(25 65 120 / 0.1);
+  /* Shared product tokens used by shell and route surfaces. */
+  --page-bg: var(--semantic-background);
+  --sidebar-bg: var(--semantic-navigation-background);
+  --panel-bg: var(--semantic-surface);
+  --panel-bg-elevated: var(--semantic-surface-raised);
+  --border: var(--semantic-border);
+  --text-primary: var(--semantic-text-primary);
+  --text-secondary: var(--semantic-text-secondary);
+  --accent-blue: var(--semantic-action-primary);
+  --accent-red: var(--semantic-accent);
+  --flag-overlay-opacity: var(--semantic-flag-overlay-opacity);
+  --gradient-primary: linear-gradient(135deg, var(--acp-light-blue-50), var(--acp-white));
+  --gradient-sidebar: linear-gradient(160deg, var(--acp-light-blue-25), var(--acp-light-blue-100));
 }
