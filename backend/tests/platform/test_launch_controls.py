@@ -133,6 +133,7 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     assert PayrollPermission.REMITTANCE_EXECUTE not in owner
     assert AccountingPermission.JOURNAL_POST not in owner
     assert PaymentPermission.COLLECT not in owner
+    assert InvoicePermission.MANUAL_PAYMENT_RECORD in owner
     assert PayrollPermission.CUTOVER_OWNER_CERTIFY not in platform_admin
 
 
@@ -173,6 +174,7 @@ def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> 
                 InvoicePermission.ISSUE,
                 InvoicePermission.ADJUST,
                 InvoicePermission.APPLY_PAYMENT,
+                InvoicePermission.MANUAL_PAYMENT_RECORD,
                 PaymentPermission.COLLECT,
                 PaymentPermission.APPLY,
                 PaymentPermission.REFUND,

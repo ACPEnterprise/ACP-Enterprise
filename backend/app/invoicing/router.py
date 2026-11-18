@@ -58,9 +58,7 @@ Apply = Annotated[
 ManualPayment = Annotated[
     AuthorizationContext,
     Depends(
-        require_all_permissions(
-            PaymentPermission.COLLECT, InvoicePermission.APPLY_PAYMENT
-        )
+        require_permission(InvoicePermission.MANUAL_PAYMENT_RECORD)
     ),
 ]
 PaymentHistoryRead = Annotated[
