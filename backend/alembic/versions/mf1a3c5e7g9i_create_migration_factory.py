@@ -195,6 +195,26 @@ def upgrade() -> None:
             "company_id", "source_system", name="uq_migration_delta_cursor"
         ),
     )
+    op.execute(
+        """
+        CREATE FUNCTION reject_migration_factory_evidence_mutation()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          RAISE EXCEPTION 'migration factory evidence is immutable';
+        END;
+        $$
+        """
+    )
+    for table in (
+        "migration_factory_raw_evidence",
+        "migration_factory_page_checkpoints",
+        "migration_factory_authority_rules",
+        "migration_factory_certificates",
+    ):
+        op.execute(
+            f"CREATE TRIGGER trg_{table}_immutable BEFORE UPDATE OR DELETE ON {table} "
+            "FOR EACH ROW EXECUTE FUNCTION reject_migration_factory_evidence_mutation()"
+        )
 
 
 def downgrade() -> None:
@@ -208,3 +228,4 @@ def downgrade() -> None:
         "migration_factory_runs",
     ):
         op.drop_table(table)
+    op.execute("DROP FUNCTION reject_migration_factory_evidence_mutation()")
