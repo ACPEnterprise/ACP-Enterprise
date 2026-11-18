@@ -32,11 +32,11 @@ class FieldActivityService:
         expected_appointment_version: int,
         idempotency_key: str,
     ) -> FieldJobActivityEvent:
-        employee = await field_service._employee(session, context)
         digest = self._digest(
             action, activity, job_id, expected_job_version, expected_appointment_version
         )
         async with session.begin():
+            employee = await field_service._employee(session, context)
             replay = await session.scalar(
                 select(FieldJobActivityEvent).where(
                     FieldJobActivityEvent.company_id == context.company.id,
@@ -163,8 +163,8 @@ class FieldActivityService:
         note: str | None,
         idempotency_key: str,
     ) -> FieldJobContinuation:
-        employee = await field_service._employee(session, context)
         async with session.begin():
+            employee = await field_service._employee(session, context)
             replay = await session.scalar(
                 select(FieldJobContinuation).where(
                     FieldJobContinuation.company_id == context.company.id,
