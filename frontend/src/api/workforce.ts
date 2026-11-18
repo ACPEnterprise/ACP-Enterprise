@@ -28,6 +28,28 @@ export interface WorkforceEmployeeDetail extends WorkforceEmployeeSummary {
   availability: Array<{ branch_id: string; start_at: string; end_at: string; status: string; source: string }>;
 }
 
+export interface HistoricalWorkforceIdentity {
+  id: string;
+  native_employee_id: string | null;
+  source_system: string;
+  source_identity: string;
+  display_name: string;
+  source_status: string | null;
+  lifecycle_state: string;
+  provenance_reference: string;
+  evidence_digest: string | null;
+  unresolved_reason: string | null;
+  operational_access_enabled: boolean;
+  evidence_metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HistoricalWorkforceDirectory {
+  items: HistoricalWorkforceIdentity[];
+  total: number;
+}
+
 export interface EmployeeTimelineItem {
   event_type: string;
   occurred_at: string;
@@ -325,6 +347,10 @@ export async function revokeEmployeeFunctionalAccess(employeeId: string, assignm
 export async function listWorkforceEmployees(): Promise<WorkforceEmployeeSummary[]> {
   const response = await apiClient.get<{ items: WorkforceEmployeeSummary[] }>("/api/v1/workforce/employees");
   return response.data.items;
+}
+
+export async function listHistoricalWorkforceIdentities(): Promise<HistoricalWorkforceDirectory> {
+  return (await apiClient.get<HistoricalWorkforceDirectory>("/api/v1/workforce/historical-identities")).data;
 }
 
 export async function getWorkforceEmployee(employeeId: string): Promise<WorkforceEmployeeDetail> {

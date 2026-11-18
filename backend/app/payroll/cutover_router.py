@@ -487,17 +487,19 @@ async def historical_workforce(
     identities = tuple(
         (
             await session.scalars(
-                select(HistoricalWorkforceIdentity).where(
-                    HistoricalWorkforceIdentity.company_id == context.company.id,
-                    HistoricalWorkforceIdentity.native_employee_id.in_(employee_ids),
-                )
+                select(HistoricalWorkforceIdentity)
+                .where(HistoricalWorkforceIdentity.company_id == context.company.id)
+                .order_by(HistoricalWorkforceIdentity.display_name, HistoricalWorkforceIdentity.id)
             )
         ).all()
-    ) if employee_ids else ()
+    )
     identities_by_employee: dict[UUID, list[HistoricalWorkforceIdentity]] = {}
+    source_only_identities: list[HistoricalWorkforceIdentity] = []
     for identity in identities:
         if identity.native_employee_id is not None:
             identities_by_employee.setdefault(identity.native_employee_id, []).append(identity)
+        else:
+            source_only_identities.append(identity)
 
     compensation_rows = tuple(
         (
@@ -575,9 +577,12 @@ async def historical_workforce(
         ).all()
     ) if bridge_ids else ()
     facts_by_employee: dict[UUID, list[PayrollCutoverBridgeEmployeeFactRevision]] = {}
+    facts_by_source: dict[str, list[PayrollCutoverBridgeEmployeeFactRevision]] = {}
     for fact in bridge_facts:
         if fact.employee_id is not None:
             facts_by_employee.setdefault(fact.employee_id, []).append(fact)
+        if fact.source_employee_reference is not None:
+            facts_by_source.setdefault(fact.source_employee_reference, []).append(fact)
 
     def employment_status(employee: Employee) -> tuple[str, bool]:
         if employee.hire_date and employee.hire_date > period_end:
@@ -589,6 +594,22 @@ async def historical_workforce(
         if employee.hire_date and (
             employee.termination_date is None or employee.termination_date >= period_start
         ):
+            return "FORMER_EMPLOYEE_IN_PERIOD", True
+        return "STATUS_AS_OF_UNAVAILABLE", False
+
+    def source_employment_status(identity: HistoricalWorkforceIdentity) -> tuple[str, bool]:
+        effective_at = identity.evidence_metadata.get("status_effective_at")
+        effective_date: date | None = None
+        if isinstance(effective_at, str):
+            try:
+                effective_date = datetime.fromisoformat(effective_at).date()
+            except ValueError:
+                effective_date = None
+        if effective_date is not None and identity.source_status == "TERMINATED":
+            if effective_date > period_end:
+                return "FORMER_EMPLOYEE_IN_PERIOD", True
+            if effective_date < period_start:
+                return "NOT_EMPLOYED_AS_OF_PERIOD", False
             return "FORMER_EMPLOYEE_IN_PERIOD", True
         return "STATUS_AS_OF_UNAVAILABLE", False
 
@@ -661,6 +682,48 @@ async def historical_workforce(
                         ],
                         *[f"bridge-evidence:{value.evidence_digest}" for value in employee_facts],
                         *[f"time-evidence:{value.evidence_digest}" for value in employee_time],
+                    }
+                ),
+            }
+        )
+    for identity in source_only_identities:
+        status_as_of, eligible_as_of = source_employment_status(identity)
+        identity_facts = facts_by_source.get(identity.source_identity, [])
+        result.append(
+            {
+                "employee_id": None,
+                "employee_number": None,
+                "display_name": identity.display_name,
+                "historical_position": None,
+                "current_status": identity.source_status or identity.lifecycle_state,
+                "employment_status_as_of": status_as_of,
+                "employment_eligible_as_of": eligible_as_of,
+                "hire_date": None,
+                "termination_date": None,
+                "historical_identities": [
+                    {
+                        "source_system": identity.source_system,
+                        "source_identity": identity.source_identity,
+                        "source_status": identity.source_status,
+                        "lifecycle_state": identity.lifecycle_state,
+                        "provenance_reference": identity.provenance_reference,
+                        "evidence_digest": identity.evidence_digest,
+                        "evidence_metadata": identity.evidence_metadata,
+                        "unresolved_reason": identity.unresolved_reason,
+                    }
+                ],
+                "compensation": [],
+                "time_records": [],
+                "variable_pay_and_deduction_evidence": sorted(
+                    {value.fact_key for value in identity_facts}
+                ),
+                "source_provenance": sorted(
+                    {
+                        identity.provenance_reference,
+                        *[
+                            f"bridge-evidence:{value.evidence_digest}"
+                            for value in identity_facts
+                        ],
                     }
                 ),
             }

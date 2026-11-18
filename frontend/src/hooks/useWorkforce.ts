@@ -13,6 +13,7 @@ import {
   getSourceCertificationLedger,
   getWorkforceEmployee,
   listWorkforceEmployees,
+  listHistoricalWorkforceIdentities,
   prepareEmployeeFieldReadiness,
   setEmployeeBranchGrant,
   setEmployeeMembershipStatus,
@@ -25,6 +26,10 @@ import {
 
 export function useWorkforceDirectory() {
   return useQuery({ queryKey: ["workforce-directory"], queryFn: listWorkforceEmployees });
+}
+
+export function useHistoricalWorkforceIdentities() {
+  return useQuery({ queryKey: ["historical-workforce-identities"], queryFn: listHistoricalWorkforceIdentities });
 }
 
 export function useRealRosterReadiness(canBind: boolean) {

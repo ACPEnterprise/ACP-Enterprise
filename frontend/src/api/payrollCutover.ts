@@ -21,8 +21,8 @@ export interface PayrollCompletionReadiness {
 }
 
 export interface HistoricalWorkforceEmployee {
-  employee_id: string;
-  employee_number: string;
+  employee_id: string | null;
+  employee_number: string | null;
   display_name: string;
   historical_position: string | null;
   current_status: string;
@@ -30,6 +30,7 @@ export interface HistoricalWorkforceEmployee {
   employment_eligible_as_of: boolean;
   hire_date: string | null;
   termination_date: string | null;
+  historical_identities: Array<{ source_system: string; source_identity: string; source_status: string | null; lifecycle_state: string; provenance_reference: string; evidence_digest: string | null; evidence_metadata?: Record<string, unknown>; unresolved_reason?: string | null }>;
   compensation: Array<{ authority_version: number; lifecycle: string; effective_start: string; effective_end: string | null; compensation_type: string; hourly_rate: string | null; salary_amount: string | null; salary_frequency: string | null; additional_earning_types: string[]; recurring_components: Array<Record<string, unknown>>; evidence_digest: string }>;
   time_records: Array<{ work_date: string; state: string; provenance: string; approved_duration_minutes: number | null; evidence_digest: string }>;
   variable_pay_and_deduction_evidence: string[];

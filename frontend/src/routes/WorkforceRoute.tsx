@@ -8,7 +8,7 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
-import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeePermissionUpdate, useEmployeeTimeline, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeePermissionUpdate, useEmployeeTimeline, useHistoricalWorkforceIdentities, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { useRoles } from "../features/administration/hooks";
 import { listPermissions } from "../features/administration/api";
@@ -86,6 +86,7 @@ export function WorkforceRoute() {
   const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
   const roles = useRoles(canAdministerEmployees);
   const directory = useWorkforceDirectory();
+  const historicalDirectory = useHistoricalWorkforceIdentities?.() ?? { data: undefined };
   const canCertifySources = permissionCodes.includes("COMPANY_WORKFORCE_CERTIFICATION_MANAGE");
   const sourceCertifications = useSourceCertification(canCertifySources);
   const [sourceEmployeeSelections, setSourceEmployeeSelections] = useState<Record<string, string>>({});
@@ -103,12 +104,14 @@ export function WorkforceRoute() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [permissionPresetPending, setPermissionPresetPending] = useState(false);
   const [pendingPermissionNavigation, setPendingPermissionNavigation] = useState<(() => void) | null>(null);
-  const detail = useWorkforceEmployee(selected);
-  const timeline = useEmployeeTimeline(selected);
-  const administration = useEmployeeAdministration(selected, canAdministerEmployees);
+  const nativeSelected = selected?.startsWith("historical:") ? null : selected;
+  const selectedHistorical = historicalDirectory.data?.items.find((item) => `historical:${item.id}` === selected);
+  const detail = useWorkforceEmployee(nativeSelected);
+  const timeline = useEmployeeTimeline(nativeSelected);
+  const administration = useEmployeeAdministration(nativeSelected, canAdministerEmployees);
   const permissionUpdate = useEmployeePermissionUpdate(selected);
   const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
-  const functionalAccess = useEmployeeFunctionalAccess(selected, canAdministerIdentity);
+  const functionalAccess = useEmployeeFunctionalAccess(nativeSelected, canAdministerIdentity);
   const [functionalArea, setFunctionalArea] = useState("FIELD_OPERATIONS");
   const [functionalLevel, setFunctionalLevel] = useState("TECHNICIAN");
   const [functionalEffective, setFunctionalEffective] = useState("");
@@ -121,8 +124,8 @@ export function WorkforceRoute() {
   const [confirmPasswordReset, setConfirmPasswordReset] = useState(false);
   const [confirmAccessLock, setConfirmAccessLock] = useState(false);
   const [accessLockReason, setAccessLockReason] = useState("");
-  const accessLock = useEmployeeAccessLock(selected);
-  const accessMutation = useEmployeeAccessMutation(selected);
+  const accessLock = useEmployeeAccessLock(nativeSelected);
+  const accessMutation = useEmployeeAccessMutation(nativeSelected);
   const canManageMembership = permissionCodes.includes("COMPANY_MEMBERSHIP_MANAGE");
   const canManageBranches = permissionCodes.includes("COMPANY_BRANCH_ACCESS_MANAGE");
   const [selectedBranchGrant, setSelectedBranchGrant] = useState("");
@@ -173,6 +176,14 @@ export function WorkforceRoute() {
         && (!readinessFilter || item.readiness_state === readinessFilter);
     });
   }, [branchFilter, directory.data, readinessFilter, search, statusFilter]);
+  const filteredHistorical = useMemo(() => {
+    if (statusFilter === "active") return [];
+    const query = search.trim().toLowerCase();
+    return (historicalDirectory.data?.items ?? []).filter((item) =>
+      (!query || [item.display_name, item.source_identity, item.source_system, item.source_status ?? "", item.lifecycle_state].some((value) => value.toLowerCase().includes(query)))
+      && (!readinessFilter || readinessFilter === "INSUFFICIENT_EVIDENCE"),
+    );
+  }, [historicalDirectory.data, readinessFilter, search, statusFilter]);
   const morningReview = useMemo(
     () => ({
       total: directory.data?.length ?? 0,
@@ -864,6 +875,12 @@ export function WorkforceRoute() {
                   </span>
                 </button>
               ))}
+              {filteredHistorical.map((identity) => (
+                <button key={`historical:${identity.id}`} type="button" onClick={() => openEmployee(`historical:${identity.id}`)} className="block min-h-16 w-full border-t border-stroke bg-surface-subtle/40 p-4 text-left hover:bg-surface-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
+                  <span className="flex flex-wrap items-start justify-between gap-3"><span className="min-w-0"><span className="block truncate font-semibold">{identity.display_name}</span><span className="mt-1 block truncate text-sm text-content-muted">{identity.source_system} · {identity.source_status ?? identity.lifecycle_state} · source-only history</span></span><Badge variant="neutral">HISTORICAL</Badge></span>
+                  <span className="mt-3 block text-xs text-content-muted">{identity.provenance_reference}</span>
+                </button>
+              ))}
             </div>
           ) : (
             <div className="space-y-4 p-4">
@@ -880,9 +897,10 @@ export function WorkforceRoute() {
                   </div>
                 </section>;
               })}
+              {filteredHistorical.length > 0 && <section aria-labelledby="historical-workforce-group"><h4 id="historical-workforce-group" className="mb-2 text-sm font-semibold text-content-muted">Historical / former source identities</h4><div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{filteredHistorical.map((identity) => <button key={`historical:${identity.id}`} type="button" onClick={() => openEmployee(`historical:${identity.id}`)} className="rounded-xl border border-stroke bg-surface-subtle p-3 text-left hover:border-action-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"><div className="flex items-start justify-between gap-2"><strong>{identity.display_name}</strong><Badge variant="neutral">HISTORICAL</Badge></div><p className="mt-1 text-sm text-content-muted">{identity.source_system} · {identity.source_status ?? identity.lifecycle_state}</p></button>)}</div></section>}
             </div>
           )}
-          {directory.isSuccess && filtered.length === 0 && <p className="p-5 text-sm text-content-muted">No authorized Employee profile matches this search.</p>}
+          {directory.isSuccess && filtered.length === 0 && filteredHistorical.length === 0 && <p className="p-5 text-sm text-content-muted">No authorized Employee or retained historical identity matches this search.</p>}
         </Card>
         {!selected ? (
           <Card className="flex min-h-72 items-center justify-center p-8 text-center">
@@ -892,6 +910,8 @@ export function WorkforceRoute() {
               <p className="mt-2 text-sm text-content-muted">Open a profile for contact, access, dispatch, payroll, and historical detail.</p>
             </div>
           </Card>
+        ) : selectedHistorical ? (
+          <Card className="min-w-0 p-4 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm text-action-primary">{selectedHistorical.source_system} · {selectedHistorical.source_identity}</p><h3 className="mt-1 text-2xl font-bold">{selectedHistorical.display_name}</h3><p className="mt-1 text-content-muted">Retained historical source identity</p></div><div className="flex items-center gap-2"><Badge variant="neutral">{selectedHistorical.lifecycle_state}</Badge><button type="button" className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold hover:bg-surface-subtle" onClick={closeEmployee}>Back to Workforce</button></div></div><dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-content-muted">Source status</dt><dd className="font-medium">{selectedHistorical.source_status ?? "Unavailable"}</dd></div><div><dt className="text-content-muted">Operational access</dt><dd className="font-medium">{selectedHistorical.operational_access_enabled ? "Enabled" : "Not enabled"}</dd></div><div><dt className="text-content-muted">Provenance</dt><dd className="break-words font-medium">{selectedHistorical.provenance_reference}</dd></div><div><dt className="text-content-muted">Evidence</dt><dd className="break-words font-medium">{selectedHistorical.evidence_digest ?? "Evidence digest unavailable"}</dd></div></dl>{selectedHistorical.unresolved_reason && <Alert className="mt-5" variant="warning" title="Historical identity remains source-only">{selectedHistorical.unresolved_reason} No Employee was reactivated or created from this record.</Alert>}</Card>
         ) : detail.isLoading ? (
           <Card className="p-8">
             <Spinner label="Loading Employee profile" />
