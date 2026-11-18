@@ -1092,6 +1092,88 @@ class PayrollCalculationInputSnapshotRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class PayrollShadowSnapshotRecord(Base):
+    """Encrypted immutable blind-replay inputs and results; never Payroll authority."""
+
+    __tablename__ = "payroll_shadow_snapshots"
+    __table_args__ = (
+        UniqueConstraint("company_id", "id", name="uq_payroll_shadow_company_id"),
+        UniqueConstraint("company_id", "calculation_id", name="uq_payroll_shadow_calculation"),
+        UniqueConstraint("company_id", "replay_identity", name="uq_payroll_shadow_replay"),
+        UniqueConstraint("company_id", "input_digest", "snapshot_version", name="uq_payroll_shadow_input_version"),
+        CheckConstraint("snapshot_version >= 1", name="ck_payroll_shadow_version"),
+        CheckConstraint("frozen_before_qbo_reveal", name="ck_payroll_shadow_frozen_before_qbo"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    calculation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    pay_date: Mapped[date] = mapped_column(Date, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    engine_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    engine_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    tax_table_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    key_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    frozen_before_qbo_reveal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    replay_identity: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    frozen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollQBOAnswerKeyRecord(Base):
+    """Encrypted read-only historical answer key admitted only after freeze."""
+
+    __tablename__ = "payroll_qbo_answer_keys"
+    __table_args__ = (
+        UniqueConstraint("company_id", "id", name="uq_payroll_qbo_answer_company_id"),
+        UniqueConstraint("company_id", "source_file_digest", name="uq_payroll_qbo_answer_file"),
+        ForeignKeyConstraint(["company_id", "shadow_snapshot_id"], ["payroll_shadow_snapshots.company_id", "payroll_shadow_snapshots.id"], ondelete="RESTRICT"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    shadow_snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    answer_key_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_file_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    key_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    answer_key_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    imported_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollShadowComparisonRecord(Base):
+    """Encrypted immutable comparison; unique per snapshot and answer key."""
+
+    __tablename__ = "payroll_shadow_comparisons"
+    __table_args__ = (
+        UniqueConstraint("company_id", "shadow_snapshot_id", "answer_key_record_id", name="uq_payroll_shadow_comparison_pair"),
+        ForeignKeyConstraint(["company_id", "shadow_snapshot_id"], ["payroll_shadow_snapshots.company_id", "payroll_shadow_snapshots.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "answer_key_record_id"], ["payroll_qbo_answer_keys.company_id", "payroll_qbo_answer_keys.id"], ondelete="RESTRICT"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    shadow_snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    answer_key_record_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    key_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    comparison_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    unexplained_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class PayrollPaperCheckEvidenceRecord(Base):
     """Append-only manual paper-check evidence; never claims bank settlement."""
     __tablename__ = "payroll_paper_check_evidence"
