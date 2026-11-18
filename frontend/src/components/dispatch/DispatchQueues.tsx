@@ -46,7 +46,7 @@ export function DispatchAppointmentsQueue({
       <p className="mt-1 text-sm text-content-muted">
         Arrival-ordered scheduled work in the selected scope.
       </p>
-      <Card className="mt-3 overflow-hidden">
+      <Card className="primary-work-panel mt-3 overflow-hidden">
         {loading ? (
           <div className="flex justify-center p-ui-8">
             <Spinner label="Loading Appointments" />

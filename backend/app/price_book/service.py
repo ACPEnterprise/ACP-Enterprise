@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import and_, case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -246,12 +246,21 @@ class PriceBookService:
                 for category in categories
                 if category.id in visible_category_ids
             )
+        item_order = [PriceBookServiceItem.name, PriceBookServiceItem.id]
+        if search:
+            exact_term = search.strip()
+            item_order.insert(
+                0,
+                case(
+                    (PriceBookServiceItem.code.ilike(exact_term), 0),
+                    (PriceBookServiceItem.code.ilike(f"{exact_term}%"), 1),
+                    else_=2,
+                ),
+            )
         items = tuple(
             (
                 await session.scalars(
-                    item_query.order_by(
-                        PriceBookServiceItem.name, PriceBookServiceItem.id
-                    )
+                    item_query.order_by(*item_order)
                     .limit(limit)
                     .offset(offset)
                 )

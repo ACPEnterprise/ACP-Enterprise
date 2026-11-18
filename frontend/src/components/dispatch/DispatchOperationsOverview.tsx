@@ -72,7 +72,7 @@ export function DispatchOperationsOverview({
           </Card>
         ))}
       </div>
-      <Card className="p-4">
+      <Card className="primary-work-panel p-4">
         <h3 className="font-semibold">Find operating work</h3>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <label className="text-sm font-medium">
@@ -118,7 +118,7 @@ export function DispatchOperationsOverview({
           </label>
         </div>
       </Card>
-      <Card className="p-4">
+      <Card className="primary-work-panel p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="font-semibold">Technician load and route context</h3>

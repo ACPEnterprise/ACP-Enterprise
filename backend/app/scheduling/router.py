@@ -386,6 +386,10 @@ async def list_appointments(
         AwareDatetime, Query(description="Inclusive overlap boundary.")
     ],
     end_at: Annotated[AwareDatetime, Query(description="Exclusive overlap boundary.")],
+    include_unscheduled: bool = Query(
+        default=False,
+        description="Include appointments with an incomplete or missing arrival window.",
+    ),
     branch_id: UUID | None = None,
     status_filter: Annotated[
         list[AppointmentStatus] | None, Query(alias="status")
@@ -400,6 +404,7 @@ async def list_appointments(
         authorized_branch_ids=context.authorized_branch_ids,
         start_at=start_at,
         end_at=end_at,
+        include_unscheduled=include_unscheduled,
         branch_id=branch_id,
         statuses=frozenset(status_filter or ()),
         customer_id=customer_id,

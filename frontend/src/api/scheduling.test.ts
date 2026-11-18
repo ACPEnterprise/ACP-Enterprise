@@ -69,4 +69,18 @@ describe("Scheduling API", () => {
       },
     );
   });
+  it("can request the office queue population including incomplete windows", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { items: [] } });
+    await listAppointments({
+      startAt: "2026-09-12T04:00:00Z",
+      endAt: "2026-12-14T04:00:00Z",
+      page: 1,
+      pageSize: 200,
+      includeUnscheduled: true,
+    });
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/v1/scheduling/appointments",
+      { params: expect.objectContaining({ include_unscheduled: true }) },
+    );
+  });
 });

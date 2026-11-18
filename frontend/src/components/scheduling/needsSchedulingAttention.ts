@@ -37,7 +37,9 @@ export function needsSchedulingAttentionCount(props: {
   const appointmentAttention = props.appointments.filter((appointment) => {
     const dispatch = props.dispatchByAppointment.get(appointment.id);
     const scheduled =
-      appointment.status !== "draft" && appointment.arrival_window_start_at;
+      appointment.status !== "draft" &&
+      appointment.arrival_window_start_at &&
+      appointment.arrival_window_end_at;
     if (scheduled && hasActiveAssignment(dispatch)) return false;
     const job = dispatch?.job_id
       ? props.jobsById.get(dispatch.job_id)

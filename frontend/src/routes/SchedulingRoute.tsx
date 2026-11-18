@@ -369,6 +369,17 @@ export function SchedulingRoute({
     },
     Boolean(activeCompany) && canRead,
   );
+  const queueAppointments = useAppointments(
+    {
+      ...CURRENT_CALENDAR_QUERY_RANGE,
+      branchId: branchId || undefined,
+      status: status ? [status] : undefined,
+      page: 1,
+      pageSize: 200,
+      includeUnscheduled: true,
+    },
+    Boolean(activeCompany) && canRead,
+  );
   const appointments = useAppointments(
     {
       startAt: range.startAt,
@@ -386,12 +397,29 @@ export function SchedulingRoute({
     branchId || undefined,
     Boolean(activeCompany) && canDispatch,
   );
+  const queueDispatch = useDispatchBoard(
+    CURRENT_CALENDAR_QUERY_RANGE.startAt,
+    CURRENT_CALENDAR_QUERY_RANGE.endAt,
+    branchId || undefined,
+    Boolean(activeCompany) && canDispatch,
+  );
   const jobs = useJobs(
     {
       branchId: branchId || undefined,
       status: operationalJobStatuses,
       page: 1,
       pageSize: 100,
+      sortField: "priority",
+      sortDirection: "desc",
+    },
+    Boolean(activeCompany) && canReadJobs,
+  );
+  const queueJobs = useJobs(
+    {
+      branchId: branchId || undefined,
+      status: operationalJobStatuses,
+      page: 1,
+      pageSize: 200,
       sortField: "priority",
       sortDirection: "desc",
     },
@@ -407,6 +435,17 @@ export function SchedulingRoute({
   const jobsById = useMemo(
     () => new Map((jobs.data?.items ?? []).map((job) => [job.id, job])),
     [jobs.data?.items],
+  );
+  const queueDispatchByAppointment = useMemo(
+    () =>
+      new Map(
+        (queueDispatch.data?.items ?? []).map((item) => [item.appointment_id, item]),
+      ),
+    [queueDispatch.data?.items],
+  );
+  const queueJobsById = useMemo(
+    () => new Map((queueJobs.data?.items ?? []).map((job) => [job.id, job])),
+    [queueJobs.data?.items],
   );
   const technicians = useMemo(
     () =>
@@ -511,10 +550,10 @@ export function SchedulingRoute({
   ]);
   const returnTo = `${schedulingPath()}?${routeState.toString()}`;
   const needsSchedulingCount = needsSchedulingAttentionCount({
-    jobs: jobs.data?.items ?? [],
-    appointments: visible,
-    dispatchByAppointment,
-    jobsById,
+    jobs: queueJobs.data?.items ?? [],
+    appointments: queueAppointments.data?.items ?? [],
+    dispatchByAppointment: queueDispatchByAppointment,
+    jobsById: queueJobsById,
     search,
     serviceCategory,
     jobStatus: queueJobStatus,
@@ -660,7 +699,7 @@ export function SchedulingRoute({
         />
       )}
       {dropError && <Alert variant="danger" title="Calendar move not saved">{dropError} The board has refreshed authoritative state.</Alert>}
-      <Card className="space-y-4 p-4">
+      <Card className="primary-work-panel space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto">
             <Button
@@ -947,10 +986,10 @@ export function SchedulingRoute({
         !branchRoster.isError &&
         (view === "unassigned" ? (
           <NeedsSchedulingQueue
-            jobs={jobs.data?.items ?? []}
-            appointments={visible}
-            dispatchByAppointment={dispatchByAppointment}
-            jobsById={jobsById}
+            jobs={queueJobs.data?.items ?? []}
+            appointments={queueAppointments.data?.items ?? []}
+            dispatchByAppointment={queueDispatchByAppointment}
+            jobsById={queueJobsById}
             branches={activeCompany.branches}
             search={search}
             serviceCategory={serviceCategory}

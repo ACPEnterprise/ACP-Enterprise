@@ -532,7 +532,7 @@ export function BeaconPanel({
   );
   return (
     <CommandCenterPanel
-      className="beacon-panel"
+      className="beacon-panel primary-work-panel"
       title="Beacon"
       description="Deterministic operational signals measured from authoritative Company data."
       action={

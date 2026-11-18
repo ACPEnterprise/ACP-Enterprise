@@ -31,6 +31,7 @@ export interface AppointmentListParams {
   page?: number;
   pageSize?: number;
   customerId?: string;
+  includeUnscheduled?: boolean;
 }
 
 export interface CalendarQueryResult {

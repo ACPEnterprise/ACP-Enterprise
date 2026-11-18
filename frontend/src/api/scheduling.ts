@@ -75,6 +75,7 @@ export async function listAppointments(
         page: query.page,
         page_size: query.pageSize,
         customer_id: query.customerId,
+        include_unscheduled: query.includeUnscheduled,
       },
     })
   ).data;

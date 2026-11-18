@@ -139,7 +139,7 @@ export function PriceBookRoute() {
       limit: candidatePageSize,
       offset: candidateOffset,
     },
-    canRead && Boolean(activeCompany),
+    canManage && Boolean(activeCompany),
   );
   const selectedService = catalog.data?.service_items.find(
     (service) => service.id === selectedServiceId,
@@ -587,6 +587,13 @@ export function PriceBookRoute() {
           </Select>
         </CardContent>
       </Card>
+      <Alert title="All County company tax policy">
+        Owner-supplied company policy: service/labor and parts/materials are not
+        separately taxed to the customer. Applicable purchase-side sales tax is
+        included in material acquisition cost. This is configurable company
+        policy, not a universal legal determination; exceptions and audit
+        history remain authoritative.
+      </Alert>
       {catalog.isPending ? (
         <Spinner label="Loading Price Book" />
       ) : catalog.isError ? (
@@ -664,7 +671,7 @@ export function PriceBookRoute() {
               </CardHeader>
             </Card>
           </section>
-          <Card>
+          {canManage && <Card>
             <CardHeader>
               <CardTitle>All County candidate review</CardTitle>
               <CardDescription>
@@ -784,7 +791,7 @@ export function PriceBookRoute() {
                 </>
               )}
             </CardContent>
-          </Card>
+          </Card>}
           {reviewVersionId && (
             <Card>
               <CardHeader>

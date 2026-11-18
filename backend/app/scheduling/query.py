@@ -22,6 +22,7 @@ class AppointmentQuery:
     appointment_id: UUID | None = None
     start_at: datetime | None = None
     end_at: datetime | None = None
+    include_unscheduled: bool = False
     branch_id: UUID | None = None
     statuses: frozenset[AppointmentStatus] = frozenset()
     customer_id: UUID | None = None

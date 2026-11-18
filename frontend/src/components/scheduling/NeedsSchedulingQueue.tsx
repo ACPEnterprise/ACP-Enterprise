@@ -65,7 +65,11 @@ const classification = (
   appointment: AppointmentDetail,
   dispatch?: DispatchBoardItem,
 ) => {
-  if (appointment.status === "draft" || !appointment.arrival_window_start_at)
+  if (
+    appointment.status === "draft" ||
+    !appointment.arrival_window_start_at ||
+    !appointment.arrival_window_end_at
+  )
     return "NEEDS_SCHEDULING";
   return activeAssignment(dispatch) ? "ASSIGNED" : "SCHEDULED_UNASSIGNED";
 };
@@ -184,13 +188,13 @@ export function NeedsSchedulingQueue(props: NeedsSchedulingQueueProps) {
   const count = unscheduled.length + projected.length;
 
   return (
-    <Card className="min-w-0 p-4" aria-label="Needs scheduling work queue">
+    <Card className="primary-work-panel min-w-0 p-4" aria-label="Needs scheduling work queue">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Needs Scheduling work queue</h2>
           <p className="text-sm text-content-muted">
-            Native Jobs and Appointments in the current authorized Branch, date,
-            and filter scope.
+            Native Jobs and Appointments across the authorized Branch scope,
+            including incomplete appointment windows.
           </p>
         </div>
         <Badge>{count}</Badge>

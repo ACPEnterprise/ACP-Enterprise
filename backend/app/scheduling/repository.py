@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, nullslast, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -177,11 +177,22 @@ class SchedulingRepository:
         filters = [
             Appointment.company_id == query.company_id,
             Appointment.branch_id.in_(query.authorized_branch_ids),
+        ]
+        scheduled_overlap = and_(
             Appointment.arrival_window_start_at.is_not(None),
             Appointment.arrival_window_end_at.is_not(None),
             Appointment.arrival_window_start_at < query.end_at,
             Appointment.arrival_window_end_at > query.start_at,
-        ]
+        )
+        filters.append(
+            or_(
+                Appointment.arrival_window_start_at.is_(None),
+                Appointment.arrival_window_end_at.is_(None),
+                scheduled_overlap,
+            )
+            if query.include_unscheduled
+            else scheduled_overlap
+        )
         if query.branch_id is not None:
             filters.append(Appointment.branch_id == query.branch_id)
         if query.statuses:
@@ -204,8 +215,8 @@ class SchedulingRepository:
                     cls._query_record_statement()
                     .where(*filters)
                     .order_by(
-                        Appointment.arrival_window_start_at,
-                        Appointment.arrival_window_end_at,
+                        nullslast(Appointment.arrival_window_start_at),
+                        nullslast(Appointment.arrival_window_end_at),
                         Appointment.appointment_number,
                         Appointment.id,
                     )

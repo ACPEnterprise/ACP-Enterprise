@@ -39,6 +39,7 @@
   --semantic-header-background: var(--acp-header-navy);
   --semantic-command-center-accent: var(--acp-liberty-blue-400);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
+  --semantic-primary-panel-border: rgb(255 255 255 / 0.88);
   --semantic-flag-overlay-opacity: 0.62;
   --flag-backdrop-image: url("/theme/twelvehats-premium-flag-dark.png");
   --workspace-wash: rgb(3 18 48 / 0.44);
@@ -101,6 +102,7 @@
   --semantic-header-background: var(--acp-white);
   --semantic-command-center-accent: var(--acp-liberty-blue-700);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
+  --semantic-primary-panel-border: var(--acp-heritage-red-700);
   --semantic-flag-overlay-opacity: 0.42;
   --flag-backdrop-image: url("/theme/twelvehats-premium-flag-light.png");
   --workspace-wash: rgb(248 251 255 / 0.62);

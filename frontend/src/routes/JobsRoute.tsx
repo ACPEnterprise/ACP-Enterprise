@@ -127,7 +127,7 @@ export function JobsRoute() {
       )}
       <form
         onSubmit={submit}
-        className="twelve-hats-panel-outline grid gap-3 rounded-xl border bg-surface p-ui-4 md:grid-cols-4"
+        className="primary-work-panel twelve-hats-panel-outline grid gap-3 rounded-xl border bg-surface p-ui-4 md:grid-cols-4"
       >
         <label className="relative md:col-span-2">
           <span className="sr-only">Search Jobs</span>
