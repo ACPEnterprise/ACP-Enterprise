@@ -40,7 +40,8 @@
   --semantic-command-center-accent: var(--acp-liberty-blue-400);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
   --semantic-flag-overlay-opacity: 0.62;
-  --flag-backdrop-image: url("/theme/twelvehats-flag-dark.svg");
+  --flag-backdrop-image: url("/theme/twelvehats-premium-flag-dark.png");
+  --workspace-wash: rgb(3 18 48 / 0.44);
   --flag-wave-color: rgb(132 188 255 / 0.52);
   --flag-red-wave-color: rgb(206 55 82 / 0.68);
   --flag-star-color: rgb(255 255 255 / 0.95);
@@ -101,7 +102,8 @@
   --semantic-command-center-accent: var(--acp-liberty-blue-700);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
   --semantic-flag-overlay-opacity: 0.42;
-  --flag-backdrop-image: url("/theme/twelvehats-flag-light.svg");
+  --flag-backdrop-image: url("/theme/twelvehats-premium-flag-light.png");
+  --workspace-wash: rgb(248 251 255 / 0.62);
   --flag-wave-color: rgb(73 119 180 / 0.58);
   --flag-red-wave-color: rgb(171 49 70 / 0.5);
   --flag-star-color: rgb(68 111 174 / 0.7);

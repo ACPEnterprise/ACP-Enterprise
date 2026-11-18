@@ -83,7 +83,7 @@ body {
 }
 
 .theme-shell-content {
-  background: color-mix(in oklab, var(--semantic-background) 10%, transparent);
+  background: var(--workspace-wash);
 }
 
 @media (max-width: 47.99rem) {
@@ -173,7 +173,7 @@ body {
   pointer-events: none;
   content: "";
   opacity: 0.08;
-  background: url("/theme/twelvehats-flag-dark.svg") center / cover no-repeat;
+  background: var(--flag-backdrop-image) center / cover no-repeat;
   mix-blend-mode: soft-light;
 }
 
@@ -321,10 +321,6 @@ body {
   .theme-viewport-backdrop {
     background-position: 58% center;
   }
-}
-
-html[data-theme="light"] .theme-navigation::after {
-  background-image: url("/theme/twelvehats-flag-light.svg");
 }
 
 .safe-area-header {
