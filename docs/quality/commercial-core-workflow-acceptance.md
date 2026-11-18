@@ -26,3 +26,9 @@ cannot be called green until an authorized owner activates at least one approved
 Price Book service and Beta provides a sanctioned completed accepted-work fixture.
 Those are controlled business/test-fixture decisions, not reasons to invent data
 or bypass Price Book authority.
+
+Deployment note: the Clean Beta release passed its application, schema, and
+stateful-identity gates. The Preview/Beta parity verifier was run with its
+documented `VERIFY_PREVIEW_BETA_PARITY=0` override because Preview remains on
+`48f3911f…` while Beta's prior application release was `68b2b25f…`; Preview was
+not changed as part of this Beta-only deployment.
