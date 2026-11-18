@@ -30,6 +30,31 @@ class CertificationStatus(StrEnum):
     CERTIFIED = "CERTIFIED"
 
 
+class CommercialSupportLabel(StrEnum):
+    CERTIFIED = "CERTIFIED"
+    PARTIALLY_CERTIFIED = "PARTIALLY CERTIFIED"
+    AWAITING_PROVIDER_ACCESS = "AWAITING PROVIDER ACCESS"
+    UNAVAILABLE_FROM_PROVIDER = "UNAVAILABLE FROM PROVIDER"
+
+
+def commercial_support_label(
+    statuses: tuple[CertificationStatus, ...],
+) -> CommercialSupportLabel:
+    if statuses and all(
+        item in {CertificationStatus.QUALIFIED_LIVE, CertificationStatus.CERTIFIED}
+        for item in statuses
+    ):
+        return CommercialSupportLabel.CERTIFIED
+    if any(
+        item in {CertificationStatus.QUALIFIED_LIVE, CertificationStatus.CERTIFIED}
+        for item in statuses
+    ):
+        return CommercialSupportLabel.PARTIALLY_CERTIFIED
+    if statuses and all(item is CertificationStatus.UNAVAILABLE for item in statuses):
+        return CommercialSupportLabel.UNAVAILABLE_FROM_PROVIDER
+    return CommercialSupportLabel.AWAITING_PROVIDER_ACCESS
+
+
 @dataclass(frozen=True, slots=True)
 class ConformanceEvidence:
     authentication_discovery: bool
