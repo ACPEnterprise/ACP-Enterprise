@@ -87,6 +87,35 @@ class MigrationProviderAuthorizationRecord(Base):
     )
 
 
+class MigrationProviderCertificationRecord(Base):
+    __tablename__ = "migration_factory_provider_certifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider",
+            "certificate_digest",
+            name="uq_migration_provider_certificate",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)
+    conformance: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    domains: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    transformation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    certificate_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    certified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
 class MigrationCoverageRecord(Base):
     __tablename__ = "migration_factory_coverage"
     id: Mapped[UUID] = mapped_column(

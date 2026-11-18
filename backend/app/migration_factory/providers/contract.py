@@ -30,6 +30,16 @@ class ProviderCapability:
 
 
 @dataclass(frozen=True, slots=True)
+class AdapterControls:
+    read_only: bool
+    pagination: bool
+    resumable: bool
+    idempotent_reads: bool
+    bounded_retry: bool
+    delta_mode: str
+
+
+@dataclass(frozen=True, slots=True)
 class AdapterContext:
     company_id: str
     connection_reference: str
@@ -78,6 +88,7 @@ class ProviderAdapter(Protocol):
     """Adapters expose reads only; source mutation is absent by construction."""
 
     provider: ProviderKey
+    controls: AdapterControls
 
     async def discover(self, context: AdapterContext) -> ProviderDiscovery: ...
 
