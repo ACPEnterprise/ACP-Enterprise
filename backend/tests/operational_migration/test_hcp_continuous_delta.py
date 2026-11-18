@@ -119,6 +119,58 @@ def test_changed_location_and_evidence_only_domains_fail_closed() -> None:
     )
 
 
+def test_required_cutover_holds_propagate_to_clean_children() -> None:
+    held_job = provider("held-job", "1" * 64)
+    child = provider(
+        "child-appointment",
+        "2" * 64,
+        domain="appointment",
+        parents=(held_job.key,),
+    )
+    unchanged_child = provider(
+        "unchanged-child",
+        "3" * 64,
+        domain="appointment",
+        parents=(held_job.key,),
+    )
+    result = build_continuous_delta(
+        cutoff=CUTOFF,
+        base_source4_digest="a" * 64,
+        company_id="company",
+        branch_id="branch",
+        acquired_at=ACQUIRED,
+        provider=(held_job, child, unchanged_child),
+        native={unchanged_child.key: native("3" * 64)},
+        required_holds={held_job.key: "final cutover policy hold"},
+    )
+
+    assert [item.disposition for item in result.decisions] == [
+        DeltaDisposition.HOLD_PARENT,
+        DeltaDisposition.HOLD_PARENT,
+        DeltaDisposition.HOLD_CUTOVER_POLICY,
+    ]
+    assert result.manifest is not None
+    assert all(
+        item.assertion is OverlayAssertion.HOLD for item in result.manifest.records
+    )
+
+
+def test_required_cutover_hold_must_be_in_provider_scope() -> None:
+    with pytest.raises(ValueError, match="outside provider scope"):
+        build_continuous_delta(
+            cutoff=CUTOFF,
+            base_source4_digest="a" * 64,
+            company_id="company",
+            branch_id="branch",
+            acquired_at=ACQUIRED,
+            provider=(),
+            native={},
+            required_holds={
+                OverlayKey("job", "missing"): "final cutover policy hold"
+            },
+        )
+
+
 def test_missing_or_non_successor_provider_chronology_is_held() -> None:
     missing = provider("missing-time", "1" * 64, updated_at=None)
     stale = provider(

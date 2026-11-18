@@ -128,7 +128,10 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
                     .where(HcpMigrationMasterRun.id == self._master_run_id)
                     .with_for_update()
                 )
-                if self._master is None or self._master.status != "completed":
+                if self._master is None or self._master.status not in {
+                    "completed",
+                    MASTER_STATUS,
+                }:
                     raise ValueError("completed SOURCE.4 master run is required")
             if self._master.status not in {"running", "completed", MASTER_STATUS}:
                 raise ValueError("admissible SOURCE.4 master run is required")

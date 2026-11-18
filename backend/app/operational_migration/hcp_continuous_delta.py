@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -36,6 +37,8 @@ class DeltaDisposition(StrEnum):
     HOLD_NATIVE_NEWER = "HOLD_NATIVE_NEWER"
     HOLD_SOURCE_CHRONOLOGY = "HOLD_SOURCE_CHRONOLOGY"
     HOLD_UNSUPPORTED_MUTATION = "HOLD_UNSUPPORTED_MUTATION"
+    HOLD_CUTOVER_POLICY = "HOLD_CUTOVER_POLICY"
+    HOLD_PARENT = "HOLD_PARENT"
 
 
 @dataclass(frozen=True)
@@ -88,6 +91,7 @@ def build_continuous_delta(
     acquired_at: str,
     provider: tuple[ProviderObservation, ...],
     native: dict[OverlayKey, NativeObservation],
+    required_holds: Mapping[OverlayKey, str] | None = None,
 ) -> ContinuousDeltaPlan:
     """Classify a sealed delta without allowing provider truth to erase ACP work."""
     cutoff_time = _time(cutoff, "cutoff")
@@ -97,12 +101,63 @@ def build_continuous_delta(
     keys = [item.key for item in provider]
     if len(keys) != len(set(keys)):
         raise ValueError("continuous delta provider identities must be unique")
+    observations = {item.key: item for item in provider}
+    holds = dict(required_holds or {})
+    unknown_holds = sorted(set(holds) - set(observations))
+    if unknown_holds:
+        key = unknown_holds[0]
+        raise ValueError(
+            f"required cutover hold is outside provider scope: "
+            f"{key.domain}:{key.source_id}"
+        )
+
+    classifications: dict[OverlayKey, tuple[DeltaDisposition, str]] = {}
+    for item in sorted(provider, key=lambda value: value.key):
+        if item.key in holds:
+            classifications[item.key] = (
+                DeltaDisposition.HOLD_CUTOVER_POLICY,
+                holds[item.key],
+            )
+        else:
+            classifications[item.key] = _classify(
+                item, native.get(item.key), cutoff_time, acquired_time
+            )
+
+    while True:
+        held_keys = {
+            key
+            for key, (disposition, _) in classifications.items()
+            if disposition
+            not in {
+                DeltaDisposition.CREATE,
+                DeltaDisposition.UPDATE,
+                DeltaDisposition.UNCHANGED_REPLAY,
+            }
+        }
+        additions = {
+            item.key: next(parent for parent in item.parent_keys if parent in held_keys)
+            for item in provider
+            if classifications[item.key][0]
+            in {
+                DeltaDisposition.CREATE,
+                DeltaDisposition.UPDATE,
+                DeltaDisposition.UNCHANGED_REPLAY,
+            }
+            and any(parent in held_keys for parent in item.parent_keys)
+        }
+        if not additions:
+            break
+        for key, parent in additions.items():
+            classifications[key] = (
+                DeltaDisposition.HOLD_PARENT,
+                f"parent cutover identity is held: {parent.domain}:{parent.source_id}",
+            )
 
     records: list[OverlayRecord] = []
     decisions: list[DeltaDecision] = []
     for item in sorted(provider, key=lambda value: value.key):
         state = native.get(item.key)
-        disposition, reason = _classify(item, state, cutoff_time, acquired_time)
+        disposition, reason = classifications[item.key]
         decisions.append(
             DeltaDecision(
                 item.key,

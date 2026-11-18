@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
+from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from app.core.config import settings
 from app.customer_migration.models import CustomerMigrationRun
+from app.operational_migration.hcp_continuous_delta_rehearsal_command import (
+    CONTRACT as CLONE_DELTA_CONTRACT,
+)
+from app.operational_migration.hcp_continuous_delta_rehearsal_command import (
+    EXPECTED_DATABASE,
+    RESTORE_CONTRACT,
+    CloneDeltaAuthority,
+)
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayExecutor,
     CurrentOverlayManifest,
@@ -24,6 +35,10 @@ from app.operational_migration.hcp_current_overlay_lineage import (
     MASTER_STATUS,
     CurrentOverlayLineageBinding,
     CurrentOverlayLineageBootstrap,
+)
+from app.operational_migration.hcp_operational_gate import (
+    canonical_digest,
+    file_sha256,
 )
 from app.operational_migration.models import (
     HcpMigrationMasterRun,
@@ -315,3 +330,142 @@ async def test_repository_persists_receipt_and_exact_replay(
             rollback_backup_digest="3" * 64,
         )
     assert second == receipt
+
+
+@pytest.mark.asyncio
+async def test_repository_accepts_finalized_operational_master() -> None:
+    master = SimpleNamespace(id=uuid4(), status=MASTER_STATUS, replay_state={})
+
+    class Transaction:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    class Session:
+        def in_transaction(self) -> bool:
+            return False
+
+        def begin(self) -> Transaction:
+            return Transaction()
+
+        async def scalar(self, statement: object) -> object:
+            return master
+
+    repository = SqlAlchemyCurrentOverlayRepository(
+        Session(),  # type: ignore[arg-type]
+        master_run_id=master.id,
+        services=_Services(),
+    )
+
+    async with repository.transaction():
+        pass
+
+
+def _write_private(path: Path, value: object) -> Path:
+    path.write_text(json.dumps(value, sort_keys=True))
+    path.chmod(0o600)
+    return path
+
+
+def test_clone_delta_authority_binds_final_policy(tmp_path: Path) -> None:
+    company_id = uuid4()
+    branch_id = uuid4()
+    overlay = CurrentOverlayManifest.build(
+        base_source4_digest=DIGEST,
+        delta_digest="4" * 64,
+        company_id=str(company_id),
+        branch_id=str(branch_id),
+        acquired_at="2026-11-10T15:24:37+00:00",
+        records=(
+            OverlayRecord(
+                "job",
+                "held-job",
+                OverlayAssertion.HOLD,
+                "5" * 64,
+                "2026-11-10T15:24:37+00:00",
+                {},
+                reason="final cutover policy hold",
+            ),
+        ),
+    )
+    overlay_path = _write_private(tmp_path / "overlay.json", overlay.private_payload())
+
+    source_gate_digest = "6" * 64
+    gate: dict[str, object] = {
+        "contract": "hcp-operational-cutover-gate-validation/v1",
+        "gate_digest": source_gate_digest,
+    }
+    gate["digest"] = canonical_digest(gate)
+    gate_path = _write_private(tmp_path / "gate.json", gate)
+
+    native: dict[str, object] = {"records": []}
+    native_digest = canonical_digest(native)
+    native_path = _write_private(tmp_path / "native.json", native)
+
+    policy: dict[str, object] = {
+        "contract": "hcp-final-operational-cutover-disposition/v1",
+        "source_gate_digest": source_gate_digest,
+    }
+    policy["digest"] = canonical_digest(policy)
+    policy_path = _write_private(tmp_path / "policy.json", policy)
+
+    rehearsal: dict[str, object] = {
+        "contract": "hcp-isolated-clone-continuous-delta-rehearsal/v1",
+        "overlay_manifest_digest": overlay.digest,
+        "native_observations_digest": native_digest,
+        "final_policy_digest": policy["digest"],
+        "gate_digest": source_gate_digest,
+    }
+    rehearsal["digest"] = canonical_digest(rehearsal)
+    rehearsal_path = _write_private(tmp_path / "rehearsal.json", rehearsal)
+
+    backup_path = tmp_path / "backup.dump"
+    backup_path.write_bytes(b"qualified clone backup")
+    backup_path.chmod(0o600)
+    backup_digest = file_sha256(backup_path)
+    restore = {
+        "contract": RESTORE_CONTRACT,
+        "restore_verified": True,
+        "backup_digest": backup_digest,
+        "database": EXPECTED_DATABASE,
+        "schema_head": "schema-head",
+    }
+    restore_path = _write_private(tmp_path / "restore.json", restore)
+    idempotency = canonical_digest(
+        {
+            "contract": CLONE_DELTA_CONTRACT,
+            "overlay": overlay.digest,
+            "backup": backup_digest,
+            "company": str(company_id),
+            "branch": str(branch_id),
+        }
+    )
+    authority = CloneDeltaAuthority(
+        expected_repository_sha="7" * 40,
+        expected_schema_head="schema-head",
+        expected_database=EXPECTED_DATABASE,
+        company_id=company_id,
+        branch_id=branch_id,
+        actor_id=uuid4(),
+        base_source4_digest=DIGEST,
+        overlay_path=overlay_path,
+        overlay_file_sha256=file_sha256(overlay_path),
+        overlay_manifest_digest=overlay.digest,
+        gate_validation_path=gate_path,
+        gate_validation_digest=str(gate["digest"]),
+        native_observations_path=native_path,
+        native_observations_digest=native_digest,
+        final_policy_path=policy_path,
+        final_policy_digest=str(policy["digest"]),
+        rehearsal_manifest_path=rehearsal_path,
+        rehearsal_manifest_digest=str(rehearsal["digest"]),
+        backup_path=backup_path,
+        backup_digest=backup_digest,
+        restore_receipt_path=restore_path,
+        restore_receipt_digest=file_sha256(restore_path),
+        idempotency_identity=idempotency,
+    )
+
+    assert authority.verify() == overlay
