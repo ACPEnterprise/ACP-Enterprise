@@ -16,8 +16,8 @@ describe("PrimaryNavigation", () => {
     expect(screen.getByRole("link", { name: "Scheduling" })).toHaveAttribute("href", "/scheduling");
   });
 
-  it("retains accessible names when collapsed", () => {
-    render(<MemoryRouter><PrimaryNavigation groups={navigationGroups} collapsed /></MemoryRouter>);
+  it("keeps every label inside the stable desktop navigation column", () => {
+    render(<MemoryRouter><PrimaryNavigation groups={navigationGroups} /></MemoryRouter>);
     expect(screen.getByRole("link", { name: "Command Center" })).toHaveAttribute("href", "/command-center");
     expect(screen.getByRole("link", { name: "Mission Control" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Customers" })).toBeInTheDocument();

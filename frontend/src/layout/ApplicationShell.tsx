@@ -24,7 +24,6 @@ function isShellHandle(value: unknown): value is ShellRouteHandle {
 }
 
 export function ApplicationShell() {
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
@@ -69,8 +68,6 @@ export function ApplicationShell() {
       <SkipLink />
       <Sidebar
         brand={brandConfig}
-        collapsed={collapsed}
-        onCollapseToggle={() => setCollapsed((value) => !value)}
       />
       {mobileNavigationOpen && (
         <>

@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import type { BrandConfiguration } from "../branding/types";
 import { IconButton } from "../ui";
@@ -11,18 +11,14 @@ import { isFieldTechnicianProfile } from "../auth/authorizationProfiles";
 
 interface SidebarProps {
   readonly brand: BrandConfiguration;
-  readonly collapsed?: boolean;
   readonly mobile?: boolean;
-  readonly onCollapseToggle?: () => void;
   readonly onNavigate?: () => void;
   readonly onClose?: () => void;
 }
 
 export function Sidebar({
   brand,
-  collapsed = false,
   mobile = false,
-  onCollapseToggle,
   onNavigate,
   onClose,
 }: SidebarProps) {
@@ -48,11 +44,11 @@ export function Sidebar({
     <aside
       aria-label={mobile ? "Mobile application navigation" : "Application navigation"}
       className={mobile
-        ? "theme-navigation safe-area-drawer fixed inset-y-0 left-0 z-[var(--layer-overlay)] flex h-dvh w-72 max-w-[calc(100vw-var(--space-8))] flex-col border-r border-stroke bg-navigation shadow-lg"
-        : `theme-navigation hidden shrink-0 flex-col border-r border-stroke bg-navigation lg:flex ${collapsed ? "w-20" : "w-72"}`}
+        ? "theme-navigation safe-area-drawer fixed inset-y-0 left-0 z-[var(--layer-overlay)] flex h-dvh w-72 max-w-[calc(100vw-var(--space-8))] min-w-0 flex-col overflow-hidden border-r border-stroke bg-navigation shadow-lg"
+        : "theme-navigation hidden w-64 min-w-64 shrink-0 flex-col overflow-hidden border-r border-stroke bg-navigation lg:flex"}
     >
       <div className="relative">
-        <BrandRegion brand={brand} compact={collapsed} />
+        <BrandRegion brand={brand} />
         {mobile && (
           <IconButton
             icon={<X />}
@@ -65,17 +61,7 @@ export function Sidebar({
           />
         )}
       </div>
-      <PrimaryNavigation groups={visibleGroups} collapsed={collapsed} onNavigate={onNavigate} />
-      {!mobile && (
-        <div className="border-t border-stroke p-ui-3">
-          <IconButton
-            icon={collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-            label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            variant="ghost"
-            onClick={onCollapseToggle}
-          />
-        </div>
-      )}
+      <PrimaryNavigation groups={visibleGroups} onNavigate={onNavigate} />
     </aside>
   );
 }

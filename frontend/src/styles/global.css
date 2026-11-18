@@ -6,30 +6,9 @@ body,
   margin: 0;
 }
 
-/* A quiet, star-and-wave texture gives the shell depth without competing with
- * dense operational content.  The overlay is decorative and never receives
- * pointer events or participates in the accessibility tree. */
 body {
   position: relative;
   isolation: isolate;
-}
-
-body::before {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  content: "";
-  opacity: var(--flag-overlay-opacity);
-  background-image:
-    radial-gradient(circle at 12% 18%, rgb(255 255 255 / 0.9) 0 1px, transparent 1.7px),
-    radial-gradient(circle at 72% 28%, rgb(255 255 255 / 0.7) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 38% 78%, rgb(255 255 255 / 0.65) 0 1px, transparent 1.7px),
-    radial-gradient(ellipse at 20% 48%, transparent 0 46%, rgb(116 177 255 / 0.28) 46.5% 47%, transparent 47.8%),
-    radial-gradient(ellipse at 76% 68%, transparent 0 44%, rgb(116 177 255 / 0.22) 44.5% 45%, transparent 45.8%);
-  background-size: 8rem 8rem, 11rem 11rem, 13rem 13rem, 100% 72%, 120% 90%;
-  background-position: 0 0, 2rem 1rem, 4rem 3rem, 0 8%, 20% 20%;
-  background-repeat: repeat, repeat, repeat, no-repeat, no-repeat;
 }
 
 #root {
@@ -39,14 +18,17 @@ body::before {
 
 .theme-shell {
   position: relative;
+  min-width: 0;
   isolation: isolate;
+  overflow: hidden;
   background:
     radial-gradient(circle at 84% 8%, rgb(36 99 198 / 0.2), transparent 32rem),
-    var(--gradient-primary);
+    var(--gradient-primary) !important;
 }
 
-/* A visible-but-quiet fabric/star layer lives inside the shell so light mode
- * remains perceptible even when the workspace itself is mostly white. */
+/* The shell owns a real, visible decorative layer. It sits above the shell
+ * gradient and below every navigation/content child, so it cannot disappear
+ * behind an opaque document background. */
 .theme-shell::before {
   position: absolute;
   inset: 0;
@@ -55,14 +37,27 @@ body::before {
   content: "";
   opacity: var(--flag-overlay-opacity);
   background-image:
-    radial-gradient(circle at 14% 16%, var(--flag-star-color) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 68% 24%, var(--flag-star-color) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 84% 76%, var(--flag-star-color) 0 1px, transparent 1.8px),
-    radial-gradient(ellipse at 20% 42%, transparent 0 38%, var(--flag-wave-color) 39% 39.6%, transparent 40.6%),
-    radial-gradient(ellipse at 74% 62%, transparent 0 42%, var(--flag-wave-color) 43% 43.6%, transparent 44.6%);
-  background-size: 7rem 7rem, 10rem 10rem, 12rem 12rem, 125% 78%, 140% 96%;
-  background-position: 0 0, 3rem 1rem, 1rem 4rem, 0 8%, 14% 18%;
-  background-repeat: repeat, repeat, repeat, no-repeat, no-repeat;
+    url("/theme/flag-wave.svg"),
+    radial-gradient(circle at 18% 18%, var(--flag-star-color) 0 2px, transparent 2.8px),
+    radial-gradient(circle at 68% 28%, var(--flag-star-color) 0 1.8px, transparent 2.6px),
+    radial-gradient(circle at 82% 78%, var(--flag-star-color) 0 2px, transparent 2.8px);
+  background-size: cover, 9rem 9rem, 12rem 12rem, 14rem 14rem;
+  background-position: center, 0 0, 3rem 2rem, 4rem 5rem;
+  background-repeat: no-repeat, repeat, repeat, repeat;
+  transform: translateZ(0);
+}
+
+.theme-shell::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.72;
+  background:
+    linear-gradient(112deg, transparent 0 32%, color-mix(in oklab, var(--flag-wave-color) 55%, transparent) 42%, transparent 53%),
+    linear-gradient(112deg, transparent 0 58%, color-mix(in oklab, var(--flag-wave-color) 38%, transparent) 67%, transparent 76%);
+  mix-blend-mode: soft-light;
 }
 
 .theme-shell > * {
@@ -75,8 +70,19 @@ body::before {
 }
 
 .theme-navigation {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 16rem;
+  width: 16rem;
+  min-width: 16rem;
+  min-height: 100dvh;
   background: var(--gradient-sidebar);
   box-shadow: 10px 0 32px rgb(3 19 56 / 0.12);
+}
+
+.theme-navigation > * {
+  min-width: 0;
+  width: 100%;
 }
 
 .theme-header {
@@ -160,13 +166,19 @@ body {
 }
 
 @media (max-width: 48rem) {
-  /* Keep the decorative layer especially quiet behind dense mobile tables. */
-  body::before {
-    opacity: calc(var(--flag-overlay-opacity) * 0.55);
-  }
-
   .twelve-hats-panel-outline {
     box-shadow: 0 6px 18px rgb(3 19 56 / 0.09);
+  }
+
+  .theme-navigation {
+    flex-basis: 18rem;
+    width: 18rem;
+    min-width: 0;
+    min-height: 100dvh;
+  }
+
+  .theme-shell::before {
+    opacity: calc(var(--flag-overlay-opacity) * 0.72);
   }
 }
 
