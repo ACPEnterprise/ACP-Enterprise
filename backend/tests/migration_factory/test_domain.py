@@ -9,12 +9,16 @@ from app.migration_factory.domain import (
     MigrationFactory,
     MigrationFactoryError,
     PageCheckpoint,
+    ProviderKey,
     SourceDiscovery,
-    SourceSystem,
-    all_county_current_assessment,
     canonical_digest,
     import_report_csv,
 )
+from app.migration_factory.providers.quickbooks import all_county_current_assessment
+
+QBO = ProviderKey("quickbooks")
+HCP = ProviderKey("housecall_pro")
+FILE = ProviderKey("structured_file")
 
 
 def factory() -> MigrationFactory:
@@ -32,7 +36,7 @@ def test_matrix_starts_complete_and_not_discovered() -> None:
 def test_discovery_requires_digest_protected_identity() -> None:
     with pytest.raises(MigrationFactoryError):
         SourceDiscovery(
-            SourceSystem.QUICKBOOKS,
+            QBO,
             "raw-realm",
             "x" * 64,
             (),
@@ -58,7 +62,7 @@ def test_acquired_requires_zero_silent_drop_count_proof() -> None:
 def test_raw_vault_is_digest_bound_and_idempotent() -> None:
     value = factory()
     kwargs = {
-        "source": SourceSystem.HOUSECALL_PRO,
+        "source": HCP,
         "object_type": "job",
         "object_id": "j1",
         "payload": {"id": "j1"},
@@ -76,38 +80,30 @@ def test_raw_vault_is_digest_bound_and_idempotent() -> None:
 
 def test_page_replay_rejects_changed_content() -> None:
     value = factory()
-    page = PageCheckpoint(
-        SourceSystem.QUICKBOOKS, "invoice", "1", "100", 2, 0, True, "a" * 64
-    )
+    page = PageCheckpoint(QBO, "invoice", "1", "100", 2, 0, True, "a" * 64)
     value.checkpoint_page(page)
     with pytest.raises(MigrationFactoryError, match="changed"):
         value.checkpoint_page(
-            PageCheckpoint(
-                SourceSystem.QUICKBOOKS, "invoice", "1", "100", 3, 0, True, "b" * 64
-            )
+            PageCheckpoint(QBO, "invoice", "1", "100", 3, 0, True, "b" * 64)
         )
 
 
 def test_pagination_requires_one_terminal_page_and_exact_count() -> None:
     value = factory()
     value.checkpoint_page(
-        PageCheckpoint(
-            SourceSystem.QUICKBOOKS, "invoice", "1", "10", 2, 0, False, "a" * 64
-        )
+        PageCheckpoint(QBO, "invoice", "1", "10", 2, 0, False, "a" * 64)
     )
     value.checkpoint_page(
-        PageCheckpoint(
-            SourceSystem.QUICKBOOKS, "invoice", "2", "20", 1, 1, True, "b" * 64
-        )
+        PageCheckpoint(QBO, "invoice", "2", "20", 1, 1, True, "b" * 64)
     )
-    assert value.prove_pagination(SourceSystem.QUICKBOOKS, "invoice", 4)
-    assert not value.prove_pagination(SourceSystem.QUICKBOOKS, "invoice", 5)
+    assert value.prove_pagination(QBO, "invoice", 4)
+    assert not value.prove_pagination(QBO, "invoice", 5)
 
 
 def test_crosswalk_conflict_preserves_both_and_surfaces_exception() -> None:
     value = factory()
-    value.bind_crosswalk(SourceSystem.HOUSECALL_PRO, "employee-1", uuid4())
-    value.bind_crosswalk(SourceSystem.HOUSECALL_PRO, "employee-1", uuid4())
+    value.bind_crosswalk(HCP, "employee-1", uuid4())
+    value.bind_crosswalk(HCP, "employee-1", uuid4())
     assert value.coverage[Domain.EMPLOYEES].state is CoverageState.CONFLICTED
     assert value.exceptions[0].classification == "IDENTITY_CONFLICT"
 
@@ -117,20 +113,18 @@ def test_authority_rules_are_explicit_and_versioned() -> None:
     first = value.add_authority_rule(
         Domain.JOBS,
         "scheduled_at",
-        (SourceSystem.HOUSECALL_PRO, SourceSystem.OWNER_FILE),
+        (HCP, FILE),
         1,
     )
     second = value.add_authority_rule(
         Domain.JOBS,
         "scheduled_at",
-        (SourceSystem.HOUSECALL_PRO, SourceSystem.OWNER_FILE),
+        (HCP, FILE),
         2,
     )
     assert first.rule_digest != second.rule_digest
     with pytest.raises(MigrationFactoryError):
-        value.add_authority_rule(
-            Domain.JOBS, "scheduled_at", (SourceSystem.HOUSECALL_PRO,), 4
-        )
+        value.add_authority_rule(Domain.JOBS, "scheduled_at", (HCP,), 4)
 
 
 def test_fallback_prefers_api_then_report_then_file() -> None:
@@ -159,7 +153,7 @@ def test_certificate_requires_every_domain() -> None:
 
 def test_dashboard_uses_owner_language() -> None:
     result = factory().dashboard()
-    assert result["owner_steps"][0] == "Connect QuickBooks"
+    assert result["owner_steps"][0] == "Connect jobs system"
     assert "pagination" not in " ".join(result["owner_steps"]).lower()
 
 
@@ -179,7 +173,7 @@ def test_normalization_requires_raw_lineage_and_is_replay_safe() -> None:
     with pytest.raises(MigrationFactoryError, match="retained raw"):
         value.normalize(uuid4(), "v1", {"name": "A"})
     raw = value.retain_raw(
-        source=SourceSystem.QUICKBOOKS,
+        source=QBO,
         object_type="Customer",
         object_id="1",
         payload={"Id": "1"},
@@ -206,15 +200,15 @@ def test_report_import_quarantines_bad_rows_and_preserves_digest() -> None:
 
 def test_webhook_gap_creates_backfill_exception() -> None:
     value = factory()
-    value.record_delta(SourceSystem.HOUSECALL_PRO, "ignored", webhook_sequence=10)
-    value.record_delta(SourceSystem.HOUSECALL_PRO, "ignored", webhook_sequence=12)
+    value.record_delta(HCP, "ignored", webhook_sequence=10)
+    value.record_delta(HCP, "ignored", webhook_sequence=12)
     assert value.exceptions[0].classification == "WEBHOOK_GAP"
     assert "backfill" in value.exceptions[0].actionable_message
 
 
 def test_provider_calls_and_cost_are_metered() -> None:
     value = factory()
-    value.record_provider_call(SourceSystem.QUICKBOOKS, 25)
-    value.record_provider_call(SourceSystem.QUICKBOOKS, 25)
-    assert value.provider_calls[SourceSystem.QUICKBOOKS] == 2
-    assert value.provider_cost_microunits[SourceSystem.QUICKBOOKS] == 50
+    value.record_provider_call(QBO, 25)
+    value.record_provider_call(QBO, 25)
+    assert value.provider_calls[QBO] == 2
+    assert value.provider_cost_microunits[QBO] == 50

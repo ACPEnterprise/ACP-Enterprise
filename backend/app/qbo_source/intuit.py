@@ -53,6 +53,52 @@ ENDPOINTS = {
 ACCOUNTING_SCOPE = "com.intuit.quickbooks.accounting"
 
 
+def parse_scopes(value: str | tuple[str, ...]) -> frozenset[str]:
+    parts = value if isinstance(value, tuple) else tuple(value.split())
+    scopes = frozenset(item.strip() for item in parts if item.strip())
+    if not scopes or any(
+        not all(
+            character.isalnum() or character in {".", "_", "-"} for character in item
+        )
+        for item in scopes
+    ):
+        raise ValueError("invalid OAuth scope set")
+    return scopes
+
+
+@dataclass(frozen=True)
+class ScopeRegistry:
+    """Scopes enabled for this deployment after provider approval."""
+
+    enabled: frozenset[str] = frozenset({ACCOUNTING_SCOPE})
+
+    def validate(self, requested: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(sorted(parse_scopes(requested)))
+        unauthorized = set(normalized) - self.enabled
+        if unauthorized:
+            raise ValueError(
+                "OAuth scope not enabled: " + ",".join(sorted(unauthorized))
+            )
+        return normalized
+
+
+@dataclass(frozen=True)
+class ScopeComparison:
+    granted: frozenset[str]
+    required: frozenset[str]
+    missing: frozenset[str]
+
+    @property
+    def reauthorization_required(self) -> bool:
+        return bool(self.missing)
+
+
+def compare_scopes(granted: str, required: tuple[str, ...]) -> ScopeComparison:
+    granted_set = parse_scopes(granted)
+    required_set = parse_scopes(required)
+    return ScopeComparison(granted_set, required_set, required_set - granted_set)
+
+
 @dataclass(frozen=True)
 class ClientCredential:
     client_id: str
@@ -94,8 +140,7 @@ class OAuthToken:
             raise ValueError("complete OAuth token material is required")
         if self.access_expires_at.tzinfo is None:
             raise ValueError("token expiry must be timezone-aware")
-        if self.scope != ACCOUNTING_SCOPE:
-            raise ValueError("unexpected OAuth scope")
+        parse_scopes(self.scope)
 
 
 @dataclass(frozen=True)
@@ -105,6 +150,7 @@ class PendingAuthorization:
     redirect_uri: str
     token_reference: str
     expires_at: datetime
+    requested_scopes: tuple[str, ...] = (ACCOUNTING_SCOPE,)
 
 
 class AuthorizationStateStore(Protocol):
@@ -285,6 +331,7 @@ class IntuitOAuthClient:
         transport: HttpTransport,
         secrets: SecretProvider,
         credential_reference: str,
+        scope_registry: ScopeRegistry | None = None,
         clock: Clock | None = None,
     ) -> None:
         self.environment = environment
@@ -292,18 +339,26 @@ class IntuitOAuthClient:
         self.transport = transport
         self.secrets = secrets
         self.credential_reference = credential_reference
+        self.scope_registry = scope_registry or ScopeRegistry()
         self.clock = clock or SystemClock()
 
-    async def build_authorization_url(self, *, redirect_uri: str, state: str) -> str:
+    async def build_authorization_url(
+        self,
+        *,
+        redirect_uri: str,
+        state: str,
+        requested_scopes: tuple[str, ...] = (ACCOUNTING_SCOPE,),
+    ) -> str:
         if not redirect_uri.startswith("https://") or len(state) < 32:
             raise ValueError("secure redirect URI and high-entropy state are required")
+        scopes = self.scope_registry.validate(requested_scopes)
         credential = await self.secrets.get_client_credential(self.credential_reference)
         query = urlencode(
             {
                 "client_id": credential.client_id,
                 "redirect_uri": redirect_uri,
                 "response_type": "code",
-                "scope": ACCOUNTING_SCOPE,
+                "scope": " ".join(scopes),
                 "state": state,
             }
         )
@@ -435,7 +490,13 @@ class OAuthAuthorizationCoordinator:
         self.clock = clock or SystemClock()
         self.state_lifetime = state_lifetime
 
-    async def begin(self, *, redirect_uri: str, token_reference: str) -> str:
+    async def begin(
+        self,
+        *,
+        redirect_uri: str,
+        token_reference: str,
+        requested_scopes: tuple[str, ...] = (ACCOUNTING_SCOPE,),
+    ) -> str:
         state = self.state_factory()
         if len(state) < 32:
             raise ValueError("high-entropy OAuth state is required")
@@ -445,10 +506,13 @@ class OAuthAuthorizationCoordinator:
             redirect_uri=redirect_uri,
             token_reference=token_reference,
             expires_at=self.clock.now() + self.state_lifetime,
+            requested_scopes=requested_scopes,
         )
         await self.states.put(pending)
         return await self.oauth.build_authorization_url(
-            redirect_uri=redirect_uri, state=state
+            redirect_uri=redirect_uri,
+            state=state,
+            requested_scopes=requested_scopes,
         )
 
     async def complete(
@@ -463,6 +527,10 @@ class OAuthAuthorizationCoordinator:
             token_reference=pending.token_reference,
             realm_id=realm_id,
         )
+        comparison = compare_scopes(token.scope, pending.requested_scopes)
+        if comparison.reauthorization_required:
+            await self.oauth.secrets.delete_token(pending.token_reference)
+            raise IntuitAuthenticationError("oauth_required_scope_missing")
         return AuthorizedRealm(realm_id=realm_id, token=token)
 
     async def reject(self, *, state: str) -> None:

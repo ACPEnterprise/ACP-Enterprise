@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Final
+from typing import Final, Self
 from uuid import UUID, uuid4
 
 
@@ -70,10 +70,16 @@ class AccessMethod(StrEnum):
     UNAVAILABLE_FROM_PROVIDER = "UNAVAILABLE_FROM_PROVIDER"
 
 
-class SourceSystem(StrEnum):
-    QUICKBOOKS = "quickbooks"
-    HOUSECALL_PRO = "housecall_pro"
-    OWNER_FILE = "owner_file"
+class ProviderKey(str):
+    """Validated provider identity; concrete provider names live in adapters."""
+
+    def __new__(cls, value: str) -> Self:
+        normalized = value.strip().lower()
+        if not normalized or not all(
+            character.isalnum() or character in {"_", "-"} for character in normalized
+        ):
+            raise MigrationFactoryError("invalid provider key")
+        return str.__new__(cls, normalized)
 
 
 PAYROLL_FIELDS: Final = (
@@ -124,7 +130,7 @@ def canonical_digest(value: object) -> str:
 
 @dataclass(frozen=True, slots=True)
 class SourceDiscovery:
-    source: SourceSystem
+    source: ProviderKey
     connection_identity_digest: str
     company_identity_digest: str
     oauth_scopes: tuple[str, ...]
@@ -149,7 +155,7 @@ class Coverage:
     domain: Domain
     state: CoverageState
     methods: tuple[AccessMethod, ...] = ()
-    source_systems: tuple[SourceSystem, ...] = ()
+    source_systems: tuple[ProviderKey, ...] = ()
     source_count: int | None = None
     received_count: int = 0
     quarantined_count: int = 0
@@ -165,7 +171,7 @@ class Coverage:
 class RawSourceEvidence:
     evidence_id: UUID
     company_id: UUID
-    source: SourceSystem
+    source: ProviderKey
     object_type: str
     object_id: str
     source_timestamp: datetime | None
@@ -180,7 +186,7 @@ class RawSourceEvidence:
 
 @dataclass(frozen=True, slots=True)
 class PageCheckpoint:
-    source: SourceSystem
+    source: ProviderKey
     family: str
     page_identity: str
     high_water_mark: str | None
@@ -196,7 +202,7 @@ class AuthorityRule:
     version: int
     domain: Domain
     field_name: str
-    source_precedence: tuple[SourceSystem, ...]
+    source_precedence: tuple[ProviderKey, ...]
     effective_at: datetime
     rule_digest: str
 
@@ -230,29 +236,29 @@ class MigrationCertificate:
 class MigrationFactory:
     company_id: UUID
     migration_id: UUID = field(default_factory=uuid4)
-    discoveries: dict[SourceSystem, SourceDiscovery] = field(default_factory=dict)
+    discoveries: dict[ProviderKey, SourceDiscovery] = field(default_factory=dict)
     coverage: dict[Domain, Coverage] = field(
         default_factory=lambda: {
             domain: Coverage(domain, CoverageState.NOT_DISCOVERED) for domain in Domain
         }
     )
-    vault: dict[tuple[SourceSystem, str, str, str], RawSourceEvidence] = field(
+    vault: dict[tuple[ProviderKey, str, str, str], RawSourceEvidence] = field(
         default_factory=dict
     )
-    checkpoints: dict[tuple[SourceSystem, str, str], PageCheckpoint] = field(
+    checkpoints: dict[tuple[ProviderKey, str, str], PageCheckpoint] = field(
         default_factory=dict
     )
     authority_rules: dict[tuple[Domain, str], AuthorityRule] = field(
         default_factory=dict
     )
-    crosswalks: dict[tuple[SourceSystem, str], UUID] = field(default_factory=dict)
+    crosswalks: dict[tuple[ProviderKey, str], UUID] = field(default_factory=dict)
     exceptions: list[MigrationException] = field(default_factory=list)
-    high_water_marks: dict[SourceSystem, str] = field(default_factory=dict)
+    high_water_marks: dict[ProviderKey, str] = field(default_factory=dict)
     normalized_records: dict[UUID, tuple[str, dict[str, object], str]] = field(
         default_factory=dict
     )
-    provider_calls: dict[SourceSystem, int] = field(default_factory=dict)
-    provider_cost_microunits: dict[SourceSystem, int] = field(default_factory=dict)
+    provider_calls: dict[ProviderKey, int] = field(default_factory=dict)
+    provider_cost_microunits: dict[ProviderKey, int] = field(default_factory=dict)
 
     def record_discovery(self, discovery: SourceDiscovery) -> None:
         self.discoveries[discovery.source] = discovery
@@ -263,7 +269,7 @@ class MigrationFactory:
         state: CoverageState,
         *,
         methods: tuple[AccessMethod, ...] | None = None,
-        sources: tuple[SourceSystem, ...] | None = None,
+        sources: tuple[ProviderKey, ...] | None = None,
         source_count: int | None = None,
         received_count: int | None = None,
         quarantined_count: int | None = None,
@@ -310,7 +316,7 @@ class MigrationFactory:
     def retain_raw(
         self,
         *,
-        source: SourceSystem,
+        source: ProviderKey,
         object_type: str,
         object_id: str,
         payload: object,
@@ -356,7 +362,7 @@ class MigrationFactory:
         return checkpoint
 
     def prove_pagination(
-        self, source: SourceSystem, family: str, expected_count: int
+        self, source: ProviderKey, family: str, expected_count: int
     ) -> bool:
         pages = [
             p
@@ -372,7 +378,7 @@ class MigrationFactory:
         return sum(1 for p in pages if p.terminal_page) == 1
 
     def bind_crosswalk(
-        self, source: SourceSystem, source_id: str, canonical_id: UUID
+        self, source: ProviderKey, source_id: str, canonical_id: UUID
     ) -> None:
         key = (source, source_id)
         existing = self.crosswalks.get(key)
@@ -408,7 +414,7 @@ class MigrationFactory:
         self.normalized_records[evidence_id] = candidate
 
     def record_provider_call(
-        self, source: SourceSystem, cost_microunits: int = 0
+        self, source: ProviderKey, cost_microunits: int = 0
     ) -> None:
         if cost_microunits < 0:
             raise MigrationFactoryError("provider cost cannot be negative")
@@ -419,7 +425,7 @@ class MigrationFactory:
 
     def record_delta(
         self,
-        source: SourceSystem,
+        source: ProviderKey,
         high_water_mark: str,
         *,
         webhook_sequence: int | None = None,
@@ -448,7 +454,7 @@ class MigrationFactory:
         self,
         domain: Domain,
         field_name: str,
-        precedence: tuple[SourceSystem, ...],
+        precedence: tuple[ProviderKey, ...],
         version: int,
     ) -> AuthorityRule:
         if not precedence or len(set(precedence)) != len(precedence):
@@ -483,8 +489,9 @@ class MigrationFactory:
             "domains": {d.value: self.coverage[d].state.value for d in Domain},
             "actionable_exceptions": sum(not e.resolved for e in self.exceptions),
             "owner_steps": (
-                "Connect QuickBooks",
-                "Connect Housecall Pro",
+                "Connect jobs system",
+                "Connect accounting system",
+                "Connect payroll system",
                 "Review exceptions",
                 "Approve cutover",
             ),
@@ -564,38 +571,3 @@ def import_report_csv(
                 }
             )
     return tuple(accepted), tuple(quarantined), digest
-
-
-def all_county_current_assessment() -> dict[str, object]:
-    """Repository-proven current access only; never probes QBO or opens Payroll."""
-    accounting_families = (
-        "company_info",
-        "account",
-        "customer",
-        "vendor",
-        "invoice",
-        "payment",
-        "bill",
-        "bill_payment",
-        "purchase",
-        "deposit",
-        "transfer",
-        "journal_entry",
-        "tax_payment",
-        "tax_agency",
-        "item",
-        "employee",
-        "time_activity",
-    )
-    return {
-        "oauth_scopes": ("com.intuit.quickbooks.accounting",),
-        "accounting": "AVAILABLE",
-        "accounting_families": accounting_families,
-        "payroll_compensation": "ADDITIONAL SCOPE REQUIRED",
-        "employee_workforce": "PARTNER APPROVAL REQUIRED",
-        "sensitive_payroll": "ADDITIONAL AGREEMENT REQUIRED",
-        "time": "AVAILABLE",
-        "time_qualification": "Accounting TimeActivity only; not QuickBooks Time/Workforce coverage",
-        "answer_key_opened": False,
-        "source_writes": False,
-    }

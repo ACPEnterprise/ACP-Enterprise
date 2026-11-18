@@ -32,7 +32,13 @@ class ProtectedSandboxSecretProvider(SecretProvider):
     CLIENT_FILENAME = "development-client.json"
     TOKEN_FILENAME = "sandbox-token.json"
 
-    def __init__(self, *, root: Path, repository_root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        root: Path,
+        repository_root: Path,
+        allowed_scopes: frozenset[str] = frozenset({ACCOUNTING_SCOPE}),
+    ) -> None:
         self.root = root.expanduser().resolve()
         repository = repository_root.expanduser().resolve()
         if self.root == repository or repository in self.root.parents:
@@ -43,6 +49,9 @@ class ProtectedSandboxSecretProvider(SecretProvider):
         os.chmod(self.root, 0o700)
         self._lock_path = self.root / ".token.lock"
         self._ensure_lock_file()
+        if ACCOUNTING_SCOPE not in allowed_scopes:
+            raise SandboxSecretStoreError("accounting_scope_must_remain_enabled")
+        self.allowed_scopes = allowed_scopes
 
     async def get_client_credential(self, reference: str) -> ClientCredential:
         self._require_reference(reference, self.CLIENT_REFERENCE)
@@ -92,7 +101,9 @@ class ProtectedSandboxSecretProvider(SecretProvider):
             return self._token_from_document(document)
 
     def _put_token(self, token: OAuthToken, expected_generation: int | None) -> None:
-        if token.scope != ACCOUNTING_SCOPE:
+        from .intuit import parse_scopes
+
+        if not parse_scopes(token.scope).issubset(self.allowed_scopes):
             raise SandboxSecretStoreError("sandbox_token_scope_invalid")
         with self._locked():
             if expected_generation is None:

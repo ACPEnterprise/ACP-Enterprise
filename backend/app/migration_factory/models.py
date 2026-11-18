@@ -53,6 +53,40 @@ class MigrationFactoryRunRecord(Base):
     )
 
 
+class MigrationProviderAuthorizationRecord(Base):
+    """Digest-protected grant history; token material remains in secret storage."""
+
+    __tablename__ = "migration_factory_provider_authorizations"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider",
+            "authorization_digest",
+            name="uq_migration_provider_authorization",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_company_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    authorized_scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    token_reference: Mapped[str] = mapped_column(String(191), nullable=False)
+    authorization_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    supersedes_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("migration_factory_provider_authorizations.id", ondelete="RESTRICT"),
+    )
+
+
 class MigrationCoverageRecord(Base):
     __tablename__ = "migration_factory_coverage"
     id: Mapped[UUID] = mapped_column(
