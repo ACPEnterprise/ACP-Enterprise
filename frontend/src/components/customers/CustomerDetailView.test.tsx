@@ -293,8 +293,7 @@ describe("CustomerDetailView", () => {
   it("does not equate empty admitted Locations or Contacts with empty source", () => {
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
 
-    expect(screen.getByText(/No Service Locations are currently admitted/)).toBeInTheDocument();
-    expect(screen.getByText(/does not infer a Location from held or incomplete source evidence/)).toBeInTheDocument();
+    expect(screen.getByText(/Add the address where service will take place/)).toBeInTheDocument();
     expect(screen.getByText(/No additional Contacts are currently admitted/)).toBeInTheDocument();
   });
 

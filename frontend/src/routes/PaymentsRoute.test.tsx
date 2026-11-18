@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as paymentsApi from "../api/payments";
@@ -27,22 +26,10 @@ describe("PaymentsRoute", () => {
     expect(await screen.findByText(/20.00 USD available/)).toBeVisible();
     expect(screen.queryByText("Submit payment collection")).not.toBeInTheDocument();
   });
-  it("shows only opaque collection controls to collectors", async () => {
+  it("routes office users to invoice-level payment evidence", async () => {
     permissions = new Set(["COMPANY_PAYMENT_READ", "COMPANY_PAYMENT_COLLECT"]); renderRoute();
-    expect(await screen.findByText("Submit payment collection")).toBeVisible();
-    expect(screen.getByLabelText("Opaque payment method")).toBeVisible();
-  });
-  it("shows a safe uncertain outcome when provider submission fails", async () => {
-    permissions = new Set(["COMPANY_PAYMENT_READ", "COMPANY_PAYMENT_COLLECT"]);
-    vi.mocked(paymentsApi.collectPayment).mockRejectedValueOnce(new Error("raw provider secret"));
-    renderRoute();
-    await screen.findByText("Submit payment collection");
-    await userEvent.type(screen.getByLabelText("Branch ID"), "branch-1");
-    await userEvent.type(screen.getByLabelText("Customer ID"), "customer-1");
-    await userEvent.type(screen.getByLabelText("Amount"), "10.00");
-    await userEvent.type(screen.getByLabelText("Opaque payment method"), "opaque_test");
-    await userEvent.click(screen.getByRole("button", { name: "Submit to provider" }));
-    expect(await screen.findByText(/Do not assume money moved/)).toBeVisible();
-    expect(screen.queryByText(/raw provider secret/)).not.toBeInTheDocument();
+    expect(await screen.findByText("Record payment evidence from an invoice")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open invoices" })).toHaveAttribute("href", "/invoices");
+    expect(screen.queryByText("Submit payment collection")).not.toBeInTheDocument();
   });
 });

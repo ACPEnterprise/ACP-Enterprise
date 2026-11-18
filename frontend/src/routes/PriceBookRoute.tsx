@@ -673,11 +673,11 @@ export function PriceBookRoute() {
           </section>
           {canManage && <Card>
             <CardHeader>
-              <CardTitle>All County candidate review</CardTitle>
+              <CardTitle>All County owner review</CardTitle>
               <CardDescription>
-                Source-backed draft candidates are visible here before any price
-                becomes active. Held items remain isolated until their source
-                conflict is resolved.
+                Retained All County services are shown here before any price
+                becomes active. Draft items are ready for review; held items
+                remain isolated until their source conflict is resolved.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -691,15 +691,15 @@ export function PriceBookRoute() {
               ) : (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div><strong>{candidateReview.data?.counts.admitted ?? 0}</strong><p className="text-sm text-content-muted">Draft — ready for review</p></div>
+                    <div><strong>{candidateReview.data?.counts.admitted ?? 0}</strong><p className="text-sm text-content-muted">Draft — owner review</p></div>
                     <div><strong>{candidateReview.data?.counts.held ?? 0}</strong><p className="text-sm text-content-muted">Held — source conflict</p></div>
                     <div><strong>{candidateReview.data?.counts.material_mapping_required ?? 0}</strong><p className="text-sm text-content-muted">Need material mapping</p></div>
                     <div><strong>{candidateReview.data?.counts.activation_ready ?? 0}</strong><p className="text-sm text-content-muted">Activation ready</p></div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <Input
-                      aria-label="Filter candidate category"
-                      placeholder="Candidate category"
+                      aria-label="Filter owner review category"
+                      placeholder="Category"
                       value={candidateCategory}
                       onChange={(event) => {
                         setCandidateCategory(event.target.value);
@@ -707,19 +707,19 @@ export function PriceBookRoute() {
                       }}
                     />
                     <Select
-                      aria-label="Filter candidate admission state"
+                      aria-label="Filter owner review state"
                       value={candidateAdmission}
                       onChange={(event) => {
                         setCandidateAdmission(event.target.value as "" | "admitted" | "held");
                         setCandidateOffset(0);
                       }}
                     >
-                      <option value="">All candidate states</option>
-                      <option value="admitted">Draft — ready for review</option>
+                      <option value="">All review states</option>
+                      <option value="admitted">Draft — owner review</option>
                       <option value="held">Held — source conflict</option>
                     </Select>
                     <Select
-                      aria-label="Filter candidate review requirement"
+                      aria-label="Filter owner review requirement"
                       value={candidateReviewFlag}
                       onChange={(event) => {
                         setCandidateReviewFlag(event.target.value);
@@ -733,7 +733,7 @@ export function PriceBookRoute() {
                       <option value="SOURCE_CONFLICT">Source conflict</option>
                     </Select>
                   </div>
-                  <div className="space-y-3" aria-label="All County candidate services">
+                  <div className="space-y-3" aria-label="All County services for owner review">
                     {(candidateReview.data?.items ?? []).map((candidate) => (
                       <article
                         key={candidate.candidate_identity}
@@ -750,7 +750,7 @@ export function PriceBookRoute() {
                         </div>
                         <p className="mt-2 text-sm">{candidate.customer_description}</p>
                         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                          <div><dt className="text-content-muted">Candidate price</dt><dd>${candidate.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
+                          <div><dt className="text-content-muted">Proposed selling price</dt><dd>${candidate.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
                           <div><dt className="text-content-muted">Source</dt><dd>{candidate.source_sheet}, row {candidate.source_row}</dd></div>
                           <div><dt className="text-content-muted">Price evidence</dt><dd>{candidate.price_derivation === "OWNER_OVERRIDE" ? "Owner workbook value" : "Workbook formula"}</dd></div>
                         </dl>
@@ -1699,7 +1699,7 @@ export function PriceBookRoute() {
                   ) : (
                     <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                       <div><dt className="text-content-muted">Status</dt><dd>{selectedEvidence.admission_status === "held" ? "Held — source conflict" : "Draft — ready for review"}</dd></div>
-                      <div><dt className="text-content-muted">Candidate price</dt><dd>${selectedEvidence.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
+                      <div><dt className="text-content-muted">Proposed selling price</dt><dd>${selectedEvidence.candidate_prices.standard ?? "Not supplied"} — not active</dd></div>
                       <div><dt className="text-content-muted">Source</dt><dd>{selectedEvidence.source_sheet}, row {selectedEvidence.source_row}</dd></div>
                       <div><dt className="text-content-muted">Remaining review</dt><dd>{selectedEvidence.review_flags.length ? selectedEvidence.review_flags.map((flag) => flag.replaceAll("_", " ").toLocaleLowerCase()).join(" · ") : "No review flags"}</dd></div>
                     </dl>

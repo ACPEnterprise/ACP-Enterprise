@@ -1,23 +1,14 @@
-import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
-import { getOperatorApiError } from "../api/errors";
 import { useHasPermission } from "../auth";
-import { usePaymentMutations, usePayments } from "../hooks/usePayments";
-import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Spinner } from "../ui";
+import { usePayments } from "../hooks/usePayments";
+import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 
 export function PaymentsRoute() {
   const canRead = useHasPermission("COMPANY_PAYMENT_READ");
-  const canCollect = useHasPermission("COMPANY_PAYMENT_COLLECT");
-  const receipts = usePayments(canRead); const mutations = usePaymentMutations();
-  const [form, setForm] = useState({ branch: "", customer: "", invoice: "", amount: "", currency: "USD", method: "" });
+  const receipts = usePayments(canRead);
   if (!canRead) return <Alert variant="danger">You are not authorized to view Payments.</Alert>;
-  const submit = (event: FormEvent) => { event.preventDefault(); mutations.collect.mutate({ branch_id: form.branch, customer_id: form.customer, invoice_id: form.invoice || undefined, amount: form.amount, currency: form.currency, opaque_payment_method: form.method, idempotency_key: crypto.randomUUID() }); };
-  const collectionError = mutations.collect.error ? getOperatorApiError(mutations.collect.error, "Payment") : null;
   return <div className="mx-auto max-w-5xl space-y-6 pb-12"><header><p className="text-sm font-semibold text-action-primary">Financial Operations</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payments and settlements</h1><p className="mt-2 text-content-muted">Apply, refund, and reconcile verified Payment evidence. A receipt is not bank settlement or cash.</p></header>
     {receipts.isPending ? <Spinner label="Loading payments" /> : receipts.isError ? <Alert variant="danger">Payments could not be loaded.</Alert> : <Card><CardHeader><CardTitle>Payment receipt evidence</CardTitle><CardDescription>Provider-neutral assertions, explicitly separated from settlement and bank cash.</CardDescription></CardHeader><CardContent><ul className="space-y-2">{receipts.data?.map((receipt) => <li key={receipt.id}><Link className="flex justify-between rounded-lg border border-stroke p-3" to={`/payments/${receipt.id}`}><span>{receipt.id.slice(0, 8)}</span><span>{receipt.status} · {receipt.available_amount} {receipt.currency} available to apply</span></Link></li>)}</ul></CardContent></Card>}
     {receipts.isError && receipts.data && <Alert variant="warning">Payment evidence may be stale because refresh failed. Verify current authority before acting.</Alert>}
-    {collectionError && <Alert variant="danger">{collectionError.message} Do not assume money moved. Refresh Payment evidence before retrying.</Alert>}
-    {canCollect && <Card><CardHeader><CardTitle>Submit payment collection</CardTitle><CardDescription>Submission creates provider evidence; it does not prove settlement or bank cash. Only provider-safe opaque payment identities are accepted.</CardDescription></CardHeader><CardContent><form className="grid gap-3 sm:grid-cols-2" onSubmit={submit}>
-      <Input aria-label="Branch ID" required value={form.branch} onChange={(e) => setForm({...form, branch:e.target.value})}/><Input aria-label="Customer ID" required value={form.customer} onChange={(e) => setForm({...form, customer:e.target.value})}/><Input aria-label="Invoice ID (optional)" value={form.invoice} onChange={(e) => setForm({...form, invoice:e.target.value})}/><Input aria-label="Amount" type="number" min="0.01" step="0.01" required value={form.amount} onChange={(e) => setForm({...form, amount:e.target.value})}/><Input aria-label="Currency" required value={form.currency} onChange={(e) => setForm({...form, currency:e.target.value.toUpperCase()})}/><Input aria-label="Opaque payment method" placeholder="opaque_test_success" required value={form.method} onChange={(e) => setForm({...form, method:e.target.value})}/><Button type="submit" loading={mutations.collect.isPending}>Submit to provider</Button>
-    </form></CardContent></Card>}</div>;
+    <Card><CardHeader><CardTitle>Record payment evidence from an invoice</CardTitle><CardDescription>Use an issued Invoice to record office-observed payment evidence without charging a card, debiting a bank, or sending money to a provider.</CardDescription></CardHeader><CardContent><p className="text-sm text-content-secondary">Open the invoice, choose <strong>Record and apply payment</strong>, and enter the amount, method, and office reference. The invoice balance and customer receivable view update from that evidence.</p><Link className="mt-4 inline-flex min-h-11 items-center rounded-md bg-action-primary px-4 text-sm font-semibold text-content-inverse" to="/invoices">Open invoices</Link></CardContent></Card></div>;
 }

@@ -222,20 +222,10 @@ export function CustomerForm({
             <option value="inactive">Inactive</option>
           </select>
         </label>
-        <label className={labelClass}>
-          Customer source
-          <input
-            className={inputClass}
-            value={form.source}
-            onChange={(event) => update("source", event.target.value)}
-            required
-            maxLength={50}
-          />
-        </label>
       </div>
 
       <label className={`${labelClass} block`}>
-        Internal customer context
+        Notes for your team
         <textarea
           className={`${inputClass} min-h-24`}
           value={form.internal_notes ?? ""}

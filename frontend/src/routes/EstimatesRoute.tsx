@@ -453,23 +453,21 @@ export function EstimatesRoute() {
       {canManage && (
         <Card>
           <CardHeader>
-            <CardTitle>Create proposal</CardTitle>
+          <CardTitle>Create estimate</CardTitle>
             <CardDescription>
-              Build a customer-ready proposal from active services or a governed
-              option set. ACP seals every selected line before the Estimate is
-              created.
+              Build a customer-ready estimate from approved Price Book services.
+              Prices are carried from the Price Book and cannot be changed here.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!canReadPriceBook && (
               <Alert variant="danger">
-                Price Book read permission is required to select commercial
-                services.
+                Price Book access is required to select services.
               </Alert>
             )}
             {!canReadCustomers && (
               <Alert variant="danger">
-                Customer read permission is required to select a Customer and Service Location.
+                Customer access is required to select a Customer and Service Location.
               </Alert>
             )}
             {(mutations.create.isError ||
@@ -582,7 +580,7 @@ export function EstimatesRoute() {
                 </Select>
               </Field>
               <Input
-                aria-label="Search active Price Book services"
+                aria-label="Search approved Price Book services"
                 placeholder="Search by service name, code, or category"
                 value={serviceSearch}
                 onChange={(event) => {
@@ -592,7 +590,7 @@ export function EstimatesRoute() {
                 disabled={!canReadPriceBook || form.branch.length !== 36}
               />
               <Select
-                aria-label="Filter active Price Book category"
+                aria-label="Filter approved Price Book category"
                 value={serviceCategory}
                 onChange={(event) => {
                   setServiceCategory(event.target.value);
@@ -696,7 +694,7 @@ export function EstimatesRoute() {
                   <option value="">
                     {priceBook.isPending
                       ? "Loading Price Book…"
-                      : "Select active service"}
+                      : "Choose an approved service"}
                   </option>
                   {activeServices.map((item) => (
                       <option key={item.id} value={item.id}>
@@ -730,7 +728,8 @@ export function EstimatesRoute() {
                 form.branch.length === 36 &&
                 activeServices.length === 0 && (
                   <Alert variant="warning">
-                    No active Price Book services match this search and category. Draft and held services must be reviewed and explicitly activated before they can be sold.
+                    No approved Price Book services are available for sale yet. Draft services are waiting for owner review, and held services have a source conflict. Review the Price Book before trying again.
+                    <Link className="ml-1 font-semibold underline" to="/price-book">Open Price Book</Link>
                   </Alert>
                 )}
               <Input
@@ -887,7 +886,7 @@ export function EstimatesRoute() {
                   priceBookMutations.snapshot.isPending
                 }
               >
-                Create immutable Estimate
+                Save estimate
               </Button>
             </form>
           </CardContent>

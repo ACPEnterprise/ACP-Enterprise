@@ -415,10 +415,10 @@ describe("PriceBookRoute", () => {
   it("filters coherent candidate review cohorts without activating them", async () => {
     render(<PriceBookRoute />, { wrapper: MemoryRouter });
 
-    fireEvent.change(screen.getByLabelText("Filter candidate admission state"), {
+    fireEvent.change(screen.getByLabelText("Filter owner review state"), {
       target: { value: "held" },
     });
-    fireEvent.change(screen.getByLabelText("Filter candidate review requirement"), {
+    fireEvent.change(screen.getByLabelText("Filter owner review requirement"), {
       target: { value: "MATERIAL_MAPPING_REQUIRED" },
     });
 

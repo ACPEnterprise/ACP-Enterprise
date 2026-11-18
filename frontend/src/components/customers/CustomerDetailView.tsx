@@ -253,8 +253,8 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
       {Boolean(actionError) && <Alert variant="danger" title="Customer update failed">{getOperatorApiError(actionError, "Customer").message}</Alert>}
 
       <Card className="p-ui-4 sm:p-ui-6">
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Service locations</p><h3 className="mt-1 text-xl font-semibold">Properties</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingProperty("new")} leadingIcon={<Plus size={16} />}>Add property</Button>}</div>
-        {customer.properties.length === 0 && editingProperty === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No Service Locations are currently admitted for this Customer. ACP does not infer a Location from held or incomplete source evidence.</p>}
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Service locations</p><h3 className="mt-1 text-xl font-semibold">Where we do the work</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingProperty("new")} leadingIcon={<Plus size={16} />}>Add service location</Button>}</div>
+        {customer.properties.length === 0 && editingProperty === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">Add the address where service will take place before creating an estimate or job.</p>}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {customer.properties.map((property) => (
             <article id={`service-location-${property.id}`} key={property.id} className="min-w-0 scroll-mt-24 rounded-xl border border-stroke bg-surface-subtle p-4">

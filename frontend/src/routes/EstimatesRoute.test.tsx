@@ -215,7 +215,7 @@ describe("EstimatesRoute", () => {
     permissions = new Set(["COMPANY_ESTIMATE_READ"]);
     renderRoute("/estimates?id=estimate-1");
     expect((await screen.findAllByText("Heating proposal"))[0]).toBeVisible();
-    expect(screen.queryByText("Create proposal")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create estimate")).not.toBeInTheDocument();
     expect(screen.getByText("Selected customer option")).toBeVisible();
     expect(screen.getByText("1 × $100.00 each")).toBeVisible();
     expect(screen.getByText("Estimate pipeline")).toBeVisible();
@@ -269,7 +269,7 @@ describe("EstimatesRoute", () => {
       "COMPANY_CUSTOMER_READ",
     ]);
     renderRoute("/estimates?id=estimate-1");
-    expect(await screen.findByText("Create proposal")).toBeVisible();
+    expect(await screen.findByText("Create estimate")).toBeVisible();
     expect((await screen.findAllByText("Heating proposal"))[0]).toBeVisible();
     expect(screen.getAllByText("$97.20")).toHaveLength(2);
     expect(screen.getByLabelText("Discount type")).toBeVisible();
@@ -304,7 +304,7 @@ describe("EstimatesRoute", () => {
       name: "HEAT-1 · Heating service · $149.00",
     });
 
-    fireEvent.change(screen.getByLabelText("Search active Price Book services"), {
+    fireEvent.change(screen.getByLabelText("Search approved Price Book services"), {
       target: { value: "drain" },
     });
     await waitFor(() =>
@@ -318,7 +318,7 @@ describe("EstimatesRoute", () => {
       ),
     );
 
-    fireEvent.change(screen.getByLabelText("Filter active Price Book category"), {
+    fireEvent.change(screen.getByLabelText("Filter approved Price Book category"), {
       target: { value: "category-1" },
     });
     await waitFor(() =>
@@ -352,7 +352,7 @@ describe("EstimatesRoute", () => {
       },
     });
     renderRoute();
-    await screen.findByText("Create proposal");
+    await screen.findByText("Create estimate");
     fireEvent.change(screen.getByLabelText("Estimate Customer"), {
       target: { value: "customer-1" },
     });
@@ -366,7 +366,7 @@ describe("EstimatesRoute", () => {
       target: { value: "Heating proposal" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Create immutable Estimate" }),
+      screen.getByRole("button", { name: "Save estimate" }),
     );
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(
@@ -436,12 +436,12 @@ describe("EstimatesRoute", () => {
       offset: 0,
       costs_visible: false,
     });
-    fireEvent.change(screen.getByLabelText("Search active Price Book services"), {
+    fireEvent.change(screen.getByLabelText("Search approved Price Book services"), {
       target: { value: "toilet" },
     });
-    await screen.findByText(/No active Price Book services match/);
+    await screen.findByText(/No approved Price Book services are available/);
     fireEvent.submit(
-      screen.getByRole("button", { name: "Create immutable Estimate" }).closest("form")!,
+      screen.getByRole("button", { name: "Save estimate" }).closest("form")!,
     );
 
     await waitFor(() =>
