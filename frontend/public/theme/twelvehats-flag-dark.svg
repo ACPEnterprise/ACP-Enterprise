@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="navy-fabric" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#071b49" stop-opacity=".72"/>
+      <stop offset=".34" stop-color="#0d3f91" stop-opacity=".32"/>
+      <stop offset=".62" stop-color="#071941" stop-opacity=".54"/>
+      <stop offset="1" stop-color="#1d68d5" stop-opacity=".28"/>
+    </linearGradient>
+    <path id="dark-star" d="m0-25 7 15 17 2-13 11 4 17-15-9-15 9 4-17-13-11 17-2z"/>
+  </defs>
+  <rect width="1600" height="900" fill="#061a45" fill-opacity=".3"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M-160 120C190-45 470 285 820 112s590-92 960 104" stroke="#f7fbff" stroke-width="112" stroke-opacity=".22"/>
+    <path d="M-160 205C190 40 470 370 820 197s590-92 960 104" stroke="#c72d4b" stroke-width="68" stroke-opacity=".26"/>
+    <path d="M-160 290C190 125 470 455 820 282s590-92 960 104" stroke="#e9f2ff" stroke-width="106" stroke-opacity=".18"/>
+    <path d="M-160 390C190 225 470 555 820 382s590-92 960 104" stroke="#a91f42" stroke-width="62" stroke-opacity=".22"/>
+    <path d="M-160 490C190 325 470 655 820 482s590-92 960 104" stroke="#dceaff" stroke-width="112" stroke-opacity=".16"/>
+    <path d="M-160 610C190 445 470 775 820 602s590-92 960 104" stroke="#96203e" stroke-width="56" stroke-opacity=".18"/>
+    <path d="M-160 725C190 560 470 890 820 717s590-92 960 104" stroke="#cfe1fb" stroke-width="96" stroke-opacity=".13"/>
+  </g>
+  <path d="M0 0h760c-80 118-82 238 0 360-220 80-490 65-760-32z" fill="#0b3d8c" fill-opacity=".58"/>
+  <g fill="#d9eaff" fill-opacity=".72">
+    <use href="#dark-star" transform="translate(78 66) scale(.74)"/>
+    <use href="#dark-star" transform="translate(184 52) scale(.5)"/>
+    <use href="#dark-star" transform="translate(290 76) scale(.68)"/>
+    <use href="#dark-star" transform="translate(398 50) scale(.5)"/>
+    <use href="#dark-star" transform="translate(506 74) scale(.68)"/>
+    <use href="#dark-star" transform="translate(614 48) scale(.5)"/>
+    <use href="#dark-star" transform="translate(720 72) scale(.68)"/>
+    <use href="#dark-star" transform="translate(130 168) scale(.52)"/>
+    <use href="#dark-star" transform="translate(240 192) scale(.7)"/>
+    <use href="#dark-star" transform="translate(350 165) scale(.5)"/>
+    <use href="#dark-star" transform="translate(460 190) scale(.7)"/>
+    <use href="#dark-star" transform="translate(570 162) scale(.5)"/>
+    <use href="#dark-star" transform="translate(680 186) scale(.68)"/>
+  </g>
+  <rect width="1600" height="900" fill="url(#navy-fabric)" opacity=".64"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-opacity=".13">
+    <path d="M-100 0C210 240 150 610 450 900" stroke-width="92"/>
+    <path d="M470 0c220 270 145 590 420 900" stroke-width="62"/>
+    <path d="M1040 0C820 270 920 600 650 900" stroke-width="86"/>
+    <path d="M1510 0c-200 260-110 570-390 900" stroke-width="54"/>
+  </g>
+</svg>

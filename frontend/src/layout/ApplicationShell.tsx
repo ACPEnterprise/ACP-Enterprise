@@ -87,7 +87,7 @@ export function ApplicationShell() {
           </div>
         </>
       )}
-      <div className="flex min-h-screen min-h-dvh min-w-0 flex-1 flex-col">
+      <div className="theme-shell-content flex min-h-screen min-h-dvh min-w-0 flex-1 flex-col">
         <ApplicationHeader
           brand={brandConfig}
           metadata={workspaceMetadata}

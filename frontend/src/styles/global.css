@@ -26,6 +26,25 @@ body {
     var(--gradient-primary) !important;
 }
 
+@media (min-width: 64rem) {
+  .theme-shell {
+    display: grid;
+    grid-template-columns: 16rem minmax(0, 1fr);
+    grid-template-rows: minmax(100dvh, auto);
+    align-items: stretch;
+  }
+
+  .theme-shell > .theme-navigation {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .theme-shell > .theme-shell-content {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
 /* The shell owns a real, visible decorative layer. It sits above the shell
  * gradient and below every navigation/content child, so it cannot disappear
  * behind an opaque document background. */
@@ -36,7 +55,7 @@ body {
   pointer-events: none;
   content: "";
   opacity: var(--flag-overlay-opacity);
-  background-image: url("/theme/flag-wave.svg");
+  background-image: url("/theme/twelvehats-flag-dark.svg");
   background-size: cover;
   background-position: center top;
   background-repeat: no-repeat;
@@ -88,7 +107,7 @@ body {
   pointer-events: none;
   content: "";
   opacity: 0.08;
-  background: url("/theme/flag-wave.svg") center / cover no-repeat;
+  background: url("/theme/twelvehats-flag-dark.svg") center / cover no-repeat;
   mix-blend-mode: soft-light;
 }
 
@@ -194,6 +213,14 @@ body {
   .theme-shell::before {
     opacity: calc(var(--flag-overlay-opacity) * 0.72);
   }
+}
+
+html[data-theme="light"] .theme-shell::before {
+  background-image: url("/theme/twelvehats-flag-light.svg");
+}
+
+html[data-theme="light"] .theme-navigation::after {
+  background-image: url("/theme/twelvehats-flag-light.svg");
 }
 
 .safe-area-header {

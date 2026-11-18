@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="light-fabric" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fff" stop-opacity=".88"/>
+      <stop offset=".3" stop-color="#d7eaff" stop-opacity=".38"/>
+      <stop offset=".6" stop-color="#fff" stop-opacity=".74"/>
+      <stop offset="1" stop-color="#bfd8f4" stop-opacity=".42"/>
+    </linearGradient>
+    <path id="light-star" d="m0-25 7 15 17 2-13 11 4 17-15-9-15 9 4-17-13-11 17-2z"/>
+  </defs>
+  <rect width="1600" height="900" fill="#edf5ff" fill-opacity=".42"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M-160 120C190-45 470 285 820 112s590-92 960 104" stroke="#fff" stroke-width="112" stroke-opacity=".7"/>
+    <path d="M-160 205C190 40 470 370 820 197s590-92 960 104" stroke="#c95368" stroke-width="68" stroke-opacity=".23"/>
+    <path d="M-160 290C190 125 470 455 820 282s590-92 960 104" stroke="#fff" stroke-width="106" stroke-opacity=".66"/>
+    <path d="M-160 390C190 225 470 555 820 382s590-92 960 104" stroke="#d46a7b" stroke-width="62" stroke-opacity=".2"/>
+    <path d="M-160 490C190 325 470 655 820 482s590-92 960 104" stroke="#f9fcff" stroke-width="112" stroke-opacity=".72"/>
+    <path d="M-160 610C190 445 470 775 820 602s590-92 960 104" stroke="#c95368" stroke-width="56" stroke-opacity=".16"/>
+    <path d="M-160 725C190 560 470 890 820 717s590-92 960 104" stroke="#d9eaff" stroke-width="96" stroke-opacity=".56"/>
+  </g>
+  <path d="M0 0h760c-80 118-82 238 0 360-220 80-490 65-760-32z" fill="#9ec5f1" fill-opacity=".24"/>
+  <g fill="#4879b7" fill-opacity=".42">
+    <use href="#light-star" transform="translate(78 66) scale(.74)"/>
+    <use href="#light-star" transform="translate(184 52) scale(.5)"/>
+    <use href="#light-star" transform="translate(290 76) scale(.68)"/>
+    <use href="#light-star" transform="translate(398 50) scale(.5)"/>
+    <use href="#light-star" transform="translate(506 74) scale(.68)"/>
+    <use href="#light-star" transform="translate(614 48) scale(.5)"/>
+    <use href="#light-star" transform="translate(720 72) scale(.68)"/>
+    <use href="#light-star" transform="translate(130 168) scale(.52)"/>
+    <use href="#light-star" transform="translate(240 192) scale(.7)"/>
+    <use href="#light-star" transform="translate(350 165) scale(.5)"/>
+    <use href="#light-star" transform="translate(460 190) scale(.7)"/>
+    <use href="#light-star" transform="translate(570 162) scale(.5)"/>
+    <use href="#light-star" transform="translate(680 186) scale(.68)"/>
+  </g>
+  <rect width="1600" height="900" fill="url(#light-fabric)" opacity=".72"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-opacity=".34">
+    <path d="M-100 0C210 240 150 610 450 900" stroke-width="92"/>
+    <path d="M470 0c220 270 145 590 420 900" stroke-width="62"/>
+    <path d="M1040 0C820 270 920 600 650 900" stroke-width="86"/>
+    <path d="M1510 0c-200 260-110 570-390 900" stroke-width="54"/>
+  </g>
+</svg>
