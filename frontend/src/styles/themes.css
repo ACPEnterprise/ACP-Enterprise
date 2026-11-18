@@ -32,8 +32,9 @@
   --semantic-header-background: var(--acp-header-navy);
   --semantic-command-center-accent: var(--acp-liberty-blue-400);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
-  --semantic-flag-overlay-opacity: 0.18;
+  --semantic-flag-overlay-opacity: 0.22;
   --flag-wave-color: rgb(132 188 255 / 0.52);
+  --flag-red-wave-color: rgb(206 55 82 / 0.68);
   --flag-star-color: rgb(255 255 255 / 0.95);
   --semantic-panel-shadow: 0 12px 32px rgb(3 19 56 / 0.24);
   /* Shared product tokens used by shell and route surfaces. */
@@ -84,8 +85,9 @@
   --semantic-header-background: var(--acp-white);
   --semantic-command-center-accent: var(--acp-liberty-blue-700);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
-  --semantic-flag-overlay-opacity: 0.18;
+  --semantic-flag-overlay-opacity: 0.22;
   --flag-wave-color: rgb(73 119 180 / 0.58);
+  --flag-red-wave-color: rgb(171 49 70 / 0.5);
   --flag-star-color: rgb(68 111 174 / 0.7);
   --semantic-panel-shadow: 0 10px 28px rgb(25 65 120 / 0.1);
   /* Shared product tokens used by shell and route surfaces. */

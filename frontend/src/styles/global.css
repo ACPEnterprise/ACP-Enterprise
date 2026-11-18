@@ -38,7 +38,7 @@ body {
   opacity: var(--flag-overlay-opacity);
   background-image: url("/theme/flag-wave.svg");
   background-size: cover;
-  background-position: center;
+  background-position: center top;
   background-repeat: no-repeat;
   transform: translateZ(0);
 }
@@ -52,7 +52,8 @@ body {
   opacity: 0.72;
   background:
     linear-gradient(112deg, transparent 0 32%, color-mix(in oklab, var(--flag-wave-color) 55%, transparent) 42%, transparent 53%),
-    linear-gradient(112deg, transparent 0 58%, color-mix(in oklab, var(--flag-wave-color) 38%, transparent) 67%, transparent 76%);
+    linear-gradient(112deg, transparent 0 58%, color-mix(in oklab, var(--flag-wave-color) 38%, transparent) 67%, transparent 76%),
+    linear-gradient(158deg, transparent 0 20%, color-mix(in oklab, var(--flag-red-wave-color) 34%, transparent) 31%, transparent 43%);
   mix-blend-mode: soft-light;
 }
 
