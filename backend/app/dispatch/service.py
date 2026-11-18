@@ -356,6 +356,8 @@ class DispatchService:
                 assignment.status = "assigned"
                 assignment.assignment_reason = reason
                 assignment.assigned_by_user_id = context.user.id
+                assignment.window_start_at = work_start
+                assignment.window_end_at = work_end
                 assignment.effective_at = now
                 assignment.released_at = None
                 assignment.release_reason = None
@@ -420,6 +422,7 @@ class DispatchService:
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
             )
+            work_start, work_end = self._technician_work_interval(appointment)
             assignment = await self._required_assignment(
                 session, context.company.id, appointment_id, lock=True
             )
@@ -449,6 +452,8 @@ class DispatchService:
             assignment.status = "assigned"
             assignment.assignment_reason = reason
             assignment.assigned_by_user_id = context.user.id
+            assignment.window_start_at = work_start
+            assignment.window_end_at = work_end
             assignment.replaced_at = now
             assignment.effective_at = now
             assignment.version += 1
