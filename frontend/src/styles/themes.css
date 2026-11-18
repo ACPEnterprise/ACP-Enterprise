@@ -5,6 +5,13 @@
   --semantic-surface: var(--acp-navy-850);
   --semantic-surface-raised: var(--acp-cobalt-850);
   --semantic-surface-muted: var(--acp-navy-800);
+  --semantic-surface-glass: rgb(7 28 73 / 0.76);
+  --semantic-surface-glass-strong: rgb(10 38 91 / 0.88);
+  --semantic-surface-inset: rgb(20 62 123 / 0.72);
+  --semantic-panel-highlight: rgb(129 194 255 / 0.34);
+  --semantic-feature-border: rgb(255 74 103 / 0.92);
+  --semantic-panel-glow: 0 18px 48px rgb(1 12 40 / 0.4), 0 0 24px rgb(24 119 255 / 0.12);
+  --semantic-control-glow: 0 0 0 1px rgb(90 174 255 / 0.25), 0 8px 22px rgb(0 17 58 / 0.28);
   --semantic-text-primary: var(--acp-slate-50);
   --semantic-text-secondary: var(--acp-slate-300);
   --semantic-text-muted: var(--acp-slate-400);
@@ -58,6 +65,13 @@
   --semantic-surface: var(--acp-white);
   --semantic-surface-raised: var(--acp-light-blue-25);
   --semantic-surface-muted: var(--acp-light-blue-100);
+  --semantic-surface-glass: rgb(255 255 255 / 0.78);
+  --semantic-surface-glass-strong: rgb(255 255 255 / 0.9);
+  --semantic-surface-inset: rgb(229 240 255 / 0.72);
+  --semantic-panel-highlight: rgb(255 255 255 / 0.86);
+  --semantic-feature-border: rgb(91 148 229 / 0.58);
+  --semantic-panel-glow: 0 18px 44px rgb(63 101 155 / 0.16), 0 0 22px rgb(95 157 231 / 0.1);
+  --semantic-control-glow: 0 0 0 1px rgb(75 135 221 / 0.18), 0 8px 20px rgb(58 101 166 / 0.12);
   --semantic-text-primary: var(--acp-slate-950);
   --semantic-text-secondary: var(--acp-slate-700);
   --semantic-text-muted: var(--acp-slate-500);
