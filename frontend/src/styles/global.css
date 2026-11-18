@@ -21,7 +21,7 @@ body {
   min-width: 0;
   isolation: isolate;
   overflow: hidden;
-  --app-header-height: 5rem;
+  --app-header-height: calc(3.5rem + var(--space-3) + max(var(--space-3), var(--safe-area-top)));
   background:
     radial-gradient(circle at 84% 8%, rgb(36 99 198 / 0.2), transparent 32rem),
     var(--gradient-primary) !important;
@@ -342,6 +342,10 @@ html[data-theme="light"] .theme-navigation::after {
 }
 
 @media (orientation: landscape) and (max-height: 32rem) {
+  .theme-shell {
+    --app-header-height: calc(3.5rem + var(--space-2) + max(var(--space-2), var(--safe-area-top)));
+  }
+
   .safe-area-header {
     padding-top: max(var(--space-2), var(--safe-area-top));
     padding-bottom: var(--space-2);
