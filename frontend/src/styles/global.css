@@ -31,6 +31,9 @@ body {
 @media (min-width: 48rem) {
   .theme-shell {
     display: grid;
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: visible;
     --sidebar-width: 5rem;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     grid-template-rows: minmax(100dvh, auto);
@@ -45,6 +48,24 @@ body {
   .theme-shell > .theme-shell-content {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .theme-shell-content {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .theme-navigation-desktop {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+  }
+
+  .theme-navigation-desktop .theme-primary-navigation {
+    min-height: 0;
   }
 }
 

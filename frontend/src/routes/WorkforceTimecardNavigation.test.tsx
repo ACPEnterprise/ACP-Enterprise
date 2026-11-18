@@ -27,6 +27,7 @@ vi.mock("../hooks/useWorkforce", () => ({
     canBind: false,
   }),
   useWorkforceDirectory: () => ({ data: [], isLoading: false, isError: false }),
+  useHistoricalWorkforceIdentities: () => ({ data: { items: [] }, isLoading: false, isError: false }),
   useWorkforceEmployee: () => ({
     data: undefined,
     isLoading: false,

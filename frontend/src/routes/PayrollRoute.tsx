@@ -9,7 +9,7 @@ import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup
 import { PayrollCutoverReview } from "../components/payroll/PayrollCutoverReview";
 import { PayrollPolicySetup } from "../components/payroll/PayrollPolicySetup";
 
-const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
+const label = (value: string | null | undefined) => (value ?? "Not available").replaceAll("_", " ").replaceAll(":", " · ");
 
 const employeeRequirement = (code: string) => {
   if (code === "TIME_EVIDENCE_MISSING") return { requirement: "Accepted time", owner: "OWNER", blocks: "ASSEMBLE · CALCULATE · APPROVE · CLOSE", next: "Open the linked Timecard, resolve the period exception, and accept the time." };

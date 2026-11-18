@@ -56,6 +56,7 @@ const contextualDomains = new Set([
   "luminary",
   "beacon",
   "price-book",
+  "migration",
 ]);
 
 const tone = (classification: LiaResponse["classification"]) =>
@@ -189,6 +190,7 @@ export function LiaRoute() {
         luminary: "Luminary",
         beacon: "Beacon",
         "price-book": "Price Book",
+        migration: "Migration",
       }[context.domain]
     : undefined;
   const routeContextKey = context

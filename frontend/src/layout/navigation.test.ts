@@ -42,11 +42,10 @@ describe("employee mobile navigation", () => {
     expect(operations?.items).toContain(purchasing);
   });
 
-  it("keeps both dispatch and scheduling reachable in Operations", () => {
+  it("keeps Dispatch as the sole scheduling workspace in Operations", () => {
     const operations = navigationGroups.find((group) => group.id === "operations");
 
-    expect(operations?.items.map((item) => item.id)).toEqual(
-      expect.arrayContaining(["dispatch", "scheduling"]),
-    );
+    expect(operations?.items.map((item) => item.id)).toContain("dispatch");
+    expect(operations?.items.map((item) => item.id)).not.toContain("scheduling");
   });
 });

@@ -42,6 +42,7 @@ import {
   jobsHandle,
   liaHandle,
   missionControlHandle,
+  onboardingHandle,
   notFoundHandle,
   priceBookHandle,
   schedulingHandle,
@@ -93,6 +94,13 @@ export const appRoutes: RouteObject[] = [
             lazy: async () => ({
               Component: (await import("../routes/AuthenticatedLandingRoute"))
                 .AuthenticatedLandingRoute,
+            }),
+          },
+          {
+            path: "onboarding",
+            handle: onboardingHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/CommercialOnboardingRoute")).CommercialOnboardingRoute,
             }),
           },
           {

@@ -9,6 +9,15 @@ export const commandCenterHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const onboardingHandle = {
+  workspace: {
+    pageTitle: "Set up your company",
+    breadcrumbs: [{ label: "Set up your company" }],
+    helpTopic: "commercial-onboarding",
+    aiContext: "migration",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const liaHandle = {
   workspace: {
     pageTitle: "LIA",

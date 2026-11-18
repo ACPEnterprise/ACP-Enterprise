@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Outlet, useLocation, useMatches, useNavigationType } from "react-router";
 
 import { brandConfig } from "../branding/brandConfig";
@@ -63,14 +64,8 @@ export function ApplicationShell() {
     navigationTriggerRef.current?.focus();
   };
 
-  return (
-    <div className="theme-shell flex min-h-screen min-h-dvh bg-app-background text-content">
-      <SkipLink />
-      <Sidebar
-        brand={brandConfig}
-      />
-      <div aria-hidden="true" className="theme-viewport-backdrop" />
-      {mobileNavigationOpen && (
+  const mobileNavigation = mobileNavigationOpen
+    ? createPortal(
         <>
           <button
             type="button"
@@ -78,16 +73,25 @@ export function ApplicationShell() {
             className="fixed inset-0 z-[var(--layer-navigation)] bg-[var(--semantic-overlay)] md:hidden"
             onClick={closeMobileNavigation}
           />
-          <div className="md:hidden">
-            <Sidebar
-              brand={brandConfig}
-              mobile
-              onClose={closeMobileNavigation}
-              onNavigate={() => setMobileNavigationOpen(false)}
-            />
-          </div>
-        </>
-      )}
+          <Sidebar
+            brand={brandConfig}
+            mobile
+            onClose={closeMobileNavigation}
+            onNavigate={() => setMobileNavigationOpen(false)}
+          />
+        </>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <div className="theme-shell flex min-h-screen min-h-dvh bg-app-background text-content">
+      <SkipLink />
+      <Sidebar
+        brand={brandConfig}
+      />
+      <div aria-hidden="true" className="theme-viewport-backdrop" />
+      {mobileNavigation}
       <div className="theme-shell-content flex min-h-screen min-h-dvh min-w-0 flex-1 flex-col">
         <ApplicationHeader
           brand={brandConfig}

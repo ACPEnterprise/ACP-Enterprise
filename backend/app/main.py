@@ -60,6 +60,7 @@ from app.luminary.router import router as luminary_router
 from app.marketing.router import router as marketing_router
 from app.operational_assets.router import router as operational_assets_router
 from app.operational_migration.product_router import router as migration_product_router
+from app.migration_support.router import router as migration_support_router
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
 from app.payroll.cutover_router import router as payroll_cutover_router
@@ -244,6 +245,7 @@ app.include_router(worker_recovery_router)
 app.include_router(worker_recovery_transport_router)
 app.include_router(qbo_source_router)
 app.include_router(migration_product_router)
+app.include_router(migration_support_router)
 
 
 @app.get("/", tags=["System"])
