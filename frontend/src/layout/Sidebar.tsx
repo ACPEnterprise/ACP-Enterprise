@@ -44,8 +44,8 @@ export function Sidebar({
     <aside
       aria-label={mobile ? "Mobile application navigation" : "Application navigation"}
       className={mobile
-        ? "theme-navigation safe-area-drawer fixed inset-y-0 left-0 z-[var(--layer-overlay)] flex h-dvh w-72 max-w-[calc(100vw-var(--space-8))] min-w-0 flex-col overflow-hidden border-r border-stroke bg-navigation shadow-lg"
-        : "theme-navigation hidden w-64 min-w-64 shrink-0 flex-col overflow-hidden border-r border-stroke bg-navigation lg:flex"}
+        ? "theme-navigation safe-area-drawer fixed inset-y-0 left-0 z-[var(--layer-overlay)] flex h-dvh w-72 max-w-[calc(100vw-var(--space-8))] min-w-0 flex-col overflow-hidden border-r border-stroke shadow-lg"
+        : "theme-navigation hidden w-64 min-w-64 shrink-0 flex-col overflow-hidden border-r border-stroke lg:flex"}
     >
       <div className="relative">
         <BrandRegion brand={brand} />

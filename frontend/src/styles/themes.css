@@ -32,7 +32,7 @@
   --semantic-header-background: var(--acp-header-navy);
   --semantic-command-center-accent: var(--acp-liberty-blue-400);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
-  --semantic-flag-overlay-opacity: 0.13;
+  --semantic-flag-overlay-opacity: 0.18;
   --flag-wave-color: rgb(132 188 255 / 0.52);
   --flag-star-color: rgb(255 255 255 / 0.95);
   --semantic-panel-shadow: 0 12px 32px rgb(3 19 56 / 0.24);
@@ -84,7 +84,7 @@
   --semantic-header-background: var(--acp-white);
   --semantic-command-center-accent: var(--acp-liberty-blue-700);
   --semantic-panel-outline: var(--twelve-hats-panel-red);
-  --semantic-flag-overlay-opacity: 0.11;
+  --semantic-flag-overlay-opacity: 0.18;
   --flag-wave-color: rgb(73 119 180 / 0.58);
   --flag-star-color: rgb(68 111 174 / 0.7);
   --semantic-panel-shadow: 0 10px 28px rgb(25 65 120 / 0.1);

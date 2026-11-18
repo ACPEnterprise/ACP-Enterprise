@@ -1,23 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="none">
-  <g fill="none" stroke="#4f86c6" stroke-linecap="round">
-    <path d="M-80 210C260 40 470 390 820 190s560-20 900 140" stroke-width="34" stroke-opacity=".36"/>
-    <path d="M-120 350c340-170 570 190 910-10s560-20 930 120" stroke-width="13" stroke-opacity=".25"/>
-    <path d="M-80 690c360-180 570 180 920-20s520-30 850 120" stroke-width="30" stroke-opacity=".24"/>
-    <path d="M-100 790c340-150 560 130 910-30s540-30 840 90" stroke-width="10" stroke-opacity=".2"/>
+  <defs>
+    <linearGradient id="fabric" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".34"/>
+      <stop offset=".28" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".56" stop-color="#173d78" stop-opacity=".18"/>
+      <stop offset=".78" stop-color="#fff" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#173d78" stop-opacity=".12"/>
+    </linearGradient>
+    <path id="star" d="m0-11 3.1 6.6 7.3.8-5.4 4.8 1.5 7.1L0 5.5l-6.5 3.8L-5-2.6l-5.4-4.8 7.3-.8z"/>
+  </defs>
+
+  <!-- Broad curved bands make the composition read as fabric, not a star field. -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M-180 110C180-20 430 250 760 100s610-100 1050 120" stroke="#fff" stroke-width="76" stroke-opacity=".19"/>
+    <path d="M-180 185C180 55 430 325 760 175s610-100 1050 120" stroke="#b8324b" stroke-width="48" stroke-opacity=".16"/>
+    <path d="M-180 260C180 130 430 400 760 250s610-100 1050 120" stroke="#fff" stroke-width="76" stroke-opacity=".2"/>
+    <path d="M-180 335C180 205 430 475 760 325s610-100 1050 120" stroke="#b8324b" stroke-width="48" stroke-opacity=".16"/>
+    <path d="M-180 410C180 280 430 550 760 400s610-100 1050 120" stroke="#fff" stroke-width="76" stroke-opacity=".19"/>
+    <path d="M-180 485C180 355 430 625 760 475s610-100 1050 120" stroke="#b8324b" stroke-width="48" stroke-opacity=".15"/>
+    <path d="M-180 560C180 430 430 700 760 550s610-100 1050 120" stroke="#fff" stroke-width="76" stroke-opacity=".18"/>
+    <path d="M-180 635C180 505 430 775 760 625s610-100 1050 120" stroke="#b8324b" stroke-width="48" stroke-opacity=".14"/>
+    <path d="M-180 710C180 580 430 850 760 700s610-100 1050 120" stroke="#fff" stroke-width="76" stroke-opacity=".16"/>
   </g>
-  <g fill="#6c96c7" fill-opacity=".55">
-    <path d="m150 128 5 13 14 1-11 9 3 14-11-7-12 7 4-14-11-9 14-1z"/>
-    <path d="m330 256 4 11 12 1-9 8 3 12-10-6-10 6 3-12-9-8 12-1z"/>
-    <path d="m560 105 4 12 13 1-10 8 3 13-10-7-11 7 4-13-10-8 13-1z"/>
-    <path d="m790 300 5 13 14 1-11 9 3 14-11-7-12 7 4-14-11-9 14-1z"/>
-    <path d="m1040 160 4 12 13 1-10 8 3 13-10-7-11 7 4-13-10-8 13-1z"/>
-    <path d="m1290 350 5 13 14 1-11 9 3 14-11-7-12 7 4-14-11-9 14-1z"/>
-    <path d="m1460 145 4 12 13 1-10 8 3 13-10-7-11 7 4-13-10-8 13-1z"/>
-    <path d="m210 560 4 12 13 1-10 8 3 13-10-7-11 7 4-13-10-8 13-1z"/>
-    <path d="m470 730 5 13 14 1-11 9 3 14-11-7-12 7 4-14-11-9 14-1z"/>
-    <path d="m740 570 4 12 13 1-10 8 3 13-10-7-11 7 4-13-10-8 13-1z"/>
-    <path d="m1010 760 5 13 14 1-11 9 3 14-11-7-12 7 4-14-11-9 14-1z"/>
-    <path d="m1260 600 4 12 13 1-10 8 3 13-10-7-11 7 4-13-10-8 13-1z"/>
-    <path d="m1510 760 5 13 14 1-11 9 3 14-11-7-12 7 4-14-11-9 14-1z"/>
+
+  <!-- A softly curved canton anchors the stars to the flag composition. -->
+  <path d="M0 0h790c-70 105-74 210-4 320-216 74-500 48-786-34z" fill="#1f4f95" fill-opacity=".24"/>
+  <g fill="#fff" fill-opacity=".38">
+    <use href="#star" transform="translate(70 66) scale(.72)"/>
+    <use href="#star" transform="translate(150 48) scale(.55)"/>
+    <use href="#star" transform="translate(230 72) scale(.7)"/>
+    <use href="#star" transform="translate(315 46) scale(.52)"/>
+    <use href="#star" transform="translate(395 70) scale(.66)"/>
+    <use href="#star" transform="translate(480 44) scale(.5)"/>
+    <use href="#star" transform="translate(565 67) scale(.68)"/>
+    <use href="#star" transform="translate(650 45) scale(.52)"/>
+    <use href="#star" transform="translate(112 142) scale(.52)"/>
+    <use href="#star" transform="translate(195 166) scale(.68)"/>
+    <use href="#star" transform="translate(280 138) scale(.5)"/>
+    <use href="#star" transform="translate(365 164) scale(.7)"/>
+    <use href="#star" transform="translate(450 136) scale(.52)"/>
+    <use href="#star" transform="translate(535 161) scale(.66)"/>
+    <use href="#star" transform="translate(620 137) scale(.5)"/>
+    <use href="#star" transform="translate(705 158) scale(.64)"/>
+    <use href="#star" transform="translate(72 238) scale(.68)"/>
+    <use href="#star" transform="translate(158 216) scale(.5)"/>
+    <use href="#star" transform="translate(242 242) scale(.66)"/>
+    <use href="#star" transform="translate(328 214) scale(.5)"/>
+    <use href="#star" transform="translate(414 239) scale(.68)"/>
+    <use href="#star" transform="translate(500 214) scale(.5)"/>
+    <use href="#star" transform="translate(586 238) scale(.65)"/>
+    <use href="#star" transform="translate(672 215) scale(.52)"/>
   </g>
+
+  <!-- Long folds add low-contrast fabric depth across the whole flag. -->
+  <rect width="1600" height="900" fill="url(#fabric)" opacity=".56"/>
+  <path d="M-80 0C220 250 150 570 420 900M360 0c230 260 160 570 430 900M900 0c-180 250-100 560-360 900M1360 0c-190 260-110 580-360 900" fill="none" stroke="#fff" stroke-linecap="round" stroke-opacity=".12" stroke-width="70"/>
 </svg>
