@@ -164,7 +164,9 @@ export function WorkforceRoute() {
     const query = search.trim().toLowerCase();
     return (directory.data ?? []).filter((item) => {
       const statusMatches = !statusFilter
-        || (statusFilter === "inactive" ? ["inactive", "leave"].includes(item.employee_status) : item.employee_status === statusFilter);
+        || (statusFilter === "former"
+          ? ["inactive", "leave", "terminated"].includes(item.employee_status)
+          : item.employee_status === statusFilter);
       return (!query || [item.display_name, item.employee_number, item.job_title ?? "", ...item.capability_codes, ...item.language_codes].some((value) => value.toLowerCase().includes(query)))
         && (!branchFilter || item.home_branch_id === branchFilter)
         && statusMatches
@@ -810,8 +812,7 @@ export function WorkforceRoute() {
                 Employee status
                 <select aria-label="Filter by Employee status" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                   <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="terminated">Terminated</option>
+                  <option value="former">Former Employees</option>
                   <option value="">All</option>
                 </select>
               </label>

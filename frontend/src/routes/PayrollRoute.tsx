@@ -302,6 +302,7 @@ export function PayrollRoute() {
                   <thead>
                     <tr className="text-content-muted">
                       <th className="pb-2">Employee</th>
+                      <th>Employment as of period</th>
                       <th>Accepted hours</th>
                       <th>Regular-rate candidate</th>
                       <th>Overtime premium candidate</th>
@@ -323,6 +324,10 @@ export function PayrollRoute() {
                         <td className="py-3">
                           <strong>{employee.display_name}</strong>
                           <p className="text-xs text-content-muted">{employee.employee_number}</p>
+                        </td>
+                        <td>
+                          <span className={employee.employment_eligible_as_of ? "text-content" : "text-content-muted"}>{label(employee.employment_status_as_of)}</span>
+                          <span className="block text-xs text-content-muted">{employee.hire_date ?? "Hire date unavailable"} – {employee.termination_date ?? "present"}</span>
                         </td>
                         <td>{(employee.accepted_minutes / 60).toFixed(2)}</td>
                         <td>{employee.regular_candidate_minutes === null ? "Not calculated" : (employee.regular_candidate_minutes / 60).toFixed(2)}</td>

@@ -158,10 +158,9 @@ describe("application routing", () => {
       permissionCodes: ["COMPANY_SCHEDULING_READ"],
     });
     expect(await screen.findByText("Service Board route content")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/scheduling");
+    expect(router.state.location.pathname).toBe("/dispatch");
     expect(router.state.location.search).toContain("date=2026-09-30");
-    expect(router.state.location.search).toContain("view=day");
-    expect(router.state.location.search).toContain("perspective=dispatch");
+    expect(router.state.location.search).not.toContain("perspective=scheduling");
     expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("aria-current", "page");
   });
 

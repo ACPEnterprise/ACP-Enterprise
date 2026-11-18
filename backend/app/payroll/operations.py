@@ -76,6 +76,10 @@ class PayrollPeriodEmployee:
     time_evidence_revision_ids: tuple[UUID, ...]
     time_snapshot_state: str
     gross_calculation_state: str
+    employment_status_as_of: str
+    employment_eligible_as_of: bool
+    hire_date: date | None
+    termination_date: date | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +94,22 @@ class PayrollPeriodOperations:
 
 
 class PayrollOperationsService:
+    @staticmethod
+    def _employment_as_of(
+        employee: Employee, *, period_start: date, period_end: date
+    ) -> tuple[str, bool]:
+        if employee.hire_date is not None and employee.hire_date > period_end:
+            return "NOT_EMPLOYED_AS_OF_PERIOD", False
+        if employee.termination_date is not None and employee.termination_date < period_start:
+            return "NOT_EMPLOYED_AS_OF_PERIOD", False
+        if employee.status == "active":
+            return "ACTIVE_AS_OF_PERIOD", True
+        if employee.hire_date is not None and (
+            employee.termination_date is None or employee.termination_date >= period_start
+        ):
+            return "FORMER_EMPLOYEE_IN_PERIOD", True
+        return "STATUS_AS_OF_UNAVAILABLE", False
+
     async def period(
         self,
         session: AsyncSession,
@@ -125,14 +145,25 @@ class PayrollOperationsService:
                     select(Employee)
                     .where(
                         Employee.company_id == company_id,
-                        Employee.status == "active",
+                        Employee.archived_at.is_(None),
                         employee_scope,
                     )
                     .order_by(Employee.display_name, Employee.id)
                 )
             ).all()
         )
-        employee_ids = tuple(item.id for item in employees)
+        period_employees = tuple(
+            item
+            for item in employees
+            if self._employment_as_of(
+                item, period_start=period.period_start, period_end=period.period_end
+            )[1]
+            or self._employment_as_of(
+                item, period_start=period.period_start, period_end=period.period_end
+            )[0]
+            == "STATUS_AS_OF_UNAVAILABLE"
+        )
+        employee_ids = tuple(item.id for item in period_employees)
         revisions = await self._current_revisions(
             session, company_id, employee_ids, period.period_start, period.period_end
         )
@@ -229,7 +260,10 @@ class PayrollOperationsService:
             else "MISSING_CONFIGURATION"
         )
         rows: list[PayrollPeriodEmployee] = []
-        for employee in employees:
+        for employee in period_employees:
+            employment_status_as_of, employment_eligible_as_of = self._employment_as_of(
+                employee, period_start=period.period_start, period_end=period.period_end
+            )
             current = tuple(
                 item
                 for item in revisions.get(employee.id, ())
@@ -276,6 +310,8 @@ class PayrollOperationsService:
             exceptions: set[str] = set()
             if not current:
                 exceptions.add("TIME_EVIDENCE_MISSING")
+            if not employment_eligible_as_of:
+                exceptions.add("EMPLOYMENT_STATUS_AS_OF_UNAVAILABLE")
             elif len(accepted) != len(current):
                 exceptions.add("TIME_REVIEW_INCOMPLETE")
             if comp_state != "READY":
@@ -319,6 +355,10 @@ class PayrollOperationsService:
                     accepted_ids,
                     time_snapshot_state,
                     gross_calculation_state,
+                    employment_status_as_of,
+                    employment_eligible_as_of,
+                    employee.hire_date,
+                    employee.termination_date,
                 )
             )
         return PayrollPeriodOperations(

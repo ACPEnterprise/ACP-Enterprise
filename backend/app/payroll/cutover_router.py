@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -20,6 +20,7 @@ from app.payroll.models import (
     PayrollCutoverBridgePeriodRecord,
     PayrollCutoverFactRevision,
     PayrollCutoverReviewRecord,
+    EmployeeCompensationAuthorityVersion,
     PayrollPaymentDestinationVersion,
     PayrollPayStatementRecord,
     PayrollProtectedInputEnvelope,
@@ -43,6 +44,8 @@ from app.platform.idempotency.reliability import (
 )
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
+from app.timekeeping.models import WorkdayTimeEntryRevision
+from app.workforce.models import HistoricalWorkforceIdentity
 
 router = APIRouter(
     prefix="/api/v1/payroll/cutover-review", tags=["Payroll Cutover Review"]
@@ -453,6 +456,235 @@ async def get_review(context: Read, session: Session) -> dict[str, object]:
                 "version": p.version,
             }
             for p in periods
+        ],
+    }
+
+
+@router.get("/historical-workforce")
+async def historical_workforce(
+    context: Read,
+    session: Session,
+    period_start: date = date(2026, 8, 15),
+    period_end: date = date(2026, 8, 21),
+    pay_date: date = date(2026, 8, 28),
+) -> dict[str, object]:
+    """Expose source workforce evidence without exposing sealed Payroll results."""
+    if period_end < period_start or pay_date < period_end:
+        raise HTTPException(422, "Historical Payroll dates are not chronological.")
+    employees = tuple(
+        (
+            await session.scalars(
+                select(Employee)
+                .where(
+                    Employee.company_id == context.company.id,
+                    Employee.archived_at.is_(None),
+                )
+                .order_by(Employee.display_name, Employee.id)
+            )
+        ).all()
+    )
+    employee_ids = tuple(employee.id for employee in employees)
+    identities = tuple(
+        (
+            await session.scalars(
+                select(HistoricalWorkforceIdentity).where(
+                    HistoricalWorkforceIdentity.company_id == context.company.id,
+                    HistoricalWorkforceIdentity.native_employee_id.in_(employee_ids),
+                )
+            )
+        ).all()
+    ) if employee_ids else ()
+    identities_by_employee: dict[UUID, list[HistoricalWorkforceIdentity]] = {}
+    for identity in identities:
+        if identity.native_employee_id is not None:
+            identities_by_employee.setdefault(identity.native_employee_id, []).append(identity)
+
+    compensation_rows = tuple(
+        (
+            await session.scalars(
+                select(EmployeeCompensationAuthorityVersion)
+                .where(
+                    EmployeeCompensationAuthorityVersion.company_id == context.company.id,
+                    EmployeeCompensationAuthorityVersion.employee_id.in_(employee_ids),
+                    EmployeeCompensationAuthorityVersion.lifecycle.in_(("approved", "superseded")),
+                    EmployeeCompensationAuthorityVersion.effective_start <= period_end,
+                    or_(
+                        EmployeeCompensationAuthorityVersion.effective_end.is_(None),
+                        EmployeeCompensationAuthorityVersion.effective_end >= period_start,
+                    ),
+                )
+                .order_by(
+                    EmployeeCompensationAuthorityVersion.employee_id,
+                    EmployeeCompensationAuthorityVersion.effective_start.desc(),
+                )
+            )
+        ).all()
+    ) if employee_ids else ()
+    compensation_by_employee: dict[UUID, list[EmployeeCompensationAuthorityVersion]] = {}
+    for value in compensation_rows:
+        compensation_by_employee.setdefault(value.employee_id, []).append(value)
+
+    time_rows = tuple(
+        (
+            await session.scalars(
+                select(WorkdayTimeEntryRevision)
+                .where(
+                    WorkdayTimeEntryRevision.company_id == context.company.id,
+                    WorkdayTimeEntryRevision.employee_id.in_(employee_ids),
+                    WorkdayTimeEntryRevision.work_date >= period_start,
+                    WorkdayTimeEntryRevision.work_date <= period_end,
+                )
+                .order_by(
+                    WorkdayTimeEntryRevision.employee_id,
+                    WorkdayTimeEntryRevision.entry_id,
+                    WorkdayTimeEntryRevision.revision_number.desc(),
+                )
+            )
+        ).all()
+    ) if employee_ids else ()
+    current_time: dict[tuple[UUID, UUID], WorkdayTimeEntryRevision] = {}
+    for value in time_rows:
+        current_time.setdefault((value.employee_id, value.entry_id), value)
+    time_by_employee: dict[UUID, list[WorkdayTimeEntryRevision]] = {}
+    for value in current_time.values():
+        time_by_employee.setdefault(value.employee_id, []).append(value)
+
+    bridge_periods = tuple(
+        (
+            await session.scalars(
+                select(PayrollCutoverBridgePeriodRecord).where(
+                    PayrollCutoverBridgePeriodRecord.company_id == context.company.id,
+                    PayrollCutoverBridgePeriodRecord.period_start == period_start,
+                    PayrollCutoverBridgePeriodRecord.period_end == period_end,
+                    PayrollCutoverBridgePeriodRecord.pay_date == pay_date,
+                    PayrollCutoverBridgePeriodRecord.certification_state != "superseded",
+                )
+            )
+        ).all()
+    )
+    bridge_ids = tuple(value.id for value in bridge_periods)
+    bridge_facts = tuple(
+        (
+            await session.scalars(
+                select(PayrollCutoverBridgeEmployeeFactRevision).where(
+                    PayrollCutoverBridgeEmployeeFactRevision.company_id == context.company.id,
+                    PayrollCutoverBridgeEmployeeFactRevision.bridge_period_id.in_(bridge_ids),
+                    PayrollCutoverBridgeEmployeeFactRevision.certification_state != "superseded",
+                )
+            )
+        ).all()
+    ) if bridge_ids else ()
+    facts_by_employee: dict[UUID, list[PayrollCutoverBridgeEmployeeFactRevision]] = {}
+    for fact in bridge_facts:
+        if fact.employee_id is not None:
+            facts_by_employee.setdefault(fact.employee_id, []).append(fact)
+
+    def employment_status(employee: Employee) -> tuple[str, bool]:
+        if employee.hire_date and employee.hire_date > period_end:
+            return "NOT_EMPLOYED_AS_OF_PERIOD", False
+        if employee.termination_date and employee.termination_date < period_start:
+            return "NOT_EMPLOYED_AS_OF_PERIOD", False
+        if employee.status == "active":
+            return "ACTIVE_AS_OF_PERIOD", True
+        if employee.hire_date and (
+            employee.termination_date is None or employee.termination_date >= period_start
+        ):
+            return "FORMER_EMPLOYEE_IN_PERIOD", True
+        return "STATUS_AS_OF_UNAVAILABLE", False
+
+    result: list[dict[str, object]] = []
+    for employee in employees:
+        status_as_of, eligible_as_of = employment_status(employee)
+        employee_compensation = compensation_by_employee.get(employee.id, [])
+        employee_time = sorted(
+            time_by_employee.get(employee.id, []), key=lambda value: value.work_date
+        )
+        employee_facts = facts_by_employee.get(employee.id, [])
+        employee_identities = identities_by_employee.get(employee.id, [])
+        result.append(
+            {
+                "employee_id": str(employee.id),
+                "employee_number": employee.employee_number,
+                "display_name": employee.display_name,
+                "historical_position": employee.job_title,
+                "current_status": employee.status,
+                "employment_status_as_of": status_as_of,
+                "employment_eligible_as_of": eligible_as_of,
+                "hire_date": employee.hire_date,
+                "termination_date": employee.termination_date,
+                "historical_identities": [
+                    {
+                        "source_system": value.source_system,
+                        "source_identity": value.source_identity,
+                        "source_status": value.source_status,
+                        "lifecycle_state": value.lifecycle_state,
+                        "provenance_reference": value.provenance_reference,
+                        "evidence_digest": value.evidence_digest,
+                    }
+                    for value in employee_identities
+                ],
+                "compensation": [
+                    {
+                        "authority_version": value.authority_version,
+                        "lifecycle": value.lifecycle,
+                        "effective_start": value.effective_start,
+                        "effective_end": value.effective_end,
+                        "compensation_type": value.compensation_type,
+                        "hourly_rate": value.hourly_rate,
+                        "salary_amount": value.salary_amount,
+                        "salary_frequency": value.salary_frequency,
+                        "additional_earning_types": value.additional_earning_types,
+                        "recurring_components": value.recurring_components,
+                        "evidence_digest": value.decision_evidence_digest,
+                    }
+                    for value in employee_compensation
+                ],
+                "time_records": [
+                    {
+                        "work_date": value.work_date,
+                        "state": value.state,
+                        "provenance": value.provenance,
+                        "approved_duration_minutes": value.approved_duration_minutes,
+                        "evidence_digest": value.evidence_digest,
+                    }
+                    for value in employee_time
+                ],
+                "variable_pay_and_deduction_evidence": sorted(
+                    {value.fact_key for value in employee_facts}
+                ),
+                "source_provenance": sorted(
+                    {
+                        *[value.provenance_reference for value in employee_identities],
+                        *[
+                            f"bridge:{period.source_reference}"
+                            for period in bridge_periods
+                        ],
+                        *[f"bridge-evidence:{value.evidence_digest}" for value in employee_facts],
+                        *[f"time-evidence:{value.evidence_digest}" for value in employee_time],
+                    }
+                ),
+            }
+        )
+    return {
+        "period_start": period_start,
+        "period_end": period_end,
+        "pay_date": pay_date,
+        "employees": result,
+        "bridge_periods": [
+            {
+                "period_start": value.period_start,
+                "period_end": value.period_end,
+                "pay_date": value.pay_date,
+                "source_type": value.source_type,
+                "source_reference": value.source_reference,
+                "certification_state": value.certification_state,
+            }
+            for value in bridge_periods
+        ],
+        "sealed_answer_key_excluded": True,
+        "limitations": [
+            "This view exposes source workforce evidence only; it never returns calculated QuickBooks or ACP Payroll results.",
+            "Protected bridge values remain sealed; fact keys, certification state, and evidence provenance are visible.",
         ],
     }
 

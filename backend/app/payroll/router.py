@@ -143,6 +143,10 @@ class PayrollPeriodEmployeeMetadata(BaseModel):
     time_evidence_revision_ids: list[UUID]
     time_snapshot_state: str
     gross_calculation_state: str
+    employment_status_as_of: str
+    employment_eligible_as_of: bool
+    hire_date: date | None
+    termination_date: date | None
 
 
 class PayrollPeriodOperationsMetadata(BaseModel):

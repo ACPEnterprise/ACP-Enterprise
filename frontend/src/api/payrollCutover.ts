@@ -20,6 +20,32 @@ export interface PayrollCompletionReadiness {
   accounting_requirements: string[];
 }
 
+export interface HistoricalWorkforceEmployee {
+  employee_id: string;
+  employee_number: string;
+  display_name: string;
+  historical_position: string | null;
+  current_status: string;
+  employment_status_as_of: string;
+  employment_eligible_as_of: boolean;
+  hire_date: string | null;
+  termination_date: string | null;
+  compensation: Array<{ authority_version: number; lifecycle: string; effective_start: string; effective_end: string | null; compensation_type: string; hourly_rate: string | null; salary_amount: string | null; salary_frequency: string | null; additional_earning_types: string[]; recurring_components: Array<Record<string, unknown>>; evidence_digest: string }>;
+  time_records: Array<{ work_date: string; state: string; provenance: string; approved_duration_minutes: number | null; evidence_digest: string }>;
+  variable_pay_and_deduction_evidence: string[];
+  source_provenance: string[];
+}
+
+export interface HistoricalWorkforceSource {
+  period_start: string;
+  period_end: string;
+  pay_date: string;
+  employees: HistoricalWorkforceEmployee[];
+  bridge_periods: Array<{ period_start: string; period_end: string; pay_date: string; source_type: string; source_reference: string; certification_state: string }>;
+  sealed_answer_key_excluded: true;
+  limitations: string[];
+}
+
 export const getCutoverReview = async () => (await apiClient.get<CutoverReview>("/api/v1/payroll/cutover-review")).data;
 export const createCutoverReview = async (body: Record<string, unknown>) => (await apiClient.post("/api/v1/payroll/cutover-review", body)).data;
 export const writeCutoverFact = async (body: Record<string, unknown>, certify: boolean) => (await apiClient.post(`/api/v1/payroll/cutover-review/${certify ? "certifications" : "facts"}`, body)).data;
@@ -29,3 +55,4 @@ export const certifyBridgePeriod = async (periodId: string, body: { certifier_ro
 export const getCutoverGates = async () => (await apiClient.get<{status: string; blockers: string[]}>("/api/v1/payroll/cutover-review/gates")).data;
 export const getDirectDepositReadiness = async () => (await apiClient.get<{status: string; blockers: string[]; can_initiate_ach: boolean}>("/api/v1/payroll/cutover-review/direct-deposit-readiness")).data;
 export const getPayrollCompletionReadiness = async () => (await apiClient.get<PayrollCompletionReadiness>("/api/v1/payroll/cutover-review/completion-readiness")).data;
+export const getHistoricalWorkforceSource = async () => (await apiClient.get<HistoricalWorkforceSource>("/api/v1/payroll/cutover-review/historical-workforce?period_start=2026-08-15&period_end=2026-08-21&pay_date=2026-08-28")).data;

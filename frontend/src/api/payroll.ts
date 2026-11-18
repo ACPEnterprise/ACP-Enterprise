@@ -62,6 +62,10 @@ export interface PayrollPeriodEmployee {
   exception_codes: string[];
   payroll_review_status: string;
   time_evidence_revision_ids: string[];
+  employment_status_as_of: string;
+  employment_eligible_as_of: boolean;
+  hire_date: string | null;
+  termination_date: string | null;
 }
 
 export interface PayrollPeriodOperations {

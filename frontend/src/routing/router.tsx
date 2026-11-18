@@ -176,10 +176,7 @@ export const appRoutes: RouteObject[] = [
           {
             path: "scheduling",
             handle: schedulingHandle,
-            lazy: async () => ({
-              Component: (await import("../routes/SchedulingRoute"))
-                .SchedulingRoute,
-            }),
+            Component: ServiceBoardRedirect,
           },
           {
             Component: TechnicianRouteGuard,
@@ -236,7 +233,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: "dispatch",
             handle: dispatchHandle,
-            Component: ServiceBoardRedirect,
+            lazy: async () => ({
+              Component: (await import("../routes/SchedulingRoute"))
+                .SchedulingRoute,
+            }),
           },
           {
             path: "estimates",
