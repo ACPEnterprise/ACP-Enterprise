@@ -30,7 +30,7 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
             label="Open navigation"
             variant="ghost"
             onClick={onOpenNavigation}
-            className="lg:hidden"
+            className="md:hidden"
           />
           <div className="min-w-0">
             {metadata.breadcrumbs.length > 0 && (

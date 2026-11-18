@@ -11,7 +11,7 @@ export function BrandRegion({ brand, compact = false }: BrandRegionProps) {
   const fallback = brand.wordmark || brand.productName;
 
   return (
-    <div className="flex min-h-20 items-center gap-ui-3 border-b border-stroke px-ui-4">
+    <div className="theme-brand-region flex min-h-20 items-center gap-ui-3 border-b border-stroke px-ui-4">
       {asset ? (
         <img src={asset.src} alt={asset.alt} className="size-10 shrink-0 object-contain" />
       ) : (
@@ -20,7 +20,7 @@ export function BrandRegion({ brand, compact = false }: BrandRegionProps) {
         </div>
       )}
       {!compact && (
-        <Stack space="none" className="min-w-0">
+        <Stack space="none" className="theme-brand-copy min-w-0">
           <div className="flex flex-wrap items-center gap-ui-2">
             <span className="truncate text-heading-s text-navigation-content">{fallback}</span>
             {brand.environment && <Badge variant="information">{brand.environment}</Badge>}

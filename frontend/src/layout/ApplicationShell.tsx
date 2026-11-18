@@ -75,10 +75,10 @@ export function ApplicationShell() {
           <button
             type="button"
             aria-label="Close navigation"
-            className="fixed inset-0 z-[var(--layer-navigation)] bg-[var(--semantic-overlay)] lg:hidden"
+            className="fixed inset-0 z-[var(--layer-navigation)] bg-[var(--semantic-overlay)] md:hidden"
             onClick={closeMobileNavigation}
           />
-          <div className="lg:hidden">
+          <div className="md:hidden">
             <Sidebar
               brand={brandConfig}
               mobile
