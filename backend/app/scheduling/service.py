@@ -553,10 +553,10 @@ class SchedulingService:
                 for_update=True,
             )
             if reservation is None:
-                if (
-                    appointment.capacity_state
-                    != AppointmentCapacityState.INTENTIONALLY_UNASSIGNED.value
-                ):
+                if appointment.capacity_state not in {
+                    AppointmentCapacityState.INTENTIONALLY_UNASSIGNED.value,
+                    AppointmentCapacityState.LEGACY_UNRECONCILED.value,
+                }:
                     raise SchedulingConflictError(
                         "Scheduled Appointment has unreconciled capacity authority."
                     )
