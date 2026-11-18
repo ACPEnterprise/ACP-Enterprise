@@ -1,7 +1,7 @@
 """Persist tenant-scoped onboarding support cases.
 
 Revision ID: zq9s1u3w5y7c
-Revises: zq9s1u3w5y7b
+Revises: a1b3c5d7e9f0
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "zq9s1u3w5y7c"
-down_revision: str | Sequence[str] | None = "zq9s1u3w5y7b"
+down_revision: str | Sequence[str] | None = "a1b3c5d7e9f0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
