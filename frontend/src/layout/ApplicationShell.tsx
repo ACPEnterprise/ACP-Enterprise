@@ -69,6 +69,7 @@ export function ApplicationShell() {
       <Sidebar
         brand={brandConfig}
       />
+      <div aria-hidden="true" className="theme-viewport-backdrop" />
       {mobileNavigationOpen && (
         <>
           <button
