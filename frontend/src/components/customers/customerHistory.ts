@@ -3,7 +3,6 @@ import type { InvoiceWorkspaceItem } from "../../types/invoices";
 import type { JobListItem } from "../../types/jobs";
 import type { PaymentReceipt } from "../../types/payments";
 import type { AppointmentDetail } from "../../types/scheduling";
-import type { HcpCustomerSourceHistory } from "../../types/hcpSourceHistory";
 
 export interface CustomerHistorySources {
   readonly customerId: string;
@@ -13,7 +12,6 @@ export interface CustomerHistorySources {
   readonly estimates: readonly EstimateSummary[];
   readonly invoices: readonly InvoiceWorkspaceItem[];
   readonly payments: readonly PaymentReceipt[];
-  readonly sourceHistory?: HcpCustomerSourceHistory;
 }
 
 export interface CustomerHistoryItem {
@@ -75,15 +73,7 @@ export function buildCustomerHistoryItems(props: CustomerHistorySources): Custom
     authority: "Native ACP Payment evidence",
     locationId: null,
   }));
-  const sourceJobs = (props.sourceHistory?.jobs ?? []).map((item) => ({
-    id: `historical-job:${item.source_id}`, occurredAt: item.updated_at ?? item.created_at ?? item.scheduled_start ?? "0001-01-01T00:00:00Z", title: `Job ${item.number ?? item.source_id}`, detail: (item.status ?? "status unavailable").replaceAll("_", " "), href: `/customers/${props.customerId}`, authority: "Imported historical service record", locationId: item.source_location_id,
-  }));
-  const sourceEstimates = (props.sourceHistory?.estimates ?? []).map((item) => ({
-    id: `historical-estimate:${item.source_id}`, occurredAt: item.updated_at ?? item.created_at ?? "0001-01-01T00:00:00Z", title: `Estimate ${item.number ?? item.source_id}`, detail: (item.status ?? "status unavailable").replaceAll("_", " "), href: `/customers/${props.customerId}`, authority: "Imported historical service record", locationId: null,
-  }));
-  const sourceInvoices = (props.sourceHistory?.invoices ?? []).map((item) => ({
-    id: `historical-invoice:${item.source_id}`, occurredAt: item.service_date ?? item.invoice_date ?? "0001-01-01T00:00:00Z", title: `Invoice ${item.number ?? item.source_id}`, detail: `${(item.status ?? "status unavailable").replaceAll("_", " ")} · ${item.amount_cents == null ? "amount unavailable" : `$${(item.amount_cents / 100).toFixed(2)}`}`, href: `/customers/${props.customerId}`, authority: "Imported historical service record", locationId: null,
-  }));
-  return [...jobs, ...appointments, ...estimates, ...invoices, ...payments, ...sourceJobs, ...sourceEstimates, ...sourceInvoices]
-    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt) || left.id.localeCompare(right.id));
+  return [...jobs, ...appointments, ...estimates, ...invoices, ...payments]
+    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt) || left.id.localeCompare(right.id))
+    .slice(0, 50);
 }

@@ -6,7 +6,6 @@ import type { InvoiceWorkspaceItem, CustomerEvidenceClassification } from "../..
 import type { JobListItem } from "../../types/jobs";
 import type { PaymentReceipt } from "../../types/payments";
 import type { AppointmentDetail } from "../../types/scheduling";
-import type { HcpCustomerSourceHistory } from "../../types/hcpSourceHistory";
 import { Badge } from "../../ui";
 import { buildCustomerHistoryItems } from "./customerHistory";
 
@@ -23,7 +22,6 @@ interface CustomerHistoryWorkspaceProps {
   readonly payments: readonly PaymentReceipt[];
   readonly evidence: readonly CustomerEvidenceClassification[];
   readonly unavailableDomains: readonly string[];
-  readonly sourceHistory?: HcpCustomerSourceHistory;
 }
 
 const terminalJobs = new Set(["completed", "cancelled"]);
@@ -58,11 +56,11 @@ export function CustomerHistoryWorkspace(props: CustomerHistoryWorkspaceProps) {
       <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-7">
         <div><dt className="text-content-muted">Locations</dt><dd className="text-lg font-semibold">{props.locations.length}</dd></div>
         <div><dt className="text-content-muted">Open Jobs</dt><dd className="text-lg font-semibold">{props.currentJobs.length}</dd></div>
-        <div><dt className="text-content-muted">Historical Jobs</dt><dd className="text-lg font-semibold">{props.historicalJobs.length + (props.sourceHistory?.counts.jobs ?? 0)}</dd></div>
+        <div><dt className="text-content-muted">Historical Jobs</dt><dd className="text-lg font-semibold">{props.historicalJobs.length}</dd></div>
         <div><dt className="text-content-muted">Appointments</dt><dd className="text-lg font-semibold">{props.appointments.length}</dd></div>
-        <div><dt className="text-content-muted">Estimates</dt><dd className="text-lg font-semibold">{props.estimates.length + (props.sourceHistory?.counts.estimates ?? 0)}</dd></div>
-        <div><dt className="text-content-muted">Invoices</dt><dd className="text-lg font-semibold">{props.invoices.length + (props.sourceHistory?.counts.invoices ?? 0)}</dd></div>
-        <div><dt className="text-content-muted">Payments</dt><dd className="text-lg font-semibold">{props.payments.length + (props.sourceHistory?.counts.payments ?? 0)}</dd></div>
+        <div><dt className="text-content-muted">Estimates</dt><dd className="text-lg font-semibold">{props.estimates.length}</dd></div>
+        <div><dt className="text-content-muted">Invoices</dt><dd className="text-lg font-semibold">{props.invoices.length}</dd></div>
+        <div><dt className="text-content-muted">Payments</dt><dd className="text-lg font-semibold">{props.payments.length}</dd></div>
       </dl>
       <p className="mt-3 text-sm text-content-muted">{latestJob ? <>Latest Job: <Link className="font-medium text-action-primary" to={`/jobs/${latestJob.id}?returnTo=${encodeURIComponent(`/customers/${props.customerId}`)}`}>{latestJob.job_number}</Link> · {new Date(latestJob.updated_at).toLocaleString()}</> : "No admitted Job is available in the bounded projection."}</p>
     </section>
@@ -107,7 +105,7 @@ export function CustomerHistoryWorkspace(props: CustomerHistoryWorkspaceProps) {
 
     <section aria-label="Combined service history" className="rounded-xl border border-stroke p-4">
       <h4 className="font-semibold">Combined service history</h4>
-      <p className="mt-1 text-xs text-content-muted">One chronology of native activity and deterministically bound retained history.</p>
+      <p className="mt-1 text-xs text-content-muted">Newest 50 items from the bounded native projections. Source-only events remain outside this timeline until admitted.</p>
       <ol className="mt-3 space-y-2">
         {history.map((item) => <li className="rounded-lg bg-surface-subtle p-3 text-sm" key={item.id}><div className="flex flex-wrap items-start justify-between gap-2"><Link className="font-medium text-action-primary" to={item.href}>{item.title}</Link><time className="text-xs text-content-muted" dateTime={item.occurredAt}>{new Date(item.occurredAt).toLocaleString()}</time></div><p className="mt-1 text-content-muted">{item.detail}</p><p className="mt-1 text-xs text-content-muted">Authority: {item.authority}</p></li>)}
         {history.length === 0 && <li className="text-sm text-content-muted">No admitted cross-domain history is available. Source-only history may still be unadmitted.</li>}

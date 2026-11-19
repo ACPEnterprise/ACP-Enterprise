@@ -1,5 +1,4 @@
 import pytest
-
 from app.operational_migration.hcp_historical_identity_bridge import (
     AddressEvidence,
     BridgeDisposition,
@@ -28,7 +27,9 @@ def canonical(
         display_name=name,
         email=email,
         phones=(phone,),
-        locations=(CanonicalLocationEvidence(f"location-{identity}", address("", line)),),
+        locations=(
+            CanonicalLocationEvidence(f"location-{identity}", address("", line)),
+        ),
         existing_source_ids=source_ids,
     )
 

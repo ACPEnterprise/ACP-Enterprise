@@ -52,6 +52,7 @@ class SourceCustomerEvidence:
 class CanonicalLocationEvidence:
     native_location_id: str
     address: AddressEvidence
+    existing_source_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,7 +269,21 @@ def _bound_decision(
     disposition: BridgeDisposition,
     dimensions: tuple[str, ...],
 ) -> CustomerBridgeDecision:
-    locations = tuple(_classify_location(item, target) for item in source.locations)
+    classified = [_classify_location(item, target) for item in source.locations]
+    claims = Counter(
+        item.native_location_id for item in classified if item.native_location_id
+    )
+    locations = tuple(
+        LocationBridgeDecision(
+            item.source_location_id,
+            None,
+            BridgeDisposition.AMBIGUOUS,
+            "multiple retained Locations claim one canonical Location",
+        )
+        if item.native_location_id and claims[item.native_location_id] > 1
+        else item
+        for item in classified
+    )
     return CustomerBridgeDecision(
         source_customer_id=source.source_customer_id,
         native_customer_id=target.native_customer_id,
@@ -283,12 +298,29 @@ def _bound_decision(
 def _classify_location(
     source: AddressEvidence, target: CanonicalCustomerEvidence
 ) -> LocationBridgeDecision:
-    matches = [
+    already = [
         row
         for row in target.locations
-        if _address(row.address) == _address(source)
+        if source.source_location_id in row.existing_source_ids
+    ]
+    if len(already) == 1:
+        return LocationBridgeDecision(
+            source.source_location_id,
+            already[0].native_location_id,
+            BridgeDisposition.ALREADY_BOUND,
+            "existing exact SOURCE.4 Location binding",
+        )
+    matches = [
+        row for row in target.locations if _address(row.address) == _address(source)
     ]
     if len(matches) == 1:
+        if matches[0].existing_source_ids:
+            return LocationBridgeDecision(
+                source.source_location_id,
+                None,
+                BridgeDisposition.AMBIGUOUS,
+                "canonical Location already has another SOURCE.4 identity",
+            )
         return LocationBridgeDecision(
             source.source_location_id,
             matches[0].native_location_id,
@@ -322,9 +354,7 @@ def _ambiguous(
     )
 
 
-def _quarantine(
-    source: SourceCustomerEvidence, reason: str
-) -> CustomerBridgeDecision:
+def _quarantine(source: SourceCustomerEvidence, reason: str) -> CustomerBridgeDecision:
     return CustomerBridgeDecision(
         source.source_customer_id,
         None,
@@ -365,5 +395,7 @@ def _address(value: AddressEvidence) -> str:
 
 def _digest(value: object) -> str:
     return hashlib.sha256(
-        json.dumps(value, default=asdict, sort_keys=True, separators=(",", ":")).encode()
+        json.dumps(
+            value, default=asdict, sort_keys=True, separators=(",", ":")
+        ).encode()
     ).hexdigest()

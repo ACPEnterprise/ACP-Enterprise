@@ -16,15 +16,21 @@ class HcpCustomerSourceHistoryError(ValueError):
     pass
 
 
-def _rows(root: Path, family: str) -> list[dict[str, Any]]:
+def _rows(root: Path, family: str, *, required: bool = True) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for path in sorted((root / "raw" / family).glob("page-*.json")):
+    for path in sorted((root / "raw" / family).glob("*.json")):
         value = json.loads(path.read_bytes())
         page = value.get(family)
         if not isinstance(page, list):
             raise HcpCustomerSourceHistoryError(f"invalid_{family}_page")
-        rows.extend(item for item in page if isinstance(item, dict))
-    if not rows:
+        for item in page:
+            if isinstance(item, dict):
+                rows.append(
+                    {**item, "_parent_job_id": path.stem.removeprefix("job-")}
+                    if family == "appointments" and path.stem.startswith("job-")
+                    else item
+                )
+    if required and not rows:
         raise HcpCustomerSourceHistoryError(f"missing_{family}_evidence")
     return rows
 
@@ -51,6 +57,12 @@ def _source_indexes(
         customer_id = (estimate.get("customer") or {}).get("id")
         if isinstance(customer_id, str):
             estimates_by_customer.setdefault(customer_id, []).append(estimate)
+    appointments_by_customer: dict[str, list[dict[str, Any]]] = {}
+    for appointment in _rows(root, "appointments", required=False):
+        job = jobs_by_id.get(str(appointment.get("_parent_job_id")))
+        customer_id = (job.get("customer") or {}).get("id") if job else None
+        if isinstance(customer_id, str):
+            appointments_by_customer.setdefault(customer_id, []).append(appointment)
     invoices_by_customer: dict[str, list[dict[str, Any]]] = {}
     for invoice in _rows(root, "invoices"):
         job = jobs_by_id.get(str(invoice.get("job_id")))
@@ -60,12 +72,13 @@ def _source_indexes(
     return {
         "customers": {key: (value,) for key, value in customers_by_id.items()},
         "jobs": {key: tuple(value) for key, value in jobs_by_customer.items()},
+        "appointments": {
+            key: tuple(value) for key, value in appointments_by_customer.items()
+        },
         "estimates": {
             key: tuple(value) for key, value in estimates_by_customer.items()
         },
-        "invoices": {
-            key: tuple(value) for key, value in invoices_by_customer.items()
-        },
+        "invoices": {key: tuple(value) for key, value in invoices_by_customer.items()},
     }
 
 
@@ -74,19 +87,26 @@ def project_customer_source_history(
 ) -> dict[str, object]:
     """Project exact provider-linked history without creating Accounting truth."""
     manifest_path = root / "acquisition-package-manifest.json"
+    if not manifest_path.exists():
+        manifest_path = root / "current-source-manifest.json"
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
-    if manifest.get("contract") != "hcp-source-4-acquisition-package/v1":
+    if manifest.get("contract") not in {
+        "hcp-source-4-acquisition-package/v1",
+        "hcp-current-provider-acquisition/v1",
+    }:
         raise HcpCustomerSourceHistoryError("unsupported_source_package")
-    if manifest.get("request_methods") != ["GET"]:
+    if not (
+        manifest.get("request_methods") == ["GET"]
+        or manifest.get("policy") == "GET_ONLY"
+    ):
         raise HcpCustomerSourceHistoryError("source_package_not_read_only")
 
     manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
-    indexes = _source_indexes(
-        str(root.resolve()), manifest_sha256
-    )
+    indexes = _source_indexes(str(root.resolve()), manifest_sha256)
     customer_rows = indexes["customers"].get(source_customer_id, ())
     jobs = indexes["jobs"].get(source_customer_id, ())
+    appointments = indexes["appointments"].get(source_customer_id, ())
     estimates = indexes["estimates"].get(source_customer_id, ())
     invoices = indexes["invoices"].get(source_customer_id, ())
     if len(customer_rows) != 1:
@@ -123,6 +143,19 @@ def project_customer_source_history(
             "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
         }
         for job in sorted(jobs, key=lambda row: str(row.get("id")))
+    ]
+    appointment_items = [
+        {
+            "source_id": item.get("id"),
+            "source_job_id": item.get("_parent_job_id"),
+            "scheduled_start": item.get("start_time") or item.get("start_date"),
+            "scheduled_end": item.get("end_time"),
+            "assigned_employee_source_ids": list(
+                item.get("dispatched_employees_ids") or []
+            ),
+            "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
+        }
+        for item in sorted(appointments, key=lambda row: str(row.get("id")))
     ]
 
     estimate_items = []
@@ -225,6 +258,7 @@ def project_customer_source_history(
         "counts": {
             "locations": len(location_items),
             "jobs": len(job_items),
+            "appointments": len(appointment_items),
             "estimates": len(estimate_items),
             "invoices": len(invoice_items),
             "payments": payment_count,
@@ -232,6 +266,7 @@ def project_customer_source_history(
         },
         "locations": location_items,
         "jobs": job_items,
+        "appointments": appointment_items,
         "estimates": estimate_items,
         "invoices": invoice_items,
     }
