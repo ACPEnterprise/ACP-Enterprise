@@ -3,6 +3,8 @@ import type {
   LiaFoundationReadiness,
   LiaReadiness,
   LiaResponse,
+  LiaContextMetric,
+  LiaContextRecord,
   LiaTemporalContext,
 } from "../types/lia";
 
@@ -11,7 +13,11 @@ export async function getLiaReadiness(): Promise<LiaReadiness> {
 }
 
 export async function getLiaFoundationReadiness(): Promise<LiaFoundationReadiness> {
-  return (await apiClient.get<LiaFoundationReadiness>("/api/v1/lia/foundation-readiness")).data;
+  return (
+    await apiClient.get<LiaFoundationReadiness>(
+      "/api/v1/lia/foundation-readiness",
+    )
+  ).data;
 }
 
 export async function getOwnerBriefing(): Promise<LiaResponse> {
@@ -29,6 +35,8 @@ export async function askLia(input: {
     as_of?: string;
     topic_domains?: string[];
     temporal?: LiaTemporalContext | null;
+    records?: LiaContextRecord[];
+    metrics?: LiaContextMetric[];
   };
 }): Promise<LiaResponse> {
   return (await apiClient.post<LiaResponse>("/api/v1/lia/ask", input)).data;

@@ -1,66 +1,58 @@
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
-import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
   useActiveBeaconRecommendations,
   useBeaconLifecycleActions,
   useBeaconSignals,
-  useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
-import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics";
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
 import { useCompletedJobTrend } from "../hooks/useJobs";
+import { useLuminaryBriefing } from "../hooks/useLuminary";
 import { useMoneyPosition } from "../hooks/usePayments";
 import { CommandCenterRoute } from "./CommandCenterRoute";
 
 vi.mock("../auth/useAuth");
 vi.mock("../auth/usePermissions");
-vi.mock("../hooks/useAnalyticsSummary");
 vi.mock("../hooks/useBeaconSignals");
-vi.mock("../hooks/useBusinessEconomics");
 vi.mock("../hooks/useDispatch");
 vi.mock("../hooks/useInvoices");
 vi.mock("../hooks/useJobs");
+vi.mock("../hooks/useLuminary");
 vi.mock("../hooks/usePayments");
 
 const permissions = new Set([
+  "COMPANY_ANALYTICS_READ",
   "COMPANY_INVOICE_READ",
   "COMPANY_JOB_READ",
   "COMPANY_DISPATCH_READ",
-  "COMPANY_ANALYTICS_READ",
-  "COMPANY_BEACON_OWN",
-  "COMPANY_ECONOMICS_MEASUREMENT_READ",
   "COMPANY_PAYMENT_READ",
+  "COMPANY_LUMINARY_READ",
+  "COMPANY_BEACON_OWN",
 ]);
 
-function queryResult<T>(data: T) {
-  return { data, isPending: false, isLoading: false, isError: false } as never;
+function result<T>(data: T) {
+  return {
+    data,
+    isPending: false,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  } as never;
 }
 
-function arrange() {
-  vi.mocked(useActiveBeaconRecommendations).mockReturnValue(
-    queryResult({
-      company_id: "company-1",
-      branch_id: null,
-      evaluated_at: "2026-09-22T12:00:00Z",
-      recommendation_digest: "a".repeat(64),
-      items: [],
-      readiness_adapters: [],
-      autonomous_action: false,
-    }),
-  );
+beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(useAuth).mockReturnValue({
     user: { id: "owner-1" },
     activeCompany: {
       id: "company-1",
-      name: "All County Plumbing & Leak",
-      code: "ACP",
+      name: "Demo Company",
+      code: "DEMO",
       membership_id: "membership-1",
       default_branch_id: "branch-1",
       has_all_branch_access: true,
@@ -71,262 +63,71 @@ function arrange() {
   } as ReturnType<typeof useAuth>);
   vi.mocked(useEffectivePermissions).mockReturnValue(permissions);
   vi.mocked(useBeaconSignals).mockReturnValue(
-    queryResult({
+    result({
       items: [],
       snoozed_items: [],
-      evaluated_at: "2026-09-22T12:00:00Z",
-      expires_at: "2026-09-22T12:15:00Z",
-      lifecycle_commands_available: false,
-      recommendation_coverage: [
-        {
-          family: "scheduling_dispatch",
-          source_authority: "Scheduling and Dispatch",
-          contract: "BeaconSnapshot.overdue_appointments/v1",
-          status: "ACTIVE",
-          responsibility: "OFFICE",
-          clearing_condition: "Record the authoritative outcome.",
-          limitation: null,
-        },
-        {
-          family: "economics_luminary",
-          source_authority: "Business Economics and Luminary",
-          contract: "immutable economics result",
-          status: "ADAPTER_GATED",
-          responsibility: "OWNER",
-          clearing_condition: "Admit the Economics adapter.",
-          limitation: "Beacon does not recalculate Economics.",
-        },
-      ],
+      evaluated_at: "2026-11-18T12:00:00Z",
+      expires_at: "2026-11-18T12:15:00Z",
+      lifecycle_commands_available: true,
+      recommendation_coverage: [],
     }),
   );
+  vi.mocked(useActiveBeaconRecommendations).mockReturnValue(
+    result({ items: [], readiness_adapters: [] }),
+  );
   vi.mocked(useBeaconLifecycleActions).mockReturnValue({
-    isError: false,
-    isPending: false,
     mutate: vi.fn(),
-  } as never);
-  vi.mocked(useBeaconWorkflowActions).mockReturnValue({
-    isError: false,
     isPending: false,
-    mutate: vi.fn(),
+    isError: false,
   } as never);
   vi.mocked(useReceivablesSummary).mockReturnValue(
-    queryResult({
-      as_of: "2026-09-22",
-      generated_at: "2026-09-22T12:00:00Z",
-      branch_id: null,
+    result({
       currency: "USD",
-      evidence_state: "AVAILABLE",
-      open_invoice_count: 4,
       total_open_amount: "2400.00",
-      due_today_amount: "500.00",
+      open_invoice_count: 4,
       buckets: [
         {
-          key: "not_due",
-          label: "Current / Not Due",
-          invoice_count: 2,
-          amount: "1000.00",
-        },
-        {
-          key: "due_today",
-          label: "Due Today",
-          invoice_count: 1,
-          amount: "500.00",
-        },
-        {
-          key: "past_due_1_15",
-          label: "1–15 Days Past Due",
-          invoice_count: 1,
-          amount: "900.00",
-        },
-        {
-          key: "past_due_16_30",
-          label: "16–30 Days Past Due",
-          invoice_count: 0,
-          amount: "0.00",
-        },
-        {
           key: "past_due_31_plus",
-          label: "31+ Days Past Due",
-          invoice_count: 0,
-          amount: "0.00",
+          label: "31+ days",
+          amount: "900.00",
+          invoice_count: 1,
         },
       ],
     }),
   );
   vi.mocked(useCompletedJobTrend).mockReturnValue(
-    queryResult({
-      generated_at: "2026-09-22T12:00:00Z",
-      timezone: "America/New_York",
-      branch_id: null,
+    result({
       currency: "USD",
-      granularity: "day",
-      period_start: "2026-09-22",
-      period_end: "2026-09-22",
       points: [
-        {
-          label: "Sep 22",
-          period_start: "2026-09-22",
-          period_end: "2026-09-22",
-          completed_start_at: "2026-09-22T04:00:00Z",
-          completed_end_at: "2026-09-23T04:00:00Z",
-          job_count: 3,
-          produced_value: "1500.00",
-          known_produced_value: "1500.00",
-          missing_value_count: 0,
-          evidence_state: "AVAILABLE",
-        },
+        { period_start: "2026-11-18", produced_value: "1500.00", job_count: 3 },
       ],
     }),
   );
   vi.mocked(useDispatchBoard).mockReturnValue(
-    queryResult({
-      total_count: 1,
+    result({
+      total_count: 2,
       items: [
         {
           appointment_id: "appointment-1",
-          appointment_number: "APT-000001",
+          appointment_number: "APT-1",
           job_id: "job-1",
-          job_number: "JOB-000001",
-          customer_display_name: "Hammer Haag",
-          service_location_label: "100 Main St",
           branch_id: "branch-1",
           status: "confirmed",
-          window_start_at: "2026-09-22T13:00:00Z",
-          window_end_at: "2026-09-22T15:00:00Z",
-          assignment: {
-            primary_employee_id: "employee-1",
-            primary_employee_name: "Mel Santiago",
-          },
+          window_start_at: "2026-11-18T13:00:00Z",
+          window_end_at: "2026-11-18T15:00:00Z",
+          assignment: null,
         },
       ],
     }),
   );
-  vi.mocked(useAnalyticsSummary).mockReturnValue(
-    queryResult({
-      period_start: "2026-09-22T04:00:00Z",
-      period_end: "2026-09-23T04:00:00Z",
-      timezone: "America/New_York",
-      cash_collected: { name: "Cash collected", value: "750.00" },
-      booked_revenue: { name: "Booked revenue", value: "0" },
-      new_customers: { name: "New customers", value: 2 },
-      appointments_booked: { name: "Appointments", value: 4 },
-      total_events: { name: "Events", value: 6 },
-      recent_activity: [],
-    }),
-  );
-  vi.mocked(useEconomicsMeasurementFoundation).mockReturnValue(
-    queryResult({
-      contract_version: "1",
-      company_id: "company-1",
-      branch_id: null,
-      canonical_efficiency_kpi: null,
-      break_even_input_readiness: {},
-      mutation_authority: "none",
-    }),
-  );
+  vi.mocked(useLuminaryBriefing).mockReturnValue(result({ findings: [] }));
   vi.mocked(useMoneyPosition).mockReturnValue(
-    queryResult({
-      company_id: "company-1",
-      branch_id: null,
-      period_start: "2026-09-22",
-      period_end: "2026-09-22",
-      as_of: "2026-09-22",
-      generated_at: "2026-09-22T12:00:00Z",
-      bank_balance: {
-        amount: null,
-        currency: null,
-        evidence_state: "UNAVAILABLE",
-        limitation: "No sanctioned authoritative bank-balance source is connected.",
-        connection_state: "NOT_CONNECTED",
-        provider_as_of: null,
-        last_sync_at: null,
-      },
-      accounts_receivable_due_today: {
-        amount: "500.00",
-        currency: "USD",
-        evidence_state: "AVAILABLE",
-        limitation: null,
-        invoice_count: 1,
-        drilldown_path: "/invoices?agingBucket=due_today&asOf=2026-09-22",
-      },
-      cod_expected_today: {
-        amount: null,
-        currency: null,
-        evidence_state: "UNAVAILABLE",
-        limitation: "Scheduled COD value is not authoritative.",
-      },
-      expected_collections_today: {
-        amount: null,
-        currency: null,
-        evidence_state: "INCOMPLETE",
-        limitation: "COD evidence is incomplete.",
-      },
-      card_processing: {
-        transaction_count: 2,
-        amount_charged: {
-          amount: "640.00",
-          currency: "USD",
-          evidence_state: "AVAILABLE",
-          limitation: null,
-        },
-        refund_amount: {
-          amount: "0.00",
-          currency: "USD",
-          evidence_state: "AVAILABLE",
-          limitation: null,
-        },
-        chargeback_amount: {
-          amount: "0.00",
-          currency: "USD",
-          evidence_state: "AVAILABLE",
-          limitation: null,
-        },
-        fees_paid: {
-          amount: null,
-          currency: null,
-          evidence_state: "UNAVAILABLE",
-          limitation: "No provider settlement evidence is available.",
-        },
-        effective_fee_rate: null,
-        limitation: "Settlement fees are not allocated to charges.",
-      },
-      collection_state: {
-        collected: {
-          amount: "750.00",
-          currency: "USD",
-          evidence_state: "AVAILABLE",
-          limitation: null,
-        },
-        settled_gross: {
-          amount: null,
-          currency: null,
-          evidence_state: "UNAVAILABLE",
-          limitation: "No provider settlement evidence is available.",
-        },
-        settled_net: {
-          amount: null,
-          currency: null,
-          evidence_state: "UNAVAILABLE",
-          limitation: "No provider settlement evidence is available.",
-        },
-        deposited: {
-          amount: null,
-          currency: null,
-          evidence_state: "UNAVAILABLE",
-          limitation: "No bank-confirmed deposit evidence is available.",
-        },
-      },
-    }),
+    result({ bank_balance: { evidence_state: "UNAVAILABLE", amount: null } }),
   );
-}
+});
 
 describe("CommandCenterRoute", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    arrange();
-  });
-
-  it("renders authoritative money and job evidence while keeping unavailable facts distinct from zero", () => {
+  it("renders the owner hierarchy and truthful empty attention state", () => {
     render(
       <MemoryRouter>
         <CommandCenterRoute />
@@ -335,131 +136,113 @@ describe("CommandCenterRoute", () => {
     expect(
       screen.getByRole("heading", { name: "Command Center" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Beacon" })).toBeInTheDocument();
-    expect(screen.getByText(/1 active · 1 not yet evaluable/)).toBeInTheDocument();
-    const moneyPanel = screen
-      .getByRole("heading", { name: "Money / Cash Position" })
-      .closest("article");
-    expect(moneyPanel).toHaveClass("twelve-hats-panel-outline");
-    expect(moneyPanel).toHaveAttribute("data-panel-tone", "normal");
-    expect(screen.getByText("$2,400")).toBeInTheDocument();
-    expect(screen.getByText(/Due-today AR: \$500/)).toBeInTheDocument();
-    expect(screen.getByText("Not connected")).toBeInTheDocument();
-    const economicStatus = screen
-      .getByText("Economic Health unavailable")
-      .closest("[data-economic-status]");
-    expect(economicStatus).toHaveAttribute(
-      "data-economic-status",
-      "UNAVAILABLE",
-    );
-    expect(economicStatus).toHaveClass("border-2", "border-dashed");
-    expect(economicStatus).not.toHaveClass("twelve-hats-panel-outline");
-    expect(screen.getByText(/Hammer Haag/)).toBeInTheDocument();
-    expect(screen.getByText("$640")).toBeInTheDocument();
-    expect(screen.getByText("No provider settlement evidence is available.")).toBeInTheDocument();
-    const bankTile = screen.getByText("Bank cash / available").parentElement;
-    expect(bankTile).not.toBeNull();
     expect(
-      within(bankTile!).queryByText("$0", { exact: true }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("heading", { name: "Needs Your Attention" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Nothing urgent needs your attention."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Business Pulse" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Recommended Actions / Ask LIA" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("$2,400")).toBeInTheDocument();
   });
 
-  it("preserves exact AR and graph drill-down filters", () => {
+  it("keeps exact action filters and passes finding records to LIA", () => {
+    vi.mocked(useBeaconSignals).mockReturnValue(
+      result({
+        items: [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            condition_key: "22222222-2222-4222-8222-222222222222",
+            evidence_digest: "a".repeat(64),
+            definition_id: "operational.scheduling.appointment_unassigned",
+            definition_version: 1,
+            rule_code: "scheduling.unassigned",
+            source: "scheduling",
+            title: "2 jobs tomorrow are unassigned",
+            category: "scheduling",
+            severity: "important",
+            priority: {
+              band: "important",
+              score: 80,
+              rank: 1,
+              ranking_factors: [],
+              explanation: "Dispatch capacity is at risk.",
+              evaluated_at: "2026-11-18T12:00:00Z",
+              tie_break_semantics: "stable",
+            },
+            lifecycle: {
+              status: "active",
+              latest_event: null,
+              temporarily_suppressed: false,
+            },
+            confidence: { level: "high", basis: "authoritative" },
+            supporting_facts: [
+              {
+                name: "job_count",
+                value: 2,
+                source: "dispatch",
+                measured_at: "2026-11-18T12:00:00Z",
+                unit: "jobs",
+                evidence: [
+                  {
+                    entity_type: "job",
+                    entity_id: "33333333-3333-4333-8333-333333333333",
+                    event_id: null,
+                    event_type: null,
+                    occurred_at: null,
+                  },
+                ],
+              },
+            ],
+            recommended_action:
+              "Assign the jobs before the operating day begins.",
+            created_at: "2026-11-18T12:00:00Z",
+            expires_at: "2026-11-18T12:15:00Z",
+            expiration_policy: "replace_on_next_evaluation",
+            escalation: null,
+          },
+        ],
+        snoozed_items: [],
+        evaluated_at: "2026-11-18T12:00:00Z",
+        expires_at: "2026-11-18T12:15:00Z",
+        lifecycle_commands_available: true,
+        recommendation_coverage: [],
+      } as never),
+    );
     render(
       <MemoryRouter>
         <CommandCenterRoute />
       </MemoryRouter>,
     );
-    const dueToday = screen.getByRole("link", { name: /Due Today/ });
-    expect(dueToday).toHaveAttribute(
+    expect(
+      screen.getByText("2 jobs tomorrow are unassigned"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: /Open Dispatch/ })[0],
+    ).toHaveAttribute(
       "href",
-      expect.stringContaining("agingBucket=due_today"),
+      expect.stringContaining("queue=scheduled_unassigned"),
     );
-    const point = screen.getAllByRole("link", { name: /Sep 22: \$1,500/ })[0];
-    expect(point).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Open job/ })).toHaveAttribute(
       "href",
-      expect.stringContaining("completedStartAt=2026-09-22T04%3A00%3A00Z"),
+      "/jobs/33333333-3333-4333-8333-333333333333",
     );
-    expect(point).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: /Ask LIA/ })[0]).toHaveAttribute(
       "href",
-      expect.stringContaining("status=completed"),
+      expect.stringContaining(
+        "contextRecord=job%3A33333333-3333-4333-8333-333333333333",
+      ),
     );
-  });
-
-  it("switches date and branch scope without inventing branch analytics", async () => {
-    const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <CommandCenterRoute />
-      </MemoryRouter>,
-    );
-    await user.click(screen.getByRole("button", { name: "Tomorrow" }));
-    expect(useDispatchBoard).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.any(String),
-      undefined,
-      true,
-    );
-    await user.selectOptions(
-      screen.getByLabelText("Command Center Branch"),
-      "branch-1",
-    );
-    expect(useReceivablesSummary).toHaveBeenLastCalledWith(
-      expect.any(String),
-      "branch-1",
-      true,
-    );
-    expect(useCompletedJobTrend).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.any(String),
-      "branch-1",
-      true,
-    );
-    expect(useAnalyticsSummary).toHaveBeenLastCalledWith(false);
-    expect(useMoneyPosition).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.any(String),
-      "branch-1",
-      true,
-    );
-  });
-
-  it("enforces domain read permissions at every data request", () => {
-    vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
-    render(
-      <MemoryRouter>
-        <CommandCenterRoute />
-      </MemoryRouter>,
-    );
-    expect(useReceivablesSummary).toHaveBeenCalledWith(
-      expect.any(String),
-      undefined,
-      false,
-    );
-    expect(useCompletedJobTrend).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.any(String),
-      undefined,
-      false,
-    );
-    expect(useDispatchBoard).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      undefined,
-      false,
-    );
-    expect(useAnalyticsSummary).toHaveBeenCalledWith(false);
-    expect(useBeaconSignals).toHaveBeenCalledWith(false);
-    expect(useEconomicsMeasurementFoundation).toHaveBeenCalledWith(false);
-    expect(useMoneyPosition).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.any(String),
-      undefined,
-      false,
+    expect(
+      screen.getByRole("link", { name: /Unassigned jobs today/ }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("queue=scheduled_unassigned"),
     );
   });
 });

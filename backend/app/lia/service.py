@@ -430,6 +430,8 @@ class LiaService:
                                 prior_context.topic_domains if prior_context else ()
                             ),
                             temporal=temporal,
+                            records=prior_context.records if prior_context else (),
+                            metrics=prior_context.metrics if prior_context else (),
                         )
                     }
                 )
@@ -594,6 +596,8 @@ class LiaService:
                         authorization_version=context.authorization_version,
                         topic_domains=tuple(sorted(selected)),
                         temporal=temporal,
+                        records=request.context.records if request.context else (),
+                        metrics=request.context.metrics if request.context else (),
                     )
                 }
             )
@@ -611,6 +615,8 @@ class LiaService:
                         else None,
                         topic_domains=tuple(sorted(selected)),
                         temporal=temporal,
+                        records=request.context.records if request.context else (),
+                        metrics=request.context.metrics if request.context else (),
                     )
                 }
             )
@@ -648,6 +654,8 @@ class LiaService:
                             evidence_digest=prior_evidence_digest,
                             topic_domains=tuple(sorted(selected)),
                             temporal=temporal,
+                            records=prior_context.records if prior_context else (),
+                            metrics=prior_context.metrics if prior_context else (),
                         )
                     }
                 )
@@ -672,6 +680,8 @@ class LiaService:
                             else tuple(sorted(selected))
                         ),
                         temporal=temporal,
+                        records=prior_context.records if prior_context else (),
+                        metrics=prior_context.metrics if prior_context else (),
                     )
                 }
             )
