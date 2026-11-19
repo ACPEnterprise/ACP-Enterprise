@@ -35,6 +35,12 @@ const isBalanceSheet = (value: FinancialReport): value is BalanceSheet =>
 const isIncomeStatement = (value: FinancialReport): value is IncomeStatement =>
   value.manifest.report_name === "income_statement";
 
+function reportLabel(value: string): string {
+  return value === "income_statement"
+    ? "Profit & Loss"
+    : value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function formatAmount(value: string, currency: string): string {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return "Unavailable";
@@ -212,31 +218,30 @@ export function FinancialReportsRoute() {
     <div className="mx-auto max-w-7xl space-y-8 pb-12">
       <header>
         <p className="text-sm font-semibold text-action-primary">
-          Accounting evidence
+          Accounting
         </p>
         <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-          Financial reports and source evidence
+          Financial reports
         </h1>
         <p className="mt-2 text-content-muted">
-          ACP-posted statements and external source-reported evidence remain
-          visibly separate.
+          Run Profit & Loss, Balance Sheet, and other reports across any date range. Canonical migrated and TwelveHats accounting data is included together when available.
         </p>
       </header>
       <section
-        aria-label="ACP native financial statements"
+        aria-label="Financial statements"
         className="space-y-6"
       >
         <div>
           <h2 className="text-xl font-semibold">
-            ACP native financial statements
+            Financial statements
           </h2>
           <p className="text-sm text-content-muted">
-            Derived exclusively from posted ACP General Ledger entries.
+            Derived from canonical posted General Ledger entries.
           </p>
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Statement of Cash Flows</CardTitle>
+              <CardTitle>Statement of Cash Flows</CardTitle>
             <CardDescription>
               Review operating, investing, and financing cash movement with
               reconciliation evidence.
@@ -330,7 +335,7 @@ export function FinancialReportsRoute() {
           <Card>
             <CardHeader>
               <CardTitle>
-                {report.data.manifest.report_name.replaceAll("_", " ")}
+                {reportLabel(report.data.manifest.report_name)}
               </CardTitle>
               <CardDescription>
                 {report.data.scope.scope_label} ·{" "}
@@ -360,7 +365,10 @@ export function FinancialReportsRoute() {
           </Card>
         ) : null}
       </section>
-      <QboSourceEvidence enabled={canRead} />
+      <details className="space-y-4">
+        <summary className="cursor-pointer text-lg font-semibold">Audit &amp; source evidence</summary>
+        <QboSourceEvidence enabled={canRead} />
+      </details>
     </div>
   );
 }

@@ -53,7 +53,7 @@ describe("Customer operations reliability", () => {
       expect.objectContaining({ customerId: "customer-no-job" }),
       true,
     );
-    expect(screen.getByText("No current Jobs are linked in native Job authority.")).toBeInTheDocument();
+    expect(screen.getByText("No Jobs are linked to this Customer.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Operational workspace" })).toBeInTheDocument();
   });
 

@@ -96,6 +96,28 @@ describe("CustomerManagement", () => {
     );
   });
 
+  it("renders migrated and TwelveHats matches in one normal customer search", async () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [
+          { id: "customer-migrated", display_name: "Richard Ratliff", customer_type: "residential", first_name: "Richard", last_name: "Ratliff", business_name: null, primary_phone: "555-0102", email: "richard@example.com", status: "active", source: "unknown", is_vip: false },
+          { id: "customer-native", display_name: "Richard Ratliff HVAC", customer_type: "commercial", first_name: "Richard", last_name: "Ratliff", business_name: "Richard Ratliff HVAC", primary_phone: "555-0103", email: "office@example.com", status: "active", source: "referral", is_vip: false },
+        ],
+        total_count: 2, page: 1, page_size: 20, total_pages: 1,
+      },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    await userEvent.type(screen.getByRole("textbox", { name: "Search customers" }), "Richard Ratliff");
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(screen.getByText("Richard Ratliff", { exact: true }).closest("a")).toHaveAttribute("href", "/customers/customer-migrated");
+    expect(screen.getByRole("link", { name: /Richard Ratliff HVAC/ })).toHaveAttribute("href", "/customers/customer-native");
+    expect(screen.queryByText(/Legacy|Historical HCP|Imported Customers/)).not.toBeInTheDocument();
+  });
+
   it("distinguishes authentication failure from an empty customer list", () => {
     vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,
@@ -116,7 +138,7 @@ describe("CustomerManagement", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 
-  it("renders a safe source label when a migrated response contains null", () => {
+  it("keeps customer search labels source-neutral when a migrated response contains null", () => {
     vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -145,7 +167,7 @@ describe("CustomerManagement", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/business · unknown/)).toBeInTheDocument();
+    expect(screen.getByText("Number unavailable · business")).toBeInTheDocument();
   });
 
   it("keeps authorized customer evidence visible without exposing manage controls", () => {
@@ -259,8 +281,8 @@ describe("CustomerManagement", () => {
 
     render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
 
-    expect(screen.getByText("No Customer records are currently admitted.")).toBeInTheDocument();
-    expect(screen.getByText(/not proof that upstream source data is empty or complete/i)).toBeInTheDocument();
+    expect(screen.getByText("No Customer records are available.")).toBeInTheDocument();
+    expect(screen.getByText(/Customer history may still be importing or reconciling/i)).toBeInTheDocument();
   });
 
   it("recovers safely when a changed result set leaves the current page empty", () => {
@@ -315,7 +337,7 @@ describe("CustomerManagement", () => {
     expect(screen.getByText("Stale source projection")).toBeInTheDocument();
     expect(screen.getByText("Source projection is stale")).toBeInTheDocument();
     expect(screen.getByText(/do not treat this source population or as-of date as current/i)).toBeInTheDocument();
-    expect(screen.getByText("No Customer records are currently admitted.")).toBeInTheDocument();
+    expect(screen.getByText("No Customer records are available.")).toBeInTheDocument();
   });
 
   it("offers a safe retry when source readiness is unavailable", async () => {
@@ -347,7 +369,7 @@ describe("CustomerManagement", () => {
     } as never);
 
     render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
-    expect(screen.getByText(/Showing 1–20 of 41 admitted Customers/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1–20 of 41 Customers/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, page_size: 20 }));
@@ -373,6 +395,6 @@ describe("CustomerManagement", () => {
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ record_state: "current" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Customer record state" }), "archived");
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ record_state: "archived", page: 1 }));
-    expect(screen.getByText("No admitted Customers match these filters.")).toBeVisible();
+    expect(screen.getByText("No Customers match these filters.")).toBeVisible();
   });
 });

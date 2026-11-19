@@ -20,28 +20,39 @@ const baseProps = {
 };
 
 describe("CustomerHistoryWorkspace", () => {
-  it("orders bounded native history deterministically and labels authority", () => {
+  it("orders mixed migrated and TwelveHats history deterministically", () => {
     const items = buildCustomerHistoryItems(baseProps);
     expect(items.map((item) => item.id)).toEqual(["payment:payment-1", "invoice:invoice-1", "job:job-1", "appointment:appointment-1", "estimate:estimate-1"]);
     expect(items[0].detail).toContain("USD 10.00 refunded");
-    expect(items.every((item) => item.authority.startsWith("Native ACP"))).toBe(true);
+    expect(items.map((item) => item.kind)).toEqual(["payment", "invoice", "job", "appointment", "estimate"]);
   });
 
   it("presents overview, Location history, limitations, and context-preserving links", () => {
     render(<MemoryRouter><CustomerHistoryWorkspace {...baseProps} /></MemoryRouter>);
-    expect(screen.getByRole("region", { name: "Customer history overview" })).toHaveTextContent("Historical Jobs1");
+    expect(screen.getByRole("region", { name: "Customer history overview" })).toHaveTextContent("Jobs1");
     expect(screen.getByRole("region", { name: "History completeness" })).toHaveTextContent("AttachmentsUNAVAILABLE");
     const locations = screen.getByRole("region", { name: "Service Location history" });
     expect(within(locations).getByText("10 Main Street")).toBeVisible();
-    expect(within(locations).getByText(/0 open · 1 historical Jobs · 1 Appointments/)).toBeVisible();
+    expect(within(locations).getByText(/0 open · 1 closed · 1 Appointments/)).toBeVisible();
     expect(within(locations).getByRole("link", { name: "View Location Jobs" })).toHaveAttribute("href", "/jobs?customerId=customer-1&serviceLocationId=location-1");
-    expect(screen.getByRole("region", { name: "Combined service history" })).toHaveTextContent("Authority: Native ACP Payment evidence");
+    expect(screen.getByRole("region", { name: "Activity timeline" })).toHaveTextContent("Payment receipt");
   });
 
   it("never turns unavailable domains or empty source history into complete evidence", () => {
     render(<MemoryRouter><CustomerHistoryWorkspace {...baseProps} historicalJobs={[]} appointments={[]} estimates={[]} invoices={[]} payments={[]} unavailableDomains={["Jobs", "Invoices", "Payments"]} /></MemoryRouter>);
     const completeness = screen.getByRole("region", { name: "History completeness" });
     expect(within(completeness).getAllByText("UNAVAILABLE").length).toBeGreaterThanOrEqual(4);
-    expect(screen.getByText(/Source-only history may still be unadmitted/)).toBeVisible();
+    expect(screen.getByText(/No activity is available in this customer record/)).toBeVisible();
+  });
+
+  it("keeps migrated and post-cutover records in one clickable timeline", () => {
+    const migrated = { ...job, id: "job-migrated", job_number: "MIGRATED-1", updated_at: "2025-09-01T00:00:00Z", completed_at: "2025-09-01T00:00:00Z" };
+    const native = { ...job, id: "job-native", job_number: "NATIVE-1", status: "ready" as const, updated_at: "2026-09-01T00:00:00Z", completed_at: null };
+    render(<MemoryRouter><CustomerHistoryWorkspace {...baseProps} currentJobs={[native]} historicalJobs={[migrated]} appointments={[]} estimates={[]} invoices={[]} payments={[]} /></MemoryRouter>);
+
+    expect(screen.getByRole("link", { name: "Job NATIVE-1" })).toHaveAttribute("href", "/jobs/job-native?returnTo=%2Fcustomers%2Fcustomer-1");
+    expect(screen.getByRole("link", { name: "Job MIGRATED-1" })).toHaveAttribute("href", "/jobs/job-migrated?returnTo=%2Fcustomers%2Fcustomer-1");
+    const timeline = screen.getByRole("region", { name: "Activity timeline" });
+    expect(timeline.textContent?.indexOf("Job NATIVE-1")).toBeLessThan(timeline.textContent?.indexOf("Job MIGRATED-1") ?? -1);
   });
 });
