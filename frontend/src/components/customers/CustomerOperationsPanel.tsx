@@ -98,6 +98,7 @@ export function CustomerOperationsPanel({ customerId, locations }: { customerId:
         payments={payments.data ?? []}
         evidence={evidence}
         unavailableDomains={unavailableDomains}
+        sourceHistory={sourceHistory.data}
       />}
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         {canReadJobs && <section className="rounded-xl border border-stroke p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Current Jobs</h4><Link to={`/jobs?customerId=${encodeURIComponent(customerId)}`} className="text-xs text-action-primary">View all related Jobs</Link></div>{currentJobs.data && <p className="mt-1 text-xs text-content-muted">Showing {currentJobs.data.items.length} of {currentJobs.data.total_count} current linked Jobs.</p>}<div className="mt-3 space-y-2"><JobList customerId={customerId} jobs={currentJobs.data?.items ?? []} empty="No current Jobs are linked in native Job authority." /></div></section>}

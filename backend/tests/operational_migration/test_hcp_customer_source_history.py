@@ -23,6 +23,7 @@ def _source(root: Path) -> Path:
             }
         )
     )
+    _page(root, "customers", [{"id": "customer-1", "addresses": [{"id": "location-1", "street": "123 Main St", "city": "Clearwater", "state": "FL", "zip": "33755"}]}])
     _page(
         root,
         "estimates",
@@ -47,7 +48,7 @@ def _source(root: Path) -> Path:
         root,
         "jobs",
         [
-            {"id": "job-1", "customer": {"id": "customer-1"}},
+            {"id": "job-1", "customer": {"id": "customer-1"}, "address": {"id": "location-1"}},
             {"id": "job-other", "customer": {"id": "customer-other"}},
         ],
     )
@@ -94,11 +95,15 @@ def test_projects_exact_customer_history_without_accounting_promotion(
     )
 
     assert result["counts"] == {
+        "locations": 1,
+        "jobs": 1,
         "estimates": 1,
         "invoices": 1,
         "payments": 1,
         "refunds": 1,
     }
+    assert result["locations"][0]["source_id"] == "location-1"
+    assert result["jobs"][0]["source_location_id"] == "location-1"
     assert result["accepted_as_acp_accounting"] is False
     assert result["mutation_authority"] == "none"
     assert result["estimates"][0]["source_id"] == "estimate-1"

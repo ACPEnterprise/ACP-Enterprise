@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final
 
-CONTRACT: Final = "hcp-customer-source-history/v2"
+CONTRACT: Final = "hcp-customer-source-history/v3"
 
 
 class HcpCustomerSourceHistoryError(ValueError):
@@ -32,32 +32,41 @@ def _rows(root: Path, family: str) -> list[dict[str, Any]]:
 @lru_cache(maxsize=2)
 def _source_indexes(
     root_text: str, manifest_sha256: str
-) -> tuple[
-    dict[str, tuple[dict[str, Any], ...]],
-    dict[str, tuple[dict[str, Any], ...]],
-]:
+) -> dict[str, dict[str, tuple[dict[str, Any], ...]]]:
     # The manifest digest is intentionally part of the cache key. Deployments mount
     # this evidence read-only; a newly sealed package receives a new digest.
     del manifest_sha256
     root = Path(root_text)
+    customers_by_id = {str(row["id"]): row for row in _rows(root, "customers")}
+    jobs_by_customer: dict[str, list[dict[str, Any]]] = {}
+    jobs_by_id: dict[str, dict[str, Any]] = {}
+    for job in _rows(root, "jobs"):
+        job_id = str(job["id"])
+        jobs_by_id[job_id] = job
+        customer_id = (job.get("customer") or {}).get("id")
+        if isinstance(customer_id, str):
+            jobs_by_customer.setdefault(customer_id, []).append(job)
     estimates_by_customer: dict[str, list[dict[str, Any]]] = {}
     for estimate in _rows(root, "estimates"):
         customer_id = (estimate.get("customer") or {}).get("id")
         if isinstance(customer_id, str):
             estimates_by_customer.setdefault(customer_id, []).append(estimate)
-    job_customers = {
-        str(job["id"]): (job.get("customer") or {}).get("id")
-        for job in _rows(root, "jobs")
-    }
     invoices_by_customer: dict[str, list[dict[str, Any]]] = {}
     for invoice in _rows(root, "invoices"):
-        customer_id = job_customers.get(str(invoice.get("job_id")))
+        job = jobs_by_id.get(str(invoice.get("job_id")))
+        customer_id = (job.get("customer") or {}).get("id") if job else None
         if isinstance(customer_id, str):
             invoices_by_customer.setdefault(customer_id, []).append(invoice)
-    return (
-        {key: tuple(value) for key, value in estimates_by_customer.items()},
-        {key: tuple(value) for key, value in invoices_by_customer.items()},
-    )
+    return {
+        "customers": {key: (value,) for key, value in customers_by_id.items()},
+        "jobs": {key: tuple(value) for key, value in jobs_by_customer.items()},
+        "estimates": {
+            key: tuple(value) for key, value in estimates_by_customer.items()
+        },
+        "invoices": {
+            key: tuple(value) for key, value in invoices_by_customer.items()
+        },
+    }
 
 
 def project_customer_source_history(
@@ -73,11 +82,48 @@ def project_customer_source_history(
         raise HcpCustomerSourceHistoryError("source_package_not_read_only")
 
     manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
-    estimates_by_customer, invoices_by_customer = _source_indexes(
+    indexes = _source_indexes(
         str(root.resolve()), manifest_sha256
     )
-    estimates = estimates_by_customer.get(source_customer_id, ())
-    invoices = invoices_by_customer.get(source_customer_id, ())
+    customer_rows = indexes["customers"].get(source_customer_id, ())
+    jobs = indexes["jobs"].get(source_customer_id, ())
+    estimates = indexes["estimates"].get(source_customer_id, ())
+    invoices = indexes["invoices"].get(source_customer_id, ())
+    if len(customer_rows) != 1:
+        raise HcpCustomerSourceHistoryError("exact_source_customer_unavailable")
+    customer = customer_rows[0]
+
+    location_items = [
+        {
+            "source_id": item.get("id"),
+            "address": item.get("street") or item.get("address"),
+            "city": item.get("city"),
+            "state": item.get("state"),
+            "postal_code": item.get("zip") or item.get("postal_code"),
+            "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
+        }
+        for item in customer.get("addresses") or []
+        if isinstance(item, Mapping) and item.get("id")
+    ]
+    job_items = [
+        {
+            "source_id": job.get("id"),
+            "source_location_id": (job.get("address") or {}).get("id"),
+            "number": job.get("invoice_number") or job.get("job_number"),
+            "status": job.get("work_status") or job.get("status"),
+            "created_at": job.get("created_at"),
+            "updated_at": job.get("updated_at"),
+            "scheduled_start": job.get("start_time"),
+            "scheduled_end": job.get("end_time"),
+            "assigned_employee_source_ids": [
+                str(item.get("id"))
+                for item in job.get("assigned_employees") or []
+                if isinstance(item, Mapping) and item.get("id")
+            ],
+            "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
+        }
+        for job in sorted(jobs, key=lambda row: str(row.get("id")))
+    ]
 
     estimate_items = []
     for estimate in sorted(estimates, key=lambda row: str(row.get("id"))):
@@ -177,11 +223,15 @@ def project_customer_source_history(
         "source_customer_id": source_customer_id,
         "source_manifest_sha256": manifest_sha256,
         "counts": {
+            "locations": len(location_items),
+            "jobs": len(job_items),
             "estimates": len(estimate_items),
             "invoices": len(invoice_items),
             "payments": payment_count,
             "refunds": refund_count,
         },
+        "locations": location_items,
+        "jobs": job_items,
         "estimates": estimate_items,
         "invoices": invoice_items,
     }

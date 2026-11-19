@@ -9,13 +9,15 @@ export type HcpSourcePayment = {
 };
 
 export type HcpCustomerSourceHistory = {
-  contract: "hcp-customer-source-history/v2";
+  contract: "hcp-customer-source-history/v3";
   authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY";
   accepted_as_acp_accounting: false;
   mutation_authority: "none";
   source_customer_id: string;
   source_manifest_sha256: string;
-  counts: { estimates: number; invoices: number; payments: number; refunds: number };
+  counts: { locations: number; jobs: number; estimates: number; invoices: number; payments: number; refunds: number };
+  locations: Array<{ source_id: string; address: string | null; city: string | null; state: string | null; postal_code: string | null }>;
+  jobs: Array<{ source_id: string; source_location_id: string | null; number: string | null; status: string | null; created_at: string | null; updated_at: string | null; scheduled_start: string | null; scheduled_end: string | null }>;
   estimates: Array<{
     source_id: string;
     number: string | null;

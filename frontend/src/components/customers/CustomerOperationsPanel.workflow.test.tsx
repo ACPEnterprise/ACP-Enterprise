@@ -40,13 +40,15 @@ describe("CustomerOperationsPanel office workflow", () => {
 
   it("shows exact HCP history without promoting QuickBooks overlap to native Accounting", () => {
     vi.mocked(sourceHistoryHooks.useHcpCustomerSourceHistory).mockReturnValue(query({
-      contract: "hcp-customer-source-history/v2",
+      contract: "hcp-customer-source-history/v3",
       authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
       accepted_as_acp_accounting: false,
       mutation_authority: "none",
       source_customer_id: "source-customer-1",
       source_manifest_sha256: "digest",
-      counts: { estimates: 1, invoices: 1, payments: 1, refunds: 1 },
+      counts: { locations: 1, jobs: 1, estimates: 1, invoices: 1, payments: 1, refunds: 1 },
+      locations: [{ source_id: "location-source-1", address: "123 Main St", city: "Clearwater", state: "FL", postal_code: "33755" }],
+      jobs: [{ source_id: "job-source-1", source_location_id: "location-source-1", number: "10", status: "completed", created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-02T00:00:00Z", scheduled_start: null, scheduled_end: null }],
       estimates: [{ source_id: "estimate-source-1", number: "100", status: "approved", created_at: null, updated_at: null, options: [], authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY" }],
       invoices: [{ source_id: "invoice-source-1", source_job_id: "job-source-1", number: "200", status: "paid", amount_cents: 12500, balance_cents: 0, invoice_date: null, service_date: null, authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY", payments: [{ source_id: "payment-source-1", status: "succeeded", amount_cents: 12500, date: null, payment_method: "imported_from_quickbooks", overlap_disposition: "HOLD_FROM_AGGREGATION_PENDING_QBO_RECONCILIATION", authority: "HCP_SOURCE_BACKED_PAYMENT_EVIDENCE_NOT_ACCOUNTING_POSTING" }], refunds: [{ source_id: null, status: "succeeded", amount_cents: 2500, date: null, payment_method: "card", identity_disposition: "SOURCE_BACKED_UNLINKED_REFUND", aggregation_safe: false, authority: "HCP_SOURCE_BACKED_REFUND_EVIDENCE_NOT_ACCOUNTING_POSTING" }] }],
     }) as never);
