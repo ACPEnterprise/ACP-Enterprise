@@ -127,8 +127,8 @@ def test_protected_source4_qualification_emits_safe_metadata_only(
         "referenced_details": 43,
         "control_assertions": 5248,
         "customer_union": 5296,
-        "contacts": 4148,
-        "locations": 5339,
+        "contacts": 4143,
+        "locations": 4939,
         "location_exceptions": 294,
         "job_parent_references": 5801,
     }

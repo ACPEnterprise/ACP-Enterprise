@@ -32,7 +32,7 @@ from app.operational_migration.hcp_successor_reconciliation import (
 MANIFEST_CONTRACT = "hcp-source4-successor-manifest/v1"
 PREFLIGHT_CONTRACT = "hcp-source4-successor-admission-preflight/v1"
 AUTHORITATIVE_HYBRID_DIGEST = (
-    "228f2e1b1f9050066cd8de5cddfceff6a62461864c0d6a90361040801132cbad"
+    "7205c86cf389ae951fd588ed6cb6b1dc67eeb7772fe4b6324fbaec46cad7a187"
 )
 AUTHORITATIVE_CUSTOMER_CONTROL_DIGEST = (
     "c5c81977116c9d4e296a8b4fa763a5029a94752ae00803d9a6c363d7e1ca711e"

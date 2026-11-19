@@ -1408,7 +1408,7 @@ class HcpMigration2Orchestrator:
             "EXPLICIT_EXCEPTION": {
                 key: value
                 for key, value in requirements.exception_counts.items()
-                if key != "service_location" and value
+                if key not in {"customer", "contact", "service_location"} and value
             },
             "REJECTED": {
                 key: value
@@ -1418,7 +1418,8 @@ class HcpMigration2Orchestrator:
             "INTENTIONALLY_NON_APPLICABLE": {
                 key: value
                 for key, value in requirements.non_applicable_counts.items()
-                if key != "employee" and value
+                if key not in {"customer", "contact", "service_location", "employee"}
+                and value
             },
         }
         if actual_plan_outcomes != expected_plan_outcomes:
@@ -1426,6 +1427,8 @@ class HcpMigration2Orchestrator:
         if (
             lineage_count != requirements.customer_lineage
             or lineage_count != customer_run.accepted_count
+            or customer_run.rejected_count
+            != requirements.exception_counts.get("customer", 0)
         ):
             raise ValueError("Customer success is missing immutable SOURCE.4 lineage")
         if employee_count != requirements.employee_crosswalks:

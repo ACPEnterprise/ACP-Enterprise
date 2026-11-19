@@ -125,18 +125,18 @@ def test_sealed_source4_event_population_is_exact_and_plan_identity_is_stable() 
         }
     )
     expected = plan.customers.boundary.expected
-    assert expected.customer_admission_events == 5296
-    assert expected.customers == 5296
-    assert expected.contacts == 4148
-    assert expected.service_locations == 5339
+    assert expected.customer_admission_events == 4905
+    assert expected.customers == 4905
+    assert expected.contacts == 4143
+    assert expected.service_locations == 4939
     assert expected.billing_addresses == 0
-    assert expected.business_events == 14783
+    assert expected.business_events == 13987
     assert (
         expected.event_population_digest
-        == "bad342ccb09303812cda817fedd8115921f7287e6f2bb41b8b2f8f1426a4c4e3"
+        == "ff833acf470d3e50cb259524f314fcef9eb5d399cce207a380506a28fd022e30"
     )
-    assert str(plan.plan_id) == "8c717798-db5e-5c49-99be-ca3d250536e3"
+    assert str(plan.plan_id) == "58d1da9b-9576-5ed3-9bbf-5d624b80a5b8"
     assert (
         plan.plan_digest
-        == "6ac31cc70e269dfa123a73c8a896f7e957eff113c1873a6ee8c908a9f1256962"
+        == "ddc09d49d88c9a07001d5d69d377e1a8edc71a4445f1233648768b8df7fe2417"
     )
