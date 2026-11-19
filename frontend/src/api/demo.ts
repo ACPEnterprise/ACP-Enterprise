@@ -9,16 +9,6 @@ export interface DemoScenario {
   record_refs: Record<string, unknown>;
 }
 
-export interface DemoSignal {
-  source: "BEACON" | "LUMINARY" | "LIA";
-  severity: string;
-  title: string;
-  explanation: string;
-  recommendation: string;
-  scenario_code: string;
-  record_refs: Record<string, unknown>;
-}
-
 export interface DemoProvisionResult {
   environment_id: string;
   company_id: string;
@@ -29,7 +19,5 @@ export interface DemoProvisionResult {
 }
 
 export const getDemoScenarios = async () => (await apiClient.get<DemoScenario[]>("/api/v1/demo/scenarios")).data;
-export const getDemoSignals = async () => (await apiClient.get<DemoSignal[]>("/api/v1/demo/signals")).data;
 export const resetDemo = async () => (await apiClient.post<DemoProvisionResult>("/api/v1/demo/reset")).data;
 export const sendDemoFeedback = async (payload: { category: string; page: string; scenario_code?: string; comment: string; app_sha: string }) => (await apiClient.post("/api/v1/demo/feedback", payload)).data;
-
