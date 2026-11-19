@@ -178,3 +178,61 @@ async def test_per_rep_tenant_seed_reset_isolation_and_scenarios():
     assert left.company_id == right.company_id
     assert {left.action, right.action} == {"created", "reused"}
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_parallel_per_rep_generation_and_reset_remain_isolated():
+    engine = create_async_engine(settings.database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    service = SalesDemoService(configuration=configuration())
+    user_ids = tuple(uuid4() for _ in range(12))
+    async with factory() as session:
+        await permission_catalog_sync_service.synchronize(session)
+        session.add_all(
+            [
+                User(
+                    id=user_id,
+                    normalized_email=f"parallel-demo-{user_id}@example.invalid",
+                    first_name="Parallel",
+                    last_name="Representative",
+                    display_name="Parallel Representative",
+                    status="active",
+                    authorization_version=1,
+                )
+                for user_id in user_ids
+            ]
+        )
+        await session.commit()
+
+    async def provision(user_id, *, reset=False):
+        async with factory() as session:
+            result = await service.provision(
+                session, context=context(user_id), reset=reset
+            )
+            await session.commit()
+            return result
+
+    original = await asyncio.gather(*(provision(user_id) for user_id in user_ids))
+    company_ids = {result.company_id for result in original}
+    assert len(company_ids) == len(user_ids)
+    assert all(result.counts == original[0].counts for result in original)
+
+    replacement = await provision(user_ids[0], reset=True)
+    assert replacement.company_id not in company_ids
+    assert replacement.generation == 2
+
+    async with factory() as session:
+        environments = (
+            await session.scalars(
+                select(DemoEnvironment).where(
+                    DemoEnvironment.owner_user_id.in_(user_ids)
+                )
+            )
+        ).all()
+    active_by_owner = {
+        item.owner_user_id: item.active_company_id for item in environments
+    }
+    assert active_by_owner[user_ids[0]] == replacement.company_id
+    for user_id, result in zip(user_ids[1:], original[1:], strict=True):
+        assert active_by_owner[user_id] == result.company_id
+    await engine.dispose()
