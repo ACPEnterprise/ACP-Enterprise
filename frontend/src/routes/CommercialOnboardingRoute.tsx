@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, ArrowRight, Check, CircleHelp, LifeBuoy, RefreshCw, Sparkles } from "lucide-react";
 
-import { useAuth, type AuthenticatedUser } from "../auth";
+import { useAuth, useHasPermission, type AuthenticatedUser } from "../auth";
 import type { AccessibleCompany } from "../auth/companyTypes";
 import { createMigrationSupportCase, getCommercialOnboardingEvidence, type CommercialException, type CommercialProgressItem } from "../api/commercialOnboarding";
 import { getOperatorApiError } from "../api/errors";
 import { useLiaReadiness } from "../hooks/useLia";
-import { loadCommercialOnboardingDraft, saveCommercialOnboardingDraft, type CommercialOnboardingDraft, type CommercialOnboardingStep } from "../onboarding/commercialOnboardingState";
+import { isCommercialOnboardingComplete, loadCommercialOnboardingDraft, saveCommercialOnboardingDraft, type CommercialOnboardingDraft, type CommercialOnboardingStep } from "../onboarding/commercialOnboardingState";
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select, Spinner, Textarea } from "../ui";
 
 const steps: Array<{ id: CommercialOnboardingStep; label: string }> = [
@@ -31,7 +31,13 @@ function ProgressGrid({ items }: { items: CommercialProgressItem[] }) {
 
 export function CommercialOnboardingRoute() {
   const { activeCompany, user } = useAuth();
+  const canAdminister = useHasPermission("COMPANY_ADMINISTER");
+  const [searchParams] = useSearchParams();
   if (!activeCompany) return <Alert variant="danger" title="Company unavailable">Choose an active Company before starting setup.</Alert>;
+  const explicitlyOpenedByAdministrator = canAdminister && searchParams.get("manage") === "1";
+  if (isCommercialOnboardingComplete(activeCompany.id) && !explicitlyOpenedByAdministrator) {
+    return <Navigate to="/command-center" replace />;
+  }
   return <CommercialOnboardingCompanyRoute key={`${activeCompany.id}:${activeCompany.name}`} activeCompany={activeCompany} user={user} />;
 }
 

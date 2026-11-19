@@ -35,11 +35,27 @@ export interface LiaTemporalContext {
   prior_label?: string | null;
 }
 
+export interface LiaContextRecord {
+  entity_type: string;
+  entity_id: string;
+  label?: string;
+}
+
+export interface LiaContextMetric {
+  name: string;
+  value: string;
+  unit?: string;
+}
+
 export interface LiaResponse {
   request_id: string;
   conversation_id: string;
   classification: LiaClassification;
-  authority: "ACP_AUTHORITATIVE" | "SOURCE_BACKED" | "PARTIAL" | "INSUFFICIENT_EVIDENCE";
+  authority:
+    | "ACP_AUTHORITATIVE"
+    | "SOURCE_BACKED"
+    | "PARTIAL"
+    | "INSUFFICIENT_EVIDENCE";
   answer: string;
   response_mode: "BRIEF" | "NORMAL" | "DETAILED" | "EVIDENCE";
   evidence: LiaEvidence[];
@@ -88,7 +104,14 @@ export interface LiaReadiness {
 export interface LiaFoundationReadiness {
   foundation_version: string;
   release_profile: string;
-  provider_state: "NOT_CONFIGURED" | "AVAILABLE" | "TEMPORARILY_UNAVAILABLE" | "RATE_LIMITED" | "TIMEOUT" | "UNCERTAIN" | "FAILED";
+  provider_state:
+    | "NOT_CONFIGURED"
+    | "AVAILABLE"
+    | "TEMPORARILY_UNAVAILABLE"
+    | "RATE_LIMITED"
+    | "TIMEOUT"
+    | "UNCERTAIN"
+    | "FAILED";
   provider_configured: boolean;
   autonomous_mutation: boolean;
   production_mutation: boolean;

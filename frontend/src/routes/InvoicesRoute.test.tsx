@@ -86,6 +86,7 @@ describe("InvoicesRoute", () => {
     renderRoute();
     expect(await screen.findByText("Create from accepted work")).toBeVisible();
     expect(screen.getByLabelText("Completed accepted work")).toBeVisible();
+    expect(screen.getByLabelText("Due date")).not.toHaveValue("");
     expect(screen.queryByLabelText("Estimate ID")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Job ID")).not.toBeInTheDocument();
   });

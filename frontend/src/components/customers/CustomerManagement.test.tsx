@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as customerHooks from "../../hooks/useCustomers";
 import * as administrationHooks from "../../features/administration/hooks";
+import { CustomerMigrationControls } from "../../features/administration/CustomerMigrationControls";
 import { CustomerManagement } from "./CustomerManagement";
 
 vi.mock("../../hooks/useCustomers");
@@ -39,6 +40,7 @@ describe("CustomerManagement", () => {
     vi.resetAllMocks();
     permissions.clear();
     permissions.add("COMPANY_CUSTOMER_MANAGE");
+    permissions.add("COMPANY_ADMINISTER");
     vi.mocked(administrationHooks.useMigrationReadiness).mockReturnValue({ isLoading: false, isError: false, data: undefined } as never);
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       create: mutation,
@@ -75,6 +77,13 @@ describe("CustomerManagement", () => {
             created_at: "2026-01-01T00:00:00Z",
             updated_at: "2026-01-01T00:00:00Z",
             archived_at: null,
+            primary_location: {
+              id: "location-1",
+              address_line_1: "10 Main Street",
+              city: "Raleigh",
+              state: "NC",
+              postal_code: "27601",
+            },
           },
         ],
         total_count: 1,
@@ -94,6 +103,60 @@ describe("CustomerManagement", () => {
       "href",
       "/customers/customer-1",
     );
+    expect(screen.getByText("10 Main Street, Raleigh, NC 27601")).toBeInTheDocument();
+  });
+
+  it("renders migrated and TwelveHats matches in one normal customer search", async () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [
+          { id: "customer-migrated", display_name: "Richard Ratliff", customer_type: "residential", first_name: "Richard", last_name: "Ratliff", business_name: null, primary_phone: "555-0102", email: "richard@example.com", status: "active", source: "unknown", is_vip: false },
+          { id: "customer-native", display_name: "Richard Ratliff HVAC", customer_type: "commercial", first_name: "Richard", last_name: "Ratliff", business_name: "Richard Ratliff HVAC", primary_phone: "555-0103", email: "office@example.com", status: "active", source: "referral", is_vip: false },
+        ],
+        total_count: 2, page: 1, page_size: 20, total_pages: 1,
+      },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    await userEvent.type(screen.getByRole("textbox", { name: "Search customers" }), "Richard Ratliff");
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(screen.getByText("Richard Ratliff", { exact: true }).closest("a")).toHaveAttribute("href", "/customers/customer-migrated");
+    expect(screen.getByRole("link", { name: /Richard Ratliff HVAC/ })).toHaveAttribute("href", "/customers/customer-native");
+    expect(screen.queryByText(/Legacy|Historical HCP|Imported Customers/)).not.toBeInTheDocument();
+  });
+
+  it("accepts global-search results without requiring a legacy mode", () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{ id: "customer-global", display_name: "Taylor Home", customer_type: "residential", first_name: "Taylor", last_name: "Home", business_name: null, primary_phone: "555-0100", email: null, status: "active", source: "unknown", is_vip: false }],
+        total_count: 1, page: 1, page_size: 20, total_pages: 1,
+      },
+    } as never);
+
+    render(<MemoryRouter initialEntries={["/customers?query=Taylor"]}><CustomerManagement /></MemoryRouter>);
+
+    expect(customerHooks.useCustomerSearch).toHaveBeenCalledWith(expect.objectContaining({ query: "Taylor" }));
+    expect(screen.getByRole("link", { name: /Taylor Home/ })).toHaveAttribute("href", "/customers/customer-global");
+    expect(screen.queryByText(/legacy mode|imported customers/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps source reconciliation out of the daily Customer workspace", () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(administrationHooks.useMigrationReadiness).not.toHaveBeenCalled();
+    expect(screen.queryByText("Source accounting and reconciliation")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh source classification" })).not.toBeInTheDocument();
   });
 
   it("distinguishes authentication failure from an empty customer list", () => {
@@ -116,7 +179,7 @@ describe("CustomerManagement", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 
-  it("renders a safe source label when a migrated response contains null", () => {
+  it("keeps customer search labels source-neutral when a migrated response contains null", () => {
     vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -145,7 +208,7 @@ describe("CustomerManagement", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/business · unknown/)).toBeInTheDocument();
+    expect(screen.getByText("Number unavailable · business")).toBeInTheDocument();
   });
 
   it("keeps authorized customer evidence visible without exposing manage controls", () => {
@@ -178,7 +241,7 @@ describe("CustomerManagement", () => {
       data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
     } as never);
 
-    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    render(<MemoryRouter><CustomerMigrationControls /></MemoryRouter>);
     await userEvent.click(screen.getByRole("button", { name: "Refresh source classification" }));
 
     expect(populationRefresh.mutate).toHaveBeenCalledWith();
@@ -192,7 +255,7 @@ describe("CustomerManagement", () => {
       data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
     } as never);
 
-    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    render(<MemoryRouter><CustomerMigrationControls /></MemoryRouter>);
     await userEvent.click(
       screen.getByRole("button", { name: "Admit deterministic Customers" }),
     );
@@ -222,7 +285,7 @@ describe("CustomerManagement", () => {
       data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
     } as never);
 
-    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    render(<MemoryRouter><CustomerMigrationControls /></MemoryRouter>);
 
     expect(screen.getByText(/20 processed/)).toBeInTheDocument();
     expect(screen.getByText(/18 created/)).toBeInTheDocument();
@@ -245,7 +308,7 @@ describe("CustomerManagement", () => {
       data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
     } as never);
 
-    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    render(<MemoryRouter><CustomerMigrationControls /></MemoryRouter>);
 
     expect(screen.getByText(/1,540 accepted source Customers/)).toBeInTheDocument();
     expect(screen.getByText(/No Customer admission was performed/)).toBeInTheDocument();
@@ -259,8 +322,8 @@ describe("CustomerManagement", () => {
 
     render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
 
-    expect(screen.getByText("No Customer records are currently admitted.")).toBeInTheDocument();
-    expect(screen.getByText(/not proof that upstream source data is empty or complete/i)).toBeInTheDocument();
+    expect(screen.getByText("No Customer records are available.")).toBeInTheDocument();
+    expect(screen.getByText(/Customer history may still be importing or reconciling/i)).toBeInTheDocument();
   });
 
   it("recovers safely when a changed result set leaves the current page empty", () => {
@@ -283,13 +346,13 @@ describe("CustomerManagement", () => {
     } as never);
     vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 } } as never);
 
-    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    render(<MemoryRouter><CustomerMigrationControls /></MemoryRouter>);
 
-    expect(screen.getByText(/sealed HCP migration rehearsal through 2026-09-10/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Customer data import administration")).toHaveTextContent("Sealed source projection through 2026-09-10");
     expect(screen.getByText("90 projected / 100 acquired source")).toBeInTheDocument();
     expect(screen.getByText(/5 held · 3 exception · 1 deferred · 1 unresolved · delta 0/)).toBeInTheDocument();
     expect(screen.getByText("Source population is partial")).toBeInTheDocument();
-    expect(screen.getByText(/do not replace the current live classification/i)).toBeInTheDocument();
+    expect(screen.getByText(/remain outside Customer authority/i)).toBeInTheDocument();
   });
 
   it("makes stale source evidence explicit without disabling the native roster", () => {
@@ -310,12 +373,11 @@ describe("CustomerManagement", () => {
       data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
     } as never);
 
-    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    render(<MemoryRouter><CustomerMigrationControls /></MemoryRouter>);
 
     expect(screen.getByText("Stale source projection")).toBeInTheDocument();
     expect(screen.getByText("Source projection is stale")).toBeInTheDocument();
     expect(screen.getByText(/do not treat this source population or as-of date as current/i)).toBeInTheDocument();
-    expect(screen.getByText("No Customer records are currently admitted.")).toBeInTheDocument();
   });
 
   it("offers a safe retry when source readiness is unavailable", async () => {
@@ -333,11 +395,11 @@ describe("CustomerManagement", () => {
       data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
     } as never);
 
-    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    render(<MemoryRouter><CustomerMigrationControls /></MemoryRouter>);
     await userEvent.click(screen.getByRole("button", { name: "Retry source accounting" }));
 
     expect(refetch).toHaveBeenCalledOnce();
-    expect(screen.getByText(/population completeness and source freshness are unverified/i)).toBeInTheDocument();
+    expect(screen.getByText(/Customer work remains usable, but source completeness and freshness are unverified/i)).toBeInTheDocument();
   });
 
   it("requests every roster page instead of treating the first page as complete", async () => {
@@ -347,7 +409,7 @@ describe("CustomerManagement", () => {
     } as never);
 
     render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
-    expect(screen.getByText(/Showing 1–20 of 41 admitted Customers/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1–20 of 41 Customers/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, page_size: 20 }));
@@ -373,6 +435,6 @@ describe("CustomerManagement", () => {
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ record_state: "current" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Customer record state" }), "archived");
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ record_state: "archived", page: 1 }));
-    expect(screen.getByText("No admitted Customers match these filters.")).toBeVisible();
+    expect(screen.getByText("No Customers match these filters.")).toBeVisible();
   });
 });

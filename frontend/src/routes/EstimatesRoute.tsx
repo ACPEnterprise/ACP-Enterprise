@@ -58,8 +58,14 @@ export function EstimatesRoute() {
   const canReadPriceBook = useHasPermission("COMPANY_PRICE_BOOK_READ");
   const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
   const id = params.get("id") ?? "";
+  const initialCustomerId = params.get("customerId") ?? "";
+  const initialLocationId = params.get("locationId") ?? "";
   const returnTo = customerReturnPath(params.get("returnTo"));
   const estimate = useEstimate(id, canRead && Boolean(id));
+  const estimateCustomer = useCustomerDetail(
+    estimate.data?.customer_id ?? null,
+    canRead && Boolean(estimate.data?.customer_id),
+  );
   const mutations = useEstimateMutations();
   const priceBookMutations = usePriceBookMutations();
   const [statusFilter, setStatusFilter] = useState("");
@@ -76,8 +82,8 @@ export function EstimatesRoute() {
   const [form, setForm] = useState({
     branch:
       activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? "",
-    customer: "",
-    serviceLocation: "",
+    customer: initialCustomerId,
+    serviceLocation: initialLocationId,
     serviceItem: "",
     optionGroup: "",
     option: "",
@@ -442,7 +448,9 @@ export function EstimatesRoute() {
                 )}
                 {canManage && (
                   <EstimateDecisionControls
+                    key={`${estimate.data.id}-${estimateCustomer.data?.display_name ?? ""}`}
                     estimate={estimate.data}
+                    defaultCustomerName={estimateCustomer.data?.display_name ?? estimateCustomer.data?.business_name ?? ""}
                     mutations={mutations}
                   />
                 )}

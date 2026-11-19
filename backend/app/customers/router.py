@@ -25,6 +25,7 @@ from app.customers.schemas import (
     CustomerNoteResponse,
     CustomerResponse,
     CustomerSearchItem,
+    CustomerSearchLocationResponse,
     CustomerSearchQuery,
     CustomerSearchResponse,
     CustomerStatusUpdate,
@@ -191,6 +192,28 @@ async def search_customers(
                     ContactResponse.model_validate(preferred_contact)
                     if preferred_contact is not None
                     else None
+                ),
+                primary_location=next(
+                    (
+                        CustomerSearchLocationResponse(
+                            id=location.id,
+                            address_line_1=location.address,
+                            city=location.city,
+                            state=location.state,
+                            postal_code=location.postal_code,
+                        )
+                        for location in sorted(
+                            record.locations,
+                            key=lambda location: (
+                                not location.is_primary,
+                                location.archived_at is not None,
+                                location.address,
+                                location.id,
+                            ),
+                        )
+                        if location.archived_at is None
+                    ),
+                    None,
                 ),
             )
         )

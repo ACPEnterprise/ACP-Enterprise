@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,31 +38,32 @@ describe("CustomerOperationsPanel office workflow", () => {
     );
   });
 
-  it("shows exact HCP history without promoting QuickBooks overlap to native Accounting", () => {
+  it("keeps source provenance secondary without promoting it into customer workflow", () => {
     vi.mocked(sourceHistoryHooks.useHcpCustomerSourceHistory).mockReturnValue(query({
-      contract: "hcp-customer-source-history/v2",
+      contract: "hcp-customer-source-history/v3",
       authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
       accepted_as_acp_accounting: false,
       mutation_authority: "none",
       source_customer_id: "source-customer-1",
       source_manifest_sha256: "digest",
-      counts: { estimates: 1, invoices: 1, payments: 1, refunds: 1 },
+      counts: { locations: 1, jobs: 1, appointments: 0, estimates: 1, invoices: 1, payments: 1, refunds: 1 },
+      locations: [],
+      jobs: [],
+      appointments: [],
       estimates: [{ source_id: "estimate-source-1", number: "100", status: "approved", created_at: null, updated_at: null, options: [], authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY" }],
       invoices: [{ source_id: "invoice-source-1", source_job_id: "job-source-1", number: "200", status: "paid", amount_cents: 12500, balance_cents: 0, invoice_date: null, service_date: null, authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY", payments: [{ source_id: "payment-source-1", status: "succeeded", amount_cents: 12500, date: null, payment_method: "imported_from_quickbooks", overlap_disposition: "HOLD_FROM_AGGREGATION_PENDING_QBO_RECONCILIATION", authority: "HCP_SOURCE_BACKED_PAYMENT_EVIDENCE_NOT_ACCOUNTING_POSTING" }], refunds: [{ source_id: null, status: "succeeded", amount_cents: 2500, date: null, payment_method: "card", identity_disposition: "SOURCE_BACKED_UNLINKED_REFUND", aggregation_safe: false, authority: "HCP_SOURCE_BACKED_REFUND_EVIDENCE_NOT_ACCOUNTING_POSTING" }] }],
     }) as never);
 
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" locations={[]} /></MemoryRouter>);
-    expect(screen.getByRole("heading", { name: "Housecall Pro history" })).toBeInTheDocument();
-    expect(screen.getByText("Source-backed evidence")).toBeVisible();
-    expect(screen.getByText(/not ACP Accounting postings/i)).toBeVisible();
-    expect(screen.getByText(/held from aggregation/i)).toBeVisible();
+    expect(screen.getByText("Audit & evidence")).toBeInTheDocument();
+    expect(screen.queryByText("Housecall Pro history")).not.toBeInTheDocument();
     expect(screen.queryByText("source-customer-1")).not.toBeInTheDocument();
   });
 
-  it("separates current and historical work and preserves action context", () => {
+  it("unifies migrated and TwelveHats work and preserves action context", () => {
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" locations={[]} /></MemoryRouter>);
-    expect(screen.getByRole("heading", { name: "Current Jobs" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Historical Jobs" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Jobs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create Estimate" })).toHaveAttribute("href", "/estimates?customerId=customer-1&returnTo=%2Fcustomers%2Fcustomer-1");
     expect(screen.getByRole("link", { name: "Create Job" })).toHaveAttribute("href", "/jobs?create=1&customerId=customer-1");
     expect(screen.getByRole("link", { name: "Open Job to schedule" })).toHaveAttribute("href", "/jobs/job-current?returnTo=%2Fcustomers%2Fcustomer-1");
     expect(screen.getAllByRole("link", { name: /APT-1/ }).every((item) => item.getAttribute("href") === "/appointments/appointment-1")).toBe(true);
@@ -81,11 +82,11 @@ describe("CustomerOperationsPanel office workflow", () => {
     vi.mocked(invoiceHooks.useInvoiceWorkspace).mockReturnValue(query([]) as never);
     vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue({ data: undefined, isLoading: false, isError: false, isSuccess: true } as never);
     vi.mocked(paymentHooks.usePayments).mockReturnValue(query([]) as never);
+    vi.mocked(sourceHistoryHooks.useHcpCustomerSourceHistory).mockReturnValue({ data: undefined, isLoading: false, isError: true, isSuccess: false } as never);
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" locations={[]} /></MemoryRouter>);
-    expect(screen.getByText("No current Jobs are linked in native Job authority.")).toBeInTheDocument();
-    expect(screen.getByText("No historical Jobs are present in native Job authority.")).toBeInTheDocument();
+    expect(screen.getByText("No Jobs are linked to this Customer.")).toBeInTheDocument();
     expect(screen.getByText(/Balance evidence unavailable/)).toBeInTheDocument();
-    expect(screen.getByText(/does not imply that unavailable source history is zero/)).toBeInTheDocument();
+    expect(screen.getByText("Historical data is still being imported/reconciled.")).toBeInTheDocument();
   });
 
   it("marks the workspace partial when an owning domain is unavailable", () => {
@@ -98,7 +99,8 @@ describe("CustomerOperationsPanel office workflow", () => {
   it("warns when native AR does not represent complete historical evidence", () => {
     vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue(query({ currency: "USD", open_balance: "75.00", native_invoice_count: 1, applied_payment_total: "25.00", unapplied_receipt_total: "0.00", legacy_evidence_incomplete: true, as_of: "2026-09-12", evidence_classifications: [{ company_id: "company-1", customer_id: "customer-1", source_system: "acp_native", source_record_identity: "customer-1", as_of: "2026-09-12", acquired_at: null, evidence_digest: "a", completeness: "partial", conflict_state: "none", classification: "PARTIAL", authority: "native_invoice_and_receipt_authority" }] }) as never);
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" locations={[]} /></MemoryRouter>);
-    expect(screen.getByText("Evidence is partial")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Audit & evidence"));
+    expect(screen.getByText("Review evidence")).toBeInTheDocument();
   });
 
   it("does not confuse an unapplied receipt with an Invoice payment", () => {

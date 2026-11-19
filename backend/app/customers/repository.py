@@ -318,6 +318,7 @@ class CustomerRepository:
                     .options(
                         joinedload(Customer.primary_contact),
                         selectinload(Customer.contacts),
+                        selectinload(Customer.locations),
                     )
                     .where(*filters)
                     .order_by(

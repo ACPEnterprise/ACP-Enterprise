@@ -333,6 +333,19 @@ describe("EstimatesRoute", () => {
       ),
     );
   });
+
+  it("starts authoring from Customer and Service Location context", async () => {
+    permissions = new Set([
+      "COMPANY_ESTIMATE_READ",
+      "COMPANY_ESTIMATE_MANAGE",
+      "COMPANY_PRICE_BOOK_READ",
+      "COMPANY_CUSTOMER_READ",
+    ]);
+    renderRoute("/estimates?customerId=customer-1&locationId=location-1");
+    expect(await screen.findByText("Create estimate")).toBeVisible();
+    expect(screen.getByLabelText("Estimate Customer")).toHaveValue("customer-1");
+    expect(await screen.findByLabelText("Estimate Service Location")).toHaveValue("location-1");
+  });
   it("retains proposal evidence and hides backend details after rejection", async () => {
     permissions = new Set([
       "COMPANY_ESTIMATE_READ",

@@ -1,35 +1,43 @@
 import { useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, Star } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
 import { useHasPermission } from "../../auth";
 import {
-  useCustomerCleanMajorityAdmission,
   useCustomerMutations,
-  useCustomerPopulationRefresh,
   useCustomerSearch,
 } from "../../hooks/useCustomers";
-import { useMigrationReadiness } from "../../features/administration/hooks";
 import { customerDetailPath } from "../../routing/paths";
-import { formatCustomerSource, type CustomerInput, type DuplicateMatch } from "../../types/customers";
-import { Alert, Badge, Button, Card, EmptyState, Input, Spinner } from "../../ui";
+import { type CustomerInput, type DuplicateMatch } from "../../types/customers";
+import { Alert, Button, Card, EmptyState, Input, Spinner } from "../../ui";
 import { CustomerForm } from "./CustomerForm";
 
 const PAGE_SIZE = 20;
 
 export function CustomerManagement() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryFromUrl = searchParams.get("query") ?? "";
   const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
-  const canReviewSource = useHasPermission("COMPANY_ADMINISTER");
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(queryFromUrl);
+  const [search, setSearch] = useState(queryFromUrl);
   const [status, setStatus] = useState("");
   const [customerType, setCustomerType] = useState("");
   const [recordState, setRecordState] = useState<"current" | "archived" | "all">("current");
   const [page, setPage] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
   const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateMatch[]>([]);
+
+  // Global search can navigate to this already-mounted route. Keep its query
+  // authoritative while preserving the existing submit-to-search behavior.
+  const [syncedQuery, setSyncedQuery] = useState(queryFromUrl);
+  if (queryFromUrl !== syncedQuery) {
+    setSyncedQuery(queryFromUrl);
+    setSearchInput(queryFromUrl);
+    setSearch(queryFromUrl);
+    setPage(1);
+  }
   const customers = useCustomerSearch({
     query: search || undefined,
     status: status ? status as "prospect" | "active" | "inactive" : undefined,
@@ -41,18 +49,6 @@ export function CustomerManagement() {
     page_size: PAGE_SIZE,
   });
   const mutations = useCustomerMutations();
-  const populationRefresh = useCustomerPopulationRefresh();
-  const cleanMajorityAdmission = useCustomerCleanMajorityAdmission();
-  const migration = useMigrationReadiness(canReviewSource);
-  const sourceCounts = (migration.data?.counts ?? []).filter((item) => ["Customers", "Contacts", "Locations"].includes(item.domain));
-  const sourceProjectionPartial = sourceCounts.some((item) =>
-    item.migrated !== item.source
-    || item.held > 0
-    || item.exception > 0
-    || item.deferred > 0
-    || item.unresolved > 0
-    || item.delta !== 0,
-  );
 
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -65,38 +61,41 @@ export function CustomerManagement() {
 
   return <div className="space-y-6">
     <section className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0"><p className="text-sm font-medium text-action-primary">CRM</p><h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Customers</h2><p className="mt-2 text-content-muted">Search the admitted Customer roster and continue into locations, contacts, and related work.</p></div>
-      {canManage && <Button type="button" onClick={() => { setDuplicateWarnings([]); setIsCreating(true); }} leadingIcon={<Plus size={18} />}>New customer</Button>}
+      <div className="min-w-0"><p className="text-sm font-medium text-action-primary">CRM</p><h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Customers</h2><p className="mt-2 text-content-muted">Find a Customer, open the record, and continue into locations and related work.</p></div>
+      {canManage && <Button type="button" onClick={() => { setDuplicateWarnings([]); setIsCreating(true); }} leadingIcon={<Plus size={18} />}>New Customer</Button>}
     </section>
-
-    {canReviewSource && <Card className="p-ui-4 sm:p-ui-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-medium text-action-primary">Migration source accounting</p><h3 className="mt-1 text-lg font-semibold">Sealed rehearsal projection</h3></div>{migration.data && <Badge variant={migration.data.stale ? "warning" : "neutral"}>{migration.data.stale ? "Stale source projection" : migration.data.overall_status.replaceAll("_", " ")}</Badge>}</div>{migration.isLoading && <div className="mt-4"><Spinner label="Loading source accounting" /></div>}{migration.isError && <div className="mt-4"><Alert variant="warning" title="Source accounting unavailable" action={<Button type="button" variant="outline" onClick={() => void migration.refetch()}>Retry source accounting</Button>}>The native roster remains usable, but population completeness and source freshness are unverified.</Alert></div>}{migration.data && <><p className="mt-2 text-sm text-content-muted">This is the sealed HCP migration rehearsal through {migration.data.historical_window.ends_on || "an unavailable date"}; it is not the live deterministic Customer admission queue below. Source totals reconcile only when each row’s delta is zero.</p>{migration.data.stale && <Alert className="mt-4" variant="warning" title="Source projection is stale">Use the admitted native roster for current ACP work, but do not treat this source population or as-of date as current completeness evidence.</Alert>}{sourceProjectionPartial && <Alert className="mt-4" variant="information" title="Source population is partial">Only projected admissible records are counted here. Held, exception, deferred, unresolved, and not-yet-admitted records remain outside live Customer authority.</Alert>}<div className="mt-4 grid gap-3 sm:grid-cols-3">{sourceCounts.map((item) => <div key={item.domain} className="rounded-lg border border-stroke p-3"><p className="font-semibold">{item.domain}</p><p className="mt-1 text-sm">{item.migrated.toLocaleString()} projected / {item.source.toLocaleString()} acquired source</p><p className="mt-1 text-xs text-content-muted">{item.held.toLocaleString()} held · {item.exception.toLocaleString()} exception · {item.deferred.toLocaleString()} deferred · {item.unresolved.toLocaleString()} unresolved · delta {item.delta.toLocaleString()}</p></div>)}</div><p className="mt-3 text-xs text-content-muted">These rehearsal counts do not replace the current live classification returned by Refresh source classification.</p></> }</Card>}
-
-    {canManage && <Card className="p-ui-4 sm:p-ui-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-medium text-action-primary">Customer source reconciliation</p><h3 className="mt-1 text-lg font-semibold">Admit deterministic HCP Customers</h3><p className="mt-2 max-w-3xl text-sm text-content-muted">Create or bind only Customers with exact provider identity and validated source evidence. Any record that cannot be admitted safely is held for review while unrelated Customers continue. This never performs a fuzzy merge.</p><p className="mt-2 text-xs text-content-muted">Refresh classifies the live source population and can take about a minute. Admission can take many minutes; keep this page open until the final receipt appears and do not submit it from another tab.</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" loading={populationRefresh.isPending} onClick={() => populationRefresh.mutate()}>Refresh source classification</Button><Button type="button" loading={cleanMajorityAdmission.isPending} loadingLabel="Customer admission is running" onClick={() => cleanMajorityAdmission.mutate()}>Admit deterministic Customers</Button></div></div>{populationRefresh.isError && (() => { const error = getOperatorApiError(populationRefresh.error, "Customer source reconciliation"); return <Alert className="mt-4" variant="danger" title={error.title}>{error.message}</Alert>; })()}{populationRefresh.data && <Alert className="mt-4" variant={populationRefresh.data.counts.ambiguous || populationRefresh.data.counts.unexplained ? "warning" : "success"} title="Source classification refreshed">{populationRefresh.data.counts.total.toLocaleString()} accepted source Customers · {populationRefresh.data.counts.bound.toLocaleString()} bound · {populationRefresh.data.counts.held.toLocaleString()} held · {populationRefresh.data.counts.ambiguous.toLocaleString()} ambiguous · {populationRefresh.data.counts.unexplained.toLocaleString()} unexplained. No Customer admission was performed.</Alert>}{cleanMajorityAdmission.isPending && <Alert className="mt-4" variant="information" title="Deterministic admission is running">Keep this page open. The action is disabled while exact-provider Customers are processed. If the browser disconnects, do not submit again until Refresh source classification shows the authoritative bound, held, and unexplained counts.</Alert>}{cleanMajorityAdmission.isError && (() => { const error = getOperatorApiError(cleanMajorityAdmission.error, "Customer admission"); return <Alert className="mt-4" variant="danger" title={error.title}>{error.message} Do not submit again until Refresh source classification recovers the authoritative state.</Alert>; })()}{cleanMajorityAdmission.data && <><Alert className="mt-4" variant={cleanMajorityAdmission.data.quarantined || cleanMajorityAdmission.data.remaining_unexplained ? "warning" : "success"} title="Deterministic admission complete">{cleanMajorityAdmission.data.processed.toLocaleString()} processed · {cleanMajorityAdmission.data.admitted.toLocaleString()} created · {cleanMajorityAdmission.data.replayed.toLocaleString()} already bound or replayed · {cleanMajorityAdmission.data.quarantined.toLocaleString()} held or quarantined · {cleanMajorityAdmission.data.rejected.toLocaleString()} rejected · {cleanMajorityAdmission.data.provider_unavailable.toLocaleString()} provider unavailable · {cleanMajorityAdmission.data.remaining_unexplained.toLocaleString()} unexplained.</Alert>{cleanMajorityAdmission.data.quarantine_records.length > 0 && <section className="mt-4 rounded-lg border border-status-warning/40 p-4" aria-label="Customer admission review queue"><h4 className="font-semibold">Customer admission review</h4><p className="mt-1 text-sm text-content-muted">These provider Customers remain outside native authority until Migration review resolves the exact evidence.</p><ul className="mt-3 space-y-3">{cleanMajorityAdmission.data.quarantine_records.map((record) => <li key={record.source_customer_id}><p className="font-medium">Provider Customer {record.source_customer_id}</p><p className="text-sm text-content-muted">{record.reason}</p><p className="text-xs text-content-muted">Reason: {record.reason_code.replaceAll("_", " ")}</p></li>)}</ul></section>}</>}</Card>}
 
     {canManage && isCreating && <Card className="p-ui-4 sm:p-ui-6"><h3 className="text-xl font-semibold">Create customer</h3><p className="mt-1 text-sm text-content-muted">Create the Customer record first, then add Service Locations and Contacts.</p><div className="mt-6"><CustomerForm duplicateWarnings={duplicateWarnings} isSaving={mutations.create.isPending} isCheckingDuplicates={mutations.duplicateCheck.isPending} error={mutations.create.error ?? mutations.duplicateCheck.error} onCancel={() => setIsCreating(false)} onCheckDuplicates={(input) => mutations.duplicateCheck.mutate({ first_name: input.first_name, last_name: input.last_name, business_name: input.business_name, phone: input.primary_phone, email: input.email }, { onSuccess: setDuplicateWarnings })} onSubmit={(input: CustomerInput) => mutations.create.mutate(input, { onSuccess: (result) => { setDuplicateWarnings(result.duplicate_warnings); setIsCreating(false); navigate(customerDetailPath(result.customer.id)); } })} /></div></Card>}
 
     <Card>
       <div className="border-b border-stroke p-ui-4 sm:p-ui-5">
-        <form onSubmit={submitSearch} className="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_auto_auto_auto_auto]">
+        <form onSubmit={submitSearch} className="flex flex-col gap-3 sm:flex-row">
           <label className="relative min-w-0"><span className="sr-only">Search customers</span><Search size={18} className="pointer-events-none absolute left-3 top-3 text-content-muted" /><Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Name, number, contact, phone, email, or address" className="pl-10" /></label>
-          <select aria-label="Customer status" className="min-h-11 rounded-lg border border-stroke-strong bg-surface px-3" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
-          <select aria-label="Customer type" className="min-h-11 rounded-lg border border-stroke-strong bg-surface px-3" value={customerType} onChange={(event) => { setCustomerType(event.target.value); setPage(1); }}><option value="">All types</option><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="municipal">Municipal</option><option value="hoa">HOA</option><option value="property_management">Property management</option></select>
-          <select aria-label="Customer record state" className="min-h-11 rounded-lg border border-stroke-strong bg-surface px-3" value={recordState} onChange={(event) => { setRecordState(event.target.value as "current" | "archived" | "all"); setPage(1); }}><option value="current">Current records</option><option value="archived">Archived records</option><option value="all">Current and archived</option></select>
-          <Button type="submit" variant="outline">Search</Button>
+          <Button type="submit" variant="primary">Search</Button>
         </form>
-        {(search || status || customerType || recordState !== "current") && <Button type="button" variant="ghost" onClick={clearFilters} className="mt-2">Clear roster filters</Button>}
-        <p className="mt-3 text-xs text-content-muted">Totals cover Customer records currently admitted to native ACP authority. Migration-held or not-yet-admitted source records are not counted; completeness cannot be inferred from this page.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-content-muted">Search name, phone, email, address, or Customer number.</span>
+          <details className="relative">
+            <summary className="cursor-pointer text-xs font-semibold text-action-primary">More filters</summary>
+            <div className="absolute left-0 z-10 mt-2 grid min-w-64 gap-2 rounded-lg border border-stroke bg-surface p-3 shadow-lg">
+              <select aria-label="Customer status" className="min-h-10 rounded-lg border border-stroke-strong bg-surface px-3 text-sm" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
+              <select aria-label="Customer type" className="min-h-10 rounded-lg border border-stroke-strong bg-surface px-3 text-sm" value={customerType} onChange={(event) => { setCustomerType(event.target.value); setPage(1); }}><option value="">All types</option><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="municipal">Municipal</option><option value="hoa">HOA</option><option value="property_management">Property management</option></select>
+              <select aria-label="Customer record state" className="min-h-10 rounded-lg border border-stroke-strong bg-surface px-3 text-sm" value={recordState} onChange={(event) => { setRecordState(event.target.value as "current" | "archived" | "all"); setPage(1); }}><option value="current">Current records</option><option value="archived">Archived records</option><option value="all">Current and archived</option></select>
+            </div>
+          </details>
+          {(search || status || customerType || recordState !== "current") && <Button type="button" variant="ghost" onClick={clearFilters}>Clear filters</Button>}
+        </div>
       </div>
 
       {customers.isLoading && <div className="flex justify-center p-ui-8"><Spinner label="Loading customers" /></div>}
       {customers.isError && (() => { const error = getOperatorApiError(customers.error, "Customer roster"); return <div className="p-ui-4"><Alert variant="danger" title={error.title} action={error.retryable ? <Button variant="outline" onClick={() => void customers.refetch()}>Retry</Button> : undefined}>{error.message}</Alert></div>; })()}
       {customers.data && customers.data.items.length === 0 && customers.data.total_count > 0 && <EmptyState title="This roster page is no longer available." description="The authoritative result set changed. Return to the first page and refresh the current roster." primaryAction={<Button type="button" variant="outline" onClick={() => setPage(1)}>Return to first page</Button>} />}
-      {customers.data && customers.data.items.length === 0 && customers.data.total_count === 0 && <EmptyState title={search || status || customerType || recordState !== "current" ? "No admitted Customers match these filters." : "No Customer records are currently admitted."} description={search || status || customerType || recordState !== "current" ? "Change the search or filters. Records held by Migration are outside this result." : "This is an empty native-authority result, not proof that upstream source data is empty or complete."} />}
-      {customers.data && customers.data.items.length > 0 && <div className="divide-y divide-stroke">{customers.data.items.map((customer) => <Link key={customer.id} to={customerDetailPath(customer.id)} className="grid min-h-11 w-full min-w-0 gap-3 p-ui-4 text-left transition hover:bg-surface-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus sm:grid-cols-[1.5fr_1fr_1fr_auto] sm:items-center sm:p-ui-5">
-        <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="break-words font-semibold text-content">{customer.display_name || customer.business_name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() || "Unnamed customer"}</p>{customer.is_vip && <Star size={15} className="shrink-0 fill-amber-400 text-amber-400" />}</div><p className="mt-1 break-words text-xs text-content-muted">{customer.customer_number || "Number unavailable"} · {customer.customer_type} · {formatCustomerSource(customer.source)}</p><p className="mt-1 text-xs text-content-muted">Record updated {customer.updated_at ? new Date(customer.updated_at).toLocaleDateString() : "date unavailable"}</p></div>
-        <p className="break-words text-sm text-content-secondary">{customer.primary_phone || "No phone"}</p><p className="break-all text-sm text-content-muted">{customer.email ?? "No email"}</p><span className={`w-fit rounded-full px-2.5 py-1 text-xs ${customer.archived_at || customer.status === "inactive" ? "bg-status-warning/15 text-status-warning" : "bg-status-success/15 text-status-success"}`}>{customer.archived_at ? "archived" : customer.status.replaceAll("_", " ")}</span>
+      {customers.data && customers.data.items.length === 0 && customers.data.total_count === 0 && <EmptyState title={search || status || customerType || recordState !== "current" ? "No Customers match these filters." : "No Customer records are available."} description={search || status || customerType || recordState !== "current" ? "Change the search or filters." : "Customer history may still be importing or reconciling."} />}
+      {customers.data && customers.data.items.length > 0 && <div className="divide-y divide-stroke"><div className="hidden grid-cols-[minmax(14rem,1.5fr)_minmax(14rem,1.4fr)_minmax(8rem,1fr)_minmax(12rem,1.2fr)_auto] gap-3 bg-surface-subtle px-ui-4 py-ui-2 text-overline uppercase tracking-wide text-content-muted sm:grid"><span>Customer</span><span>Primary location</span><span>Phone</span><span>Email</span><span>Status</span></div>{customers.data.items.map((customer) => <Link key={customer.id} to={customerDetailPath(customer.id)} className="grid min-h-11 w-full min-w-0 gap-2 p-ui-3 text-left transition hover:bg-surface-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus sm:grid-cols-[minmax(14rem,1.5fr)_minmax(14rem,1.4fr)_minmax(8rem,1fr)_minmax(12rem,1.2fr)_auto] sm:items-center sm:gap-3">
+      <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="truncate font-semibold text-content">{customer.display_name || customer.business_name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() || "Name unavailable"}</p>{customer.is_vip && <Star size={15} className="shrink-0 fill-amber-400 text-amber-400" />}</div><p className="mt-1 truncate text-xs text-content-muted">{customer.customer_number || "Number unavailable"} · {customer.customer_type}</p></div>
+        <p className="truncate text-sm text-content-secondary">{customer.primary_location ? `${customer.primary_location.address_line_1}, ${customer.primary_location.city}, ${customer.primary_location.state} ${customer.primary_location.postal_code}` : "Location unavailable"}</p><p className="truncate text-sm text-content-secondary">{customer.primary_phone || "No phone"}</p><p className="truncate text-sm text-content-muted">{customer.email ?? "No email"}</p><span className={`w-fit rounded-full px-2.5 py-1 text-xs ${customer.archived_at || customer.status === "inactive" ? "bg-status-warning/15 text-status-warning" : "bg-status-success/15 text-status-success"}`}>{customer.archived_at ? "archived" : customer.status.replaceAll("_", " ")}</span>
       </Link>)}</div>}
-      {customers.data && customers.data.total_count > 0 && <div className="flex flex-col gap-3 border-t border-stroke p-ui-4 text-sm text-content-muted sm:flex-row sm:items-center sm:justify-between"><span>Showing {(customers.data.page - 1) * customers.data.page_size + 1}–{Math.min(customers.data.page * customers.data.page_size, customers.data.total_count)} of {customers.data.total_count} admitted Customers · page {customers.data.page} of {customers.data.total_pages}</span><div className="flex gap-2"><Button type="button" variant="outline" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} leadingIcon={<ChevronLeft size={16} />}>Previous</Button><Button type="button" variant="outline" disabled={page >= customers.data.total_pages} onClick={() => setPage((value) => value + 1)} trailingIcon={<ChevronRight size={16} />}>Next</Button></div></div>}
+      {customers.data && customers.data.total_count > 0 && <div className="flex flex-col gap-3 border-t border-stroke p-ui-4 text-sm text-content-muted sm:flex-row sm:items-center sm:justify-between"><span>Showing {(customers.data.page - 1) * customers.data.page_size + 1}–{Math.min(customers.data.page * customers.data.page_size, customers.data.total_count)} of {customers.data.total_count} Customers · page {customers.data.page} of {customers.data.total_pages}</span><div className="flex gap-2"><Button type="button" variant="outline" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} leadingIcon={<ChevronLeft size={16} />}>Previous</Button><Button type="button" variant="outline" disabled={page >= customers.data.total_pages} onClick={() => setPage((value) => value + 1)} trailingIcon={<ChevronRight size={16} />}>Next</Button></div></div>}
     </Card>
   </div>;
 }

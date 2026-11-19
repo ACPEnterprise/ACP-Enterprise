@@ -62,6 +62,26 @@ class LiaTemporalContext(LiaSchema):
         return self
 
 
+class LiaContextRecord(LiaSchema):
+    """A bounded source-record pointer supplied by an owner intelligence handoff.
+
+    These pointers are context only. Retrieval still re-checks authorization and
+    source freshness before using any record as evidence.
+    """
+
+    entity_type: str = Field(min_length=1, max_length=64)
+    entity_id: UUID
+    label: str | None = Field(default=None, max_length=200)
+
+
+class LiaContextMetric(LiaSchema):
+    """A measured value that explains why an owner opened LIA."""
+
+    name: str = Field(min_length=1, max_length=100)
+    value: str = Field(max_length=200)
+    unit: str | None = Field(default=None, max_length=64)
+
+
 class LiaContext(LiaSchema):
     domain: str | None = Field(default=None, max_length=64)
     entity_id: UUID | None = None
@@ -70,6 +90,8 @@ class LiaContext(LiaSchema):
     as_of: datetime | None = None
     topic_domains: tuple[str, ...] = Field(default=(), max_length=8)
     temporal: LiaTemporalContext | None = None
+    records: tuple[LiaContextRecord, ...] = Field(default=(), max_length=50)
+    metrics: tuple[LiaContextMetric, ...] = Field(default=(), max_length=20)
 
 
 class LiaRequest(LiaSchema):

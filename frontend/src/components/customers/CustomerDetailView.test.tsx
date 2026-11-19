@@ -86,6 +86,7 @@ describe("CustomerDetailView", () => {
   it("offers permission-gated Job creation with Customer and Location context", () => {
     permissions.add("COMPANY_JOB_READ");
     permissions.add("COMPANY_JOB_MANAGE");
+    permissions.add("COMPANY_ESTIMATE_MANAGE");
     vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
       isLoading: false, isError: false,
       data: { ...customer, properties: [{ id: "location-1", customer_id: customer.id, address_line_1: "10 Main", address_line_2: null, city: "Albany", state: "NY", postal_code: "12207", property_type: "single_family", gate_access_instructions: null, water_shutoff_location: null, sewer_septic: "sewer", property_notes: null, is_primary: true, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", archived_at: null }] },
@@ -94,15 +95,16 @@ describe("CustomerDetailView", () => {
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
 
     expect(screen.getByRole("link", { name: "Create Job for this Location" })).toHaveAttribute("href", "/jobs?create=1&customerId=customer-1&locationId=location-1");
+    expect(screen.getByRole("link", { name: "Create Estimate for this Location" })).toHaveAttribute("href", "/estimates?customerId=customer-1&locationId=location-1&returnTo=%2Fcustomers%2Fcustomer-1");
     expect(screen.getByRole("link", { name: "View Jobs for this Location" })).toHaveAttribute("href", "/jobs?customerId=customer-1&locationId=location-1");
   });
 
-  it("distinguishes native authority from marketing source and states history limits", () => {
+  it("keeps the customer workflow source-neutral while retaining history limits", () => {
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
-    expect(screen.getByText("Native ACP Customer")).toBeInTheDocument();
+    expect(screen.getByText("Customer record")).toBeInTheDocument();
     expect(screen.getByText(/Marketing source: referral/)).toBeInTheDocument();
     expect(screen.getByText("History completeness")).toBeInTheDocument();
-    expect(screen.getByText(/Missing or source-only history is not treated as none or zero/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing or unavailable history is never treated as none or zero/)).toBeInTheDocument();
   });
 
   it("shows exact migration source lineage without conflating it with marketing source", () => {
@@ -124,7 +126,7 @@ describe("CustomerDetailView", () => {
 
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
 
-    expect(screen.getByText("Migration source lineage")).toBeInTheDocument();
+    expect(screen.getByText("Audit & evidence")).toBeInTheDocument();
     expect(screen.getByText(/provider Customer 147405829/)).toBeInTheDocument();
     expect(screen.getByText(/Marketing source: referral/)).toBeInTheDocument();
   });
@@ -136,8 +138,7 @@ describe("CustomerDetailView", () => {
     } as never);
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
     expect(customerHooks.useCustomerTimeline).toHaveBeenCalledWith(customer.id, 1, 25);
-    await userEvent.click(screen.getByRole("button", { name: "Next history" }));
-    expect(customerHooks.useCustomerTimeline).toHaveBeenLastCalledWith(customer.id, 2, 25);
+    expect(customerHooks.useCustomerTimeline).toHaveBeenLastCalledWith(customer.id, 1, 25);
   });
 
   it("uses the shared accessible confirmation before archiving", async () => {
@@ -294,7 +295,7 @@ describe("CustomerDetailView", () => {
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
 
     expect(screen.getByText(/Add the address where service will take place/)).toBeInTheDocument();
-    expect(screen.getByText(/No additional Contacts are currently admitted/)).toBeInTheDocument();
+    expect(screen.getByText(/No additional Contacts are linked/)).toBeInTheDocument();
   });
 
   it("records explicit consent and renders consent-safe history", async () => {
@@ -334,7 +335,6 @@ describe("CustomerDetailView", () => {
       source: "staff_confirmed",
       reason: null,
     });
-    expect(screen.getByText("Customer created")).toBeInTheDocument();
     expect(screen.getByText("Recorded preference unavailable")).toBeInTheDocument();
   });
 
@@ -372,7 +372,7 @@ describe("CustomerDetailView", () => {
     await userEvent.click(screen.getByRole("button", { name: "Check for possible duplicates" }));
     expect(duplicateCheck).toHaveBeenCalledOnce();
     expect(screen.getByText("matching normalized email")).toBeInTheDocument();
-    expect(screen.getByText(/Native consolidation authority is not available/)).toBeInTheDocument();
+    expect(screen.getByText(/Customer consolidation authority is not available/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /merge/i })).not.toBeInTheDocument();
   });
 

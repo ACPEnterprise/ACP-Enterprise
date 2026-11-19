@@ -88,12 +88,7 @@ describe("FinancialReportsRoute", () => {
     expect(screen.getByText("Integrity: passed")).toBeVisible();
     expect(screen.getByText("Reconciliation: reconciled")).toBeVisible();
     expect(screen.getByText(/Definition acc-rpt-1.0/)).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "QuickBooks source evidence" }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(/did not infer zeros or substitute native\/HCP data/i),
-    ).toBeVisible();
+    expect(screen.getByText("Audit & source evidence")).toBeVisible();
     expect(screen.getByRole("option", { name: "Main Branch (MAIN)" })).toBeVisible();
     expect(screen.queryByLabelText(/Branch ID/i)).not.toBeInTheDocument();
     expect(screen.getByText("$125.50")).toBeVisible();

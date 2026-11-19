@@ -1,335 +1,710 @@
 import { useMemo, useState } from "react";
 import {
-  Banknote,
+  AlertTriangle,
+  ArrowRight,
+  Bot,
   CalendarDays,
   CircleDollarSign,
-  Clock3,
-  CreditCard,
-  Gauge,
+  RadioTower,
   ReceiptText,
-  TrendingUp,
-  Users,
+  Sparkles,
 } from "lucide-react";
 import { Link } from "react-router";
 
 import { useAuth } from "../auth/useAuth";
 import { useEffectivePermissions } from "../auth/usePermissions";
-import { BeaconPanel } from "../components/command-center/BeaconPanel";
-import { BeaconReasoningPanel } from "../components/command-center/BeaconReasoningPanel";
-import { JobsEvidenceGraph } from "../components/command-center/JobsEvidenceGraph";
-import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import type { BeaconSignal, BeaconSupportingFact } from "../api/beacon";
+import type { LuminaryEvidence, LuminaryFinding } from "../api/luminary";
 import {
   useBeaconLifecycleActions,
   useActiveBeaconRecommendations,
   useBeaconSignals,
-  useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
-import { useEconomicsMeasurementFoundation } from "../hooks/useBusinessEconomics";
 import { useDispatchBoard } from "../hooks/useDispatch";
 import { useReceivablesSummary } from "../hooks/useInvoices";
 import { useCompletedJobTrend } from "../hooks/useJobs";
+import { useLuminaryBriefing } from "../hooks/useLuminary";
 import { useMoneyPosition } from "../hooks/usePayments";
-import type { DispatchBoardItem } from "../types/dispatch";
-import type { JobTrendGranularity } from "../types/jobs";
 import {
   Alert,
   Badge,
+  Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
   Select,
+  Spinner,
 } from "../ui";
+import type { DispatchBoardItem } from "../types/dispatch";
 
-type RangeKey = "day" | "week" | "month" | "12m" | "3y" | "5y" | "custom";
-type JobMetric = "produced_value" | "job_count";
-type BookedRange = "day" | "week" | "month";
-
-const panelClass = "bg-surface";
-const commandCenterObservedAt = new Date();
-const commandCenterToday = new Date(
-  commandCenterObservedAt.getFullYear(),
-  commandCenterObservedAt.getMonth(),
-  commandCenterObservedAt.getDate(),
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const now = new Date();
+const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+const tomorrowDate = new Date(
+  now.getFullYear(),
+  now.getMonth(),
+  now.getDate() + 1,
 );
+const tomorrow = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, "0")}-${String(tomorrowDate.getDate()).padStart(2, "0")}`;
+const monthStart = `${today.slice(0, 7)}-01`;
 
-function isoDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
-}
+type ContextRecord = {
+  entity_type: string;
+  entity_id: string | null;
+  label?: string;
+};
+type ContextMetric = { name: string; value: string; unit?: string };
 
-function startOfMonth(value: Date): Date {
-  return new Date(value.getFullYear(), value.getMonth(), 1);
-}
-
-function addMonths(value: Date, amount: number): Date {
-  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
-}
-
-function rangeFor(
-  key: RangeKey,
-  customStart: string,
-  customEnd: string,
-): { start: string; end: string; granularity: JobTrendGranularity } {
-  const today = commandCenterToday;
-  if (key === "day")
-    return { start: isoDate(today), end: isoDate(today), granularity: "day" };
-  if (key === "week")
-    return {
-      start: isoDate(new Date(today.getTime() - 6 * 86_400_000)),
-      end: isoDate(today),
-      granularity: "day",
-    };
-  if (key === "month")
-    return {
-      start: isoDate(startOfMonth(today)),
-      end: isoDate(today),
-      granularity: "day",
-    };
-  if (key === "12m")
-    return {
-      start: isoDate(addMonths(startOfMonth(today), -11)),
-      end: isoDate(today),
-      granularity: "month",
-    };
-  if (key === "3y")
-    return {
-      start: isoDate(addMonths(startOfMonth(today), -35)),
-      end: isoDate(today),
-      granularity: "month",
-    };
-  if (key === "5y")
-    return {
-      start: `${today.getFullYear() - 4}-01-01`,
-      end: isoDate(today),
-      granularity: "year",
-    };
-  const days = Math.max(
-    0,
-    (Date.parse(customEnd) - Date.parse(customStart)) / 86_400_000,
-  );
-  return {
-    start: customStart,
-    end: customEnd,
-    granularity:
-      days > 730 ? "year" : days > 120 ? "month" : days > 31 ? "week" : "day",
-  };
-}
-
-function currency(
-  value: string | null | undefined,
-  code: string | null | undefined,
-): string {
-  if (value === null || value === undefined) return "Unavailable";
-  if (!code) return Number(value) === 0 ? "Measured zero" : "Unavailable";
+function money(
+  value: string | number | boolean | null | undefined,
+  currency: string | null = "USD",
+) {
+  if (value === null || value === undefined || value === "") return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: code,
+    currency: currency ?? "USD",
     maximumFractionDigits: 0,
   }).format(Number(value));
 }
 
-function moneyEvidence(
-  amount: string | null | undefined,
-  code: string | null | undefined,
-  state: string | undefined,
-): string {
-  if (state === "MEASURED_ZERO") return code ? currency("0", code) : "Measured zero";
-  if (state !== "AVAILABLE") return state === "INCOMPLETE" ? "Incomplete evidence" : "Unavailable";
-  return currency(amount, code);
+function count(value: number | null | undefined) {
+  return value === null || value === undefined ? "—" : value.toLocaleString();
 }
 
-function Panel({
+function dateWindow(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return {
+    start: new Date(year, month - 1, day).toISOString(),
+    end: new Date(year, month - 1, day + 1).toISOString(),
+  };
+}
+
+function contextPath(
+  domain: string,
+  records: readonly ContextRecord[] = [],
+  metrics: readonly ContextMetric[] = [],
+  entityId?: string,
+) {
+  const params = new URLSearchParams({ contextDomain: domain });
+  if (entityId && UUID.test(entityId)) params.set("contextId", entityId);
+  records
+    .filter((record) => record.entity_id && UUID.test(record.entity_id))
+    .slice(0, 50)
+    .forEach((record) =>
+      params.append(
+        "contextRecord",
+        `${record.entity_type}:${record.entity_id}`,
+      ),
+    );
+  metrics
+    .slice(0, 20)
+    .forEach((metric) =>
+      params.append(
+        "contextMetric",
+        `${metric.name}:${metric.value}:${metric.unit ?? ""}`,
+      ),
+    );
+  return `/lia?${params.toString()}`;
+}
+
+function evidenceRecords(signal: BeaconSignal): ContextRecord[] {
+  const records = signal.supporting_facts.flatMap((fact) =>
+    fact.evidence.map((item) => ({
+      entity_type: item.entity_type,
+      entity_id: item.entity_id,
+    })),
+  );
+  return [
+    ...new Map(
+      records
+        .filter((item) => UUID.test(item.entity_id))
+        .map((item) => [`${item.entity_type}:${item.entity_id}`, item]),
+    ).values(),
+  ];
+}
+
+function evidencePath(entityType: string, entityId: string | null) {
+  if (!entityId) return null;
+  const paths: Record<string, string> = {
+    customer: `/customers/${entityId}`,
+    estimate: `/estimates/${entityId}`,
+    job: `/jobs/${entityId}`,
+    invoice: `/invoices/${entityId}`,
+    appointment: `/appointments/${entityId}`,
+    payment: `/payments/${entityId}`,
+    employee: `/employees/${entityId}`,
+  };
+  return paths[entityType] ?? null;
+}
+
+function factLabel(fact: BeaconSupportingFact) {
+  if (fact.unit === "currency_amount") return money(fact.value);
+  return `${fact.value}${fact.unit ? ` ${fact.unit.replaceAll("_", " ")}` : ""}`;
+}
+
+function signalDate(signal: BeaconSignal) {
+  const factDate = signal.supporting_facts.find(
+    (fact) =>
+      /date|start|scheduled/i.test(fact.name) &&
+      typeof fact.value === "string" &&
+      /^\d{4}-\d{2}-\d{2}/.test(fact.value),
+  );
+  if (factDate && typeof factDate.value === "string") {
+    return factDate.value.slice(0, 10);
+  }
+  const evidenceDate = signal.supporting_facts
+    .flatMap((fact) => fact.evidence)
+    .find((item) => item.occurred_at)?.occurred_at;
+  return evidenceDate?.slice(0, 10) ?? today;
+}
+
+function findingEvidence(finding: LuminaryFinding): ContextRecord[] {
+  const rows = finding.evidence
+    .filter((item) => UUID.test(item.record_id))
+    .map((item) => ({
+      entity_type: item.record_type,
+      entity_id: item.record_id,
+    }));
+  return [
+    ...new Map(
+      rows.map((item) => [`${item.entity_type}:${item.entity_id}`, item]),
+    ).values(),
+  ];
+}
+
+function luminaryEvidencePath(item: LuminaryEvidence) {
+  return evidencePath(item.record_type, item.record_id);
+}
+
+function Section({
   title,
   description,
   icon: Icon,
   children,
-  className = "",
 }: {
   readonly title: string;
   readonly description: string;
-  readonly icon: typeof Banknote;
+  readonly icon: typeof RadioTower;
   readonly children: React.ReactNode;
-  readonly className?: string;
 }) {
   return (
-    <Card className={`${panelClass} ${className}`}>
-      <CardHeader>
-        <div className="flex items-center gap-2 text-action-primary">
-          <Icon aria-hidden="true" size={20} />
-          <CardTitle className="text-action-primary">{title}</CardTitle>
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-action-primary">
+            <Icon aria-hidden="true" size={20} />
+            <CardTitle>{title}</CardTitle>
+          </div>
+          <CardDescription>{description}</CardDescription>
         </div>
-        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
   );
 }
 
-function Unavailable({ children }: { readonly children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-dashed border-stroke-strong bg-surface-muted p-4 text-sm text-content-muted">
-      <strong className="block text-content">Unavailable</strong>
-      {children}
-    </div>
-  );
-}
-
-function MoneyValue({
+function PulseMetric({
   label,
   value,
   detail,
-  unavailable = false,
+  to,
+  tone = "normal",
 }: {
   readonly label: string;
-  readonly value: string;
+  readonly value: string | null | undefined;
   readonly detail: string;
-  readonly unavailable?: boolean;
+  readonly to: string;
+  readonly tone?: "normal" | "warning";
 }) {
   return (
-    <div className="rounded-lg bg-surface-muted p-4">
+    <Link
+      className={`block rounded-xl border p-4 transition hover:border-action-primary hover:bg-surface-muted ${tone === "warning" ? "border-status-warning/50" : "border-stroke"}`}
+      to={to}
+    >
       <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
         {label}
       </p>
-      <p
-        className={`mt-2 text-2xl font-bold ${unavailable ? "text-content-muted" : "text-action-primary"}`}
-      >
-        {value}
+      <p className="mt-2 text-2xl font-bold text-action-primary">
+        {value ?? "—"}
       </p>
       <p className="mt-1 text-xs text-content-muted">{detail}</p>
-    </div>
+    </Link>
   );
 }
 
-function dateWindow(offsetDays: number) {
-  const start = new Date(commandCenterToday);
-  start.setDate(start.getDate() + offsetDays);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
+function AttentionItem({
+  signal,
+  onSnooze,
+}: {
+  readonly signal: BeaconSignal;
+  readonly onSnooze: (signal: BeaconSignal) => void;
+}) {
+  const records = evidenceRecords(signal);
+  const askPath = contextPath(
+    "beacon",
+    records,
+    signal.supporting_facts.map((fact) => ({
+      name: fact.name,
+      value: String(fact.value),
+      unit: fact.unit ?? undefined,
+    })),
+    signal.id,
+  );
+  const urgency =
+    signal.priority.band === "critical" || signal.priority.band === "immediate"
+      ? "Act now"
+      : signal.priority.band === "important"
+        ? "Today"
+        : "Monitor";
+  return (
+    <article className="rounded-xl border border-stroke bg-surface p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant={
+                urgency === "Act now"
+                  ? "danger"
+                  : urgency === "Today"
+                    ? "warning"
+                    : "neutral"
+              }
+            >
+              {urgency}
+            </Badge>
+            <span className="text-xs text-content-muted">
+              {signal.category}
+            </span>
+          </div>
+          <h3 className="mt-2 text-lg font-semibold text-content">
+            {signal.title}
+          </h3>
+          <p className="mt-1 text-sm text-content-secondary">
+            {signal.priority.explanation}
+          </p>
+        </div>
+        <RadioTower aria-hidden="true" className="text-accent" size={20} />
+      </div>
+      {signal.supporting_facts.length ? (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {signal.supporting_facts.slice(0, 4).map((fact) => (
+            <div className="rounded-lg bg-surface-muted p-3" key={fact.name}>
+              <p className="text-xs capitalize text-content-muted">
+                {fact.name.replaceAll("_", " ")}
+              </p>
+              <p className="mt-1 font-semibold text-content">
+                {factLabel(fact)}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+            Why it matters
+          </p>
+          <p className="mt-1 text-sm text-content-secondary">
+            {signal.priority.explanation}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+            Recommended action
+          </p>
+          <p className="mt-1 text-sm text-content-secondary">
+            {signal.recommended_action}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {signal.source === "scheduling" ? (
+          <Link
+            className="inline-flex min-h-10 items-center gap-1 font-semibold text-action-primary underline"
+            to={`/scheduling?date=${signalDate(signal)}&perspective=dispatch${signal.rule_code.includes("unassigned") || signal.definition_id.includes("unassigned") ? "&queue=scheduled_unassigned" : ""}`}
+          >
+            Open Dispatch <ArrowRight size={15} />
+          </Link>
+        ) : null}
+        {records.length ? (
+          records.map((record) => {
+            const path = evidencePath(record.entity_type, record.entity_id);
+            return path ? (
+              <Link
+                className="inline-flex min-h-10 items-center gap-1 font-semibold text-action-primary underline"
+                key={`${record.entity_type}:${record.entity_id}`}
+                to={path}
+              >
+                Open {record.entity_type.replaceAll("_", " ")}{" "}
+                <ArrowRight size={15} />
+              </Link>
+            ) : null;
+          })
+        ) : (
+          <Link
+            className="font-semibold text-action-primary underline"
+            to={
+              signal.source === "scheduling"
+                ? `/scheduling?date=${today}&perspective=dispatch`
+                : signal.source === "invoices"
+                  ? `/invoices?state=open&asOf=${today}`
+                  : "/jobs"
+            }
+          >
+            Open{" "}
+            {signal.source === "scheduling"
+              ? "Dispatch"
+              : signal.source === "invoices"
+                ? "Invoices"
+                : "Jobs"}
+          </Link>
+        )}
+        <Link
+          className="inline-flex min-h-10 items-center gap-1 font-semibold text-content underline"
+          to={askPath}
+        >
+          <Bot size={16} /> Ask LIA
+        </Link>
+        <Button
+          className="ml-auto"
+          size="small"
+          variant="outline"
+          onClick={() => onSnooze(signal)}
+        >
+          Snooze until tomorrow
+        </Button>
+      </div>
+      <details className="mt-4 text-xs text-content-muted">
+        <summary className="cursor-pointer font-semibold">
+          Why am I seeing this?
+        </summary>
+        <div className="mt-2 space-y-1">
+          <p>
+            Measured from {signal.source} records at{" "}
+            {new Date(signal.created_at).toLocaleString()}.
+          </p>
+          <p>
+            Rule: {signal.rule_code} · evidence digest: {signal.evidence_digest}
+          </p>
+          {records.map((record) => (
+            <p key={`${record.entity_type}:${record.entity_id}`}>
+              {record.entity_type}: {record.entity_id}
+            </p>
+          ))}
+        </div>
+      </details>
+    </article>
+  );
 }
 
-function bookedDateWindow(range: BookedRange) {
-  const start = new Date(commandCenterToday);
-  if (range === "week") start.setDate(start.getDate() - start.getDay());
-  if (range === "month") start.setDate(1);
-  const end = new Date(start);
-  if (range === "day") end.setDate(end.getDate() + 1);
-  if (range === "week") end.setDate(end.getDate() + 7);
-  if (range === "month") end.setMonth(end.getMonth() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
+function AttentionSection({
+  signals,
+  loading,
+  error,
+  onSnooze,
+  retry,
+}: {
+  readonly signals: readonly BeaconSignal[] | undefined;
+  readonly loading: boolean;
+  readonly error: boolean;
+  readonly onSnooze: (signal: BeaconSignal) => void;
+  readonly retry: () => void;
+}) {
+  return (
+    <Section
+      title="Needs Your Attention"
+      description="Beacon shows only current, actionable findings backed by tenant records."
+      icon={AlertTriangle}
+    >
+      {loading ? (
+        <Spinner label="Checking current business conditions" />
+      ) : error ? (
+        <Alert
+          variant="danger"
+          title="Beacon is temporarily unavailable"
+          action={
+            <Button variant="outline" onClick={retry}>
+              Retry
+            </Button>
+          }
+        >
+          No finding state was inferred.
+        </Alert>
+      ) : signals?.length ? (
+        <div className="space-y-3">
+          {signals.map((signal) => (
+            <AttentionItem
+              key={signal.id}
+              signal={signal}
+              onSnooze={onSnooze}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-status-success/40 bg-status-success/10 p-5">
+          <p className="text-lg font-semibold text-content">
+            Nothing urgent needs your attention.
+          </p>
+          <p className="mt-1 text-sm text-content-secondary">
+            Beacon found no active condition that needs owner action right now.
+          </p>
+        </div>
+      )}
+    </Section>
+  );
 }
 
-function groupEmployeeItems(items: readonly DispatchBoardItem[]) {
-  const grouped = new Map<
-    string,
-    { name: string; items: DispatchBoardItem[] }
-  >();
-  for (const item of items) {
-    const id = item.assignment?.primary_employee_id ?? "unassigned";
-    const existing = grouped.get(id) ?? {
-      name: item.assignment?.primary_employee_name ?? "Unassigned",
-      items: [],
-    };
-    grouped.set(id, { ...existing, items: [...existing.items, item] });
-  }
-  return [...grouped.entries()];
+function LuminarySection({
+  start,
+  end,
+  enabled,
+}: {
+  readonly start: string;
+  readonly end: string;
+  readonly enabled: boolean;
+}) {
+  const briefing = useLuminaryBriefing(start, end, enabled);
+  const findings = briefing.data?.findings ?? [];
+  return (
+    <Section
+      title="Luminary"
+      description="Patterns and changes explained from current business evidence."
+      icon={Sparkles}
+    >
+      {briefing.isPending ? (
+        <Spinner label="Explaining current business patterns" />
+      ) : briefing.isError ? (
+        <Alert variant="warning" title="Luminary is temporarily unavailable">
+          No interpretation was inferred while the source evidence was
+          unavailable.
+        </Alert>
+      ) : findings.length ? (
+        <div className="space-y-3">
+          {findings.slice(0, 3).map((finding) => {
+            const records = findingEvidence(finding);
+            const askPath = contextPath(
+              "luminary",
+              records,
+              finding.observations.map((item) => ({
+                name: item.metric,
+                value: String(item.value_minor ?? "unavailable"),
+                unit: item.unit,
+              })),
+            );
+            return (
+              <article
+                className="rounded-xl border border-stroke p-4"
+                key={finding.id}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+                      What changed
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold text-content">
+                      {finding.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-content-secondary">
+                      {finding.summary}
+                    </p>
+                  </div>
+                  <Badge variant="information">
+                    {finding.confidence_percent}% confidence
+                  </Badge>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+                      Why
+                    </p>
+                    <p className="mt-1 text-sm text-content-secondary">
+                      {finding.explanation}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+                      Dollar / operational impact
+                    </p>
+                    <p className="mt-1 text-sm text-content-secondary">
+                      {finding.observations.length
+                        ? finding.observations
+                            .slice(0, 2)
+                            .map(
+                              (item) =>
+                                `${item.metric.replaceAll("_", " ")}: ${item.unit === "minor_currency" && item.value_minor != null ? money(item.value_minor / 100, item.currency ?? "USD") : (item.value_minor ?? "unavailable")}`,
+                            )
+                            .join(" · ")
+                        : "Impact is not available from the current evidence."}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {records.slice(0, 4).map((record) => {
+                    const evidence = finding.evidence.find(
+                      (item) => item.record_id === record.entity_id,
+                    );
+                    const path = evidence
+                      ? luminaryEvidencePath(evidence)
+                      : null;
+                    return path ? (
+                      <Link
+                        className="font-semibold text-action-primary underline"
+                        key={`${record.entity_type}:${record.entity_id}`}
+                        to={path}
+                      >
+                        View {record.entity_type.replaceAll("_", " ")}
+                      </Link>
+                    ) : null;
+                  })}
+                  <Link
+                    className="font-semibold text-content underline"
+                    to={`/luminary?finding=${encodeURIComponent(finding.id)}`}
+                  >
+                    View details
+                  </Link>
+                  <Link
+                    className="inline-flex items-center gap-1 font-semibold text-content underline"
+                    to={askPath}
+                  >
+                    <Bot size={16} /> Ask LIA
+                  </Link>
+                </div>
+                <details className="mt-3 text-xs text-content-muted">
+                  <summary className="cursor-pointer font-semibold">
+                    View evidence
+                  </summary>
+                  <ul className="mt-2 space-y-1">
+                    {finding.evidence.map((item) => (
+                      <li key={`${item.record_type}:${item.record_id}`}>
+                        {item.source_domain} · {item.record_type} ·{" "}
+                        {item.record_id}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-stroke bg-surface-muted p-4 text-sm text-content-secondary">
+          No material change was found in current Luminary evidence.
+        </div>
+      )}
+      <Link
+        className="mt-4 inline-flex min-h-10 items-center gap-1 font-semibold text-action-primary underline"
+        to="/luminary"
+      >
+        Open Luminary details <ArrowRight size={16} />
+      </Link>
+    </Section>
+  );
 }
 
 export function CommandCenterRoute() {
-  const { activeCompany, user } = useAuth();
+  const { activeCompany } = useAuth();
   const permissions = useEffectivePermissions();
   const [branchId, setBranchId] = useState("");
-  const [rangeKey, setRangeKey] = useState<RangeKey>("month");
-  const [jobMetric, setJobMetric] = useState<JobMetric>("produced_value");
-  const [customStart, setCustomStart] = useState(
-    isoDate(new Date(commandCenterToday.getTime() - 30 * 86_400_000)),
-  );
-  const [customEnd, setCustomEnd] = useState(isoDate(commandCenterToday));
-  const [employeeDay, setEmployeeDay] = useState<"today" | "tomorrow">("today");
-  const [bookedRange, setBookedRange] = useState<BookedRange>("day");
-  const today = isoDate(commandCenterToday);
-  const selectedRange = useMemo(
-    () => rangeFor(rangeKey, customStart, customEnd),
-    [rangeKey, customStart, customEnd],
-  );
+  const canReadAnalytics = permissions.has("COMPANY_ANALYTICS_READ");
   const canReadInvoices = permissions.has("COMPANY_INVOICE_READ");
   const canReadJobs = permissions.has("COMPANY_JOB_READ");
   const canReadDispatch = permissions.has("COMPANY_DISPATCH_READ");
   const canReadPayments = permissions.has("COMPANY_PAYMENT_READ");
-  const canReadAnalytics = permissions.has("COMPANY_ANALYTICS_READ");
-  const canReadEconomics = permissions.has(
-    "COMPANY_ECONOMICS_MEASUREMENT_READ",
-  );
+  const canReadLuminary = permissions.has("COMPANY_LUMINARY_READ");
   const ar = useReceivablesSummary(
     today,
     branchId || undefined,
     canReadInvoices,
   );
   const jobs = useCompletedJobTrend(
-    selectedRange.start,
-    selectedRange.end,
-    selectedRange.granularity,
+    monthStart,
+    today,
+    "day",
     branchId || undefined,
     canReadJobs,
   );
-  const employeeWindow = dateWindow(employeeDay === "today" ? 0 : 1);
-  const dispatch = useDispatchBoard(
-    employeeWindow.start,
-    employeeWindow.end,
+  const todayDispatch = useDispatchBoard(
+    dateWindow(today).start,
+    dateWindow(today).end,
     branchId || undefined,
     canReadDispatch,
   );
-  const bookedWindow = bookedDateWindow(bookedRange);
-  const booked = useDispatchBoard(
-    bookedWindow.start,
-    bookedWindow.end,
+  const tomorrowDispatch = useDispatchBoard(
+    dateWindow(tomorrow).start,
+    dateWindow(tomorrow).end,
     branchId || undefined,
     canReadDispatch,
   );
-  const analytics = useAnalyticsSummary(canReadAnalytics && !branchId);
-  const beacon = useBeaconSignals(canReadAnalytics);
-  const canOwnBeacon = permissions.has("COMPANY_BEACON_OWN");
-  const recommendations = useActiveBeaconRecommendations(canOwnBeacon);
-  const beaconLifecycle = useBeaconLifecycleActions();
-  const beaconWorkflow = useBeaconWorkflowActions();
-  const economics = useEconomicsMeasurementFoundation(canReadEconomics);
-  const money = useMoneyPosition(
+  const moneyPosition = useMoneyPosition(
     today,
     today,
     today,
     branchId || undefined,
     canReadPayments,
   );
-  const buckets = ar.data?.buckets ?? [];
-  const groupedEmployees = useMemo(
-    () => groupEmployeeItems(dispatch.data?.items ?? []),
-    [dispatch.data?.items],
+  const beacon = useBeaconSignals(canReadAnalytics);
+  const recommendations = useActiveBeaconRecommendations(
+    canReadAnalytics && permissions.has("COMPANY_BEACON_OWN"),
   );
-  const todayPoint = jobs.data?.points.find(
-    (point) => point.period_start === today,
+  const lifecycle = useBeaconLifecycleActions();
+  const mtdProduced = useMemo(
+    () =>
+      jobs.data
+        ? jobs.data.points.reduce(
+            (total, point) => total + Number(point.produced_value ?? 0),
+            0,
+          )
+        : null,
+    [jobs.data],
   );
-
+  const overdue = useMemo(
+    () =>
+      ar.data
+        ? ar.data.buckets
+            .filter((bucket) => bucket.key.startsWith("past_due"))
+            .reduce((total, bucket) => total + Number(bucket.amount), 0)
+        : null,
+    [ar.data],
+  );
+  const unassignedToday = todayDispatch.data
+    ? todayDispatch.data.items.filter(
+        (item: DispatchBoardItem) => !item.assignment,
+      ).length
+    : null;
+  const unassignedTomorrow = tomorrowDispatch.data
+    ? tomorrowDispatch.data.items.filter(
+        (item: DispatchBoardItem) => !item.assignment,
+      ).length
+    : null;
+  const snooze = (signal: BeaconSignal) =>
+    lifecycle.mutate({
+      signal,
+      action: "snooze",
+      snoozeUntil: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    });
   if (!activeCompany)
     return (
       <Alert variant="warning">
         Select a Company before opening Command Center.
       </Alert>
     );
-
+  const dispatchLink = (date: string, queue?: string) =>
+    `/scheduling?date=${date}&perspective=dispatch${queue ? `&queue=${queue}` : ""}${branchId ? `&branch=${encodeURIComponent(branchId)}` : ""}`;
   return (
     <div className="mx-auto max-w-[96rem] space-y-6 pb-14">
       <header className="flex flex-col gap-4 border-b border-stroke pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wider text-accent">
-            Twelve Hats owner operations
+            Owner operations
           </p>
           <h1 className="mt-1 text-3xl font-bold text-action-primary sm:text-4xl">
             Command Center
           </h1>
           <p className="mt-2 max-w-3xl text-content-muted">
-            Owner attention first, with every measured fact and recommendation
-            connected to authoritative evidence.
+            Understand what changed, why it matters, and where to act.
           </p>
         </div>
         <label className="grid min-w-56 gap-1 text-sm font-semibold text-content">
@@ -348,588 +723,202 @@ export function CommandCenterRoute() {
           </Select>
         </label>
       </header>
-
-      {canReadAnalytics ? (
-        <>
-        <BeaconPanel
-          signals={beacon.data?.items}
-          snoozedSignals={beacon.data?.snoozed_items}
-          recommendationCoverage={beacon.data?.recommendation_coverage}
-          canReview={beacon.data?.lifecycle_commands_available ?? false}
-          canOwn={permissions.has("COMPANY_BEACON_OWN")}
-          canAssign={permissions.has("COMPANY_BEACON_ASSIGN")}
-          currentUserId={user?.id ?? null}
-          evaluatedAt={beacon.data?.evaluated_at ?? null}
-          loading={beacon.isLoading}
-          error={beacon.isError}
-          lifecycleError={beaconLifecycle.isError}
-          lifecyclePending={beaconLifecycle.isPending}
-          workflowError={beaconWorkflow.isError}
-          workflowPending={beaconWorkflow.isPending}
-          onLifecycleAction={(signal, action, snoozeUntil) =>
-            beaconLifecycle.mutate({ signal, action, snoozeUntil })
-          }
-          onWorkflowAction={(signal, action, expectedVersion, ownerUserId) =>
-            beaconWorkflow.mutate({
-              signal,
-              action,
-              expectedVersion,
-              ownerUserId,
-            })
-          }
-          retry={() => void beacon.refetch()}
-        />
-        <BeaconReasoningPanel
-          evaluatedAt={recommendations.data?.evaluated_at}
-          isError={recommendations.isError}
-          isPending={recommendations.isPending}
-          items={recommendations.data?.items}
-          readinessAdapters={recommendations.data?.readiness_adapters}
-        />
-        </>
-      ) : (
-        <Alert variant="information" title="Beacon access unavailable">
-          Analytics read permission is required to view Beacon evidence.
-        </Alert>
-      )}
-
-      <Panel
-        title="Money / Cash Position"
-        description={`Company/Branch scope as of ${today}. Scheduled revenue is never represented as expected cash.`}
-        icon={Banknote}
+      <AttentionSection
+        signals={beacon.data?.items}
+        loading={beacon.isLoading}
+        error={beacon.isError}
+        onSnooze={snooze}
+        retry={() => void beacon.refetch()}
+      />
+      <Section
+        title="Business Pulse"
+        description="A short, live view of the operating state. Each metric opens its supporting records or exact filter."
+        icon={CircleDollarSign}
       >
-        <div className="grid gap-3 sm:grid-cols-3">
-          <MoneyValue
-            label="Bank cash / available"
-            value={
-              money.data?.bank_balance.connection_state === "NOT_CONNECTED"
-                ? "Not connected"
-                : moneyEvidence(
-                    money.data?.bank_balance.amount,
-                    money.data?.bank_balance.currency,
-                    money.data?.bank_balance.evidence_state,
-                  )
-            }
-            detail={money.data?.bank_balance.limitation ?? "No authoritative bank balance evidence is available."}
-            unavailable={money.data?.bank_balance.evidence_state !== "AVAILABLE"}
-          />
-          <MoneyValue
-            label="Total open receivables"
-            value={
-              ar.isError || !canReadInvoices
-                ? "Unavailable"
-                : currency(ar.data?.total_open_amount, ar.data?.currency)
-            }
-            detail={
-              ar.data
-                ? `${ar.data.open_invoice_count} open Invoices · as of ${ar.data.as_of}`
-                : "Invoice authority did not provide current evidence."
-            }
-            unavailable={!ar.data || ar.data.total_open_amount === null}
-          />
-          <MoneyValue
-            label="Expected cash today"
-            value={moneyEvidence(
-              money.data?.expected_collections_today.amount,
-              money.data?.expected_collections_today.currency,
-              money.data?.expected_collections_today.evidence_state,
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <PulseMetric
+            label="Produced value today"
+            value={money(
+              jobs.data?.points.find((point) => point.period_start === today)
+                ?.produced_value,
+              jobs.data?.currency,
             )}
+            detail="Completed Jobs with sold-snapshot value"
+            to={`/jobs?status=completed&completedStartAt=${encodeURIComponent(`${today}T00:00:00`)}&completedEndAt=${encodeURIComponent(`${tomorrow}T00:00:00`)}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
+          />
+          <PulseMetric
+            label="Produced value MTD"
+            value={money(mtdProduced, jobs.data?.currency)}
+            detail={`${jobs.data?.points.length ?? 0} measured daily points`}
+            to={`/jobs?status=completed&completedStartAt=${encodeURIComponent(`${monthStart}T00:00:00`)}&completedEndAt=${encodeURIComponent(`${tomorrow}T00:00:00`)}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
+          />
+          <PulseMetric
+            label="Jobs today"
+            value={count(todayDispatch.data?.total_count)}
+            detail="Scheduled and confirmed appointments"
+            to={dispatchLink(today)}
+          />
+          <PulseMetric
+            label="Jobs tomorrow"
+            value={count(tomorrowDispatch.data?.total_count)}
             detail={
-              money.data
-                ? `Due-today AR: ${moneyEvidence(
-                    money.data.accounts_receivable_due_today.amount,
-                    money.data.accounts_receivable_due_today.currency,
-                    money.data.accounts_receivable_due_today.evidence_state,
-                  )}. ${money.data.expected_collections_today.limitation ?? "COD and due-today evidence are complete."}`
-                : "Payment authority did not provide current collection evidence."
+              unassignedTomorrow
+                ? `${unassignedTomorrow} unassigned`
+                : "No unassigned jobs measured"
             }
-            unavailable={money.data?.expected_collections_today.evidence_state !== "AVAILABLE" && money.data?.expected_collections_today.evidence_state !== "MEASURED_ZERO"}
+            to={dispatchLink(tomorrow)}
+            tone={unassignedTomorrow ? "warning" : "normal"}
+          />
+          <PulseMetric
+            label="Unassigned jobs today"
+            value={count(unassignedToday)}
+            detail="Appointments without an active assignment"
+            to={dispatchLink(today, "scheduled_unassigned")}
+            tone={unassignedToday ? "warning" : "normal"}
+          />
+          <PulseMetric
+            label="Open AR"
+            value={money(
+              ar.data?.total_open_amount,
+              ar.data?.currency ?? "USD",
+            )}
+            detail={`${ar.data?.open_invoice_count ?? "—"} open invoices`}
+            to={`/invoices?state=open&asOf=${today}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
+          />
+          <PulseMetric
+            label="Overdue AR"
+            value={money(overdue, ar.data?.currency ?? "USD")}
+            detail="Past-due invoices only"
+            to={`/invoices?state=overdue&asOf=${today}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
+            tone={overdue ? "warning" : "normal"}
+          />
+          <PulseMetric
+            label="Bank cash"
+            value={
+              moneyPosition.data?.bank_balance.evidence_state === "AVAILABLE"
+                ? moneyPosition.data.bank_balance.amount
+                : "—"
+            }
+            detail={
+              moneyPosition.data?.bank_balance.evidence_state === "AVAILABLE"
+                ? "Authoritative bank balance"
+                : "Unavailable from connected sources"
+            }
+            to="/banking"
           />
         </div>
-      </Panel>
-
-      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-        <Panel
-          title="Jobs — Produced Work"
-          description="Completed Job count and sold-snapshot produced value. Every graph point opens its exact underlying Job population."
-          icon={TrendingUp}
+      </Section>
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <LuminarySection
+          start={monthStart}
+          end={today}
+          enabled={canReadLuminary}
+        />
+        <Section
+          title="Recommended Actions / Ask LIA"
+          description="Next steps from current evidence. LIA can explain the records and recommend safe navigation."
+          icon={Bot}
         >
-          <div className="mb-4 flex flex-wrap gap-2">
-            {(
-              [
-                "day",
-                "week",
-                "month",
-                "12m",
-                "3y",
-                "5y",
-                "custom",
-              ] as RangeKey[]
-            ).map((key) => (
-              <button
-                className={`min-h-11 rounded-md px-3 text-sm font-semibold ${rangeKey === key ? "bg-action-primary text-content-inverse" : "border border-stroke text-action-primary"}`}
-                key={key}
-                onClick={() => setRangeKey(key)}
-                type="button"
-              >
-                {key === "12m"
-                  ? "12 Months"
-                  : key === "3y"
-                    ? "3 Years"
-                    : key === "5y"
-                      ? "5 Years"
-                      : key[0].toUpperCase() + key.slice(1)}
-              </button>
-            ))}
-          </div>
-          {rangeKey === "custom" && (
-            <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm">
-                Start
-                <input
-                  aria-label="Custom range start"
-                  className="min-h-11 rounded-md border border-stroke bg-surface px-3"
-                  type="date"
-                  value={customStart}
-                  onChange={(event) => setCustomStart(event.target.value)}
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                End
-                <input
-                  aria-label="Custom range end"
-                  className="min-h-11 rounded-md border border-stroke bg-surface px-3"
-                  type="date"
-                  value={customEnd}
-                  onChange={(event) => setCustomEnd(event.target.value)}
-                />
-              </label>
-            </div>
-          )}
-          <div className="mb-4 flex gap-2">
-            <button
-              className={`min-h-11 rounded-md px-3 text-sm font-semibold ${jobMetric === "produced_value" ? "bg-action-primary text-white" : "border border-stroke"}`}
-              onClick={() => setJobMetric("produced_value")}
-              type="button"
-            >
-              Produced value
-            </button>
-            <button
-              className={`min-h-11 rounded-md px-3 text-sm font-semibold ${jobMetric === "job_count" ? "bg-action-primary text-white" : "border border-stroke"}`}
-              onClick={() => setJobMetric("job_count")}
-              type="button"
-            >
-              Job count
-            </button>
-          </div>
-          {jobs.isPending ? (
-            <p className="p-8 text-center text-content-muted">
-              Loading completed Job evidence…
-            </p>
-          ) : jobs.isError || !jobs.data ? (
-            <Unavailable>
-              Completed Job reporting could not be loaded.
-            </Unavailable>
-          ) : (
-            <JobsEvidenceGraph
-              branchId={branchId || undefined}
-              currency={jobs.data.currency}
-              metric={jobMetric}
-              points={jobs.data.points}
-            />
-          )}
-        </Panel>
-
-        <Panel
-          title="Economic Health"
-          description="100% will represent break-even only after the owner's authoritative break-even model is approved."
-          icon={Gauge}
-        >
-          <div
-            className="rounded-xl border-2 border-dashed border-stroke-strong bg-surface-muted p-5 data-[economic-status=RED]:border-solid data-[economic-status=RED]:border-status-danger data-[economic-status=RED]:bg-status-danger/15 data-[economic-status=RED]:text-status-danger"
-            data-economic-status="UNAVAILABLE"
-          >
-            <Badge variant="warning">INCOMPLETE EVIDENCE</Badge>
-            <p className="mt-4 text-2xl font-bold text-action-primary">
-              Economic Health unavailable
-            </p>
-            <p className="mt-2 text-sm text-content-muted">
-              {economics.data?.canonical_efficiency_kpi === null
-                ? "The existing economics contract explicitly has no canonical efficiency KPI. Break-even inputs and allocation policy remain prerequisites."
-                : economics.isError
-                  ? "Economics readiness could not be loaded."
-                  : "Loading economics readiness…"}
-            </p>
-          </div>
-          <p className="mt-3 text-xs text-content-muted">
-            A future RED condition uses a dedicated danger badge, icon, and
-            strong status background; the thin red card border is decorative
-            only.
-          </p>
-          <Link
-            className="mt-4 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline"
-            to="/business-economics"
-          >
-            Inspect economics evidence
-          </Link>
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Panel
-          title="Pipeline"
-          description="Every inbound opportunity belongs to one Lead lifecycle. ACP does not yet have a qualified first-class Lead authority."
-          icon={Users}
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Unavailable>
-              Scheduled / moving forward is unavailable until Lead stage and
-              next-action evidence exist.
-            </Unavailable>
-            <Unavailable>
-              Needs attention is unavailable until callback, stale-opportunity,
-              and ownership evidence exist.
-            </Unavailable>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-4">
-            <Link
-              className="font-semibold text-action-primary hover:underline"
-              to="/estimates"
-            >
-              Open Estimates
-            </Link>
-            <Link
-              className="font-semibold text-action-primary hover:underline"
-              to="/customers"
-            >
-              Open Customers
-            </Link>
-          </div>
-        </Panel>
-
-        <Panel
-          title="Employee Status"
-          description="Authoritative scheduled/confirmed Appointment and Dispatch assignment evidence."
-          icon={CalendarDays}
-        >
-          <div className="mb-4 flex gap-2">
-            <button
-              className={`min-h-11 rounded-md px-4 font-semibold ${employeeDay === "today" ? "bg-action-primary text-white" : "border border-stroke"}`}
-              onClick={() => setEmployeeDay("today")}
-              type="button"
-            >
-              Today
-            </button>
-            <button
-              className={`min-h-11 rounded-md px-4 font-semibold ${employeeDay === "tomorrow" ? "bg-action-primary text-white" : "border border-stroke"}`}
-              onClick={() => setEmployeeDay("tomorrow")}
-              type="button"
-            >
-              Tomorrow
-            </button>
-          </div>
-          {dispatch.isPending ? (
-            <p className="text-content-muted">Loading employee work…</p>
-          ) : dispatch.isError || !canReadDispatch ? (
-            <Unavailable>Dispatch board evidence is unavailable.</Unavailable>
-          ) : groupedEmployees.length === 0 ? (
-            <p className="text-sm text-content-muted">
-              Measured zero scheduled/confirmed Appointments for this scope.
-            </p>
-          ) : (
+          {recommendations.isPending ? (
+            <Spinner label="Loading recommended actions" />
+          ) : recommendations.isError ? (
+            <Alert variant="warning">
+              Recommended actions are temporarily unavailable.
+            </Alert>
+          ) : recommendations.data?.items.length ? (
             <div className="space-y-3">
-              {groupedEmployees.map(([id, group]) => (
-                <section className="rounded-lg bg-surface-muted p-3" key={id}>
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-action-primary">
-                      {group.name}
-                    </h3>
-                    <span className="text-xs text-content-muted">
-                      {group.items.length} stops
-                    </span>
+              {recommendations.data.items.slice(0, 4).map((item) => (
+                <article
+                  className="rounded-xl border border-stroke p-4"
+                  key={item.recommendation_id}
+                >
+                  <p className="font-semibold text-content">{item.title}</p>
+                  <p className="mt-1 text-sm text-content-secondary">
+                    {item.interpretation}
+                  </p>
+                  <p className="mt-2 text-sm">
+                    <span className="font-semibold">Do this:</span>{" "}
+                    {item.recommended_human_action}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <Link
+                      className="font-semibold text-action-primary underline"
+                      to={item.drilldown_path}
+                    >
+                      Open {item.action_destination}
+                    </Link>
+                    <Link
+                      className="font-semibold text-content underline"
+                      to={contextPath(
+                        "beacon",
+                        item.evidence.map((evidence) => ({
+                          entity_type: evidence.entity_type,
+                          entity_id: evidence.entity_id,
+                        })),
+                      )}
+                    >
+                      Ask LIA
+                    </Link>
                   </div>
-                  <ol className="mt-2 space-y-2">
-                    {group.items.map((item, index) => (
-                      <li
-                        className="flex items-center justify-between gap-3 text-sm"
-                        key={item.appointment_id}
-                      >
-                        <span>
-                          {index + 1}. {item.customer_display_name ?? item.appointment_number}
-                          <span className="block text-xs text-content-muted">
-                            {item.job_number ? `${item.job_number} · ` : ""}
-                            {new Date(item.window_start_at).toLocaleTimeString(
-                              [],
-                              { hour: "numeric", minute: "2-digit" },
-                            )}{" "}
-                            · {item.status}
-                          </span>
-                        </span>
-                        {item.job_id ? (
-                          <Link
-                            className="font-semibold text-action-primary hover:underline"
-                            to={`/jobs/${item.job_id}`}
-                          >
-                            Open Job
-                          </Link>
-                        ) : (
-                          <Link
-                            className="font-semibold text-action-primary hover:underline"
-                            to={`/appointments/${item.appointment_id}`}
-                          >
-                            Open
-                          </Link>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                </section>
+                  <details className="mt-3 text-xs text-content-muted">
+                    <summary className="cursor-pointer font-semibold">
+                      Why am I seeing this?
+                    </summary>
+                    <p className="mt-2">
+                      {item.measured_fact} · evidence as of{" "}
+                      {new Date(item.evidence_as_of).toLocaleString()}
+                    </p>
+                  </details>
+                </article>
               ))}
             </div>
-          )}
-          <Link
-            className="mt-4 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline"
-            to="/dispatch"
-          >
-            Open Dispatch
-          </Link>
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <Panel
-          title="Open Invoices"
-          description="Open accounts receivable by exact contractual due state. Paid Invoices are intentionally excluded."
-          icon={ReceiptText}
-        >
-          {!canReadInvoices || ar.isError ? (
-            <Unavailable>Receivables authority is unavailable.</Unavailable>
           ) : (
-            <div className="space-y-2">
-              {buckets.map((bucket) => {
-                const query = new URLSearchParams({
-                  state: "open",
-                  agingBucket: bucket.key,
-                  asOf: today,
-                });
-                if (branchId) query.set("branchId", branchId);
-                return (
-                  <Link
-                    className="grid min-h-14 grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-stroke p-3 hover:border-action-primary hover:bg-surface-muted"
-                    key={bucket.key}
-                    to={`/invoices?${query.toString()}`}
-                  >
-                    <span>
-                      <strong className="text-action-primary">
-                        {bucket.label}
-                      </strong>
-                      <span className="block text-xs text-content-muted">
-                        {bucket.invoice_count} Invoices
-                      </span>
-                    </span>
-                    <strong>
-                      {currency(bucket.amount, ar.data?.currency)}
-                    </strong>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </Panel>
-
-        <Panel
-          title="Today's Scorecard"
-          description="Live operating facts for the current day. Collected and deposited remain distinct states."
-          icon={CircleDollarSign}
-        >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MoneyValue
-              label="Jobs completed"
-              value={todayPoint ? String(todayPoint.job_count) : "Unavailable"}
-              detail={
-                todayPoint
-                  ? "Authoritative completed Jobs today"
-                  : "Job reporting evidence unavailable"
-              }
-              unavailable={!todayPoint}
-            />
-            <MoneyValue
-              label="Produced value"
-              value={
-                todayPoint
-                  ? currency(todayPoint.produced_value, jobs.data?.currency)
-                  : "Unavailable"
-              }
-              detail={
-                todayPoint?.missing_value_count
-                  ? `${todayPoint.missing_value_count} completed Jobs lack sold-snapshot value`
-                  : "Completed sold-snapshot value"
-              }
-              unavailable={!todayPoint?.produced_value}
-            />
-            <MoneyValue
-              label="Collected"
-              value={moneyEvidence(
-                money.data?.collection_state.collected.amount,
-                money.data?.collection_state.collected.currency,
-                money.data?.collection_state.collected.evidence_state,
-              )}
-              detail="Captured provider receipts plus separately evidenced manual collections; settlement is not implied."
-              unavailable={money.data?.collection_state.collected.evidence_state !== "AVAILABLE" && money.data?.collection_state.collected.evidence_state !== "MEASURED_ZERO"}
-            />
-            <MoneyValue
-              label="Deposited"
-              value={moneyEvidence(
-                money.data?.collection_state.deposited.amount,
-                money.data?.collection_state.deposited.currency,
-                money.data?.collection_state.deposited.evidence_state,
-              )}
-              detail={money.data?.collection_state.deposited.limitation ?? "No authoritative bank-confirmed deposit evidence."}
-              unavailable={money.data?.collection_state.deposited.evidence_state !== "AVAILABLE" && money.data?.collection_state.deposited.evidence_state !== "MEASURED_ZERO"}
-            />
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <MoneyValue
-              label="New customers"
-              value={
-                !branchId && analytics.data
-                  ? String(analytics.data.new_customers.value)
-                  : "Unavailable"
-              }
-              detail="Company analytics Business Events"
-              unavailable={!analytics.data || Boolean(branchId)}
-            />
-            <MoneyValue
-              label="Booked appointments"
-              value={
-                !branchId && analytics.data
-                  ? String(analytics.data.appointments_booked.value)
-                  : "Unavailable"
-              }
-              detail="Company analytics Business Events"
-              unavailable={!analytics.data || Boolean(branchId)}
-            />
-          </div>
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <Panel
-          title="Booked Jobs"
-          description="Scheduled/confirmed Appointment count. Scheduled value awaits complete sold-snapshot linkage."
-          icon={CalendarDays}
-        >
-          <div className="mb-3 flex gap-2">
-            {(["day", "week", "month"] as BookedRange[]).map((range) => (
-              <button
-                className={`min-h-11 rounded-md px-3 text-sm font-semibold ${bookedRange === range ? "bg-action-primary text-white" : "border border-stroke"}`}
-                key={range}
-                onClick={() => setBookedRange(range)}
-                type="button"
-              >
-                {range[0].toUpperCase() + range.slice(1)}
-              </button>
-            ))}
-          </div>
-          <p className="text-3xl font-bold text-action-primary">
-            {booked.data?.total_count ?? "Unavailable"}
-          </p>
-          <p className="mt-1 text-sm text-content-muted">
-            Scheduled/confirmed count · value unavailable
-          </p>
-          <Link
-            className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline"
-            to={`/scheduling?date=${today}&view=${bookedRange}&branch=${encodeURIComponent(branchId)}`}
-          >
-            Open exact schedule
-          </Link>
-        </Panel>
-        <Panel
-          title="Card Processing"
-          description={`Authoritative captured and provider-settlement evidence for ${today}.`}
-          icon={CreditCard}
-        >
-          {money.isError || !canReadPayments || !money.data ? (
-            <Unavailable>Payment authority did not provide current card evidence.</Unavailable>
-          ) : (
-            <div className="grid gap-3">
-              <MoneyValue
-                label="Transactions"
-                value={String(money.data.card_processing.transaction_count)}
-                detail="Captured provider receipts"
-              />
-              <MoneyValue
-                label="Charged"
-                value={moneyEvidence(
-                  money.data.card_processing.amount_charged.amount,
-                  money.data.card_processing.amount_charged.currency,
-                  money.data.card_processing.amount_charged.evidence_state,
-                )}
-                detail="Captured amount; refunds and chargebacks remain separate evidence."
-                unavailable={money.data.card_processing.amount_charged.evidence_state !== "AVAILABLE" && money.data.card_processing.amount_charged.evidence_state !== "MEASURED_ZERO"}
-              />
-              <MoneyValue
-                label="Fees"
-                value={moneyEvidence(
-                  money.data.card_processing.fees_paid.amount,
-                  money.data.card_processing.fees_paid.currency,
-                  money.data.card_processing.fees_paid.evidence_state,
-                )}
-                detail={money.data.card_processing.fees_paid.limitation ?? money.data.card_processing.limitation}
-                unavailable={money.data.card_processing.fees_paid.evidence_state !== "AVAILABLE" && money.data.card_processing.fees_paid.evidence_state !== "MEASURED_ZERO"}
-              />
-            </div>
+            <p className="rounded-xl border border-stroke bg-surface-muted p-4 text-sm text-content-secondary">
+              No additional recommended action is active from the current tenant
+              evidence.
+            </p>
           )}
           <Link
-            className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline"
-            to={`/payments?periodStart=${today}&periodEnd=${today}`}
+            className="mt-4 inline-flex min-h-10 items-center gap-1 font-semibold text-action-primary underline"
+            to={contextPath("beacon")}
           >
-            Open Payments
+            Ask LIA what to do next <ArrowRight size={16} />
           </Link>
-        </Panel>
-        <Panel
-          title="Sales Leaderboard"
-          description="Only reliable denominators and sales/production lineage may be ranked."
-          icon={TrendingUp}
-        >
-          <Unavailable>
-            No qualified salesperson attribution contract is available. ACP will
-            not infer performance from incomplete records.
-          </Unavailable>
-        </Panel>
-        <Panel
-          title="Timesheet"
-          description="Labor consumption belongs beside economic productivity, but Company aggregates require a qualified reporting projection."
-          icon={Clock3}
-        >
-          <Unavailable>
-            Today, week, and overtime totals are not available from an
-            authoritative Company-level time projection.
-          </Unavailable>
-          <Link
-            className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline"
-            to="/employees"
-          >
-            Open Time &amp; Attendance
-          </Link>
-        </Panel>
+        </Section>
       </div>
-
+      <Section
+        title="Owner shortcuts"
+        description="Open the workspaces most often used to act on current conditions."
+        icon={CalendarDays}
+      >
+        <div className="flex flex-wrap gap-3">
+          <Link
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-stroke px-4 font-semibold text-action-primary hover:bg-surface-muted"
+            to={dispatchLink(today)}
+          >
+            <CalendarDays size={16} /> Open Dispatch
+          </Link>
+          <Link
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-stroke px-4 font-semibold text-action-primary hover:bg-surface-muted"
+            to={`/invoices?state=open&asOf=${today}`}
+          >
+            <ReceiptText size={16} /> Open Invoices
+          </Link>
+          <Link
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-stroke px-4 font-semibold text-action-primary hover:bg-surface-muted"
+            to="/estimates"
+          >
+            <CircleDollarSign size={16} /> Open Estimates
+          </Link>
+        </div>
+      </Section>
       <footer className="text-xs text-content-muted">
         Scope:{" "}
         {branchId
           ? activeCompany.branches.find((branch) => branch.id === branchId)
               ?.name
-          : `${activeCompany.name} · all accessible Branches`}{" "}
-        · AR as of{" "}
-        {ar.data?.generated_at
-          ? new Date(ar.data.generated_at).toLocaleString()
-          : "unavailable"}{" "}
-        · Jobs as of{" "}
-        {jobs.data?.generated_at
-          ? new Date(jobs.data.generated_at).toLocaleString()
-          : "unavailable"}
-        .
+          : "All accessible Branches"}{" "}
+        · as of {today}. Source details are available behind each finding.
       </footer>
     </div>
   );

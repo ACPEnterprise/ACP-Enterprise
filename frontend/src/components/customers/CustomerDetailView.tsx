@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, Clock3, Edit3, MapPin, Plus, RotateCcw, Star, UserRound } from "lucide-react";
+import { ArrowLeft, Edit3, MapPin, Plus, RotateCcw, Star, UserRound } from "lucide-react";
 import { Link } from "react-router";
 
 import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
@@ -41,6 +41,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
   const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
+  const canManageEstimates = useHasPermission("COMPANY_ESTIMATE_MANAGE");
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
   const consents = useCustomerConsents(customerId);
@@ -107,11 +108,11 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-slate-800 px-3 py-1 text-content-secondary">{customer.customer_type}</span>
               <span className={`rounded-full px-3 py-1 ${archived ? "bg-red-950 text-red-300" : "bg-emerald-950 text-emerald-300"}`}>{archived ? "archived" : customer.status.replaceAll("_", " ")}</span>
-              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Native ACP Customer</span>
+              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Customer record</span>
             </div>
-            <p className="mt-3 text-xs text-content-muted">{customer.customer_number || "Customer number unavailable"} · Native record created {customer.created_at ? new Date(customer.created_at).toLocaleString() : "date unavailable"} · updated {customer.updated_at ? new Date(customer.updated_at).toLocaleString() : "date unavailable"}</p>
-            <p className="mt-1 text-xs text-content-muted">Marketing source: {formatCustomerSource(customer.source)}. Source provenance is shown only when admitted by Migration authority; this label is not migration-completeness evidence.</p>
-            {customer.source_lineage.length > 0 && <div className="mt-3 rounded-lg border border-stroke p-3"><p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Migration source lineage</p><ul className="mt-2 space-y-1 text-sm">{customer.source_lineage.map((identity) => <li key={`${identity.source_system}:${identity.source_customer_id}`}><span className="font-medium">{formatCustomerSource(identity.source_system)}</span> · provider Customer {identity.source_customer_id} · bound {identity.bound_at ? new Date(identity.bound_at).toLocaleString() : "date unavailable"}</li>)}</ul></div>}
+            <p className="mt-3 text-xs text-content-muted">{customer.customer_number || "Customer number unavailable"} · Record created {customer.created_at ? new Date(customer.created_at).toLocaleString() : "date unavailable"} · updated {customer.updated_at ? new Date(customer.updated_at).toLocaleString() : "date unavailable"}</p>
+            <p className="mt-1 text-xs text-content-muted">Marketing source: {formatCustomerSource(customer.source)}.</p>
+            {customer.source_lineage.length > 0 && <details className="mt-3 rounded-lg border border-stroke p-3"><summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-content-muted">Audit &amp; evidence</summary><p className="mt-2 text-xs text-content-muted">Source provenance is available for review and does not change the customer workflow.</p><ul className="mt-2 space-y-1 text-sm">{customer.source_lineage.map((identity) => <li key={`${identity.source_system}:${identity.source_customer_id}`}><span className="font-medium">{formatCustomerSource(identity.source_system)}</span> · provider Customer {identity.source_customer_id} · bound {identity.bound_at ? new Date(identity.bound_at).toLocaleString() : "date unavailable"}</li>)}</ul></details>}
           </div>
           {canManage && (!archived ? (
             <div className="grid w-full gap-3 sm:flex sm:w-auto">
@@ -149,10 +150,21 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
       </Card>
 
       <Alert variant="information" title="History completeness">
-        This workspace shows related records admitted to native ACP authority. Each section states its own page or time boundary. Missing or source-only history is not treated as none or zero.
+        This workspace combines migrated and TwelveHats records in one customer view. Missing or unavailable history is never treated as none or zero.
       </Alert>
 
-      <CustomerOperationsPanel customerId={customerId} locations={customer.properties} />
+      <CustomerOperationsPanel
+        customerId={customerId}
+        locations={customer.properties}
+        timelineEntries={timeline.data?.items ?? []}
+        timelinePage={timeline.data?.page ?? timelinePage}
+        timelineTotalCount={timeline.data?.total_count}
+        timelineTotalPages={timeline.data?.total_pages}
+        timelineLoading={timeline.isLoading}
+        timelineFetching={timeline.isFetching}
+        onPreviousTimelinePage={() => setTimelinePage((value) => Math.max(1, value - 1))}
+        onNextTimelinePage={() => setTimelinePage((value) => value + 1)}
+      />
       {canReadCommunications && <CustomerCommunicationHistory customerId={customerId} />}
 
       <Card className="p-ui-4 sm:p-ui-6">
@@ -192,34 +204,13 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
               <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-content-muted">
                 {match.reasons.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}
               </ul>
-              <p className="mt-3 text-xs font-medium text-status-warning">Native consolidation authority is not available; review only.</p>
+              <p className="mt-3 text-xs font-medium text-status-warning">Customer consolidation authority is not available; review only.</p>
             </article>
           ))}
         </div>
       </Card>
 
-      <Card className="p-ui-4 sm:p-ui-6">
-        <p className="text-sm text-action-primary">Customer history</p>
-        <h3 className="mt-1 text-xl font-semibold">Authoritative timeline</h3>
-        {timeline.data && <p className="mt-2 text-xs text-content-muted">Showing {timeline.data.items.length} of {timeline.data.total_count} recorded events · page {timeline.data.page} of {timeline.data.total_pages || 1}</p>}
-        {timeline.isError && <Alert variant="danger" title="Timeline unavailable" action={<Button type="button" variant="outline" onClick={() => void timeline.refetch()}>Retry history</Button>}>{getApiErrorMessage(timeline.error)}</Alert>}
-        {timeline.isLoading && <p className="mt-4 text-sm text-content-muted">Loading customer history…</p>}
-        <ol className="mt-5 space-y-3" aria-label="Customer timeline">
-          {(timeline.data?.items ?? []).map((entry) => (
-            <li key={entry.id} className="flex gap-3 rounded-xl border border-stroke bg-surface-subtle p-4">
-              <Clock3 size={17} className="mt-0.5 shrink-0 text-action-primary" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="font-medium text-content">{entry.summary}</p>
-                <p className="mt-1 text-xs text-content-muted">
-                  {new Date(entry.timestamp).toLocaleString()} · {entry.actor?.display_name ?? "System"}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
-        {timeline.isSuccess && timeline.data.items.length === 0 && <p className="mt-4 text-sm text-content-muted">No authoritative customer events are available.</p>}
-        {timeline.data && timeline.data.total_pages > 1 && <div className="mt-4 flex flex-col gap-3 border-t border-stroke pt-4 text-sm sm:flex-row sm:items-center sm:justify-between"><span className="text-content-muted">History page {timeline.data.page} of {timeline.data.total_pages}</span><div className="grid grid-cols-2 gap-2"><Button type="button" variant="outline" disabled={timelinePage <= 1 || timeline.isFetching} onClick={() => setTimelinePage((value) => Math.max(1, value - 1))}>Previous history</Button><Button type="button" variant="outline" disabled={timelinePage >= timeline.data.total_pages || timeline.isFetching} onClick={() => setTimelinePage((value) => value + 1)}>Next history</Button></div></div>}
-      </Card>
+      {timeline.isError && <Alert variant="warning" title="Some customer activity is unavailable" action={<Button type="button" variant="outline" onClick={() => void timeline.refetch()}>Retry activity</Button>}>{getApiErrorMessage(timeline.error)}</Alert>}
 
       <Card className="p-ui-4 sm:p-ui-6">
         <p className="text-sm text-action-primary">Communication consent</p>
@@ -262,6 +253,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
               <p className="mt-3 text-xs text-content-muted">{property.property_type.replaceAll("_", " ")} · {property.sewer_septic ?? "waste system unknown"}</p>
               {canManage && !archived && <button type="button" onClick={() => setEditingProperty(property)} className="mt-3 text-sm text-action-primary">Edit property</button>}
               {canReadJobs && <Link className="mt-3 ml-4 inline-block text-sm font-semibold text-action-primary" to={`/jobs?customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}`}>View Jobs for this Location</Link>}
+              {canManageEstimates && !archived && <Link className="mt-3 ml-4 inline-block text-sm text-action-primary" to={`/estimates?customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}&returnTo=${encodeURIComponent(`/customers/${customer.id}`)}`}>Create Estimate for this Location</Link>}
               {canManageJobs && !archived && <Link className="mt-3 ml-4 inline-block text-sm text-action-primary" to={`/jobs?create=1&customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}`}>Create Job for this Location</Link>}
             </article>
           ))}
@@ -271,7 +263,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
 
       <Card className="p-ui-4 sm:p-ui-6">
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Customer relationships</p><h3 className="mt-1 text-xl font-semibold">Contacts</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingContact("new")} leadingIcon={<Plus size={16} />}>Add contact</Button>}</div>
-        {customer.contacts.length === 0 && editingContact === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No additional Contacts are currently admitted for this Customer. The Customer's own optional contact fields remain separate.</p>}
+        {customer.contacts.length === 0 && editingContact === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No additional Contacts are linked to this Customer. The Customer's own optional contact fields remain separate.</p>}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {customer.contacts.map((contact) => (
             <article key={contact.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-4">

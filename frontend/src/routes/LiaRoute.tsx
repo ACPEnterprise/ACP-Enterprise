@@ -11,7 +11,12 @@ import {
   useLiaReadiness,
   useOwnerBriefing,
 } from "../hooks/useLia";
-import type { LiaResponse, LiaTemporalContext } from "../types/lia";
+import type {
+  LiaContextMetric,
+  LiaContextRecord,
+  LiaResponse,
+  LiaTemporalContext,
+} from "../types/lia";
 import {
   Alert,
   Button,
@@ -58,6 +63,8 @@ const contextualDomains = new Set([
   "price-book",
   "migration",
 ]);
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const tone = (classification: LiaResponse["classification"]) =>
   classification === "KNOWN" || classification === "DERIVED"
@@ -156,19 +163,40 @@ export function LiaRoute() {
   const [searchParams] = useSearchParams();
   const contextDomain = searchParams.get("contextDomain");
   const contextId = searchParams.get("contextId");
-  const validContextId =
-    !contextId ||
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      contextId,
-    );
+  const contextRecords: LiaContextRecord[] = searchParams
+    .getAll("contextRecord")
+    .map((value) => {
+      const separator = value.indexOf(":");
+      return separator > 0 && uuidPattern.test(value.slice(separator + 1))
+        ? {
+            entity_type: value.slice(0, separator),
+            entity_id: value.slice(separator + 1),
+          }
+        : null;
+    })
+    .filter((value): value is LiaContextRecord => Boolean(value));
+  const contextMetrics: LiaContextMetric[] = searchParams
+    .getAll("contextMetric")
+    .map((value) => {
+      const [name, metricValue, unit] = value.split(":");
+      return name && metricValue !== undefined
+        ? { name, value: metricValue, ...(unit ? { unit } : {}) }
+        : null;
+    })
+    .filter((value): value is LiaContextMetric => Boolean(value));
+  const validContextId = !contextId || uuidPattern.test(contextId);
   const invalidContext =
     contextDomain !== null &&
     (!contextualDomains.has(contextDomain) || !validContextId);
   const context =
-    contextDomain !== null && contextualDomains.has(contextDomain) && validContextId
+    contextDomain !== null &&
+    contextualDomains.has(contextDomain) &&
+    validContextId
       ? {
           domain: contextDomain,
           ...(contextId ? { entity_id: contextId } : {}),
+          ...(contextRecords.length ? { records: contextRecords } : {}),
+          ...(contextMetrics.length ? { metrics: contextMetrics } : {}),
         }
       : undefined;
   const contextLabel = context
@@ -194,7 +222,7 @@ export function LiaRoute() {
       }[context.domain]
     : undefined;
   const routeContextKey = context
-    ? `${context.domain}:${context.entity_id ?? ""}`
+    ? `${context.domain}:${context.entity_id ?? ""}:${contextRecords.map((item) => `${item.entity_type}:${item.entity_id}`).join(",")}`
     : "";
   const readiness = useLiaReadiness();
   const foundation = useLiaFoundationReadiness();
@@ -209,8 +237,11 @@ export function LiaRoute() {
   const [conversationContext, setConversationContext] = useState<{
     domain?: string;
     entity_id?: string;
+    records?: LiaContextRecord[];
+    metrics?: LiaContextMetric[];
   }>();
-  const [conversationRouteKey, setConversationRouteKey] = useState(routeContextKey);
+  const [conversationRouteKey, setConversationRouteKey] =
+    useState(routeContextKey);
   const [continuation, setContinuation] = useState<{
     authorization_version: number;
     evidence_digest: string;
@@ -224,8 +255,10 @@ export function LiaRoute() {
     setConversationContext(
       result.subject_domain
         ? {
-        domain: result.subject_domain,
-        ...(result.subject_id ? { entity_id: result.subject_id } : {}),
+            domain: result.subject_domain,
+            ...(result.subject_id ? { entity_id: result.subject_id } : {}),
+            ...(contextRecords.length ? { records: contextRecords } : {}),
+            ...(contextMetrics.length ? { metrics: contextMetrics } : {}),
           }
         : {},
     );
@@ -239,11 +272,15 @@ export function LiaRoute() {
   };
   const conversationMatchesRoute = conversationRouteKey === routeContextKey;
   const activeContext =
-    conversationMatchesRoute && conversationContext ? conversationContext : context;
+    conversationMatchesRoute && conversationContext
+      ? conversationContext
+      : context;
   const activeConversationId = conversationMatchesRoute
     ? conversationId
     : undefined;
-  const activeContinuation = conversationMatchesRoute ? continuation : undefined;
+  const activeContinuation = conversationMatchesRoute
+    ? continuation
+    : undefined;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const value = question.trim();
@@ -348,13 +385,25 @@ export function LiaRoute() {
         <Alert variant="success" title="Entity context ready">
           LIA will retrieve only the server-authorized minimum-necessary{" "}
           {contextLabel} context. The entity identifier does not grant access.
+          {contextRecords.length ? (
+            <p className="mt-1 text-sm">
+              Triggering records carried into this conversation:{" "}
+              {contextRecords.length}.
+            </p>
+          ) : null}
+          {contextMetrics.length ? (
+            <p className="text-sm">
+              Measured context:{" "}
+              {contextMetrics.map((item) => item.name).join(", ")}.
+            </p>
+          ) : null}
         </Alert>
       ) : null}
       {invalidContext ? (
         <Alert variant="warning" title="Record context unavailable">
-          This link does not contain a supported safe record context. LIA did not
-          use the supplied record identifier; open the authoritative record and
-          choose Ask LIA again.
+          This link does not contain a supported safe record context. LIA did
+          not use the supplied record identifier; open the authoritative record
+          and choose Ask LIA again.
         </Alert>
       ) : null}
       {foundation.data ? (

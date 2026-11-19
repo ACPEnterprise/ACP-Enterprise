@@ -59,6 +59,7 @@ export interface CustomerSummary extends CustomerInput {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  primary_location?: CustomerProperty;
 }
 
 export interface CustomerSearchCriteria {
