@@ -30,6 +30,22 @@
     "resolved_to_rejected_customer": 0,
     "missing_authoritative_customer_evidence": 0
   },
+  "derived_repair_authority": {
+    "repair_plan_digest": "aaf029072652061c7af7183a56bce6dab72a893d03fb2e6c5763be83b3cd3e1b",
+    "persisted_jobs": 1075,
+    "persisted_appointments": 1218,
+    "persisted_estimates": 14,
+    "persisted_invoices": 768,
+    "persisted_payments": 666,
+    "additional_explicit_exceptions": 13791
+  },
+  "derived_financial_supersession": {
+    "plan_id": "066cba1d-1fdf-5242-8957-3bd29343de09",
+    "plan_digest": "564e4a0d76a1dfa239c256b56b97b6e1955542d946d0d0e86fdf0dfa0ceb2c08",
+    "persisted_invoices": 653,
+    "invoice_exceptions": 4714,
+    "persisted_payments": 666
+  },
   "preservation": {
     "source_identities_removed": 0,
     "source_payloads_modified": 0,

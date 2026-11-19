@@ -165,34 +165,34 @@ def test_sealed_source4_requalification_has_exact_safe_counts() -> None:
         persisted_customer_ids=customer_ids,
         persisted_location_ids=location_ids,
     )
-    assert len(repair.operational.jobs) == 1094
-    assert len(repair.operational.appointments) == 1249
-    assert sum(repair.operational.job_exceptions.values()) == 4136
-    assert sum(repair.operational.appointment_exceptions.values()) == 1861
+    assert len(repair.operational.jobs) == 1075
+    assert len(repair.operational.appointments) == 1218
+    assert sum(repair.operational.job_exceptions.values()) == 4155
+    assert sum(repair.operational.appointment_exceptions.values()) == 1892
     assert len(repair.financial.estimates) == 14
-    assert len(repair.financial.invoices) == 780
-    assert len(repair.financial.payments) == 684
+    assert len(repair.financial.invoices) == 768
+    assert len(repair.financial.payments) == 666
     assert (
         repair.persisted_counts.items()
         >= {
-            "job": 1094,
-            "appointment": 1249,
+            "job": 1075,
+            "appointment": 1218,
             "estimate": 14,
-            "invoice": 780,
-            "payment": 684,
+            "invoice": 768,
+            "payment": 666,
         }.items()
     )
     assert (
         repair.exception_counts.items()
         >= {
-            "job": 4411,
-            "appointment": 1970,
+            "job": 4430,
+            "appointment": 2001,
             "estimate": 32,
-            "invoice": 4587,
-            "payment": 3337,
+            "invoice": 4599,
+            "payment": 3355,
         }.items()
     )
-    assert len(repair.additional_plan_outcomes) == 13711
+    assert len(repair.additional_plan_outcomes) == 13791
     assert all(
         item.outcome == "EXPLICIT_EXCEPTION" for item in repair.additional_plan_outcomes
     )

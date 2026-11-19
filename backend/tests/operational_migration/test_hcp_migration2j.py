@@ -17,6 +17,9 @@ MASTER_ID = UUID("63273602-8619-5c0b-8b49-8537338b04b5")
 PLAN_ID = UUID("8c717798-db5e-5c49-99be-ca3d250536e3")
 PLAN_DIGEST = "6ac31cc70e269dfa123a73c8a896f7e957eff113c1873a6ee8c908a9f1256962"
 REPAIR_DIGEST = "64df671d21ab95818ae6035949202e6d61195733013ff63485471164e9b64d8a"
+REQUALIFIED_REPAIR_DIGEST = (
+    "aaf029072652061c7af7183a56bce6dab72a893d03fb2e6c5763be83b3cd3e1b"
+)
 
 
 def authority() -> HcpMigration2RepairAuthority:
@@ -181,14 +184,14 @@ def test_sealed_repair_plan_and_completion_envelope_are_deterministic() -> None:
         persisted_customer_ids=frozenset(customer_ids),
         persisted_location_ids=frozenset(location_ids),
     )
-    assert repair.repair_plan_digest == REPAIR_DIGEST
+    assert repair.repair_plan_digest == REQUALIFIED_REPAIR_DIGEST
     assert repair_again.repair_plan_digest == repair.repair_plan_digest
-    assert len(repair.operational.jobs) == 1094
-    assert len(repair.operational.appointments) == 1249
+    assert len(repair.operational.jobs) == 1075
+    assert len(repair.operational.appointments) == 1218
     assert len(repair.financial.estimates) == 14
-    assert len(repair.financial.invoices) == 780
-    assert len(repair.financial.payments) == 684
-    assert len(repair.additional_plan_outcomes) == 13711
+    assert len(repair.financial.invoices) == 768
+    assert len(repair.financial.payments) == 666
+    assert len(repair.additional_plan_outcomes) == 13791
     requirements = replace(
         plan.completion,
         transformed_counts=repair.persisted_counts,

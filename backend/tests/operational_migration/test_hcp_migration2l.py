@@ -40,6 +40,10 @@ SEALED_SUCCESSOR_ID = UUID("8d3a78a3-c62d-55f8-8de3-f63286f099ad")
 SEALED_SUCCESSOR_DIGEST = (
     "77863d0a1c9d86178ab2f81ce2858c935829bab473dc49219633aa54d4f4e123"
 )
+REQUALIFIED_SUCCESSOR_ID = UUID("066cba1d-1fdf-5242-8957-3bd29343de09")
+REQUALIFIED_SUCCESSOR_DIGEST = (
+    "564e4a0d76a1dfa239c256b56b97b6e1955542d946d0d0e86fdf0dfa0ceb2c08"
+)
 
 
 def invoice(source_id: str, *, line_items: bool) -> InvoiceMigrationRecord:
@@ -320,14 +324,14 @@ def test_sealed_financial_supersession_is_exact() -> None:
         nonconforming_child_id=FINANCIAL_CHILD_ID,
         repair=original,
     )
-    assert superseding.id == SEALED_SUCCESSOR_ID
-    assert superseding.digest == SEALED_SUCCESSOR_DIGEST
-    assert len(superseding.retained_invoice_identity_digests) == 663
-    assert len(superseding.invoice_evidence) == 117
-    assert len(superseding.retained_payment_identity_digests) == 684
+    assert superseding.id == REQUALIFIED_SUCCESSOR_ID
+    assert superseding.digest == REQUALIFIED_SUCCESSOR_DIGEST
+    assert len(superseding.retained_invoice_identity_digests) == 653
+    assert len(superseding.invoice_evidence) == 115
+    assert len(superseding.retained_payment_identity_digests) == 666
     assert not superseding.payment_evidence
-    assert superseding.persisted_counts["invoice"] == 663
-    assert superseding.exception_counts["invoice"] == 4704
+    assert superseding.persisted_counts["invoice"] == 653
+    assert superseding.exception_counts["invoice"] == 4714
     adjusted = superseding_completion_counts(original, superseding)
     requirements = replace(
         plan.completion,
