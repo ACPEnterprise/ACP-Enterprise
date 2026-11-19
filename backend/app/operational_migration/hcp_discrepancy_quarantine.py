@@ -17,19 +17,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.operational_migration.hcp_hybrid_customer import hcp_customer_name
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_executor import (
-    HOLD_DISPOSITIONS,
-    NovemberExecutionPacket,
     PACKET_CONTRACT,
     WRITE_DISPOSITIONS,
+    NovemberExecutionPacket,
     _packet_inventory,
 )
 from app.operational_migration.hcp_november_supplemental_authority import (
     SupplementalCurrentStateAuthority,
 )
-from app.operational_migration.hcp_source4_contracts import JOB_STATUS, build_estimate, build_invoice
-
+from app.operational_migration.hcp_source4_contracts import (
+    JOB_STATUS,
+    build_estimate,
+    build_invoice,
+)
 
 CONTRACT = "hcp-november-discrepancy-quarantine-authority/v1"
 QUARANTINE_REASON = "estimate_job_lineage_missing"
@@ -108,10 +111,7 @@ def _derive_records(
 
     def customer_invalid(item: dict[str, Any]) -> bool:
         payload = item.get("payload") or {}
-        first = str(payload.get("first_name") or "").strip()
-        last = str(payload.get("last_name") or "").strip()
-        company = str(payload.get("company") or payload.get("company_name") or "").strip()
-        return not (company or (first and last))
+        return hcp_customer_name(payload) is None
 
     def location_invalid(item: dict[str, Any]) -> bool:
         payload = item.get("payload") or {}

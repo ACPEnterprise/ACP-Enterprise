@@ -17,23 +17,23 @@ from app.customer_migration.models import (
     CustomerSourceIdentity,
     ServiceLocationSourceIdentity,
 )
-from app.financials.service import (
-    FinancialService,
-    MigrateEstimate,
-    MigrateInvoice,
-    MigratedLineItem,
-)
 from app.customers.models import Customer, ServiceLocation
 from app.customers.schemas import (
     ContactCreate,
     CustomerCreate,
     CustomerStatus,
-    CustomerType,
     CustomerUpdateRequest,
     ServiceLocationCreate,
 )
 from app.customers.service import CustomerService
 from app.customers.update import CustomerUpdateService, customer_update_service
+from app.financials.models import Estimate, Invoice
+from app.financials.service import (
+    FinancialService,
+    MigratedLineItem,
+    MigrateEstimate,
+    MigrateInvoice,
+)
 from app.jobs.commands import MigrateJob, UpdateJob
 from app.jobs.models import Job, JobAppointmentLink
 from app.jobs.service import JobService
@@ -47,17 +47,18 @@ from app.operational_migration.hcp_current_overlay import (
 from app.operational_migration.hcp_current_overlay_adapter import (
     CurrentOverlayDomainServices,
 )
-from app.operational_migration.hcp_source4_contracts import JOB_STATUS
-from app.operational_migration.hcp_source4_native_binding import (
-    HcpSource4NativeBindingBootstrap,
-)
+from app.operational_migration.hcp_hybrid_customer import hcp_customer_name
 from app.operational_migration.hcp_migration2b import (
     EmployeeCrosswalkCommand,
     persist_employee_crosswalk,
 )
 from app.operational_migration.hcp_source4_contracts import (
+    JOB_STATUS,
     build_estimate,
     build_invoice,
+)
+from app.operational_migration.hcp_source4_native_binding import (
+    HcpSource4NativeBindingBootstrap,
 )
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
@@ -70,7 +71,6 @@ from app.operational_migration.models import (
     JobSourceIdentity,
 )
 from app.operational_migration.repository import OperationalMigrationRepository
-from app.financials.models import Estimate, Invoice
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.models import Appointment
@@ -418,21 +418,16 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         payload = record.payload
         first = _text(payload.get("first_name"))
         last = _text(payload.get("last_name"))
-        company = _text(payload.get("company") or payload.get("company_name"))
-        display_name = company or " ".join(value for value in (first, last) if value)
-        if not display_name:
+        name = hcp_customer_name(payload)
+        if name is None:
             raise ValueError("source Customer has no authoritative display name")
         customer = await self.customers.stage_migrated_customer(
             session,
             context=self.context,
             customer_data=CustomerCreate(
-                customer_type=(
-                    CustomerType.COMMERCIAL
-                    if payload.get("kind") == "business"
-                    else CustomerType.RESIDENTIAL
-                ),
-                display_name=display_name,
-                legal_name=company,
+                customer_type=name.customer_type,
+                display_name=name.display_name,
+                legal_name=name.legal_name,
                 marketing_source=_text(payload.get("lead_source")),
                 notes=_text(payload.get("notes")),
                 status=CustomerStatus.ACTIVE,
@@ -817,14 +812,16 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 "newer native Customer state is authoritative and remains unchanged"
             )
         first, last = _text(payload.get("first_name")), _text(payload.get("last_name"))
-        company = _text(payload.get("company"))
-        display_name = company or " ".join(value for value in (first, last) if value)
+        name = hcp_customer_name(payload)
+        if name is None:
+            raise OverlayDomainHold("source Customer has no customer-owned name")
+        company = name.legal_name
         return await self.customer_updates.stage_update(
             session,
             context=self.context,
             customer_id=UUID(state.native_id),
             data=CustomerUpdateRequest(
-                display_name=display_name or None,
+                display_name=name.display_name,
                 legal_name=company,
                 marketing_source=_text(payload.get("lead_source")),
                 notes=_text(payload.get("notes")),

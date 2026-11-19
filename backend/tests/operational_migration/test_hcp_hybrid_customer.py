@@ -141,6 +141,55 @@ def test_child_exception_does_not_reject_parent_and_projection_is_native() -> No
     assert boundary.expected.customers == 1
 
 
+def test_provider_tenant_name_is_never_a_customer_name() -> None:
+    payload = customer("cus_blank")
+    payload.update(
+        first_name="",
+        last_name="",
+        company=None,
+        company_name="All County Plumbing and Leak",
+    )
+    admission = build_hybrid_admission(
+        api_assertions=[
+            CustomerAssertion.source4(
+                kind=AssertionKind.API_LISTED,
+                payload=payload,
+                container_digest="a" * 64,
+            )
+        ],
+        detail_assertions=[],
+    )
+    assert admission.candidates[0].outcome == AdmissionOutcome.EXPLICIT_EXCEPTION
+    assert admission.candidates[0].reason == "customer_display_identity_missing"
+
+
+def test_person_and_business_names_use_customer_owned_fields() -> None:
+    person = customer("cus_person", name="Richard Ratliff")
+    person["company"] = "Unrelated Customer Business"
+    person["company_name"] = "All County Plumbing and Leak"
+    business = customer("cus_business", name="Business Contact")
+    business["kind"] = "business"
+    business["company"] = "Real Customer Business LLC"
+    business["company_name"] = "All County Plumbing and Leak"
+    admission = build_hybrid_admission(
+        api_assertions=[
+            CustomerAssertion.source4(
+                kind=AssertionKind.API_LISTED,
+                payload=payload,
+                container_digest="a" * 64,
+            )
+            for payload in (person, business)
+        ],
+        detail_assertions=[],
+    )
+    reviewed, _ = build_reviewed_customer_output(admission)
+    projected = {row.source_identity: row.customer for row in reviewed.aggregates}
+    assert projected["cus_person"].display_name == "Richard Ratliff"
+    assert projected["cus_person"].legal_name is None
+    assert projected["cus_business"].display_name == "Real Customer Business LLC"
+    assert projected["cus_business"].legal_name == "Real Customer Business LLC"
+
+
 def test_job_parent_closure_is_exhaustive_and_deterministic() -> None:
     admission = build_hybrid_admission(
         api_assertions=[assertion("cus_1", AssertionKind.API_LISTED)],
