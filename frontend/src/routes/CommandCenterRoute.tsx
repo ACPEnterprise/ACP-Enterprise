@@ -74,6 +74,30 @@ function count(value: number | null | undefined) {
   return value === null || value === undefined ? "—" : value.toLocaleString();
 }
 
+function ownerLabel(value: string) {
+  const labels: Record<string, string> = {
+    operations: "Operations",
+    revenue: "Revenue",
+    customer: "Customer",
+    scheduling: "Scheduling",
+    workforce: "People",
+    count: "Jobs",
+  };
+  return labels[value] ?? value.replaceAll("_", " ");
+}
+
+function observationValue(item: {
+  value_minor: number | null;
+  unit: string;
+  currency: string | null;
+}) {
+  if (item.value_minor == null) return "Not available";
+  if (item.unit === "minor_currency") {
+    return money(item.value_minor / 100, item.currency ?? "USD");
+  }
+  return `${item.value_minor.toLocaleString()} ${ownerLabel(item.unit)}`;
+}
+
 function dateWindow(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   return {
@@ -214,7 +238,7 @@ function PulseMetric({
   tone = "normal",
 }: {
   readonly label: string;
-  readonly value: string | null | undefined;
+  readonly value: string;
   readonly detail: string;
   readonly to: string;
   readonly tone?: "normal" | "warning";
@@ -228,7 +252,7 @@ function PulseMetric({
         {label}
       </p>
       <p className="mt-2 text-2xl font-bold text-action-primary">
-        {value ?? "—"}
+        {value}
       </p>
       <p className="mt-1 text-xs text-content-muted">{detail}</p>
     </Link>
@@ -253,8 +277,10 @@ function AttentionItem({
     })),
     signal.id,
   );
-  const urgency =
-    signal.priority.band === "critical" || signal.priority.band === "immediate"
+  const staleEvidence = signal.evidence_quality?.freshness === "stale";
+  const urgency = staleEvidence
+    ? "Needs refresh"
+    : signal.priority.band === "critical" || signal.priority.band === "immediate"
       ? "Act now"
       : signal.priority.band === "important"
         ? "Today"
@@ -266,17 +292,19 @@ function AttentionItem({
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant={
-                urgency === "Act now"
-                  ? "danger"
-                  : urgency === "Today"
-                    ? "warning"
-                    : "neutral"
+                urgency === "Needs refresh"
+                  ? "warning"
+                  : urgency === "Act now"
+                    ? "danger"
+                    : urgency === "Today"
+                      ? "warning"
+                      : "neutral"
               }
             >
               {urgency}
             </Badge>
             <span className="text-xs text-content-muted">
-              {signal.category}
+              {ownerLabel(signal.category)}
             </span>
           </div>
           <h3 className="mt-2 text-lg font-semibold text-content">
@@ -288,6 +316,12 @@ function AttentionItem({
         </div>
         <RadioTower aria-hidden="true" className="text-accent" size={20} />
       </div>
+      {staleEvidence ? (
+        <Alert className="mt-4" variant="warning" title="Evidence needs refresh">
+          This finding is based on stale source records. Refresh the source
+          record before treating the recommendation as current.
+        </Alert>
+      ) : null}
       {signal.supporting_facts.length ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {signal.supporting_facts.slice(0, 4).map((fact) => (
@@ -366,7 +400,7 @@ function AttentionItem({
           className="inline-flex min-h-10 items-center gap-1 font-semibold text-content underline"
           to={askPath}
         >
-          <Bot size={16} /> Ask LIA
+          <Bot size={16} /> Ask LIA about this
         </Link>
         <Button
           className="ml-auto"
@@ -404,12 +438,14 @@ function AttentionSection({
   signals,
   loading,
   error,
+  enabled,
   onSnooze,
   retry,
 }: {
   readonly signals: readonly BeaconSignal[] | undefined;
   readonly loading: boolean;
   readonly error: boolean;
+  readonly enabled: boolean;
   readonly onSnooze: (signal: BeaconSignal) => void;
   readonly retry: () => void;
 }) {
@@ -419,7 +455,11 @@ function AttentionSection({
       description="Beacon shows only current, actionable findings backed by tenant records."
       icon={AlertTriangle}
     >
-      {loading ? (
+      {!enabled ? (
+        <Alert variant="information" title="Beacon is not available">
+          Your account does not have access to current Beacon findings.
+        </Alert>
+      ) : loading ? (
         <Spinner label="Checking current business conditions" />
       ) : error ? (
         <Alert
@@ -443,7 +483,7 @@ function AttentionSection({
             />
           ))}
         </div>
-      ) : (
+      ) : signals ? (
         <div className="rounded-xl border border-status-success/40 bg-status-success/10 p-5">
           <p className="text-lg font-semibold text-content">
             Nothing urgent needs your attention.
@@ -452,6 +492,11 @@ function AttentionSection({
             Beacon found no active condition that needs owner action right now.
           </p>
         </div>
+      ) : (
+        <Alert variant="warning" title="Beacon data is not available">
+          No current finding state was returned. No healthy or clear state was
+          inferred.
+        </Alert>
       )}
     </Section>
   );
@@ -474,7 +519,11 @@ function LuminarySection({
       description="Patterns and changes explained from current business evidence."
       icon={Sparkles}
     >
-      {briefing.isPending ? (
+      {!enabled ? (
+        <Alert variant="information" title="Luminary is not available">
+          Your account does not have access to Luminary explanations.
+        </Alert>
+      ) : briefing.isPending ? (
         <Spinner label="Explaining current business patterns" />
       ) : briefing.isError ? (
         <Alert variant="warning" title="Luminary is temporarily unavailable">
@@ -526,7 +575,7 @@ function LuminarySection({
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
-                      Dollar / operational impact
+                      Measured impact
                     </p>
                     <p className="mt-1 text-sm text-content-secondary">
                       {finding.observations.length
@@ -534,7 +583,7 @@ function LuminarySection({
                             .slice(0, 2)
                             .map(
                               (item) =>
-                                `${item.metric.replaceAll("_", " ")}: ${item.unit === "minor_currency" && item.value_minor != null ? money(item.value_minor / 100, item.currency ?? "USD") : (item.value_minor ?? "unavailable")}`,
+                                `${item.metric.replaceAll("_", " ")}: ${observationValue(item)}`,
                             )
                             .join(" · ")
                         : "Impact is not available from the current evidence."}
@@ -569,7 +618,7 @@ function LuminarySection({
                     className="inline-flex items-center gap-1 font-semibold text-content underline"
                     to={askPath}
                   >
-                    <Bot size={16} /> Ask LIA
+                    <Bot size={16} /> Ask LIA about this finding
                   </Link>
                 </div>
                 <details className="mt-3 text-xs text-content-muted">
@@ -649,10 +698,12 @@ export function CommandCenterRoute() {
   const recommendations = useActiveBeaconRecommendations(
     canReadAnalytics && permissions.has("COMPANY_BEACON_OWN"),
   );
+  const recommendationsEnabled =
+    canReadAnalytics && permissions.has("COMPANY_BEACON_OWN");
   const lifecycle = useBeaconLifecycleActions();
   const mtdProduced = useMemo(
     () =>
-      jobs.data
+      jobs.data?.points.length
         ? jobs.data.points.reduce(
             (total, point) => total + Number(point.produced_value ?? 0),
             0,
@@ -725,84 +776,170 @@ export function CommandCenterRoute() {
       </header>
       <AttentionSection
         signals={beacon.data?.items}
-        loading={beacon.isLoading}
+        loading={beacon.isPending || beacon.isLoading}
         error={beacon.isError}
+        enabled={canReadAnalytics}
         onSnooze={snooze}
         retry={() => void beacon.refetch()}
       />
       <Section
         title="Business Pulse"
-        description="A short, live view of the operating state. Each metric opens its supporting records or exact filter."
+        description="A short view of today’s operating state. Select a metric to open the records behind it."
         icon={CircleDollarSign}
       >
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <PulseMetric
-            label="Produced value today"
-            value={money(
-              jobs.data?.points.find((point) => point.period_start === today)
-                ?.produced_value,
-              jobs.data?.currency,
-            )}
-            detail="Completed Jobs with sold-snapshot value"
+            label="Completed Job value today"
+            value={
+              !canReadJobs
+                ? "Not available"
+                : jobs.isError
+                ? "Unavailable"
+                : jobs.data
+                  ? jobs.data.points.find((point) => point.period_start === today)
+                    ? money(
+                        jobs.data.points.find(
+                          (point) => point.period_start === today,
+                        )?.produced_value,
+                        jobs.data.currency,
+                      )
+                    : "No data"
+                  : "Loading…"
+            }
+            detail="Recorded value from completed Jobs"
             to={`/jobs?status=completed&completedStartAt=${encodeURIComponent(`${today}T00:00:00`)}&completedEndAt=${encodeURIComponent(`${tomorrow}T00:00:00`)}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
           />
           <PulseMetric
-            label="Produced value MTD"
-            value={money(mtdProduced, jobs.data?.currency)}
-            detail={`${jobs.data?.points.length ?? 0} measured daily points`}
+            label="Completed Job value this month"
+            value={
+              !canReadJobs
+                ? "Not available"
+                : jobs.isError
+                ? "Unavailable"
+                : jobs.data
+                  ? jobs.data.points.length
+                    ? money(mtdProduced, jobs.data.currency)
+                    : "No data"
+                  : "Loading…"
+            }
+            detail={
+              !canReadJobs
+                ? "Job data is not available for this account"
+                : jobs.data?.points.length
+                  ? `${jobs.data.points.length} days with recorded value`
+                  : "No completed Job value recorded in this period"
+            }
             to={`/jobs?status=completed&completedStartAt=${encodeURIComponent(`${monthStart}T00:00:00`)}&completedEndAt=${encodeURIComponent(`${tomorrow}T00:00:00`)}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
           />
           <PulseMetric
-            label="Jobs today"
-            value={count(todayDispatch.data?.total_count)}
-            detail="Scheduled and confirmed appointments"
+            label="Jobs scheduled today"
+            value={
+              !canReadDispatch
+                ? "Not available"
+                : todayDispatch.isError
+                ? "Unavailable"
+                : todayDispatch.data
+                  ? count(todayDispatch.data.total_count)
+                  : "Loading…"
+            }
+            detail="Appointments on today’s schedule"
             to={dispatchLink(today)}
           />
           <PulseMetric
-            label="Jobs tomorrow"
-            value={count(tomorrowDispatch.data?.total_count)}
+            label="Jobs scheduled tomorrow"
+            value={
+              !canReadDispatch
+                ? "Not available"
+                : tomorrowDispatch.isError
+                ? "Unavailable"
+                : tomorrowDispatch.data
+                  ? count(tomorrowDispatch.data.total_count)
+                  : "Loading…"
+            }
             detail={
-              unassignedTomorrow
-                ? `${unassignedTomorrow} unassigned`
-                : "No unassigned jobs measured"
+              !canReadDispatch
+                ? "Dispatch data is not available for this account"
+                : tomorrowDispatch.data
+                  ? unassignedTomorrow
+                    ? `${unassignedTomorrow} without a technician`
+                    : "No jobs without a technician"
+                  : "Tomorrow’s schedule is not available yet"
             }
             to={dispatchLink(tomorrow)}
             tone={unassignedTomorrow ? "warning" : "normal"}
           />
           <PulseMetric
-            label="Unassigned jobs today"
-            value={count(unassignedToday)}
-            detail="Appointments without an active assignment"
+            label="Jobs without a technician today"
+            value={
+              !canReadDispatch
+                ? "Not available"
+                : todayDispatch.isError
+                ? "Unavailable"
+                : todayDispatch.data
+                  ? count(unassignedToday)
+                  : "Loading…"
+            }
+            detail="Jobs with no active technician assignment"
             to={dispatchLink(today, "scheduled_unassigned")}
             tone={unassignedToday ? "warning" : "normal"}
           />
           <PulseMetric
-            label="Open AR"
-            value={money(
-              ar.data?.total_open_amount,
-              ar.data?.currency ?? "USD",
-            )}
-            detail={`${ar.data?.open_invoice_count ?? "—"} open invoices`}
+            label="Customer balances due"
+            value={
+              !canReadInvoices
+                ? "Not available"
+                : ar.isError
+                ? "Unavailable"
+                : ar.data
+                  ? money(ar.data.total_open_amount, ar.data.currency ?? "USD")
+                  : "Loading…"
+            }
+            detail={
+              !canReadInvoices
+                ? "Invoice data is not available for this account"
+                : ar.data
+                  ? `${ar.data.open_invoice_count} open Invoices`
+                  : "Open Invoices could not be measured yet"
+            }
             to={`/invoices?state=open&asOf=${today}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
           />
           <PulseMetric
-            label="Overdue AR"
-            value={money(overdue, ar.data?.currency ?? "USD")}
-            detail="Past-due invoices only"
+            label="Past-due customer balances"
+            value={
+              !canReadInvoices
+                ? "Not available"
+                : ar.isError
+                ? "Unavailable"
+                : ar.data
+                  ? money(overdue, ar.data.currency ?? "USD")
+                  : "Loading…"
+            }
+            detail="Past-due Invoices only"
             to={`/invoices?state=overdue&asOf=${today}${branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""}`}
             tone={overdue ? "warning" : "normal"}
           />
           <PulseMetric
-            label="Bank cash"
+            label="Bank cash balance"
             value={
-              moneyPosition.data?.bank_balance.evidence_state === "AVAILABLE"
-                ? moneyPosition.data.bank_balance.amount
-                : "—"
+              !canReadPayments
+                ? "Not available"
+                : moneyPosition.data?.bank_balance.evidence_state === "AVAILABLE" ||
+                  moneyPosition.data?.bank_balance.evidence_state === "MEASURED_ZERO"
+                ? money(
+                    moneyPosition.data.bank_balance.amount,
+                    moneyPosition.data.bank_balance.currency,
+                  )
+                : moneyPosition.isError
+                  ? "Unavailable"
+                  : moneyPosition.data
+                    ? "Not connected"
+                    : "Loading…"
             }
             detail={
-              moneyPosition.data?.bank_balance.evidence_state === "AVAILABLE"
+              moneyPosition.data?.bank_balance.evidence_state === "AVAILABLE" ||
+              moneyPosition.data?.bank_balance.evidence_state === "MEASURED_ZERO"
                 ? "Authoritative bank balance"
-                : "Unavailable from connected sources"
+                : "No connected bank balance is available"
             }
             to="/banking"
           />
@@ -815,11 +952,18 @@ export function CommandCenterRoute() {
           enabled={canReadLuminary}
         />
         <Section
-          title="Recommended Actions / Ask LIA"
-          description="Next steps from current evidence. LIA can explain the records and recommend safe navigation."
+          title="Recommended actions"
+          description="Next steps from current evidence. Ask LIA when you want help understanding the records."
           icon={Bot}
         >
-          {recommendations.isPending ? (
+          {!recommendationsEnabled ? (
+            <Alert
+              variant="information"
+              title="Recommended actions are not available"
+            >
+              Beacon owner access is required to view action recommendations.
+            </Alert>
+          ) : recommendations.isPending ? (
             <Spinner label="Loading recommended actions" />
           ) : recommendations.isError ? (
             <Alert variant="warning">
@@ -857,7 +1001,7 @@ export function CommandCenterRoute() {
                         })),
                       )}
                     >
-                      Ask LIA
+                      Ask LIA about this action
                     </Link>
                   </div>
                   <details className="mt-3 text-xs text-content-muted">

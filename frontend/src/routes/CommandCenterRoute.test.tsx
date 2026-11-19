@@ -146,7 +146,7 @@ describe("CommandCenterRoute", () => {
       screen.getByRole("heading", { name: "Business Pulse" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Recommended Actions / Ask LIA" }),
+      screen.getByRole("heading", { name: "Recommended actions" }),
     ).toBeInTheDocument();
     expect(screen.getByText("$2,400")).toBeInTheDocument();
   });
@@ -181,6 +181,19 @@ describe("CommandCenterRoute", () => {
               temporarily_suppressed: false,
             },
             confidence: { level: "high", basis: "authoritative" },
+            evidence_quality: {
+              definition_id: "operational.scheduling.appointment_unassigned",
+              definition_version: 1,
+              source_authority: "dispatch",
+              completeness: "complete",
+              reconciliation: "reconciled",
+              freshness: "stale",
+              confidence: "high",
+              limitations: [],
+              quality_digest: "b".repeat(64),
+              conclusion_admissible: true,
+              explanation: "Source records are older than the freshness policy.",
+            },
             supporting_facts: [
               {
                 name: "job_count",
@@ -222,6 +235,8 @@ describe("CommandCenterRoute", () => {
     expect(
       screen.getByText("2 jobs tomorrow are unassigned"),
     ).toBeInTheDocument();
+    expect(screen.getByText("Evidence needs refresh")).toBeInTheDocument();
+    expect(screen.getByText("Needs refresh")).toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: /Open Dispatch/ })[0],
     ).toHaveAttribute(
@@ -239,10 +254,47 @@ describe("CommandCenterRoute", () => {
       ),
     );
     expect(
-      screen.getByRole("link", { name: /Unassigned jobs today/ }),
+      screen.getByRole("link", { name: /Jobs without a technician today/ }),
     ).toHaveAttribute(
       "href",
       expect.stringContaining("queue=scheduled_unassigned"),
     );
+  });
+
+  it("does not turn low-data into a misleading zero", () => {
+    vi.mocked(useCompletedJobTrend).mockReturnValue(
+      result({ currency: "USD", points: [] }),
+    );
+    vi.mocked(useDispatchBoard).mockReturnValue(
+      result({ total_count: 0, items: [] }),
+    );
+    vi.mocked(useReceivablesSummary).mockReturnValue(
+      result({
+        currency: "USD",
+        total_open_amount: "0.00",
+        open_invoice_count: 0,
+        buckets: [],
+      }),
+    );
+    vi.mocked(useMoneyPosition).mockReturnValue(
+      result({
+        bank_balance: {
+          evidence_state: "MEASURED_ZERO",
+          amount: "0.00",
+          currency: "USD",
+        },
+      }),
+    );
+    render(
+      <MemoryRouter>
+        <CommandCenterRoute />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByText("No data").length).toBe(2);
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("$0").length).toBeGreaterThanOrEqual(3);
+    expect(
+      screen.getByText("No completed Job value recorded in this period"),
+    ).toBeInTheDocument();
   });
 });
