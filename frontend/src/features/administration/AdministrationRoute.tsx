@@ -37,6 +37,7 @@ import {
   useRoles,
 } from "./hooks";
 import { MigrationWorkspace } from "./MigrationWorkspace";
+import { CustomerMigrationControls } from "./CustomerMigrationControls";
 import { BranchSchedulingSetup } from "../../components/scheduling/BranchSchedulingSetup";
 
 type PendingChange = {
@@ -288,6 +289,24 @@ export function AdministrationRoute() {
         </Card>
       )}
       {canAdminister && <BranchSchedulingSetup />}
+      {canAdminister && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Company setup</CardTitle>
+            <CardDescription>
+              Reopen the guided company setup only when you are intentionally reviewing onboarding.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-stroke-strong px-ui-4 text-body-s font-semibold text-action-primary"
+              to="/onboarding?manage=1"
+            >
+              Open Company Setup
+            </Link>
+          </CardContent>
+        </Card>
+      )}
       {permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && (
         <Card>
           <CardHeader>
@@ -417,6 +436,7 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
+      {canAdminister && <CustomerMigrationControls />}
       {canAdminister && <MigrationWorkspace />}
       {canReadRoles && (
         <Card>

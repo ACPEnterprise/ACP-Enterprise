@@ -166,7 +166,7 @@ function normalizeCustomerSummary(
   return {
     id: stringValue(customer.id),
     customer_number: stringValue(customer.customer_number),
-    display_name: name || "Unnamed customer",
+    display_name: name,
     customer_type: stringValue(
       customer.customer_type,
       "residential",
@@ -190,6 +190,9 @@ function normalizeCustomerSummary(
     created_at: stringValue(customer.created_at),
     updated_at: stringValue(customer.updated_at),
     archived_at: optionalString(customer.archived_at),
+    primary_location: recordValue(customer.primary_location)
+      ? normalizeProperty(recordValue(customer.primary_location) as CustomerResponseRecord)
+      : undefined,
   };
 }
 

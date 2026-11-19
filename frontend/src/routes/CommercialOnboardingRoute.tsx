@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, ArrowRight, Check, CircleHelp, LifeBuoy, RefreshCw, Sparkles } from "lucide-react";
 
-import { useAuth } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
 import { createMigrationSupportCase, getCommercialOnboardingEvidence, type CommercialException, type CommercialProgressItem } from "../api/commercialOnboarding";
 import { getOperatorApiError } from "../api/errors";
 import { useLiaReadiness } from "../hooks/useLia";
-import { loadCommercialOnboardingDraft, saveCommercialOnboardingDraft, type CommercialOnboardingDraft, type CommercialOnboardingStep } from "../onboarding/commercialOnboardingState";
+import { isCommercialOnboardingComplete, loadCommercialOnboardingDraft, saveCommercialOnboardingDraft, type CommercialOnboardingDraft, type CommercialOnboardingStep } from "../onboarding/commercialOnboardingState";
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select, Spinner, Textarea } from "../ui";
 
 const steps: Array<{ id: CommercialOnboardingStep; label: string }> = [
@@ -30,6 +30,8 @@ function ProgressGrid({ items }: { items: CommercialProgressItem[] }) {
 
 export function CommercialOnboardingRoute() {
   const { activeCompany, user } = useAuth();
+  const canAdminister = useHasPermission("COMPANY_ADMINISTER");
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const companyId = activeCompany?.id ?? "no-company";
   const [drafts, setDrafts] = useState<Record<string, CommercialOnboardingDraft>>({});
@@ -42,6 +44,7 @@ export function CommercialOnboardingRoute() {
   const evidence = useQuery({ queryKey: ["commercial-onboarding-evidence", companyId], queryFn: getCommercialOnboardingEvidence, enabled: companyId !== "no-company", retry: false });
   const lia = useLiaReadiness();
   const support = useMutation({ mutationFn: createMigrationSupportCase });
+  const explicitlyOpenedByAdministrator = canAdminister && searchParams.get("manage") === "1";
 
   useEffect(() => {
     if (companyId !== "no-company") saveCommercialOnboardingDraft(companyId, draft);
@@ -72,6 +75,9 @@ export function CommercialOnboardingRoute() {
   };
 
   if (!activeCompany) return <Alert variant="danger" title="Company unavailable">Choose an active Company before starting setup.</Alert>;
+  if (isCommercialOnboardingComplete(activeCompany.id) && !explicitlyOpenedByAdministrator) {
+    return <Navigate to="/command-center" replace />;
+  }
 
   return <div className="space-y-6">
     <header className="primary-work-panel rounded-2xl border-2 p-5 sm:p-7">

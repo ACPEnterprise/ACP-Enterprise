@@ -86,6 +86,28 @@ describe("application routing", () => {
     expect(screen.getByRole("link", { name: "Command Center" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("does not send an established tenant to commercial onboarding on login", async () => {
+    localStorage.setItem(
+      "twelvehats.commercial-onboarding.company-1",
+      JSON.stringify({ completed: false }),
+    );
+    const router = renderRoute("/", {
+      ...authenticatedContext,
+      activeCompany: {
+        id: "company-1",
+        code: "ACP",
+        name: "All County Plumbing",
+        membership_id: "membership-1",
+        default_branch_id: "branch-1",
+        has_all_branch_access: true,
+        branches: [{ id: "branch-1", code: "MAIN", name: "Main", is_primary: true }],
+      },
+    });
+
+    expect(await screen.findByText("Command Center route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/command-center");
+  });
+
   it("lands a field technician on My Day with only own-work navigation", async () => {
     const router = renderRoute("/", fieldTechnicianContext);
     expect(await screen.findByText("Technician route content")).toBeInTheDocument();
