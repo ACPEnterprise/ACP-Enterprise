@@ -161,20 +161,30 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         self, manifest_digest: str, package_digest: str
     ) -> OverlayExecutionReceipt | None:
         """Read a prior receipt before any new lineage bootstrap is attempted."""
-        masters = await self._session.scalars(
-            select(HcpMigrationMasterRun).where(
-                HcpMigrationMasterRun.package_digest == package_digest
+        if self._session.in_transaction():
+            raise ValueError("overlay replay lookup requires a clean session")
+        # Keep the replay probe in its own read transaction.  AsyncSession
+        # autobegins on SELECT; allowing that implicit transaction to escape
+        # would make transaction() reject the subsequent atomic admission.
+        async with self._session.begin():
+            masters = await self._session.scalars(
+                select(HcpMigrationMasterRun).where(
+                    HcpMigrationMasterRun.package_digest == package_digest
+                )
             )
-        )
-        for master in masters:
-            root = master.replay_state if isinstance(master.replay_state, dict) else {}
-            state = root.get(STATE_KEY)
-            receipts = state.get("receipts") if isinstance(state, dict) else None
-            value = (
-                receipts.get(manifest_digest) if isinstance(receipts, dict) else None
-            )
-            if value is not None:
-                return _receipt(value)
+            for master in masters:
+                root = (
+                    master.replay_state if isinstance(master.replay_state, dict) else {}
+                )
+                state = root.get(STATE_KEY)
+                receipts = state.get("receipts") if isinstance(state, dict) else None
+                value = (
+                    receipts.get(manifest_digest)
+                    if isinstance(receipts, dict)
+                    else None
+                )
+                if value is not None:
+                    return _receipt(value)
         return None
 
     async def source_state(self, key: OverlayKey) -> OverlaySourceState | None:
