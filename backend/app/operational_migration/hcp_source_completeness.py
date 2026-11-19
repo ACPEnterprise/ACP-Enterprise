@@ -88,12 +88,12 @@ def build_source_completeness(
     source_keys = [(row.domain, row.source_id) for row in source]
     if len(source_keys) != len(set(source_keys)):
         raise ValueError("sealed provider identities must be unique")
-    decisions = {
-        (row.key.domain, row.key.source_id): row for row in delta.decisions
-    }
+    decisions = {(row.key.domain, row.key.source_id): row for row in delta.decisions}
     extra = set(decisions) - set(source_keys)
     if extra:
-        raise ValueError("delta contains identities absent from sealed source inventory")
+        raise ValueError(
+            "delta contains identities absent from sealed source inventory"
+        )
 
     records: list[CompletenessRecord] = []
     unexplained_by_domain: Counter[str] = Counter()
