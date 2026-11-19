@@ -32,7 +32,11 @@ export function CommercialOnboardingRoute() {
   const { activeCompany, user } = useAuth();
   const navigate = useNavigate();
   const companyId = activeCompany?.id ?? "no-company";
-  const [draft, setDraft] = useState<CommercialOnboardingDraft>(() => loadCommercialOnboardingDraft(companyId, activeCompany?.name ?? ""));
+  const [drafts, setDrafts] = useState<Record<string, CommercialOnboardingDraft>>({});
+  const draft = useMemo(
+    () => drafts[companyId] ?? loadCommercialOnboardingDraft(companyId, activeCompany?.name ?? ""),
+    [activeCompany?.name, companyId, drafts],
+  );
   const [supportMessage, setSupportMessage] = useState("");
   const [supportSent, setSupportSent] = useState(false);
   const evidence = useQuery({ queryKey: ["commercial-onboarding-evidence", companyId], queryFn: getCommercialOnboardingEvidence, enabled: companyId !== "no-company", retry: false });
@@ -40,14 +44,13 @@ export function CommercialOnboardingRoute() {
   const support = useMutation({ mutationFn: createMigrationSupportCase });
 
   useEffect(() => {
-    setDraft(loadCommercialOnboardingDraft(companyId, activeCompany?.name ?? ""));
-  }, [activeCompany?.name, companyId]);
-
-  useEffect(() => {
     if (companyId !== "no-company") saveCommercialOnboardingDraft(companyId, draft);
   }, [companyId, draft]);
 
-  const update = (changes: Partial<CommercialOnboardingDraft>) => setDraft((current) => ({ ...current, ...changes }));
+  const update = (changes: Partial<CommercialOnboardingDraft>) => setDrafts((current) => {
+    const currentDraft = current[companyId] ?? loadCommercialOnboardingDraft(companyId, activeCompany?.name ?? "");
+    return { ...current, [companyId]: { ...currentDraft, ...changes } };
+  });
   const stepIndex = steps.findIndex((step) => step.id === draft.step);
   const progress = evidence.data;
   const exceptions = useMemo(() => progress?.exceptions ?? [], [progress]);
