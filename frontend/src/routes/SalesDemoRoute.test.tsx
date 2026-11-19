@@ -9,7 +9,6 @@ vi.mock("../hooks/useDemo", () => ({
     { code: "new_service_call", title: "New Service Call", position: 1, guided_steps: [{ order: 1, action: "Create Customer" }] },
     { code: "owner_morning_review", title: "Owner Morning Review", position: 8, guided_steps: [{ order: 1, action: "Open Command Center" }] },
   ] }),
-  useDemoSignals: () => ({ data: [{ source: "BEACON", title: "Overdue AR", explanation: "One real demo invoice is overdue.", recommendation: "Open the invoice.", scenario_code: "overdue_ar" }] }),
   useResetDemo: () => ({ isPending: false, isSuccess: false, isError: false, mutateAsync: vi.fn() }),
   useDemoFeedback: () => ({ isPending: false, isSuccess: false, mutate: vi.fn() }),
 }));
@@ -20,7 +19,9 @@ describe.each([[390, "mobile"], [820, "tablet"], [1440, "desktop"]])("Sales Demo
     render(<MemoryRouter><SalesDemoRoute /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Sales training" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Start scenario" })[0]).toHaveAttribute("href", "/customers");
-    expect(screen.getByText("One real demo invoice is overdue.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Beacon" })).toHaveAttribute("href", "/command-center");
+    expect(screen.getByRole("link", { name: "Open Luminary" })).toHaveAttribute("href", "/luminary");
+    expect(screen.getByRole("link", { name: "Open LIA" })).toHaveAttribute("href", "/lia");
     expect(screen.getByRole("button", { name: "Reset Demo Company" })).toBeInTheDocument();
   });
 });

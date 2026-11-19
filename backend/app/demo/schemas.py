@@ -22,16 +22,6 @@ class DemoScenarioResponse(BaseModel):
     record_refs: dict[str, object]
 
 
-class DemoSignalResponse(BaseModel):
-    source: str
-    severity: str
-    title: str
-    explanation: str
-    recommendation: str
-    scenario_code: str
-    record_refs: dict[str, object]
-
-
 class DemoFeedbackCreate(BaseModel):
     category: str
     page: str = Field(min_length=1, max_length=240)
