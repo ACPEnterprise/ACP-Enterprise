@@ -18,6 +18,7 @@ from uuid import UUID
 from app import main as application_model_registry  # noqa: F401
 from app.customer_migration.housecall_pro_adapter import (
     AdaptedCustomerRecord,
+    CustomerTransformationReport,
     HousecallProCustomerExportAdapter,
 )
 from app.customer_migration.models import (
@@ -43,11 +44,36 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 SOURCE_SYSTEM = "housecall_pro"
 CONTRACT = "hcp-customer-roster-correction/v1"
+EXPECTED_SOURCE_ROWS = 5464
+READ_ONLY_TRANSACTION = "SET TRANSACTION READ ONLY"
+TENANT_DEFECT_NAME = "all county plumbing and leak"
+
+
+def _load_source(
+    args: argparse.Namespace,
+) -> tuple[str, CustomerTransformationReport, dict[str, AdaptedCustomerRecord]]:
+    source = args.source.read_bytes()
+    digest = hashlib.sha256(source).hexdigest()
+    if digest != args.sha256:
+        raise ValueError("Customer CSV digest mismatch")
+    report = HousecallProCustomerExportAdapter().transform(
+        source, expected_source_sha256=args.sha256
+    )
+    if (
+        report.source != EXPECTED_SOURCE_ROWS
+        or report.accepted + report.rejected + report.duplicate != report.source
+        or len(report.records) != report.accepted
+    ):
+        raise ValueError("Customer CSV row accounting mismatch")
+    records = {item.source_id: item for item in report.records}
+    if len(records) != len(report.records):
+        raise ValueError("Customer CSV contains duplicate accepted provider identities")
+    return digest, report, records
 
 
 def _changed(target: object, field: str, value: object) -> bool:
@@ -75,10 +101,14 @@ async def _context(
         raise ValueError("isolated acceptance Company authority is incomplete")
     if branch is None:
         raise ValueError("isolated acceptance Branch authority is incomplete")
+    if branch.company_id != company_id:
+        raise ValueError("isolated acceptance Branch authority is cross-tenant")
     if actor is None:
         raise ValueError("isolated acceptance actor authority is incomplete")
     if membership is None:
         raise ValueError("isolated acceptance membership authority is incomplete")
+    if membership.status != "active":
+        raise ValueError("isolated acceptance membership authority is inactive")
     if permission is None:
         raise ValueError("isolated acceptance authority is incomplete")
     return AuthorizationContext(
@@ -206,19 +236,7 @@ async def _apply_locations(
 
 
 async def apply(args: argparse.Namespace) -> dict[str, object]:
-    source = args.source.read_bytes()
-    digest = hashlib.sha256(source).hexdigest()
-    if digest != args.sha256:
-        raise ValueError("Customer CSV digest mismatch")
-    report = HousecallProCustomerExportAdapter().transform(
-        source, expected_source_sha256=args.sha256
-    )
-    if (
-        report.source != 5464
-        or report.accepted + report.rejected + report.duplicate != report.source
-    ):
-        raise ValueError("Customer CSV row accounting mismatch")
-    records = {item.source_id: item for item in report.records}
+    digest, report, records = _load_source(args)
     counts: Counter[str] = Counter()
     service = CustomerService()
     async with AsyncSessionFactory() as session, session.begin():
@@ -375,6 +393,192 @@ async def apply(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _newer_native_source_ids(
+    *,
+    identities: tuple[CustomerSourceIdentity, ...],
+    events: tuple[BusinessEvent, ...],
+) -> set[str]:
+    """Return provider identities with a native event after that binding."""
+    identities_by_customer: dict[UUID, list[CustomerSourceIdentity]] = {}
+    for identity in identities:
+        identities_by_customer.setdefault(identity.customer_id, []).append(identity)
+
+    newer_source_ids: set[str] = set()
+    for event in events:
+        if event.entity_id is None:
+            continue
+        for identity in identities_by_customer.get(event.entity_id, ()):
+            if event.occurred_at > identity.created_at:
+                newer_source_ids.add(identity.source_customer_id)
+    return newer_source_ids
+
+
+def _preflight_counts(
+    *,
+    records: dict[str, AdaptedCustomerRecord],
+    identities: tuple[CustomerSourceIdentity, ...],
+    customers: dict[UUID, Customer],
+    newer_native_source_ids: set[str],
+    company_id: UUID,
+) -> Counter[str]:
+    """Classify exact provider bindings without modifying ORM objects."""
+    counts: Counter[str] = Counter(
+        {
+            "cross_tenant_native_records": 0,
+            "missing_native_records": 0,
+            "newer_native_change_holds": 0,
+            "provider_identities_absent_from_csv": 0,
+            "provider_identities_total": 0,
+            "source_bound": 0,
+            "source_bound_cross_tenant_native_records": 0,
+            "source_bound_eligible_for_update": 0,
+            "source_bound_missing_native_records": 0,
+            "source_unbound": 0,
+            "tenant_defect_overrides": 0,
+            "tenant_defect_records": 0,
+        }
+    )
+    identities_by_source = {
+        identity.source_customer_id: identity for identity in identities
+    }
+    if len(identities_by_source) != len(identities):
+        raise ValueError("Customer provider bindings are not unique")
+
+    source_ids = set(records)
+    bound_source_ids = source_ids.intersection(identities_by_source)
+    counts["provider_identities_total"] = len(identities)
+    counts["source_bound"] = len(bound_source_ids)
+    counts["source_unbound"] = len(source_ids - bound_source_ids)
+    counts["provider_identities_absent_from_csv"] = len(
+        set(identities_by_source) - source_ids
+    )
+
+    for identity in identities:
+        customer = customers.get(identity.customer_id)
+        is_source_bound = identity.source_customer_id in records
+        if customer is None:
+            counts["missing_native_records"] += 1
+            if is_source_bound:
+                counts["source_bound_missing_native_records"] += 1
+            continue
+        if customer.company_id != company_id:
+            counts["cross_tenant_native_records"] += 1
+            if is_source_bound:
+                counts["source_bound_cross_tenant_native_records"] += 1
+            continue
+        if not is_source_bound:
+            continue
+
+        record = records[identity.source_customer_id]
+        tenant_defect = (
+            customer.display_name.strip().lower() == TENANT_DEFECT_NAME
+            and record.customer.display_name.strip().lower() != TENANT_DEFECT_NAME
+        )
+        if tenant_defect:
+            counts["tenant_defect_records"] += 1
+        if identity.source_customer_id in newer_native_source_ids:
+            if tenant_defect:
+                counts["tenant_defect_overrides"] += 1
+            else:
+                counts["newer_native_change_holds"] += 1
+                continue
+        counts["source_bound_eligible_for_update"] += 1
+
+    if counts["source_bound"] + counts["source_unbound"] != len(records):
+        raise ValueError("Customer provider binding accounting mismatch")
+    classified_bound = (
+        counts["source_bound_eligible_for_update"]
+        + counts["newer_native_change_holds"]
+        + counts["source_bound_missing_native_records"]
+        + counts["source_bound_cross_tenant_native_records"]
+    )
+    if classified_bound != counts["source_bound"]:
+        raise ValueError("Customer native binding accounting mismatch")
+    return counts
+
+
+async def preflight(args: argparse.Namespace) -> dict[str, object]:
+    """Inspect correction authority and exact bindings in a read-only transaction."""
+    digest, report, records = _load_source(args)
+    async with AsyncSessionFactory() as session:
+        await session.execute(text(READ_ONLY_TRANSACTION))
+        try:
+            await _context(
+                session,
+                company_id=args.company_id,
+                branch_id=args.branch_id,
+                actor_id=args.actor_id,
+            )
+            identities = tuple(
+                (
+                    await session.scalars(
+                        select(CustomerSourceIdentity).where(
+                            CustomerSourceIdentity.company_id == args.company_id,
+                            CustomerSourceIdentity.source_system == SOURCE_SYSTEM,
+                        )
+                    )
+                ).all()
+            )
+            customer_ids = {identity.customer_id for identity in identities}
+            customers: dict[UUID, Customer] = {}
+            newer_native_source_ids: set[str] = set()
+            if customer_ids:
+                customers = {
+                    customer.id: customer
+                    for customer in (
+                        await session.scalars(
+                            select(Customer).where(Customer.id.in_(customer_ids))
+                        )
+                    ).all()
+                }
+                events = tuple(
+                    (
+                        await session.scalars(
+                            select(BusinessEvent).where(
+                                BusinessEvent.company_id == args.company_id,
+                                BusinessEvent.entity_type == "customer",
+                                BusinessEvent.event_type == "customer.updated",
+                                BusinessEvent.entity_id.in_(customer_ids),
+                            )
+                        )
+                    ).all()
+                )
+                newer_native_source_ids = _newer_native_source_ids(
+                    identities=identities,
+                    events=events,
+                )
+            counts = _preflight_counts(
+                records=records,
+                identities=identities,
+                customers=customers,
+                newer_native_source_ids=newer_native_source_ids,
+                company_id=args.company_id,
+            )
+        finally:
+            await session.rollback()
+    return {
+        "contract": CONTRACT,
+        "mode": "preflight",
+        "read_only": True,
+        "source_sha256": digest,
+        "transformation_sha256": report.transformation_sha256,
+        "source_rows": report.source,
+        "transformation_counts": {
+            "accepted": report.accepted,
+            "duplicate": report.duplicate,
+            "rejected": report.rejected,
+        },
+        "authority": {
+            "actor_id": str(args.actor_id),
+            "branch_id": str(args.branch_id),
+            "company_id": str(args.company_id),
+            "validated": True,
+        },
+        "counts": dict(sorted(counts.items())),
+        "child_exceptions": len(report.child_exceptions),
+    }
+
+
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser()
     value.add_argument("--source", type=Path, required=True)
@@ -382,12 +586,19 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--company-id", type=UUID, required=True)
     value.add_argument("--branch-id", type=UUID, required=True)
     value.add_argument("--actor-id", type=UUID, required=True)
+    value.add_argument(
+        "--preflight",
+        action="store_true",
+        help="validate authority and exact provider bindings without writes",
+    )
     return value
 
 
 async def main_async() -> None:
     try:
-        print(json.dumps(await apply(parser().parse_args()), sort_keys=True))
+        args = parser().parse_args()
+        result = await preflight(args) if args.preflight else await apply(args)
+        print(json.dumps(result, sort_keys=True))
     finally:
         await engine.dispose()
 
