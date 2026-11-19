@@ -15,6 +15,8 @@ x-application-runtime: &application-runtime
   secrets:
     - source: release_qualification_application_password
       target: application-password
+    - source: release_qualification_postgres_password
+      target: postgres-password
   read_only: true
   tmpfs:
     - /tmp
@@ -32,7 +34,11 @@ services:
     environment:
       POSTGRES_DB: release_qualification
       POSTGRES_USER: release_qualification
-      POSTGRES_PASSWORD: release-qualification-disposable-only
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+      POSTGRES_INITDB_ARGS: --encoding=UTF8
+    secrets:
+      - source: release_qualification_postgres_password
+        target: postgres-password
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U release_qualification -d release_qualification"]
       interval: 2s
@@ -50,7 +56,11 @@ services:
     environment:
       POSTGRES_DB: acp_resilience_restore_qualification
       POSTGRES_USER: release_qualification
-      POSTGRES_PASSWORD: release-qualification-disposable-only
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+      POSTGRES_INITDB_ARGS: --encoding=UTF8
+    secrets:
+      - source: release_qualification_postgres_password
+        target: postgres-password
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U release_qualification -d acp_resilience_restore_qualification"]
       interval: 2s
@@ -88,18 +98,14 @@ services:
         condition: service_healthy
     environment:
       <<: *qualification-environment
-      DATABASE_URL: postgresql+asyncpg://release_qualification:release-qualification-disposable-only@postgres:5432/release_qualification
+      DATABASE_PASSWORD_FILE: /run/secrets/postgres-password
     command:
       - /bin/sh
       - -ec
       - |
-        python -c "import os, psycopg; connection = psycopg.connect(os.environ['DATABASE_URL'].replace('+asyncpg', '')); version = int(connection.execute('SHOW server_version_num').fetchone()[0]); connection.close(); assert 160000 <= version < 170000, version; print(f'POSTGRES_VERSION_NUM={version}')"
-        heads="$$(alembic heads)"
-        test "$$(printf '%s\n' "$$heads" | sed '/^[[:space:]]*$$/d' | wc -l | tr -d ' ')" = 1
-        printf 'ALEMBIC_HEAD=%s\n' "$$(printf '%s\n' "$$heads" | awk '{print $$1}')"
-        alembic upgrade head
-        alembic current | grep -q '(head)'
-        alembic check
+        database_password="$$(cat "$$DATABASE_PASSWORD_FILE")"
+        export DATABASE_URL="postgresql+asyncpg://release_qualification:$${database_password}@postgres:5432/release_qualification"
+        exec python -m scripts.qualify_release_database
 
   readiness:
     <<: *application-runtime
@@ -111,8 +117,14 @@ services:
         condition: service_healthy
     environment:
       <<: *qualification-environment
-      DATABASE_URL: postgresql+asyncpg://release_qualification:release-qualification-disposable-only@restore-postgres:5432/acp_resilience_restore_qualification
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-access-log"]
+      DATABASE_PASSWORD_FILE: /run/secrets/postgres-password
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        database_password="$$(cat "$$DATABASE_PASSWORD_FILE")"
+        export DATABASE_URL="postgresql+asyncpg://release_qualification:$${database_password}@restore-postgres:5432/acp_resilience_restore_qualification"
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers --no-access-log
     expose:
       - "8000"
     healthcheck:
@@ -129,6 +141,8 @@ secrets:
     file: ${RELEASE_QUALIFICATION_SECRET_DIR:?Set the disposable release qualification secret directory}/application-password
   release_qualification_health_password:
     file: ${RELEASE_QUALIFICATION_SECRET_DIR:?Set the disposable release qualification secret directory}/health-password
+  release_qualification_postgres_password:
+    file: ${RELEASE_QUALIFICATION_SECRET_DIR:?Set the disposable release qualification secret directory}/postgres-password
 
 volumes:
   qualification-postgres:

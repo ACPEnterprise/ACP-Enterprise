@@ -81,9 +81,7 @@ def test_redis_qualification_uses_production_acl_and_secret_indirection() -> Non
         "/run/secrets/"
     )
     assert "REDIS_PASSWORD" not in qualification["environment"]
-    assert compose["secrets"]["redis_qualification_acl"]["file"].endswith(
-        "/users.acl"
-    )
+    assert compose["secrets"]["redis_qualification_acl"]["file"].endswith("/users.acl")
 
 
 def test_release_qualification_has_fresh_restore_and_readiness_targets() -> None:
@@ -93,6 +91,13 @@ def test_release_qualification_has_fresh_restore_and_readiness_targets() -> None
     assert services["postgres"]["image"].startswith("postgres:16-alpine@sha256:")
     assert services["restore-postgres"]["image"] == services["postgres"]["image"]
     assert services["postgres"]["volumes"] != services["restore-postgres"]["volumes"]
+    for service_name in ("postgres", "restore-postgres"):
+        service = services[service_name]
+        assert service["environment"]["POSTGRES_PASSWORD_FILE"] == (
+            "/run/secrets/postgres-password"
+        )
+        assert service["environment"]["POSTGRES_INITDB_ARGS"] == "--encoding=UTF8"
+        assert "POSTGRES_PASSWORD" not in service["environment"]
     assert services["readiness"]["depends_on"]["restore-postgres"]["condition"] == (
         "service_healthy"
     )
