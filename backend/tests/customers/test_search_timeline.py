@@ -174,7 +174,7 @@ async def test_enterprise_customer_search_filter_sort_and_pagination(
 
 
 @pytest.mark.asyncio
-async def test_archived_customer_search_is_explicit_and_detail_remains_restorable(
+async def test_archived_customer_search_is_explicit_detail_is_hidden_and_timeline_remains(
     search_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
 ) -> None:
     _, factory = search_database
@@ -205,8 +205,7 @@ async def test_archived_customer_search_is_explicit_and_detail_remains_restorabl
     assert [item["id"] for item in archived_only.json()["items"]] == [customer["id"]]
     assert archived_only.json()["items"][0]["archived_at"] is not None
     assert [item["id"] for item in all_records.json()["items"]] == [customer["id"]]
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["archived_at"] is not None
+    assert detail.status_code == 404, detail.text
     assert timeline.status_code == 200, timeline.text
     assert any(
         item["event_type"] == "customer.archived" for item in timeline.json()["items"]
