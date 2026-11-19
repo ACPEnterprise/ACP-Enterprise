@@ -105,13 +105,25 @@ def backup(args: argparse.Namespace) -> None:
 
 def load_verified(backup_path: Path) -> dict[str, object]:
     manifest_path = backup_path.with_suffix(backup_path.suffix + ".manifest.json")
+    if not backup_path.is_file():
+        raise ValueError("Backup file is missing.")
+    if not manifest_path.is_file():
+        raise ValueError("Backup manifest is missing.")
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("contract_version") != "platform-resilience.backup.v1":
         raise ValueError("Unsupported backup manifest contract.")
+    if manifest.get("format") != "postgresql-custom":
+        raise ValueError("Backup manifest format is not PostgreSQL custom.")
+    if manifest.get("backup_file") != backup_path.name:
+        raise ValueError("Backup filename does not match its manifest.")
+    if manifest.get("size_bytes") != backup_path.stat().st_size:
+        raise ValueError("Backup size does not match its manifest.")
     if manifest.get("sha256") != sha256(backup_path):
         raise ValueError("Backup checksum does not match its manifest.")
     if stat.S_IMODE(backup_path.stat().st_mode) & 0o077:
         raise ValueError("Backup permissions are not restrictive.")
+    if stat.S_IMODE(manifest_path.stat().st_mode) & 0o077:
+        raise ValueError("Backup manifest permissions are not restrictive.")
     run(["pg_restore", "--list", str(backup_path)])
     return manifest
 
@@ -138,6 +150,25 @@ def restore(args: argparse.Namespace) -> None:
     if args.expected_source_identity != manifest["database_identity"]:
         raise ValueError("Backup database identity does not match the approved source.")
     connection, environment = database_parts(args.database_url)
+    relation_count_query = (
+        "SELECT count(*) FROM pg_class c JOIN pg_namespace n "
+        "ON n.oid = c.relnamespace "
+        "WHERE n.nspname NOT IN ('pg_catalog','information_schema') "
+        "AND c.relkind IN ('r','p','v','m','f')"
+    )
+    existing_relations = run(
+        [
+            "psql",
+            *connection,
+            "--tuples-only",
+            "--no-align",
+            "--command",
+            relation_count_query,
+        ],
+        environment=environment,
+    )
+    if existing_relations != "0":
+        raise ValueError("Restore target is not empty; refusing to overwrite it.")
     run(
         [
             "pg_restore",
