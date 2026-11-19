@@ -3,7 +3,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router";
 import { ArrowLeft, ArrowRight, Check, CircleHelp, LifeBuoy, RefreshCw, Sparkles } from "lucide-react";
 
-import { useAuth } from "../auth";
+import { useAuth, type AuthenticatedUser } from "../auth";
+import type { AccessibleCompany } from "../auth/companyTypes";
 import { createMigrationSupportCase, getCommercialOnboardingEvidence, type CommercialException, type CommercialProgressItem } from "../api/commercialOnboarding";
 import { getOperatorApiError } from "../api/errors";
 import { useLiaReadiness } from "../hooks/useLia";
@@ -30,9 +31,14 @@ function ProgressGrid({ items }: { items: CommercialProgressItem[] }) {
 
 export function CommercialOnboardingRoute() {
   const { activeCompany, user } = useAuth();
+  if (!activeCompany) return <Alert variant="danger" title="Company unavailable">Choose an active Company before starting setup.</Alert>;
+  return <CommercialOnboardingCompanyRoute key={`${activeCompany.id}:${activeCompany.name}`} activeCompany={activeCompany} user={user} />;
+}
+
+function CommercialOnboardingCompanyRoute({ activeCompany, user }: { activeCompany: AccessibleCompany; user: AuthenticatedUser | null }) {
   const navigate = useNavigate();
-  const companyId = activeCompany?.id ?? "no-company";
-  const [draft, setDraft] = useState<CommercialOnboardingDraft>(() => loadCommercialOnboardingDraft(companyId, activeCompany?.name ?? ""));
+  const companyId = activeCompany.id;
+  const [draft, setDraft] = useState<CommercialOnboardingDraft>(() => loadCommercialOnboardingDraft(companyId, activeCompany.name));
   const [supportMessage, setSupportMessage] = useState("");
   const [supportSent, setSupportSent] = useState(false);
   const evidence = useQuery({ queryKey: ["commercial-onboarding-evidence", companyId], queryFn: getCommercialOnboardingEvidence, enabled: companyId !== "no-company", retry: false });
@@ -40,11 +46,7 @@ export function CommercialOnboardingRoute() {
   const support = useMutation({ mutationFn: createMigrationSupportCase });
 
   useEffect(() => {
-    setDraft(loadCommercialOnboardingDraft(companyId, activeCompany?.name ?? ""));
-  }, [activeCompany?.name, companyId]);
-
-  useEffect(() => {
-    if (companyId !== "no-company") saveCommercialOnboardingDraft(companyId, draft);
+    saveCommercialOnboardingDraft(companyId, draft);
   }, [companyId, draft]);
 
   const update = (changes: Partial<CommercialOnboardingDraft>) => setDraft((current) => ({ ...current, ...changes }));
@@ -67,8 +69,6 @@ export function CommercialOnboardingRoute() {
       { onSuccess: () => setSupportSent(true) },
     );
   };
-
-  if (!activeCompany) return <Alert variant="danger" title="Company unavailable">Choose an active Company before starting setup.</Alert>;
 
   return <div className="space-y-6">
     <header className="primary-work-panel rounded-2xl border-2 p-5 sm:p-7">

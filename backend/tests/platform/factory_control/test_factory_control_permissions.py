@@ -37,6 +37,7 @@ def test_human_read_and_controller_mutation_dependencies_are_split():
         )
     for path in (
         "/api/v1/platform/factory-control/internal/events",
+        "/api/v1/platform/factory-control/internal/live-sync",
         "/api/v1/platform/factory-control/internal/sync",
         "/api/v1/platform/factory-control/internal/snapshots",
     ):
