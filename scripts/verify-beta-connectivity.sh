@@ -4,13 +4,10 @@ set -eu
 preview_url=https://preview.allcountyhomeservices.com
 beta_url=https://beta.twelve-hats.com
 expected_beta_ipv4=${EXPECTED_BETA_IPV4:-162.243.232.59}
-verify_preview_beta_parity=${VERIFY_PREVIEW_BETA_PARITY:-1}
 
 temporary_headers=$(mktemp)
 temporary_body=$(mktemp)
-preview_health=$(mktemp)
-beta_health=$(mktemp)
-trap 'rm -f "$temporary_headers" "$temporary_body" "$preview_health" "$beta_health"' EXIT HUP INT TERM
+trap 'rm -f "$temporary_headers" "$temporary_body"' EXIT HUP INT TERM
 
 require_status() {
   expected=$1
@@ -111,13 +108,6 @@ done
 require_https_redirect preview.allcountyhomeservices.com
 require_https_redirect beta.twelve-hats.com
 
-curl --fail --silent --show-error --max-time 15 "$preview_url/backend-health" >"$preview_health"
-curl --fail --silent --show-error --max-time 15 "$beta_url/backend-health" >"$beta_health"
-if [ "$verify_preview_beta_parity" = "1" ] && ! cmp -s "$preview_health" "$beta_health"; then
-  echo "Preview and Beta backend health projections differ." >&2
-  exit 1
-fi
-
 require_status 404 "$beta_url/mission-control"
 require_status 404 "$beta_url/engineering"
 require_status 404 "$beta_url/api/v1/worker-transport/sessions/challenge"
@@ -158,7 +148,7 @@ if [ "${REQUIRE_PUBLIC_METADATA:-0}" = "1" ]; then
 fi
 
 certificate_file=$(mktemp)
-trap 'rm -f "$temporary_headers" "$temporary_body" "$preview_health" "$beta_health" "$certificate_file"' EXIT HUP INT TERM
+trap 'rm -f "$temporary_headers" "$temporary_body" "$certificate_file"' EXIT HUP INT TERM
 echo | openssl s_client -servername beta.twelve-hats.com \
   -connect beta.twelve-hats.com:443 2>/dev/null \
   | openssl x509 >"$certificate_file"

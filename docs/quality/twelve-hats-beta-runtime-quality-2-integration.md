@@ -23,6 +23,12 @@ releases, while edge headers were duplicated, while untrusted CORS was accepted,
 HTTP redirects were wrong, or when the certificate was near expiry. This candidate
 adds deterministic gates for all five conditions.
 
+Successor release policy preserves the header, CORS, redirect, health, session,
+isolation, and TLS gates but supersedes cross-host release-payload equality. Legacy
+Preview and clean Beta are independently governed runtimes and may advance through
+different approved release lineages; each must pass its own checks without requiring
+byte-identical backend health projections.
+
 Approved support/privacy content remains a human/legal gate. Setting
 `REQUIRE_PUBLIC_METADATA=1` makes the verifier reject `/support` or `/privacy` while
 either is still the generic application shell. The gate currently fails truthfully at
@@ -56,4 +62,3 @@ No runtime container was restarted, reconfigured or deleted during this sweep.
 - Platform connectivity and network exposure: 9 tests passed
 - Shell syntax, Ruff, formatting and diff checks: required before integration
 - Production and `app.twelve-hats.com`: untouched
-

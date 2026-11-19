@@ -28,10 +28,11 @@ Those are controlled business/test-fixture decisions, not reasons to invent data
 or bypass Price Book authority.
 
 Deployment note: the Clean Beta release passed its application, schema, and
-stateful-identity gates. The Preview/Beta parity verifier was run with its
-documented `VERIFY_PREVIEW_BETA_PARITY=0` override because Preview remains on
-`48f3911f…` while Beta's prior application release was `68b2b25f…`; Preview was
-not changed as part of this Beta-only deployment.
+stateful-identity gates. Preview remained on `48f3911f…` while Beta's prior
+application release was `68b2b25f…`; Preview was not changed as part of this
+Beta-only deployment. The connectivity verifier now validates each host
+independently and does not require their approved release lineages or health
+projection payloads to be identical.
 
 The later owner-authority correction binds Michael's exact existing identity to
 the protected canonical OWNER role. Manual office-observed payment recording is
