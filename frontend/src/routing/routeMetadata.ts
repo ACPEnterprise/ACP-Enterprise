@@ -412,6 +412,15 @@ export const operatorGuideHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const salesDemoHandle = {
+  workspace: {
+    pageTitle: "Sales training",
+    breadcrumbs: [{ label: "Sales training" }],
+    helpTopic: "sales-demo",
+    aiContext: "sales-demo",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const ownerOperationsHandle = {
   workspace: {
     pageTitle: "Owner Operations",

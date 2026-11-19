@@ -69,6 +69,33 @@ ADDRESS_KEYS = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class HcpCustomerName:
+    """Identity derived only from fields owned by the HCP customer.
+
+    ``company_name`` is the provider/tenant label and is intentionally never
+    eligible to become a customer name.
+    """
+
+    display_name: str
+    legal_name: str | None
+    customer_type: CustomerType
+
+
+def hcp_customer_name(payload: Mapping[str, Any]) -> HcpCustomerName | None:
+    first = str(payload.get("first_name") or "").strip()
+    last = str(payload.get("last_name") or "").strip()
+    company = str(payload.get("company") or "").strip()
+    if str(payload.get("kind") or "").strip().lower() == "business":
+        if not company:
+            return None
+        return HcpCustomerName(company, company, CustomerType.COMMERCIAL)
+    display_name = " ".join(value for value in (first, last) if value)
+    if not display_name:
+        return None
+    return HcpCustomerName(display_name, None, CustomerType.RESIDENTIAL)
+
+
 def canonical_sha256(value: object) -> str:
     def normalize(item: object) -> object:
         if is_dataclass(item) and not isinstance(item, type):
@@ -266,10 +293,7 @@ def build_hybrid_admission(
                     if assertions[0].payload.get(k) != assertions[1].payload.get(k)
                 )
             )
-        has_name = any(
-            isinstance(payload.get(key), str) and payload[key].strip()
-            for key in ("company_name", "first_name", "last_name")
-        )
+        has_name = hcp_customer_name(payload) is not None
         outcome = (
             AdmissionOutcome.PERSISTABLE
             if has_name
@@ -418,16 +442,13 @@ def build_reviewed_customer_output(
         )
         first = str(payload.get("first_name") or "").strip()
         last = str(payload.get("last_name") or "").strip()
-        company = str(payload.get("company_name") or "").strip()
-        display_name = company or " ".join(x for x in (first, last) if x)
+        name = hcp_customer_name(payload)
+        if name is None:  # protected by the admission outcome
+            raise ValueError("persistable source Customer has no customer-owned name")
         customer = CustomerCreate(
-            customer_type=(
-                CustomerType.COMMERCIAL
-                if payload.get("kind") == "business"
-                else CustomerType.RESIDENTIAL
-            ),
-            display_name=display_name,
-            legal_name=company or None,
+            customer_type=name.customer_type,
+            display_name=name.display_name,
+            legal_name=name.legal_name,
             marketing_source=payload.get("lead_source"),
             notes=payload.get("notes"),
             status=CustomerStatus.ACTIVE,

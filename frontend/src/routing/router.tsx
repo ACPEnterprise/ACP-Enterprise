@@ -50,6 +50,7 @@ import {
   technicianHandle,
   workdayHandle,
   workforceHandle,
+  salesDemoHandle,
 } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 import { RouteLoading } from "./RouteLoading";
@@ -102,6 +103,11 @@ export const appRoutes: RouteObject[] = [
             lazy: async () => ({
               Component: (await import("../routes/CommercialOnboardingRoute")).CommercialOnboardingRoute,
             }),
+          },
+          {
+            path: "sales-demo",
+            handle: salesDemoHandle,
+            lazy: async () => ({ Component: (await import("../routes/SalesDemoRoute")).SalesDemoRoute }),
           },
           {
             path: "account/security",

@@ -24,6 +24,7 @@ from app.customer_migration.population_router import (
 from app.customers.router import router as customers_router
 from app.data_quality.router import router as data_quality_router
 from app.database.session import AsyncSessionFactory, engine
+from app.demo.router import router as demo_router
 from app.dispatch.router import router as dispatch_router
 from app.employee_operations.router import router as employee_operations_router
 from app.engineering_capacity.router import router as engineering_capacity_router
@@ -193,6 +194,7 @@ app.include_router(customers_router)
 app.include_router(pipeline_router)
 app.include_router(marketing_router)
 app.include_router(data_quality_router)
+app.include_router(demo_router)
 app.include_router(location_identity_router)
 app.include_router(customer_population_router)
 app.include_router(auth_router)

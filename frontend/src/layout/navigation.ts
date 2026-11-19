@@ -29,11 +29,20 @@ import {
   ScrollText,
   Users,
   BadgeCheck,
+  Presentation,
 } from "lucide-react";
 
 import type { NavigationGroup, NavigationItem } from "./types";
 
 export const navigationCatalog = [
+  {
+    id: "sales-demo",
+    label: "Start Demo",
+    path: "/sales-demo",
+    icon: Presentation,
+    availability: "available",
+    requiredPermission: "COMPANY_CUSTOMER_MANAGE",
+  },
   {
     id: "lia",
     label: "Ask LIA",
@@ -405,6 +414,7 @@ export const navigationGroups = [
     id: "operations",
     label: "Operations",
     items: [
+      item("sales-demo"),
       item("customers"),
       item("pipeline"),
       item("service-agreements"),
