@@ -63,9 +63,9 @@ def test_450_contract_is_limited_to_verified_header_differences() -> None:
     assert phone_2b.address_group_count == extended.address_group_count
 
 
-def test_450_contract_preserves_do_not_service_as_unmapped_evidence() -> None:
+def test_450_contract_preserves_and_applies_do_not_service() -> None:
     row = base_row()
-    row["Do Not Service"] = "synthetic-source-value"
+    row["Do Not Service"] = "true"
     raw = source_bytes(contract_index=2, rows=[row])
 
     report = adapter().transform(
@@ -74,10 +74,42 @@ def test_450_contract_preserves_do_not_service_as_unmapped_evidence() -> None:
 
     assert report.schema_version == "housecall_pro_customer_450_v1"
     assert report.accepted == 1
-    assert report.records[0].customer.status == CustomerStatus.ACTIVE
+    assert report.records[0].customer.status == CustomerStatus.INACTIVE
     assert report.records[0].unmapped_fields == {
-        "Do Not Service": "synthetic-source-value"
+        "Do Not Service": "true"
     }
+
+
+def test_type_specific_name_precedes_display_name_with_validated_fallback() -> None:
+    person = base_row(source_id="person") | {
+        "First Name": "Actual",
+        "Last Name": "Person",
+        "Display Name": "Stale Display",
+        "Do Not Service": "false",
+    }
+    business = base_row(source_id="business") | {
+        "Customer Type": "business",
+        "Company": "Actual Business LLC",
+        "Display Name": "Stale Business Display",
+        "Do Not Service": "false",
+    }
+    fallback = base_row(source_id="fallback") | {
+        "First Name": "",
+        "Last Name": "",
+        "Display Name": "Genuine Display Fallback",
+        "Do Not Service": "false",
+    }
+    raw = source_bytes(contract_index=2, rows=[person, business, fallback])
+
+    report = adapter().transform(
+        raw, expected_source_sha256=hashlib.sha256(raw).hexdigest()
+    )
+
+    assert [row.customer.display_name for row in report.records] == [
+        "Actual Person",
+        "Actual Business LLC",
+        "Genuine Display Fallback",
+    ]
 
 
 def test_unknown_columns_fail_closed() -> None:
