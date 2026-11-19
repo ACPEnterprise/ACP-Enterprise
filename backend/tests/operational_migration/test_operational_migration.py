@@ -972,9 +972,30 @@ async def test_financial_dry_run_import_rerun_and_reconciliation(
     ) == (9, 3, 1, 3, 2)
     assert len(updates) == 9
     async with factory() as session:
-        assert await session.scalar(select(func.count()).select_from(Estimate)) == 0
-        assert await session.scalar(select(func.count()).select_from(Invoice)) == 0
-        assert await session.scalar(select(func.count()).select_from(Payment)) == 0
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Estimate)
+                .where(Estimate.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Invoice)
+                .where(Invoice.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Payment)
+                .where(Payment.company_id == context.company.id)
+            )
+            == 0
+        )
 
     imported = await service.run(
         factory,
@@ -993,41 +1014,83 @@ async def test_financial_dry_run_import_rerun_and_reconciliation(
         imported.unresolved,
     ) == (9, 3, 1, 3, 2)
     async with factory() as session:
-        assert await session.scalar(select(func.count()).select_from(Estimate)) == 1
-        assert (
-            await session.scalar(select(func.count()).select_from(EstimateLineItem))
-            == 1
-        )
-        assert await session.scalar(select(func.count()).select_from(Invoice)) == 1
-        assert (
-            await session.scalar(select(func.count()).select_from(InvoiceLineItem)) == 1
-        )
-        assert await session.scalar(select(func.count()).select_from(Payment)) == 1
         assert (
             await session.scalar(
-                select(func.count()).select_from(EstimateSourceIdentity)
+                select(func.count())
+                .select_from(Estimate)
+                .where(Estimate.company_id == context.company.id)
             )
             == 1
         )
         assert (
             await session.scalar(
-                select(func.count()).select_from(EstimateLineItemSourceIdentity)
+                select(func.count())
+                .select_from(EstimateLineItem)
+                .where(EstimateLineItem.company_id == context.company.id)
             )
             == 1
         )
         assert (
             await session.scalar(
-                select(func.count()).select_from(InvoiceSourceIdentity)
+                select(func.count())
+                .select_from(Invoice)
+                .where(Invoice.company_id == context.company.id)
             )
             == 1
         )
         assert (
             await session.scalar(
-                select(func.count()).select_from(InvoiceLineItemSourceIdentity)
+                select(func.count())
+                .select_from(InvoiceLineItem)
+                .where(InvoiceLineItem.company_id == context.company.id)
             )
             == 1
         )
-        payment_identity = await session.scalar(select(PaymentSourceIdentity))
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Payment)
+                .where(Payment.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(EstimateSourceIdentity)
+                .where(EstimateSourceIdentity.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(EstimateLineItemSourceIdentity)
+                .where(EstimateLineItemSourceIdentity.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(InvoiceSourceIdentity)
+                .where(InvoiceSourceIdentity.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(InvoiceLineItemSourceIdentity)
+                .where(InvoiceLineItemSourceIdentity.company_id == context.company.id)
+            )
+            == 1
+        )
+        payment_identity = await session.scalar(
+            select(PaymentSourceIdentity).where(
+                PaymentSourceIdentity.company_id == context.company.id
+            )
+        )
         assert payment_identity is not None
         payment = await session.get(Payment, payment_identity.payment_id)
         assert payment is not None

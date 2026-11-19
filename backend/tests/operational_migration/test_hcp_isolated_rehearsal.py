@@ -174,5 +174,5 @@ def test_rehearsal_compose_has_no_published_port(restore) -> None:
     }
     restore.validate_compose_config(compose)
     compose["services"]["postgres"]["ports"] = ["127.0.0.1:55432:5432"]
-    with pytest.raises(ValueError, match="published"):
+    with pytest.raises(ValueError, match="must not publish"):
         restore.validate_compose_config(compose)

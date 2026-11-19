@@ -52,7 +52,8 @@ class HeadlessApplicationService:
         self.commands = commands or EngineeringControlService()
         self.executions = executions or EngineeringExecutionService()
         self.controlled = controlled or ControlledExecutionService()
-        self.authority = authority or ProductionBoundedGitAdapter(Path.cwd())
+        repository_root = Path(__file__).resolve().parents[4]
+        self.authority = authority or ProductionBoundedGitAdapter(repository_root)
 
     async def reconcile_stale_executions(
         self,
