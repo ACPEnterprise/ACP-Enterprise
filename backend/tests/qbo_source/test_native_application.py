@@ -201,6 +201,18 @@ async def test_clean_majority_binds_exact_and_quarantines_only_conflicts(
     assert counts["invoice"].quarantined == 1
     assert counts["employee"].unsupported == 1
     assert all(item.unexplained == 0 for item in counts.values())
+    certificate = await service.source_parity_certificate(
+        factory,
+        context=context,
+        source_as_of="2026-08-31T21:00:00+00:00",
+        required_families=("vendor", "invoice", "employee"),
+    )
+    assert certificate.complete is True
+    assert certificate.unexplained_delta == 0
+    certified = {item.family: item for item in certificate.domains}
+    assert certified["vendor"].canonical_count == 1
+    assert certified["invoice"].quarantined == 1
+    assert certified["employee"].quarantined == 1
     reviews = await service.open_review_items(factory, context=context)
     assert len(reviews) == 1
     assert reviews[0].provider_record_id == "invoice-conflict"
