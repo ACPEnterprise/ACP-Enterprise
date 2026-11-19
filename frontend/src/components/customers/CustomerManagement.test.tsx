@@ -118,6 +118,23 @@ describe("CustomerManagement", () => {
     expect(screen.queryByText(/Legacy|Historical HCP|Imported Customers/)).not.toBeInTheDocument();
   });
 
+  it("accepts global-search results without requiring a legacy mode", () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{ id: "customer-global", display_name: "Taylor Home", customer_type: "residential", first_name: "Taylor", last_name: "Home", business_name: null, primary_phone: "555-0100", email: null, status: "active", source: "unknown", is_vip: false }],
+        total_count: 1, page: 1, page_size: 20, total_pages: 1,
+      },
+    } as never);
+
+    render(<MemoryRouter initialEntries={["/customers?query=Taylor"]}><CustomerManagement /></MemoryRouter>);
+
+    expect(customerHooks.useCustomerSearch).toHaveBeenCalledWith(expect.objectContaining({ query: "Taylor" }));
+    expect(screen.getByRole("link", { name: /Taylor Home/ })).toHaveAttribute("href", "/customers/customer-global");
+    expect(screen.queryByText(/legacy mode|imported customers/i)).not.toBeInTheDocument();
+  });
+
   it("distinguishes authentication failure from an empty customer list", () => {
     vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,

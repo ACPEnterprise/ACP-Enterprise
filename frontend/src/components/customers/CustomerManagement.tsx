@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, Star } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
 import { useHasPermission } from "../../auth";
@@ -20,16 +20,28 @@ const PAGE_SIZE = 20;
 
 export function CustomerManagement() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryFromUrl = searchParams.get("query") ?? "";
   const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
   const canReviewSource = useHasPermission("COMPANY_ADMINISTER");
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(queryFromUrl);
+  const [search, setSearch] = useState(queryFromUrl);
   const [status, setStatus] = useState("");
   const [customerType, setCustomerType] = useState("");
   const [recordState, setRecordState] = useState<"current" | "archived" | "all">("current");
   const [page, setPage] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
   const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateMatch[]>([]);
+
+  // Global search can navigate to this already-mounted route. Keep its query
+  // authoritative while preserving the existing submit-to-search behavior.
+  const [syncedQuery, setSyncedQuery] = useState(queryFromUrl);
+  if (queryFromUrl !== syncedQuery) {
+    setSyncedQuery(queryFromUrl);
+    setSearchInput(queryFromUrl);
+    setSearch(queryFromUrl);
+    setPage(1);
+  }
   const customers = useCustomerSearch({
     query: search || undefined,
     status: status ? status as "prospect" | "active" | "inactive" : undefined,
