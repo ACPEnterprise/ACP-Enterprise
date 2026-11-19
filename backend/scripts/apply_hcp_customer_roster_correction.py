@@ -71,7 +71,15 @@ async def _context(
     permission = await session.scalar(
         select(Permission).where(Permission.code == CustomerPermission.MANAGE)
     )
-    if None in (company, branch, actor, membership, permission):
+    if company is None:
+        raise ValueError("isolated acceptance Company authority is incomplete")
+    if branch is None:
+        raise ValueError("isolated acceptance Branch authority is incomplete")
+    if actor is None:
+        raise ValueError("isolated acceptance actor authority is incomplete")
+    if membership is None:
+        raise ValueError("isolated acceptance membership authority is incomplete")
+    if permission is None:
         raise ValueError("isolated acceptance authority is incomplete")
     return AuthorizationContext(
         user=actor,
@@ -205,7 +213,10 @@ async def apply(args: argparse.Namespace) -> dict[str, object]:
     report = HousecallProCustomerExportAdapter().transform(
         source, expected_source_sha256=args.sha256
     )
-    if report.source != 5464 or report.accepted + report.rejected + report.duplicate != report.source:
+    if (
+        report.source != 5464
+        or report.accepted + report.rejected + report.duplicate != report.source
+    ):
         raise ValueError("Customer CSV row accounting mismatch")
     records = {item.source_id: item for item in report.records}
     counts: Counter[str] = Counter()
@@ -278,16 +289,22 @@ async def apply(args: argparse.Namespace) -> dict[str, object]:
                 counts["new_customers"] += 1
                 counts["locations_added"] += len(record.service_locations)
                 continue
-            customer = await session.get(Customer, identity.customer_id)
-            if customer is None or customer.company_id != args.company_id:
+            existing_customer = await session.get(Customer, identity.customer_id)
+            if (
+                existing_customer is None
+                or existing_customer.company_id != args.company_id
+            ):
                 counts["quarantined"] += 1
                 continue
-            tenant_defect = customer.display_name.strip().lower() == (
+            tenant_defect = existing_customer.display_name.strip().lower() == (
                 "all county plumbing and leak"
             ) and record.customer.display_name.strip().lower() != (
                 "all county plumbing and leak"
             )
-            if await _native_change_after_binding(session, identity) and not tenant_defect:
+            if (
+                await _native_change_after_binding(session, identity)
+                and not tenant_defect
+            ):
                 counts["quarantined"] += 1
                 session.add(
                     CustomerMigrationException(
@@ -323,18 +340,20 @@ async def apply(args: argparse.Namespace) -> dict[str, object]:
                 ),
             }
             for field, value in values.items():
-                changed |= _changed(customer, field, value)
-            changed |= await _apply_contact(session, customer, record)
+                changed |= _changed(existing_customer, field, value)
+            changed |= await _apply_contact(session, existing_customer, record)
             added, duplicate_locations = await _apply_locations(
                 session,
                 context=context,
-                customer=customer,
+                customer=existing_customer,
                 record=record,
                 service=service,
             )
             counts["locations_added"] += added
             counts["duplicate_locations_prevented"] += duplicate_locations
-            counts["updated_customers" if changed or added else "replayed_customers"] += 1
+            counts[
+                "updated_customers" if changed or added else "replayed_customers"
+            ] += 1
         counts["canonical"] = report.accepted - counts["quarantined"]
         counts["duplicates"] = report.duplicate
         counts["unexplained"] = report.source - (

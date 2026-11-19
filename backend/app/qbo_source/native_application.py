@@ -270,8 +270,7 @@ class QboNativeApplicationService:
                 (
                     await session.scalars(
                         select(QboNativeApplicationRecord).where(
-                            QboNativeApplicationRecord.company_id
-                            == context.company.id,
+                            QboNativeApplicationRecord.company_id == context.company.id,
                             QboNativeApplicationRecord.superseded_at.is_(None),
                         )
                     )

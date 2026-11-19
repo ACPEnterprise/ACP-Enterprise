@@ -1,5 +1,4 @@
 import pytest
-
 from app.migration_source_parity import (
     ParityDisposition,
     SourceDisposition,
@@ -16,9 +15,7 @@ def disposition(
         disposition=state,
         explanation="deterministic test disposition",
         canonical_id=(
-            f"native-{identity}"
-            if state is ParityDisposition.CANONICAL
-            else None
+            f"native-{identity}" if state is ParityDisposition.CANONICAL else None
         ),
     )
 
@@ -75,8 +72,6 @@ def test_duplicate_or_non_source_dispositions_are_rejected() -> None:
             provider="hcp",
             source_as_of="now",
             source_identities={"customers": ("1",)},
-            dispositions=(
-                disposition("customers", "2", ParityDisposition.CANONICAL),
-            ),
+            dispositions=(disposition("customers", "2", ParityDisposition.CANONICAL),),
             required_families=("customers",),
         )

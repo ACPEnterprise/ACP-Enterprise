@@ -6,8 +6,10 @@ import argparse
 import asyncio
 import json
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from app import main as application_main  # noqa: F401
@@ -36,7 +38,7 @@ from app.platform.company.models import Company  # noqa: F401
 from sqlalchemy import select
 
 
-def _rows(root: Path, family: str):
+def _rows(root: Path, family: str) -> Iterator[dict[str, Any]]:
     for path in sorted((root / "raw" / family).glob("*.json")):
         payload = json.loads(path.read_text())
         for row in payload.get(family, []):
@@ -45,7 +47,7 @@ def _rows(root: Path, family: str):
             yield row
 
 
-def _address(row: dict, identity: str) -> AddressEvidence:
+def _address(row: dict[str, Any], identity: str) -> AddressEvidence:
     return AddressEvidence(
         identity,
         str(row.get("street") or row.get("address_line_1") or ""),
@@ -60,7 +62,7 @@ async def run(
     root: Path, *, apply: bool, master_run_id: UUID | None = None
 ) -> dict[str, object]:
     source_jobs = list(_rows(root, "jobs"))
-    job_addresses = defaultdict(dict)
+    job_addresses: defaultdict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
     for job in source_jobs:
         customer_id = str((job.get("customer") or {}).get("id") or "")
         address = job.get("address") or {}
@@ -154,34 +156,37 @@ async def run(
                 )
             )
         ).all()
-        by_contact = defaultdict(list)
-        by_location = defaultdict(list)
-        by_identity = defaultdict(list)
-        by_location_identity = defaultdict(list)
-        for row in contacts:
-            by_contact[row.customer_id].append(row)
-        for row in locations:
-            by_location[row.customer_id].append(row)
-        for row in identities:
-            if row.source_system == "housecall_pro_source4":
-                by_identity[row.customer_id].append(row.source_customer_id)
-        for row in location_identities:
-            by_location_identity[row.service_location_id].append(row.source_location_id)
+        by_contact: defaultdict[UUID, list[CustomerContact]] = defaultdict(list)
+        by_location: defaultdict[UUID, list[ServiceLocation]] = defaultdict(list)
+        by_identity: defaultdict[UUID, list[str]] = defaultdict(list)
+        by_location_identity: defaultdict[UUID, list[str]] = defaultdict(list)
+        for contact in contacts:
+            by_contact[contact.customer_id].append(contact)
+        for location in locations:
+            by_location[location.customer_id].append(location)
+        for identity in identities:
+            if identity.source_system == "housecall_pro_source4":
+                by_identity[identity.customer_id].append(identity.source_customer_id)
+        for location_identity in location_identities:
+            by_location_identity[location_identity.service_location_id].append(
+                location_identity.source_location_id
+            )
         canonical = tuple(
             CanonicalCustomerEvidence(
-                str(row.id),
-                row.display_name,
-                row.email
+                str(customer.id),
+                customer.display_name,
+                customer.email
                 or next(
-                    (item.email for item in by_contact[row.id] if item.email), None
+                    (item.email for item in by_contact[customer.id] if item.email),
+                    None,
                 ),
                 tuple(
                     value
                     for value in (
-                        row.primary_phone,
-                        row.secondary_phone,
-                        *(item.mobile_phone for item in by_contact[row.id]),
-                        *(item.office_phone for item in by_contact[row.id]),
+                        customer.primary_phone,
+                        customer.secondary_phone,
+                        *(item.mobile_phone for item in by_contact[customer.id]),
+                        *(item.office_phone for item in by_contact[customer.id]),
                     )
                     if value
                 ),
@@ -198,11 +203,11 @@ async def run(
                         ),
                         tuple(by_location_identity[item.id]),
                     )
-                    for item in by_location[row.id]
+                    for item in by_location[customer.id]
                 ),
-                tuple(by_identity[row.id]),
+                tuple(by_identity[customer.id]),
             )
-            for row in customers
+            for customer in customers
         )
         plan = build_historical_identity_bridge(source=source, canonical=canonical)
         result = None
@@ -226,7 +231,7 @@ async def run(
             async with session.begin_nested():
                 result = await application.apply(session, plan)
             await session.commit()
-        dispositions = defaultdict(int)
+        dispositions: defaultdict[str, int] = defaultdict(int)
         for item in plan.decisions:
             dispositions[item.disposition.value] += 1
         richard = [
@@ -246,7 +251,7 @@ async def run(
                 )
             ).all()
         )
-        category = {}
+        category: dict[str, str] = {}
         for item in plan.decisions:
             category[item.source_customer_id] = (
                 "newly_bound"
@@ -258,7 +263,7 @@ async def run(
                 else "unmatched"
             )
         source_by_id = {item.source_customer_id: item for item in source}
-        domains = {}
+        domains: dict[str, dict[str, int]] = {}
         new_location_ids = set(
             (
                 await session.scalars(
@@ -271,7 +276,7 @@ async def run(
                 )
             ).all()
         )
-        location_counts = defaultdict(int)
+        location_counts: defaultdict[str, int] = defaultdict(int)
         for item in plan.decisions:
             source_locations = source_by_id[item.source_customer_id].locations
             if category[item.source_customer_id] in {"ambiguous", "unmatched"}:
@@ -279,14 +284,14 @@ async def run(
                     source_locations
                 )
                 continue
-            for location in item.locations:
-                if location.native_location_id is None:
+            for location_decision in item.locations:
+                if location_decision.native_location_id is None:
                     location_counts[
                         "ambiguous"
-                        if location.disposition.value == "AMBIGUOUS"
+                        if location_decision.disposition.value == "AMBIGUOUS"
                         else "unmatched"
                     ] += 1
-                elif location.source_location_id in new_location_ids:
+                elif location_decision.source_location_id in new_location_ids:
                     location_counts["newly_bound"] += 1
                 else:
                     location_counts["already_bound"] += 1
@@ -306,7 +311,7 @@ async def run(
             str(item["id"]): str((item.get("customer") or {}).get("id") or "")
             for item in jobs
         }
-        domain_rows = {
+        domain_rows: dict[str, list[str]] = {
             "jobs": [job_customer.get(str(item.get("id")), "") for item in jobs],
             "appointments": [
                 job_customer.get(
@@ -339,7 +344,7 @@ async def run(
             for _refund in item.get("refunds") or []
         ]
         for domain, parents in domain_rows.items():
-            counts = defaultdict(int)
+            counts: defaultdict[str, int] = defaultdict(int)
             for parent in parents:
                 counts[category.get(parent, "unmatched")] += 1
             domains[domain] = {

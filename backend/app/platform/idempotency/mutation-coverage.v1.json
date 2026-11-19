@@ -3688,6 +3688,36 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "sales_demo",
+      "mechanism": "Representative-scoped advisory lock with deterministic environment identity and ready-state reuse",
+      "method": "POST",
+      "operation_id": "provision_api_v1_demo_provision_post",
+      "path": "/api/v1/demo/provision",
+      "reason": "Repeated provision requests for a ready representative environment return the existing active demo generation.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "sales_demo",
+      "mechanism": "Authorized non-production reset deliberately advances the representative-scoped demo generation under an advisory lock",
+      "method": "POST",
+      "operation_id": "reset_api_v1_demo_reset_post",
+      "path": "/api/v1/demo/reset",
+      "reason": "Each accepted reset intentionally retires the prior synthetic generation and creates a new one; replay is not equivalent to the original operator action.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "sales_demo",
+      "mechanism": "Authenticated append-only synthetic-demo feedback with generated server identity",
+      "method": "POST",
+      "operation_id": "create_feedback_api_v1_demo_feedback_post",
+      "path": "/api/v1/demo/feedback",
+      "reason": "Feedback is a deliberate human-authored append and has no client replay identity.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "workforce",
       "mechanism": "Company-scoped onboarding request key with durable identity-onboarding request uniqueness",
@@ -3728,6 +3758,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "c6ba040cf667b6dc5acf7a4e77fd7dd780b61e38c2bdec8a141b4c37f5cf233e",
+  "fingerprint": "a0016976de441443df44ac1599156075c1f6770f66dd348754bbaeb0b99ad843",
   "schema_version": "1"
 }

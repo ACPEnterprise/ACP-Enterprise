@@ -230,11 +230,19 @@ class SalesDemoService:
             and environment.active_company_id is not None
         ):
             company = await session.get(Company, environment.active_company_id)
+            if company is None:
+                raise OnboardingConflictError(
+                    "Sales Demo active Company authority is unavailable."
+                )
             branch = await session.scalar(
                 select(Branch).where(
                     Branch.company_id == company.id, Branch.is_primary.is_(True)
                 )
             )
+            if branch is None:
+                raise OnboardingConflictError(
+                    "Sales Demo active Branch authority is unavailable."
+                )
             return DemoProvisionResult(
                 environment.id,
                 company.id,
@@ -381,6 +389,7 @@ class SalesDemoService:
         generation: int,
     ) -> dict[str, int]:
         now = datetime.now(UTC)
+        today = now.date()
         customer_ids: list[UUID] = []
         location_ids: list[UUID] = []
         for index, name in enumerate(CUSTOMERS, 1):
@@ -701,11 +710,10 @@ class SalesDemoService:
                     else ("partially_paid" if open_amount else "paid"),
                     accounting_status="posted",
                     currency="USD",
-                    issue_date=date.today()
-                    - timedelta(days=45 if index == 1 else index * 4),
-                    due_date=date.today() - timedelta(days=15)
+                    issue_date=today - timedelta(days=45 if index == 1 else index * 4),
+                    due_date=today - timedelta(days=15)
                     if index == 1
-                    else date.today() + timedelta(days=20),
+                    else today + timedelta(days=20),
                     terms="Demo Net 30",
                     subtotal_amount=total,
                     discount_amount=Decimal(0),
@@ -725,21 +733,21 @@ class SalesDemoService:
 
         accounting_period_ids: list[UUID] = []
         for offset in range(3):
-            start = (date.today().replace(day=1) - timedelta(days=offset * 31)).replace(
-                day=1
-            )
-            end = (start.replace(day=28) + timedelta(days=4)).replace(
-                day=1
-            ) - timedelta(days=1)
+            accounting_period_start = (
+                today.replace(day=1) - timedelta(days=offset * 31)
+            ).replace(day=1)
+            accounting_period_end = (
+                accounting_period_start.replace(day=28) + timedelta(days=4)
+            ).replace(day=1) - timedelta(days=1)
             period_id = _id(environment.id, generation, "period", offset)
             accounting_period_ids.append(period_id)
             session.add(
                 AccountingPeriod(
                     id=period_id,
                     company_id=company_id,
-                    name=start.strftime("%B %Y"),
-                    start_date=start,
-                    end_date=end,
+                    name=accounting_period_start.strftime("%B %Y"),
+                    start_date=accounting_period_start,
+                    end_date=accounting_period_end,
                     status="open" if offset == 0 else "closed",
                     created_by_user_id=actor_id,
                 )
@@ -755,7 +763,7 @@ class SalesDemoService:
             now=now,
         )
 
-        for index, (name, total, open_amount) in enumerate(
+        for index, (name, total_text, open_amount_text) in enumerate(
             (
                 ("Demo Plumbing Supply", "875.00", "875.00"),
                 ("Synthetic Fleet Service", "420.00", "0.00"),
@@ -778,8 +786,8 @@ class SalesDemoService:
                 )
             )
             await session.flush()
-            amount = Decimal(total)
-            remaining = Decimal(open_amount)
+            amount = Decimal(total_text)
+            remaining = Decimal(open_amount_text)
             session.add(
                 VendorBill(
                     id=_id(environment.id, generation, "vendor-bill", index),
@@ -789,9 +797,9 @@ class SalesDemoService:
                     bill_number=f"BILL-{index:06d}",
                     vendor_document_number=f"DEMO-DOC-{generation}-{index}",
                     normalized_document_number=f"demo-doc-{generation}-{index}",
-                    bill_date=date.today() - timedelta(days=index * 9),
-                    received_date=date.today() - timedelta(days=index * 9),
-                    due_date=date.today() + timedelta(days=30 - index * 9),
+                    bill_date=today - timedelta(days=index * 9),
+                    received_date=today - timedelta(days=index * 9),
+                    due_date=today + timedelta(days=30 - index * 9),
                     terms_snapshot="Demo Net 30",
                     currency="USD",
                     status="paid" if remaining == 0 else "posted",
@@ -817,7 +825,7 @@ class SalesDemoService:
                     kind="job_cost",
                     reference=f"demo-margin:{jobs[4].id}",
                     status="posted",
-                    effective_date=date.today() - timedelta(days=4),
+                    effective_date=today - timedelta(days=4),
                     amount=Decimal("1680.00"),
                     currency="USD",
                     payload={
@@ -836,7 +844,7 @@ class SalesDemoService:
                     kind="inventory_usage",
                     reference=f"demo-shortage:{jobs[6].id}",
                     status="active",
-                    effective_date=date.today() + timedelta(days=2),
+                    effective_date=today + timedelta(days=2),
                     amount=Decimal("3.00"),
                     currency="USD",
                     payload={
@@ -938,7 +946,7 @@ class SalesDemoService:
                     classification=classification,
                     normal_balance=normal_balance,
                     status="active",
-                    effective_from=date.today() - timedelta(days=365),
+                    effective_from=now.date() - timedelta(days=365),
                 )
             )
         await session.flush()
@@ -961,7 +969,7 @@ class SalesDemoService:
                 period_id=period_id,
                 journal_type="automated",
                 status="draft",
-                effective_date=date.today() - timedelta(days=index),
+                effective_date=now.date() - timedelta(days=index),
                 currency="USD",
                 description=description,
                 total_debits=amount,
@@ -1053,7 +1061,8 @@ class SalesDemoService:
                     created_by_user_id=actor_id,
                 )
             )
-        period_end = date.today() - timedelta(days=date.today().weekday() + 3)
+        today = now.date()
+        period_end = today - timedelta(days=today.weekday() + 3)
         pay_period = PayPeriod(
             id=_id(environment.id, generation, "pay-period"),
             company_id=company_id,

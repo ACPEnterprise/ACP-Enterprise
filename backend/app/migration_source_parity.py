@@ -11,10 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from enum import Enum
-
 
 CONTRACT = "migration-source-parity-certificate/v1"
 
@@ -35,9 +34,7 @@ class SourceDisposition:
 
     def __post_init__(self) -> None:
         if not self.family.strip() or not self.provider_record_id.strip():
-            raise ValueError(
-                "source family and provider record identity are required"
-            )
+            raise ValueError("source family and provider record identity are required")
         if not self.explanation.strip():
             raise ValueError("every source disposition requires an explanation")
         if self.disposition is ParityDisposition.CANONICAL and not self.canonical_id:
@@ -80,9 +77,7 @@ class SourceParityCertificate:
         ).hexdigest()
         if self.contract != CONTRACT or observed != expected:
             raise ValueError("source parity certificate digest mismatch")
-        if self.unexplained_delta != sum(
-            row.unexplained_delta for row in self.domains
-        ):
+        if self.unexplained_delta != sum(row.unexplained_delta for row in self.domains):
             raise ValueError("source parity certificate total is inconsistent")
         if self.complete != (self.unexplained_delta == 0):
             raise ValueError("source parity completion claim is inconsistent")
@@ -92,14 +87,17 @@ def build_source_parity_certificate(
     *,
     provider: str,
     source_as_of: str,
-    source_identities: dict[str, Iterable[str]],
+    source_identities: Mapping[str, Iterable[str]],
     dispositions: Iterable[SourceDisposition],
     required_families: Iterable[str],
 ) -> SourceParityCertificate:
     """Reconcile exact provider identities; duplicates and omissions fail closed."""
     required = tuple(dict.fromkeys(item.strip() for item in required_families))
-    if not provider.strip() or not source_as_of.strip() or not required or any(
-        not item for item in required
+    if (
+        not provider.strip()
+        or not source_as_of.strip()
+        or not required
+        or any(not item for item in required)
     ):
         raise ValueError("provider, source as-of, and required families are required")
     unknown = set(source_identities) - set(required)
@@ -122,9 +120,7 @@ def build_source_parity_certificate(
             item.family not in source
             or item.provider_record_id not in source[item.family]
         ):
-            raise ValueError(
-                f"disposition has no acquired source identity: {key}"
-            )
+            raise ValueError(f"disposition has no acquired source identity: {key}")
         if key in indexed:
             raise ValueError(
                 f"source identity has multiple current dispositions: {key}"
@@ -166,6 +162,14 @@ def build_source_parity_certificate(
             separators=(",", ":"),
         ).encode()
     ).hexdigest()
-    result = SourceParityCertificate(**payload, digest=digest)
+    result = SourceParityCertificate(
+        contract=CONTRACT,
+        provider=provider,
+        source_as_of=source_as_of,
+        domains=tuple(domains),
+        unexplained_delta=delta,
+        complete=delta == 0,
+        digest=digest,
+    )
     result.verify()
     return result

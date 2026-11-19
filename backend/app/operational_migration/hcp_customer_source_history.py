@@ -46,12 +46,12 @@ def _source_indexes(
     customers_by_id = {str(row["id"]): row for row in _rows(root, "customers")}
     jobs_by_customer: dict[str, list[dict[str, Any]]] = {}
     jobs_by_id: dict[str, dict[str, Any]] = {}
-    for job in _rows(root, "jobs"):
-        job_id = str(job["id"])
-        jobs_by_id[job_id] = job
-        customer_id = (job.get("customer") or {}).get("id")
+    for source_job in _rows(root, "jobs"):
+        job_id = str(source_job["id"])
+        jobs_by_id[job_id] = source_job
+        customer_id = (source_job.get("customer") or {}).get("id")
         if isinstance(customer_id, str):
-            jobs_by_customer.setdefault(customer_id, []).append(job)
+            jobs_by_customer.setdefault(customer_id, []).append(source_job)
     estimates_by_customer: dict[str, list[dict[str, Any]]] = {}
     for estimate in _rows(root, "estimates"):
         customer_id = (estimate.get("customer") or {}).get("id")
@@ -59,14 +59,18 @@ def _source_indexes(
             estimates_by_customer.setdefault(customer_id, []).append(estimate)
     appointments_by_customer: dict[str, list[dict[str, Any]]] = {}
     for appointment in _rows(root, "appointments", required=False):
-        job = jobs_by_id.get(str(appointment.get("_parent_job_id")))
-        customer_id = (job.get("customer") or {}).get("id") if job else None
+        parent_job = jobs_by_id.get(str(appointment.get("_parent_job_id")))
+        customer_id = (
+            (parent_job.get("customer") or {}).get("id") if parent_job else None
+        )
         if isinstance(customer_id, str):
             appointments_by_customer.setdefault(customer_id, []).append(appointment)
     invoices_by_customer: dict[str, list[dict[str, Any]]] = {}
     for invoice in _rows(root, "invoices"):
-        job = jobs_by_id.get(str(invoice.get("job_id")))
-        customer_id = (job.get("customer") or {}).get("id") if job else None
+        parent_job = jobs_by_id.get(str(invoice.get("job_id")))
+        customer_id = (
+            (parent_job.get("customer") or {}).get("id") if parent_job else None
+        )
         if isinstance(customer_id, str):
             invoices_by_customer.setdefault(customer_id, []).append(invoice)
     return {

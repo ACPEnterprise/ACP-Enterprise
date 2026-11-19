@@ -138,37 +138,38 @@ def build_historical_identity_bridge(
     indexes: dict[str, dict[str, list[CanonicalCustomerEvidence]]] = {
         name: defaultdict(list) for name in ("name", "email", "phone", "address")
     }
-    for row in canonical:
-        for source_id in row.existing_source_ids:
-            existing[source_id].append(row)
-        indexes["name"][_text(row.display_name)].append(row)
-        if email := _email(row.email):
-            indexes["email"][email].append(row)
-        for phone in {_phone(value) for value in row.phones} - {""}:
-            indexes["phone"][phone].append(row)
-        for location in row.locations:
-            indexes["address"][_address(location.address)].append(row)
+    for canonical_row in canonical:
+        for source_id in canonical_row.existing_source_ids:
+            existing[source_id].append(canonical_row)
+        indexes["name"][_text(canonical_row.display_name)].append(canonical_row)
+        if email := _email(canonical_row.email):
+            indexes["email"][email].append(canonical_row)
+        for phone in {_phone(value) for value in canonical_row.phones} - {""}:
+            indexes["phone"][phone].append(canonical_row)
+        for location in canonical_row.locations:
+            indexes["address"][_address(location.address)].append(canonical_row)
 
     decisions: list[CustomerBridgeDecision] = []
     claimed_targets: dict[str, str] = {}
     duplicates_prevented = 0
-    for row in sorted(source, key=lambda value: value.source_customer_id):
-        decision = _classify_customer(row, by_native, existing, indexes)
-        if decision.native_customer_id:
-            prior = claimed_targets.get(decision.native_customer_id)
-            if prior and prior != row.source_customer_id:
+    for source_row in sorted(source, key=lambda value: value.source_customer_id):
+        decision = _classify_customer(source_row, by_native, existing, indexes)
+        native_customer_id = decision.native_customer_id
+        if native_customer_id is not None:
+            prior = claimed_targets.get(native_customer_id)
+            if prior and prior != source_row.source_customer_id:
                 duplicates_prevented += 1
                 decision = CustomerBridgeDecision(
-                    source_customer_id=row.source_customer_id,
+                    source_customer_id=source_row.source_customer_id,
                     native_customer_id=None,
                     disposition=BridgeDisposition.AMBIGUOUS,
                     evidence_dimensions=decision.evidence_dimensions,
-                    candidate_native_ids=(decision.native_customer_id,),
+                    candidate_native_ids=(native_customer_id,),
                     locations=(),
                     reason="multiple opaque source Customers claim one canonical Customer",
                 )
             else:
-                claimed_targets[decision.native_customer_id] = row.source_customer_id
+                claimed_targets[native_customer_id] = source_row.source_customer_id
         decisions.append(decision)
 
     counts = Counter(row.disposition for row in decisions)
@@ -190,7 +191,17 @@ def build_historical_identity_bridge(
         "unexplained": 0,
         "decisions": tuple(decisions),
     }
-    result = HistoricalIdentityBridgePlan(**payload, digest=_digest(payload))
+    result = HistoricalIdentityBridgePlan(
+        contract=CONTRACT,
+        source_count=len(source),
+        bridged=bridged,
+        quarantined=counts[BridgeDisposition.QUARANTINED],
+        ambiguous=counts[BridgeDisposition.AMBIGUOUS],
+        duplicates_prevented=duplicates_prevented,
+        unexplained=0,
+        decisions=tuple(decisions),
+        digest=_digest(payload),
+    )
     result.verify()
     return result
 
@@ -244,9 +255,12 @@ def _classify_customer(
         )
     if qualified:
         candidates = [by_native[native_id] for native_id in sorted(qualified)]
-        dimensions = tuple(sorted(set().union(*qualified.values())))
+        ambiguous_dimensions = tuple(sorted(set().union(*qualified.values())))
         return _ambiguous(
-            source, candidates, dimensions, "multiple corroborated exact candidates"
+            source,
+            candidates,
+            ambiguous_dimensions,
+            "multiple corroborated exact candidates",
         )
     return _quarantine(source, "no candidate has two independent exact dimensions")
 

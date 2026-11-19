@@ -69,8 +69,8 @@ class HistoricalIdentityBridgeApplication:
         self, session: AsyncSession, plan: HistoricalIdentityBridgePlan
     ) -> HistoricalIdentityApplicationResult:
         plan.verify()
-        customer = Counter()
-        location = Counter()
+        customer: Counter[str] = Counter()
+        location: Counter[str] = Counter()
         customer["source"] = plan.source_count
         customer["duplicates_prevented"] = plan.duplicates_prevented
 
@@ -186,7 +186,7 @@ class HistoricalIdentityBridgeApplication:
         )
         if target is not None:
             raise ValueError("canonical Location already has another SOURCE.4 identity")
-        legacy = await session.scalar(
+        legacy_location = await session.scalar(
             select(ServiceLocationSourceIdentity).where(
                 ServiceLocationSourceIdentity.company_id == self.company_id,
                 ServiceLocationSourceIdentity.source_system == LEGACY_SOURCE,
@@ -195,11 +195,14 @@ class HistoricalIdentityBridgeApplication:
                 == customer_identity.customer_id,
             )
         )
-        if legacy is None:
+        legacy: CustomerSourceIdentity | ServiceLocationSourceIdentity
+        if legacy_location is None:
             # Some legacy imports retained Customer lineage but did not create a
             # provider Location crosswalk. The already-bound parent Customer plus
             # exact in-parent address is still deterministic relationship evidence.
             legacy = await self._legacy_customer(session, customer_identity.customer_id)
+        else:
+            legacy = legacy_location
         digest = _digest(
             {
                 "contract": APPLICATION_CONTRACT,
