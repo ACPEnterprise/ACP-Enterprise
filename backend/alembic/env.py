@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.database import Base
 from app.customer_migration import models as customer_migration_models  # noqa: F401
 from app.customers import models as customer_models  # noqa: F401
+from app.demo import models as demo_models  # noqa: F401
 from app.dispatch import models as dispatch_models  # noqa: F401
 from app.engineering_capacity import models as engineering_capacity_models  # noqa: F401
 from app.engineering_control import models as engineering_control_models  # noqa: F401
@@ -59,8 +60,8 @@ from app.inventory import models as inventory_models  # noqa: F401
 from app.invoicing import models as invoicing_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.luminary import models as luminary_models  # noqa: F401
-from app.migration_support import models as migration_support_models  # noqa: F401
 from app.marketing import models as marketing_models  # noqa: F401
+from app.migration_support import models as migration_support_models  # noqa: F401
 from app.operational_assets import models as operational_asset_models  # noqa: F401
 from app.operational_measurement import (
     models as operational_measurement_models,  # noqa: F401
