@@ -7,25 +7,35 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.session import get_security_database_session
+from app.database.session import get_database_session, get_security_database_session
 from app.platform.auth.dependencies import AuthenticatedIdentity
 from app.platform.auth.services import AuthenticatedContext
 from app.platform.company.membership_models import Membership
 from app.platform.factory_control.models import PlatformAuthorityAssignment
 from app.platform.permissions.codes import LaunchPlatformPermission
 from app.platform.users.models import User
+from app.worker_control.transport.errors import WorkerTransportError
 from app.worker_control.transport.http.dependencies import (
-    AuthenticatedIdentity as AuthenticatedWorkerIdentity,
+    WorkerHttpIdentity,
+    worker_transport_service,
 )
-from app.worker_control.transport.http.dependencies import WorkerHttpIdentity
 from app.worker_identity.models import WorkerIdentity
 
 AuthorityDatabase = Annotated[
     AsyncSession, Depends(get_security_database_session, scope="function")
 ]
+FactoryControllerDatabase = Annotated[
+    AsyncSession, Depends(get_database_session, scope="function")
+]
+factory_controller_bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="FactoryControllerBearer",
+    description="Challenge-established Factory Controller session identifier.",
+)
 
 
 @dataclass(frozen=True)
@@ -41,6 +51,39 @@ class FactoryControllerContext:
     tenant_company_id: UUID
     authority_code: str
     permission_code: str
+
+
+def _factory_controller_authentication_required() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Factory controller authentication required.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def get_factory_controller_identity(
+    database: FactoryControllerDatabase,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(factory_controller_bearer_scheme),
+    ],
+) -> WorkerHttpIdentity:
+    """Authenticate a challenge-established worker session from a bearer token."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise _factory_controller_authentication_required()
+    try:
+        session_id = UUID(credentials.credentials)
+        session = await worker_transport_service.authenticate_http_session(
+            database, session_id=session_id
+        )
+    except (ValueError, WorkerTransportError) as error:
+        raise _factory_controller_authentication_required() from error
+    return WorkerHttpIdentity(context=session.context, session_id=session.session_id)
+
+
+AuthenticatedFactoryController = Annotated[
+    WorkerHttpIdentity, Depends(get_factory_controller_identity)
+]
 
 
 async def active_user_platform_permissions(
@@ -103,7 +146,7 @@ def require_factory_controller_permission(
         raise ValueError("Unsupported Factory Control controller permission.")
 
     async def dependency(
-        identity: AuthenticatedWorkerIdentity,
+        identity: AuthenticatedFactoryController,
         session: AuthorityDatabase,
     ) -> FactoryControllerContext:
         worker_identity = await session.scalar(

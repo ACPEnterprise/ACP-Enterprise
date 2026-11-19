@@ -14,6 +14,7 @@ from app.platform.auth.services import access_token_service
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.factory_control.authority import (
+    get_factory_controller_identity,
     grant_factory_controller_authority,
     grant_platform_factory_reader,
     revoke_platform_authority_assignment,
@@ -39,7 +40,6 @@ from app.worker_control.contracts import AuthenticatedWorkerContext
 from app.worker_control.models import EngineeringWorker
 from app.worker_control.transport.http.dependencies import (
     WorkerHttpIdentity,
-    get_worker_http_identity,
 )
 from app.worker_identity.models import WorkerIdentity
 from fastapi import FastAPI
@@ -445,7 +445,7 @@ async def test_http_ingest_requires_exact_active_global_worker_grant(database) -
 
     app.dependency_overrides[get_database_session] = session_override
     app.dependency_overrides[get_security_database_session] = session_override
-    app.dependency_overrides[get_worker_http_identity] = worker_identity_override
+    app.dependency_overrides[get_factory_controller_identity] = worker_identity_override
     transport = httpx.ASGITransport(app=app)
     payload = event(fixture, key=f"http-worker-{uuid4()}").model_dump(mode="json")
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -471,7 +471,12 @@ async def test_http_ingest_requires_exact_active_global_worker_grant(database) -
         accepted = await client.post(
             "/api/v1/platform/factory-control/internal/events", json=payload
         )
+        wrong_tenant = await client.post(
+            "/api/v1/platform/factory-control/internal/events",
+            json={**payload, "tenant_company_id": str(uuid4())},
+        )
     assert accepted.status_code == 202
+    assert wrong_tenant.status_code == 403
 
     async with database() as session, session.begin():
         persisted = await session.get(PlatformAuthorityAssignment, grant.id)
@@ -528,7 +533,7 @@ async def test_existing_controller_sync_connection_projects_authoritative_worker
 
     app.dependency_overrides[get_database_session] = session_override
     app.dependency_overrides[get_security_database_session] = session_override
-    app.dependency_overrides[get_worker_http_identity] = worker_identity_override
+    app.dependency_overrides[get_factory_controller_identity] = worker_identity_override
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         accepted = await client.post("/api/v1/platform/factory-control/internal/sync")

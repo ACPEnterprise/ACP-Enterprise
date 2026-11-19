@@ -212,7 +212,7 @@ class WorkerTransportClient:
     ) -> tuple[dict[str, object], ...]:
         response = await self._client.post(
             "/api/v1/platform/factory-control/internal/live-sync",
-            headers={"X-Worker-Session-ID": str(session_id)},
+            headers={"Authorization": f"Bearer {session_id}"},
             json=payload,
         )
         self._accepted(response, 202)
@@ -223,7 +223,7 @@ class WorkerTransportClient:
     ) -> dict[str, object]:
         response = await self._client.post(
             "/api/v1/platform/factory-control/internal/snapshots",
-            headers={"X-Worker-Session-ID": str(session_id)},
+            headers={"Authorization": f"Bearer {session_id}"},
             json=payload,
         )
         self._accepted(response, 201)
