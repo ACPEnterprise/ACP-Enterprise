@@ -171,7 +171,10 @@ class EmployeeAdministrationService:
         override_rows = (
             await session.execute(
                 select(MembershipPermissionOverride, Permission)
-                .join(Permission, Permission.id == MembershipPermissionOverride.permission_id)
+                .join(
+                    Permission,
+                    Permission.id == MembershipPermissionOverride.permission_id,
+                )
                 .where(
                     MembershipPermissionOverride.company_id == context.company.id,
                     MembershipPermissionOverride.membership_id == summary.membership_id,
@@ -214,10 +217,13 @@ class EmployeeAdministrationService:
                         and overrides_by_code.get(permission.code) != "grant"
                     )
                     else "OWN_DATA_ONLY"
-                    if "_OWN_" in permission.code or permission.code.endswith("_OWN_READ")
+                    if "_OWN_" in permission.code
+                    or permission.code.endswith("_OWN_READ")
                     else "ROLE_DERIVED"
                 ),
-                role_codes=tuple(sorted(set(role_codes_by_permission.get(permission.code, ())))),
+                role_codes=tuple(
+                    sorted(set(role_codes_by_permission.get(permission.code, ())))
+                ),
                 branch_scoped=summary.branch_ids != (),
             )
             for permission in all_permissions
@@ -294,7 +300,10 @@ class EmployeeAdministrationService:
             override_rows = (
                 await session.execute(
                     select(MembershipPermissionOverride, Permission)
-                    .join(Permission, Permission.id == MembershipPermissionOverride.permission_id)
+                    .join(
+                        Permission,
+                        Permission.id == MembershipPermissionOverride.permission_id,
+                    )
                     .where(
                         MembershipPermissionOverride.company_id == context.company.id,
                         MembershipPermissionOverride.membership_id == membership.id,
@@ -396,7 +405,9 @@ class EmployeeAdministrationService:
             .limit(1)
         )
         locked_by = (
-            await session.scalar(select(User).where(User.id == locked_audit.actor_user_id))
+            await session.scalar(
+                select(User).where(User.id == locked_audit.actor_user_id)
+            )
             if locked_audit is not None and locked_audit.actor_user_id is not None
             else None
         )
@@ -412,7 +423,8 @@ class EmployeeAdministrationService:
                 (DispatchCrewMember.company_id == DispatchAssignment.company_id)
                 & (DispatchCrewMember.assignment_id == DispatchAssignment.id)
                 & (DispatchCrewMember.status == "active"),
-            ).distinct()
+            )
+            .distinct()
             .where(
                 DispatchAssignment.company_id == context.company.id,
                 DispatchAssignment.status.in_(
@@ -449,7 +461,9 @@ class EmployeeAdministrationService:
         future_assignment_count = int(
             await session.scalar(
                 select(func.count()).select_from(
-                    assigned.where(DispatchAssignment.window_start_at > tomorrow).subquery()
+                    assigned.where(
+                        DispatchAssignment.window_start_at > tomorrow
+                    ).subquery()
                 )
             )
             or 0
@@ -480,13 +494,19 @@ class EmployeeAdministrationService:
             masked_login=onboarding.masked_login if onboarding else None,
             access_status=access_status,
             access_locked_at=(
-                locked_audit.occurred_at if user is not None and user.status == "locked" and locked_audit else None
+                locked_audit.occurred_at
+                if user is not None and user.status == "locked" and locked_audit
+                else None
             ),
             access_locked_by_user_id=(
-                locked_audit.actor_user_id if user is not None and user.status == "locked" and locked_audit else None
+                locked_audit.actor_user_id
+                if user is not None and user.status == "locked" and locked_audit
+                else None
             ),
             access_locked_by_display_name=(
-                locked_by.display_name if user is not None and user.status == "locked" and locked_by else None
+                locked_by.display_name
+                if user is not None and user.status == "locked" and locked_by
+                else None
             ),
             access_lock_reason=(
                 str(locked_audit.details.get("reason"))

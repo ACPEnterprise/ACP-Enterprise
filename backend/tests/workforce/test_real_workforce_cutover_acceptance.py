@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from scripts.real_workforce_cutover_acceptance import _get, evaluate
 
 CONTRACT = json.loads(

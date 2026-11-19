@@ -246,25 +246,20 @@ class PriceBookService:
                 for category in categories
                 if category.id in visible_category_ids
             )
-        item_order = [PriceBookServiceItem.name, PriceBookServiceItem.id]
         if search:
             exact_term = search.strip()
-            item_order.insert(
-                0,
+            item_query = item_query.order_by(
                 case(
                     (PriceBookServiceItem.code.ilike(exact_term), 0),
                     (PriceBookServiceItem.code.ilike(f"{exact_term}%"), 1),
                     else_=2,
-                ),
-            )
-        items = tuple(
-            (
-                await session.scalars(
-                    item_query.order_by(*item_order)
-                    .limit(limit)
-                    .offset(offset)
                 )
-            ).all()
+            )
+        item_query = item_query.order_by(
+            PriceBookServiceItem.name, PriceBookServiceItem.id
+        )
+        items = tuple(
+            (await session.scalars(item_query.limit(limit).offset(offset))).all()
         )
         item_ids = [item.id for item in items]
         versions = (

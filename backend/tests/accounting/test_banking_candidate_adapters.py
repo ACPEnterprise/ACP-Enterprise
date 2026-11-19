@@ -45,9 +45,7 @@ def test_single_customer_payment_uses_canonical_provider_lineage() -> None:
     )
     assert decision.state is MatchState.MATCHED
     assert candidate.source_digest == DIGEST
-    assert candidate.component_identities == (
-        "invoice_application:invoice-1:125.00",
-    )
+    assert candidate.component_identities == ("invoice_application:invoice-1:125.00",)
     assert candidate.evidence_strength == "exact_source_lineage"
 
 
@@ -160,9 +158,7 @@ def test_vendor_check_and_ach_use_verified_disbursement(
     assert candidate.target_type == expected_type
     assert (
         deterministic_match(
-            evidence(
-                direction="outflow", related_identity=candidate.target_identity
-            ),
+            evidence(direction="outflow", related_identity=candidate.target_identity),
             (candidate,),
         ).state
         is MatchState.MATCHED
@@ -197,9 +193,7 @@ def test_payroll_check_and_withdrawal_require_settlement_evidence(
     assert candidate.target_type == expected_type
     assert (
         deterministic_match(
-            evidence(
-                direction="outflow", related_identity=candidate.target_identity
-            ),
+            evidence(direction="outflow", related_identity=candidate.target_identity),
             (candidate,),
         ).state
         is MatchState.MATCHED
@@ -251,7 +245,10 @@ def test_transfer_pair_is_neutral_candidate_and_one_sided_is_review_only() -> No
         is MatchState.MATCHED
     )
     assert one_sided.explicit_bank_source_identity is None
-    assert deterministic_match(evidence(), (one_sided,)).state is MatchState.REVIEW_REQUIRED
+    assert (
+        deterministic_match(evidence(), (one_sided,)).state
+        is MatchState.REVIEW_REQUIRED
+    )
 
 
 def test_owner_movement_requires_review_even_with_accounting_evidence() -> None:
@@ -311,4 +308,7 @@ def test_ambiguous_same_amount_and_unmatched_never_auto_match() -> None:
         ).state
         is MatchState.AMBIGUOUS
     )
-    assert deterministic_match(evidence(amount=Decimal("7.00")), (candidate,)).state is MatchState.UNMATCHED
+    assert (
+        deterministic_match(evidence(amount=Decimal("7.00")), (candidate,)).state
+        is MatchState.UNMATCHED
+    )

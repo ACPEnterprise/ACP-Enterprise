@@ -6,7 +6,10 @@ import argparse
 import json
 from pathlib import Path
 
-from app.accounting.cutover_evidence import capture_source_baseline, seal_cutover_package
+from app.accounting.cutover_evidence import (
+    capture_source_baseline,
+    seal_cutover_package,
+)
 
 
 def main() -> int:
@@ -29,7 +32,16 @@ def main() -> int:
             authority_id=args.authority_id,
             cutoff=args.cutoff,
         )
-        print(json.dumps({"baseline_digest": result["baseline_digest"], "file_count": len(result["files"]), "state": "IMMUTABLE_BASELINE_CAPTURED"}, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "baseline_digest": result["baseline_digest"],
+                    "file_count": len(result["files"]),
+                    "state": "IMMUTABLE_BASELINE_CAPTURED",
+                },
+                sort_keys=True,
+            )
+        )
         return 0
     workbook = json.loads(args.workbook.read_bytes())
     if not isinstance(workbook, dict):
@@ -39,7 +51,16 @@ def main() -> int:
         output_root=args.output_root,
         sanitized_root=args.sanitized_root,
     )
-    print(json.dumps({"package_digest": result["package_digest"], "file_count": result["file_count"], "state": "EVIDENCE_PACKAGE_SEALED"}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "package_digest": result["package_digest"],
+                "file_count": result["file_count"],
+                "state": "EVIDENCE_PACKAGE_SEALED",
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

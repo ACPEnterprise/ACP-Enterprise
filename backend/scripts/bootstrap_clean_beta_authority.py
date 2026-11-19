@@ -26,17 +26,22 @@ async def main() -> int:
             password_service=PasswordService(settings),
         )
     await engine.dispose()
-    print(json.dumps({
-        "status": "PASS",
-        "action": result.action,
-        "company_id": str(result.company_id),
-        "branch_id": str(result.branch_id),
-        "actor_id": str(result.actor_id),
-        "membership_id": str(result.membership_id),
-        "role_id": str(result.role_id),
-        "rows_created": result.rows_created,
-        "rows_reused": result.rows_reused,
-    }, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "status": "PASS",
+                "action": result.action,
+                "company_id": str(result.company_id),
+                "branch_id": str(result.branch_id),
+                "actor_id": str(result.actor_id),
+                "membership_id": str(result.membership_id),
+                "role_id": str(result.role_id),
+                "rows_created": result.rows_created,
+                "rows_reused": result.rows_reused,
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

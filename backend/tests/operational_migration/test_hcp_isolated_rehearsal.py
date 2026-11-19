@@ -10,7 +10,11 @@ import pytest
 
 
 def _load_exporter():
-    path = Path(__file__).parents[2] / "scripts" / "export_hcp_isolated_native_observations.py"
+    path = (
+        Path(__file__).parents[2]
+        / "scripts"
+        / "export_hcp_isolated_native_observations.py"
+    )
     spec = importlib.util.spec_from_file_location("hcp_isolated_exporter", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

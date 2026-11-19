@@ -52,6 +52,13 @@ RELATED_KINDS = {
 }
 
 
+def _payment_references(payload: dict[str, object]) -> set[str]:
+    values = payload.get("payment_references", [])
+    if not isinstance(values, list):
+        raise AccountingValidation("Deposit payment_references must be a list")
+    return {str(value).strip() for value in values if str(value).strip()}
+
+
 class AccountingOperationService:
     @staticmethod
     def _validate(data: AccountingOperationCreate) -> None:
@@ -148,11 +155,7 @@ class AccountingOperationService:
                         )
                     return existing
                 if data.kind == "deposit":
-                    payment_references = {
-                        str(value).strip()
-                        for value in data.payload["payment_references"]
-                        if str(value).strip()
-                    }
+                    payment_references = _payment_references(data.payload)
                     for payment_reference in sorted(payment_references):
                         await session.execute(
                             text(
@@ -187,11 +190,7 @@ class AccountingOperationService:
                             "Every deposit payment requires an Undeposited Funds receipt"
                         )
                     if any(
-                        payment_references
-                        & {
-                            str(value).strip()
-                            for value in prior.payload.get("payment_references", [])
-                        }
+                        payment_references & _payment_references(prior.payload)
                         for prior in prior_deposits
                     ):
                         raise AccountingConflict(

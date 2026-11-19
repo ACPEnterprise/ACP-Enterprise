@@ -94,9 +94,7 @@ def main() -> int:
             {
                 "digest": plan.digest,
                 "records": len(plan.decisions),
-                "overlay_records": len(plan.manifest.records)
-                if plan.manifest
-                else 0,
+                "overlay_records": len(plan.manifest.records) if plan.manifest else 0,
             }
         )
     )

@@ -11,7 +11,6 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.auth.services import AuthenticationService, credential_service
-from app.platform.auth.errors import PasswordPolicyError
 from app.platform.auth.tokens import SecurityTokenService
 from app.platform.notifications.repository import (
     NotificationOutboxRepository,

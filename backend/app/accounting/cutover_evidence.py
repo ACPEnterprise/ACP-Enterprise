@@ -13,15 +13,19 @@ import os
 import re
 import shutil
 import stat
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from app.simulation.phase1 import run_accounting_regression_scenarios
 
-
-VALUE_STATES = frozenset({"OBSERVED", "DERIVED", "RECONSTRUCTED", "APPROVED", "SUSPECTED", "UNKNOWN"})
-APPROVER_ROLES = frozenset({"OWNER", "ACCOUNTANT", "PAYROLL_AUTHORITY", "TAX_PROFESSIONAL"})
+VALUE_STATES = frozenset(
+    {"OBSERVED", "DERIVED", "RECONSTRUCTED", "APPROVED", "SUSPECTED", "UNKNOWN"}
+)
+APPROVER_ROLES = frozenset(
+    {"OWNER", "ACCOUNTANT", "PAYROLL_AUTHORITY", "TAX_PROFESSIONAL"}
+)
 MILESTONES = (
     "SOURCE_BASELINE",
     "DISCOVERY",
@@ -34,11 +38,11 @@ MILESTONES = (
 )
 SENSITIVE_KEY_RE = re.compile(
     r"(password|secret|token|credential|api[_-]?key|access[_-]?key|tax[_-]?id|bank[_-]?(account|routing)|card[_-]?(number|cvv)|ssn|social[_-]?security)",
-    re.I,
+    re.IGNORECASE,
 )
 PII_KEY_RE = re.compile(
     r"(^|_)(first|last|full)?_?(name|email|phone|mobile|address|street|city|zip|employee|customer|vendor|counterparty)(_|$)",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -47,7 +51,9 @@ def _now() -> str:
 
 
 def _canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode()
 
 
 def digest(value: Any) -> str:
@@ -69,7 +75,9 @@ def _protected_dir(path: Path) -> None:
 
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    body = (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode()
+    body = (
+        json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+    ).encode()
     with path.open("xb") as stream:
         stream.write(body)
     os.chmod(path, 0o600)
@@ -107,7 +115,9 @@ def capture_source_baseline(
             excluded.append({"path": str(relative), "reason": "symlink_not_copied"})
             continue
         if _sensitive_name(path.name):
-            excluded.append({"path": str(relative), "reason": "secret_like_filename_not_copied"})
+            excluded.append(
+                {"path": str(relative), "reason": "secret_like_filename_not_copied"}
+            )
             continue
         target = private_root / relative
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -131,7 +141,9 @@ def capture_source_baseline(
         "excluded": excluded,
         "source_mutation": "PROHIBITED_AND_NOT_PERFORMED",
     }
-    manifest["baseline_digest"] = digest({key: value for key, value in manifest.items() if key != "baseline_digest"})
+    manifest["baseline_digest"] = digest(
+        {key: value for key, value in manifest.items() if key != "baseline_digest"}
+    )
     _write_json(output_root / "source-baseline.json", manifest)
     return manifest
 
@@ -143,25 +155,36 @@ def _validate_issue(issue: Mapping[str, Any]) -> None:
     for key in ("business_impact", "accounting_impact"):
         _require_text(issue, key)
     if not isinstance(issue.get("affected_accounts_or_entities"), list):
-        raise ValueError("issue affected_accounts_or_entities is required")
+        raise TypeError("issue affected_accounts_or_entities is required")
     if not isinstance(issue.get("materiality"), (str, int, float)):
-        raise ValueError("issue materiality is required")
+        raise TypeError("issue materiality is required")
     if issue.get("value_status") not in VALUE_STATES:
         raise ValueError("issue value_status is invalid")
     if not isinstance(issue.get("source_provenance"), list):
-        raise ValueError("issue source_provenance is required")
+        raise TypeError("issue source_provenance is required")
 
 
 def _validate_provenance(row: Mapping[str, Any]) -> None:
     _require_text(row, "provenance_id")
     _require_text(row, "conclusion_id")
-    for key in ("source_evidence", "conflicting_evidence", "source_dates", "unresolved_contradictions", "accepted_evidence"):
+    for key in (
+        "source_evidence",
+        "conflicting_evidence",
+        "source_dates",
+        "unresolved_contradictions",
+        "accepted_evidence",
+    ):
         if not isinstance(row.get(key, []), list):
-            raise ValueError(f"provenance {key} must be a list")
+            raise TypeError(f"provenance {key} must be a list")
     _require_text(row, "source_system_authority")
     _require_text(row, "confidence")
     _require_text(row, "decision_authority")
-    if row.get("value_class") not in {"SOURCE VALUE", "OBSERVED VALUE", "RECONSTRUCTED VALUE", "APPROVED VALUE"}:
+    if row.get("value_class") not in {
+        "SOURCE VALUE",
+        "OBSERVED VALUE",
+        "RECONSTRUCTED VALUE",
+        "APPROVED VALUE",
+    }:
         raise ValueError("provenance value_class is invalid")
 
 
@@ -179,14 +202,14 @@ def _validate_correction(row: Mapping[str, Any], issue_ids: set[str]) -> None:
         raise ValueError("correction references unknown issue")
     for key in ("evidence_used", "accounts_affected", "validation"):
         if not isinstance(row.get(key), list):
-            raise ValueError(f"correction {key} must be a list")
+            raise TypeError(f"correction {key} must be a list")
     _require_text(row, "detected_by")
     _require_text(row, "analyzed_by")
     _require_text(row, "occurred_at")
     _require_text(row, "native_action")
 
 
-def _unique(rows: list[Mapping[str, Any]], key: str) -> None:
+def _unique(rows: Sequence[Mapping[str, Any]], key: str) -> None:
     values = [_require_text(row, key) for row in rows]
     if len(values) != len(set(values)):
         raise ValueError(f"duplicate {key}")
@@ -208,7 +231,7 @@ def _scorecard_report(scorecard: Mapping[str, Any]) -> dict[str, Any]:
     before = scorecard.get("before", {})
     after = scorecard.get("after", {})
     if not isinstance(before, Mapping) or not isinstance(after, Mapping):
-        raise ValueError("scorecard requires before and after mappings")
+        raise TypeError("scorecard requires before and after mappings")
     return {
         "contract": "twelvehats-accounting-before-after-scorecard/v1",
         "before": dict(before),
@@ -276,7 +299,7 @@ def seal_cutover_package(
     }
     milestones = workbook.get("milestones", {})
     if not isinstance(milestones, Mapping):
-        raise ValueError("milestones must be a mapping")
+        raise TypeError("milestones must be a mapping")
     for name in MILESTONES:
         reports[f"milestones/{name.lower()}.json"] = {
             "contract": "twelvehats-accounting-cutover-milestone/v1",
@@ -289,17 +312,28 @@ def seal_cutover_package(
     scorecard = reports["before-after-scorecard.json"]
     reports["final-reconciliation-report.json"] = {
         "contract": "twelvehats-accounting-final-reconciliation/v1",
-        "status": "PASS" if not workbook.get("unresolved_external_evidence") else "PENDING_EXTERNAL_EVIDENCE",
+        "status": "PASS"
+        if not workbook.get("unresolved_external_evidence")
+        else "PENDING_EXTERNAL_EVIDENCE",
         "scorecard_digest": scorecard["scorecard_digest"],
-        "unresolved_external_evidence": list(workbook.get("unresolved_external_evidence", [])),
+        "unresolved_external_evidence": list(
+            workbook.get("unresolved_external_evidence", [])
+        ),
         "source_mutation": "PROHIBITED_AND_NOT_PERFORMED",
     }
     reports["first-native-close-report.json"] = {
         "contract": "twelvehats-first-native-accounting-close/v1",
         "status": "PENDING",
-        "requires": ["approved_common_cutoff", "balanced_opening_controls", "finance_acceptance", "close_receipt"],
+        "requires": [
+            "approved_common_cutoff",
+            "balanced_opening_controls",
+            "finance_acceptance",
+            "close_receipt",
+        ],
     }
-    reports["simulation-regression-scenarios.json"] = run_accounting_regression_scenarios()
+    reports["simulation-regression-scenarios.json"] = (
+        run_accounting_regression_scenarios()
+    )
 
     _protected_dir(output_root)
     _protected_dir(sanitized_root)
@@ -307,7 +341,13 @@ def seal_cutover_package(
     for relative, value in sorted(reports.items()):
         target = output_root / relative
         _write_json(target, value)
-        manifest_files.append({"path": relative, "sha256": file_digest(target), "size_bytes": target.stat().st_size})
+        manifest_files.append(
+            {
+                "path": relative,
+                "sha256": file_digest(target),
+                "size_bytes": target.stat().st_size,
+            }
+        )
         sanitized_target = sanitized_root / relative
         _write_json(sanitized_target, _sanitize(value))
     package_manifest = {

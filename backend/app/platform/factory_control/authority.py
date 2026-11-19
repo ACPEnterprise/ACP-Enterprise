@@ -329,7 +329,9 @@ async def grant_factory_controller_authority(
         )
     )
     if grantor_membership is None:
-        raise ValueError("Grantor lacks an active membership in the controller Company.")
+        raise ValueError(
+            "Grantor lacks an active membership in the controller Company."
+        )
     results: list[tuple[PlatformAuthorityAssignment, bool]] = []
     for permission in (
         LaunchPlatformPermission.FACTORY_CONTROL_INGEST,

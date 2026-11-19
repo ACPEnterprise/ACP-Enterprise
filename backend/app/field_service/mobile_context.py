@@ -264,7 +264,9 @@ class MobileFieldContext:
             .join(DispatchAssignment, DispatchAssignment.job_id == Job.id)
             .join(Appointment, Appointment.id == DispatchAssignment.appointment_id)
             .join(Customer, Customer.id == Appointment.customer_id)
-            .join(ServiceLocation, ServiceLocation.id == Appointment.service_location_id)
+            .join(
+                ServiceLocation, ServiceLocation.id == Appointment.service_location_id
+            )
             .where(
                 Job.company_id == context.company.id,
                 DispatchAssignment.company_id == context.company.id,
@@ -304,8 +306,7 @@ class MobileFieldContext:
             await session.execute(
                 statement.order_by(
                     Appointment.arrival_window_start_at.desc(), Appointment.id
-                )
-                .limit(limit)
+                ).limit(limit)
             )
         ).all()
         return FieldHistoryProjection(

@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.accounting import router as accounting_router
 from app.accounting.router import list_journals
 
@@ -57,7 +56,9 @@ async def test_list_journals_awaits_line_queries_before_building_response(
 ) -> None:
     journal = _journal()
 
-    async def lines(_session: object, _company_id: object, _journal_id: object) -> tuple:
+    async def lines(
+        _session: object, _company_id: object, _journal_id: object
+    ) -> tuple:
         return ()
 
     monkeypatch.setattr(accounting_router.accounting_repository, "lines", lines)

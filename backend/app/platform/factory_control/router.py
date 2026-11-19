@@ -262,7 +262,12 @@ async def overview(
         for item in roadmap.milestones
         if item.launch_class == "P1" and item.lifecycle_status != "CLOSED"
     ]
-    engineering_complete = {"ENGINEERING_READY", "INTEGRATED", "DEPLOYED_BETA", "CLOSED"}
+    engineering_complete = {
+        "ENGINEERING_READY",
+        "INTEGRATED",
+        "DEPLOYED_BETA",
+        "CLOSED",
+    }
     bottlenecks = [
         item
         for item in (*active_p0, *active_p1)
@@ -272,11 +277,7 @@ async def overview(
     ]
     priority_rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
     acceptance_defects = sorted(
-        (
-            item
-            for item in roadmap.operational_acceptance
-            if item.status == "DEFECT"
-        ),
+        (item for item in roadmap.operational_acceptance if item.status == "DEFECT"),
         key=lambda item: (priority_rank[item.priority], item.acceptance_id),
     )
     current_bottleneck: dict[str, object] | None
@@ -322,7 +323,9 @@ async def overview(
         owner_actions=_durable_owner_actions(roadmap_actions, events),
         lifecycle_counts=dict(
             sorted(
-                Counter(str(item.lifecycle_status) for item in roadmap.milestones).items()
+                Counter(
+                    str(item.lifecycle_status) for item in roadmap.milestones
+                ).items()
             )
         ),
         active_p0=active_p0,

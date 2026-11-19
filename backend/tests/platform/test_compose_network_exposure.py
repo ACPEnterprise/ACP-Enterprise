@@ -81,9 +81,7 @@ def test_redis_qualification_uses_production_acl_and_secret_indirection() -> Non
         "/run/secrets/"
     )
     assert "REDIS_PASSWORD" not in qualification["environment"]
-    assert compose["secrets"]["redis_qualification_acl"]["file"].endswith(
-        "/users.acl"
-    )
+    assert compose["secrets"]["redis_qualification_acl"]["file"].endswith("/users.acl")
 
 
 def test_release_qualification_has_fresh_restore_and_readiness_targets() -> None:

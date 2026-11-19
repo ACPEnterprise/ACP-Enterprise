@@ -55,10 +55,9 @@ class PrincipalSessionResult:
 class AcceptanceServicePrincipalService:
     @staticmethod
     def _require_platform_authority(context: AuthorizationContext) -> None:
-        if (
-            context.membership.status != "active"
-            or context.permission_codes != {ReleasePrincipalPermission.MANAGE}
-        ):
+        if context.membership.status != "active" or context.permission_codes != {
+            ReleasePrincipalPermission.MANAGE
+        }:
             raise PermissionError("Platform service-principal authority is required.")
 
     async def provision(

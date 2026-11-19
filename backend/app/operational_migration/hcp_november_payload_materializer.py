@@ -12,16 +12,15 @@ import hashlib
 import json
 import stat
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_executor import _digest
 
-
 WRITE_DISPOSITIONS = frozenset({"CREATE", "UPDATE", "REPLAY"})
 
 
-def _fail(code: str, value: object = "") -> None:
+def _fail(code: str, value: object = "") -> NoReturn:
     raise SafeEvidenceError(code, _digest(value))
 
 
@@ -85,10 +84,15 @@ def _lineage(record: dict[str, Any]) -> set[tuple[str, str]]:
         _fail("hcp_november_payload_lineage_missing", record.get("source_id"))
     result: set[tuple[str, str]] = set()
     for parent in value:
-        if not isinstance(parent, dict) or not parent.get("domain") or not parent.get("source_id"):
+        if (
+            not isinstance(parent, dict)
+            or not parent.get("domain")
+            or not parent.get("source_id")
+        ):
             _fail("hcp_november_payload_lineage_invalid", record.get("source_id"))
         result.add((str(parent["domain"]), str(parent["source_id"])))
     return result
+
 
 def _resolve(
     *,
@@ -123,7 +127,10 @@ def _resolve(
         and item.get("source_id") == expected_source_id
     ]
     if len(matches) != 1:
-        _fail("hcp_november_payload_resolution_ambiguous", (str(relative), expected_source_id, len(matches)))
+        _fail(
+            "hcp_november_payload_resolution_ambiguous",
+            (str(relative), expected_source_id, len(matches)),
+        )
     match = matches[0]
     actual_digest = _source_digest(match)
     if actual_digest != expected_digest:
@@ -147,7 +154,9 @@ def materialize_executable_payloads(
     byte-for-byte at the record level and are never resolved or made writable.
     """
 
-    if not isinstance(source_packet, dict) or not isinstance(source_packet.get("records"), list):
+    if not isinstance(source_packet, dict) or not isinstance(
+        source_packet.get("records"), list
+    ):
         _fail("hcp_november_payload_packet_invalid")
     if not evidence_root.is_dir() or evidence_root.is_symlink():
         _fail("hcp_november_payload_evidence_root_missing", str(evidence_root))

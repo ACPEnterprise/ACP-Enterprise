@@ -92,7 +92,10 @@ class LiveFactoryControlConfig:
             or not 1 <= config.request_timeout_seconds <= 30
             or len(config.protected_sha) != 40
             or len(config.beta_sha) != 40
-            or any(character not in "0123456789abcdef" for character in config.protected_sha)
+            or any(
+                character not in "0123456789abcdef"
+                for character in config.protected_sha
+            )
             or any(character not in "0123456789abcdef" for character in config.beta_sha)
             or not config.private_key_file.is_absolute()
             or not config.health_file.is_absolute()
@@ -103,7 +106,9 @@ class LiveFactoryControlConfig:
     def read_private_key(self) -> Ed25519PrivateKey:
         if self.private_key_file.stat().st_mode & 0o077:
             raise PermissionError("Factory Control private key permissions must be 600")
-        return decode_private_key(self.private_key_file.read_text(encoding="utf-8").strip())
+        return decode_private_key(
+            self.private_key_file.read_text(encoding="utf-8").strip()
+        )
 
 
 class LiveFactoryControlRuntime:

@@ -26,9 +26,7 @@ from app.platform.permissions.codes import MigrationPermission
 
 CONTRACT = "hcp-workforce-source-authority/v1"
 AUTHORITY_PATH = (
-    Path(__file__).parent
-    / "authorities"
-    / "hcp-workforce-source-authority.v1.json"
+    Path(__file__).parent / "authorities" / "hcp-workforce-source-authority.v1.json"
 )
 
 
@@ -71,7 +69,9 @@ class WorkforceSourceRecord:
             ("source_snapshot_digest", self.source_snapshot_digest),
             ("source_record_digest", self.source_record_digest),
         ):
-            if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+            if len(value) != 64 or any(
+                char not in "0123456789abcdef" for char in value
+            ):
                 raise ValueError(f"{name} must be a lowercase SHA-256 digest")
         _ = self.names
         if self.employment_status not in {"ACTIVE", "TERMINATED"}:
@@ -115,7 +115,9 @@ class WorkforceSourcePacket:
             raise ValueError("Workforce authority requires a sealed SOURCE.4 digest")
         if self.branch_code != "MAIN" or len(self.records) != 7:
             raise ValueError("Workforce authority cardinality or Branch is invalid")
-        if len({item.provider_employee_id for item in self.records}) != len(self.records):
+        if len({item.provider_employee_id for item in self.records}) != len(
+            self.records
+        ):
             raise ValueError("duplicate HCP Employee identity")
         for record in self.records:
             record.validate()
@@ -123,10 +125,13 @@ class WorkforceSourcePacket:
             raise ValueError("exactly six active source identities are required")
         if sum(item.employment_status == "TERMINATED" for item in self.records) != 1:
             raise ValueError("exactly one terminated source identity is required")
-        if sum(
-            item.owner_disposition == "OWNER_IDENTITY_DECISION_REQUIRED"
-            for item in self.records
-        ) != 1:
+        if (
+            sum(
+                item.owner_disposition == "OWNER_IDENTITY_DECISION_REQUIRED"
+                for item in self.records
+            )
+            != 1
+        ):
             raise ValueError("exactly one owner identity decision is required")
 
 
@@ -152,7 +157,10 @@ class WorkforceSourceStagingService:
         packet.validate()
         if not context.has_permission(MigrationPermission.EXECUTE_REHEARSAL):
             raise ValueError("Migration execution authority is required")
-        if context.active_branch is None or context.active_branch.code != packet.branch_code:
+        if (
+            context.active_branch is None
+            or context.active_branch.code != packet.branch_code
+        ):
             raise ValueError("MAIN Branch authority is required")
         master = await session.scalar(
             select(HcpMigrationMasterRun)
@@ -166,7 +174,9 @@ class WorkforceSourceStagingService:
             .with_for_update()
         )
         if master is None:
-            raise ValueError("completed current-operational SOURCE.4 lineage is required")
+            raise ValueError(
+                "completed current-operational SOURCE.4 lineage is required"
+            )
 
         created_candidates = 0
         replayed = 0
@@ -206,7 +216,9 @@ class WorkforceSourceStagingService:
                 continue
             if employee_id is not None:
                 if await session.get(Employee, employee_id) is not None:
-                    raise ValueError("deterministic Employee exists without source authority")
+                    raise ValueError(
+                        "deterministic Employee exists without source authority"
+                    )
                 first_name, last_name = record.names
                 session.add(
                     Employee(
@@ -250,7 +262,9 @@ class WorkforceSourceStagingService:
             packet_digest=packet.digest,
             staged=len(packet.records),
             created_candidates=created_candidates,
-            terminated=sum(item.employment_status == "TERMINATED" for item in packet.records),
+            terminated=sum(
+                item.employment_status == "TERMINATED" for item in packet.records
+            ),
             owner_decisions=sum(
                 item.owner_disposition == "OWNER_IDENTITY_DECISION_REQUIRED"
                 for item in packet.records

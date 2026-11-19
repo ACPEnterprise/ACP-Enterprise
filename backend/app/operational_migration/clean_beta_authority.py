@@ -5,14 +5,16 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.platform.auth.passwords import PasswordService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.launch_controls import COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
 from app.platform.permissions.codes import (
     CustomerPermission,
     DispatchPermission,
@@ -22,11 +24,13 @@ from app.platform.permissions.codes import (
     SchedulingPermission,
     WorkforcePermission,
 )
-from app.platform.permissions.models import MembershipRole, Permission, Role, RolePermission
-from app.platform.launch_controls import COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
+from app.platform.permissions.models import (
+    MembershipRole,
+    Permission,
+    Role,
+    RolePermission,
+)
 from app.platform.users.models import User, UserCredential
-from app.platform.auth.passwords import PasswordService
-
 
 COMPANY_ID = UUID("3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd")
 BRANCH_ID = UUID("887f413a-70dc-4ab1-98aa-8e84f4e7efd0")
@@ -138,7 +142,9 @@ async def reconcile_clean_beta_authority(
         else:
             reused += 1
             _require_same("actor.status", user.status, "active")
-            _require_same("actor.normalized_email", user.normalized_email, MICHAEL_EMAIL)
+            _require_same(
+                "actor.normalized_email", user.normalized_email, MICHAEL_EMAIL
+            )
             credential = await session.scalar(
                 select(UserCredential).where(UserCredential.user_id == ACTOR_ID)
             )
@@ -180,8 +186,14 @@ async def reconcile_clean_beta_authority(
         else:
             reused += 1
             _require_same("membership.status", membership.status, "active")
-            _require_same("membership.default_branch_id", membership.default_branch_id, BRANCH_ID)
-            _require_same("membership.has_all_branch_access", membership.has_all_branch_access, True)
+            _require_same(
+                "membership.default_branch_id", membership.default_branch_id, BRANCH_ID
+            )
+            _require_same(
+                "membership.has_all_branch_access",
+                membership.has_all_branch_access,
+                True,
+            )
 
         role = await session.scalar(
             select(Role).where(Role.company_id == COMPANY_ID, Role.code == ROLE_CODE)

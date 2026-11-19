@@ -154,7 +154,10 @@ class JobTrendPoint(JobsApiSchema):
     known_produced_value: Decimal
     missing_value_count: int = Field(ge=0)
     evidence_state: Literal[
-        "AVAILABLE", "MEASURED_ZERO", "INCOMPLETE_SOLD_SNAPSHOT", "CONFLICTING_CURRENCIES"
+        "AVAILABLE",
+        "MEASURED_ZERO",
+        "INCOMPLETE_SOLD_SNAPSHOT",
+        "CONFLICTING_CURRENCIES",
     ]
 
 

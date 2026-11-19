@@ -54,9 +54,7 @@ def test_restore_refuses_wrong_identity_before_running(tmp_path, monkeypatch) ->
         "sha256": module.sha256(backup),
     }
     manifest_path = backup.with_suffix(".dump.manifest.json")
-    manifest_path.write_text(
-        __import__("json").dumps(manifest)
-    )
+    manifest_path.write_text(__import__("json").dumps(manifest))
     manifest_path.chmod(0o600)
     monkeypatch.setattr(module, "run", lambda *_args, **_kwargs: "")
     with pytest.raises(ValueError, match="does not match"):
@@ -96,9 +94,7 @@ def test_corrupt_backup_fails_checksum_before_restore(tmp_path, monkeypatch) -> 
         "sha256": module.sha256(backup),
     }
     manifest_path = backup.with_suffix(".dump.manifest.json")
-    manifest_path.write_text(
-        __import__("json").dumps(manifest)
-    )
+    manifest_path.write_text(__import__("json").dumps(manifest))
     manifest_path.chmod(0o600)
     backup.write_bytes(b"tampered")
     monkeypatch.setattr(module, "run", lambda *_args, **_kwargs: "")
@@ -106,7 +102,9 @@ def test_corrupt_backup_fails_checksum_before_restore(tmp_path, monkeypatch) -> 
         module.load_verified(backup)
 
 
-def test_restore_refuses_nonempty_target_before_pg_restore(tmp_path, monkeypatch) -> None:
+def test_restore_refuses_nonempty_target_before_pg_restore(
+    tmp_path, monkeypatch
+) -> None:
     backup = tmp_path / "backup.dump"
     backup.write_bytes(b"safe synthetic backup")
     backup.chmod(0o600)

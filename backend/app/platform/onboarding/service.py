@@ -468,10 +468,14 @@ class IdentityOnboardingService:
                         or source_employee.last_name != command.last_name.strip()
                         or source_employee.display_name != command.display_name.strip()
                     ):
-                        if source_employee is not None and source_employee.status not in {
-                            "active",
-                            "inactive",
-                        }:
+                        if (
+                            source_employee is not None
+                            and source_employee.status
+                            not in {
+                                "active",
+                                "inactive",
+                            }
+                        ):
                             raise OnboardingConflictError(
                                 "Eligible existing Employee is not available for onboarding."
                             )
@@ -701,12 +705,13 @@ class IdentityOnboardingService:
                             and linked_record is not None
                             and linked_record.status == "inactive"
                             and linked_record.company_id == source_employee.company_id
-                            and linked_record.home_branch_id == source_employee.home_branch_id
-                            and linked_record.display_name == source_employee.display_name
+                            and linked_record.home_branch_id
+                            == source_employee.home_branch_id
+                            and linked_record.display_name
+                            == source_employee.display_name
                         )
                         if not (
-                            same_canonical_employee
-                            or inactive_duplicate_is_compatible
+                            same_canonical_employee or inactive_duplicate_is_compatible
                         ):
                             raise OnboardingConflictError(
                                 "Membership is already linked to an Employee."
@@ -732,15 +737,21 @@ class IdentityOnboardingService:
                         first_name=command.first_name.strip(),
                         last_name=command.last_name.strip(),
                         display_name=command.display_name.strip(),
-                        status="active" if command.admin_password is not None else "invited",
-                        email_verified_at=now if command.admin_password is not None else None,
+                        status="active"
+                        if command.admin_password is not None
+                        else "invited",
+                        email_verified_at=now
+                        if command.admin_password is not None
+                        else None,
                     )
                     session.add(user)
                     await session.flush()
                     membership = Membership(
                         user_id=user.id,
                         company_id=context.company.id,
-                        status="active" if command.admin_password is not None else "invited",
+                        status="active"
+                        if command.admin_password is not None
+                        else "invited",
                         default_branch_id=branch.id,
                         has_all_branch_access=False,
                         invited_at=now,

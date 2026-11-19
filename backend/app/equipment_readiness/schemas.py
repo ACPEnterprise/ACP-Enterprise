@@ -13,7 +13,9 @@ class CatalogCreate(Schema):
     code: str = Field(min_length=1, max_length=80)
     display_name: str = Field(min_length=1, max_length=200)
     capability_code: str = Field(min_length=1, max_length=100)
-    item_kind: str = Field(pattern=r"^(controlled_asset|equipment_set|non_serialized_item)$")
+    item_kind: str = Field(
+        pattern=r"^(controlled_asset|equipment_set|non_serialized_item)$"
+    )
     serialization_required: bool = False
     provenance: dict[str, object] = Field(default_factory=dict)
 
@@ -50,11 +52,15 @@ class PlacementCreate(Schema):
     asset_id: UUID | None = None
     home_kind: str = Field(pattern=r"^(vehicle|shop|warehouse|repair_vendor|other)$")
     home_entity_id: UUID | None = None
-    current_location_kind: str = Field(pattern=r"^(vehicle|employee|shop|warehouse|repair_vendor|other|unknown)$")
+    current_location_kind: str = Field(
+        pattern=r"^(vehicle|employee|shop|warehouse|repair_vendor|other|unknown)$"
+    )
     current_location_entity_id: UUID | None = None
     current_custodian_employee_id: UUID | None = None
     effective_at: AwareDatetime
-    idempotency_key: str = Field(min_length=8, max_length=160, pattern=r"^[A-Za-z0-9.:-]+$")
+    idempotency_key: str = Field(
+        min_length=8, max_length=160, pattern=r"^[A-Za-z0-9.:-]+$"
+    )
 
 
 class PlacementOut(Schema):
@@ -78,21 +84,30 @@ class PlacementOut(Schema):
 class ConfirmationItem(Schema):
     catalog_item_id: UUID
     placement_id: UUID | None = None
-    state: str = Field(pattern=r"^(present_ready|transferred|left_at_shop|in_repair|missing_or_unknown|incomplete_set|broken_or_out_of_service|other)$")
+    state: str = Field(
+        pattern=r"^(present_ready|transferred|left_at_shop|in_repair|missing_or_unknown|incomplete_set|broken_or_out_of_service|other)$"
+    )
     missing_components: list[str] = Field(default_factory=list, max_length=50)
     note: str | None = Field(default=None, max_length=500)
     receiving_employee_id: UUID | None = None
-    receiving_location_kind: str | None = Field(default=None, pattern=r"^(vehicle|employee|shop|warehouse|repair_vendor|other|unknown)$")
+    receiving_location_kind: str | None = Field(
+        default=None,
+        pattern=r"^(vehicle|employee|shop|warehouse|repair_vendor|other|unknown)$",
+    )
     receiving_location_entity_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_disposition(self):
         if self.state == "incomplete_set" and not self.missing_components:
-            raise ValueError("Incomplete equipment sets require missing component evidence")
+            raise ValueError(
+                "Incomplete equipment sets require missing component evidence"
+            )
         if self.state == "transferred" and not (
             self.receiving_employee_id or self.receiving_location_entity_id
         ):
-            raise ValueError("Transfers require a receiving Employee or governed location")
+            raise ValueError(
+                "Transfers require a receiving Employee or governed location"
+            )
         return self
 
 
@@ -101,7 +116,9 @@ class DailyConfirmationRequest(Schema):
     work_date: date
     confirmed_at: AwareDatetime
     items: tuple[ConfirmationItem, ...] = Field(min_length=1, max_length=50)
-    idempotency_key: str = Field(min_length=8, max_length=150, pattern=r"^[A-Za-z0-9.:-]+$")
+    idempotency_key: str = Field(
+        min_length=8, max_length=150, pattern=r"^[A-Za-z0-9.:-]+$"
+    )
 
 
 class ConfirmationOut(Schema):
@@ -150,11 +167,17 @@ class EquipmentChecklistSettingOut(Schema):
 
 class CustodyTransferRequest(Schema):
     to_employee_id: UUID | None = None
-    to_location_kind: str = Field(pattern=r"^(vehicle|employee|shop|warehouse|repair_vendor|other|unknown)$")
+    to_location_kind: str = Field(
+        pattern=r"^(vehicle|employee|shop|warehouse|repair_vendor|other|unknown)$"
+    )
     to_location_entity_id: UUID | None = None
     reason: str = Field(min_length=1, max_length=500)
-    event_type: str = Field(pattern=r"^(transferred|received|returned|repair|broken|lost|correction)$")
-    resulting_state: str = Field(pattern=r"^(ready|unknown|incomplete|out_of_service|missing)$")
+    event_type: str = Field(
+        pattern=r"^(transferred|received|returned|repair|broken|lost|correction)$"
+    )
+    resulting_state: str = Field(
+        pattern=r"^(ready|unknown|incomplete|out_of_service|missing)$"
+    )
     occurred_at: AwareDatetime
     expected_version: int = Field(ge=1)
     idempotency_key: str = Field(min_length=8, max_length=160)

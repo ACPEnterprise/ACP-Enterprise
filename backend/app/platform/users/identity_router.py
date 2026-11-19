@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.database.session import get_database_session
+from app.platform.auth.errors import PasswordPolicyError
 from app.platform.auth.recovery_delivery import (
     RecoveryDeliveryError,
     RecoveryDeliveryStatus,
     employee_recovery_delivery_service,
 )
-from app.platform.auth.errors import PasswordPolicyError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import (
@@ -27,11 +27,11 @@ from app.platform.reliability.failures import (
 from app.platform.users.identity_models import PendingEmailChange
 from app.platform.users.identity_schemas import (
     AdministrativeEmailChangeRequest,
+    AdministrativePasswordResetRequest,
     EmailAvailabilityRequest,
     EmailAvailabilityResponse,
     EmailChangeConfirmationRequest,
     EmailChangeRequestResponse,
-    AdministrativePasswordResetRequest,
     ForcedPasswordResetRequest,
     ForcedPasswordResetResponse,
     IdentityMutationResponse,

@@ -99,13 +99,26 @@ class MaterialCatalogAdmission(Base):
             name="ck_material_admissions_opening_state",
         ),
         UniqueConstraint(
-            "company_id", "source_digest", "source_row_number",
+            "company_id",
+            "source_digest",
+            "source_row_number",
             name="uq_material_admissions_source_row",
         ),
-        Index("ix_material_admissions_source", "company_id", "source_digest", "disposition"),
+        Index(
+            "ix_material_admissions_source",
+            "company_id",
+            "source_digest",
+            "disposition",
+        ),
     )
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     inventory_item_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     source_filename: Mapped[str] = mapped_column(String(240), nullable=False)
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -114,9 +127,17 @@ class MaterialCatalogAdmission(Base):
     source_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     disposition: Mapped[str] = mapped_column(String(20), nullable=False)
     hold_reason: Mapped[str | None] = mapped_column(String(120))
-    opening_inventory_state: Mapped[str] = mapped_column(String(48), nullable=False, default="not_historically_reconstructed")
-    admitted_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    admitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    opening_inventory_state: Mapped[str] = mapped_column(
+        String(48), nullable=False, default="not_historically_reconstructed"
+    )
+    admitted_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    admitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
 
 
 class StockLocation(Base):

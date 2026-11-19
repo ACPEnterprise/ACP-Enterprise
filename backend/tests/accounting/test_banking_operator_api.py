@@ -58,7 +58,9 @@ def preview_request(*items: BankTransactionIngest) -> BankImportPreviewRequest:
 
 
 @pytest.mark.asyncio
-async def test_import_preview_is_non_mutating_and_classifies_new_replay_conflict() -> None:
+async def test_import_preview_is_non_mutating_and_classifies_new_replay_conflict() -> (
+    None
+):
     company_id, account_id = uuid4(), uuid4()
     account = SimpleNamespace(id=account_id, company_id=company_id)
     existing = [
@@ -119,9 +121,7 @@ async def test_confirm_requires_exact_preview_digest() -> None:
         scalars=AsyncMock(return_value=Rows([])),
     )
     request = preview_request(transaction("new"))
-    confirm = BankImportConfirmRequest(
-        **request.model_dump(), preview_digest="0" * 64
-    )
+    confirm = BankImportConfirmRequest(**request.model_dump(), preview_digest="0" * 64)
     context = SimpleNamespace(company=SimpleNamespace(id=company_id))
     with pytest.raises(AccountingConflict, match="changed"):
         await BankingOperatorService().confirm_import(
@@ -163,7 +163,9 @@ def test_cash_flow_contract_preserves_tie_and_incomplete_truth() -> None:
     assert partial.tie_status == "UNAVAILABLE"
 
 
-def test_operator_routes_are_default_deny_and_expose_no_reopen_or_money_movement() -> None:
+def test_operator_routes_are_default_deny_and_expose_no_reopen_or_money_movement() -> (
+    None
+):
     client = TestClient(app)
     paths = app.openapi()["paths"]
     required = {
@@ -178,7 +180,9 @@ def test_operator_routes_are_default_deny_and_expose_no_reopen_or_money_movement
     assert required <= paths.keys()
     for path in required:
         method = "post" if "preview" in path or "confirm" in path else "get"
-        response = getattr(client, method)(path.replace("{bank_account_id}", str(uuid4())))
+        response = getattr(client, method)(
+            path.replace("{bank_account_id}", str(uuid4()))
+        )
         assert response.status_code in {401, 422}
     banking_paths = tuple(path for path in paths if "/accounting/banking" in path)
     assert not any("reopen" in path or "move-money" in path for path in banking_paths)

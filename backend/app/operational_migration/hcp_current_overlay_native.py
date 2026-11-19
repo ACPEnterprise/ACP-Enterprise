@@ -17,12 +17,6 @@ from app.customer_migration.models import (
     CustomerSourceIdentity,
     ServiceLocationSourceIdentity,
 )
-from app.financials.service import (
-    FinancialService,
-    MigrateEstimate,
-    MigrateInvoice,
-    MigratedLineItem,
-)
 from app.customers.models import Customer, ServiceLocation
 from app.customers.schemas import (
     ContactCreate,
@@ -34,6 +28,13 @@ from app.customers.schemas import (
 )
 from app.customers.service import CustomerService
 from app.customers.update import CustomerUpdateService, customer_update_service
+from app.financials.models import Estimate, Invoice
+from app.financials.service import (
+    FinancialService,
+    MigratedLineItem,
+    MigrateEstimate,
+    MigrateInvoice,
+)
 from app.jobs.commands import MigrateJob, UpdateJob
 from app.jobs.models import Job, JobAppointmentLink
 from app.jobs.service import JobService
@@ -47,17 +48,17 @@ from app.operational_migration.hcp_current_overlay import (
 from app.operational_migration.hcp_current_overlay_adapter import (
     CurrentOverlayDomainServices,
 )
-from app.operational_migration.hcp_source4_contracts import JOB_STATUS
-from app.operational_migration.hcp_source4_native_binding import (
-    HcpSource4NativeBindingBootstrap,
-)
 from app.operational_migration.hcp_migration2b import (
     EmployeeCrosswalkCommand,
     persist_employee_crosswalk,
 )
 from app.operational_migration.hcp_source4_contracts import (
+    JOB_STATUS,
     build_estimate,
     build_invoice,
+)
+from app.operational_migration.hcp_source4_native_binding import (
+    HcpSource4NativeBindingBootstrap,
 )
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
@@ -70,7 +71,6 @@ from app.operational_migration.models import (
     JobSourceIdentity,
 )
 from app.operational_migration.repository import OperationalMigrationRepository
-from app.financials.models import Estimate, Invoice
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.models import Appointment
@@ -290,7 +290,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             if customer is None or customer.company_id != self.context.company.id:
                 return None
         elif domain in {"estimate", "invoice"}:
-            if native.company_id != self.context.company.id or native.branch_id != self.branch.id:
+            if (
+                native.company_id != self.context.company.id
+                or native.branch_id != self.branch.id
+            ):
                 return None
         elif native.company_id != self.context.company.id:
             return None
@@ -661,7 +664,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         await session.flush()
         return employee
 
-    async def _job_identity(self, session: AsyncSession, parents: tuple[OverlayKey, ...]):
+    async def _job_identity(
+        self, session: AsyncSession, parents: tuple[OverlayKey, ...]
+    ):
         key = next((item for item in parents if item.domain == "job"), None)
         if key is None:
             raise ValueError("financial record Job parent is missing")
@@ -682,9 +687,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         payload = dict(record.payload)
         payload.setdefault("_source_digest", record.source_digest)
         payload.setdefault("_owner_disposition", record.source_disposition or "CREATE")
-        payload.setdefault("_source_job_id", next(
-            key.source_id for key in record.parent_keys if key.domain == "job"
-        ))
+        payload.setdefault(
+            "_source_job_id",
+            next(key.source_id for key in record.parent_keys if key.domain == "job"),
+        )
         source = build_estimate(payload)
         estimate, items = await self.financials.stage_migrated_estimate(
             session,
@@ -697,7 +703,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 subtotal_amount=source.subtotal_amount,
                 tax_amount=source.tax_amount,
                 total_amount=source.total_amount,
-                line_items=tuple(MigratedLineItem(**vars(item)) for item in source.line_items),
+                line_items=tuple(
+                    MigratedLineItem(**vars(item)) for item in source.line_items
+                ),
                 presented_at=source.presented_at,
                 expires_on=source.expires_on,
             ),
@@ -759,7 +767,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 subtotal_amount=source.subtotal_amount,
                 tax_amount=source.tax_amount,
                 total_amount=source.total_amount,
-                line_items=tuple(MigratedLineItem(**vars(item)) for item in source.line_items),
+                line_items=tuple(
+                    MigratedLineItem(**vars(item)) for item in source.line_items
+                ),
                 issued_at=source.issued_at,
                 due_on=source.due_on,
             ),

@@ -88,14 +88,22 @@ class EmployeeAccessLockService:
             await AuthenticationService.revoke_user_sessions(
                 session,
                 user_id=user.id,
-                reason="employee_access_locked" if locked else "employee_access_unlocked",
+                reason="employee_access_locked"
+                if locked
+                else "employee_access_unlocked",
                 now=now,
                 revoked_by_user_id=context.user.id,
             )
 
-            action = "workforce.employee_access_locked" if locked else "workforce.employee_access_unlocked"
+            action = (
+                "workforce.employee_access_locked"
+                if locked
+                else "workforce.employee_access_unlocked"
+            )
             event_type = (
-                EventType.USER_ACCESS_LOCKED if locked else EventType.USER_ACCESS_UNLOCKED
+                EventType.USER_ACCESS_LOCKED
+                if locked
+                else EventType.USER_ACCESS_UNLOCKED
             )
             details: dict[str, object] = {
                 "employee_id": str(employee_id),
@@ -113,7 +121,9 @@ class EmployeeAccessLockService:
                     resource_id=employee_id,
                     actor_user_id=context.user.id,
                     company_id=context.company.id,
-                    branch_id=context.active_branch.id if context.active_branch else None,
+                    branch_id=context.active_branch.id
+                    if context.active_branch
+                    else None,
                     reason_code="emergency_access_lock" if locked else "access_unlock",
                     details=details,
                     occurred_at=now,
@@ -126,7 +136,9 @@ class EmployeeAccessLockService:
                     entity_type="employee",
                     entity_id=employee_id,
                     company_id=context.company.id,
-                    branch_id=context.active_branch.id if context.active_branch else None,
+                    branch_id=context.active_branch.id
+                    if context.active_branch
+                    else None,
                     user_id=context.user.id,
                     payload=details,
                     occurred_at=now,

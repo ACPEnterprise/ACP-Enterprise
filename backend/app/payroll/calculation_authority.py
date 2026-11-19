@@ -41,7 +41,9 @@ from .tax_calculation import (
 
 
 def protected_payload(
-    *, company_id: UUID, authority: PayrollInputAuthorityVersion,
+    *,
+    company_id: UUID,
+    authority: PayrollInputAuthorityVersion,
     envelope: PayrollProtectedInputEnvelope | None,
     cipher: ProtectedPayrollInputCipher,
 ) -> dict[str, object]:
@@ -64,17 +66,28 @@ def protected_payload(
 def configured_input_cipher() -> ProtectedPayrollInputCipher:
     """Return the configured server-side keyring, never exposing plaintext."""
     if not settings.payroll_input_active_kid:
-        raise PayrollConflictError("protected Payroll input configuration is unavailable")
+        raise PayrollConflictError(
+            "protected Payroll input configuration is unavailable"
+        )
     configured = settings.payroll_input_encryption_keys
     if settings.payroll_input_encryption_key_file:
-        configured = json.loads(Path(settings.payroll_input_encryption_key_file).read_text(encoding="utf-8"))
+        configured = json.loads(
+            Path(settings.payroll_input_encryption_key_file).read_text(encoding="utf-8")
+        )
     if not isinstance(configured, dict):
         raise PayrollConflictError("protected Payroll input keyring is invalid")
     try:
-        keys = {str(key): base64.urlsafe_b64decode(str(value)) for key, value in configured.items()}
-        return ProtectedPayrollInputCipher(active_key_id=settings.payroll_input_active_kid, keys=keys)
+        keys = {
+            str(key): base64.urlsafe_b64decode(str(value))
+            for key, value in configured.items()
+        }
+        return ProtectedPayrollInputCipher(
+            active_key_id=settings.payroll_input_active_kid, keys=keys
+        )
     except Exception as error:  # pragma: no cover - defensive configuration boundary
-        raise PayrollConflictError("protected Payroll input keyring is unavailable") from error
+        raise PayrollConflictError(
+            "protected Payroll input keyring is unavailable"
+        ) from error
 
 
 @dataclass(frozen=True)
@@ -92,7 +105,9 @@ def _decimal(payload: Mapping[str, object], key: str) -> Decimal:
     try:
         return Decimal(str(value))
     except Exception as error:
-        raise PayrollConflictError(f"protected Payroll input {key} is invalid") from error
+        raise PayrollConflictError(
+            f"protected Payroll input {key} is invalid"
+        ) from error
 
 
 def _bool(payload: Mapping[str, object], key: str) -> bool:
@@ -106,7 +121,9 @@ def _filing_status(value: object) -> FilingStatus:
     try:
         return FilingStatus(str(value))
     except ValueError as error:
-        raise PayrollConflictError("protected Payroll filing status is invalid") from error
+        raise PayrollConflictError(
+            "protected Payroll filing status is invalid"
+        ) from error
 
 
 def build_federal_authority_inputs(
@@ -137,10 +154,29 @@ def build_federal_authority_inputs(
         if envelope_id is not None:
             envelope = envelopes.get(envelope_id)
             if envelope is None:
-                raise PayrollConflictError("protected Payroll input envelope is missing")
-            payload.update(cipher.decrypt(company_id=company_id, key_id=envelope.key_id, nonce=envelope.nonce, ciphertext=envelope.ciphertext, expected_digest=envelope.content_digest))
+                raise PayrollConflictError(
+                    "protected Payroll input envelope is missing"
+                )
+            payload.update(
+                cipher.decrypt(
+                    company_id=company_id,
+                    key_id=envelope.key_id,
+                    nonce=envelope.nonce,
+                    ciphertext=envelope.ciphertext,
+                    expected_digest=envelope.content_digest,
+                )
+            )
         if authority.authority_domain == "deduction":
-            deductions.append(deduction_instruction_from_authority(authority_id=authority.id, authority_digest=authority.authority_digest, authority_key=authority.authority_key, currency="USD", public_parameters=public, priority=authority.priority or 0))
+            deductions.append(
+                deduction_instruction_from_authority(
+                    authority_id=authority.id,
+                    authority_digest=authority.authority_digest,
+                    authority_key=authority.authority_key,
+                    currency="USD",
+                    public_parameters=public,
+                    priority=authority.priority or 0,
+                )
+            )
             continue
         key = authority.authority_key
         component = {
@@ -163,17 +199,38 @@ def build_federal_authority_inputs(
                     step_3_credits=_decimal(payload, "step_3_credits"),
                     step_4a_other_income=_decimal(payload, "step_4a_other_income"),
                     step_4b_deductions=_decimal(payload, "step_4b_deductions"),
-                    step_4c_extra_withholding=_decimal(payload, "step_4c_extra_withholding"),
+                    step_4c_extra_withholding=_decimal(
+                        payload, "step_4c_extra_withholding"
+                    ),
                 ),
-                social_security_wages_ytd=_decimal(payload, "social_security_wages_ytd"),
+                social_security_wages_ytd=_decimal(
+                    payload, "social_security_wages_ytd"
+                ),
                 medicare_wages_ytd=_decimal(payload, "medicare_wages_ytd"),
             ),
             component=component,
             environment=ProviderEnvironment.PRODUCTION,
         )
-        tax_instructions.append(TaxComponentInstruction(component_key=component.value, responsibility=TaxResponsibility.EMPLOYEE_WITHHOLDING if component is FederalComponent.FEDERAL_INCOME_TAX else TaxResponsibility.EMPLOYEE_PAYROLL_TAX, authority_id=authority.id, authority_digest=authority.authority_digest, jurisdiction_reference=jurisdiction, requires_protected_input=envelope_id is not None, provider=cast(TaxRuleProvider, federal_provider)))
+        tax_instructions.append(
+            TaxComponentInstruction(
+                component_key=component.value,
+                responsibility=TaxResponsibility.EMPLOYEE_WITHHOLDING
+                if component is FederalComponent.FEDERAL_INCOME_TAX
+                else TaxResponsibility.EMPLOYEE_PAYROLL_TAX,
+                authority_id=authority.id,
+                authority_digest=authority.authority_digest,
+                jurisdiction_reference=jurisdiction,
+                requires_protected_input=envelope_id is not None,
+                provider=cast(TaxRuleProvider, federal_provider),
+            )
+        )
     provider = tax_instructions[0].provider if tax_instructions else None
     if provider is None:
         raise PayrollConflictError("federal tax authority is missing")
     concrete = cast(Federal2026TaxRuleProvider, provider)
-    return FederalAuthorityInputs(context=concrete.context, tax_instructions=tuple(tax_instructions), deduction_instructions=tuple(deductions), authority_ids=tuple(ids))
+    return FederalAuthorityInputs(
+        context=concrete.context,
+        tax_instructions=tuple(tax_instructions),
+        deduction_instructions=tuple(deductions),
+        authority_ids=tuple(ids),
+    )

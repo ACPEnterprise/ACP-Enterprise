@@ -498,14 +498,21 @@ class SimpleEmployeeMatchResponse(WorkforceSchema):
 class SimpleEmployeeOnboardingRequest(SimpleEmployeeMatchRequest):
     request_key: str = Field(min_length=1, max_length=128)
     access_profile: Literal[
-        "ADMINISTRATOR", "OFFICE_MANAGER", "OFFICE_STAFF", "FIELD_TECHNICIAN", "HELPER", "FIELD_MANAGER"
+        "ADMINISTRATOR",
+        "OFFICE_MANAGER",
+        "OFFICE_STAFF",
+        "FIELD_TECHNICIAN",
+        "HELPER",
+        "FIELD_MANAGER",
     ]
     temporary_password: str = Field(min_length=1, max_length=1024, repr=False)
     confirm_temporary_password: str = Field(min_length=1, max_length=1024, repr=False)
     require_password_change: bool = True
 
     @model_validator(mode="after")
-    def validate_temporary_password_confirmation(self) -> "SimpleEmployeeOnboardingRequest":
+    def validate_temporary_password_confirmation(
+        self,
+    ) -> "SimpleEmployeeOnboardingRequest":
         if self.temporary_password != self.confirm_temporary_password:
             raise ValueError("Temporary password and confirmation must match.")
         return self

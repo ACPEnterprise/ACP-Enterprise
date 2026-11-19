@@ -41,7 +41,11 @@ def compose_csr_dispatch_copilot(
 ) -> CsrDispatchCopilot:
     """Compose a CSR payload without promoting unconfirmed speech to authority."""
 
-    if customer_match.state not in {"EXISTING", "NEW_CUSTOMER_INTAKE_REQUIRED", "AMBIGUOUS"}:
+    if customer_match.state not in {
+        "EXISTING",
+        "NEW_CUSTOMER_INTAKE_REQUIRED",
+        "AMBIGUOUS",
+    }:
         raise ValueError("customer match must be canonical EXISTING, NEW, or AMBIGUOUS")
     if customer_match.state == "EXISTING" and not customer_match.customer_id:
         raise ValueError("existing Customer branch requires canonical customer_id")
@@ -57,7 +61,9 @@ def compose_csr_dispatch_copilot(
     )
     expired = evaluated_at >= reasoning.expires_at
     current = customer_match.state == "EXISTING" and not clarification and not expired
-    slots = tuple(_slot_payload(item) for item in (reasoning.primary, *reasoning.alternates))
+    slots = tuple(
+        _slot_payload(item) for item in (reasoning.primary, *reasoning.alternates)
+    )
     primary = (
         slots[0]
         if not expired
@@ -73,16 +79,21 @@ def compose_csr_dispatch_copilot(
     constrained = tuple(
         item
         for item in slots
-        if not expired
-        and item["slot_class"] == GhostSlotClass.CONSTRAINED_OPTION.value
+        if not expired and item["slot_class"] == GhostSlotClass.CONSTRAINED_OPTION.value
     )
     limitations = list(reasoning.limitations) + list(customer_match.limitations)
     if customer_match.state != "EXISTING":
-        limitations.append("Recommendations remain provisional until canonical Customer and Location are confirmed.")
+        limitations.append(
+            "Recommendations remain provisional until canonical Customer and Location are confirmed."
+        )
     if clarification:
-        limitations.append("Unconfirmed speech interpretations require CSR/customer confirmation.")
+        limitations.append(
+            "Unconfirmed speech interpretations require CSR/customer confirmation."
+        )
     if expired:
-        limitations.append("Dispatch reasoning expired; refresh before offering a slot.")
+        limitations.append(
+            "Dispatch reasoning expired; refresh before offering a slot."
+        )
     question = _next_question(customer_match, clarification, reasoning.next_question)
     return CsrDispatchCopilot(
         reasoning_id=reasoning.reasoning_id,
@@ -100,7 +111,9 @@ def compose_csr_dispatch_copilot(
         ),
         speech_interpretations=speech,
         clarification_required=bool(clarification),
-        translation_available=any(item.translation_state == "TRANSLATED" for item in speech),
+        translation_available=any(
+            item.translation_state == "TRANSLATED" for item in speech
+        ),
         recommendation_state=(
             "EXPIRED" if expired else "CURRENT" if current else "PROVISIONAL"
         ),
@@ -140,7 +153,11 @@ def _slot_payload(slot: GhostSlot) -> dict[str, object]:
         "why": slot.why,
         "limitations": slot.limitations,
         "evidence": tuple(
-            {"authority": item.authority, "identity": item.identity, "digest": item.digest}
+            {
+                "authority": item.authority,
+                "identity": item.identity,
+                "digest": item.digest,
+            }
             for item in slot.evidence
         ),
     }

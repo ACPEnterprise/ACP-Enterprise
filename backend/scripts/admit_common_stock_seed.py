@@ -15,7 +15,9 @@ from app.inventory.common_stock_seed import (
 
 
 async def run() -> int:
-    parser = argparse.ArgumentParser(description="Inspect or admit the owner common-stock workbook")
+    parser = argparse.ArgumentParser(
+        description="Inspect or admit the owner common-stock workbook"
+    )
     parser.add_argument("workbook", type=Path)
     parser.add_argument("--admit", action="store_true")
     parser.add_argument("--company-id", type=UUID)
@@ -45,7 +47,9 @@ async def run() -> int:
                 company_id=args.company_id,
                 actor_user_id=args.actor_user_id,
             )
-        result.update({"mode": "admitted", "records_admitted": admitted, "records_held": held})
+        result.update(
+            {"mode": "admitted", "records_admitted": admitted, "records_held": held}
+        )
     print(json.dumps(result, sort_keys=True))
     return 0
 

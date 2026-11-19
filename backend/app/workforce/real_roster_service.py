@@ -226,9 +226,7 @@ class RealRosterService:
             )
         confirmed_login_email = normalize_email(command.confirmed_login_email)
         existing_user = await session.scalar(
-            select(User).where(
-                User.normalized_email == confirmed_login_email
-            )
+            select(User).where(User.normalized_email == confirmed_login_email)
         )
         role_ids = tuple(sorted((role.id for role in roles), key=str))
         existing_user_id = existing_user.id if existing_user is not None else None
@@ -254,18 +252,16 @@ class RealRosterService:
                     role_ids=role_ids,
                     additional_permission_ids=(),
                     login_email=(
-                        None
-                        if existing_user_id is not None
-                        else confirmed_login_email
+                        None if existing_user_id is not None else confirmed_login_email
                     ),
                     existing_user_id=existing_user_id,
                     existing_employee_id=preview.source_candidate_employee_id,
-                admin_password=(
-                    command.admin_password.get_secret_value()
-                    if command.admin_password is not None
-                    else None
-                ),
-                require_password_change=command.require_password_change,
+                    admin_password=(
+                        command.admin_password.get_secret_value()
+                        if command.admin_password is not None
+                        else None
+                    ),
+                    require_password_change=command.require_password_change,
                 ),
             )
         except OnboardingConflictError as error:

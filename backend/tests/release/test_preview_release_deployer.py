@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPOSITORY_ROOT / "scripts" / "deploy-preview-release.py"
 SPEC = importlib.util.spec_from_file_location("deploy_preview_release", SCRIPT)
@@ -23,26 +22,28 @@ def git(root: Path, *arguments: str, check: bool = True) -> str:
         ("git", "-C", str(root), *arguments),
         check=check,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     return completed.stdout.strip()
 
 
 def preview_env(sha: str) -> str:
-    return "\n".join(
-        (
-            "COMPOSE_PROJECT_NAME=acp-enterprise-preview",
-            "PREVIEW_HTTP_PORT=8080",
-            f"APP_VERSION={sha}",
-            "DATABASE_URL=postgresql+asyncpg://preview:secret@postgres:5432/preview",
-            "POSTGRES_PASSWORD=preview-secret",
-            "PLATFORM_CONTRACT_EXPECTED_FINGERPRINT=test-fingerprint",
-            'ACCESS_TOKEN_KEYS={"preview":"test-secret"}',
-            "SECURITY_TOKEN_HMAC_KEY=test-hmac",
-            "QBO_PRODUCTION_ENABLED=false",
+    return (
+        "\n".join(
+            (
+                "COMPOSE_PROJECT_NAME=acp-enterprise-preview",
+                "PREVIEW_HTTP_PORT=8080",
+                f"APP_VERSION={sha}",
+                "DATABASE_URL=postgresql+asyncpg://preview:secret@postgres:5432/preview",
+                "POSTGRES_PASSWORD=preview-secret",
+                "PLATFORM_CONTRACT_EXPECTED_FINGERPRINT=test-fingerprint",
+                'ACCESS_TOKEN_KEYS={"preview":"test-secret"}',
+                "SECURITY_TOKEN_HMAC_KEY=test-hmac",
+                "QBO_PRODUCTION_ENABLED=false",
+            )
         )
-    ) + "\n"
+        + "\n"
+    )
 
 
 def source_repo(tmp_path: Path) -> tuple[Path, str]:
@@ -83,7 +84,9 @@ def clean_root(tmp_path: Path, sha: str) -> tuple[Path, Path]:
     return root, env
 
 
-def test_git_archive_materializes_source_without_git_and_copies_only_env(tmp_path: Path) -> None:
+def test_git_archive_materializes_source_without_git_and_copies_only_env(
+    tmp_path: Path,
+) -> None:
     source, sha = source_repo(tmp_path)
     root, previous = runtime_root(tmp_path)
     release, target = deployer.build_release(
@@ -100,7 +103,9 @@ def test_git_archive_materializes_source_without_git_and_copies_only_env(tmp_pat
     assert target.name == f"enterprise-beta-{sha[:8]}"
     assert (release.path / "tracked.txt").read_text() == "tracked source\n"
     assert not (release.path / ".git").exists()
-    assert (release.path / ".env.preview").read_text().split("APP_VERSION=", 1)[1].splitlines()[0] == sha
+    assert (release.path / ".env.preview").read_text().split("APP_VERSION=", 1)[
+        1
+    ].splitlines()[0] == sha
     assert (release.path / ".release-metadata.json").is_file()
 
 
@@ -195,18 +200,21 @@ def test_dirty_source_is_blocked(tmp_path: Path) -> None:
     (source / "untracked.txt").write_text("dirty\n")
     root, _ = runtime_root(tmp_path)
 
-    assert deployer.main(
-        [
-            "deploy",
-            "--source-root",
-            str(source),
-            "--root",
-            str(root),
-            "--sha",
-            sha,
-            "--dry-run",
-        ]
-    ) == 1
+    assert (
+        deployer.main(
+            [
+                "deploy",
+                "--source-root",
+                str(source),
+                "--root",
+                str(root),
+                "--sha",
+                sha,
+                "--dry-run",
+            ]
+        )
+        == 1
+    )
 
 
 def test_stateful_and_migration_services_are_blocked() -> None:
@@ -254,13 +262,17 @@ def test_backend_only_verification_does_not_require_frontend_or_proxy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[str] = []
-    monkeypatch.setattr(deployer, "wait_for_backend", lambda *_args: calls.append("wait"))
+    monkeypatch.setattr(
+        deployer, "wait_for_backend", lambda *_args: calls.append("wait")
+    )
     monkeypatch.setattr(
         deployer,
         "verify_backend_runtime",
         lambda *_args: calls.append("backend"),
     )
-    monkeypatch.setattr(deployer, "verify_schema", lambda *_args: calls.append("schema"))
+    monkeypatch.setattr(
+        deployer, "verify_schema", lambda *_args: calls.append("schema")
+    )
     monkeypatch.setattr(
         deployer,
         "verify_stateful_ids",
@@ -292,14 +304,18 @@ def test_full_stack_verification_keeps_proxy_and_beta_checks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[str] = []
-    monkeypatch.setattr(deployer, "wait_for_backend", lambda *_args: calls.append("wait"))
+    monkeypatch.setattr(
+        deployer, "wait_for_backend", lambda *_args: calls.append("wait")
+    )
     monkeypatch.setattr(
         deployer,
         "verify_backend_runtime",
         lambda *_args: calls.append("backend"),
     )
     monkeypatch.setattr(deployer, "verify_http", lambda *_args: calls.append("proxy"))
-    monkeypatch.setattr(deployer, "verify_schema", lambda *_args: calls.append("schema"))
+    monkeypatch.setattr(
+        deployer, "verify_schema", lambda *_args: calls.append("schema")
+    )
     monkeypatch.setattr(
         deployer,
         "verify_stateful_ids",
@@ -322,7 +338,9 @@ def test_backend_runtime_rejects_unhealthy_container(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     responses = iter(("backend-id\n", "running\n", "unhealthy\n"))
-    monkeypatch.setattr(deployer, "compose_command", lambda *_args: ("docker", "compose"))
+    monkeypatch.setattr(
+        deployer, "compose_command", lambda *_args: ("docker", "compose")
+    )
     monkeypatch.setattr(deployer, "run", lambda *_args, **_kwargs: next(responses))
 
     with pytest.raises(deployer.DeployError, match="not healthy"):
@@ -332,8 +350,12 @@ def test_backend_runtime_rejects_unhealthy_container(
 def test_backend_runtime_rejects_wrong_app_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    responses = iter(("backend-id\n", "running\n", "healthy\n", "APP_VERSION=" + "b" * 40 + "\n"))
-    monkeypatch.setattr(deployer, "compose_command", lambda *_args: ("docker", "compose"))
+    responses = iter(
+        ("backend-id\n", "running\n", "healthy\n", "APP_VERSION=" + "b" * 40 + "\n")
+    )
+    monkeypatch.setattr(
+        deployer, "compose_command", lambda *_args: ("docker", "compose")
+    )
     monkeypatch.setattr(deployer, "run", lambda *_args, **_kwargs: next(responses))
 
     with pytest.raises(deployer.DeployError, match="APP_VERSION"):
@@ -346,7 +368,9 @@ def test_deploy_rolls_back_when_schema_or_health_verification_fails(
     source, sha = source_repo(tmp_path)
     root, previous = runtime_root(tmp_path)
     monkeypatch.setattr(deployer, "validate_compose", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(deployer, "compose_ids", lambda *_args: {"postgres": "p", "redis": "r"})
+    monkeypatch.setattr(
+        deployer, "compose_ids", lambda *_args: {"postgres": "p", "redis": "r"}
+    )
     monkeypatch.setattr(deployer, "build", lambda *_args: None)
     monkeypatch.setattr(deployer, "recreate", lambda *_args: None)
     calls = 0
@@ -359,18 +383,21 @@ def test_deploy_rolls_back_when_schema_or_health_verification_fails(
 
     monkeypatch.setattr(deployer, "verify_release", fail_target_then_accept_rollback)
 
-    assert deployer.main(
-        [
-            "deploy",
-            "--source-root",
-            str(source),
-            "--root",
-            str(root),
-            "--sha",
-            sha,
-            "--service",
-            "backend",
-        ]
-    ) == 1
+    assert (
+        deployer.main(
+            [
+                "deploy",
+                "--source-root",
+                str(source),
+                "--root",
+                str(root),
+                "--sha",
+                sha,
+                "--service",
+                "backend",
+            ]
+        )
+        == 1
+    )
     assert calls == 2
     assert (root / "current").resolve() == previous

@@ -260,17 +260,18 @@ def _exact_list(
     expected: frozenset[str],
     *,
     allow_extra: bool = False,
-) -> list[object]:
+) -> list[Mapping[str, object]]:
     value = row[key]
     if not isinstance(value, list):
         raise TransformationValidationError("changed_nested_layout", fields=(key,))
-    if any(
-        not isinstance(item, Mapping)
-        or (set(item) != expected if not allow_extra else not expected.issubset(item))
-        for item in value
-    ):
-        raise TransformationValidationError("changed_nested_layout", fields=(key,))
-    return value
+    result: list[Mapping[str, object]] = []
+    for item in value:
+        if not isinstance(item, Mapping) or (
+            set(item) != expected if not allow_extra else not expected.issubset(item)
+        ):
+            raise TransformationValidationError("changed_nested_layout", fields=(key,))
+        result.append(item)
+    return result
 
 
 def _id(value: object, field: str, prefix: str) -> str:

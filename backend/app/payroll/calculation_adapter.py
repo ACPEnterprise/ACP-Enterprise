@@ -72,7 +72,9 @@ def required_tax_authorities(employee_id: UUID) -> tuple[AuthorityRequirement, .
     """Return only explicit requirements; elections/jurisdiction remain inputs."""
     return (
         AuthorityRequirement(PayrollInputDomain.TAX, "federal_income_tax", employee_id),
-        AuthorityRequirement(PayrollInputDomain.TAX, "social_security_employee", employee_id),
+        AuthorityRequirement(
+            PayrollInputDomain.TAX, "social_security_employee", employee_id
+        ),
         AuthorityRequirement(PayrollInputDomain.TAX, "medicare_employee", employee_id),
     )
 

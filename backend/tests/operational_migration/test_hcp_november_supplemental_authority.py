@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_executor import _digest
 from app.operational_migration.hcp_november_supplemental_authority import (
@@ -26,7 +25,9 @@ def _packet_and_manifest(tmp_path: Path) -> tuple[Path, Path]:
         record: dict[str, object] = {
             "domain": domain,
             "source_id": source_id,
-            "assertion": "hold" if disposition.startswith("HOLD") else ("update" if disposition == "UPDATE" else "create"),
+            "assertion": "hold"
+            if disposition.startswith("HOLD")
+            else ("update" if disposition == "UPDATE" else "create"),
             "source_digest": hashlib.sha256(source_id.encode()).hexdigest(),
             "acquired_at": "2026-11-13T00:00:00+00:00",
             "payload": {},
@@ -62,7 +63,9 @@ def _packet_and_manifest(tmp_path: Path) -> tuple[Path, Path]:
     for i in range(EXPECTED_COUNTS["HOLD"] - len(quarantined)):
         add("legacy_appointment", f"held-{i}", "HOLD")
     for source_id in quarantined:
-        add("estimate" if source_id.startswith("csr_") else "invoice", source_id, "HOLD")
+        add(
+            "estimate" if source_id.startswith("csr_") else "invoice", source_id, "HOLD"
+        )
         records[-1].update(
             {
                 "original_gate_disposition": "REPLAY",
@@ -90,7 +93,9 @@ def _packet_and_manifest(tmp_path: Path) -> tuple[Path, Path]:
     }
     packet_values["digest"] = _digest(packet_values)
     packet_path = tmp_path / "packet.json"
-    packet_path.write_text(json.dumps(packet_values, sort_keys=True, separators=(",", ":")))
+    packet_path.write_text(
+        json.dumps(packet_values, sort_keys=True, separators=(",", ":"))
+    )
     packet_path.chmod(0o600)
 
     manifest_records = []
@@ -112,7 +117,9 @@ def _packet_and_manifest(tmp_path: Path) -> tuple[Path, Path]:
         "digest": "94bb2277b77510432369d8752c74ef3fe1dcf77056f5d51ac91854079f155d70",
     }
     manifest_path = tmp_path / "supplemental-manifest.json"
-    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+    )
     manifest_path.chmod(0o600)
     return packet_path, manifest_path
 
@@ -166,12 +173,24 @@ def _authority(tmp_path: Path, packet_path: Path, manifest_path: Path) -> Path:
 
 def test_valid_supplemental_authority_is_accepted(tmp_path: Path) -> None:
     packet, manifest = _packet_and_manifest(tmp_path)
-    authority = SupplementalCurrentStateAuthority.load(_authority(tmp_path, packet, manifest))
+    authority = SupplementalCurrentStateAuthority.load(
+        _authority(tmp_path, packet, manifest)
+    )
     assert authority.executable_count == 5188
 
 
-@pytest.mark.parametrize("field", ["approved_current_source_ids", "quarantined_source_ids", "supplemental_manifest_digest", "immutable_source_packet_digest"])
-def test_supplemental_authority_mismatch_is_rejected(tmp_path: Path, field: str) -> None:
+@pytest.mark.parametrize(
+    "field",
+    [
+        "approved_current_source_ids",
+        "quarantined_source_ids",
+        "supplemental_manifest_digest",
+        "immutable_source_packet_digest",
+    ],
+)
+def test_supplemental_authority_mismatch_is_rejected(
+    tmp_path: Path, field: str
+) -> None:
     packet, manifest = _packet_and_manifest(tmp_path)
     path = _authority(tmp_path, packet, manifest)
     value = json.loads(path.read_text())
@@ -179,7 +198,9 @@ def test_supplemental_authority_mismatch_is_rejected(tmp_path: Path, field: str)
         value[field] = ["wrong-id"]
     else:
         value[field] = "f" * 64
-    value["authority_digest"] = _digest({key: item for key, item in value.items() if key != "authority_digest"})
+    value["authority_digest"] = _digest(
+        {key: item for key, item in value.items() if key != "authority_digest"}
+    )
     path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")))
     path.chmod(0o600)
     with pytest.raises(SafeEvidenceError):
@@ -191,7 +212,9 @@ def test_production_target_is_rejected(tmp_path: Path) -> None:
     path = _authority(tmp_path, packet, manifest)
     value = json.loads(path.read_text())
     value["target"] = "production"
-    value["authority_digest"] = _digest({key: item for key, item in value.items() if key != "authority_digest"})
+    value["authority_digest"] = _digest(
+        {key: item for key, item in value.items() if key != "authority_digest"}
+    )
     path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")))
     path.chmod(0o600)
     with pytest.raises(SafeEvidenceError):

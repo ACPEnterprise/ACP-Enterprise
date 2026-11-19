@@ -23,9 +23,7 @@ def test_private_packet_builder_is_deterministic_and_preserves_parent_graph(
                         "acquired_at": "2026-09-30T12:00:00Z",
                         "source_updated_at": "2026-09-29T12:00:00Z",
                         "payload": {"id": "appointment-1"},
-                        "parent_keys": [
-                            {"domain": "job", "source_id": "job-1"}
-                        ],
+                        "parent_keys": [{"domain": "job", "source_id": "job-1"}],
                     }
                 ],
             }

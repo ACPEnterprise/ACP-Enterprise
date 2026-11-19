@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import stat
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 COLLECTIONS = {
     "employee": "employees",
@@ -32,8 +32,9 @@ class GetResponse(Protocol):
 
 
 class GetOnlyTransport(Protocol):
-    def get(self, path: str, *, query: Mapping[str, str | int] | None = None) -> GetResponse:
-        ...
+    def get(
+        self, path: str, *, query: Mapping[str, str | int] | None = None
+    ) -> GetResponse: ...
 
 
 def _now() -> str:
@@ -60,7 +61,9 @@ def _read_json(path: Path) -> Any:
     return json.loads(path.read_bytes())
 
 
-def load_inventory(path: Path, expected_sha256: str) -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
+def load_inventory(
+    path: Path, expected_sha256: str
+) -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
     if not path.is_file() or path.is_symlink():
         raise ValueError("missing payload inventory is absent or is a symlink")
     actual = _sha256_bytes(path.read_bytes())
@@ -68,7 +71,7 @@ def load_inventory(path: Path, expected_sha256: str) -> tuple[dict[str, Any], tu
         raise ValueError("missing payload inventory SHA-256 mismatch")
     value = _read_json(path)
     if not isinstance(value, dict):
-        raise ValueError("missing payload inventory must be an object")
+        raise TypeError("missing payload inventory must be an object")
     raw = value.get("records", value.get("missing", value.get("inventory")))
     if not isinstance(raw, list) or not all(isinstance(row, dict) for row in raw):
         raise ValueError("missing payload inventory records are invalid")
@@ -120,7 +123,9 @@ def _response_record(body: bytes, *, domain: str, source_id: str) -> dict[str, A
                 candidates.append(candidate)
             elif isinstance(candidate, list):
                 candidates.extend(item for item in candidate if isinstance(item, dict))
-    matches = [candidate for candidate in candidates if candidate.get("id") == source_id]
+    matches = [
+        candidate for candidate in candidates if candidate.get("id") == source_id
+    ]
     if len(matches) != 1:
         raise ValueError(f"HCP response did not contain exactly one requested {domain}")
     return matches[0]
@@ -138,13 +143,15 @@ def _page_request(locator: str, *, domain: str) -> tuple[str, int]:
 def _page_records(body: bytes, *, collection: str, page: int) -> list[dict[str, Any]]:
     value = json.loads(body)
     if not isinstance(value, dict) or not isinstance(value.get(collection), list):
-        raise ValueError("HCP acquisition page is invalid")
+        raise TypeError("HCP acquisition page is invalid")
     if value.get("page") != page:
         raise ValueError("HCP acquisition page number mismatch")
     if value.get("page_size") != 100:
         raise ValueError("HCP acquisition page size mismatch")
     records = value[collection]
-    if not all(isinstance(item, dict) and isinstance(item.get("id"), str) for item in records):
+    if not all(
+        isinstance(item, dict) and isinstance(item.get("id"), str) for item in records
+    ):
         raise ValueError("HCP acquisition page contains invalid identities")
     return records
 
@@ -195,26 +202,35 @@ def build_supplemental(
                 f"/{collection}", query={"page": page, "page_size": 100}
             )
             if response.status != 200:
-                raise ValueError(f"HCP GET failed for {domain} without exposing response body")
+                raise ValueError(
+                    f"HCP GET failed for {domain} without exposing response body"
+                )
             document = json.loads(response.body)
-            if not isinstance(document, dict) or not isinstance(document.get("total_pages"), int):
-                raise ValueError("HCP acquisition pagination is invalid")
+            if not isinstance(document, dict) or not isinstance(
+                document.get("total_pages"), int
+            ):
+                raise TypeError("HCP acquisition pagination is invalid")
             total_pages = document["total_pages"]
             page_rows = _page_records(response.body, collection=collection, page=page)
             for record in page_rows:
                 source_id = str(record["id"])
-                row = targets.get(source_id)
-                if row is None:
+                target_row = targets.get(source_id)
+                if target_row is None:
                     continue
                 identity = (domain, source_id)
                 if identity in seen:
                     raise ValueError("duplicate supplemental execution identity")
                 seen.add(identity)
                 actual_source_digest = _digest(record)
-                if actual_source_digest != row["source_digest"]:
+                if actual_source_digest != target_row["source_digest"]:
                     raise ValueError(f"source digest mismatch for {domain}:{source_id}")
                 raw_body = (
-                    json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    json.dumps(
+                        record,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    )
                     + "\n"
                 ).encode()
                 raw_name = "raw/{}-{}.json".format(
@@ -226,18 +242,29 @@ def build_supplemental(
                         "domain": domain,
                         "source_id": source_id,
                         "source_digest": actual_source_digest,
-                        "parent_keys": row.get("parent_keys", row.get("parent_lineage", [])),
+                        "parent_keys": target_row.get(
+                            "parent_keys", target_row.get("parent_lineage", [])
+                        ),
                         "payload": record,
                         "raw_body": raw_body,
                         "raw_artifact": raw_name,
-                        "payload_locator": str(row["payload_locator"]),
+                        "payload_locator": str(target_row["payload_locator"]),
                         "request": f"GET /{collection}?page={page}&page_size=100",
                     }
                 )
             page += 1
-        missing = sorted(set(targets) - {source_id for target_domain, source_id in seen if target_domain == domain})
+        missing = sorted(
+            set(targets)
+            - {
+                source_id
+                for target_domain, source_id in seen
+                if target_domain == domain
+            }
+        )
         if missing:
-            raise ValueError(f"HCP acquisition did not return all requested {domain} identities")
+            raise ValueError(
+                f"HCP acquisition did not return all requested {domain} identities"
+            )
 
     by_locator: dict[str, list[dict[str, Any]]] = defaultdict(list)
     raw_seals: list[dict[str, Any]] = []
@@ -267,7 +294,9 @@ def build_supplemental(
 
     for locator, records in sorted(by_locator.items()):
         relative = _locator_path(locator)
-        body = (json.dumps({"records": records}, sort_keys=True, indent=2) + "\n").encode()
+        body = (
+            json.dumps({"records": records}, sort_keys=True, indent=2) + "\n"
+        ).encode()
         _write_once(output_root / relative, body)
 
     raw_seals.sort(key=lambda item: item["artifact"])
@@ -295,7 +324,9 @@ def build_supplemental(
     }
     manifest["digest"] = _digest(manifest)
     manifest_path = output_root / "supplemental-custody-manifest.json"
-    _write_once(manifest_path, (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode())
+    _write_once(
+        manifest_path, (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+    )
     # Inventory metadata is retained as a receipt, not copied as authority.
     receipt = {
         "contract": "hcp-november-supplemental-custody-receipt/v1",
@@ -309,7 +340,10 @@ def build_supplemental(
         "count": len(fetched),
         "status": "COMPLETE",
     }
-    _write_once(output_root / "supplemental-custody-receipt.json", (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode())
+    _write_once(
+        output_root / "supplemental-custody-receipt.json",
+        (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode(),
+    )
     return manifest
 
 
@@ -339,7 +373,9 @@ def build_paginated_current_state_supplemental(
         if row["domain"] in {"employee", "estimate", "invoice"}:
             targets_by_domain[str(row["domain"])][str(row["source_id"])] = row
     if sum(len(value) for value in targets_by_domain.values()) != expected_target_count:
-        raise ValueError("paginated supplemental target population has an unexpected size")
+        raise ValueError(
+            "paginated supplemental target population has an unexpected size"
+        )
     if output_root.exists():
         if output_root.is_symlink() or not output_root.is_dir():
             raise ValueError("current supplemental output root is unsafe")
@@ -355,18 +391,35 @@ def build_paginated_current_state_supplemental(
     duplicate_targets: set[tuple[str, str]] = set()
     for domain, targets in sorted(targets_by_domain.items()):
         collection = COLLECTIONS[domain]
-        def fetch_page(page: int) -> tuple[int, bytes, dict[str, Any]]:
+
+        def fetch_page(
+            page: int,
+            *,
+            collection: str = collection,
+            domain: str = domain,
+        ) -> tuple[int, bytes, dict[str, Any]]:
             response = transport.get(
                 f"/{collection}", query={"page": page, "page_size": 100}
             )
             if response.status != 200:
-                raise ValueError(f"HCP GET failed for {domain} without exposing response body")
+                raise ValueError(
+                    f"HCP GET failed for {domain} without exposing response body"
+                )
             document = json.loads(response.body)
-            if not isinstance(document, dict) or not isinstance(document.get("total_pages"), int):
-                raise ValueError("HCP acquisition pagination is invalid")
+            if not isinstance(document, dict) or not isinstance(
+                document.get("total_pages"), int
+            ):
+                raise TypeError("HCP acquisition pagination is invalid")
             return page, response.body, document
 
-        def consume_page(page: int, body: bytes) -> None:
+        def consume_page(
+            page: int,
+            body: bytes,
+            *,
+            collection: str = collection,
+            domain: str = domain,
+            targets: dict[str, dict[str, Any]] = targets,
+        ) -> None:
             page_rows = _page_records(body, collection=collection, page=page)
             pages_requested[domain] = pages_requested.get(domain, 0) + 1
             records_examined[domain] = records_examined.get(domain, 0) + len(page_rows)
@@ -388,7 +441,12 @@ def build_paginated_current_state_supplemental(
                     else "BUSINESS_STATE_CHANGED"
                 )
                 raw_body = (
-                    json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    json.dumps(
+                        record,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    )
                     + "\n"
                 ).encode()
                 raw_artifact = "raw/{}-{}.json".format(
@@ -415,6 +473,7 @@ def build_paginated_current_state_supplemental(
                         "acquired_at": fetched_at or _now(),
                     }
                 )
+
         first_page, first_body, first_document = fetch_page(1)
         total_pages = first_document["total_pages"]
         consume_page(first_page, first_body)
@@ -428,7 +487,10 @@ def build_paginated_current_state_supplemental(
                         break
             else:
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = {executor.submit(fetch_page, page): page for page in remaining_pages}
+                    futures = {
+                        executor.submit(fetch_page, page): page
+                        for page in remaining_pages
+                    }
                     for future in as_completed(futures):
                         page, body, _ = future.result()
                         consume_page(page, body)
@@ -473,8 +535,12 @@ def build_paginated_current_state_supplemental(
         "scan": {
             "pages_requested": pages_requested,
             "records_examined": records_examined,
-            "target_found": {domain: len(found[domain]) for domain in targets_by_domain},
-            "target_missing": {domain: len(values) for domain, values in missing.items()},
+            "target_found": {
+                domain: len(found[domain]) for domain in targets_by_domain
+            },
+            "target_missing": {
+                domain: len(values) for domain, values in missing.items()
+            },
             "unrelated_records_examined_and_discarded": unrelated_discarded,
             "stop_policy": "all_targets_found_or_pagination_exhausted",
         },
@@ -489,12 +555,10 @@ def build_paginated_current_state_supplemental(
             )
         },
         "records": [
-            {
-                key: value
-                for key, value in item.items()
-                if key not in {"raw_body"}
-            }
-            for item in sorted(fetched, key=lambda value: (value["domain"], value["source_id"]))
+            {key: value for key, value in item.items() if key not in {"raw_body"}}
+            for item in sorted(
+                fetched, key=lambda value: (value["domain"], value["source_id"])
+            )
         ],
         "raw_artifacts": raw_seals,
         "missing": missing,
@@ -503,6 +567,8 @@ def build_paginated_current_state_supplemental(
     manifest["digest"] = _digest(manifest)
     _write_once(
         output_root / "supplemental-current-state-manifest.json",
-        (json.dumps(manifest, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode(),
+        (
+            json.dumps(manifest, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+        ).encode(),
     )
     return manifest

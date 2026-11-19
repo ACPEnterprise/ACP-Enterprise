@@ -152,10 +152,14 @@ def test_real_operational_acceptance_is_truthful_and_complete() -> None:
     }
     assert {item["surface"] for item in surfaces} == required
     assert all(
-        (item["status"] == "PASS")
-        == (item["beta_operable"] and item["owner_accepted"])
+        (item["status"] == "PASS") == (item["beta_operable"] and item["owner_accepted"])
         for item in surfaces
     )
-    assert {
-        item["surface"] for item in surfaces if item["status"] == "DEFECT"
-    } == {"Customers", "Customer Search", "Service Agreements", "My Day", "Scheduling", "Payroll"}
+    assert {item["surface"] for item in surfaces if item["status"] == "DEFECT"} == {
+        "Customers",
+        "Customer Search",
+        "Service Agreements",
+        "My Day",
+        "Scheduling",
+        "Payroll",
+    }

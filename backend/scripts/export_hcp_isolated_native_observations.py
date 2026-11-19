@@ -11,15 +11,13 @@ import os
 import re
 import stat
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.customers.models import Customer, ServiceLocation
 from app.jobs.models import Job
@@ -30,6 +28,8 @@ from app.operational_migration.models import (
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
 from app.scheduling.models import Appointment
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 EXPECTED_ENVIRONMENT = "migration_rehearsal"
 EXPECTED_DATABASE = "acp_hcp_rehearsal_import"
@@ -85,7 +85,9 @@ def verify_repository_sha(actual: str, expected: str) -> str:
 def reject_database_url(database_url: str) -> None:
     parsed = urlsplit(database_url.replace("postgresql+asyncpg://", "postgresql://", 1))
     if parsed.scheme not in {"postgres", "postgresql"} or parsed.hostname != "postgres":
-        raise ValueError("database URL must target the private migration_rehearsal postgres service")
+        raise ValueError(
+            "database URL must target the private migration_rehearsal postgres service"
+        )
     if parsed.path.removeprefix("/") != EXPECTED_DATABASE:
         raise ValueError("database URL does not target the rehearsal database")
     forbidden = ("preview", "production", "prod", "beta", "live")
@@ -98,11 +100,18 @@ def verify_schema_head(heads: list[str], expected: str = EXPECTED_SCHEMA_HEAD) -
     if expected != EXPECTED_SCHEMA_HEAD:
         raise ValueError("canonical Alembic head is fixed to yp8r0t2v4x6z")
     if heads != [expected]:
-        raise ValueError(f"Alembic head mismatch: expected [{expected!r}], got {heads!r}")
+        raise ValueError(
+            f"Alembic head mismatch: expected [{expected!r}], got {heads!r}"
+        )
     return expected
 
 
-def verify_scope(company_rows: list[str], branch_rows: list[tuple[str, str]], company_id: str, branch_id: str) -> None:
+def verify_scope(
+    company_rows: list[str],
+    branch_rows: list[tuple[str, str]],
+    company_id: str,
+    branch_id: str,
+) -> None:
     if company_rows != [company_id]:
         raise ValueError("scope must resolve exactly one Company")
     if branch_rows != [(branch_id, company_id)]:
@@ -177,7 +186,9 @@ def resolve_lineage(
         raise ValueError(f"ambiguous durable overlay lineage for {domain}:{source_id}")
     match = matches[0]
     if match.get("native_id") != native_id:
-        raise ValueError(f"overlay lineage native target mismatch for {domain}:{source_id}")
+        raise ValueError(
+            f"overlay lineage native target mismatch for {domain}:{source_id}"
+        )
     if not match.get("source_digest") or not match.get("applied_at"):
         raise ValueError(f"incomplete durable overlay lineage for {domain}:{source_id}")
     return match
@@ -212,14 +223,14 @@ def _receipt_lineage(master: HcpMigrationMasterRun) -> list[Mapping[str, str]]:
     candidates: list[Mapping[str, str]] = []
     for manifest_digest, receipt in receipts.items():
         if not isinstance(receipt, dict):
-            raise ValueError("durable overlay receipt is malformed")
+            raise TypeError("durable overlay receipt is malformed")
         if receipt.get("contract") != "hcp-current-overlay-executor/v1":
             raise ValueError("durable overlay receipt contract is invalid")
         if receipt.get("manifest_digest") != str(manifest_digest):
             raise ValueError("durable overlay receipt manifest identity is invalid")
         journal = receipt.get("journal")
         if not isinstance(journal, list):
-            raise ValueError("durable overlay receipt journal is missing")
+            raise TypeError("durable overlay receipt journal is missing")
         receipt_digest = str(receipt.get("digest") or "")
         receipt_payload = {
             "contract": receipt.get("contract"),
@@ -235,7 +246,7 @@ def _receipt_lineage(master: HcpMigrationMasterRun) -> list[Mapping[str, str]]:
             raise ValueError("durable overlay receipt digest is invalid")
         for item in journal:
             if not isinstance(item, dict) or not isinstance(item.get("key"), dict):
-                raise ValueError("durable overlay journal entry is malformed")
+                raise TypeError("durable overlay journal entry is malformed")
             key = item["key"]
             if item.get("outcome") not in {"created", "updated", "idempotent_replay"}:
                 continue
@@ -254,9 +265,13 @@ def _receipt_lineage(master: HcpMigrationMasterRun) -> list[Mapping[str, str]]:
     return candidates
 
 
-async def _native_exists(session: AsyncSession, domain: str, native_id: Any, company_id: Any, branch_id: Any) -> bool:
+async def _native_exists(
+    session: AsyncSession, domain: str, native_id: Any, company_id: Any, branch_id: Any
+) -> bool:
     if domain == "customer":
-        statement = select(Customer.id).where(Customer.id == native_id, Customer.company_id == company_id)
+        statement = select(Customer.id).where(
+            Customer.id == native_id, Customer.company_id == company_id
+        )
     elif domain == "service_location":
         statement = (
             select(ServiceLocation.id)
@@ -264,9 +279,17 @@ async def _native_exists(session: AsyncSession, domain: str, native_id: Any, com
             .where(ServiceLocation.id == native_id, Customer.company_id == company_id)
         )
     elif domain == "job":
-        statement = select(Job.id).where(Job.id == native_id, Job.company_id == company_id, Job.branch_id == branch_id)
+        statement = select(Job.id).where(
+            Job.id == native_id,
+            Job.company_id == company_id,
+            Job.branch_id == branch_id,
+        )
     elif domain == "appointment":
-        statement = select(Appointment.id).where(Appointment.id == native_id, Appointment.company_id == company_id, Appointment.branch_id == branch_id)
+        statement = select(Appointment.id).where(
+            Appointment.id == native_id,
+            Appointment.company_id == company_id,
+            Appointment.branch_id == branch_id,
+        )
     else:
         raise ValueError(f"unsupported HCP binding domain: {domain}")
     return len((await session.execute(statement)).scalars().all()) == 1
@@ -276,88 +299,124 @@ async def export(args: argparse.Namespace) -> dict[str, object]:
     database_url = args.database_url or os.environ.get("DATABASE_URL", "")
     reject_database_url(database_url)
     verify_repository_sha(args.repository_sha, args.expected_repository_sha)
-    verify_restore_receipt(Path(args.restore_receipt).resolve(), args.expected_schema_head)
+    verify_restore_receipt(
+        Path(args.restore_receipt).resolve(), args.expected_schema_head
+    )
 
     engine = create_async_engine(database_url, pool_pre_ping=False)
     try:
-        async with engine.connect() as connection:
-            async with connection.begin():
-                await set_read_only_transaction(connection)
-                async with AsyncSession(bind=connection, expire_on_commit=False) as session:
-                    identity = (await session.execute(text("SELECT current_database(), current_user"))).one()
-                    if identity[0] != EXPECTED_DATABASE or identity[1] != "acp_hcp_rehearsal":
-                        raise ValueError("database identity does not match migration_rehearsal")
-                    heads = list((await session.execute(text("SELECT version_num FROM alembic_version ORDER BY version_num"))).scalars().all())
-                    verify_schema_head(heads, args.expected_schema_head)
-                    company_rows = [
-                        str(value)
-                        for value in (
-                            await session.execute(
-                                select(Company.id).where(Company.id == args.company_id)
+        async with engine.connect() as connection, connection.begin():
+            await set_read_only_transaction(connection)
+            async with AsyncSession(bind=connection, expire_on_commit=False) as session:
+                identity = (
+                    await session.execute(
+                        text("SELECT current_database(), current_user")
+                    )
+                ).one()
+                if (
+                    identity[0] != EXPECTED_DATABASE
+                    or identity[1] != "acp_hcp_rehearsal"
+                ):
+                    raise ValueError(
+                        "database identity does not match migration_rehearsal"
+                    )
+                heads = list(
+                    (
+                        await session.execute(
+                            text(
+                                "SELECT version_num FROM alembic_version ORDER BY version_num"
                             )
-                        )
-                        .scalars()
-                        .all()
-                    ]
-                    branch_rows = [
-                        (str(row[0]), str(row[1]))
-                        for row in (
-                            await session.execute(
-                                select(Branch.id, Branch.company_id).where(
-                                    Branch.id == args.branch_id
-                                )
-                            )
-                        ).all()
-                    ]
-                    verify_scope(company_rows, branch_rows, args.company_id, args.branch_id)
-
-                    result = await session.execute(
-                        select(HcpSource4NativeBindingEvidence, HcpMigrationMasterRun)
-                        .join(HcpMigrationMasterRun, HcpMigrationMasterRun.id == HcpSource4NativeBindingEvidence.master_run_id)
-                        .where(
-                            HcpSource4NativeBindingEvidence.company_id == args.company_id,
-                            HcpSource4NativeBindingEvidence.branch_id == args.branch_id,
-                            HcpMigrationMasterRun.company_id == args.company_id,
-                            HcpMigrationMasterRun.branch_id == args.branch_id,
-                            HcpMigrationMasterRun.status == "completed_current_operational",
-                        )
-                        .order_by(
-                            HcpSource4NativeBindingEvidence.domain,
-                            HcpSource4NativeBindingEvidence.source4_source_id,
                         )
                     )
-                    observations: list[Observation] = []
-                    for binding, master in result.all():
-                        if not await _native_exists(session, binding.domain, binding.native_id, args.company_id, args.branch_id):
-                            raise ValueError(f"native row missing or outside scope for {binding.domain}:{binding.source4_source_id}")
-                        lineage = resolve_lineage(
+                    .scalars()
+                    .all()
+                )
+                verify_schema_head(heads, args.expected_schema_head)
+                company_rows = [
+                    str(value)
+                    for value in (
+                        await session.execute(
+                            select(Company.id).where(Company.id == args.company_id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                ]
+                branch_rows = [
+                    (str(row[0]), str(row[1]))
+                    for row in (
+                        await session.execute(
+                            select(Branch.id, Branch.company_id).where(
+                                Branch.id == args.branch_id
+                            )
+                        )
+                    ).all()
+                ]
+                verify_scope(company_rows, branch_rows, args.company_id, args.branch_id)
+
+                result = await session.execute(
+                    select(HcpSource4NativeBindingEvidence, HcpMigrationMasterRun)
+                    .join(
+                        HcpMigrationMasterRun,
+                        HcpMigrationMasterRun.id
+                        == HcpSource4NativeBindingEvidence.master_run_id,
+                    )
+                    .where(
+                        HcpSource4NativeBindingEvidence.company_id == args.company_id,
+                        HcpSource4NativeBindingEvidence.branch_id == args.branch_id,
+                        HcpMigrationMasterRun.company_id == args.company_id,
+                        HcpMigrationMasterRun.branch_id == args.branch_id,
+                        HcpMigrationMasterRun.status == "completed_current_operational",
+                    )
+                    .order_by(
+                        HcpSource4NativeBindingEvidence.domain,
+                        HcpSource4NativeBindingEvidence.source4_source_id,
+                    )
+                )
+                observations: list[Observation] = []
+                for binding, master in result.all():
+                    if not await _native_exists(
+                        session,
+                        binding.domain,
+                        binding.native_id,
+                        args.company_id,
+                        args.branch_id,
+                    ):
+                        raise ValueError(
+                            f"native row missing or outside scope for {binding.domain}:{binding.source4_source_id}"
+                        )
+                    lineage = resolve_lineage(
+                        domain=binding.domain,
+                        source_id=binding.source4_source_id,
+                        native_id=str(binding.native_id),
+                        candidates=list(_receipt_lineage(master)),
+                    )
+                    observations.append(
+                        Observation(
                             domain=binding.domain,
                             source_id=binding.source4_source_id,
                             native_id=str(binding.native_id),
-                            candidates=list(_receipt_lineage(master)),
+                            source_digest=str(lineage["source_digest"]),
+                            applied_at=str(lineage["applied_at"]),
+                            binding_digest=binding.binding_digest,
+                            package_digest=binding.package_digest,
+                            overlay_manifest_digest=str(
+                                lineage["overlay_manifest_digest"]
+                            ),
+                            overlay_receipt_digest=str(
+                                lineage["overlay_receipt_digest"]
+                            ),
                         )
-                        observations.append(
-                            Observation(
-                                domain=binding.domain,
-                                source_id=binding.source4_source_id,
-                                native_id=str(binding.native_id),
-                                source_digest=str(lineage["source_digest"]),
-                                applied_at=str(lineage["applied_at"]),
-                                binding_digest=binding.binding_digest,
-                                package_digest=binding.package_digest,
-                                overlay_manifest_digest=str(lineage["overlay_manifest_digest"]),
-                                overlay_receipt_digest=str(lineage["overlay_receipt_digest"]),
-                            )
-                        )
-                    document = build_export_document(
-                        repository_sha=args.repository_sha,
-                        schema_head=args.expected_schema_head,
-                        company_id=args.company_id,
-                        branch_id=args.branch_id,
-                        database=identity[0],
-                        database_user=identity[1],
-                        observations=observations,
                     )
+                document = build_export_document(
+                    repository_sha=args.repository_sha,
+                    schema_head=args.expected_schema_head,
+                    company_id=args.company_id,
+                    branch_id=args.branch_id,
+                    database=identity[0],
+                    database_user=identity[1],
+                    observations=observations,
+                )
     finally:
         await engine.dispose()
     write_private_json(Path(args.output).resolve(), document)
