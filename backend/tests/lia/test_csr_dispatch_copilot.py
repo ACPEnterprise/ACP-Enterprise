@@ -82,7 +82,9 @@ def test_existing_customer_context_makes_recommendation_current() -> None:
     assert result.mutation_authority == "none"
 
 
-def test_new_customer_requires_canonical_intake_and_keeps_recommendation_provisional() -> None:
+def test_new_customer_requires_canonical_intake_and_keeps_recommendation_provisional() -> (
+    None
+):
     result = compose_csr_dispatch_copilot(
         _reasoning(),
         customer_match=CustomerMatch(

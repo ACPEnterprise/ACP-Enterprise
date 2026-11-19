@@ -4,34 +4,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-if __package__:
-    from .hcp_operational_cutover_acquisition import (
-        OPEN_JOB_STATUSES,
-        EvidenceStore,
-        GetOnlyClient,
-        _digest,
-        _get_detail,
-        _load_object,
-        _now,
-        _secret_file,
-        _status,
-    )
-else:
-    from hcp_operational_cutover_acquisition import (
-        OPEN_JOB_STATUSES,
-        EvidenceStore,
-        GetOnlyClient,
-        _digest,
-        _get_detail,
-        _load_object,
-        _now,
-        _secret_file,
-        _status,
-    )
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "scripts"
+
+from .hcp_operational_cutover_acquisition import (
+    OPEN_JOB_STATUSES,
+    EvidenceStore,
+    GetOnlyClient,
+    _digest,
+    _get_detail,
+    _load_object,
+    _now,
+    _secret_file,
+    _status,
+)
 
 
 def _jobs(root: Path) -> list[dict[str, Any]]:

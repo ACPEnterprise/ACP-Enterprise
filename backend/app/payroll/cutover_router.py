@@ -16,11 +16,11 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.payroll.contracts import canonical_digest
 from app.payroll.models import (
+    EmployeeCompensationAuthorityVersion,
     PayrollCutoverBridgeEmployeeFactRevision,
     PayrollCutoverBridgePeriodRecord,
     PayrollCutoverFactRevision,
     PayrollCutoverReviewRecord,
-    EmployeeCompensationAuthorityVersion,
     PayrollPaymentDestinationVersion,
     PayrollPayStatementRecord,
     PayrollProtectedInputEnvelope,
@@ -489,7 +489,10 @@ async def historical_workforce(
             await session.scalars(
                 select(HistoricalWorkforceIdentity)
                 .where(HistoricalWorkforceIdentity.company_id == context.company.id)
-                .order_by(HistoricalWorkforceIdentity.display_name, HistoricalWorkforceIdentity.id)
+                .order_by(
+                    HistoricalWorkforceIdentity.display_name,
+                    HistoricalWorkforceIdentity.id,
+                )
             )
         ).all()
     )
@@ -497,59 +500,84 @@ async def historical_workforce(
     source_only_identities: list[HistoricalWorkforceIdentity] = []
     for identity in identities:
         if identity.native_employee_id is not None:
-            identities_by_employee.setdefault(identity.native_employee_id, []).append(identity)
+            identities_by_employee.setdefault(identity.native_employee_id, []).append(
+                identity
+            )
         else:
             source_only_identities.append(identity)
 
-    compensation_rows = tuple(
-        (
-            await session.scalars(
-                select(EmployeeCompensationAuthorityVersion)
-                .where(
-                    EmployeeCompensationAuthorityVersion.company_id == context.company.id,
-                    EmployeeCompensationAuthorityVersion.employee_id.in_(employee_ids),
-                    EmployeeCompensationAuthorityVersion.lifecycle.in_(("approved", "superseded")),
-                    EmployeeCompensationAuthorityVersion.effective_start <= period_end,
-                    or_(
-                        EmployeeCompensationAuthorityVersion.effective_end.is_(None),
-                        EmployeeCompensationAuthorityVersion.effective_end >= period_start,
-                    ),
+    compensation_rows = (
+        tuple(
+            (
+                await session.scalars(
+                    select(EmployeeCompensationAuthorityVersion)
+                    .where(
+                        EmployeeCompensationAuthorityVersion.company_id
+                        == context.company.id,
+                        EmployeeCompensationAuthorityVersion.employee_id.in_(
+                            employee_ids
+                        ),
+                        EmployeeCompensationAuthorityVersion.lifecycle.in_(
+                            ("approved", "superseded")
+                        ),
+                        EmployeeCompensationAuthorityVersion.effective_start
+                        <= period_end,
+                        or_(
+                            EmployeeCompensationAuthorityVersion.effective_end.is_(
+                                None
+                            ),
+                            EmployeeCompensationAuthorityVersion.effective_end
+                            >= period_start,
+                        ),
+                    )
+                    .order_by(
+                        EmployeeCompensationAuthorityVersion.employee_id,
+                        EmployeeCompensationAuthorityVersion.effective_start.desc(),
+                    )
                 )
-                .order_by(
-                    EmployeeCompensationAuthorityVersion.employee_id,
-                    EmployeeCompensationAuthorityVersion.effective_start.desc(),
-                )
-            )
-        ).all()
-    ) if employee_ids else ()
-    compensation_by_employee: dict[UUID, list[EmployeeCompensationAuthorityVersion]] = {}
-    for value in compensation_rows:
-        compensation_by_employee.setdefault(value.employee_id, []).append(value)
+            ).all()
+        )
+        if employee_ids
+        else ()
+    )
+    compensation_by_employee: dict[
+        UUID, list[EmployeeCompensationAuthorityVersion]
+    ] = {}
+    for compensation_version in compensation_rows:
+        compensation_by_employee.setdefault(
+            compensation_version.employee_id, []
+        ).append(compensation_version)
 
-    time_rows = tuple(
-        (
-            await session.scalars(
-                select(WorkdayTimeEntryRevision)
-                .where(
-                    WorkdayTimeEntryRevision.company_id == context.company.id,
-                    WorkdayTimeEntryRevision.employee_id.in_(employee_ids),
-                    WorkdayTimeEntryRevision.work_date >= period_start,
-                    WorkdayTimeEntryRevision.work_date <= period_end,
+    time_rows = (
+        tuple(
+            (
+                await session.scalars(
+                    select(WorkdayTimeEntryRevision)
+                    .where(
+                        WorkdayTimeEntryRevision.company_id == context.company.id,
+                        WorkdayTimeEntryRevision.employee_id.in_(employee_ids),
+                        WorkdayTimeEntryRevision.work_date >= period_start,
+                        WorkdayTimeEntryRevision.work_date <= period_end,
+                    )
+                    .order_by(
+                        WorkdayTimeEntryRevision.employee_id,
+                        WorkdayTimeEntryRevision.entry_id,
+                        WorkdayTimeEntryRevision.revision_number.desc(),
+                    )
                 )
-                .order_by(
-                    WorkdayTimeEntryRevision.employee_id,
-                    WorkdayTimeEntryRevision.entry_id,
-                    WorkdayTimeEntryRevision.revision_number.desc(),
-                )
-            )
-        ).all()
-    ) if employee_ids else ()
+            ).all()
+        )
+        if employee_ids
+        else ()
+    )
     current_time: dict[tuple[UUID, UUID], WorkdayTimeEntryRevision] = {}
-    for value in time_rows:
-        current_time.setdefault((value.employee_id, value.entry_id), value)
+    for time_revision in time_rows:
+        current_time.setdefault(
+            (time_revision.employee_id, time_revision.entry_id), time_revision
+        )
     time_by_employee: dict[UUID, list[WorkdayTimeEntryRevision]] = {}
-    for value in current_time.values():
-        time_by_employee.setdefault(value.employee_id, []).append(value)
+    for time_revision in current_time.values():
+        time_by_employee.setdefault(time_revision.employee_id, []).append(time_revision)
 
     bridge_periods = tuple(
         (
@@ -559,23 +587,32 @@ async def historical_workforce(
                     PayrollCutoverBridgePeriodRecord.period_start == period_start,
                     PayrollCutoverBridgePeriodRecord.period_end == period_end,
                     PayrollCutoverBridgePeriodRecord.pay_date == pay_date,
-                    PayrollCutoverBridgePeriodRecord.certification_state != "superseded",
+                    PayrollCutoverBridgePeriodRecord.certification_state
+                    != "superseded",
                 )
             )
         ).all()
     )
     bridge_ids = tuple(value.id for value in bridge_periods)
-    bridge_facts = tuple(
-        (
-            await session.scalars(
-                select(PayrollCutoverBridgeEmployeeFactRevision).where(
-                    PayrollCutoverBridgeEmployeeFactRevision.company_id == context.company.id,
-                    PayrollCutoverBridgeEmployeeFactRevision.bridge_period_id.in_(bridge_ids),
-                    PayrollCutoverBridgeEmployeeFactRevision.certification_state != "superseded",
+    bridge_facts = (
+        tuple(
+            (
+                await session.scalars(
+                    select(PayrollCutoverBridgeEmployeeFactRevision).where(
+                        PayrollCutoverBridgeEmployeeFactRevision.company_id
+                        == context.company.id,
+                        PayrollCutoverBridgeEmployeeFactRevision.bridge_period_id.in_(
+                            bridge_ids
+                        ),
+                        PayrollCutoverBridgeEmployeeFactRevision.certification_state
+                        != "superseded",
+                    )
                 )
-            )
-        ).all()
-    ) if bridge_ids else ()
+            ).all()
+        )
+        if bridge_ids
+        else ()
+    )
     facts_by_employee: dict[UUID, list[PayrollCutoverBridgeEmployeeFactRevision]] = {}
     facts_by_source: dict[str, list[PayrollCutoverBridgeEmployeeFactRevision]] = {}
     for fact in bridge_facts:
@@ -592,12 +629,15 @@ async def historical_workforce(
         if employee.status == "active":
             return "ACTIVE_AS_OF_PERIOD", True
         if employee.hire_date and (
-            employee.termination_date is None or employee.termination_date >= period_start
+            employee.termination_date is None
+            or employee.termination_date >= period_start
         ):
             return "FORMER_EMPLOYEE_IN_PERIOD", True
         return "STATUS_AS_OF_UNAVAILABLE", False
 
-    def source_employment_status(identity: HistoricalWorkforceIdentity) -> tuple[str, bool]:
+    def source_employment_status(
+        identity: HistoricalWorkforceIdentity,
+    ) -> tuple[str, bool]:
         effective_at = identity.evidence_metadata.get("status_effective_at")
         effective_date: date | None = None
         if isinstance(effective_at, str):
@@ -680,8 +720,14 @@ async def historical_workforce(
                             f"bridge:{period.source_reference}"
                             for period in bridge_periods
                         ],
-                        *[f"bridge-evidence:{value.evidence_digest}" for value in employee_facts],
-                        *[f"time-evidence:{value.evidence_digest}" for value in employee_time],
+                        *[
+                            f"bridge-evidence:{value.evidence_digest}"
+                            for value in employee_facts
+                        ],
+                        *[
+                            f"time-evidence:{value.evidence_digest}"
+                            for value in employee_time
+                        ],
                     }
                 ),
             }

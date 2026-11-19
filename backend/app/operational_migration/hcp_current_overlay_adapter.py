@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.operational_migration.hcp_current_overlay import (
     EXECUTOR_CONTRACT,
     CurrentOverlayRepository,
-    OverlayExecutionReceipt,
     OverlayAssertion,
+    OverlayExecutionReceipt,
     OverlayJournalEntry,
     OverlayKey,
     OverlayRecord,
@@ -116,7 +116,9 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
                     if locked is not True:
                         raise ValueError("concurrent HCP overlay admission is active")
                 if self._lineage_bootstrap is not None:
-                    self._master = await self._lineage_bootstrap.establish(self._session)
+                    self._master = await self._lineage_bootstrap.establish(
+                        self._session
+                    )
                     if self._master.id != self._master_run_id:
                         raise ValueError("overlay bootstrap master identity mismatch")
                     assert self._lineage_bootstrap.customer_run is not None
@@ -168,7 +170,9 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
             root = master.replay_state if isinstance(master.replay_state, dict) else {}
             state = root.get(STATE_KEY)
             receipts = state.get("receipts") if isinstance(state, dict) else None
-            value = receipts.get(manifest_digest) if isinstance(receipts, dict) else None
+            value = (
+                receipts.get(manifest_digest) if isinstance(receipts, dict) else None
+            )
             if value is not None:
                 return _receipt(value)
         return None

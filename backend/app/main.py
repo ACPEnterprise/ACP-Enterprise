@@ -58,9 +58,9 @@ from app.jobs.router import router as jobs_router
 from app.lia.router import router as lia_router
 from app.luminary.router import router as luminary_router
 from app.marketing.router import router as marketing_router
+from app.migration_support.router import router as migration_support_router
 from app.operational_assets.router import router as operational_assets_router
 from app.operational_migration.product_router import router as migration_product_router
-from app.migration_support.router import router as migration_support_router
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
 from app.payroll.cutover_router import router as payroll_cutover_router

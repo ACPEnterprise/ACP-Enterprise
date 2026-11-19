@@ -132,9 +132,7 @@ def calculate_metrics(
                 stages.difference_update(STAGES)
                 closed_event_times.pop(milestone_code, None)
             elif event.event_type == "beta_reopened":
-                stages.difference_update(
-                    ("beta_complete", "owner_accepted", "closed")
-                )
+                stages.difference_update(("beta_complete", "owner_accepted", "closed"))
                 closed_event_times.pop(milestone_code, None)
             elif event.event_type == "owner_acceptance_reopened":
                 stages.difference_update(("owner_accepted", "closed"))
@@ -205,8 +203,7 @@ def calculate_metrics(
         max(
             0.0,
             (
-                now
-                - cast(datetime, getattr(lane, "eligible_idle_since", now))
+                now - cast(datetime, getattr(lane, "eligible_idle_since", now))
             ).total_seconds(),
         )
         for lane in lanes
@@ -219,15 +216,12 @@ def calculate_metrics(
     engineering_count = sum(
         "engineering_complete" in stages for stages in milestone_stages.values()
     )
-    beta_count = sum(
-        "beta_complete" in stages for stages in milestone_stages.values()
-    )
+    beta_count = sum("beta_complete" in stages for stages in milestone_stages.values())
     owner_count = sum(
         "owner_accepted" in stages for stages in milestone_stages.values()
     )
     human_gated = sum(
-        milestone.owner_acceptance_status
-        in {"HUMAN_GATE", "OWNER_ACCEPTANCE_REQUIRED"}
+        milestone.owner_acceptance_status in {"HUMAN_GATE", "OWNER_ACCEPTANCE_REQUIRED"}
         and "closed" not in milestone_stages[milestone.code]
         for milestone in represented
     )
@@ -571,8 +565,7 @@ class FactoryControlService:
                     "owner_acceptance_required": [
                         item.code
                         for item in roadmap.milestones
-                        if item.owner_acceptance_status
-                        == "OWNER_ACCEPTANCE_REQUIRED"
+                        if item.owner_acceptance_status == "OWNER_ACCEPTANCE_REQUIRED"
                     ],
                 },
             },
@@ -702,9 +695,7 @@ class FactoryControlService:
         )
         state = reported_state or node_state
         projected_queue_depth = (
-            reported_queue_depth
-            if reported_queue_depth is not None
-            else queue_depth
+            reported_queue_depth if reported_queue_depth is not None else queue_depth
         )
         current_assignment = (
             reported_current_assignment
@@ -783,8 +774,7 @@ class FactoryControlService:
                 controlling_enterprise=controlling_enterprise,
                 self_refill_health=self_refill_health,
                 idempotency_key=(
-                    f"factory-live:{lane_code}:{worker.id}:"
-                    f"{observed_at.isoformat()}"
+                    f"factory-live:{lane_code}:{worker.id}:{observed_at.isoformat()}"
                     if observed_at is not None and lane_code is not None
                     else f"development-factory-worker:{worker.id}:"
                     f"version:{worker.version}:queue:{queue_depth}"

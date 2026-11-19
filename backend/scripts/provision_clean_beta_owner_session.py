@@ -15,8 +15,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
-
 from app import main as application_model_registry  # noqa: F401
 from app.core.config import settings
 from app.database.session import AsyncSessionFactory, engine
@@ -32,6 +30,7 @@ from app.platform.service_principals.models import (
     ReleaseServicePrincipal,
 )
 from app.platform.users.models import User, UserCredential
+from sqlalchemy import select, update
 
 COMPANY_ID = UUID("3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd")
 BRANCH_ID = UUID("887f413a-70dc-4ab1-98aa-8e84f4e7efd0")
@@ -116,26 +115,36 @@ async def issue(args: argparse.Namespace) -> dict[str, object]:
                         MembershipRole.revoked_at.is_(None),
                     )
                 )
-            if any(
-                item is None
-                for item in (company, branch, user, membership, credential, role, assignment)
+            if (
+                company is None
+                or branch is None
+                or user is None
+                or membership is None
+                or credential is None
+                or role is None
+                or assignment is None
             ):
                 raise ValueError("clean Beta owner authority chain is incomplete")
-            if await session.scalar(
-                select(AcceptanceServicePrincipal.id).where(
-                    AcceptanceServicePrincipal.user_id == ACTOR_ID,
-                    AcceptanceServicePrincipal.state == "active",
+            if (
+                await session.scalar(
+                    select(AcceptanceServicePrincipal.id).where(
+                        AcceptanceServicePrincipal.user_id == ACTOR_ID,
+                        AcceptanceServicePrincipal.state == "active",
+                    )
                 )
-            ) is not None or await session.scalar(
-                select(ReleaseServicePrincipal.id).where(
-                    ReleaseServicePrincipal.user_id == ACTOR_ID,
-                    ReleaseServicePrincipal.state == "active",
+                is not None
+                or await session.scalar(
+                    select(ReleaseServicePrincipal.id).where(
+                        ReleaseServicePrincipal.user_id == ACTOR_ID,
+                        ReleaseServicePrincipal.state == "active",
+                    )
                 )
-            ) is not None:
+                is not None
+            ):
                 raise ValueError("owner actor is also bound to a non-human principal")
 
             await session.execute(
-                AuthenticationSession.__table__.update()
+                update(AuthenticationSession)
                 .where(
                     AuthenticationSession.user_id == ACTOR_ID,
                     AuthenticationSession.status == "active",
@@ -201,7 +210,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--environment", choices=("preview",), required=True)
     result.add_argument("--company-id", required=True, type=UUID)
     result.add_argument("--branch-id", required=True, type=UUID)
-    result.add_argument("--minutes", type=int, default=10, choices=range(5, MAX_MINUTES + 1))
+    result.add_argument(
+        "--minutes", type=int, default=10, choices=range(5, MAX_MINUTES + 1)
+    )
     result.add_argument(
         "--token-output", default="/run/secrets/beta_owner_session_token"
     )

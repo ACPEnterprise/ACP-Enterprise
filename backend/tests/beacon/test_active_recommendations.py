@@ -73,7 +73,9 @@ async def test_marketing_readiness_adapter_is_evaluated(
     session = AsyncMock()
     session.scalar.return_value = False
     evaluations = await service.adapter_evaluations(
-        session, context=context, evaluated_at=NOW  # type: ignore[arg-type]
+        session,
+        context=context,
+        evaluated_at=NOW,  # type: ignore[arg-type]
     )
     marketing = next(item for item in evaluations if item.domain == "MARKETING")
     assert marketing.state == "EVALUATED"

@@ -60,7 +60,9 @@ ROLE_CODES = {
     ),
 }
 
-_TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+_TEMPORARY_PASSWORD_ALPHABET = (
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+)
 
 
 def generate_temporary_password() -> str:
@@ -170,7 +172,10 @@ class SimpleEmployeeOnboardingService:
                 ):
                     candidates[employee.id] = MatchCandidate(employee.id, None, None)
                 continue
-            if employee.status not in {"active", "inactive"} or employee.membership_id is not None:
+            if (
+                employee.status not in {"active", "inactive"}
+                or employee.membership_id is not None
+            ):
                 continue
             source = await session.scalar(
                 select(HcpEmployeeSourceCrosswalk)
@@ -218,7 +223,9 @@ class SimpleEmployeeOnboardingService:
         require_password_change: bool,
     ) -> SimpleOnboardingResult:
         if temporary_password != confirm_temporary_password:
-            raise SimpleOnboardingConflict("Temporary password and confirmation must match.")
+            raise SimpleOnboardingConflict(
+                "Temporary password and confirmation must match."
+            )
         existing_request = await session.scalar(
             select(IdentityOnboardingRequest).where(
                 IdentityOnboardingRequest.company_id == context.company.id,

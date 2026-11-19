@@ -79,9 +79,7 @@ def test_classifies_new_update_replay_and_native_newer_without_global_block() ->
         states={
             unchanged.key: native("1" * 64),
             changed.key: native("5" * 64),
-            native_newer.key: native(
-                "6" * 64, updated="2026-09-28T12:00:00Z"
-            ),
+            native_newer.key: native("6" * 64, updated="2026-09-28T12:00:00Z"),
         },
     )
 
@@ -121,9 +119,7 @@ def test_changed_location_and_evidence_only_domains_fail_closed() -> None:
 
 def test_missing_or_non_successor_provider_chronology_is_held() -> None:
     missing = provider("missing-time", "1" * 64, updated_at=None)
-    stale = provider(
-        "stale", "2" * 64, updated_at="2026-09-19T12:00:00Z"
-    )
+    stale = provider("stale", "2" * 64, updated_at="2026-09-19T12:00:00Z")
     result = build(
         missing,
         stale,
@@ -189,7 +185,9 @@ class RehearsalRepository:
     async def update(
         self, state: OverlaySourceState, record: OverlayRecord
     ) -> OverlaySourceState:
-        state = OverlaySourceState(record.source_digest, state.native_id, record.payload)
+        state = OverlaySourceState(
+            record.source_digest, state.native_id, record.payload
+        )
         self.states[record.key] = state
         return state
 
@@ -211,16 +209,12 @@ async def test_rehearsal_applies_safe_majority_holds_conflict_and_replays() -> N
         created,
         states={
             changed.key: native("5" * 64),
-            conflict.key: native(
-                "6" * 64, updated="2026-09-28T12:00:00Z"
-            ),
+            conflict.key: native("6" * 64, updated="2026-09-28T12:00:00Z"),
         },
     )
     assert plan.manifest is not None
     repository = RehearsalRepository()
-    repository.states[changed.key] = OverlaySourceState(
-        "5" * 64, "native-changed", {}
-    )
+    repository.states[changed.key] = OverlaySourceState("5" * 64, "native-changed", {})
     repository.states[conflict.key] = OverlaySourceState(
         "6" * 64, "native-conflict", {}
     )

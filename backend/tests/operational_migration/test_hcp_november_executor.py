@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from copy import deepcopy
-import json
 from pathlib import Path
 
 import pytest
-
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayExecutor,
     CurrentOverlayManifest,
@@ -21,17 +20,15 @@ from app.operational_migration.hcp_november_bundle import (
     qualification_digest,
 )
 from app.operational_migration.hcp_november_executor import (
+    PACKET_CONTRACT,
     NovemberBoundedExecutor,
     NovemberExecutionEnvelope,
     NovemberExecutionPacket,
-    PACKET_CONTRACT,
-    ENVELOPE_CONTRACT,
+    _digest,
     _packet_inventory,
     require_execution_authorization,
     validate_runtime_boundary,
-    _digest,
 )
-
 
 BUNDLE = "a" * 64
 POLICY = "b" * 64
@@ -81,12 +78,16 @@ class MemoryRepository:
     async def create(self, record):
         if record.source_id == self.fail_source:
             raise RuntimeError("synthetic partial failure")
-        state = OverlaySourceState(record.source_digest, f"native-{record.source_id}", record.payload)
+        state = OverlaySourceState(
+            record.source_digest, f"native-{record.source_id}", record.payload
+        )
         self.states[record.key] = state
         return state
 
     async def update(self, state, record):
-        updated = OverlaySourceState(record.source_digest, state.native_id, record.payload)
+        updated = OverlaySourceState(
+            record.source_digest, state.native_id, record.payload
+        )
         self.states[record.key] = updated
         return updated
 
@@ -106,19 +107,21 @@ def _hold_records() -> tuple[list[dict], dict[str, tuple[str, ...]]]:
         "unassigned_appointments": ("appt-unassigned",),
     }
     for category, ids in hold_ids.items():
-        disposition = "HOLD_QUARANTINE" if category == "locationless_open_jobs" else "HOLD"
+        disposition = (
+            "HOLD_QUARANTINE" if category == "locationless_open_jobs" else "HOLD"
+        )
         for source_id in ids:
             records.append(
                 {
-                "domain": (
-                    "job"
-                    if category == "locationless_open_jobs"
-                    else "technician_reference"
-                    if category == "unresolved_technician_identities"
-                    else "legacy_appointment"
-                    if category == "legacy_duplicate_risk_appointments"
-                    else "appointment"
-                ),
+                    "domain": (
+                        "job"
+                        if category == "locationless_open_jobs"
+                        else "technician_reference"
+                        if category == "unresolved_technician_identities"
+                        else "legacy_appointment"
+                        if category == "legacy_duplicate_risk_appointments"
+                        else "appointment"
+                    ),
                     "source_id": source_id,
                     "assertion": "hold",
                     "source_digest": BUNDLE,
@@ -131,7 +134,9 @@ def _hold_records() -> tuple[list[dict], dict[str, tuple[str, ...]]]:
     return records, hold_ids
 
 
-def _packet(*, include_clean: bool = True) -> tuple[NovemberExecutionPacket, dict, NovemberQualificationAuthority]:
+def _packet(
+    *, include_clean: bool = True
+) -> tuple[NovemberExecutionPacket, dict, NovemberQualificationAuthority]:
     records, hold_ids = _hold_records()
     if include_clean:
         records.append(
@@ -155,10 +160,15 @@ def _packet(*, include_clean: bool = True) -> tuple[NovemberExecutionPacket, dic
         records=tuple(
             # Match the packet conversion performed by load().
             OverlayRecord(
-                item["domain"], item["source_id"],
-                OverlayAssertion(item["assertion"]), item["source_digest"],
-                item["acquired_at"], item["payload"],
-                parent_keys=tuple(OverlayKey(**parent) for parent in item["parent_keys"]),
+                item["domain"],
+                item["source_id"],
+                OverlayAssertion(item["assertion"]),
+                item["source_digest"],
+                item["acquired_at"],
+                item["payload"],
+                parent_keys=tuple(
+                    OverlayKey(**parent) for parent in item["parent_keys"]
+                ),
             )
             for item in records
         ),
@@ -328,7 +338,11 @@ def _full_november_packet() -> NovemberExecutionPacket:
     )
 
 
-def _write_envelope(tmp_path: Path, packet: NovemberExecutionPacket, authority: NovemberQualificationAuthority) -> tuple[Path, NovemberQualificationAuthority]:
+def _write_envelope(
+    tmp_path: Path,
+    packet: NovemberExecutionPacket,
+    authority: NovemberQualificationAuthority,
+) -> tuple[Path, NovemberQualificationAuthority]:
     source_path = tmp_path / "source-packet.json"
     source_payload = {
         "contract": PACKET_CONTRACT,
@@ -347,12 +361,16 @@ def _write_envelope(tmp_path: Path, packet: NovemberExecutionPacket, authority: 
         "digest": packet.digest,
         "acquired_at": packet.overlay_manifest.acquired_at,
     }
-    source_path.write_text(json.dumps(source_payload, sort_keys=True, separators=(",", ":")))
+    source_path.write_text(
+        json.dumps(source_payload, sort_keys=True, separators=(",", ":"))
+    )
     source_path.chmod(0o600)
     inventory = _packet_inventory(packet.records)
     envelope = NovemberExecutionEnvelope(
         source_packet_path=source_path,
-        source_packet_sha256=__import__("hashlib").sha256(source_path.read_bytes()).hexdigest(),
+        source_packet_sha256=__import__("hashlib")
+        .sha256(source_path.read_bytes())
+        .hexdigest(),
         source_packet_digest=packet.digest,
         bundle_sha256=BUNDLE,
         policy_digest=POLICY,
@@ -378,8 +396,12 @@ def _write_envelope(tmp_path: Path, packet: NovemberExecutionPacket, authority: 
             "unassigned_appointments": 1,
         },
         operational_hold_source_ids={
-            "locationless_open_jobs": tuple(f"quarantine-{index}" for index in range(23)),
-            "duplicate_risk_appointments": tuple(f"hold-{index}" for index in range(13)),
+            "locationless_open_jobs": tuple(
+                f"quarantine-{index}" for index in range(23)
+            ),
+            "duplicate_risk_appointments": tuple(
+                f"hold-{index}" for index in range(13)
+            ),
             "unresolved_technician_identities": ("hold-14", "hold-15"),
             "unassigned_appointments": ("hold-13",),
         },
@@ -387,20 +409,27 @@ def _write_envelope(tmp_path: Path, packet: NovemberExecutionPacket, authority: 
         packet=packet,
     )
     envelope = NovemberExecutionEnvelope(
-        **{**envelope.__dict__, "authority_digest": _digest(envelope._authority_payload())}
+        **{
+            **envelope.__dict__,
+            "authority_digest": _digest(envelope._authority_payload()),
+        }
     )
     envelope_path = tmp_path / "execution-envelope.json"
     envelope_payload = envelope._authority_payload() | {
         "source_packet_path": str(source_path),
         "authority_digest": envelope.authority_digest,
     }
-    envelope_path.write_text(json.dumps(envelope_payload, sort_keys=True, separators=(",", ":")))
+    envelope_path.write_text(
+        json.dumps(envelope_payload, sort_keys=True, separators=(",", ":"))
+    )
     envelope_path.chmod(0o600)
     qualified_authority = NovemberQualificationAuthority(
         **{
             **authority.__dict__,
             "execution_packet_path": envelope_path,
-            "execution_packet_sha256": __import__("hashlib").sha256(envelope_path.read_bytes()).hexdigest(),
+            "execution_packet_sha256": __import__("hashlib")
+            .sha256(envelope_path.read_bytes())
+            .hexdigest(),
             "execution_packet_digest": envelope.authority_digest,
         }
     )
@@ -473,11 +502,15 @@ def test_stale_authority_production_target_and_missing_authorization_reject() ->
             "expected_policy_digest": "9" * 64,
         }
     )
-    with pytest.raises(SafeEvidenceError, match="hcp_november_execution_authority_mismatch"):
+    with pytest.raises(
+        SafeEvidenceError, match="hcp_november_execution_authority_mismatch"
+    ):
         packet.verify_against(stale, qualified)
     with pytest.raises(SafeEvidenceError, match="preview_runtime_boundary_invalid"):
         validate_runtime_boundary("production", False, True)
-    with pytest.raises(SafeEvidenceError, match="explicit_execution_authorization_required"):
+    with pytest.raises(
+        SafeEvidenceError, match="explicit_execution_authorization_required"
+    ):
         require_execution_authorization(False)
 
 
@@ -495,7 +528,11 @@ def test_full_november_inventory_and_envelope_preserve_source_packet(
     }
     assert inventory["total_held"] == 2102
     assert inventory["executable"] == 5191
-    assert {item["domain"] for item in packet.records if item["disposition"] in {"HOLD", "HOLD_QUARANTINE"}} >= {
+    assert {
+        item["domain"]
+        for item in packet.records
+        if item["disposition"] in {"HOLD", "HOLD_QUARANTINE"}
+    } >= {
         "invoice",
         "note",
         "attachment",
@@ -519,12 +556,16 @@ def test_execution_envelope_authority_mismatch_fails_closed(tmp_path: Path) -> N
         **{**envelope_authority.__dict__, "expected_repository_sha": "f" * 40}
     )
     envelope = NovemberExecutionEnvelope.load(envelope_path)
-    with pytest.raises(SafeEvidenceError, match="hcp_november_execution_authority_mismatch"):
+    with pytest.raises(
+        SafeEvidenceError, match="hcp_november_execution_authority_mismatch"
+    ):
         envelope.verify_against(stale)
 
 
 @pytest.mark.asyncio
-async def test_clean_baseline_bootstrap_preserves_update_replay_and_is_idempotent() -> None:
+async def test_clean_baseline_bootstrap_preserves_update_replay_and_is_idempotent() -> (
+    None
+):
     records = (
         OverlayRecord(
             domain="customer",

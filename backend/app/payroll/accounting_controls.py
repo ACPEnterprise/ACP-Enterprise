@@ -257,15 +257,16 @@ async def project_payroll_run_accounting_control(
     }
     amounts: list[PayrollControlAmount] = []
     for category, (mapping_component, payroll_amount) in expected.items():
-        candidates = [
-            item for item in mappings if item.component == mapping_component
-        ]
+        candidates = [item for item in mappings if item.component == mapping_component]
         ledger_amount = None
         ledger_digest = None
         if candidates:
             account_ids = {item.account_id for item in candidates}
             ledger_amount = sum(
-                (abs(by_account.get(account_id, Decimal(0))) for account_id in account_ids),
+                (
+                    abs(by_account.get(account_id, Decimal(0)))
+                    for account_id in account_ids
+                ),
                 Decimal(0),
             )
             ledger_digest = _digest(sorted(item.mapping_digest for item in candidates))

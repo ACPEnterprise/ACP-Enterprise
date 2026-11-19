@@ -230,7 +230,10 @@ class ReleaseActorService:
                 resource_id=principal.id,
                 actor_user_id=user.id,
                 company_id=company_id,
-                details={"environment": environment, "expires_at": expires_at.isoformat()},
+                details={
+                    "environment": environment,
+                    "expires_at": expires_at.isoformat(),
+                },
             ),
         )
         return ReleaseActorSession(principal.id, auth_session.id, token, expires_at)
@@ -307,7 +310,9 @@ class ReleaseActorService:
                 await session.scalars(
                     select(Permission.code)
                     .join(RolePermission, RolePermission.permission_id == Permission.id)
-                    .join(MembershipRole, MembershipRole.role_id == RolePermission.role_id)
+                    .join(
+                        MembershipRole, MembershipRole.role_id == RolePermission.role_id
+                    )
                     .where(
                         MembershipRole.membership_id == membership_id,
                         MembershipRole.revoked_at.is_(None),

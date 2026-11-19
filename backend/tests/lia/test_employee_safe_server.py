@@ -74,7 +74,9 @@ def projected_day(items=None):
     )
 
 
-def test_permission_is_explicit_and_only_mobile_and_field_manager_roles_receive_it() -> None:
+def test_permission_is_explicit_and_only_mobile_and_field_manager_roles_receive_it() -> (
+    None
+):
     permission_catalog.validate()
     definition = next(
         item

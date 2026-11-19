@@ -1,5 +1,3 @@
-from uuid import uuid4
-
 from app.workforce.models import HistoricalWorkforceIdentity
 
 

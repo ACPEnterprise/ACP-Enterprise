@@ -52,11 +52,18 @@ class JobPlan:
     target_completion: date | None = None
 
     def __post_init__(self) -> None:
-        if self.estimated_technician_labor_minutes is not None and self.estimated_technician_labor_minutes <= 0:
+        if (
+            self.estimated_technician_labor_minutes is not None
+            and self.estimated_technician_labor_minutes <= 0
+        ):
             raise JobWorkSessionError("estimated technician labor must be positive")
         if self.estimated_visits is not None and self.estimated_visits <= 0:
             raise JobWorkSessionError("estimated visits must be positive")
-        if self.planned_start and self.target_completion and self.target_completion < self.planned_start:
+        if (
+            self.planned_start
+            and self.target_completion
+            and self.target_completion < self.planned_start
+        ):
             raise JobWorkSessionError("target completion cannot precede planned start")
 
 
@@ -110,11 +117,15 @@ class JobContinuation:
     def __post_init__(self) -> None:
         if not self.needs_scheduling and self.requested_return_date is None:
             raise JobWorkSessionError("a scheduled continuation requires a return date")
-        if self.reason is ContinuationReason.OTHER and not (self.note and self.note.strip()):
+        if self.reason is ContinuationReason.OTHER and not (
+            self.note and self.note.strip()
+        ):
             raise JobWorkSessionError("other continuation reason requires a note")
 
 
-def derive_activity_intervals(events: tuple[JobActivityEvent, ...]) -> tuple[JobActivityInterval, ...]:
+def derive_activity_intervals(
+    events: tuple[JobActivityEvent, ...],
+) -> tuple[JobActivityInterval, ...]:
     """Derive exact activity intervals; reject ambiguous, replayed, or cross-scope evidence."""
 
     by_key: dict[tuple[UUID, UUID, str], JobActivityEvent] = {}
@@ -125,7 +136,9 @@ def derive_activity_intervals(events: tuple[JobActivityEvent, ...]) -> tuple[Job
         if event.job_version < 1 or event.appointment_version < 1:
             raise JobWorkSessionError("activity evidence must bind positive versions")
         if not event.idempotency_key or not event.evidence_digest:
-            raise JobWorkSessionError("activity evidence requires idempotency and digest")
+            raise JobWorkSessionError(
+                "activity evidence requires idempotency and digest"
+            )
         prior_digest = by_id.setdefault(event.event_id, event.evidence_digest)
         if prior_digest != event.evidence_digest:
             raise JobWorkSessionError("contradictory activity event identity")
@@ -134,27 +147,59 @@ def derive_activity_intervals(events: tuple[JobActivityEvent, ...]) -> tuple[Job
         if prior.evidence_digest != event.evidence_digest:
             raise JobWorkSessionError("contradictory activity replay")
 
-    ordered = sorted(by_key.values(), key=lambda value: (value.occurred_at, str(value.event_id)))
+    ordered = sorted(
+        by_key.values(), key=lambda value: (value.occurred_at, str(value.event_id))
+    )
     active: JobActivityEvent | None = None
     intervals: list[JobActivityInterval] = []
     for event in ordered:
         if event.action is ActivityAction.START:
             if event.activity is None or active is not None:
-                raise JobWorkSessionError("activity start requires no existing active activity")
+                raise JobWorkSessionError(
+                    "activity start requires no existing active activity"
+                )
             active = event
             continue
         if active is None:
             raise JobWorkSessionError("activity transition requires an active activity")
-        scope = (event.company_id, event.branch_id, event.employee_id, event.job_id, event.appointment_id)
-        active_scope = (active.company_id, active.branch_id, active.employee_id, active.job_id, active.appointment_id)
+        scope = (
+            event.company_id,
+            event.branch_id,
+            event.employee_id,
+            event.job_id,
+            event.appointment_id,
+        )
+        active_scope = (
+            active.company_id,
+            active.branch_id,
+            active.employee_id,
+            active.job_id,
+            active.appointment_id,
+        )
         if scope != active_scope:
-            raise JobWorkSessionError("activity transition scope differs from active visit")
+            raise JobWorkSessionError(
+                "activity transition scope differs from active visit"
+            )
         if event.occurred_at <= active.occurred_at:
             raise JobWorkSessionError("activity transition must follow active activity")
-        intervals.append(JobActivityInterval(*scope, active.activity, active.occurred_at, event.occurred_at, active.event_id, event.event_id))  # type: ignore[arg-type]
+        active_activity = active.activity
+        if active_activity is None:
+            raise JobWorkSessionError("active visit requires an activity")
+        intervals.append(
+            JobActivityInterval(
+                *scope,
+                active_activity,
+                active.occurred_at,
+                event.occurred_at,
+                active.event_id,
+                event.event_id,
+            )
+        )
         if event.action is ActivityAction.CHANGE:
             if event.activity is None or event.activity is active.activity:
-                raise JobWorkSessionError("activity change requires a different activity")
+                raise JobWorkSessionError(
+                    "activity change requires a different activity"
+                )
             active = event
         elif event.action is ActivityAction.FINISH_VISIT:
             if event.activity is not None:

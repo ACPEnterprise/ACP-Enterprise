@@ -15,8 +15,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
-
 from app import main as application_model_registry  # noqa: F401
 from app.core.config import settings
 from app.database.session import AsyncSessionFactory, engine
@@ -28,6 +26,7 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.users.models import User, UserCredential
+from sqlalchemy import select, update
 
 COMPANY_ID = UUID("3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd")
 BRANCH_ID = UUID("887f413a-70dc-4ab1-98aa-8e84f4e7efd0")
@@ -49,19 +48,25 @@ def _write_token(path: Path, token: str) -> None:
 
 async def issue(args: argparse.Namespace) -> dict[str, object]:
     if settings.environment.strip().lower() not in {"preview", "beta", "test"}:
-        raise ValueError("technician acceptance sessions are forbidden outside Beta/Preview")
+        raise ValueError(
+            "technician acceptance sessions are forbidden outside Beta/Preview"
+        )
     if args.company_id != COMPANY_ID or args.branch_id != BRANCH_ID:
         raise ValueError("clean Beta Company/Branch binding mismatch")
     output = Path(args.token_output).resolve()
     if str(output) != "/run/secrets/beta_technician_session_token":
-        raise ValueError("technician session token must use canonical secret custody path")
+        raise ValueError(
+            "technician session token must use canonical secret custody path"
+        )
 
     now = datetime.now(timezone.utc)
     lifetime = timedelta(minutes=args.minutes)
     async with AsyncSessionFactory() as session:
         async with session.begin():
             company = await session.scalar(
-                select(Company).where(Company.id == COMPANY_ID, Company.status == "active")
+                select(Company).where(
+                    Company.id == COMPANY_ID, Company.status == "active"
+                )
             )
             branch = await session.scalar(
                 select(Branch).where(
@@ -100,14 +105,23 @@ async def issue(args: argparse.Namespace) -> dict[str, object]:
                         )
                     )
                     credential = await session.scalar(
-                        select(UserCredential).where(UserCredential.user_id == membership.user_id)
+                        select(UserCredential).where(
+                            UserCredential.user_id == membership.user_id
+                        )
                     )
-            if any(item is None for item in (company, branch, employee, membership, user, credential)):
+            if (
+                company is None
+                or branch is None
+                or employee is None
+                or membership is None
+                or user is None
+                or credential is None
+            ):
                 raise ValueError("clean Beta technician authority chain is incomplete")
 
             user_id = user.id
             await session.execute(
-                AuthenticationSession.__table__.update()
+                update(AuthenticationSession)
                 .where(
                     AuthenticationSession.user_id == user_id,
                     AuthenticationSession.status == "active",
@@ -175,7 +189,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--company-id", required=True, type=UUID)
     result.add_argument("--branch-id", required=True, type=UUID)
     result.add_argument("--employee-id", required=True, type=UUID)
-    result.add_argument("--minutes", type=int, default=10, choices=range(5, MAX_MINUTES + 1))
+    result.add_argument(
+        "--minutes", type=int, default=10, choices=range(5, MAX_MINUTES + 1)
+    )
     result.add_argument(
         "--token-output", default="/run/secrets/beta_technician_session_token"
     )

@@ -11,6 +11,11 @@ from app.platform.permissions.dependencies import (
     ResolvedAuthorization,
     require_permission,
 )
+from app.workforce.historical_identity import historical_workforce_identity_service
+from app.workforce.schemas import (
+    HistoricalWorkforceDirectory,
+    HistoricalWorkforceIdentityItem,
+)
 
 from .contracts import (
     LiaFeedback,
@@ -22,11 +27,6 @@ from .contracts import (
 from .employee_safe import employee_safe_lia_service
 from .foundation import FoundationReadiness, foundation_readiness
 from .service import POLICY_VERSION, lia_service
-from app.workforce.historical_identity import historical_workforce_identity_service
-from app.workforce.schemas import (
-    HistoricalWorkforceDirectory,
-    HistoricalWorkforceIdentityItem,
-)
 
 router = APIRouter(prefix="/api/v1/lia", tags=["LIA"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]

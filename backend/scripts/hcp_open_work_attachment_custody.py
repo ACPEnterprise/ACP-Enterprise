@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -14,10 +15,11 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-if __package__:
-    from .hcp_operational_cutover_acquisition import _digest, _load_object, _now
-else:
-    from hcp_operational_cutover_acquisition import _digest, _load_object, _now
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "scripts"
+
+from .hcp_operational_cutover_acquisition import _digest, _load_object, _now
 
 APPROVED_ATTACHMENT_HOST = (
     "housecall-web-request-attachments-production-us-west-2.s3-accelerate.amazonaws.com"

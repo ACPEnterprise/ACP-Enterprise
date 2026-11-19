@@ -13,8 +13,8 @@ from app.platform.permissions.models import (
 __all__ = [
     "AuthorizationContext",
     "AuthorizationService",
-    "MembershipRole",
     "MembershipPermissionOverride",
+    "MembershipRole",
     "Permission",
     "Role",
     "RolePermission",

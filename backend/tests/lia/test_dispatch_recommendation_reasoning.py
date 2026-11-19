@@ -90,7 +90,9 @@ def _placement(
         eligible=eligible,
         rank=rank,
         constraints=(
-            ConstraintEvidence("employee_authority", result, "Employee authority is required."),
+            ConstraintEvidence(
+                "employee_authority", result, "Employee authority is required."
+            ),
         ),
         tradeoffs=("Travel duration is unavailable and is not estimated.",),
         limitations=(),
@@ -98,7 +100,9 @@ def _placement(
     )
 
 
-def test_unresolved_caller_prompts_for_customer_and_address_without_policy_claim() -> None:
+def test_unresolved_caller_prompts_for_customer_and_address_without_policy_claim() -> (
+    None
+):
     result = reason_about_dispatch(_context(), None, evaluated_at=NOW)
 
     assert result.service_intent == "Drain Cleaning"
@@ -112,7 +116,9 @@ def test_unresolved_caller_prompts_for_customer_and_address_without_policy_claim
     assert result.mutation_authority == "none"
 
 
-def test_policy_backed_urgency_and_dispatch_evidence_produce_typed_ghost_slots() -> None:
+def test_policy_backed_urgency_and_dispatch_evidence_produce_typed_ghost_slots() -> (
+    None
+):
     context = _context(
         urgency=_fact("URGENCY", "Priority 1 / urgent same-day", evidence=(POLICY,)),
         customer=_fact("CUSTOMER", "Existing Customer"),
@@ -122,8 +128,14 @@ def test_policy_backed_urgency_and_dispatch_evidence_produce_typed_ghost_slots()
         context,
         _dispatch(
             _placement(rank=1, eligible=True, result=ConstraintResult.PASS),
-            replace(_placement(rank=2, eligible=True, result=ConstraintResult.PASS), employee_id=UUID("77777777-7777-4777-8777-777777777777")),
-            replace(_placement(rank=None, eligible=False, result=ConstraintResult.FAIL), employee_id=UUID("88888888-8888-4888-8888-888888888888")),
+            replace(
+                _placement(rank=2, eligible=True, result=ConstraintResult.PASS),
+                employee_id=UUID("77777777-7777-4777-8777-777777777777"),
+            ),
+            replace(
+                _placement(rank=None, eligible=False, result=ConstraintResult.FAIL),
+                employee_id=UUID("88888888-8888-4888-8888-888888888888"),
+            ),
         ),
         evaluated_at=NOW,
     )
@@ -155,7 +167,10 @@ def test_changed_call_facts_supersede_prior_reasoning_deterministically() -> Non
     assert second.reasoning_id == replay.reasoning_id
     assert second.reasoning_digest == replay.reasoning_digest
     assert second.supersedes_reasoning_id == first.reasoning_id
-    assert second.next_question == "Is there a time today when you cannot meet the technician?"
+    assert (
+        second.next_question
+        == "Is there a time today when you cannot meet the technician?"
+    )
 
 
 def test_expired_call_evidence_cannot_leave_a_stale_ghost_slot() -> None:

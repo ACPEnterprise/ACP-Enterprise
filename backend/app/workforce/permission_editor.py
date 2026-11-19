@@ -64,7 +64,9 @@ class EmployeePermissionEditorService:
                 )
             ).one_or_none()
             if row is None:
-                raise EmployeePermissionEditorConflict("Employee access identity was not found.")
+                raise EmployeePermissionEditorConflict(
+                    "Employee access identity was not found."
+                )
             _employee, membership, user = row
             if user.authorization_version != data.expected_authorization_version:
                 raise EmployeePermissionEditorConflict(
@@ -81,10 +83,14 @@ class EmployeePermissionEditorService:
                     )
                 )
             )
-            permission_by_code = {permission.code: permission for permission in permissions}
+            permission_by_code = {
+                permission.code: permission for permission in permissions
+            }
             unknown = requested_codes - permission_by_code.keys()
             if unknown:
-                raise EmployeePermissionEditorConflict("One or more permissions are unavailable.")
+                raise EmployeePermissionEditorConflict(
+                    "One or more permissions are unavailable."
+                )
 
             if data.access_profile != "CUSTOM":
                 role_codes = PROFILE_ROLE_CODES[data.access_profile]
@@ -98,7 +104,9 @@ class EmployeePermissionEditorService:
                         )
                     )
                 )
-                target_role = next((role for role in roles if role.code in role_codes), None)
+                target_role = next(
+                    (role for role in roles if role.code in role_codes), None
+                )
                 if target_role is None:
                     raise EmployeePermissionEditorConflict(
                         "The selected Access Profile is not configured for this Company."
@@ -115,11 +123,16 @@ class EmployeePermissionEditorService:
                 now = datetime.now(timezone.utc)
                 for assignment in active_roles:
                     assignment_role = await session.get(Role, assignment.role_id)
-                    if assignment_role is not None and assignment_role.code in {
-                        code
-                        for codes in PROFILE_ROLE_CODES.values()
-                        for code in codes
-                    } and assignment.role_id != target_role.id:
+                    if (
+                        assignment_role is not None
+                        and assignment_role.code
+                        in {
+                            code
+                            for codes in PROFILE_ROLE_CODES.values()
+                            for code in codes
+                        }
+                        and assignment.role_id != target_role.id
+                    ):
                         assignment.revoked_at = now
                         assignment.revoked_by_user_id = context.user.id
                         assignment.revocation_reason = "Access Profile changed"
@@ -141,7 +154,9 @@ class EmployeePermissionEditorService:
                 await session.scalars(
                     select(Permission.code)
                     .select_from(MembershipRole)
-                    .join(RolePermission, RolePermission.role_id == MembershipRole.role_id)
+                    .join(
+                        RolePermission, RolePermission.role_id == MembershipRole.role_id
+                    )
                     .join(Permission, Permission.id == RolePermission.permission_id)
                     .where(
                         MembershipRole.company_id == context.company.id,
@@ -157,7 +172,8 @@ class EmployeePermissionEditorService:
                 for permission in (
                     await session.scalars(
                         select(MembershipPermissionOverride).where(
-                            MembershipPermissionOverride.company_id == context.company.id,
+                            MembershipPermissionOverride.company_id
+                            == context.company.id,
                             MembershipPermissionOverride.membership_id == membership.id,
                         )
                     )
@@ -194,7 +210,9 @@ class EmployeePermissionEditorService:
                     resource_id=employee_id,
                     actor_user_id=context.user.id,
                     company_id=context.company.id,
-                    branch_id=context.active_branch.id if context.active_branch else None,
+                    branch_id=context.active_branch.id
+                    if context.active_branch
+                    else None,
                     reason_code="employee_access_editor",
                     details={
                         "access_profile": data.access_profile,

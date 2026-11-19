@@ -117,20 +117,49 @@ def _manifest(company: Company, branch: Branch) -> CurrentOverlayManifest:
 
 def _broad_manifest(company: Company, branch: Branch) -> CurrentOverlayManifest:
     records = (
-        OverlayRecord("customer", "cus_broad", OverlayAssertion.CREATE, "a" * 64, "2026-09-12T17:00:00+00:00", {}),
         OverlayRecord(
-            "service_location", "loc_broad", OverlayAssertion.CREATE, "b" * 64, "2026-09-12T17:00:00+00:00", {},
+            "customer",
+            "cus_broad",
+            OverlayAssertion.CREATE,
+            "a" * 64,
+            "2026-09-12T17:00:00+00:00",
+            {},
+        ),
+        OverlayRecord(
+            "service_location",
+            "loc_broad",
+            OverlayAssertion.CREATE,
+            "b" * 64,
+            "2026-09-12T17:00:00+00:00",
+            {},
             parent_keys=(OverlayKey("customer", "cus_broad"),),
         ),
         OverlayRecord(
-            "job", "job_broad", OverlayAssertion.CREATE, "c" * 64, "2026-09-12T17:00:00+00:00", {},
+            "job",
+            "job_broad",
+            OverlayAssertion.CREATE,
+            "c" * 64,
+            "2026-09-12T17:00:00+00:00",
+            {},
             parent_keys=(OverlayKey("service_location", "loc_broad"),),
         ),
         OverlayRecord(
-            "appointment", "appt_broad", OverlayAssertion.CREATE, "d" * 64, "2026-09-12T17:00:00+00:00", {},
+            "appointment",
+            "appt_broad",
+            OverlayAssertion.CREATE,
+            "d" * 64,
+            "2026-09-12T17:00:00+00:00",
+            {},
             parent_keys=(OverlayKey("job", "job_broad"),),
         ),
-        OverlayRecord("attachment", "attachment_held", OverlayAssertion.HOLD, "e" * 64, "2026-09-12T17:00:00+00:00", {}),
+        OverlayRecord(
+            "attachment",
+            "attachment_held",
+            OverlayAssertion.HOLD,
+            "e" * 64,
+            "2026-09-12T17:00:00+00:00",
+            {},
+        ),
     )
     return CurrentOverlayManifest.build(
         base_source4_digest=DIGEST,
@@ -371,7 +400,9 @@ async def test_db_executor_orders_all_write_domains_and_keeps_unknown_hold_untou
             manifest=manifest,
             expected_base_source4_digest=DIGEST,
             rollback_backup_digest="3" * 64,
-            executable_domains=frozenset({"customer", "service_location", "job", "appointment"}),
+            executable_domains=frozenset(
+                {"customer", "service_location", "job", "appointment"}
+            ),
         )
     assert [
         entry.key.domain
@@ -380,14 +411,23 @@ async def test_db_executor_orders_all_write_domains_and_keeps_unknown_hold_untou
     ] == ["customer", "service_location", "job", "appointment"]
     assert receipt.journal[0].key.domain == "attachment"
     assert receipt.counts == {"created": 4, "held": 1}
-    assert next(
-        entry for entry in receipt.journal if entry.key.domain == "attachment"
-    ).native_id is None
+    assert (
+        next(
+            entry for entry in receipt.journal if entry.key.domain == "attachment"
+        ).native_id
+        is None
+    )
     async with lineage_database() as session:
-        master = await session.get(HcpMigrationMasterRun, bootstrap.binding.master_run_id)
+        master = await session.get(
+            HcpMigrationMasterRun, bootstrap.binding.master_run_id
+        )
         assert master is not None
         assert master.supported_entities == [
-            "appointment", "attachment", "customer", "job", "service_location"
+            "appointment",
+            "attachment",
+            "customer",
+            "job",
+            "service_location",
         ]
 
 
@@ -410,7 +450,12 @@ async def test_db_executor_failure_rolls_back_all_lineage_and_native_state(
                 manifest=manifest,
                 expected_base_source4_digest=DIGEST,
                 rollback_backup_digest="3" * 64,
-                executable_domains=frozenset({"customer", "service_location", "job", "appointment"}),
+                executable_domains=frozenset(
+                    {"customer", "service_location", "job", "appointment"}
+                ),
             )
     async with lineage_database() as session:
-        assert await session.get(HcpMigrationMasterRun, bootstrap.binding.master_run_id) is None
+        assert (
+            await session.get(HcpMigrationMasterRun, bootstrap.binding.master_run_id)
+            is None
+        )

@@ -317,8 +317,14 @@ class CurrentOverlayExecutor:
         }
         if executable_domains is not None:
             for item in manifest.records:
-                if item.assertion not in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE} and item.domain not in executable_domains:
-                    raise ValueError(f"overlay executable domain is unsupported: {item.domain}")
+                if (
+                    item.assertion
+                    not in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
+                    and item.domain not in executable_domains
+                ):
+                    raise ValueError(
+                        f"overlay executable domain is unsupported: {item.domain}"
+                    )
 
         ordered_records = _dependency_order(manifest.records)
         journal: list[OverlayJournalEntry] = []
@@ -360,7 +366,9 @@ class CurrentOverlayExecutor:
                     source_disposition = (record.source_disposition or "CREATE").upper()
                     if source_disposition in {"UPDATE", "REPLAY"}:
                         if not allow_clean_baseline_bootstrap:
-                            raise ValueError("clean-baseline bootstrap authority is required")
+                            raise ValueError(
+                                "clean-baseline bootstrap authority is required"
+                            )
                         action = (
                             "BOOTSTRAP_CREATE_FROM_UPDATE"
                             if source_disposition == "UPDATE"
@@ -402,16 +410,26 @@ class CurrentOverlayExecutor:
                     )
                 )
             elif record.assertion is OverlayAssertion.UPDATE:
-                if state is None and (record.source_disposition or "").upper() == "UPDATE":
+                if (
+                    state is None
+                    and (record.source_disposition or "").upper() == "UPDATE"
+                ):
                     if not allow_clean_baseline_bootstrap:
-                        raise ValueError("clean-baseline bootstrap authority is required")
+                        raise ValueError(
+                            "clean-baseline bootstrap authority is required"
+                        )
                     try:
                         after = await repository.create(record)
                         outcome = "bootstrapped"
                         action = "BOOTSTRAP_CREATE_FROM_UPDATE"
                     except OverlayDomainHold as error:
                         await repository.record_non_mutating_assertion(
-                            replace(record, assertion=OverlayAssertion.HOLD, payload={}, reason=str(error))
+                            replace(
+                                record,
+                                assertion=OverlayAssertion.HOLD,
+                                payload={},
+                                reason=str(error),
+                            )
                         )
                         blocked_keys.add(record.key)
                         after = state
@@ -527,7 +545,9 @@ def _dependency_order(
     while ready:
         key = ready.pop(0)
         ordered.append(by_key[key])
-        for child in sorted(children[key], key=lambda value: (value.domain, value.source_id)):
+        for child in sorted(
+            children[key], key=lambda value: (value.domain, value.source_id)
+        ):
             indegree[child] -= 1
             if indegree[child] == 0:
                 ready.append(child)

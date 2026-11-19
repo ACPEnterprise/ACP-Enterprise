@@ -10,28 +10,23 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-if __package__:
-    from .hcp_operational_cutover_acquisition import (
-        _classify,
-        _digest,
-        _load_object,
-        _location_id,
-        _parent_id,
-        _prior_index,
-    )
-else:
-    from hcp_operational_cutover_acquisition import (
-        _classify,
-        _digest,
-        _load_object,
-        _location_id,
-        _parent_id,
-        _prior_index,
-    )
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "scripts"
+
+from .hcp_operational_cutover_acquisition import (
+    _classify,
+    _digest,
+    _load_object,
+    _location_id,
+    _parent_id,
+    _prior_index,
+)
 
 
 def _pages(root: Path, stem: str, key: str) -> list[dict[str, Any]]:
@@ -191,26 +186,28 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         if job is None:
             continue
         job_parents: list[dict[str, str]] = []
-        customer_id = _parent_id(job, "customer")
-        location_id = _location_id(job)
-        if customer_id:
-            job_parents.append({"domain": "customer", "source_id": customer_id})
-        if location_id:
-            job_parents.append({"domain": "service_location", "source_id": location_id})
+        job_customer_id = _parent_id(job, "customer")
+        job_location_id = _location_id(job)
+        if job_customer_id:
+            job_parents.append({"domain": "customer", "source_id": job_customer_id})
+        if job_location_id:
+            job_parents.append(
+                {"domain": "service_location", "source_id": job_location_id}
+            )
             address = job.get("address")
-            key = ("service_location", location_id)
+            key = ("service_location", job_location_id)
             if key not in payloads and isinstance(address, dict):
                 payloads[key] = address
                 parents[key] = (
-                    [{"domain": "customer", "source_id": customer_id}]
-                    if customer_id
+                    [{"domain": "customer", "source_id": job_customer_id}]
+                    if job_customer_id
                     else []
                 )
                 _add(
                     classifications,
                     _classify(
                         domain="service_location",
-                        source_id=location_id,
+                        source_id=job_location_id,
                         payload=address,
                         prior=prior,
                     ),
@@ -251,7 +248,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     prior_provider = _load_object(
         args.acquisition_root / "isolated-clone-provider-observations.json"
     )
-    referenced_technician_ids = set()
+    referenced_technician_ids: set[str] = set()
     referenced_technician_count = 0
     for row in prior_provider.get("records", []):
         if not isinstance(row, dict) or row.get("domain") != "appointment":

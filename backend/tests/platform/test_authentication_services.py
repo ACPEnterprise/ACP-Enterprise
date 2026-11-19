@@ -206,7 +206,6 @@ async def test_login_failure_lockout_and_authentication_boundary(
     assert claims.credential_version == 1
     assert claims.authorization_version == 1
 
-
     async with factory() as session:
         credential = await session.scalar(
             select(UserCredential).where(UserCredential.user_id == user_id)

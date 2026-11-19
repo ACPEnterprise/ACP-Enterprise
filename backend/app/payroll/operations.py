@@ -100,12 +100,16 @@ class PayrollOperationsService:
     ) -> tuple[str, bool]:
         if employee.hire_date is not None and employee.hire_date > period_end:
             return "NOT_EMPLOYED_AS_OF_PERIOD", False
-        if employee.termination_date is not None and employee.termination_date < period_start:
+        if (
+            employee.termination_date is not None
+            and employee.termination_date < period_start
+        ):
             return "NOT_EMPLOYED_AS_OF_PERIOD", False
         if employee.status == "active":
             return "ACTIVE_AS_OF_PERIOD", True
         if employee.hire_date is not None and (
-            employee.termination_date is None or employee.termination_date >= period_start
+            employee.termination_date is None
+            or employee.termination_date >= period_start
         ):
             return "FORMER_EMPLOYEE_IN_PERIOD", True
         return "STATUS_AS_OF_UNAVAILABLE", False

@@ -1473,7 +1473,11 @@ async def test_existing_verified_user_admin_password_reset_clears_forced_reset(
         initial = await service.initiate(
             session,
             context=context,
-            command=replace(command(context, existing_user_id=context.user.id), admin_password="Initial-secure-passphrase-42!", require_password_change=True),
+            command=replace(
+                command(context, existing_user_id=context.user.id),
+                admin_password="Initial-secure-passphrase-42!",
+                require_password_change=True,
+            ),
         )
         employee = await session.get(Employee, initial.employee_id)
         assert employee is not None

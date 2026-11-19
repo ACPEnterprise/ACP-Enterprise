@@ -33,14 +33,14 @@ def main() -> int:
         if args.paginated_target_scan
         else build_supplemental
     )
-    build_kwargs = dict(
-        transport=HcpReadOnlyTransport(config),
-        inventory_path=args.inventory,
-        inventory_sha256=args.inventory_sha256,
-        output_root=args.output_root,
-        source_packet_sha256=args.source_packet_sha256,
-        source_canonical_digest=args.source_canonical_digest,
-    )
+    build_kwargs = {
+        "transport": HcpReadOnlyTransport(config),
+        "inventory_path": args.inventory,
+        "inventory_sha256": args.inventory_sha256,
+        "output_root": args.output_root,
+        "source_packet_sha256": args.source_packet_sha256,
+        "source_canonical_digest": args.source_canonical_digest,
+    }
     if args.paginated_target_scan:
         build_kwargs["max_workers"] = args.workers
     manifest = builder(**build_kwargs)

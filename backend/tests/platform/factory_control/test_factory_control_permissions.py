@@ -148,9 +148,7 @@ async def test_factory_controller_accepts_challenge_established_session_bearer(
     )
     identity = await get_factory_controller_identity(
         object(),  # type: ignore[arg-type]
-        HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials=str(session_id)
-        ),
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials=str(session_id)),
     )
     assert identity.session_id == session_id
     assert identity.context is expected_context

@@ -12,7 +12,9 @@ from app.price_book.models import PriceBookComponent
 from app.purchasing.models import VendorItemCrossReference, VendorPurchaseCostEvidence
 
 
-def row(*, vendor_sku: str = "H-100", description: str = "1/2 IN COPPER ELBOW") -> CommonStockRow:
+def row(
+    *, vendor_sku: str = "H-100", description: str = "1/2 IN COPPER ELBOW"
+) -> CommonStockRow:
     return CommonStockRow(
         source_row_number=2,
         description=description,
@@ -33,7 +35,9 @@ def test_acp_sku_is_deterministic_and_not_vendor_identity() -> None:
 
 
 def test_vendor_cross_reference_supports_many_vendors_per_material() -> None:
-    constraints = {constraint.name for constraint in VendorItemCrossReference.__table__.constraints}
+    constraints = {
+        constraint.name for constraint in VendorItemCrossReference.__table__.constraints
+    }
     assert "uq_vendor_item_xref_vendor_sku" in constraints
     assert "inventory_item_id" in VendorItemCrossReference.__table__.c
     assert "vendor_sku" not in MaterialCatalogAdmission.__table__.c
@@ -44,11 +48,15 @@ def test_vendor_cost_is_distinct_from_receipt_valuation_and_price_book() -> None
     assert columns.purchase_cost.type.scale == 8
     assert "cost_basis" in columns
     assert "selling_price" not in columns
-    assert PriceBookComponent.__table__.name not in getsource(CommonStockAdmissionService)
+    assert PriceBookComponent.__table__.name not in getsource(
+        CommonStockAdmissionService
+    )
 
 
 def test_planning_cost_candidate_requires_owner_approval() -> None:
-    result = planning_cost_candidate((Decimal("4.10"), Decimal("5.25"), Decimal("4.90")))
+    result = planning_cost_candidate(
+        (Decimal("4.10"), Decimal("5.25"), Decimal("4.90"))
+    )
     assert result.amount == Decimal("5.25")
     assert result.policy == "highest_current_qualified_vendor_purchase_cost"
     assert result.authority_state == "owner_approval_required"
@@ -62,6 +70,8 @@ def test_seed_does_not_create_quantity_or_opening_movement() -> None:
 
 
 def test_migration_is_single_head_and_append_only() -> None:
-    migration = Path("alembic/versions/ti9k1m3o5q7s_common_stock_seed_catalog.py").read_text()
+    migration = Path(
+        "alembic/versions/ti9k1m3o5q7s_common_stock_seed_catalog.py"
+    ).read_text()
     assert 'down_revision: str | Sequence[str] | None = "sp9e1g3i5k7m9"' in migration
     assert "reject_material_seed_evidence_mutation" in migration

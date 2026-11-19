@@ -641,7 +641,10 @@ class AuthenticationService:
                     or principal.version != claims.credential_version
                 ):
                     raise SessionInvalidError("Session is invalid.")
-            if authentication_session.authentication_method == "release_service_principal":
+            if (
+                authentication_session.authentication_method
+                == "release_service_principal"
+            ):
                 from app.platform.service_principals.models import (
                     ReleaseServicePrincipal,
                 )

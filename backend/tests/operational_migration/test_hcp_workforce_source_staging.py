@@ -32,11 +32,16 @@ def test_authority_packet_is_exact_and_deterministic() -> None:
     assert first == second
     assert len(first.records) == 7
     assert sum(record.creates_candidate for record in first.records) == 6
-    assert sum(record.employment_status == "TERMINATED" for record in first.records) == 1
-    assert sum(
-        record.owner_disposition == "OWNER_IDENTITY_DECISION_REQUIRED"
-        for record in first.records
-    ) == 1
+    assert (
+        sum(record.employment_status == "TERMINATED" for record in first.records) == 1
+    )
+    assert (
+        sum(
+            record.owner_disposition == "OWNER_IDENTITY_DECISION_REQUIRED"
+            for record in first.records
+        )
+        == 1
+    )
     assert len(first.digest) == 64
 
 
@@ -204,14 +209,14 @@ async def test_stage_and_exact_replay_are_idempotent(staging_database) -> None:
             session, context=context, master_run_id=master_id, packet=packet
         )
         employees = await session.scalar(
-            select(func.count()).select_from(Employee).where(
-                Employee.company_id == context.company.id
-            )
+            select(func.count())
+            .select_from(Employee)
+            .where(Employee.company_id == context.company.id)
         )
         crosswalks = await session.scalar(
-            select(func.count()).select_from(HcpEmployeeSourceCrosswalk).where(
-                HcpEmployeeSourceCrosswalk.company_id == context.company.id
-            )
+            select(func.count())
+            .select_from(HcpEmployeeSourceCrosswalk)
+            .where(HcpEmployeeSourceCrosswalk.company_id == context.company.id)
         )
         adam = await session.scalar(
             select(HcpEmployeeSourceCrosswalk).where(

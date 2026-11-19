@@ -192,9 +192,7 @@ class FieldService:
                 CustomerContact.active.is_(True),
                 CustomerContact.archived_at.is_(None),
             )
-            .order_by(
-                CustomerContact.is_preferred.desc(), CustomerContact.created_at
-            )
+            .order_by(CustomerContact.is_preferred.desc(), CustomerContact.created_at)
             .limit(1)
         )
         latest_activity = await session.scalar(
@@ -272,9 +270,7 @@ class FieldService:
                 customer.display_name if customer else "Customer unavailable"
             ),
             contact_display_name=(
-                f"{contact.first_name} {contact.last_name}".strip()
-                if contact
-                else None
+                f"{contact.first_name} {contact.last_name}".strip() if contact else None
             ),
             contact_phone=(contact.mobile_phone or contact.office_phone)
             if contact

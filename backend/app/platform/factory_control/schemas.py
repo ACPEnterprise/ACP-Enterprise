@@ -187,9 +187,15 @@ class FactoryLiveLaneTarget(StrictSchema):
             and self.current_assignment is None
         ):
             raise ValueError("active controller state requires a current assignment")
-        if self.lifecycle_state == "ELIGIBLE_IDLE" and self.current_assignment is not None:
+        if (
+            self.lifecycle_state == "ELIGIBLE_IDLE"
+            and self.current_assignment is not None
+        ):
             raise ValueError("eligible idle controller cannot retain an assignment")
-        if self.lifecycle_state == "WAITING_INTEGRATION" and self.last_handoff_at is None:
+        if (
+            self.lifecycle_state == "WAITING_INTEGRATION"
+            and self.last_handoff_at is None
+        ):
             raise ValueError("waiting integration requires the handoff timestamp")
         if self.last_handoff_at is not None and self.last_handoff_at.tzinfo is None:
             raise ValueError("last_handoff_at must include a timezone")

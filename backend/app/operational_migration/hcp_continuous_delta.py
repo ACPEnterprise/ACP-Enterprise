@@ -24,9 +24,7 @@ from app.operational_migration.hcp_current_overlay import (
 
 CONTRACT = "hcp-continuous-delta-preflight/v1"
 MUTABLE_DOMAINS = frozenset({"customer", "job", "appointment"})
-CREATE_DOMAINS = frozenset(
-    {"customer", "service_location", "job", "appointment"}
-)
+CREATE_DOMAINS = frozenset({"customer", "service_location", "job", "appointment"})
 
 
 class DeltaDisposition(StrEnum):
@@ -220,7 +218,10 @@ def _classify(
             DeltaDisposition.HOLD_SOURCE_CHRONOLOGY,
             "changed digest is not a newer provider version",
         )
-    return DeltaDisposition.UPDATE, "newer provider version with unchanged native target"
+    return (
+        DeltaDisposition.UPDATE,
+        "newer provider version with unchanged native target",
+    )
 
 
 def _decision_value(value: DeltaDecision) -> dict[str, object]:
