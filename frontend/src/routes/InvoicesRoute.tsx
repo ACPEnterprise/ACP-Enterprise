@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
+import { getOperatorApiError } from "../api/errors";
 import { useHasPermission } from "../auth";
 import {
   useInvoiceCandidates,
@@ -22,6 +23,12 @@ import {
   Spinner,
 } from "../ui";
 
+function defaultDueDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 30);
+  return date.toISOString().slice(0, 10);
+}
+
 export function InvoicesRoute() {
   const [searchParams] = useSearchParams();
   const customerId = searchParams.get("customerId") ?? undefined;
@@ -39,7 +46,7 @@ export function InvoicesRoute() {
   const candidates = useInvoiceCandidates(canRead && canManage);
   const [form, setForm] = useState({
     candidate: "",
-    due: "",
+    due: defaultDueDate(),
     terms: "Net 30",
   });
   const [query, setQuery] = useState("");
@@ -113,6 +120,11 @@ export function InvoicesRoute() {
           </p>
         )}
       </header>
+      {mutations.create.isError && (() => {
+        const error = getOperatorApiError(mutations.create.error, "Invoice creation");
+        return <Alert variant="danger" title={error.title}>{error.message} Your completed-work selection is still available; correct the fields or refresh before retrying.</Alert>;
+      })()}
+      {mutations.create.data && <Alert variant="success" title="Draft Invoice created">The draft is ready for review. <Link className="font-semibold underline" to={`/invoices/${mutations.create.data.id}`}>Open {mutations.create.data.invoice_number}</Link></Alert>}
       {invoices.isPending ? (
         <Spinner label="Loading Invoices" />
       ) : invoices.isError ? (

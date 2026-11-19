@@ -60,6 +60,7 @@ describe("CustomerOperationsPanel office workflow", () => {
   it("unifies migrated and TwelveHats work and preserves action context", () => {
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" locations={[]} /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Jobs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create Estimate" })).toHaveAttribute("href", "/estimates?customerId=customer-1&returnTo=%2Fcustomers%2Fcustomer-1");
     expect(screen.getByRole("link", { name: "Create Job" })).toHaveAttribute("href", "/jobs?create=1&customerId=customer-1");
     expect(screen.getByRole("link", { name: "Open Job to schedule" })).toHaveAttribute("href", "/jobs/job-current?returnTo=%2Fcustomers%2Fcustomer-1");
     expect(screen.getAllByRole("link", { name: /APT-1/ }).every((item) => item.getAttribute("href") === "/appointments/appointment-1")).toBe(true);

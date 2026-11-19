@@ -86,6 +86,7 @@ describe("CustomerDetailView", () => {
   it("offers permission-gated Job creation with Customer and Location context", () => {
     permissions.add("COMPANY_JOB_READ");
     permissions.add("COMPANY_JOB_MANAGE");
+    permissions.add("COMPANY_ESTIMATE_MANAGE");
     vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
       isLoading: false, isError: false,
       data: { ...customer, properties: [{ id: "location-1", customer_id: customer.id, address_line_1: "10 Main", address_line_2: null, city: "Albany", state: "NY", postal_code: "12207", property_type: "single_family", gate_access_instructions: null, water_shutoff_location: null, sewer_septic: "sewer", property_notes: null, is_primary: true, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", archived_at: null }] },
@@ -94,6 +95,7 @@ describe("CustomerDetailView", () => {
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
 
     expect(screen.getByRole("link", { name: "Create Job for this Location" })).toHaveAttribute("href", "/jobs?create=1&customerId=customer-1&locationId=location-1");
+    expect(screen.getByRole("link", { name: "Create Estimate for this Location" })).toHaveAttribute("href", "/estimates?customerId=customer-1&locationId=location-1&returnTo=%2Fcustomers%2Fcustomer-1");
     expect(screen.getByRole("link", { name: "View Jobs for this Location" })).toHaveAttribute("href", "/jobs?customerId=customer-1&locationId=location-1");
   });
 

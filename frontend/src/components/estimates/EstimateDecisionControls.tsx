@@ -26,12 +26,14 @@ function decisionRecoveryMessage(error: unknown) {
 
 export function EstimateDecisionControls({
   estimate,
+  defaultCustomerName = "",
   mutations,
 }: {
   readonly estimate: Estimate;
+  readonly defaultCustomerName?: string;
   readonly mutations: Mutations;
 }) {
-  const [customerName, setCustomerName] = useState("");
+  const [customerName, setCustomerName] = useState(defaultCustomerName);
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerComment, setCustomerComment] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");

@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../ui";
+import { accountingReadbackLabel, humanizeCommercialState } from "../../presentation/commercialLabels";
 
 const money = (value: string, currency: string) =>
   new Intl.NumberFormat(undefined, { style: "currency", currency }).format(
@@ -19,10 +20,10 @@ export function InvoiceSummary({ invoice }: { invoice: Invoice }) {
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>{invoice.invoice_number}</CardTitle>
-          <Badge variant="neutral">{invoice.status}</Badge>
+          <Badge variant="neutral">{humanizeCommercialState(invoice.status)}</Badge>
         </div>
         <CardDescription>
-          Due {invoice.due_date} · Accounting {invoice.accounting_status}
+          Due {invoice.due_date} · Accounting readback: {accountingReadbackLabel(invoice.accounting_status)}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -33,7 +34,7 @@ export function InvoiceSummary({ invoice }: { invoice: Invoice }) {
           <dd>−{money(invoice.discount_amount, invoice.currency)}</dd>
           <dt>Tax</dt>
           <dd>{money(invoice.tax_amount, invoice.currency)}</dd>
-          <dt className="font-bold">Open receivable</dt>
+          <dt className="font-bold">Balance due</dt>
           <dd className="font-bold">
             {money(invoice.open_amount, invoice.currency)}
           </dd>

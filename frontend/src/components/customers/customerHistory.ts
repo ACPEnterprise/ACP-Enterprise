@@ -4,6 +4,7 @@ import type { JobListItem } from "../../types/jobs";
 import type { PaymentReceipt } from "../../types/payments";
 import type { AppointmentDetail } from "../../types/scheduling";
 import type { CustomerTimelineEntry } from "../../types/customers";
+import { humanizeCommercialState } from "../../presentation/commercialLabels";
 
 export interface CustomerHistorySources {
   readonly customerId: string;
@@ -34,7 +35,7 @@ export function buildCustomerHistoryItems(props: CustomerHistorySources): Custom
     id: `job:${job.id}`,
     occurredAt: job.completed_at ?? job.updated_at,
     title: `Job ${job.job_number}`,
-    detail: `${job.status.replaceAll("_", " ")} · ${job.service_location_label}`,
+    detail: `${humanizeCommercialState(job.status)} · ${job.service_location_label}`,
     href: `/jobs/${job.id}?returnTo=${returnTo}`,
     locationId: job.service_location_id,
     kind: "job" as const,
@@ -43,7 +44,7 @@ export function buildCustomerHistoryItems(props: CustomerHistorySources): Custom
     id: `appointment:${item.id}`,
     occurredAt: item.arrival_window_start_at ?? item.updated_at,
     title: `Appointment ${item.appointment_number}`,
-    detail: item.status.replaceAll("_", " "),
+    detail: humanizeCommercialState(item.status),
     href: `/appointments/${item.id}`,
     locationId: item.service_location_id,
     kind: "appointment" as const,
@@ -52,7 +53,7 @@ export function buildCustomerHistoryItems(props: CustomerHistorySources): Custom
     id: `estimate:${item.id}`,
     occurredAt: item.updated_at,
     title: `Estimate ${item.estimate_number}`,
-    detail: `${item.status.replaceAll("_", " ")} · ${amount(item.currency, item.total_amount)}`,
+    detail: `${humanizeCommercialState(item.status)} · ${amount(item.currency, item.total_amount)}`,
     href: `/estimates?id=${item.id}`,
     locationId: item.service_location_id,
     kind: "estimate" as const,
@@ -61,7 +62,7 @@ export function buildCustomerHistoryItems(props: CustomerHistorySources): Custom
     id: `invoice:${item.id}`,
     occurredAt: item.last_ar_activity_at ?? `${item.issue_date}T00:00:00Z`,
     title: `Invoice ${item.invoice_number}`,
-    detail: `${item.status.replaceAll("_", " ")} · ${amount(item.currency, item.total_amount)} total · ${amount(item.currency, item.open_amount)} open`,
+    detail: `${humanizeCommercialState(item.status)} · ${amount(item.currency, item.total_amount)} total · ${amount(item.currency, item.open_amount)} open`,
     href: `/invoices/${item.id}`,
     locationId: item.service_location_id,
     kind: "invoice" as const,
@@ -70,7 +71,7 @@ export function buildCustomerHistoryItems(props: CustomerHistorySources): Custom
     id: `payment:${item.id}`,
     occurredAt: item.captured_at,
     title: "Payment receipt",
-    detail: `${item.status.replaceAll("_", " ")} · ${amount(item.currency, item.captured_amount)} captured · ${amount(item.currency, item.applied_amount)} applied · ${amount(item.currency, item.refunded_amount)} refunded`,
+    detail: `${humanizeCommercialState(item.status)} · ${amount(item.currency, item.captured_amount)} captured · ${amount(item.currency, item.applied_amount)} applied · ${amount(item.currency, item.refunded_amount)} refunded`,
     href: `/payments/${item.id}`,
     locationId: null,
     kind: "payment" as const,

@@ -41,6 +41,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
   const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
+  const canManageEstimates = useHasPermission("COMPANY_ESTIMATE_MANAGE");
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
   const consents = useCustomerConsents(customerId);
@@ -252,6 +253,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
               <p className="mt-3 text-xs text-content-muted">{property.property_type.replaceAll("_", " ")} · {property.sewer_septic ?? "waste system unknown"}</p>
               {canManage && !archived && <button type="button" onClick={() => setEditingProperty(property)} className="mt-3 text-sm text-action-primary">Edit property</button>}
               {canReadJobs && <Link className="mt-3 ml-4 inline-block text-sm font-semibold text-action-primary" to={`/jobs?customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}`}>View Jobs for this Location</Link>}
+              {canManageEstimates && !archived && <Link className="mt-3 ml-4 inline-block text-sm text-action-primary" to={`/estimates?customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}&returnTo=${encodeURIComponent(`/customers/${customer.id}`)}`}>Create Estimate for this Location</Link>}
               {canManageJobs && !archived && <Link className="mt-3 ml-4 inline-block text-sm text-action-primary" to={`/jobs?create=1&customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}`}>Create Job for this Location</Link>}
             </article>
           ))}
