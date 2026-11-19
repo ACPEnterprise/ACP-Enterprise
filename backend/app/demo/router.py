@@ -1,11 +1,9 @@
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.accounting.models import AccountingOperation
 from app.database.session import get_database_session
 from app.demo.models import DemoEnvironment, DemoFeedback, DemoScenario
 from app.demo.schemas import (
@@ -13,15 +11,12 @@ from app.demo.schemas import (
     DemoFeedbackResponse,
     DemoProvisionResponse,
     DemoScenarioResponse,
-    DemoSignalResponse,
 )
 from app.demo.service import sales_demo_service
-from app.invoicing.models import Invoice
 from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission, CustomerPermission
 from app.platform.permissions.dependencies import require_permission
-from app.scheduling.models import Appointment
 
 router = APIRouter(prefix="/api/v1/demo", tags=["Sales Demo"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -106,85 +101,6 @@ async def scenarios(
             record_refs=row.record_refs,
         )
         for row in rows
-    ]
-
-
-@router.get("/signals", response_model=list[DemoSignalResponse])
-async def signals(
-    context: DemoContext, session: DatabaseSession
-) -> list[DemoSignalResponse]:
-    rows = await scenarios(context, session)
-    unassigned = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(Appointment)
-            .where(
-                Appointment.company_id == context.company.id,
-                Appointment.status == "scheduled",
-                Appointment.capacity_state == "intentionally_unassigned",
-            )
-        )
-        or 0
-    )
-    overdue = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(Invoice)
-            .where(
-                Invoice.company_id == context.company.id,
-                Invoice.due_date < date.today(),
-                Invoice.open_amount > 0,
-            )
-        )
-        or 0
-    )
-    operations = (
-        await session.scalars(
-            select(AccountingOperation).where(
-                AccountingOperation.company_id == context.company.id,
-                AccountingOperation.kind.in_(("job_cost", "inventory_usage")),
-            )
-        )
-    ).all()
-    operation_kinds = {item.kind for item in operations}
-    copy = {
-        "dispatch_conflict": (
-            "BEACON",
-            f"{unassigned} jobs tomorrow have no technician assigned.",
-            "Both are scheduled before noon. Open Dispatch to assign available capacity.",
-            unassigned > 0,
-        ),
-        "overdue_ar": (
-            "BEACON",
-            f"{overdue} issued invoice is more than 30 days overdue.",
-            "Open the customer and invoice, review payment history, then record the simulated follow-up.",
-            overdue > 0,
-        ),
-        "margin_problem": (
-            "LUMINARY",
-            "Persisted labor and material cost exceed revenue on this completed job.",
-            "Drill into the job-cost operation before adjusting future Price Book assumptions.",
-            "job_cost" in operation_kinds,
-        ),
-        "inventory_shortage": (
-            "LIA",
-            "The persisted material requirement is 3 while demo availability is 1.",
-            "Open Inventory and stage replenishment before the appointment.",
-            "inventory_usage" in operation_kinds,
-        ),
-    }
-    return [
-        DemoSignalResponse(
-            source=copy[row.code][0],
-            severity="attention",
-            title=row.title,
-            explanation=copy[row.code][1],
-            recommendation=copy[row.code][2],
-            scenario_code=row.code,
-            record_refs=row.record_refs,
-        )
-        for row in rows
-        if row.code in copy and copy[row.code][3]
     ]
 
 
