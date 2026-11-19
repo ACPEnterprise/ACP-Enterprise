@@ -37,7 +37,8 @@
       "profit_and_loss_q3_2025": "BLOCKED_WITH_QBO_RUNTIME",
       "profit_and_loss_fy2025": "BLOCKED_WITH_QBO_RUNTIME",
       "balance_sheet_2025_12_31": "BLOCKED_WITH_QBO_RUNTIME"
-    }
+    },
+    "payroll": "UNAVAILABLE_NOT_AUTHORIZED"
   },
   "hcp": {
     "protected_handoff": "hcp-cutover-94f05c12",
@@ -74,6 +75,10 @@
       "retry_sample_http_400_count": 12,
       "status": "PARTIAL"
     },
+    "attachments": {
+      "status": "UNAVAILABLE_FROM_PROVIDER",
+      "fallback": "provider export or owner-supplied original documents"
+    },
     "employee_crosswalk": {
       "sealed_source_identities": 7,
       "accepted_candidate_identities": 6,
@@ -85,7 +90,9 @@
   "data_master_handoff": {
     "canonical_historical_read_contract_ready": true,
     "hcp_evidence_ready": true,
+    "hcp_only_admission_ready": true,
     "qbo_accounting_evidence_ready": false,
+    "qbo_blocker_isolated_from_hcp_admission": true,
     "overall_ready": false
   }
 }
