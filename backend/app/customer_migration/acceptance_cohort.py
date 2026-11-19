@@ -135,7 +135,7 @@ def generate_customer_acceptance_cohort(
     migration_release_sha: str,
     mandatory_source_ids: Iterable[str],
     limit: int = 25,
-    source_system: str = "housecall-pro",
+    source_system: str = "housecall_pro",
 ) -> CustomerAcceptanceCohort:
     """Transform, review, and select a deterministic non-anchor cohort."""
 

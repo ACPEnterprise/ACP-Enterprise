@@ -69,7 +69,7 @@ def parser() -> argparse.ArgumentParser:
         help="Exact provider source ID; repeat for additional mandatory anchors.",
     )
     result.add_argument("--limit", type=int, default=25)
-    result.add_argument("--source-system", default="housecall-pro")
+    result.add_argument("--source-system", default="housecall_pro")
     result.add_argument("--output", type=Path, required=True)
     return result
 

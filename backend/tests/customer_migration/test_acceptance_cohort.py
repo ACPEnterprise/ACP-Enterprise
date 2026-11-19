@@ -72,6 +72,7 @@ def test_cohort_is_deterministic_bound_and_contains_no_customer_pii() -> None:
         "provider-004"
     ]
     assert first.source_sha256 == hashlib.sha256(customer_csv()).hexdigest()
+    assert first.source_system == "housecall_pro"
     assert first.migration_release_sha == RELEASE_SHA
     assert first.transformation_sha256 != first.reviewed_output_sha256
     payload = first.model_dump_json()
