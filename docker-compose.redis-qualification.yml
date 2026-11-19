@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: acp_redis_qualification
       POSTGRES_USER: acp_redis_qualification
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: redis-qualification-disposable-postgres-only
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
@@ -12,17 +12,28 @@ services:
       interval: 1s
       timeout: 3s
       retries: 30
+    restart: "no"
+    networks:
+      - qualification
 
   redis:
     image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--aclfile", "/run/secrets/users.acl", "--protected-mode", "yes"]
     tmpfs:
       - /data
+    secrets:
+      - source: redis_qualification_acl
+        target: users.acl
+      - source: redis_qualification_health_password
+        target: health-password
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/health-password) redis-cli --user acp-health ping | grep -qx PONG"]
       interval: 1s
       timeout: 3s
       retries: 30
+    restart: "no"
+    networks:
+      - qualification
 
   qualification:
     build:
@@ -30,8 +41,10 @@ services:
       dockerfile: Dockerfile.test
     environment:
       ENVIRONMENT: test
-      DATABASE_URL: postgresql+asyncpg://acp_redis_qualification@postgres:5432/acp_redis_qualification
-      REDIS_URL: redis://redis:6379/15
+      DATABASE_URL: postgresql+asyncpg://acp_redis_qualification:redis-qualification-disposable-postgres-only@postgres:5432/acp_redis_qualification
+      REDIS_URL: redis://redis:6379/0
+      REDIS_USERNAME: acp-application
+      REDIS_PASSWORD_FILE: /run/secrets/application-password
       REDIS_REQUIRED_FOR_READINESS: "true"
       ACCESS_TOKEN_SIGNING_KEY: local-redis-qualification-signing-key
       SECURITY_TOKEN_HMAC_KEY: local-redis-qualification-hmac-key
@@ -40,6 +53,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    secrets:
+      - source: redis_qualification_application_password
+        target: application-password
     volumes:
       - ./backend:/app:ro
     command:
@@ -52,4 +68,25 @@ services:
         tests/platform/test_health_readiness.py
         tests/platform/test_authentication_persistence.py
         tests/platform/test_authentication_services.py
-        tests/platform/test_http_authentication_boundaries.py
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    networks:
+      - qualification
+
+secrets:
+  redis_qualification_acl:
+    file: ${REDIS_QUALIFICATION_SECRET_DIR:?Set the disposable Redis qualification secret directory}/users.acl
+  redis_qualification_application_password:
+    file: ${REDIS_QUALIFICATION_SECRET_DIR:?Set the disposable Redis qualification secret directory}/application-password
+  redis_qualification_health_password:
+    file: ${REDIS_QUALIFICATION_SECRET_DIR:?Set the disposable Redis qualification secret directory}/health-password
+
+networks:
+  qualification:
+    internal: true
