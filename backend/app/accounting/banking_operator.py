@@ -5,8 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from datetime import date
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -47,6 +50,7 @@ from app.accounting.models import (
     Journal,
     JournalLine,
 )
+from app.core.config import settings
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 
@@ -61,7 +65,66 @@ def _signed(direction: str, amount: Decimal) -> Decimal:
     return amount if direction == "inflow" else -amount
 
 
+@dataclass(frozen=True)
+class _BankFeedHealth:
+    state: Literal["CURRENT", "STALE", "NO_EVIDENCE"]
+    latest_source_as_of: datetime | None
+    stale_since: datetime | None
+    source_age_hours: int | None
+    stale_after_hours: int
+
+
 class BankingOperatorService:
+    def __init__(
+        self,
+        *,
+        stale_after_hours: int | None = None,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._stale_after_hours = (
+            settings.bank_feed_stale_after_hours
+            if stale_after_hours is None
+            else stale_after_hours
+        )
+        if self._stale_after_hours < 1:
+            raise ValueError("Bank feed stale cadence must be at least one hour")
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+
+    @staticmethod
+    def _utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def _feed_health(
+        self, transactions: tuple[BankTransaction, ...], *, observed_at: datetime
+    ) -> _BankFeedHealth:
+        source_times = tuple(
+            self._utc(row.source_as_of)
+            for row in transactions
+            if row.source_as_of is not None
+        )
+        if not source_times:
+            return _BankFeedHealth(
+                state="NO_EVIDENCE",
+                latest_source_as_of=None,
+                stale_since=None,
+                source_age_hours=None,
+                stale_after_hours=self._stale_after_hours,
+            )
+        latest = max(source_times)
+        observed = self._utc(observed_at)
+        stale_at = latest + timedelta(hours=self._stale_after_hours)
+        is_stale = observed >= stale_at
+        age = max(0, int((observed - latest).total_seconds() // 3600))
+        return _BankFeedHealth(
+            state="STALE" if is_stale else "CURRENT",
+            latest_source_as_of=latest,
+            stale_since=stale_at if is_stale else None,
+            source_age_hours=age,
+            stale_after_hours=self._stale_after_hours,
+        )
+
     async def reconciliation_response(
         self, session: AsyncSession, row: BankReconciliation
     ) -> BankReconciliationResponse:
@@ -105,6 +168,7 @@ class BankingOperatorService:
     async def summaries(
         self, session: AsyncSession, *, company_id: UUID
     ) -> tuple[BankAccountSummary, ...]:
+        observed_at = self._clock()
         accounts = tuple(
             (
                 await session.scalars(
@@ -164,9 +228,15 @@ class BankingOperatorService:
                 .order_by(BankReconciliation.prepared_at.desc())
                 .limit(1)
             )
+            feed_health = self._feed_health(transactions, observed_at=observed_at)
             result.append(
                 BankAccountSummary(
                     account=BankAccountResponse.model_validate(account),
+                    feed_health=feed_health.state,
+                    latest_source_as_of=feed_health.latest_source_as_of,
+                    stale_since=feed_health.stale_since,
+                    source_age_hours=feed_health.source_age_hours,
+                    stale_after_hours=feed_health.stale_after_hours,
                     imported_count=len(transactions),
                     matched_count=counts["matched"],
                     unmatched_count=sum(

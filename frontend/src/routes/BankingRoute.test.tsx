@@ -119,6 +119,11 @@ describe("BankingRoute", () => {
           opening_balance: "1000.00",
           opening_balance_date: "2026-09-01",
         },
+        feed_health: "CURRENT",
+        latest_source_as_of: "2026-09-30T12:00:00Z",
+        stale_since: null,
+        source_age_hours: 24,
+        stale_after_hours: 72,
         imported_count: 10,
         matched_count: 7,
         unmatched_count: 2,
@@ -178,12 +183,56 @@ describe("BankingRoute", () => {
     expect(screen.getByRole("combobox", { name: "Bank account" })).toHaveDisplayValue(
       "Example Bank · Operating •••• 4321",
     );
+    expect(screen.getByText("Feed current")).toBeVisible();
     expect(screen.getByText("25.00", { exact: false })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Needs Review" }));
     expect(await screen.findByText("Ambiguous")).toBeVisible();
     expect(screen.getByText("Multiple candidates")).toBeVisible();
     expect(screen.queryByRole("button", { name: /ignore|reject/i })).not.toBeInTheDocument();
+  });
+
+  it("shows provider-neutral stale and missing feed evidence for synthetic accounts", async () => {
+    const current = (await banking.getBankingSummary())[0];
+    vi.mocked(banking.getBankingSummary).mockResolvedValue([
+      {
+        ...current,
+        account: {
+          ...current.account,
+          id: "capital-one",
+          institution_name: "Capital One",
+          account_name: "Operating",
+        },
+        feed_health: "STALE",
+        latest_source_as_of: "2026-08-30T00:00:00Z",
+        stale_since: "2026-09-02T00:00:00Z",
+        source_age_hours: 1944,
+        stale_after_hours: 72,
+      },
+      {
+        ...current,
+        account: {
+          ...current.account,
+          id: "chase",
+          institution_name: "Chase",
+          account_name: "Corporate card",
+        },
+        feed_health: "NO_EVIDENCE",
+        latest_source_as_of: null,
+        stale_since: null,
+        source_age_hours: null,
+        stale_after_hours: 72,
+      },
+    ]);
+    renderRoute();
+
+    expect(await screen.findByText("Feed stale")).toBeVisible();
+    expect(screen.getByText(/Stale since/)).toBeVisible();
+    fireEvent.change(screen.getByRole("combobox", { name: "Bank account" }), {
+      target: { value: "chase" },
+    });
+    expect(await screen.findByText("No feed evidence")).toBeVisible();
+    expect(screen.getByText("No transaction feed evidence has been imported")).toBeVisible();
   });
 
   it("keeps prepare unavailable for a non-zero difference", async () => {

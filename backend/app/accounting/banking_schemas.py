@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -150,6 +151,11 @@ class BankReconciliationResponse(BaseModel):
 
 class BankAccountSummary(BaseModel):
     account: BankAccountResponse
+    feed_health: Literal["CURRENT", "STALE", "NO_EVIDENCE"]
+    latest_source_as_of: datetime | None
+    stale_since: datetime | None
+    source_age_hours: int | None
+    stale_after_hours: int
     imported_count: int
     matched_count: int
     unmatched_count: int
