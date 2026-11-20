@@ -427,6 +427,16 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
                 customer_id = customer.id; created += 1
             else:
                 matched += 1
+            existing_target_identity = await session.scalar(
+                select(CustomerSourceIdentity.id).where(
+                    CustomerSourceIdentity.company_id == context.company.id,
+                    CustomerSourceIdentity.branch_id == context.active_branch.id,
+                    CustomerSourceIdentity.source_system == identity_system,
+                    CustomerSourceIdentity.customer_id == customer_id,
+                )
+            )
+            if existing_target_identity is not None:
+                row.disposition = "held"; row.reason_code = "duplicate_existing_customer_target"; row.processed = True; row.processed_at = datetime.now(timezone.utc); matched -= 1; held += 1; run.source_count += 1; run.unresolved_count += 1; continue
             session.add(CustomerSourceIdentity(company_id=context.company.id, branch_id=context.active_branch.id, customer_id=customer_id, source_system=identity_system, source_customer_id=row.source_record_id, first_run_id=run.id))
             row.processed = True; row.processed_at = datetime.now(timezone.utc); run.source_count += 1; run.accepted_count += 1
         except (ValueError, TypeError) as error:
