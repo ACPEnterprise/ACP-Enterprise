@@ -1,0 +1,190 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+postgres_image="postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685"
+
+if [ "$#" -lt 3 ] || [ "$1" != "--python" ]; then
+  echo "usage: scripts/qualify-backend-tests --python /path/to/python PYTEST_ARGUMENT..." >&2
+  exit 64
+fi
+python_executable=$2
+shift 2
+if [ ! -x "$python_executable" ]; then
+  echo "qualification Python is not executable: $python_executable" >&2
+  exit 64
+fi
+
+project="acp_backend_test_$(git -C "$root" rev-parse --short=12 HEAD)_$$"
+qualification_root=$(mktemp -d "${TMPDIR:-/tmp}/acp-backend-test.XXXXXX")
+secret_dir="$qualification_root/secrets"
+container_name="${project}-postgres"
+volume_name="${project}-postgres"
+network_name="${project}-network"
+ownership_label="com.twelvehats.release-qualification.project=$project"
+cleaned=false
+
+# Never allow application code started by this harness to inherit a caller's
+# database authority, even while the disposable endpoint is being prepared.
+unset DATABASE_URL
+host_port=$("$python_executable" -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()')
+case "$host_port" in
+  *[!0-9]*|'')
+    echo "could not select a disposable loopback PostgreSQL port" >&2
+    exit 1
+    ;;
+esac
+
+cleanup_resources() {
+  cleanup_status=0
+  owned_containers=$(docker ps -aq --filter "label=$ownership_label")
+  if [ -n "$owned_containers" ]; then
+    # Intentional splitting passes only IDs resolved from the unique ownership label.
+    # shellcheck disable=SC2086
+    docker rm -f $owned_containers >/dev/null 2>&1 || cleanup_status=$?
+  fi
+  owned_volumes=$(docker volume ls -q --filter "label=$ownership_label")
+  if [ -n "$owned_volumes" ]; then
+    # shellcheck disable=SC2086
+    docker volume rm $owned_volumes >/dev/null 2>&1 || cleanup_status=$?
+  fi
+  owned_networks=$(docker network ls -q --filter "label=$ownership_label")
+  if [ -n "$owned_networks" ]; then
+    # shellcheck disable=SC2086
+    docker network rm $owned_networks >/dev/null 2>&1 || cleanup_status=$?
+  fi
+  if [ -n "$(docker ps -aq --filter "label=$ownership_label")" ]; then
+    cleanup_status=1
+  fi
+  if [ -n "$(docker volume ls -q --filter "label=$ownership_label")" ]; then
+    cleanup_status=1
+  fi
+  if [ -n "$(docker network ls -q --filter "label=$ownership_label")" ]; then
+    cleanup_status=1
+  fi
+  rm -rf "$qualification_root" || cleanup_status=$?
+  cleaned=true
+  return "$cleanup_status"
+}
+
+cleanup_on_exit() {
+  original_status=$?
+  trap - EXIT HUP INT TERM
+  cleanup_status=0
+  cleanup_resources || cleanup_status=$?
+  if [ "$cleanup_status" -ne 0 ]; then
+    echo "disposable backend-test database cleanup failed (test status $original_status)" >&2
+    exit 70
+  fi
+  exit "$original_status"
+}
+
+cleanup_on_signal() {
+  signal_status=$1
+  trap - EXIT HUP INT TERM
+  cleanup_status=0
+  cleanup_resources || cleanup_status=$?
+  if [ "$cleanup_status" -ne 0 ]; then
+    echo "disposable backend-test database cleanup failed after signal $signal_status" >&2
+    exit 70
+  fi
+  exit "$signal_status"
+}
+
+trap cleanup_on_exit EXIT
+trap 'cleanup_on_signal 129' HUP
+trap 'cleanup_on_signal 130' INT
+trap 'cleanup_on_signal 143' TERM
+
+umask 077
+mkdir -m 700 "$secret_dir"
+printf '%s\n' "release-postgres-qualification-$project" > "$secret_dir/postgres-password"
+
+docker network create --label "$ownership_label" "$network_name" >/dev/null
+docker volume create --label "$ownership_label" "$volume_name" >/dev/null
+postgres_container=$(docker run --detach \
+  --name "$container_name" \
+  --label "$ownership_label" \
+  --network "$network_name" \
+  --publish "127.0.0.1:$host_port:5432" \
+  --env POSTGRES_DB=release_qualification \
+  --env POSTGRES_USER=release_qualification \
+  --env POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password \
+  --env POSTGRES_INITDB_ARGS=--encoding=UTF8 \
+  --mount "type=bind,src=$secret_dir/postgres-password,dst=/run/secrets/postgres-password,readonly" \
+  --volume "$volume_name:/var/lib/postgresql/data" \
+  --health-cmd "pg_isready -h 127.0.0.1 -U release_qualification -d release_qualification" \
+  --health-interval 1s \
+  --health-timeout 3s \
+  --health-retries 60 \
+  "$postgres_image")
+
+attempt=0
+while [ "$attempt" -lt 60 ]; do
+  health=$(docker inspect --format '{{.State.Health.Status}}' "$postgres_container")
+  case "$health" in
+    healthy) break ;;
+    unhealthy)
+      echo "qualification PostgreSQL became unhealthy" >&2
+      exit 1
+      ;;
+  esac
+  attempt=$((attempt + 1))
+  sleep 1
+done
+if [ "$health" != healthy ]; then
+  echo "qualification PostgreSQL did not become healthy within 60 seconds" >&2
+  exit 1
+fi
+
+host_endpoint=$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostIp}}:{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$postgres_container")
+if [ "$host_endpoint" != "127.0.0.1:$host_port" ]; then
+  echo "qualification PostgreSQL must publish only on the selected loopback endpoint; observed $host_endpoint" >&2
+  exit 1
+fi
+
+postgres_version=$(docker exec "$postgres_container" psql -Atq -U release_qualification -d release_qualification -c "SHOW server_version_num")
+case "$postgres_version" in
+  16????) ;;
+  *)
+    echo "PostgreSQL 16 is required; observed server_version_num=$postgres_version" >&2
+    exit 1
+    ;;
+esac
+postgres_encoding=$(docker exec "$postgres_container" psql -Atq -U release_qualification -d release_qualification -c "SHOW server_encoding")
+if [ "$postgres_encoding" != "UTF8" ]; then
+  echo "UTF8 qualification database is required; observed $postgres_encoding" >&2
+  exit 1
+fi
+existing_relations=$(docker exec "$postgres_container" psql -Atq -U release_qualification -d release_qualification -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND c.relkind IN ('r','p','v','m','S','f')")
+if [ "$existing_relations" != 0 ]; then
+  echo "qualification database is not pristine" >&2
+  exit 1
+fi
+
+database_password=$(cat "$secret_dir/postgres-password")
+export DATABASE_URL="postgresql+asyncpg://release_qualification:${database_password}@127.0.0.1:${host_port}/release_qualification"
+export ENVIRONMENT=test
+export PYTHONPATH="$root/backend${PYTHONPATH:+:$PYTHONPATH}"
+
+(
+  cd "$root/backend"
+  "$python_executable" -m alembic upgrade head
+  "$python_executable" -m alembic current --check-heads
+  "$python_executable" -m alembic check
+)
+
+cd "$root"
+"$python_executable" -m pytest "$@"
+
+cleanup_status=0
+cleanup_resources || cleanup_status=$?
+if [ "$cleanup_status" -ne 0 ]; then
+  echo "disposable backend-test database cleanup failed (test status 0)" >&2
+  exit 70
+fi
+trap - EXIT HUP INT TERM
+test "$cleaned" = true
+test ! -e "$qualification_root"
+printf 'BACKEND_TEST_DATABASE=DISPOSABLE_LOOPBACK_POSTGRESQL_16\n'
+printf 'BACKEND_TEST_DATABASE_CLEANUP=VERIFIED\n'

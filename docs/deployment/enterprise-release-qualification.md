@@ -9,6 +9,22 @@ Run it from the repository root with the repository's Python 3.12 environment.
 from its repository location, so neither repository-root nor outside-`backend`
 invocations require a caller-managed `PYTHONPATH`.
 
+The local profile's backend test gate uses `scripts/qualify-backend-tests`. The
+wrapper starts the digest-pinned PostgreSQL 16 image with uniquely labeled,
+disposable Docker resources, selects an unused loopback port and publishes it
+on `127.0.0.1` only, verifies a pristine UTF-8
+database, migrates it to the current single head, and supplies that internally
+constructed URL to pytest. A caller-supplied `DATABASE_URL` is never used by
+this gate. Test failure, interruption, invalid port binding, unsupported
+PostgreSQL, migration failure, and cleanup failure all fail closed. The
+container, database volume, dedicated network, and disposable credentials are
+removed on exit. The wrapper never connects to Preview, Production, or a shared
+developer database.
+
+Signal exits remain nonzero after cleanup: HUP returns `129`, INT returns `130`,
+and TERM returns `143`. If cleanup itself fails, the wrapper returns `70`
+instead of concealing the cleanup failure or the interruption.
+
 ## Evidence profiles
 
 Create a private evidence directory outside Git. Always pass the full candidate

@@ -67,6 +67,18 @@ def test_release_catalog_covers_required_gates() -> None:
     } <= keys
 
 
+def test_backend_gate_owns_a_disposable_database_lifecycle() -> None:
+    module = _module()
+    backend = next(check for check in module.checks() if check.key == "backend_tests")
+
+    assert backend.command is not None
+    assert backend.command[0] == "scripts/qualify-backend-tests"
+    assert backend.command[1] == "--python"
+    assert backend.command[-2:] == ("-ra", "backend/tests")
+    assert backend.mutation == "disposable_database"
+    assert "docker" in backend.required_tools
+
+
 def test_every_executed_profile_is_bound_to_clean_candidate_provenance() -> None:
     module = _module()
     by_key = {check.key: check for check in module.checks()}
