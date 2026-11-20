@@ -1,7 +1,7 @@
 """Create provider-neutral customer file import staging.
 
 Revision ID: r4s6u8w0y2a4
-Revises: zq9s1u3w5y7c
+Revises: dm1v1a3c5e7g
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "r4s6u8w0y2a4"
-down_revision: str | Sequence[str] | None = "zq9s1u3w5y7c"
+down_revision: str | Sequence[str] | None = "dm1v1a3c5e7g"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
