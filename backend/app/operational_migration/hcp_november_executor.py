@@ -821,12 +821,13 @@ async def run_november_execution(
             )
         )
         await session.rollback()
+        runtime_package_digest = authority.runtime_package_digest or authority.bundle_sha256
         binding = CurrentOverlayLineageBinding(
             company_id=authority.company_id,
             branch_id=authority.branch_id,
             actor_id=authority.actor_id,
-            source4_package_identity="hcp-clean-beta-november",
-            base_source4_digest=authority.bundle_sha256,
+            source4_package_identity=f"hcp-clean-beta-november:{runtime_package_digest[:16]}",
+            base_source4_digest=runtime_package_digest,
             overlay_manifest_digest=packet.overlay_manifest.digest,
             overlay_file_digest=authority.execution_packet_sha256,
             hold_digest=authority.expected_policy_digest or "",
@@ -839,7 +840,7 @@ async def run_november_execution(
             master_run_id=binding.master_run_id,
             customer_run_id=binding.master_run_id,
             operational_run_id=binding.master_run_id,
-            package_digest=authority.bundle_sha256,
+            package_digest=runtime_package_digest,
             base_source_digests={
                 record.key: record.prior_source_digest or record.source_digest
                 for record in packet.overlay_manifest.records

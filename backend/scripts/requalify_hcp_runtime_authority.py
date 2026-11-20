@@ -110,6 +110,13 @@ def main() -> int:
         "acquired_at": packet["acquired_at"],
     }
     packet["digest"] = digest(packet_payload)
+    runtime_package_digest = digest(
+        {
+            "contract": RUNTIME_CONTRACT,
+            "source_bundle_sha256": packet["bundle_sha256"],
+            "runtime_packet_digest": packet["digest"],
+        }
+    )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     packet_path = args.output_dir / "runtime-bound-hcp-execution-packet.json"
     write_private(packet_path, packet)
@@ -177,6 +184,7 @@ def main() -> int:
             "source_authority_schema_head": source_authority.get("expected_schema_head"),
             "source_packet_sha256": source_packet_sha,
             "source_packet_digest": source_packet_digest,
+            "runtime_package_digest": runtime_package_digest,
         }
     )
     authority_path = args.output_dir / "runtime-hcp-authority.json"
@@ -188,6 +196,7 @@ def main() -> int:
         "source_packet_sha256": source_packet_sha,
         "source_packet_digest": source_packet_digest,
         "runtime_packet_digest": packet["digest"],
+        "runtime_package_digest": runtime_package_digest,
         "envelope_digest": envelope["authority_digest"],
         "counts": inv,
     }, sort_keys=True))

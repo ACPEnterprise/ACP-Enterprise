@@ -181,6 +181,7 @@ class NovemberQualificationAuthority:
     rollback_backup_digest: str | None = None
     contract: str = AUTHORITY_CONTRACT
     database_name: str | None = None
+    runtime_package_digest: str | None = None
 
     @property
     def company_id(self) -> UUID:
@@ -248,6 +249,7 @@ class NovemberQualificationAuthority:
                 rollback_backup_digest=value.get("rollback_backup_digest"),
                 contract=str(value.get("contract")),
                 database_name=(str(value["expected_database"]) if value.get("expected_database") else None),
+                runtime_package_digest=(str(value["runtime_package_digest"]) if value.get("runtime_package_digest") else None),
                 **fields,
             )
         except SafeEvidenceError:
