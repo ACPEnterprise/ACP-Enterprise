@@ -16,6 +16,11 @@ from app.platform.onboarding.preview_tenant_fixture import (
     PreviewSyntheticTenantCommand,
     preview_synthetic_tenant_fixture_service,
 )
+from app.platform.onboarding.sales_forward_fixture import (
+    SALES_FORWARD_FIXTURE_VERSION,
+    SalesForwardFixtureCommand,
+    sales_forward_fixture_service,
+)
 from app.platform.onboarding.service import OnboardingError
 from app.platform.permissions.authorization import (
     AuthorizationError,
@@ -43,26 +48,50 @@ async def execute(args: argparse.Namespace) -> dict[str, object]:
         # transaction. End that boundary before the fixture service takes
         # explicit ownership of its atomic mutation transaction.
         await session.rollback()
-        result = await preview_synthetic_tenant_fixture_service.create_or_reuse(
-            session,
-            context=context,
-            command=PreviewSyntheticTenantCommand(FIXTURE_VERSION, True),
-        )
+        if getattr(args, "sales_forward", False):
+            sales_result = await sales_forward_fixture_service.create_or_reuse(
+                session,
+                context=context,
+                command=SalesForwardFixtureCommand(SALES_FORWARD_FIXTURE_VERSION, True),
+            )
+            payload: dict[str, object] = {
+                "classification": "PREVIEW_SALES_FORWARD_FIXTURE_READY",
+                "action": sales_result.action,
+                "company_id": str(sales_result.company_id),
+                "branch_id": str(sales_result.branch_id),
+                "audit_record_id": str(sales_result.audit_record_id),
+                "fixture_version": SALES_FORWARD_FIXTURE_VERSION,
+                "customer_id": str(sales_result.customer_id),
+                "appointment_id": str(sales_result.appointment_id),
+                "estimate_id": str(sales_result.estimate_id),
+                "invoice_id": str(sales_result.invoice_id),
+                "receipt_id": str(sales_result.receipt_id),
+            }
+        else:
+            tenant_result = (
+                await preview_synthetic_tenant_fixture_service.create_or_reuse(
+                    session,
+                    context=context,
+                    command=PreviewSyntheticTenantCommand(FIXTURE_VERSION, True),
+                )
+            )
+            payload = {
+                "classification": "PREVIEW_SYNTHETIC_TENANT_READY",
+                "action": tenant_result.action,
+                "company_id": str(tenant_result.company_id),
+                "branch_id": str(tenant_result.branch_id),
+                "audit_record_id": str(tenant_result.audit_record_id),
+                "fixture_version": FIXTURE_VERSION,
+            }
     await engine.dispose()
-    return {
-        "classification": "PREVIEW_SYNTHETIC_TENANT_READY",
-        "action": result.action,
-        "company_id": str(result.company_id),
-        "branch_id": str(result.branch_id),
-        "audit_record_id": str(result.audit_record_id),
-        "fixture_version": FIXTURE_VERSION,
-    }
+    return payload
 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser()
     result.add_argument("--authorizing-company-id", required=True)
     result.add_argument("--authorizing-branch-id", required=True)
+    result.add_argument("--sales-forward", action="store_true")
     return result
 
 
