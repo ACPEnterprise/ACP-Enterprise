@@ -1,9 +1,9 @@
 {
   "schema_version": "twelvehats-master-objective-register/v1",
   "program": "TWELVEHATS_MASTER_COMPLETION_PROGRAM",
-  "as_of": "2026-11-19T19:45:00-05:00",
+  "as_of": "2026-11-19T20:17:00-05:00",
   "protected_authority": "origin/integration/platform-master@7012e24d37e90da982d8ec7d0f0c12c96d3138a2",
-  "working_authority": "release/customer-correction-20261119@e371411e47b2e840119003ae13ae3eb9acc2322c",
+  "working_authority": "release/customer-correction-20261119@0e99d31d4738ec8e7c65020f7ddcaa28ae7dea49",
   "status_values": ["NOT STARTED", "IN PROGRESS", "IMPLEMENTED", "TESTING", "INTEGRATION READY", "INTEGRATED", "ACCEPTED", "BLOCKED"],
   "guardrails": ["NO_PRODUCTION_DEPLOY", "NO_QBO_WRITES", "NO_HCP_WRITES", "NO_LIVE_PAYROLL", "NO_BANK_TRANSFER", "NO_UNAUTHORIZED_FINANCIAL_POSTING", "NO_UNVERIFIED_SSH_HOST"],
   "objectives": [
@@ -117,7 +117,7 @@
       "known_defects": ["102 Amex rows unposted", "4 exact repeats", "Capital One feed stale since 2026-08-30"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/accounting", "backend/app/procurement_matching", "frontend/src/components/accounting"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
       "dependencies": ["OBJ-050"], "implementation_steps": ["Exercise unposted candidate queue", "Verify transfer/card-payment classification", "Add stale-feed evidence"], "data_migrations": [], "security_permissions": ["No bank posting or transfer"],
       "acceptance_tests": ["Duplicate detection", "Unmatched queue", "Statement comparison", "No automatic posting"], "simulator_scenarios": ["Scenario D", "Scenario G"], "integration_requirements": ["Chart of accounts and posting service"], "evidence_required": ["Candidate IDs and no-write assertion"],
-      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "BUSINESS_REVIEW", "escalation": "Owner/accountant match approval for 102 rows"}, "completion_evidence": ["102 rows sealed mode 0600 outside Git", "36 backend and 12 frontend banking tests passed", "Stale-feed health monitor absent; provider-neutral repair assigned"]
+      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "BUSINESS_REVIEW", "escalation": "Owner/accountant match approval for 102 rows"}, "completion_evidence": ["102 rows sealed mode 0600 outside Git", "37 backend banking/authority/handoff tests and 10 Banking UI tests passed", "Provider-neutral CURRENT/STALE/NO_EVIDENCE feed health committed at 0e99d31d4738ec8e7c65020f7ddcaa28ae7dea49", "Ruff, format, MyPy, ESLint, and tenant-isolation qualification passed; no provider call or financial mutation"]
     },
     {
       "id": "OBJ-053", "domain": "financial-reporting", "outcome": "Auditable financial reports and drill-down run from admitted facts.", "status": "TESTING",
