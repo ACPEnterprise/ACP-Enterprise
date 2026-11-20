@@ -448,7 +448,30 @@ class CurrentOverlayExecutor:
                     )
                     continue
                 if state is None or record.prior_source_digest != state.source_digest:
-                    raise ValueError("overlay update compare-before-write mismatch")
+                    # A stale or independently changed source row must not abort
+                    # unrelated historical admission.  Preserve the source
+                    # assertion as a durable hold and continue the atomic packet
+                    # with no native write for this record.
+                    held = replace(
+                        record,
+                        assertion=OverlayAssertion.HOLD,
+                        payload={},
+                        reason="overlay update compare-before-write mismatch",
+                    )
+                    await repository.record_non_mutating_assertion(held)
+                    blocked_keys.add(record.key)
+                    journal.append(
+                        OverlayJournalEntry(
+                            record.key,
+                            record.assertion,
+                            "held",
+                            state.source_digest if state else None,
+                            state.source_digest if state else None,
+                            state.native_id if state else None,
+                            None,
+                        )
+                    )
+                    continue
                 if record.native_fingerprint:
                     owners = await repository.fingerprint_owners(
                         record.domain, record.native_fingerprint
