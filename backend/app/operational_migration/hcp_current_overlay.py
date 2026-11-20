@@ -329,6 +329,7 @@ class CurrentOverlayExecutor:
         ordered_records = _dependency_order(manifest.records)
         journal: list[OverlayJournalEntry] = []
         for record in ordered_records:
+            held_for_parent = False
             for parent in record.parent_keys:
                 if (
                     record.assertion
@@ -338,10 +339,30 @@ class CurrentOverlayExecutor:
                     }
                     and parent in blocked_keys
                 ):
-                    raise ValueError(
-                        "overlay parent is non-operational: "
-                        f"{record.domain}:{record.source_id} <- {parent.domain}:{parent.source_id}"
+                    held = replace(
+                        record,
+                        assertion=OverlayAssertion.HOLD,
+                        payload={},
+                        reason=(
+                            "overlay parent is non-operational: "
+                            f"{parent.domain}:{parent.source_id}"
+                        ),
                     )
+                    await repository.record_non_mutating_assertion(held)
+                    blocked_keys.add(record.key)
+                    journal.append(
+                        OverlayJournalEntry(
+                            record.key,
+                            record.assertion,
+                            "held",
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                    )
+                    held_for_parent = True
+                    break
                 if (
                     parent not in keys
                     and (
@@ -352,6 +373,8 @@ class CurrentOverlayExecutor:
                     and not await repository.source_exists(parent)
                 ):
                     raise ValueError("overlay parent source identity missing")
+            if held_for_parent or record.assertion is OverlayAssertion.HOLD:
+                continue
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
                 after: OverlaySourceState | None
