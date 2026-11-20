@@ -1,7 +1,7 @@
 {
   "schema_version": "twelvehats-master-objective-register/v1",
   "program": "TWELVEHATS_MASTER_COMPLETION_PROGRAM",
-  "as_of": "2026-11-19T20:17:00-05:00",
+  "as_of": "2026-11-19T20:20:00-05:00",
   "protected_authority": "origin/integration/platform-master@7012e24d37e90da982d8ec7d0f0c12c96d3138a2",
   "working_authority": "release/customer-correction-20261119@0e99d31d4738ec8e7c65020f7ddcaa28ae7dea49",
   "status_values": ["NOT STARTED", "IN PROGRESS", "IMPLEMENTED", "TESTING", "INTEGRATION READY", "INTEGRATED", "ACCEPTED", "BLOCKED"],
@@ -117,7 +117,7 @@
       "known_defects": ["102 Amex rows unposted", "4 exact repeats", "Capital One feed stale since 2026-08-30"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/accounting", "backend/app/procurement_matching", "frontend/src/components/accounting"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
       "dependencies": ["OBJ-050"], "implementation_steps": ["Exercise unposted candidate queue", "Verify transfer/card-payment classification", "Add stale-feed evidence"], "data_migrations": [], "security_permissions": ["No bank posting or transfer"],
       "acceptance_tests": ["Duplicate detection", "Unmatched queue", "Statement comparison", "No automatic posting"], "simulator_scenarios": ["Scenario D", "Scenario G"], "integration_requirements": ["Chart of accounts and posting service"], "evidence_required": ["Candidate IDs and no-write assertion"],
-      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "BUSINESS_REVIEW", "escalation": "Owner/accountant match approval for 102 rows"}, "completion_evidence": ["102 rows sealed mode 0600 outside Git", "37 backend banking/authority/handoff tests and 10 Banking UI tests passed", "Provider-neutral CURRENT/STALE/NO_EVIDENCE feed health committed at 0e99d31d4738ec8e7c65020f7ddcaa28ae7dea49", "Ruff, format, MyPy, ESLint, and tenant-isolation qualification passed; no provider call or financial mutation"]
+      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "BUSINESS_REVIEW", "escalation": "Accountant-approved Company/account/statement authority and explicit dispositions for four indistinguishable repeat pairs are required"}, "completion_evidence": ["102-row source is mode 0600; SHA-256 4501a4db22ef45928a6f072488dd3329cfdc77892c3e36a43cc1ad6efb1078c5; custody set digest dc682d25fa20327ee0c7663835a99f61feefdc93e1161466a5f0528c37d998ed", "102 rows parse, 98 are exact-unique, four repeat groups occur twice; source category text remains advisory and all rows remain unposted", "37 backend banking/authority/handoff tests and 10 Banking UI tests passed", "Provider-neutral CURRENT/STALE/NO_EVIDENCE feed health committed at 0e99d31d4738ec8e7c65020f7ddcaa28ae7dea49", "Ruff, format, MyPy, ESLint, and tenant-isolation qualification passed; no provider call or financial mutation", "Generic JSON preview is non-mutating and duplicate-aware; Amex CSV normalization is blocked because the source lacks stable per-row identity, currency/state semantics, target account authority, and repeat-pair dispositions"]
     },
     {
       "id": "OBJ-053", "domain": "financial-reporting", "outcome": "Auditable financial reports and drill-down run from admitted facts.", "status": "TESTING",
