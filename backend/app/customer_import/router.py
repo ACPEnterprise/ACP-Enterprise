@@ -213,7 +213,7 @@ async def _match_existing(session: AsyncSession, company_id: UUID, payload: dict
             signals.setdefault(item, set()).add("phone")
     address = tuple(payload.get(key, "").strip() for key in ("address", "city", "state", "postal_code"))
     if all(address):
-        normalized_address = build_normalized_address(*address)
+        normalized_address = build_normalized_address(address[0], None, address[1], address[2], address[3])
         ids = (await session.scalars(select(ServiceLocation.customer_id).join(Customer, Customer.id == ServiceLocation.customer_id).where(Customer.company_id == company_id, ServiceLocation.normalized_address == normalized_address))).all()
         for item in ids:
             signals.setdefault(item, set()).add("address")
