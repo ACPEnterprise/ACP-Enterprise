@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.customer_migration.native_location_review import (
     router as location_identity_router,
 )
+from app.customer_import.router import router as customer_import_router
 from app.customer_migration.population_router import (
     router as customer_population_router,
 )
@@ -191,6 +192,7 @@ app.include_router(beacon_router)
 app.include_router(business_economics_router)
 app.include_router(luminary_router)
 app.include_router(customers_router)
+app.include_router(customer_import_router)
 app.include_router(pipeline_router)
 app.include_router(marketing_router)
 app.include_router(data_quality_router)
