@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
@@ -246,7 +247,22 @@ def _source_identity_values(payload: dict[str, str]) -> tuple[str, str, str, str
     return name, email, phone, normalized_address
 
 
-def _verified_new_source_identity(payload: dict[str, str], source_payloads: list[dict[str, str]]) -> bool:
+def _source_identity_counts(source_payloads: list[dict[str, str]]) -> tuple[Counter[str], Counter[str], Counter[tuple[str, str]]]:
+    email_counts: Counter[str] = Counter()
+    phone_counts: Counter[str] = Counter()
+    name_address_counts: Counter[tuple[str, str]] = Counter()
+    for payload in source_payloads:
+        name, email, phone, address = _source_identity_values(payload)
+        if email:
+            email_counts[email] += 1
+        if phone:
+            phone_counts[phone] += 1
+        if name and address:
+            name_address_counts[(name, address)] += 1
+    return email_counts, phone_counts, name_address_counts
+
+
+def _verified_new_source_identity(payload: dict[str, str], source_counts: tuple[Counter[str], Counter[str], Counter[tuple[str, str]]]) -> bool:
     """Allow a new customer only with complete, unique source evidence.
 
     Missing crosswalk evidence is not enough by itself. A source row must have
@@ -256,10 +272,10 @@ def _verified_new_source_identity(payload: dict[str, str], source_payloads: list
     name, email, phone, address = _source_identity_values(payload)
     if not name or not (email or phone) or not address:
         return False
-    normalized_rows = [_source_identity_values(item) for item in source_payloads]
-    email_count = sum(1 for _, value, _, _ in normalized_rows if email and value == email)
-    phone_count = sum(1 for _, _, value, _ in normalized_rows if phone and value == phone)
-    name_address_count = sum(1 for row_name, _, _, row_address in normalized_rows if row_name == name and row_address == address)
+    email_counts, phone_counts, name_address_counts = source_counts
+    email_count = email_counts[email]
+    phone_count = phone_counts[phone]
+    name_address_count = name_address_counts[(name, address)]
     unique_contact = (bool(email) and email_count == 1) or (bool(phone) and phone_count == 1)
     return unique_contact and name_address_count == 1
 
@@ -384,6 +400,7 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
     all_ready_rows = (await session.scalars(select(CustomerImportRow).where(CustomerImportRow.batch_id == batch.id, CustomerImportRow.processed.is_(False), CustomerImportRow.disposition == "ready").order_by(CustomerImportRow.row_number))).all()
     rows = all_ready_rows[:limit]
     source_payloads = [row.payload for row in all_ready_rows]
+    source_counts = _source_identity_counts(source_payloads)
     created = matched = replayed = held = rejected = 0
     customer_service = CustomerService()
     identity_system = _source_system(batch.source_provider, batch.source_namespace)
@@ -404,7 +421,7 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
             if ambiguous:
                 row.disposition = "held"; row.reason_code = "ambiguous_existing_customer_match"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1; continue
             if customer_id is None:
-                if not _verified_new_source_identity(row.payload, source_payloads):
+                if not _verified_new_source_identity(row.payload, source_counts):
                     row.disposition = "held"; row.reason_code = "unverified_new_customer_identity"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1; continue
                 customer = await customer_service.stage_migrated_customer(session, context=context, customer_data=customer_data, contact_data=contact_data, service_location_data=location_data, billing_address_data=None)
                 customer_id = customer.id; created += 1

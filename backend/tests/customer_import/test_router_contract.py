@@ -13,6 +13,7 @@ from app.customer_import.router import (
     _identity_systems,
     _requires_qualified_hcp_admission,
     _source_system,
+    _source_identity_counts,
     _verified_new_source_identity,
     router,
     admit_customer_import,
@@ -79,9 +80,9 @@ def test_new_admission_requires_complete_unique_source_identity() -> None:
         "state": "NY",
         "postal_code": "10001",
     }
-    assert _verified_new_source_identity(payload, [payload])
-    assert not _verified_new_source_identity({**payload, "email": ""}, [{**payload, "email": ""}])
-    assert not _verified_new_source_identity(payload, [payload, {**payload, "display_name": "Ada L."}])
+    assert _verified_new_source_identity(payload, _source_identity_counts([payload]))
+    assert not _verified_new_source_identity({**payload, "email": ""}, _source_identity_counts([{**payload, "email": ""}]))
+    assert not _verified_new_source_identity(payload, _source_identity_counts([payload, {**payload, "display_name": "Ada L."}]))
 
 
 def test_persisted_models_include_batch_identity_and_processed_cursor() -> None:
