@@ -3,6 +3,7 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 postgres_image="postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685"
+redis_image="redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf"
 
 if [ "$#" -lt 3 ] || [ "$1" != "--python" ]; then
   echo "usage: scripts/qualify-backend-tests --python /path/to/python PYTEST_ARGUMENT..." >&2
@@ -18,15 +19,16 @@ fi
 project="acp_backend_test_$(git -C "$root" rev-parse --short=12 HEAD)_$$"
 qualification_root=$(mktemp -d "${TMPDIR:-/tmp}/acp-backend-test.XXXXXX")
 secret_dir="$qualification_root/secrets"
-container_name="${project}-postgres"
+postgres_container_name="${project}-postgres"
+redis_container_name="${project}-redis"
 volume_name="${project}-postgres"
 network_name="${project}-network"
 ownership_label="com.twelvehats.release-qualification.project=$project"
 cleaned=false
 
-# Never allow application code started by this harness to inherit a caller's
-# database authority, even while the disposable endpoint is being prepared.
-unset DATABASE_URL
+# Never allow application code started by this harness to inherit caller-owned
+# database or Redis authority while disposable endpoints are being prepared.
+unset DATABASE_URL REDIS_URL REDIS_USERNAME REDIS_PASSWORD_FILE
 host_port=$("$python_executable" -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()')
 case "$host_port" in
   *[!0-9]*|'')
@@ -98,12 +100,20 @@ trap 'cleanup_on_signal 143' TERM
 
 umask 077
 mkdir -m 700 "$secret_dir"
+printf '%s\n' "release-application-qualification-$project" > "$secret_dir/application-password"
+printf '%s\n' "release-health-qualification-$project" > "$secret_dir/health-password"
+printf '%s\n' "release-breakglass-qualification-$project" > "$secret_dir/breakglass-password"
 printf '%s\n' "release-postgres-qualification-$project" > "$secret_dir/postgres-password"
+"$root/scripts/render-redis-acl" \
+  "$secret_dir/application-password" \
+  "$secret_dir/health-password" \
+  "$secret_dir/breakglass-password" \
+  "$secret_dir/users.acl"
 
 docker network create --label "$ownership_label" "$network_name" >/dev/null
 docker volume create --label "$ownership_label" "$volume_name" >/dev/null
 postgres_container=$(docker run --detach \
-  --name "$container_name" \
+  --name "$postgres_container_name" \
   --label "$ownership_label" \
   --network "$network_name" \
   --publish "127.0.0.1:$host_port:5432" \
@@ -118,6 +128,21 @@ postgres_container=$(docker run --detach \
   --health-timeout 3s \
   --health-retries 60 \
   "$postgres_image")
+
+redis_container=$(docker run --detach \
+  --name "$redis_container_name" \
+  --label "$ownership_label" \
+  --network "$network_name" \
+  --publish "127.0.0.1::6379" \
+  --tmpfs /data \
+  --mount "type=bind,src=$secret_dir/users.acl,dst=/run/secrets/users.acl,readonly" \
+  --mount "type=bind,src=$secret_dir/health-password,dst=/run/secrets/health-password,readonly" \
+  --health-cmd 'REDISCLI_AUTH="$(cat /run/secrets/health-password)" redis-cli --user acp-health ping | grep -qx PONG' \
+  --health-interval 1s \
+  --health-timeout 3s \
+  --health-retries 60 \
+  "$redis_image" \
+  redis-server --save '' --appendonly no --aclfile /run/secrets/users.acl --protected-mode yes)
 
 attempt=0
 while [ "$attempt" -lt 60 ]; do
@@ -137,11 +162,52 @@ if [ "$health" != healthy ]; then
   exit 1
 fi
 
+attempt=0
+while [ "$attempt" -lt 60 ]; do
+  redis_health=$(docker inspect --format '{{.State.Health.Status}}' "$redis_container")
+  case "$redis_health" in
+    healthy) break ;;
+    unhealthy)
+      echo "qualification Redis became unhealthy" >&2
+      exit 1
+      ;;
+  esac
+  attempt=$((attempt + 1))
+  sleep 1
+done
+if [ "$redis_health" != healthy ]; then
+  echo "qualification Redis did not become healthy within 60 seconds" >&2
+  exit 1
+fi
+redis_version=$(docker exec "$redis_container" redis-server --version)
+case "$redis_version" in
+  *" v=7."*) ;;
+  *)
+    echo "Redis major version 7 is required; observed $redis_version" >&2
+    exit 1
+    ;;
+esac
+
 host_endpoint=$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostIp}}:{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$postgres_container")
 if [ "$host_endpoint" != "127.0.0.1:$host_port" ]; then
   echo "qualification PostgreSQL must publish only on the selected loopback endpoint; observed $host_endpoint" >&2
   exit 1
 fi
+redis_host_endpoint=$(docker inspect --format '{{(index (index .NetworkSettings.Ports "6379/tcp") 0).HostIp}}:{{(index (index .NetworkSettings.Ports "6379/tcp") 0).HostPort}}' "$redis_container")
+case "$redis_host_endpoint" in
+  127.0.0.1:*) ;;
+  *)
+    echo "qualification Redis must publish only on a loopback endpoint; observed $redis_host_endpoint" >&2
+    exit 1
+    ;;
+esac
+redis_host_port=${redis_host_endpoint#127.0.0.1:}
+case "$redis_host_port" in
+  *[!0-9]*|'')
+    echo "qualification Redis did not publish a numeric host port; observed $redis_host_endpoint" >&2
+    exit 1
+    ;;
+esac
 
 postgres_version=$(docker exec "$postgres_container" psql -Atq -U release_qualification -d release_qualification -c "SHOW server_version_num")
 case "$postgres_version" in
@@ -164,6 +230,10 @@ fi
 
 database_password=$(cat "$secret_dir/postgres-password")
 export DATABASE_URL="postgresql+asyncpg://release_qualification:${database_password}@127.0.0.1:${host_port}/release_qualification"
+export REDIS_URL="redis://127.0.0.1:${redis_host_port}/0"
+export REDIS_USERNAME=acp-application
+export REDIS_PASSWORD_FILE="$secret_dir/application-password"
+export REDIS_REQUIRED_FOR_READINESS=true
 export ENVIRONMENT=test
 export PYTHONPATH="$root/backend${PYTHONPATH:+:$PYTHONPATH}"
 
@@ -187,4 +257,5 @@ trap - EXIT HUP INT TERM
 test "$cleaned" = true
 test ! -e "$qualification_root"
 printf 'BACKEND_TEST_DATABASE=DISPOSABLE_LOOPBACK_POSTGRESQL_16\n'
+printf 'BACKEND_TEST_REDIS=DISPOSABLE_LOOPBACK_REDIS_7_ACL\n'
 printf 'BACKEND_TEST_DATABASE_CLEANUP=VERIFIED\n'

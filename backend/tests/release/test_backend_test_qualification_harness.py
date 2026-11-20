@@ -7,19 +7,22 @@ import time
 from pathlib import Path
 
 
-def test_backend_harness_uses_release_qualification_postgres_image() -> None:
+def test_backend_harness_uses_pinned_release_qualification_images() -> None:
     root = Path(__file__).parents[3]
     compose = (root / "docker-compose.release-qualification.yml").read_text(
         encoding="utf-8"
     )
     harness = (root / "scripts/qualify-backend-tests").read_text(encoding="utf-8")
-    pinned_image = next(
+    pinned_images = {
         line.strip().removeprefix("image: ")
         for line in compose.splitlines()
-        if line.strip().startswith("image: postgres:16-alpine@sha256:")
-    )
+        if line.strip().startswith(
+            ("image: postgres:16-alpine@sha256:", "image: redis:7-alpine@sha256:")
+        )
+    }
 
-    assert pinned_image in harness
+    assert len(pinned_images) == 2
+    assert all(image in harness for image in pinned_images)
 
 
 def _fake_tools(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -40,6 +43,7 @@ def _fake_tools(tmp_path: Path) -> tuple[Path, Path, Path]:
         'printf "127.0.0.1:55432\\n" ;;\n'
         '  *" SHOW server_version_num"*) printf "160011\\n" ;;\n'
         '  *" SHOW server_encoding"*) printf "UTF8\\n" ;;\n'
+        '  *" redis-server --version"*) printf "Redis server v=7.4.11\\n" ;;\n'
         '  *"SELECT count(*) FROM pg_class"*) printf "0\\n" ;;\n'
         '  *" ps -aq "*) test -e "$CONTAINER_REMOVED" || '
         'printf "owned-postgres-container\\n" ;;\n'
@@ -60,7 +64,8 @@ def _fake_tools(tmp_path: Path) -> tuple[Path, Path, Path]:
     python = fake_bin / "python"
     python.write_text(
         "#!/bin/sh\n"
-        'printf "%s|%s\\n" "$DATABASE_URL" "$*" >> "$PYTHON_LOG"\n'
+        'printf "%s|%s|%s|%s|%s\\n" "$DATABASE_URL" "$REDIS_URL" '
+        '"$REDIS_USERNAME" "$REDIS_PASSWORD_FILE" "$*" >> "$PYTHON_LOG"\n'
         'case " $* " in\n'
         '  *" -c import socket;"*) printf "55432\\n"; exit 0 ;;\n'
         '  *" -m pytest "*) '
@@ -88,6 +93,9 @@ def _run_harness(
         **os.environ,
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "DATABASE_URL": "postgresql+asyncpg://shared:unsafe@production.invalid/live",
+        "REDIS_URL": "rediss://shared-redis.production.invalid:6379/0",
+        "REDIS_USERNAME": "unsafe-production-user",
+        "REDIS_PASSWORD_FILE": "/unsafe/production/redis-password",
         "DOCKER_LOG": str(docker_log),
         "PYTHON_LOG": str(python_log),
         "CONTAINER_REMOVED": str(tmp_path / "container-removed.marker"),
@@ -121,17 +129,25 @@ def test_backend_harness_replaces_caller_database_and_cleans_up(
     assert completed.returncode == 0, completed.stderr
     invocations = python_log.read_text(encoding="utf-8")
     assert "production.invalid" not in invocations
+    assert "unsafe-production-user" not in invocations
+    assert "/unsafe/production/redis-password" not in invocations
     assert "@127.0.0.1:55432/release_qualification" in invocations
+    assert "redis://127.0.0.1:55432/0|acp-application|" in invocations
     assert "-m alembic upgrade head" in invocations
     assert "-m alembic current --check-heads" in invocations
     assert "-m alembic check" in invocations
     assert "-m pytest -q backend/tests/payroll" in invocations
     cleanup_log = docker_log.read_text(encoding="utf-8")
     assert "--health-cmd pg_isready -h 127.0.0.1" in cleanup_log
+    assert "--publish 127.0.0.1::6379" in cleanup_log
+    assert "--user acp-health ping" in cleanup_log
+    assert "redis-server --save  --appendonly no --aclfile" in cleanup_log
+    assert "redis-server --version" in cleanup_log
     assert "rm -f owned-postgres-container" in cleanup_log
     assert "volume rm owned-postgres-volume" in cleanup_log
     assert "network rm owned-postgres-network" in cleanup_log
     assert "BACKEND_TEST_DATABASE_CLEANUP=VERIFIED" in completed.stdout
+    assert "BACKEND_TEST_REDIS=DISPOSABLE_LOOPBACK_REDIS_7_ACL" in completed.stdout
 
 
 def test_backend_harness_preserves_test_failure_and_still_cleans_up(
