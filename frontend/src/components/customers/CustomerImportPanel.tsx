@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { activeCompanyId } from "../../api/client";
+import { useAuth } from "../../auth";
 import { getOperatorApiError } from "../../api/errors";
 import { admitCustomerImport, stageCustomerImport, type CustomerImportAdmissionResponse, type CustomerImportBatchResponse } from "../../api/customerImports";
 import { useCustomerCleanMajorityAdmission, useCustomerPopulationRefresh } from "../../hooks/useCustomers";
@@ -10,6 +11,7 @@ import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, C
 import { type CustomerImportPreview, validateCustomerFile } from "./customerImport";
 
 export function CustomerImportPanel() {
+  const { activeCompany } = useAuth();
   const queryClient = useQueryClient();
   const [preview, setPreview] = useState<CustomerImportPreview | null>(null);
   const [serverPreview, setServerPreview] = useState<CustomerImportBatchResponse | null>(null);
@@ -27,6 +29,7 @@ export function CustomerImportPanel() {
   const populationRefresh = useCustomerPopulationRefresh();
   const admission = useCustomerCleanMajorityAdmission();
   const tenantId = activeCompanyId() ?? "";
+  const branchId = activeCompany?.default_branch_id ?? activeCompany?.branches[0]?.id ?? "";
   const isCurrentOperation = (generation: number, expectedTenantId: string) =>
     operationGeneration.current === generation && activeCompanyId() === expectedTenantId;
 
@@ -62,6 +65,7 @@ export function CustomerImportPanel() {
         namespace: provider,
         mapping,
         expectedTenantId,
+        branchId,
         signal: controller.signal,
       });
       if (!isCurrentOperation(generation, expectedTenantId)) return;
@@ -90,7 +94,7 @@ export function CustomerImportPanel() {
     setServerAdmissionPending(true);
     setServerAdmissionError(null);
     try {
-      const result = await admitCustomerImport(batchId, expectedTenantId);
+      const result = await admitCustomerImport(batchId, expectedTenantId, branchId);
       if (!isCurrentOperation(generation, expectedTenantId)) return;
       setAdmitted(result);
       await Promise.all([
