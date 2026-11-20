@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, Star } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
+import { activeCompanyId } from "../../api/client";
 import { getOperatorApiError } from "../../api/errors";
 import { useHasPermission } from "../../auth";
 import {
@@ -12,6 +13,7 @@ import { customerDetailPath } from "../../routing/paths";
 import { type CustomerInput, type DuplicateMatch } from "../../types/customers";
 import { Alert, Button, Card, EmptyState, Input, Spinner } from "../../ui";
 import { CustomerForm } from "./CustomerForm";
+import { CustomerImportPanel } from "./CustomerImportPanel";
 
 const PAGE_SIZE = 20;
 
@@ -64,6 +66,8 @@ export function CustomerManagement() {
       <div className="min-w-0"><p className="text-sm font-medium text-action-primary">CRM</p><h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Customers</h2><p className="mt-2 text-content-muted">Find a Customer, open the record, and continue into locations and related work.</p></div>
       {canManage && <Button type="button" onClick={() => { setDuplicateWarnings([]); setIsCreating(true); }} leadingIcon={<Plus size={18} />}>New Customer</Button>}
     </section>
+
+    {canManage && <CustomerImportPanel key={`customer-import-${activeCompanyId() ?? "no-company"}`} />}
 
     {canManage && isCreating && <Card className="p-ui-4 sm:p-ui-6"><h3 className="text-xl font-semibold">Create customer</h3><p className="mt-1 text-sm text-content-muted">Create the Customer record first, then add Service Locations and Contacts.</p><div className="mt-6"><CustomerForm duplicateWarnings={duplicateWarnings} isSaving={mutations.create.isPending} isCheckingDuplicates={mutations.duplicateCheck.isPending} error={mutations.create.error ?? mutations.duplicateCheck.error} onCancel={() => setIsCreating(false)} onCheckDuplicates={(input) => mutations.duplicateCheck.mutate({ first_name: input.first_name, last_name: input.last_name, business_name: input.business_name, phone: input.primary_phone, email: input.email }, { onSuccess: setDuplicateWarnings })} onSubmit={(input: CustomerInput) => mutations.create.mutate(input, { onSuccess: (result) => { setDuplicateWarnings(result.duplicate_warnings); setIsCreating(false); navigate(customerDetailPath(result.customer.id)); } })} /></div></Card>}
 
