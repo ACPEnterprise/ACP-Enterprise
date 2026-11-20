@@ -270,14 +270,13 @@ def _verified_new_source_identity(payload: dict[str, str], source_counts: tuple[
     source batch, and a unique normalized name/address pair within that batch.
     """
     name, email, phone, address = _source_identity_values(payload)
-    if not name or not (email or phone) or not address:
+    if not name or not email or not phone or not address:
         return False
     email_counts, phone_counts, name_address_counts = source_counts
     email_count = email_counts[email]
     phone_count = phone_counts[phone]
     name_address_count = name_address_counts[(name, address)]
-    unique_contact = (bool(email) and email_count == 1) or (bool(phone) and phone_count == 1)
-    return unique_contact and name_address_count == 1
+    return email_count == 1 and phone_count == 1 and name_address_count == 1
 
 
 @router.post("/batches", response_model=ImportBatchResponse, status_code=status.HTTP_201_CREATED)
