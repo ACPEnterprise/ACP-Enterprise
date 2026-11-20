@@ -9,7 +9,7 @@ import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
 import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeePermissionUpdate, useEmployeeTimeline, useHistoricalWorkforceIdentities, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
-import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
+import { useAdminTimecardOperations, useAdminTimecardReview, useApproveTimeEntry, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { useRoles } from "../features/administration/hooks";
 import { listPermissions } from "../features/administration/api";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
@@ -132,6 +132,13 @@ export function WorkforceRoute() {
   const eligibility = useWorkforceEligibility();
   const canReviewTime = permissionCodes.includes("COMPANY_TIMEKEEPING_ADMIN_READ");
   const timeReview = useAdminTimecardReview(canReviewTime);
+  const canApproveTime = permissionCodes.includes("COMPANY_TIMEKEEPING_APPROVE");
+  const timeApproval = useApproveTimeEntry();
+  const [pendingTimeApproval, setPendingTimeApproval] = useState<{
+    revisionId: string;
+    employeeName: string;
+    workDate: string;
+  } | null>(null);
   const canCorrectTime = permissionCodes.includes("COMPANY_TIMEKEEPING_CORRECT");
   const timeCorrection = useTimeCorrection();
   const [correctionRevision, setCorrectionRevision] = useState("");
@@ -515,27 +522,65 @@ export function WorkforceRoute() {
                         </div>
                       </td>
                       <td>
-                        {canCorrectTime && item.entries.length > 0 ? (
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stroke px-3 py-2 font-medium"
-                            onClick={() => {
-                              const entry = item.entries[item.entries.length - 1];
-                              setCorrectionRevision(entry.revision_id);
-                              setCorrectionStart(entry.start_at?.slice(0, 16) ?? "");
-                              setCorrectionEnd(entry.end_at?.slice(0, 16) ?? "");
-                            }}
-                          >
-                            Review correction
-                          </button>
-                        ) : (
-                          <span className="text-content-muted">Read only</span>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {canApproveTime && item.entries.filter((entry) => entry.state === "submitted").map((entry) => (
+                            <button
+                              type="button"
+                              className="rounded-lg bg-action-primary px-3 py-2 font-medium text-white disabled:opacity-50"
+                              disabled={timeApproval.isPending}
+                              key={entry.revision_id}
+                              onClick={() => setPendingTimeApproval({
+                                revisionId: entry.revision_id,
+                                employeeName: item.display_name,
+                                workDate: entry.work_date,
+                              })}
+                            >
+                              Approve {entry.work_date}
+                            </button>
+                          ))}
+                          {canCorrectTime && item.entries.length > 0 && (
+                            <button
+                              type="button"
+                              className="rounded-lg border border-stroke px-3 py-2 font-medium"
+                              onClick={() => {
+                                const entry = item.entries[item.entries.length - 1];
+                                setCorrectionRevision(entry.revision_id);
+                                setCorrectionStart(entry.start_at?.slice(0, 16) ?? "");
+                                setCorrectionEnd(entry.end_at?.slice(0, 16) ?? "");
+                              }}
+                            >
+                              Review correction
+                            </button>
+                          )}
+                          {!canApproveTime && !canCorrectTime && <span className="text-content-muted">Read only</span>}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {pendingTimeApproval && (
+            <ConfirmationDialog
+              title="Approve submitted time?"
+              description="Approval creates accepted time evidence for downstream Payroll review."
+              confirmLabel="Approve time"
+              pending={timeApproval.isPending}
+              onCancel={() => setPendingTimeApproval(null)}
+              onConfirm={() => timeApproval.mutate(pendingTimeApproval.revisionId, {
+                onSuccess: () => setPendingTimeApproval(null),
+              })}
+            >
+              <p><strong>{pendingTimeApproval.employeeName}</strong></p>
+              <p>Work date: {pendingTimeApproval.workDate}</p>
+            </ConfirmationDialog>
+          )}
+          {timeApproval.isError && (
+            <div className="mt-4">
+              <Alert variant="danger" title="Time was not approved">
+                Refresh the current review and verify the submitted revision and approval authority.
+              </Alert>
             </div>
           )}
           {correctionRevision && (

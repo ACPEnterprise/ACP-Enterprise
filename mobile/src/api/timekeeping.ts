@@ -56,6 +56,7 @@ export interface TimekeepingService {
   state(): Promise<PunchState>;
   timecard(): Promise<Timecard>;
   punch(action: PunchAction, idempotencyKey: string): Promise<z.infer<typeof punchResultSchema>>;
+  submit(revisionId: string): Promise<TimeEntry>;
   jobClockState(): Promise<ActiveJobClock>;
   jobClock(action: JobClockAction, jobId: string, appointmentId: string | null, idempotencyKey: string): Promise<JobClockResult>;
 }
@@ -65,6 +66,7 @@ export function createTimekeepingService(client: ApiClient): TimekeepingService 
     state: () => client.request("/api/v1/timekeeping/me/state", punchStateSchema),
     timecard: () => client.request("/api/v1/timekeeping/me/timecard", timecardSchema),
     punch: (action, idempotencyKey) => client.request("/api/v1/timekeeping/me/punches", punchResultSchema, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ action }) }),
+    submit: (revisionId) => client.request(`/api/v1/timekeeping/entries/${revisionId}/submit`, timeEntrySchema, { method: "POST" }),
     jobClockState: () => client.request("/api/v1/timekeeping/me/job-clock", activeJobClockSchema),
     jobClock: (action, jobId, appointmentId, idempotencyKey) => client.request("/api/v1/timekeeping/me/job-clock", jobClockResultSchema, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ action, job_id: jobId, appointment_id: appointmentId }) }),
   };

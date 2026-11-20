@@ -59,4 +59,13 @@ describe("authoritative punch contract", () => {
     expect(JSON.parse(String(options.body))).toEqual({ action: "start", job_id: "job", appointment_id: "appointment" });
     expect(String(options.body)).not.toMatch(/employee|occurred_at|timestamp/);
   });
+  it("submits only the server revision identity for manager approval", async () => {
+    const request = jest.fn(async () => ({}));
+    await createTimekeepingService({ request } as never).submit("revision-1");
+    expect(request).toHaveBeenCalledWith(
+      "/api/v1/timekeeping/entries/revision-1/submit",
+      expect.any(Object),
+      { method: "POST" },
+    );
+  });
 });

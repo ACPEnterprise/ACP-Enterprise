@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { correctTimeEntry, createPayPeriod, getAdminTimecardReview, getOwnActiveJobClock, getOwnPunchState, getOwnTimecard, recordOwnJobClock, recordOwnPunch } from "./timekeeping";
+import { approveTimeEntry, correctTimeEntry, createPayPeriod, getAdminTimecardReview, getOwnActiveJobClock, getOwnPunchState, getOwnTimecard, recordOwnJobClock, recordOwnPunch, submitTimeEntry } from "./timekeeping";
 
 describe("Workday Time API client", () => {
   it("creates a Company-scoped pay period without sending identifiers", async () => {
@@ -97,6 +97,25 @@ describe("Workday Time API client", () => {
     expect(adapter.mock.calls[0]?.[0].url).toBe(
       "/api/v1/timekeeping/admin/timecard-review",
     );
+  });
+
+  it("uses revision-scoped submit and approve transition endpoints without client authority fields", async () => {
+    const adapter = vi.fn(async (config) => {
+      expect(config.data).toBeUndefined();
+      return { data: {}, status: 200, statusText: "OK", headers: {}, config };
+    });
+    const original = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = adapter;
+    try {
+      await submitTimeEntry("employee-revision");
+      await approveTimeEntry("submitted-revision");
+    } finally {
+      apiClient.defaults.adapter = original;
+    }
+    expect(adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      "/api/v1/timekeeping/entries/employee-revision/submit",
+      "/api/v1/timekeeping/entries/submitted-revision/approve",
+    ]);
   });
 
   it("keeps Job clock identity server-owned and reuses the caller retry key", async () => {

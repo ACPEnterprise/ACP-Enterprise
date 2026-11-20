@@ -19,6 +19,11 @@ vi.mock("../hooks/useWorkdayTime", () => ({
     isError: false,
     mutate: vi.fn(),
   }),
+  useApproveTimeEntry: () => ({
+    isPending: false,
+    isError: false,
+    mutate: vi.fn(),
+  }),
   useAdminTimecardOperations: () => ({
     data: undefined,
     isLoading: false,

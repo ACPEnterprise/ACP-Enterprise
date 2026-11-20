@@ -13,7 +13,7 @@ const stopped: ActiveJobClock = { ...inactive, server_observed_at: "2026-09-11T0
 function harness(initial = inactive, connected = true) {
   let current = initial; let listener: ((value: boolean) => void) | undefined;
   const service: TimekeepingService = {
-    state: jest.fn(), timecard: jest.fn(), punch: jest.fn(), jobClockState: jest.fn(async () => current),
+    state: jest.fn(), timecard: jest.fn(), punch: jest.fn(), submit: jest.fn(), jobClockState: jest.fn(async () => current),
     jobClock: jest.fn(async (action: JobClockAction) => { current = action === "start" ? active : stopped; return { event_id: "result-event", action, occurred_at: "2026-09-11T01:00:00Z", state: current, completed_interval: null }; }),
   };
   const network = { isConnected: jest.fn(async () => connected), subscribe: jest.fn((next: (value: boolean) => void) => { listener = next; return () => undefined; }) };

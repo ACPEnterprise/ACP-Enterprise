@@ -275,6 +275,18 @@ export async function correctTimeEntry(revisionId: string, input: TimeCorrection
   )).data;
 }
 
+export async function submitTimeEntry(revisionId: string): Promise<TimeEntry> {
+  return (await apiClient.post<TimeEntry>(
+    `/api/v1/timekeeping/entries/${revisionId}/submit`,
+  )).data;
+}
+
+export async function approveTimeEntry(revisionId: string): Promise<TimeEntry> {
+  return (await apiClient.post<TimeEntry>(
+    `/api/v1/timekeeping/entries/${revisionId}/approve`,
+  )).data;
+}
+
 export async function getCurrentPayPeriod(): Promise<PayPeriod | null> {
   return (await apiClient.get<PayPeriod | null>("/api/v1/timekeeping/pay-periods/current")).data;
 }

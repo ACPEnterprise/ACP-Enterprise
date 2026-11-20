@@ -15,6 +15,7 @@ vi.mock("../api/timekeeping", async (loadOriginal) => {
     getOwnPunchState: vi.fn(),
     getOwnTimecard: vi.fn(),
     recordOwnPunch: vi.fn(),
+    submitTimeEntry: vi.fn(),
   };
 });
 
@@ -101,6 +102,12 @@ beforeEach(() => {
     state: action === "clock_in" ? state("clocked_in") : state("not_clocked_in"),
     completed_entry: null,
   }));
+  vi.mocked(workdayApi.submitTimeEntry).mockReset().mockImplementation(async () => entry({
+    revision_id: "revision-2",
+    revision_number: 2,
+    state: "submitted",
+    approved_at: null,
+  }));
 });
 
 describe("mobile Workday Time route", () => {
@@ -149,6 +156,16 @@ describe("mobile Workday Time route", () => {
     expect(screen.getByText("Correction noted: Missed punch")).toBeInTheDocument();
     expect(screen.queryByText(/salary|pay rate|compensation|tax|payroll total/i)).not.toBeInTheDocument();
     expect(screen.getByText(/contact an authorized manager/i)).toBeInTheDocument();
+  });
+
+  it("submits only the latest recorded revision for manager approval", async () => {
+    vi.mocked(workdayApi.getOwnTimecard).mockResolvedValue(timecard([
+      entry({ state: "recorded", approved_at: null }),
+    ]));
+    renderWorkday();
+    await userEvent.click(await screen.findByRole("button", { name: "Submit for approval" }));
+    await waitFor(() => expect(workdayApi.submitTimeEntry).toHaveBeenCalledWith("revision-1", expect.any(Object)));
+    expect(await screen.findByText("Time submitted")).toBeInTheDocument();
   });
 
   it("fails safely when permission or Employee linkage is missing", async () => {
