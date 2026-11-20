@@ -100,6 +100,13 @@ def test_http_import_boundaries_commit_staging_and_admission() -> None:
     assert "attempt_count" in CustomerImportRow.__table__.columns
 
 
+def test_completed_admission_replays_durable_receipt() -> None:
+    source = inspect.getsource(admit_customer_import)
+    assert 'batch.status == "completed"' in source
+    assert 'event_key == f"admit:{run.id}"' in source
+    assert "processed=run.source_count" in source
+
+
 def test_migration_run_counts_are_recorded_with_each_row_outcome() -> None:
     source = inspect.getsource(admit_customer_import)
     assert "run.source_count += 1; run.duplicate_count += 1" in source

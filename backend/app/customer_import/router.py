@@ -391,6 +391,24 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
     run = None
     if batch.migration_run_id is not None:
         run = await session.get(CustomerMigrationRun, batch.migration_run_id, with_for_update=True)
+    if batch.status == "completed" and run is not None:
+        receipt = await session.scalar(
+            select(CustomerImportAuditEvent).where(
+                CustomerImportAuditEvent.batch_id == batch.id,
+                CustomerImportAuditEvent.event_key == f"admit:{run.id}",
+            )
+        )
+        details = receipt.details if receipt is not None else {}
+        return ImportAdmissionResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            created=int(details.get("created", 0)),
+            matched=int(details.get("matched", 0)),
+            replayed=int(details.get("replayed", 0)),
+            held=int(details.get("held", 0)),
+            rejected=int(details.get("rejected", 0)),
+            processed=run.source_count,
+        )
     if run is None:
         run = CustomerMigrationRun(company_id=context.company.id, branch_id=context.active_branch.id, initiated_by_user_id=context.user.id, source_system=_source_system(batch.source_provider, batch.source_namespace), source_sha256=batch.source_sha256, mode="import", status="running", source_count=0, accepted_count=0, rejected_count=0, duplicate_count=0, unresolved_count=0)
         session.add(run)
