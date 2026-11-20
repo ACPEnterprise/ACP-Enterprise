@@ -11,6 +11,7 @@ from app.communications import (
 from app.core.config import settings
 from app.core.database import Base
 from app.customer_migration import models as customer_migration_models  # noqa: F401
+from app.customer_import import models as customer_import_models  # noqa: F401
 from app.customers import models as customer_models  # noqa: F401
 from app.dispatch import models as dispatch_models  # noqa: F401
 from app.engineering_capacity import models as engineering_capacity_models  # noqa: F401
