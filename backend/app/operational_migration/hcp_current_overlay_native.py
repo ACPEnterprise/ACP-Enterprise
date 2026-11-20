@@ -415,7 +415,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 master_run_id=self.master_run_id,
                 entity_kind=record.domain,
                 native_id=record.source_id,
-                hold_code=record.reason or f"overlay_{record.assertion.value}",
+                hold_code=(record.reason or f"overlay_{record.assertion.value}")[:100],
                 package_digest=self.package_digest,
                 evidence_digest=record.source_digest,
                 reconciliation_key=f"{record.domain}:{record.source_id}"[:191],
