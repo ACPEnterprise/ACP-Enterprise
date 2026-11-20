@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("ACCESS_TOKEN_SIGNING_KEY", "test-customer-import-signing-key-32-chars")
@@ -13,6 +14,8 @@ from app.customer_import.router import (
     _requires_qualified_hcp_admission,
     _source_system,
     router,
+    admit_customer_import,
+    stage_customer_import,
 )
 
 
@@ -68,4 +71,12 @@ def test_persisted_models_include_batch_identity_and_processed_cursor() -> None:
     assert "batch_key" in CustomerImportBatch.__table__.columns
     assert "migration_run_id" in CustomerImportBatch.__table__.columns
     assert "processed" in CustomerImportRow.__table__.columns
+
+
+def test_http_import_boundaries_commit_staging_and_admission() -> None:
+    # The database dependency is request-scoped and deliberately does not
+    # auto-commit. Keep this regression beside the route contract so a future
+    # refactor cannot turn a successful response into a non-durable preview.
+    assert "await session.commit()" in inspect.getsource(stage_customer_import)
+    assert "await session.commit()" in inspect.getsource(admit_customer_import)
     assert "attempt_count" in CustomerImportRow.__table__.columns

@@ -302,6 +302,10 @@ async def stage_customer_import(
         actor_user_id=context.user.id, company_id=context.company.id, branch_id=context.active_branch.id,
         details={"source_sha256": result.source_sha256, "source_rows": result.counts.source_rows},
     ))
+    # The request-scoped session does not auto-commit. A successful staging
+    # response must therefore be durable before the caller can safely retry or
+    # resume the batch.
+    await session.commit()
     response.headers["Cache-Control"] = "private, no-store"
     return _batch_response(batch)
 
@@ -380,4 +384,5 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
     batch.duplicate_count += replayed
     batch.held_count += held
     session.add(CustomerImportAuditEvent(batch_id=batch.id, company_id=context.company.id, branch_id=context.active_branch.id, event_key=f"admit:{run.id}", event_type="customer_import_admitted", actor_user_id=context.user.id, details={"created": created, "matched": matched, "replayed": replayed, "held": held}))
+    await session.commit()
     return ImportAdmissionResponse(batch_id=batch.id, status=batch.status, created=created, matched=matched, replayed=replayed, held=held, rejected=rejected, processed=len(rows))
