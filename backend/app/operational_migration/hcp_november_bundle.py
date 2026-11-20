@@ -180,6 +180,7 @@ class NovemberQualificationAuthority:
     execution_packet_digest: str | None = None
     rollback_backup_digest: str | None = None
     contract: str = AUTHORITY_CONTRACT
+    database_name: str | None = None
 
     @property
     def company_id(self) -> UUID:
@@ -195,7 +196,7 @@ class NovemberQualificationAuthority:
 
     @property
     def expected_database(self) -> str:
-        return "acp_enterprise_preview"
+        return self.database_name or "acp_enterprise_preview"
 
     @classmethod
     def load(cls, path: Path) -> NovemberQualificationAuthority:
@@ -246,6 +247,7 @@ class NovemberQualificationAuthority:
                 execution_packet_digest=value.get("execution_packet_digest"),
                 rollback_backup_digest=value.get("rollback_backup_digest"),
                 contract=str(value.get("contract")),
+                database_name=(str(value["expected_database"]) if value.get("expected_database") else None),
                 **fields,
             )
         except SafeEvidenceError:
