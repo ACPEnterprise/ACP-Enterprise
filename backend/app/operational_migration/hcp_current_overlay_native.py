@@ -30,11 +30,13 @@ from app.customers.update import CustomerUpdateService, customer_update_service
 from app.financials.models import Estimate, Invoice
 from app.financials.service import (
     FinancialService,
+    FinancialValidationError,
     MigratedLineItem,
     MigrateEstimate,
     MigrateInvoice,
 )
 from app.jobs.commands import MigrateJob, UpdateJob
+from app.jobs.errors import JobValidationError
 from app.jobs.models import Job, JobAppointmentLink
 from app.jobs.service import JobService
 from app.jobs.types import JobPriority
@@ -79,6 +81,7 @@ from app.scheduling.service import (
     RescheduleAppointmentCommand,
     SchedulingService,
 )
+from app.scheduling.errors import SchedulingValidationError
 from app.scheduling.types import (
     AppointmentReference,
     AppointmentRescheduleReason,
@@ -340,22 +343,31 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
     async def create(
         self, session: AsyncSession, record: OverlayRecord
     ) -> OverlaySourceState:
-        if record.domain == "customer":
-            native: Any = await self._create_customer(session, record)
-        elif record.domain == "service_location":
-            native = await self._create_location(session, record)
-        elif record.domain == "job":
-            native = await self._create_job(session, record)
-        elif record.domain == "appointment":
-            native = await self._create_appointment(session, record)
-        elif record.domain == "employee":
-            native = await self._create_employee(session, record)
-        elif record.domain == "estimate":
-            native = await self._create_estimate(session, record)
-        elif record.domain == "invoice":
-            native = await self._create_invoice(session, record)
-        else:
-            raise ValueError("financial overlay mutation is prohibited")
+        try:
+            if record.domain == "customer":
+                native: Any = await self._create_customer(session, record)
+            elif record.domain == "service_location":
+                native = await self._create_location(session, record)
+            elif record.domain == "job":
+                native = await self._create_job(session, record)
+            elif record.domain == "appointment":
+                native = await self._create_appointment(session, record)
+            elif record.domain == "employee":
+                native = await self._create_employee(session, record)
+            elif record.domain == "estimate":
+                native = await self._create_estimate(session, record)
+            elif record.domain == "invoice":
+                native = await self._create_invoice(session, record)
+            else:
+                raise ValueError("financial overlay mutation is prohibited")
+        except (
+            JobValidationError,
+            FinancialValidationError,
+            SchedulingValidationError,
+            KeyError,
+            ValueError,
+        ) as error:
+            raise OverlayDomainHold(f"source record validation failed: {error}") from error
         return OverlaySourceState(record.source_digest, str(native.id), record.payload)
 
     async def update(
