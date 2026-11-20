@@ -1,9 +1,9 @@
 {
   "schema_version": "twelvehats-master-objective-register/v1",
   "program": "TWELVEHATS_MASTER_COMPLETION_PROGRAM",
-  "as_of": "2026-11-19T20:20:00-05:00",
+  "as_of": "2026-11-19T20:35:00-05:00",
   "protected_authority": "origin/integration/platform-master@7012e24d37e90da982d8ec7d0f0c12c96d3138a2",
-  "working_authority": "release/customer-correction-20261119@0e99d31d4738ec8e7c65020f7ddcaa28ae7dea49",
+  "working_authority": "release/customer-correction-20261119@8596ac8d78c7a221df0b57cdb76460a6d466485a",
   "status_values": ["NOT STARTED", "IN PROGRESS", "IMPLEMENTED", "TESTING", "INTEGRATION READY", "INTEGRATED", "ACCEPTED", "BLOCKED"],
   "guardrails": ["NO_PRODUCTION_DEPLOY", "NO_QBO_WRITES", "NO_HCP_WRITES", "NO_LIVE_PAYROLL", "NO_BANK_TRANSFER", "NO_UNAUTHORIZED_FINANCIAL_POSTING", "NO_UNVERIFIED_SSH_HOST"],
   "objectives": [
@@ -92,11 +92,11 @@
       "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "PARTIAL", "escalation": "Verified employee compensation inputs required"}, "completion_evidence": []
     },
     {
-      "id": "OBJ-041", "domain": "timekeeping", "outcome": "Auditable cross-device time, breaks, corrections, approvals, and payroll grouping.", "status": "TESTING",
-      "known_defects": ["Operational multi-device acceptance pending."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/timekeeping", "mobile", "frontend/src/features/workforce"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "id": "OBJ-041", "domain": "timekeeping", "outcome": "Auditable cross-device time, breaks, corrections, approvals, and payroll grouping.", "status": "BLOCKED",
+      "known_defects": ["Employee submit and manager approve services exist, but neither frontend nor mobile exposes the transitions.", "Operational physical multi-device acceptance pending."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/timekeeping", "mobile", "frontend/src/features/workforce"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
       "dependencies": ["OBJ-040"], "implementation_steps": ["Run clock/break/correction/approval suites", "Exercise restart persistence"], "data_migrations": [], "security_permissions": ["Employee and manager scoped permissions"],
       "acceptance_tests": ["Clock in/out", "Breaks", "Overtime", "Correction audit", "Period grouping"], "simulator_scenarios": ["Scenario A", "Scenario C", "Scenario G"], "integration_requirements": ["Payroll input contract"], "evidence_required": ["Time entry and audit IDs", "Calculation trace"],
-      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+      "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "PRODUCT", "escalation": "Implement and accept employee submit plus separate manager approval UX on frontend/mobile; approve real Company time policy and identities"}, "completion_evidence": ["112 focused tests passed: 40 backend on disposable PostgreSQL 16, 21 frontend, 47 mobile, 4 overtime policy/calculation", "Clock/break/job time, replay, persistence, correction lineage, backend submit/approve, self-approval denial, pay-period sealing, tenant/role denial, and overtime calculation qualified"]
     },
     {
       "id": "OBJ-050", "domain": "accounting-migration", "outcome": "Historical QBO records rehearse deterministically without writes or duplicate native records.", "status": "IN PROGRESS",
@@ -148,11 +148,11 @@
       "priority": "P1", "estimated_remaining_hours": 4, "blocker": {"state": "DATA", "escalation": "Obtain post-September check stubs and bank-clearing evidence"}, "completion_evidence": ["Secure November 19 payroll archive sealed outside Git"]
     },
     {
-      "id": "OBJ-070", "domain": "csr", "outcome": "Operational first-login command center supports caller-to-booking workflow.", "status": "TESTING",
-      "known_defects": ["Actual configured-tenant first-login acceptance pending."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["frontend/src/components/command-center", "frontend/src/components/search", "backend/app/customers", "backend/app/jobs"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 local"},
+      "id": "OBJ-070", "domain": "csr", "outcome": "Operational first-login command center supports caller-to-booking workflow.", "status": "BLOCKED",
+      "known_defects": ["Canonical CSR and SERVICE_CSR roles lack COMPANY_SCHEDULING_MANAGE and COMPANY_JOB_MANAGE required by atomic service-request booking."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["frontend/src/components/command-center", "frontend/src/components/search", "backend/app/customers", "backend/app/jobs"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 local"},
       "dependencies": ["OBJ-010", "OBJ-020"], "implementation_steps": ["Exercise configured-tenant routing", "Run customer-to-job booking flow"], "data_migrations": [], "security_permissions": ["CSR role"],
       "acceptance_tests": ["Search/create/location/job/appointment", "History and notes", "Role denial"], "simulator_scenarios": ["Scenario A", "Scenario H"], "integration_requirements": ["Customer, scheduling, dispatch"], "evidence_required": ["Persisted customer/job/appointment IDs"],
-      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "SECURITY_POLICY", "escalation": "Approve least-privilege CSR booking authority; do not silently broaden role permissions"}, "completion_evidence": ["77 frontend and 15 disposable-PostgreSQL backend CSR tests passed", "Configured owner tenant lands on Command Center", "CSR/customer-service landing repaired to authorized Customers operations at 5afec0c011537eb0808a0e38017b9a17cb5c50bc without expanding permissions"]
     },
     {
       "id": "OBJ-080", "domain": "lia-accounting", "outcome": "LIA explains accounting exceptions without silently posting changes.", "status": "TESTING",
@@ -176,11 +176,11 @@
       "priority": "P1", "estimated_remaining_hours": 0, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Synthetic connected lifecycle 16/16 assertions, 18 entities, 21 operations, digest 8e0381bcf768e267901af7e790bd23128e0280ad5661e83c82ecd2ef3e0ac636", "43 selected operational tests passed; persistent P0 workflow passed on pristine PostgreSQL 16 at dm1v1a3c5e7g"]
     },
     {
-      "id": "OBJ-091", "domain": "test-tenant", "outcome": "Sales Forward is a complete isolated synthetic contractor tenant.", "status": "IN PROGRESS",
-      "known_defects": ["Tenant existence and fixture completeness unverified."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/demo", "backend/app/simulation"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 isolated local"},
+      "id": "OBJ-091", "domain": "test-tenant", "outcome": "Sales Forward is a complete isolated synthetic contractor tenant.", "status": "INTEGRATED",
+      "known_defects": ["Accounting and payroll-provider execution remain intentionally absent from the fixture."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/platform/onboarding/sales_forward_fixture.py", "backend/scripts/preview_synthetic_tenant_fixture.py"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 isolated local"},
       "dependencies": ["OBJ-090"], "implementation_steps": ["Locate tenant fixture", "Inventory entities", "Repair with synthetic data if needed"], "data_migrations": ["Test-only fixture load"], "security_permissions": ["Synthetic PII only"],
       "acceptance_tests": ["Tenant/users/customers/pricebook/jobs/invoices/accounting/payroll configuration"], "simulator_scenarios": ["Scenario J"], "integration_requirements": ["Demo-control schema"], "evidence_required": ["Fixture IDs and tenant-isolation proof"],
-      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+      "priority": "P1", "estimated_remaining_hours": 0, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Distinct Preview-only Sales Forward company 7fbe4c2e-1a3d-5f67-9b80-c2d4e6f8a091 and branch 8acd5d3f-2b4e-5078-ac91-d3e5f709b102 integrated at f1fa4d88b05e940a52d8e8b636e21c4a2f9a7cd5", "18 unit/regression and 10 fresh-PostgreSQL tests passed; existing ACP synthetic tenant unchanged", "Connected Customer, location, employee, pricebook, appointment, job, dispatch, time, estimate, invoice and unposted receipt fixture is idempotent and fails closed on material drift"]
     },
     {
       "id": "OBJ-092", "domain": "simulation", "outcome": "Ten end-to-end contractor scenarios persist correct state and calculations.", "status": "IN PROGRESS",
@@ -208,7 +208,7 @@
       "known_defects": ["Current custody commit is local and not in protected authority."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["scripts/enterprise-release-qualify", "release governance"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
       "dependencies": ["OBJ-001"], "implementation_steps": ["Review diffs", "Qualify", "Integrate minimally", "Verify remote protected SHA only with authority"], "data_migrations": ["Single Alembic head and backup-first deployment"], "security_permissions": ["Master-only protected integration"],
       "acceptance_tests": ["Static/tests/security/tenant isolation", "Migration/rollback", "No secrets"], "simulator_scenarios": ["Scenario G"], "integration_requirements": ["Qualified candidate SHAs"], "evidence_required": ["Protected SHA", "Qualification packet"],
-      "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Offline promotion and rollback dry run PASS at 1e1a0227", "24 release/backup/resilience tests passed"]
+      "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Offline promotion and rollback dry run PASS at 1e1a0227", "24 release/backup/resilience tests passed", "Disposable loopback PostgreSQL 16 backend qualification harness integrated at 8596ac8d78c7a221df0b57cdb76460a6d466485a", "Harness 30 fail-closed lifecycle tests PASS; Alembic dm1v1a3c5e7g/no drift and signal cleanup verified"]
     },
     {
       "id": "OBJ-103", "domain": "beta-acceptance", "outcome": "Owner-accessible Beta exposes qualified workflows and rollback instructions.", "status": "BLOCKED",
