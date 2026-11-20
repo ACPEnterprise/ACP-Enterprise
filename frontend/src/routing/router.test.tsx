@@ -86,6 +86,17 @@ describe("application routing", () => {
     expect(screen.getByRole("link", { name: "Command Center" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("uses Customers as the operational landing route for a CSR without analytics", async () => {
+    const router = renderRoute("/", {
+      ...authenticatedContext,
+      permissionCodes: ["COMPANY_CUSTOMER_READ", "COMPANY_CUSTOMER_MANAGE"],
+    });
+
+    expect(await screen.findByText("Customer route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/customers");
+    expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("does not send an established tenant to commercial onboarding on login", async () => {
     localStorage.setItem(
       "twelvehats.commercial-onboarding.company-1",
