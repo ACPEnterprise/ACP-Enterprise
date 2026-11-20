@@ -97,3 +97,10 @@ def test_http_import_boundaries_commit_staging_and_admission() -> None:
     assert "await session.commit()" in inspect.getsource(stage_customer_import)
     assert "await session.commit()" in inspect.getsource(admit_customer_import)
     assert "attempt_count" in CustomerImportRow.__table__.columns
+
+
+def test_migration_run_counts_are_recorded_with_each_row_outcome() -> None:
+    source = inspect.getsource(admit_customer_import)
+    assert "run.source_count += 1; run.duplicate_count += 1" in source
+    assert "run.source_count += 1; run.unresolved_count += 1" in source
+    assert "run.source_count += 1; run.accepted_count += 1" in source

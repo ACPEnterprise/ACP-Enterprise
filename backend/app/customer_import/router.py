@@ -390,7 +390,6 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
     identity_systems = _identity_systems(batch.source_provider, batch.source_namespace)
     for row in rows:
         row.attempt_count += 1
-        run.source_count += 1
         await session.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"customer-import:{context.company.id}:{batch.source_provider}:{batch.source_namespace}:{row.source_record_id}"))))
         identity = await session.scalar(select(CustomerSourceIdentity).where(CustomerSourceIdentity.company_id == context.company.id, CustomerSourceIdentity.branch_id == context.active_branch.id, CustomerSourceIdentity.source_system.in_(identity_systems), CustomerSourceIdentity.source_customer_id == row.source_record_id))
         if identity is not None:
@@ -398,23 +397,23 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
                 scoped_identity = await session.scalar(select(CustomerSourceIdentity).where(CustomerSourceIdentity.company_id == context.company.id, CustomerSourceIdentity.branch_id == context.active_branch.id, CustomerSourceIdentity.source_system == identity_system, CustomerSourceIdentity.source_customer_id == row.source_record_id))
                 if scoped_identity is None:
                     session.add(CustomerSourceIdentity(company_id=context.company.id, branch_id=context.active_branch.id, customer_id=identity.customer_id, source_system=identity_system, source_customer_id=row.source_record_id, first_run_id=run.id))
-            row.disposition = "duplicate"; row.processed = True; row.processed_at = datetime.now(timezone.utc); replayed += 1; run.duplicate_count += 1; continue
+            row.disposition = "duplicate"; row.processed = True; row.processed_at = datetime.now(timezone.utc); replayed += 1; run.source_count += 1; run.duplicate_count += 1; continue
         try:
             customer_data, contact_data, location_data = _customer_from_payload(row.payload)
             customer_id, ambiguous = await _match_existing(session, context.company.id, row.payload)
             if ambiguous:
-                row.disposition = "held"; row.reason_code = "ambiguous_existing_customer_match"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.unresolved_count += 1; continue
+                row.disposition = "held"; row.reason_code = "ambiguous_existing_customer_match"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1; continue
             if customer_id is None:
                 if not _verified_new_source_identity(row.payload, source_payloads):
-                    row.disposition = "held"; row.reason_code = "unverified_new_customer_identity"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.unresolved_count += 1; continue
+                    row.disposition = "held"; row.reason_code = "unverified_new_customer_identity"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1; continue
                 customer = await customer_service.stage_migrated_customer(session, context=context, customer_data=customer_data, contact_data=contact_data, service_location_data=location_data, billing_address_data=None)
                 customer_id = customer.id; created += 1
             else:
                 matched += 1
             session.add(CustomerSourceIdentity(company_id=context.company.id, branch_id=context.active_branch.id, customer_id=customer_id, source_system=identity_system, source_customer_id=row.source_record_id, first_run_id=run.id))
-            row.processed = True; row.processed_at = datetime.now(timezone.utc); run.accepted_count += 1
+            row.processed = True; row.processed_at = datetime.now(timezone.utc); run.source_count += 1; run.accepted_count += 1
         except (ValueError, TypeError) as error:
-            row.disposition = "held"; row.reason_code = str(error)[:80]; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.unresolved_count += 1
+            row.disposition = "held"; row.reason_code = str(error)[:80]; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1
     remaining_ready = await session.scalar(select(func.count()).select_from(CustomerImportRow).where(CustomerImportRow.batch_id == batch.id, CustomerImportRow.disposition == "ready", CustomerImportRow.processed.is_(False)))
     run.status = "completed" if not remaining_ready else "running"
     run.completed_at = datetime.now(timezone.utc) if run.status == "completed" else None
