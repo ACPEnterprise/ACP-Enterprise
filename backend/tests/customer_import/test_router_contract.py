@@ -13,6 +13,7 @@ from app.customer_import.router import (
     _identity_systems,
     _requires_qualified_hcp_admission,
     _source_system,
+    _verified_new_source_identity,
     router,
     admit_customer_import,
     stage_customer_import,
@@ -36,6 +37,7 @@ def test_hcp_aliases_have_distinct_lineage_keys() -> None:
     assert "housecall_pro_source4" in _identity_systems(
         "housecall_pro", "housecall_pro_source4"
     )
+    assert "housecall_pro_source4" in _identity_systems("housecall_pro", "housecall_pro")
     assert _requires_qualified_hcp_admission("housecall_pro", "housecall_pro_source4")
     assert not _requires_qualified_hcp_admission("housecall_pro", "housecall_pro")
 
@@ -65,6 +67,21 @@ def test_admission_projection_keeps_contact_and_location_evidence() -> None:
     assert customer.display_name == "Ada Lovelace"
     assert contact is not None and contact.email == "ada@example.test"
     assert location is not None and location.postal_code == "10001"
+
+
+def test_new_admission_requires_complete_unique_source_identity() -> None:
+    payload = {
+        "display_name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "phone": "5551234567",
+        "address": "1 Analytical Way",
+        "city": "Example",
+        "state": "NY",
+        "postal_code": "10001",
+    }
+    assert _verified_new_source_identity(payload, [payload])
+    assert not _verified_new_source_identity({**payload, "email": ""}, [{**payload, "email": ""}])
+    assert not _verified_new_source_identity(payload, [payload, {**payload, "display_name": "Ada L."}])
 
 
 def test_persisted_models_include_batch_identity_and_processed_cursor() -> None:

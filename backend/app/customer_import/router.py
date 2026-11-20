@@ -95,7 +95,9 @@ def _identity_systems(provider: str, namespace: str) -> tuple[str, ...]:
     """Return the new scoped key plus only the known legacy HCP key."""
     scoped = _source_system(provider, namespace)
     if provider.lower() == "housecall_pro":
-        return (scoped, namespace.lower())
+        # Preserve exact native identities written by the earlier SOURCE.4
+        # admission while binding a replay to the current explicit namespace.
+        return (scoped, namespace.lower(), "housecall_pro_source4")
     return (scoped,)
 
 
@@ -224,6 +226,44 @@ async def _match_existing(session: AsyncSession, company_id: UUID, payload: dict
     return None, True
 
 
+def _source_identity_values(payload: dict[str, str]) -> tuple[str, str, str, str]:
+    """Return normalized source identity fields used by safe-new admission."""
+    name = normalize_search_text(
+        payload.get("display_name")
+        or payload.get("company_name")
+        or " ".join((payload.get("first_name", ""), payload.get("last_name", ""))).strip()
+    )
+    try:
+        email = normalize_email(payload.get("email", "").strip()) if payload.get("email", "").strip() else ""
+    except ValueError:
+        email = ""
+    try:
+        phone = normalize_phone(payload.get("phone", "").strip()) if payload.get("phone", "").strip() else ""
+    except ValueError:
+        phone = ""
+    address = tuple(payload.get(key, "").strip() for key in ("address", "city", "state", "postal_code"))
+    normalized_address = build_normalized_address(address[0], None, address[1], address[2], address[3]) if all(address) else ""
+    return name, email, phone, normalized_address
+
+
+def _verified_new_source_identity(payload: dict[str, str], source_payloads: list[dict[str, str]]) -> bool:
+    """Allow a new customer only with complete, unique source evidence.
+
+    Missing crosswalk evidence is not enough by itself. A source row must have
+    a complete name/contact/address identity, a unique contact value within the
+    source batch, and a unique normalized name/address pair within that batch.
+    """
+    name, email, phone, address = _source_identity_values(payload)
+    if not name or not (email or phone) or not address:
+        return False
+    normalized_rows = [_source_identity_values(item) for item in source_payloads]
+    email_count = sum(1 for _, value, _, _ in normalized_rows if email and value == email)
+    phone_count = sum(1 for _, _, value, _ in normalized_rows if phone and value == phone)
+    name_address_count = sum(1 for row_name, _, _, row_address in normalized_rows if row_name == name and row_address == address)
+    unique_contact = (bool(email) and email_count == 1) or (bool(phone) and phone_count == 1)
+    return unique_contact and name_address_count == 1
+
+
 @router.post("/batches", response_model=ImportBatchResponse, status_code=status.HTTP_201_CREATED)
 async def stage_customer_import(
     context: CustomerManager,
@@ -341,7 +381,9 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
         session.add(run)
         await session.flush()
         batch.migration_run_id = run.id
-    rows = (await session.scalars(select(CustomerImportRow).where(CustomerImportRow.batch_id == batch.id, CustomerImportRow.processed.is_(False), CustomerImportRow.disposition == "ready").order_by(CustomerImportRow.row_number).limit(limit).with_for_update(skip_locked=True))).all()
+    all_ready_rows = (await session.scalars(select(CustomerImportRow).where(CustomerImportRow.batch_id == batch.id, CustomerImportRow.processed.is_(False), CustomerImportRow.disposition == "ready").order_by(CustomerImportRow.row_number))).all()
+    rows = all_ready_rows[:limit]
+    source_payloads = [row.payload for row in all_ready_rows]
     created = matched = replayed = held = rejected = 0
     customer_service = CustomerService()
     identity_system = _source_system(batch.source_provider, batch.source_namespace)
@@ -363,6 +405,8 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
             if ambiguous:
                 row.disposition = "held"; row.reason_code = "ambiguous_existing_customer_match"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.unresolved_count += 1; continue
             if customer_id is None:
+                if not _verified_new_source_identity(row.payload, source_payloads):
+                    row.disposition = "held"; row.reason_code = "unverified_new_customer_identity"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.unresolved_count += 1; continue
                 customer = await customer_service.stage_migrated_customer(session, context=context, customer_data=customer_data, contact_data=contact_data, service_location_data=location_data, billing_address_data=None)
                 customer_id = customer.id; created += 1
             else:
