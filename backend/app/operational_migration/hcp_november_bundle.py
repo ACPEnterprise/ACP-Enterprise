@@ -20,10 +20,15 @@ from uuid import UUID
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 
 AUTHORITY_CONTRACT = "hcp-november-preview-qualification/v1"
+RUNTIME_AUTHORITY_CONTRACT = "hcp-november-preview-runtime-qualification/v1"
+AUTHORITY_CONTRACTS = frozenset({AUTHORITY_CONTRACT, RUNTIME_AUTHORITY_CONTRACT})
 BUNDLE_CONTRACT = "hcp-november-operational-handoff/v1"
 SEALED_HANDOFF_CONTRACT = "hcp-clean-beta-admission-handoff/v1"
 BUNDLE_CONTRACTS = frozenset({BUNDLE_CONTRACT, SEALED_HANDOFF_CONTRACT})
 EXPECTED_SCHEMA_HEAD = "yp8r0t2v4x6z"
+# The runtime-bound authority is intentionally explicit.  It is not a generic
+# override: this is the schema currently qualified for the Beta application.
+CURRENT_RUNTIME_SCHEMA_HEAD = "r4s6u8w0y2a4"
 REQUIRED_FILES = frozenset(
     {
         "BUNDLE-MANIFEST.json",
@@ -174,6 +179,7 @@ class NovemberQualificationAuthority:
     execution_packet_sha256: str | None = None
     execution_packet_digest: str | None = None
     rollback_backup_digest: str | None = None
+    contract: str = AUTHORITY_CONTRACT
 
     @property
     def company_id(self) -> UUID:
@@ -201,7 +207,7 @@ class NovemberQualificationAuthority:
             value = _require_mapping(
                 json.loads(path.read_bytes()), "hcp_november_authority_invalid"
             )
-            if value.get("contract") != AUTHORITY_CONTRACT:
+            if value.get("contract") not in AUTHORITY_CONTRACTS:
                 _fail("hcp_november_authority_contract", value.get("contract"))
             fields = {
                 key: _require_text(value, key, "hcp_november_authority_field_missing")
@@ -239,6 +245,7 @@ class NovemberQualificationAuthority:
                 execution_packet_sha256=value.get("execution_packet_sha256"),
                 execution_packet_digest=value.get("execution_packet_digest"),
                 rollback_backup_digest=value.get("rollback_backup_digest"),
+                contract=str(value.get("contract")),
                 **fields,
             )
         except SafeEvidenceError:
@@ -402,8 +409,10 @@ class NovemberQualificationAuthority:
             for character in self.expected_repository_sha
         ):
             _fail("hcp_november_repository_sha_invalid", self.expected_repository_sha)
-        if self.expected_schema_head != EXPECTED_SCHEMA_HEAD:
+        if self.contract == AUTHORITY_CONTRACT and self.expected_schema_head != EXPECTED_SCHEMA_HEAD:
             _fail("hcp_november_schema_head_invalid", self.expected_schema_head)
+        if self.contract == RUNTIME_AUTHORITY_CONTRACT and self.expected_schema_head != CURRENT_RUNTIME_SCHEMA_HEAD:
+            _fail("hcp_november_runtime_schema_head_invalid", self.expected_schema_head)
         for value in (
             self.bundle_sha256,
             self.expected_acquisition_digest,
@@ -567,7 +576,7 @@ class NovemberQualificationAuthority:
             ):
                 _fail("hcp_november_hold_inventory_mismatch", final_hold_counts)
             return {
-                "contract": AUTHORITY_CONTRACT,
+                "contract": self.contract,
                 "bundle_contract": SEALED_HANDOFF_CONTRACT,
                 "bundle_sha256": self.bundle_sha256,
                 "acquisition_digest": self.expected_acquisition_digest,
@@ -679,7 +688,7 @@ class NovemberQualificationAuthority:
         if counts["hold"] < expected_hold_count:
             _fail("hcp_november_hold_records_incomplete", counts)
         return {
-            "contract": AUTHORITY_CONTRACT,
+            "contract": self.contract,
             "bundle_contract": BUNDLE_CONTRACT,
             "bundle_sha256": self.bundle_sha256,
             "acquisition_digest": self.expected_acquisition_digest,

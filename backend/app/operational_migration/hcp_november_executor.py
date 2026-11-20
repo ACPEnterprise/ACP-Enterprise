@@ -655,7 +655,7 @@ class NovemberBoundedExecutor:
             outcomes = Counter(item.outcome for item in receipt.journal)
             return {
                 "contract": EXECUTOR_CONTRACT,
-                "authority_contract": AUTHORITY_CONTRACT,
+                "authority_contract": authority.contract,
                 "qualification_digest": authority.qualification_digest,
                 "bundle_sha256": authority.bundle_sha256,
                 "policy_digest": authority.expected_policy_digest,

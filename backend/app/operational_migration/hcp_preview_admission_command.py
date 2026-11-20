@@ -50,7 +50,7 @@ from app.operational_migration.hcp_migration2_runner import (
     SafeEvidenceError,
 )
 from app.operational_migration.hcp_november_bundle import (
-    AUTHORITY_CONTRACT as NOVEMBER_AUTHORITY_CONTRACT,
+    AUTHORITY_CONTRACTS as NOVEMBER_AUTHORITY_CONTRACTS,
 )
 from app.operational_migration.hcp_november_bundle import (
     NovemberQualificationAuthority,
@@ -857,7 +857,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(output, sort_keys=True))
         return 0
-    if authority_contract == NOVEMBER_AUTHORITY_CONTRACT:
+    if authority_contract in NOVEMBER_AUTHORITY_CONTRACTS:
         if args.mode == "execute" and not args.authorize_execution:
             print(
                 json.dumps(
