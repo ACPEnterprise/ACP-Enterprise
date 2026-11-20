@@ -373,7 +373,20 @@ class CurrentOverlayExecutor:
                     and not await repository.source_exists(parent)
                 ):
                     raise ValueError("overlay parent source identity missing")
-            if held_for_parent or record.assertion is OverlayAssertion.HOLD:
+            if held_for_parent:
+                continue
+            if record.assertion is OverlayAssertion.HOLD:
+                journal.append(
+                    OverlayJournalEntry(
+                        record.key,
+                        record.assertion,
+                        "held",
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                )
                 continue
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
