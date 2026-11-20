@@ -336,7 +336,7 @@ class HcpSource4NativeBindingBootstrap:
         self, session: AsyncSession, domain: str, source: str, native_id: UUID
     ) -> Any:
         model, _ = _model_and_source_field(domain)
-        target = _target_field(model)
+        target = _target_field(model, domain)
         return await session.scalar(
             select(model).where(
                 model.company_id == self.company_id,
@@ -652,11 +652,16 @@ def _model_and_source_field(domain: str):
     return model, field
 
 
-def _target_field(model: type[object]):
-    for name in ("customer_id", "service_location_id", "job_id", "appointment_id"):
-        if hasattr(model, name):
-            return getattr(model, name)
-    raise TypeError("identity model has no native target")
+def _target_field(model: type[object], domain: str):
+    field_name = {
+        "customer": "customer_id",
+        "service_location": "service_location_id",
+        "job": "job_id",
+        "appointment": "appointment_id",
+    }[domain]
+    if not hasattr(model, field_name):
+        raise TypeError(f"identity model has no native {domain} target")
+    return getattr(model, field_name)
 
 
 def _native_id(identity: object) -> UUID:
