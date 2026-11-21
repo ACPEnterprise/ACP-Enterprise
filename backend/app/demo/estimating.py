@@ -95,6 +95,7 @@ async def build_water_heater_estimate(
     labels = (("GOOD", "WH-ELECTRIC-50", Decimal("0.35"), "reliable standard replacement"), ("BETTER", "WH-ELECTRIC-50-PREM", Decimal("0.45"), "premium efficiency and longer warranty"), ("BEST", "WH-ELECTRIC-50-PLUS", Decimal("0.55"), "enhanced protection, expansion control, and priority warranty"))
     evidence: list[EvidenceReference] = []
     packages: list[tuple[str, UUID, str, Decimal]] = []
+    profitability_flags: list[str] = []
     for label, code, target_margin, benefit in labels:
         snapshot = by_item[by_code[code].id]
         data = snapshot.snapshot_data
@@ -111,6 +112,10 @@ async def build_water_heater_estimate(
         direct_margin = _money((direct_profit / selling_price) * Decimal("100")) if selling_price else Decimal("0")
         contribution_margin = _money((contribution / selling_price) * Decimal("100")) if selling_price else Decimal("0")
         rows.append(f"{label}: ${selling_price:,.2f} · {benefit}; direct cost ${direct_cost:,.2f}; break-even after allocated overhead ${break_even:,.2f}; target floor ${target_price:,.2f}; direct gross margin {direct_margin:.2f}%; contribution after overhead ${contribution:,.2f} ({contribution_margin:.2f}%).")
+        if selling_price < break_even:
+            profitability_flags.append(f"{label} is below break-even by ${break_even - selling_price:,.2f}.")
+        elif selling_price < target_price:
+            profitability_flags.append(f"{label} is below its target-profit floor by ${target_price - selling_price:,.2f}; review scope or price before approval.")
         packages.append((label, snapshot.id, benefit, selling_price))
         evidence.append(EvidenceReference(domain="price_book", label=f"{label} Price Book snapshot", authority="SYNTHETIC_DEMO_PRICE_BOOK", observed_at=observed_at, freshness="CURRENT_QUERY", entity_id=snapshot.id, evidence_digest=snapshot.digest, count=1, state="ACTIVE", source_contract_version="sales-demo-price-book.v2", company_id=DEMO_COMPANY_ID, branch_ids=(context.active_branch.id,) if context.active_branch else (), limitations=("Synthetic demonstration data; not All County pricing.",)))
     economics_digest = "sales-demo-economics-v2".ljust(64, "0")[:64]
@@ -119,6 +124,7 @@ async def build_water_heater_estimate(
               "I found three active Price Book packages and admitted comparable job-cost evidence. "
               "Break-even includes direct material, labor, equipment, and the disclosed $120 allocated overhead method; it is not an automatically approved customer price.\n\n"
               + "\n".join(rows)
+              + "\n\nProfitability flags: " + (" ".join(profitability_flags) if profitability_flags else "None; all packages meet break-even and target floors.")
               + "\n\nThe direct gross margin is shown separately from contribution after allocated overhead. "
                 "Edit scope, quantities, costs, or target margins in the draft Estimate before any external send; approval remains required. Historical evidence is synthetic and tenant-scoped.")
     return DemoEstimateResult(answer=answer, evidence=tuple(evidence), packages=tuple(packages))
