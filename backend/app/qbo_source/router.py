@@ -51,6 +51,7 @@ from .native_application import (
     qbo_native_application_service,
     review_action_authority,
 )
+from .manual_archive import project_manual_profit_and_loss
 from .production import (
     ProductionAgedReceivablesRequest,
     ProductionProfitAndLossRequest,
@@ -520,6 +521,19 @@ async def qbo_source_backed_profit_and_loss(
             headers={"Cache-Control": "private, no-store"},
         )
     try:
+        if settings.qbo_manual_archive_root:
+            try:
+                workspace = project_manual_profit_and_loss(
+                    root=Path(settings.qbo_manual_archive_root),
+                    start_date=start_date.isoformat(),
+                    end_date=end_date.isoformat(),
+                    basis=basis,
+                )
+                return JSONResponse(
+                    content=workspace, headers={"Cache-Control": "private, no-store"}
+                )
+            except QboEvidenceProjectionError:
+                pass
         document, marker = await read_production_profit_and_loss(
             ProductionProfitAndLossRequest(start_date, end_date, basis)
         )

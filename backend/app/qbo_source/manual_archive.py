@@ -147,6 +147,72 @@ def project_manual_archive(*, root: Path, basis: str) -> dict[str, object]:
     }
 
 
+def project_manual_profit_and_loss(
+    *, root: Path, start_date: str, end_date: str, basis: str
+) -> dict[str, object]:
+    """Project the sealed P&L workbook without promoting it to the ACP ledger."""
+    root = root.expanduser().resolve()
+    manifest = _read_json(root / "custody-manifest.json")
+    if manifest.get("contract") != "qbo-manual-archive-custody/v1":
+        raise QboEvidenceProjectionError("manual_archive_contract_invalid")
+    _verify_inventory(root, manifest.get("files", []))
+    register = _read_json(root / "reconciliation-register.json")
+    connection = _mapping(register.get("connection"))
+    company_name = _required_text(connection, "company_name")
+    realm_id = _required_text(connection, "realm_id")
+    raw_rows = _xlsx_rows(
+        root / "raw" / "All County Plumbing and Leak_Profit and Loss.xlsx"
+    )
+    header_index = next(
+        (
+            index
+            for index, row in enumerate(raw_rows)
+            if len(row) > 1 and row[1] == "Total"
+        ),
+        None,
+    )
+    if header_index is None:
+        raise QboEvidenceProjectionError("manual_archive_report_header_missing")
+    rows = [
+        {"Account": row[0], "Total": row[1] if len(row) > 1 else None}
+        for row in raw_rows[header_index + 1 :]
+    ]
+    projected = [
+        {
+            "kind": "data",
+            "depth": 0,
+            "values": [
+                str(row.get("Account") or row.get("") or ""),
+                str(row.get("Total") or ""),
+            ],
+        }
+        for row in rows
+        if any(value not in {None, ""} for value in row.values())
+    ]
+    raw_digest = _sha256(root / "raw" / "All County Plumbing and Leak_Profit and Loss.xlsx")
+    return {
+        "contract_version": "qbo-source-backed-financial-report/v1",
+        "report_type": "profit_and_loss",
+        "authority": "QBO_SOURCE_BACKED",
+        "provider_environment": "production",
+        "source": "QuickBooks Online manual archive",
+        "source_company": company_name,
+        "realm_id": realm_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "accounting_basis": basis,
+        "currency": "USD",
+        "source_as_of": str(_mapping(register.get("current_acquisition")).get("cutoff") or end_date),
+        "acquired_at": str(manifest.get("sealed_at") or datetime.now(timezone.utc).isoformat()),
+        "columns": ["Account", "Total"],
+        "rows": projected,
+        "source_digest": raw_digest,
+        "accepted_as_acp_accounting": False,
+        "mutation_authority": "none",
+        "limitations": ["sealed_manual_report_archive", "report_basis_is_provider_export_metadata"],
+    }
+
+
 def _verify_inventory(root: Path, files: list[object]) -> None:
     for entry in files:
         if not isinstance(entry, Mapping):
