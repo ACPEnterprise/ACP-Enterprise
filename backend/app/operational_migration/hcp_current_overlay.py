@@ -323,19 +323,50 @@ class CurrentOverlayExecutor:
         ordered_records = _dependency_order(manifest.records)
         journal: list[OverlayJournalEntry] = []
         for record in ordered_records:
-            for parent in record.parent_keys:
-                if (
-                    record.assertion
+            blocked_parent = next(
+                (
+                    parent
+                    for parent in record.parent_keys
+                    if record.assertion
                     in {
                         OverlayAssertion.CREATE,
                         OverlayAssertion.UPDATE,
                     }
                     and parent in blocked_keys
-                ):
-                    raise ValueError(
-                        "overlay parent is non-operational: "
-                        f"{record.domain}:{record.source_id} <- {parent.domain}:{parent.source_id}"
+                ),
+                None,
+            )
+            if blocked_parent is not None:
+                # A parent can become held during execution (for example, a
+                # newer native customer edit can be authoritative even when
+                # the source packet originally classified the customer as an
+                # UPDATE).  Descendants must inherit that non-mutating hold;
+                # aborting the whole packet would either block unrelated
+                # records or encourage unsafe manual intervention.
+                held_record = replace(
+                    record,
+                    assertion=OverlayAssertion.HOLD,
+                    payload={},
+                    reason=(
+                        "held because required parent is non-operational: "
+                        f"{blocked_parent.domain}:{blocked_parent.source_id}"
+                    ),
+                )
+                await repository.record_non_mutating_assertion(held_record)
+                blocked_keys.add(record.key)
+                journal.append(
+                    OverlayJournalEntry(
+                        record.key,
+                        OverlayAssertion.HOLD,
+                        "held",
+                        None,
+                        None,
+                        None,
+                        None,
                     )
+                )
+                continue
+            for parent in record.parent_keys:
                 if (
                     parent not in keys
                     and (

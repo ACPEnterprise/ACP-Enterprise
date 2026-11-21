@@ -375,13 +375,17 @@ async def test_requires_parent_closure_and_matching_authority() -> None:
         OverlayAssertion.CREATE,
         parents=(held_parent.key,),
     )
-    with pytest.raises(ValueError, match="parent is non-operational"):
-        await CurrentOverlayExecutor().execute(
-            repository,
-            manifest=manifest(held_parent, child),
-            expected_base_source4_digest=DIGEST,
-            rollback_backup_digest=BACKUP,
-        )
+    receipt = await CurrentOverlayExecutor().execute(
+        repository,
+        manifest=manifest(held_parent, child),
+        expected_base_source4_digest=DIGEST,
+        rollback_backup_digest=BACKUP,
+    )
+    assert receipt.counts == {"held": 2}
+    assert [item.reason for item in repository.assertions] == [
+        "",
+        "held because required parent is non-operational: job:parent",
+    ]
 
 
 @pytest.mark.asyncio
