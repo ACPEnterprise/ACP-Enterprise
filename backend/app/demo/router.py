@@ -14,9 +14,11 @@ from app.demo.schemas import (
 )
 from app.demo.service import sales_demo_service
 from app.demo.enrichment import DEMO_COMPANY_ID, demo_enrichment_service
+from app.demo.estimating import create_water_heater_drafts
+from app.estimates.errors import EstimateError
+from app.platform.permissions.codes import AdministrationPermission, CustomerPermission, EstimatePermission
 from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import AdministrationPermission, CustomerPermission
 from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(prefix="/api/v1/demo", tags=["Sales Demo"])
@@ -27,6 +29,9 @@ ProvisionContext = Annotated[
 ]
 DemoContext = Annotated[
     AuthorizationContext, Depends(require_permission(CustomerPermission.MANAGE))
+]
+EstimateDraftContext = Annotated[
+    AuthorizationContext, Depends(require_permission(EstimatePermission.MANAGE))
 ]
 
 
@@ -129,6 +134,25 @@ async def enrich(
             "synthetic": True,
         }
     except ValueError as error:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/estimating/water-heater-drafts", response_model=dict[str, object])
+async def water_heater_drafts(
+    context: EstimateDraftContext, session: DatabaseSession
+) -> dict[str, object]:
+    """Create or reuse the three editable Demo Good/Better/Best drafts."""
+    if context.company.id != DEMO_COMPANY_ID:
+        raise HTTPException(status_code=403, detail="Demo estimating is tenant-scoped.")
+    try:
+        drafts = await create_water_heater_drafts(session, context=context)
+        if drafts is None:
+            await session.rollback()
+            raise HTTPException(status_code=422, detail="Synthetic estimating evidence is not ready.")
+        await session.commit()
+        return {"company_id": str(context.company.id), "synthetic": True, "drafts": drafts}
+    except EstimateError as error:
         await session.rollback()
         raise HTTPException(status_code=422, detail=str(error)) from error
 
