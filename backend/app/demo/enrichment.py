@@ -28,8 +28,8 @@ from app.estimates.models import (
     EstimateLineItem as EstimateProposalLine,
     EstimateRevision,
 )
-from app.financials.models import Invoice
 from app.jobs.models import Job, JobAppointmentLink
+from app.invoicing.models import Invoice
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
