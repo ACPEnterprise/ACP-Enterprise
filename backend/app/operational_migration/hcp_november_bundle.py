@@ -23,7 +23,7 @@ AUTHORITY_CONTRACT = "hcp-november-preview-qualification/v1"
 BUNDLE_CONTRACT = "hcp-november-operational-handoff/v1"
 SEALED_HANDOFF_CONTRACT = "hcp-clean-beta-admission-handoff/v1"
 BUNDLE_CONTRACTS = frozenset({BUNDLE_CONTRACT, SEALED_HANDOFF_CONTRACT})
-EXPECTED_SCHEMA_HEAD = "yp8r0t2v4x6z"
+EXPECTED_SCHEMA_HEAD = "r4s6u8w0y2a4"
 REQUIRED_FILES = frozenset(
     {
         "BUNDLE-MANIFEST.json",

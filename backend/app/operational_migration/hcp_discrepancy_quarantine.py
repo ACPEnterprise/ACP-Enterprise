@@ -421,7 +421,7 @@ class DiscrepancyQuarantineAuthority:
             value = _private_json(self.authority_path, "hcp_discrepancy_authority_missing")
         if self.authority_digest != _digest(self._payload(value)):
             _fail("hcp_discrepancy_authority_digest_mismatch")
-        if self.target != "preview" or self.schema_head != "yp8r0t2v4x6z":
+        if self.target != "preview" or self.schema_head != "r4s6u8w0y2a4":
             _fail("hcp_discrepancy_runtime_boundary_invalid")
         if len(self.repository_sha) != 40 or any(c not in "0123456789abcdef" for c in self.repository_sha):
             _fail("hcp_discrepancy_repository_sha_invalid")

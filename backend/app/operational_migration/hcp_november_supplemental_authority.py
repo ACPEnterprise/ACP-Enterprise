@@ -24,7 +24,7 @@ from app.operational_migration.hcp_november_executor import (
 
 CONTRACT = "hcp-november-supplemental-current-state-authority/v1"
 EXPECTED_ENVIRONMENT = "preview"
-EXPECTED_SCHEMA = "yp8r0t2v4x6z"
+EXPECTED_SCHEMA = "r4s6u8w0y2a4"
 EXPECTED_COMPANY_ID = "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd"
 EXPECTED_BRANCH_ID = "887f413a-70dc-4ab1-98aa-8e84f4e7efd0"
 EXPECTED_ACTOR_ID = "c427ebd1-7583-4c0d-9c54-55a0c1214174"
