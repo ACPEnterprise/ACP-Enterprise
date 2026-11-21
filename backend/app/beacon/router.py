@@ -70,9 +70,11 @@ from app.beacon.schemas import (
 from app.beacon.service import SIGNAL_TTL, beacon_query_service
 from app.beacon.workflow import BeaconWorkflowCommand, beacon_workflow_service
 from app.database.session import get_database_session
+from app.demo.enrichment import DEMO_COMPANY_ID
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from app.platform.permissions.dependencies import (
+    ResolvedAuthorization,
     require_any_permission,
     require_permission,
 )
@@ -103,6 +105,30 @@ BeaconOwnerOrAssigner = Annotated[
 ]
 
 
+async def require_owner_or_sales_demo_reviewer(
+    context: ResolvedAuthorization,
+) -> AuthorizationContext:
+    """Permit read-only active recommendations for the isolated sales demo.
+
+    SALES_DEMO receives no Beacon ownership or mutation authority.  The normal
+    owner dependency remains in force for every non-demo company.
+    """
+    if context.has_permission(BeaconPermission.OWN):
+        return context
+    if (
+        context.company.id == DEMO_COMPANY_ID
+        and context.has_permission(BeaconPermission.REVIEW)
+        and any(role.code == "SALES_DEMO" for role in context.effective_roles)
+    ):
+        return context
+    raise HTTPException(status_code=403, detail="Permission denied.")
+
+
+BeaconRecommendationReader = Annotated[
+    AuthorizationContext, Depends(require_owner_or_sales_demo_reviewer)
+]
+
+
 @router.get(
     "/active-recommendations",
     response_model=ActiveOwnerRecommendationPage,
@@ -110,7 +136,7 @@ BeaconOwnerOrAssigner = Annotated[
 )
 async def active_owner_recommendations(
     session: DatabaseSession,
-    context: BeaconOwner,
+    context: BeaconRecommendationReader,
 ) -> ActiveOwnerRecommendationPage:
     evaluated_at = datetime.now(timezone.utc)
     items = await active_recommendation_service.list(

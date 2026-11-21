@@ -48,6 +48,7 @@ from .security import (
     matches_any,
 )
 from .temporal import resolve_temporal_context
+from app.demo.estimating import build_water_heater_estimate, is_good_better_best_question
 
 logger = logging.getLogger("app.lia.audit")
 POLICY_VERSION = "lia-governed-assistant/v1"
@@ -187,6 +188,27 @@ class LiaService:
                     "The request crossed ACP’s protected-information boundary.",
                 ),
             )
+        if is_good_better_best_question(question):
+            estimate = await build_water_heater_estimate(session, context=context)
+            if estimate is not None:
+                return self._response(
+                    context=context,
+                    request=request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    classification=TruthClassification.DERIVED,
+                    answer=estimate.answer,
+                    evidence=estimate.evidence,
+                    limitations=(
+                        "This is a deterministic, evidence-backed Sales Forward demonstration calculation.",
+                        "No external AI provider was invoked and no estimate was sent or approved.",
+                    ),
+                    navigation=(
+                        NavigationSuggestion(label="Open Price Book", internal_path="/price-book"),
+                        NavigationSuggestion(label="Open Estimates", internal_path="/estimates"),
+                    ),
+                    safe_next_action="Review and edit the draft Estimate before requesting approval.",
+                )
         if matches_any(question, FABRICATION_PATTERNS):
             return self._response(
                 context=context,

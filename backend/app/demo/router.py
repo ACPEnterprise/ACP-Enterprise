@@ -13,6 +13,7 @@ from app.demo.schemas import (
     DemoScenarioResponse,
 )
 from app.demo.service import sales_demo_service
+from app.demo.enrichment import DEMO_COMPANY_ID, demo_enrichment_service
 from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission, CustomerPermission
@@ -102,6 +103,34 @@ async def scenarios(
         )
         for row in rows
     ]
+
+
+@router.post("/enrich", response_model=dict[str, object])
+async def enrich(
+    context: DemoContext, session: DatabaseSession
+) -> dict[str, object]:
+    """Resume the bounded synthetic Sales Forward enrichment in place.
+
+    This endpoint cannot create tenants or memberships and is hard-scoped to the
+    preserved Demo company.  Replays are deterministic and idempotent.
+    """
+    if context.company.id != DEMO_COMPANY_ID:
+        raise HTTPException(status_code=403, detail="Demo enrichment is tenant-scoped.")
+    try:
+        result = await demo_enrichment_service.enrich(
+            session, company_id=context.company.id, actor_id=context.user.id
+        )
+        await session.commit()
+        return {
+            "company_id": str(result.company_id),
+            "version": result.version,
+            "created": result.created,
+            "existing": result.existing,
+            "synthetic": True,
+        }
+    except ValueError as error:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.post("/feedback", response_model=DemoFeedbackResponse)
