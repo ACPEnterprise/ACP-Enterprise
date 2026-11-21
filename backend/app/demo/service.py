@@ -861,7 +861,9 @@ class SalesDemoService:
             employee_ids=employee_ids,
             now=now,
         )
-        scenarios = self._scenario_specs(jobs, customer_ids)
+        scenarios = self._scenario_specs(
+            environment, generation, jobs, customer_ids
+        )
         session.add_all(
             [
                 DemoScenario(
@@ -1129,7 +1131,10 @@ class SalesDemoService:
 
     @staticmethod
     def _scenario_specs(
-        jobs: list[Job], customers: list[UUID]
+        environment: DemoEnvironment,
+        generation: int,
+        jobs: list[Job],
+        customers: list[UUID],
     ) -> list[
         tuple[str, str, list[dict[str, object]], dict[str, object], dict[str, object]]
     ]:
@@ -1164,7 +1169,12 @@ class SalesDemoService:
                     "Review cost",
                 ),
                 {"kind": "estimate", "expected": "approved"},
-                {"customer_id": str(customers[6])},
+                {
+                    "customer_id": str(customers[6]),
+                    "estimate_id": str(
+                        _id(environment.id, generation, "estimate", 1)
+                    ),
+                },
             ),
             (
                 "dispatch_conflict",
@@ -1178,7 +1188,12 @@ class SalesDemoService:
                 "Overdue AR",
                 steps("Open Beacon", "Open overdue invoice", "Ask LIA"),
                 {"kind": "overdue_invoice", "expected": 1},
-                {"customer_id": str(customers[3])},
+                {
+                    "customer_id": str(customers[3]),
+                    "invoice_id": str(
+                        _id(environment.id, generation, "invoice", 1)
+                    ),
+                },
             ),
             (
                 "margin_problem",

@@ -151,6 +151,10 @@ async def test_per_rep_tenant_seed_reset_isolation_and_scenarios():
     assert old_company.status == "inactive"
     assert [item.position for item in scenarios] == list(range(1, 9))
     assert all(item.condition and item.record_refs is not None for item in scenarios)
+    scenarios_by_code = {item.code: item for item in scenarios}
+    assert scenarios_by_code["water_heater_estimate"].record_refs["estimate_id"]
+    assert scenarios_by_code["overdue_ar"].record_refs["invoice_id"]
+    assert scenarios_by_code["margin_problem"].record_refs["job_id"]
     assert granted == DEMO_PERMISSION_CODES
 
     burst_user_id = uuid4()
