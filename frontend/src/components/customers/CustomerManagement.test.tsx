@@ -9,6 +9,9 @@ import { CustomerManagement } from "./CustomerManagement";
 
 vi.mock("../../hooks/useCustomers");
 vi.mock("../../features/administration/hooks");
+vi.mock("./CustomerImportPanel", () => ({
+  CustomerImportPanel: () => null,
+}));
 const permissions = new Set<string>();
 vi.mock("../../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),
