@@ -167,6 +167,9 @@ async def create_water_heater_drafts(
         if existing is not None:
             drafts.append({"label": label, "estimate_id": str(existing.id), "estimate_number": existing.estimate_number, "status": existing.status, "selling_price": str(selling_price)})
             continue
+        # Evidence lookups autobegin a read transaction; the existing Estimate
+        # service owns its own write transaction, so close the read scope first.
+        await session.rollback()
         created = await estimate_service.create(
             session,
             spec=CreateEstimateSpec(
