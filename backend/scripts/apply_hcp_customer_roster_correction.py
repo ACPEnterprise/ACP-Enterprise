@@ -48,11 +48,37 @@ from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User
 
+# Beta contains two retained HCP identity spellings from earlier qualified
+# imports.  Read both without rewriting them; new bindings use the canonical
+# provider+namespace key used by the reusable import engine.
 SOURCE_SYSTEM = "housecall_pro"
+CANONICAL_SOURCE_SYSTEM = "housecall_pro:housecall_pro_source4"
+IDENTITY_SOURCE_SYSTEMS = (
+    CANONICAL_SOURCE_SYSTEM,
+    "housecall_pro_source4",
+    "housecall_pro:housecall_pro",
+    SOURCE_SYSTEM,
+)
 CONTRACT = "hcp-customer-roster-correction/v1"
 EXPECTED_SOURCE_ROWS = 5464
 READ_ONLY_TRANSACTION = "SET TRANSACTION READ ONLY"
 TENANT_DEFECT_NAME = "all county plumbing and leak"
+
+
+def _index_identities(
+    identities: tuple[CustomerSourceIdentity, ...] | list[CustomerSourceIdentity],
+) -> dict[str, CustomerSourceIdentity]:
+    indexed: dict[str, CustomerSourceIdentity] = {}
+    for identity in identities:
+        previous = indexed.get(identity.source_customer_id)
+        if previous is not None and previous.customer_id != identity.customer_id:
+            raise ValueError("Customer provider binding is ambiguous across HCP namespaces")
+        # If an old and canonical spelling both exist for the same native
+        # customer, retain the canonical row for matching without rewriting
+        # either source record.
+        if previous is None or identity.source_system == CANONICAL_SOURCE_SYSTEM:
+            indexed[identity.source_customer_id] = identity
+    return indexed
 
 
 def _load_source(
@@ -248,7 +274,7 @@ async def apply(args: argparse.Namespace) -> dict[str, object]:
             company_id=args.company_id,
             branch_id=args.branch_id,
             initiated_by_user_id=args.actor_id,
-            source_system=SOURCE_SYSTEM,
+            source_system=CANONICAL_SOURCE_SYSTEM,
             source_sha256=digest,
             mode="import",
             status="running",
@@ -257,18 +283,18 @@ async def apply(args: argparse.Namespace) -> dict[str, object]:
         )
         session.add(run)
         await session.flush()
-        identities = {
-            item.source_customer_id: item
-            for item in (
+        identity_rows = tuple(
+            (
                 await session.scalars(
                     select(CustomerSourceIdentity).where(
                         CustomerSourceIdentity.company_id == args.company_id,
-                        CustomerSourceIdentity.source_system == SOURCE_SYSTEM,
+                        CustomerSourceIdentity.source_system.in_(IDENTITY_SOURCE_SYSTEMS),
                         CustomerSourceIdentity.source_customer_id.in_(records),
                     )
                 )
             ).all()
-        }
+        )
+        identities = _index_identities(identity_rows)
         for source_id, record in sorted(records.items()):
             identity = identities.get(source_id)
             if identity is None:
@@ -288,7 +314,7 @@ async def apply(args: argparse.Namespace) -> dict[str, object]:
                     company_id=args.company_id,
                     branch_id=args.branch_id,
                     customer_id=customer.id,
-                    source_system=SOURCE_SYSTEM,
+                    source_system=CANONICAL_SOURCE_SYSTEM,
                     source_customer_id=source_id,
                     first_run_id=run.id,
                 )
@@ -433,11 +459,7 @@ def _preflight_counts(
             "tenant_defect_records": 0,
         }
     )
-    identities_by_source = {
-        identity.source_customer_id: identity for identity in identities
-    }
-    if len(identities_by_source) != len(identities):
-        raise ValueError("Customer provider bindings are not unique")
+    identities_by_source = _index_identities(identities)
     source_ids = set(records)
     bound_source_ids = source_ids.intersection(identities_by_source)
     counts["source_bound"] = len(bound_source_ids)
@@ -502,7 +524,7 @@ async def preflight(args: argparse.Namespace) -> dict[str, object]:
                 await session.scalars(
                     select(CustomerSourceIdentity).where(
                         CustomerSourceIdentity.company_id == args.company_id,
-                        CustomerSourceIdentity.source_system == SOURCE_SYSTEM,
+                        CustomerSourceIdentity.source_system.in_(IDENTITY_SOURCE_SYSTEMS),
                     )
                 )
             ).all()
