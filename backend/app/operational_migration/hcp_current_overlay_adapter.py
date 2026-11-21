@@ -159,19 +159,36 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         self, manifest_digest: str, package_digest: str
     ) -> OverlayExecutionReceipt | None:
         """Read a prior receipt before any new lineage bootstrap is attempted."""
-        masters = await self._session.scalars(
-            select(HcpMigrationMasterRun).where(
-                HcpMigrationMasterRun.package_digest == package_digest
+        owned_transaction = self._session.in_transaction()
+        try:
+            masters = await self._session.scalars(
+                select(HcpMigrationMasterRun).where(
+                    HcpMigrationMasterRun.package_digest == package_digest
+                )
             )
-        )
-        for master in masters:
-            root = master.replay_state if isinstance(master.replay_state, dict) else {}
-            state = root.get(STATE_KEY)
-            receipts = state.get("receipts") if isinstance(state, dict) else None
-            value = receipts.get(manifest_digest) if isinstance(receipts, dict) else None
-            if value is not None:
-                return _receipt(value)
-        return None
+            for master in masters:
+                root = (
+                    master.replay_state
+                    if isinstance(master.replay_state, dict)
+                    else {}
+                )
+                state = root.get(STATE_KEY)
+                receipts = state.get("receipts") if isinstance(state, dict) else None
+                value = (
+                    receipts.get(manifest_digest)
+                    if isinstance(receipts, dict)
+                    else None
+                )
+                if value is not None:
+                    return _receipt(value)
+            return None
+        finally:
+            # A read on an AsyncSession may implicitly open a transaction.  The
+            # executor must own the following transaction so lineage bootstrap
+            # and native writes remain atomic.  Never disturb a transaction
+            # owned by the caller.
+            if not owned_transaction and self._session.in_transaction():
+                await self._session.rollback()
 
     async def source_state(self, key: OverlayKey) -> OverlaySourceState | None:
         cached = self._state()["source_states"].get(_key(key))
