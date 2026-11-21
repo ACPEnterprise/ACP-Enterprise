@@ -131,7 +131,20 @@ async def hcp_customer_source_history(
             )
         ).all()
     )
-    source_ids = {identity.source_customer_id for identity in identities}
+    source4_ids = {
+        identity.source_customer_id
+        for identity in identities
+        if identity.source_system == "housecall_pro_source4"
+    }
+    legacy_ids = {
+        identity.source_customer_id
+        for identity in identities
+        if identity.source_system == "housecall_pro"
+    }
+    # A bridged Customer legitimately retains both its old numeric identity and
+    # the current opaque provider identity.  Product history must use SOURCE.4;
+    # the predecessor remains audit evidence and is never a second Customer.
+    source_ids = source4_ids or legacy_ids
     if len(source_ids) != 1:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,

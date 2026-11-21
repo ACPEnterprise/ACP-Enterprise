@@ -41,6 +41,21 @@ const rangeFor = (kind: "DAY" | "WEEK" | "MONTH" | "YEAR") => {
   return { start: localDate(start), end };
 };
 const words = (value: string) => value.replaceAll("_", " ");
+const ownerStatus = (value: string) => {
+  const labels: Record<string, string> = {
+    AVAILABLE: "Available",
+    AUTHORITATIVE: "Measured",
+    COMPLETE: "Complete",
+    CONFLICTING: "Conflicting evidence",
+    INCOMPLETE: "Incomplete",
+    PARTIAL: "Partly measured",
+    POLICY_REQUIRED: "Owner policy needed",
+    READY: "Ready",
+    STALE: "Needs refresh",
+    UNAVAILABLE: "Not available",
+  };
+  return labels[value] ?? words(value);
+};
 const money = (item: LuminaryObservation) =>
   item.value_minor == null || !item.currency
     ? "Unavailable"
@@ -65,12 +80,19 @@ const signedMinorMoney = (value: number | undefined, currency = "USD") =>
         currency,
       }).format(value / 100)}`;
 
+const observationDisplay = (item: LuminaryObservation) => {
+  if (item.value_minor == null) return "Not available";
+  if (item.unit === "minor_currency") return money(item);
+  if (item.unit === "count") return `${item.value_minor.toLocaleString()} Jobs`;
+  return `${item.value_minor.toLocaleString()} ${words(item.unit)}`;
+};
+
 function FindingCard({ finding }: { finding: LuminaryFinding }) {
   const warning = [
     "insufficient_evidence",
     "conflicting_evidence",
     "policy_required",
-  ].includes(finding.finding_class);
+  ].includes(finding.finding_class) || finding.freshness === "stale";
   return (
     <Card tone={warning ? "warning" : "normal"}>
       <CardHeader>
@@ -80,7 +102,8 @@ function FindingCard({ finding }: { finding: LuminaryFinding }) {
           </span>
           <span className="rounded-full bg-surface-muted px-2 py-1 text-xs">
             {finding.confidence_percent}% confidence ·{" "}
-            {words(finding.completeness)}
+            {ownerStatus(finding.completeness)} · Evidence{" "}
+            {ownerStatus(finding.freshness)}
           </span>
         </div>
         <CardTitle>{finding.title}</CardTitle>
@@ -100,7 +123,7 @@ function FindingCard({ finding }: { finding: LuminaryFinding }) {
                 <p className="break-words text-lg font-semibold">
                   {item.unit === "minor_currency"
                     ? money(item)
-                    : String(item.value_minor ?? "Unavailable")}
+                    : observationDisplay(item)}
                 </p>
               </div>
             ))}
@@ -110,6 +133,12 @@ function FindingCard({ finding }: { finding: LuminaryFinding }) {
           <h3 className="text-sm font-semibold">Why this exists</h3>
           <p className="text-sm text-content-muted">{finding.explanation}</p>
         </div>
+        {finding.freshness === "stale" ? (
+          <Alert variant="warning" title="Evidence needs refresh">
+            This explanation is based on older source records. Refresh the
+            source evidence before relying on it for a current decision.
+          </Alert>
+        ) : null}
         {finding.limitations.length ? (
           <div>
             <h3 className="text-sm font-semibold">What remains uncertain</h3>
@@ -169,7 +198,7 @@ function SourceMatrix({ sources }: { sources: SourceCompletenessEntry[] }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold capitalize">{words(item.source)}</p>
                 <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
-                  {words(item.state)}
+                  {ownerStatus(item.state)}
                 </span>
               </div>
               <p className="mt-2 text-sm text-content-muted">
@@ -316,7 +345,7 @@ export function LuminaryRoute() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle>Owner economics decision support</CardTitle>
               <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
-                {words(ownerEconomics.data.readiness)} ·{" "}
+                {ownerStatus(ownerEconomics.data.readiness)} ·{" "}
                 {ownerEconomics.data.confidence.score_percent}% confidence
               </span>
             </div>
@@ -384,7 +413,7 @@ export function LuminaryRoute() {
                       )}
                     </dd>
                     <dd className="text-xs text-content-muted">
-                      {words(String(classification))}
+                      {ownerStatus(String(classification))}
                     </dd>
                   </div>
                 ))}
@@ -399,7 +428,7 @@ export function LuminaryRoute() {
                       : `${(ownerEconomics.data.owner_health.economic_health.value_basis_points / 100).toFixed(1)}%`}
                   </dd>
                   <dd className="text-xs text-content-muted">
-                    {words(
+                    {ownerStatus(
                       ownerEconomics.data.owner_health.economic_health
                         .classification,
                     )}{" "}

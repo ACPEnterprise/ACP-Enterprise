@@ -166,7 +166,7 @@ describe("LIA workspace", () => {
         <LiaRoute />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/minimum-necessary Customer context/i)).toBeVisible();
+    expect(screen.getByText(/authorized Customer records/i)).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "Ask LIA a question" }), {
       target: { value: "What open work exists?" },
     });
@@ -212,7 +212,7 @@ describe("LIA workspace", () => {
         <LiaRoute />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/minimum-necessary Dispatch context/i)).toBeVisible();
+    expect(screen.getByText(/authorized Dispatch records/i)).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "Ask LIA a question" }), {
       target: { value: "Who is unassigned?" },
     });

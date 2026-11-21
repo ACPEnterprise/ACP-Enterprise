@@ -150,7 +150,7 @@ class HcpSource4NativeBindingBootstrap:
             session,
             domain=record.domain,
             source_id=record.source_id,
-            native_id=_native_id(identity),
+            native_id=_native_id(identity, record.domain),
             legacy_identity_id=_required(candidate.legacy_identity_id),
             source4_identity_id=identity.id,
             predecessor_source_digest=candidate.predecessor_source_digest,
@@ -208,26 +208,30 @@ class HcpSource4NativeBindingBootstrap:
         source4 = await self._identity(session, record.key, SOURCE4_SOURCE)
         legacy = await self._identity(session, record.key, LEGACY_SOURCE)
         if source4 is not None:
-            if legacy is not None and _native_id(source4) != _native_id(legacy):
+            if legacy is not None and _native_id(source4, record.domain) != _native_id(
+                legacy, record.domain
+            ):
                 return self._candidate(
                     record,
                     BindingDisposition.CONFLICTING_SOURCE4_BINDING,
-                    _native_id(source4),
+                    _native_id(source4, record.domain),
                     legacy.id,
                     "SOURCE.4 and exact legacy identities target different native records",
                 )
-            if await self._native_exists(session, record.domain, _native_id(source4)):
+            if await self._native_exists(
+                session, record.domain, _native_id(source4, record.domain)
+            ):
                 return self._candidate(
                     record,
                     BindingDisposition.BINDING_ALREADY_PRESENT,
-                    _native_id(source4),
+                    _native_id(source4, record.domain),
                     None,
                     "existing exact SOURCE.4 binding",
                 )
             return self._candidate(
                 record,
                 BindingDisposition.CONFLICTING_SOURCE4_BINDING,
-                _native_id(source4),
+                _native_id(source4, record.domain),
                 None,
                 "SOURCE.4 binding target is missing",
             )
@@ -250,7 +254,7 @@ class HcpSource4NativeBindingBootstrap:
                     else "exact legacy provider identity is absent"
                 ),
             )
-        native_id = _native_id(legacy)
+        native_id = _native_id(legacy, record.domain)
         if not await self._native_exists(session, record.domain, native_id):
             return self._candidate(
                 record,
@@ -336,7 +340,7 @@ class HcpSource4NativeBindingBootstrap:
         self, session: AsyncSession, domain: str, source: str, native_id: UUID
     ) -> Any:
         model, _ = _model_and_source_field(domain)
-        target = _target_field(model)
+        target = _target_field(model, domain)
         return await session.scalar(
             select(model).where(
                 model.company_id == self.company_id,
@@ -371,7 +375,7 @@ class HcpSource4NativeBindingBootstrap:
                 "job": Job,
                 "appointment": Appointment,
             }[domain],
-            _native_id(identity),
+            _native_id(identity, domain),
         )
         if native is None:
             return False
@@ -652,19 +656,29 @@ def _model_and_source_field(domain: str):
     return model, field
 
 
-def _target_field(model: type[object]):
-    for name in ("customer_id", "service_location_id", "job_id", "appointment_id"):
-        if hasattr(model, name):
-            return getattr(model, name)
-    raise TypeError("identity model has no native target")
+def _target_field(model: type[object], domain: str):
+    field_name = {
+        "customer": "customer_id",
+        "service_location": "service_location_id",
+        "job": "job_id",
+        "appointment": "appointment_id",
+    }[domain]
+    if not hasattr(model, field_name):
+        raise TypeError(f"identity model has no native {domain} target")
+    return getattr(model, field_name)
 
 
-def _native_id(identity: object) -> UUID:
-    for name in ("customer_id", "service_location_id", "job_id", "appointment_id"):
-        value = getattr(identity, name, None)
-        if isinstance(value, UUID):
-            return value
-    raise TypeError("source identity has no native UUID")
+def _native_id(identity: object, domain: str) -> UUID:
+    name = {
+        "customer": "customer_id",
+        "service_location": "service_location_id",
+        "job": "job_id",
+        "appointment": "appointment_id",
+    }[domain]
+    value = getattr(identity, name, None)
+    if isinstance(value, UUID):
+        return value
+    raise TypeError(f"source identity has no native {domain} UUID")
 
 
 def _required(value: UUID | None) -> UUID:

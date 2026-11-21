@@ -473,7 +473,7 @@ describe("Luminary workspace recovery", () => {
       screen.getByText("Can I trust the profitability answer?"),
     ).toBeVisible();
     expect(screen.getAllByText("AVAILABLE").length).toBeGreaterThan(0);
-    expect(screen.getByText("POLICY REQUIRED")).toBeVisible();
+    expect(screen.getByText("Owner policy needed")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Ask LIA about this evidence" }),
     ).toBeVisible();

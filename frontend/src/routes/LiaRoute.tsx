@@ -73,17 +73,40 @@ const tone = (classification: LiaResponse["classification"]) =>
       ? "danger"
       : "warning";
 
+const ownerStatus = (value: string) => {
+  const labels: Record<string, string> = {
+    ACP_AUTHORITATIVE: "ACP records",
+    DERIVED: "Derived from records",
+    INCOMPLETE: "Partly answered",
+    INSUFFICIENT_EVIDENCE: "Not enough evidence",
+    KNOWN: "Answered from records",
+    PARTIAL: "Partial evidence",
+    POLICY_REQUIRED: "Owner policy needed",
+    SOURCE_BACKED: "Source records",
+    STALE: "Needs refresh",
+    UNAVAILABLE: "Not available",
+    UNAUTHORIZED: "Not authorized",
+    CONFLICTING: "Conflicting evidence",
+    CURRENT_QUERY: "Current records",
+    DETERMINISTIC_CAPABLE: "Ready for evidence questions",
+    NO_ACCEPTED_EVIDENCE: "No accepted evidence",
+    NOT_APPLICABLE: "Not applicable",
+    PERSISTED_EVIDENCE: "Saved evidence",
+  };
+  return labels[value] ?? value.replaceAll("_", " ");
+};
+
 function Answer({ result }: { result: LiaResponse }) {
   const navigate = useNavigate();
   return (
     <article aria-live="polite" className="space-y-4">
       <Alert
         variant={tone(result.classification)}
-        title={result.classification.replaceAll("_", " ")}
+        title={ownerStatus(result.classification)}
       >
         {result.answer}
         <p className="mt-2 text-sm font-semibold">
-          Authority: {result.authority.replaceAll("_", " ")} · As of{" "}
+          Based on: {ownerStatus(result.authority)} · As of{" "}
           {new Date(result.as_of).toLocaleString()}
         </p>
       </Alert>
@@ -109,8 +132,8 @@ function Answer({ result }: { result: LiaResponse }) {
                   </span>
                 </summary>
                 <p className="mt-2 text-sm text-content-muted">
-                  {item.state}. {item.authority.replaceAll("_", " ")} ·{" "}
-                  {item.freshness.replaceAll("_", " ")}.
+                  {ownerStatus(item.state ?? "UNKNOWN")}. {ownerStatus(item.authority)} ·{" "}
+                  {ownerStatus(item.freshness)}.
                 </p>
               </details>
             ))}
@@ -366,7 +389,7 @@ export function LiaRoute() {
               ? "warning"
               : "success"
           }
-          title={readiness.data.state.replaceAll("_", " ")}
+            title={ownerStatus(readiness.data.state)}
         >
           <span className="inline-flex items-center gap-2">
             <ShieldCheck className="size-4" />
@@ -376,15 +399,14 @@ export function LiaRoute() {
               : "The configured provider is available."}
           </span>
           <p className="mt-2 text-sm">
-            Conversation retention remains{" "}
-            {readiness.data.policy_state.replaceAll("_", " ").toLowerCase()}.
+            Conversation retention: {ownerStatus(readiness.data.policy_state)}.
           </p>
         </Alert>
       )}
       {context ? (
-        <Alert variant="success" title="Entity context ready">
-          LIA will retrieve only the server-authorized minimum-necessary{" "}
-          {contextLabel} context. The entity identifier does not grant access.
+        <Alert variant="success" title="Question context ready">
+          LIA will use only the authorized {contextLabel} records carried from
+          the previous screen. The link itself does not grant access.
           {contextRecords.length ? (
             <p className="mt-1 text-sm">
               Triggering records carried into this conversation:{" "}
