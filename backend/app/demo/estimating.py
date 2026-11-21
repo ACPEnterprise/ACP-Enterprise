@@ -140,9 +140,10 @@ async def create_water_heater_drafts(
     )
     if customer is None:
         return None
+    customer_id = customer.id
     service_location_id = await session.scalar(
         select(ServiceLocation.id)
-        .where(ServiceLocation.customer_id == customer.id)
+        .where(ServiceLocation.customer_id == customer_id)
         .order_by(ServiceLocation.created_at, ServiceLocation.id)
     )
     if service_location_id is None:
@@ -159,7 +160,7 @@ async def create_water_heater_drafts(
             )
             .where(
                 Estimate.company_id == DEMO_COMPANY_ID,
-                Estimate.customer_id == customer.id,
+                Estimate.customer_id == customer_id,
                 Estimate.status == "draft",
                 EstimateRevision.proposal_title == title,
             )
@@ -175,7 +176,7 @@ async def create_water_heater_drafts(
             spec=CreateEstimateSpec(
                 company_id=DEMO_COMPANY_ID,
                 branch_id=context.active_branch.id,
-                customer_id=customer.id,
+                customer_id=customer_id,
                 service_location_id=service_location_id,
                 actor_user_id=context.user.id,
                 proposal_title=title,
