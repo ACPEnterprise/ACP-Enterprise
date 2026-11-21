@@ -1,0 +1,57 @@
+{
+  "contract": "hcp-customer-csv-correction-live-receipt/v1",
+  "status": "COMPLETED_BOUNDED_CORRECTION",
+  "executed_at": "2026-11-20T16:57:13Z",
+  "environment": "clean-beta",
+  "release_sha": "58dcb301b3d307569f46e095d08c7b3403b81c84",
+  "database_schema": "dm1v1a3c5e7g",
+  "company_id": "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd",
+  "branch_id": "887f413a-70dc-4ab1-98aa-8e84f4e7efd0",
+  "source": {
+    "archive": "AllCountyPlumbingandLeak_customer_export.zip",
+    "csv_sha256": "62e9e91c32a979d501f0ba9f812cb8b065c50783fe821874a65b911855923d4a",
+    "csv_records": 5464,
+    "source4_observations_sha256": "c9a083e19b158cfaeb9ccf4957270ce6e1ce20af768b23f9ea4d3c32a204864a",
+    "source4_customer_payloads": 633
+  },
+  "authority": {
+    "package_digest": "c401e4f59252360861e612d23b160dde55e843b16de5aca125188ad50841bd1f",
+    "backup_path": "/opt/acp-enterprise/backups/customer-correction-20261120/preview-20261120T155435Z.dump",
+    "backup_sha256": "e5774a1c7a5898f5d80c9ecc510533230bb901e8fc24bf7d5deccca005d53163",
+    "overlay_manifest_sha256": "1e9214a375a748e593ebd4930aaa8d3a934c8e169e483824e0c3ffd8ed29e701",
+    "overlay_receipt_sha256": "c6edf5dd77bdc3cd01f38f44d6f8d2bd8947cab2d819689802f874a0eef752bc"
+  },
+  "result": {
+    "accepted_customer_corrections": 623,
+    "held_source4_customers": 10,
+    "held_ambiguous": 9,
+    "held_address_only": 1,
+    "new_customers_created": 0,
+    "native_customer_uuids_replaced": 0,
+    "source_namespace_preserved": "housecall_pro_source4",
+    "jobs_mutated": 0,
+    "jobs_admitted": 0,
+    "held_jobs": 540,
+    "unseen_export_population_not_admitted": 4716
+  },
+  "readback": {
+    "beta_customer_count": 635,
+    "beta_bad_name_count": 10,
+    "beta_job_count": 699,
+    "jobs_linked_to_held_bad_names": 6,
+    "richard_ratliff": {
+      "canonical_customers": 1,
+      "locations": 1,
+      "jobs": 2,
+      "timeline_visible": true,
+      "source_lineage": "housecall_pro_source4"
+    }
+  },
+  "safety": {
+    "hcp_writes": 0,
+    "qbo_writes": 0,
+    "payroll_execution": 0,
+    "money_movement": 0,
+    "reversible_against_backup": true
+  }
+}

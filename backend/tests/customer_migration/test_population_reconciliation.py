@@ -443,11 +443,26 @@ async def test_http_clean_majority_admits_exact_rows_and_is_replay_safe(
     assert first.headers["Cache-Control"] == "private, no-store"
     assert replay.json()["selected"] == replay.json()["admitted"] == 0
     async with factory() as session:
+        customer = await session.scalar(
+            select(Customer).where(Customer.company_id == context.company.id)
+        )
+        assert customer is not None
         assert (
             await session.scalar(
                 select(func.count())
                 .select_from(Customer)
                 .where(Customer.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(CustomerSourceIdentity)
+                .where(
+                    CustomerSourceIdentity.company_id == context.company.id,
+                    CustomerSourceIdentity.source_customer_id == HAMMER_PROVIDER_ID,
+                )
             )
             == 1
         )

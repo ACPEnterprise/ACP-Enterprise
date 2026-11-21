@@ -1,0 +1,38 @@
+{
+  "contract": "hcp-customer-roster-custody/reconstructed-v1",
+  "custody_state": "RECONSTRUCTED_FROM_OWNER_RECOVERED_ARCHIVE",
+  "original_manifest_found": false,
+  "verified_at": "2026-11-20",
+  "source_provider": "housecall_pro",
+  "source_archive": {
+    "filename": "AllCountyPlumbingandLeak_customer_export.zip",
+    "sha256": "a36214f27ced45e4752605b37b54ce5ea1a5810086c1bd979fdb9f369f530579",
+    "size_bytes": 364839,
+    "entry_count": 1,
+    "contained_filename": "AllCountyPlumbingandLeak_customer_export.csv",
+    "contained_size_bytes": 4056093,
+    "contained_sha256": "62e9e91c32a979d501f0ba9f812cb8b065c50783fe821874a65b911855923d4a"
+  },
+  "schema": {
+    "version": "housecall_pro_customer_450_v1",
+    "column_count": 450,
+    "order_independent_header_sha256": "27ae0928bb107dc030455ed4da841ab0104047e9cc2f47c4742d88af027d919d",
+    "address_group_count": 61,
+    "address_groups_contiguous": true,
+    "address_group_fields_valid": true
+  },
+  "record_accounting": {
+    "source_rows": 5464,
+    "nonempty_provider_ids": 5464,
+    "unique_provider_ids": 5464,
+    "duplicate_provider_ids": 0,
+    "blank_provider_ids": 0
+  },
+  "qualified_correction_contract": "hcp-customer-roster-correction/v1",
+  "namespace_reconciliation": {
+    "source_namespace": "housecall_pro",
+    "live_beta_namespace": "housecall_pro_source4",
+    "policy": "preserve_existing_source4_identities; bind exact provider IDs through an explicit namespace-aware correction adapter; do not rename or delete existing identities"
+  },
+  "raw_payload_policy": "source archive remains outside Git; this manifest records verification evidence only"
+}

@@ -124,6 +124,20 @@ async def test_provable_binding_and_exact_replay(
             )
         )
         assert evidence is not None and evidence.legacy_source_identity_id == legacy.id
+        identities = (
+            await session.scalars(
+                select(CustomerSourceIdentity).where(
+                    CustomerSourceIdentity.company_id == company.id,
+                    CustomerSourceIdentity.customer_id == customer.id,
+                    CustomerSourceIdentity.source_customer_id == record.source_id,
+                )
+            )
+        ).all()
+        assert {item.source_system for item in identities} == {
+            "housecall_pro",
+            "housecall_pro_source4",
+        }
+        assert len({item.id for item in identities}) == 2
     replay = HcpSource4NativeBindingBootstrap(
         company_id=service.company_id,
         branch_id=service.branch_id,

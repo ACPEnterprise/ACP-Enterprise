@@ -40,6 +40,8 @@ from app.customers.schemas import (
 )
 from app.customers.service import CustomerService
 from app.events.models import BusinessEvent
+from app.financials.models import Estimate, Invoice
+from app.jobs.models import Job
 from app.platform.audit.models import AuditRecord
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
@@ -373,6 +375,80 @@ async def test_imports_reviewed_output_and_replays_idempotently(database) -> Non
                 .where(CustomerSourceIdentity.company_id == context.company.id)
             )
             == 2
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Job)
+                .where(Job.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Estimate)
+                .where(Estimate.company_id == context.company.id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Invoice)
+                .where(Invoice.company_id == context.company.id)
+            )
+            == 0
+        )
+
+
+@pytest.mark.asyncio
+async def test_replaying_file_preserves_newer_native_customer_changes(database) -> None:
+    _, factory = database
+    context = await seed_context(factory)
+    reviewed = review_adapter_output(mock_output(1), source_system="synthetic")
+    await stage_reviewed(factory, context, reviewed)
+    approved = boundary(reviewed)
+    service = CustomerAdapterImportService()
+
+    first = await service.run(
+        factory, context=context, reviewed=reviewed, boundary=approved
+    )
+    async with factory() as session, session.begin():
+        customer = await session.scalar(
+            select(Customer).where(Customer.company_id == context.company.id)
+        )
+        assert customer is not None
+        native_customer_id = customer.id
+        customer.display_name = "Owner's Newer Native Name"
+        identity = await session.scalar(
+            select(CustomerSourceIdentity).where(
+                CustomerSourceIdentity.company_id == context.company.id
+            )
+        )
+        assert identity is not None
+        native_source_identity_id = identity.id
+
+    replay = await service.run(
+        factory, context=context, reviewed=reviewed, boundary=approved
+    )
+
+    assert first.accepted == 1
+    assert replay.duplicate == 1
+    async with factory() as session:
+        customer = await session.get(Customer, native_customer_id)
+        assert customer is not None
+        assert customer.display_name == "Owner's Newer Native Name"
+        identity = await session.get(CustomerSourceIdentity, native_source_identity_id)
+        assert identity is not None
+        assert identity.customer_id == native_customer_id
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Customer)
+                .where(Customer.company_id == context.company.id)
+            )
+            == 1
         )
 
 

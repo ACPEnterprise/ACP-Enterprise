@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 from app.operational_migration.hcp_current_overlay import (
@@ -15,6 +19,9 @@ from app.operational_migration.hcp_current_overlay import (
     OverlayKey,
     OverlayRecord,
     OverlaySourceState,
+)
+from app.operational_migration.hcp_current_overlay_native import (
+    HcpCurrentOverlayNativeServices,
 )
 
 DIGEST = "a" * 64
@@ -105,6 +112,149 @@ def manifest(*records: OverlayRecord) -> CurrentOverlayManifest:
         acquired_at=ACQUIRED,
         records=records,
     )
+
+
+def test_hcp_source4_namespace_is_distinct_from_legacy_hcp_namespace() -> None:
+    value = manifest(record("cus_namespace", OverlayAssertion.CREATE, domain="customer"))
+
+    assert value.source_system == "housecall_pro_source4"
+    with pytest.raises(ValueError, match="current overlay digest mismatch"):
+        replace(value, source_system="housecall_pro").verify()
+
+
+@pytest.mark.asyncio
+async def test_customer_name_projection_uses_authoritative_person_name() -> None:
+    customer_id = uuid4()
+    customer = SimpleNamespace(
+        id=customer_id,
+        company_id="company",
+        updated_at=datetime(2026, 11, 19, tzinfo=timezone.utc),
+    )
+    updates = AsyncMock()
+    updates.stage_update.return_value = customer
+    services = object.__new__(HcpCurrentOverlayNativeServices)
+    services.context = SimpleNamespace(company=SimpleNamespace(id="company"))
+    services.customer_updates = updates
+    session = SimpleNamespace(get=AsyncMock(return_value=customer))
+    record_value = OverlayRecord(
+        "customer",
+        "cus_projection",
+        OverlayAssertion.UPDATE,
+        DIGEST,
+        ACQUIRED,
+        {
+            # This was the historical failure mode: a stale tenant display name
+            # must never replace the source person's authoritative name.
+            "display_name": "All County Plumbing and Leak",
+            "first_name": "Richard",
+            "last_name": "Ratliff",
+            "updated_at": "2026-11-20T00:00:00+00:00",
+        },
+    )
+
+    await services._update_customer(
+        session,
+        OverlaySourceState(DIGEST, str(customer_id), {}),
+        record_value,
+    )
+
+    request = updates.stage_update.call_args.kwargs["data"]
+    assert request.display_name == "Richard Ratliff"
+    assert request.display_name != record_value.payload["display_name"]
+
+
+@pytest.mark.asyncio
+async def test_newer_native_customer_change_is_held_without_overwrite() -> None:
+    customer_id = uuid4()
+    customer = SimpleNamespace(
+        id=customer_id,
+        company_id="company",
+        updated_at=datetime(2026, 11, 21, tzinfo=timezone.utc),
+    )
+    updates = AsyncMock()
+    services = object.__new__(HcpCurrentOverlayNativeServices)
+    services.context = SimpleNamespace(company=SimpleNamespace(id="company"))
+    services.customer_updates = updates
+    session = SimpleNamespace(get=AsyncMock(return_value=customer))
+    record_value = OverlayRecord(
+        "customer",
+        "cus_newer_native",
+        OverlayAssertion.UPDATE,
+        DIGEST,
+        ACQUIRED,
+        {
+            "first_name": "Source",
+            "last_name": "Value",
+            "updated_at": "2026-11-20T00:00:00+00:00",
+        },
+    )
+
+    with pytest.raises(OverlayDomainHold, match="newer native Customer state"):
+        await services._update_customer(
+            session,
+            OverlaySourceState(DIGEST, str(customer_id), {}),
+            record_value,
+        )
+    updates.stage_update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_customer_match_is_held_and_replay_does_not_mutate() -> None:
+    repository = MemoryRepository()
+    value = manifest(
+        OverlayRecord(
+            "customer",
+            "cus_ambiguous",
+            OverlayAssertion.HOLD,
+            DIGEST,
+            ACQUIRED,
+            {},
+            reason="ambiguous_identity_review_required",
+        ),
+        record("cus_safe", OverlayAssertion.CREATE, domain="customer"),
+    )
+
+    first = await CurrentOverlayExecutor().execute(
+        repository,
+        manifest=value,
+        expected_base_source4_digest=DIGEST,
+        rollback_backup_digest=BACKUP,
+        executable_domains=frozenset({"customer"}),
+    )
+    replay = await CurrentOverlayExecutor().execute(
+        repository,
+        manifest=value,
+        expected_base_source4_digest=DIGEST,
+        rollback_backup_digest=BACKUP,
+        executable_domains=frozenset({"customer"}),
+    )
+
+    assert first == replay
+    assert first.counts == {"held": 1, "created": 1}
+    assert OverlayKey("customer", "cus_ambiguous") not in repository.states
+    assert [item.reason for item in repository.assertions] == [
+        "ambiguous_identity_review_required"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_customer_roster_admission_is_independent_of_jobs_and_accounting() -> None:
+    repository = MemoryRepository()
+    value = manifest(record("cus_roster_only", OverlayAssertion.CREATE, domain="customer"))
+
+    receipt = await CurrentOverlayExecutor().execute(
+        repository,
+        manifest=value,
+        expected_base_source4_digest=DIGEST,
+        rollback_backup_digest=BACKUP,
+        executable_domains=frozenset({"customer"}),
+    )
+
+    assert receipt.counts == {"created": 1}
+    assert repository.states[OverlayKey("customer", "cus_roster_only")].native_id == (
+        "native-cus_roster_only"
+    )
+    assert not any(key.domain in {"job", "estimate", "invoice", "payment"} for key in repository.states)
 
 
 @pytest.mark.asyncio

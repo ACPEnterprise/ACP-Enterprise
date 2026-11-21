@@ -1,0 +1,75 @@
+{
+  "contract": "hcp-customer-identity-reconciliation/proposal-v1",
+  "status": "ISOLATED_REHEARSAL_ONLY",
+  "live_beta_mutation_authorized": false,
+  "authoritative_customer_export": {
+    "source_rows": 5464,
+    "source_sha256": "62e9e91c32a979d501f0ba9f812cb8b065c50783fe821874a65b911855923d4a",
+    "schema_version": "housecall_pro_customer_450_v1"
+  },
+  "source4_custody": {
+    "acquisition_contract": "hcp-operational-cutover-acquisition/v1",
+    "acquisition_digest": "02820d1bbdb0a2468304cf493f717b8cae3982c5f8774404a813e07208680754",
+    "raw_observation_count": 633,
+    "raw_observation_ids_equal_beta_source4_ids": true,
+    "full_customer_collection_seal_count": 5446,
+    "full_customer_raw_pages_available": false
+  },
+  "identity_reconciliation": {
+    "exact_provider_id_matches": 0,
+    "unique_best_crosswalks": 624,
+    "verified_three_or_more_fields": 601,
+    "strong_two_field_matches": 22,
+    "address_only_held": 1,
+    "ambiguous_source4_records_held": 9,
+    "ambiguous_source_rows_in_candidates": 124,
+    "source_rows_with_no_candidate_evidence": 4716,
+    "source_rows_not_admitted_to_crosswalk": 4840,
+    "existing_beta_customers_requiring_verified_correction": 616,
+    "source4_shared_email_values": 6,
+    "source4_shared_phone_values": 5,
+    "source4_shared_address_values": 20
+  },
+  "job_reconciliation": {
+    "authoritative_source_jobs": 1236,
+    "beta_job_identity_rows": 696,
+    "missing_source_jobs": 540,
+    "missing_jobs_eligible_parent_complete": 441,
+    "eligible_by_disposition": {
+      "UPDATE": 351,
+      "CREATE": 66,
+      "REPLAY": 24
+    },
+    "executable_held_without_location": 65,
+    "executable_held_missing_location_identity": 1,
+    "non_executable_held": 33
+  },
+  "isolated_rehearsal": {
+    "database_schema": "dm1v1a3c5e7g",
+    "customers_before": 635,
+    "customers_after": 635,
+    "source4_identities_before": 633,
+    "source4_identities_after": 633,
+    "multi_field_customer_updates": 623,
+    "housecall_pro_bridge_identities_added": 623,
+    "jobs_before": 699,
+    "jobs_after": 699,
+    "invoices_before": 274,
+    "invoices_after": 274,
+    "estimates_before": 0,
+    "estimates_after": 0,
+    "remaining_defect_customers": 10,
+    "remaining_defect_jobs": 6,
+    "replay_new_identity_count": 0,
+    "replay_update_count": 0,
+    "rollback_basis": "verified current Beta PostgreSQL dump restored before rehearsal"
+  },
+  "admission_rules": [
+    "Preserve housecall_pro_source4 identities and native target IDs.",
+    "Add housecall_pro bridge identity only for a unique multi-field crosswalk.",
+    "Never apply address-only or tied evidence automatically.",
+    "Do not create remaining historical customers until full SOURCE.4 raw customer population is available for duplicate exclusion.",
+    "Admit only executable jobs whose exact customer and service-location parents are present; hold all others.",
+    "Use one transaction, source digest, immutable evidence, compare-before-write, and idempotent source identity constraints."
+  ]
+}
