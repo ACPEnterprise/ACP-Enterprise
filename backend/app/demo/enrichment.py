@@ -118,11 +118,27 @@ class DemoEnrichmentService:
             bucket[key] = bucket.get(key, 0) + 1
 
         customers = list((await session.scalars(select(Customer).where(Customer.company_id == company_id).order_by(Customer.created_at, Customer.id))).all())
-        locations = list((await session.scalars(select(ServiceLocation).where(ServiceLocation.customer_id.in_([c.id for c in customers]))).all()))
+        locations = list(
+            (
+                await session.scalars(
+                    select(ServiceLocation).where(
+                        ServiceLocation.customer_id.in_([c.id for c in customers])
+                    )
+                )
+            ).all()
+        )
         locations_by_customer: dict[UUID, ServiceLocation] = {}
         for location in locations:
             locations_by_customer.setdefault(location.customer_id, location)
-        employees = list((await session.scalars(select(Employee).where(Employee.company_id == company_id, Employee.status == "active").order_by(Employee.created_at, Employee.id))).all())
+        employees = list(
+            (
+                await session.scalars(
+                    select(Employee)
+                    .where(Employee.company_id == company_id, Employee.status == "active")
+                    .order_by(Employee.created_at, Employee.id)
+                )
+            ).all()
+        )
         if not customers or not locations_by_customer or len(employees) < 2:
             raise ValueError("Demo enrichment requires the preserved base customers, locations, and employees.")
 
