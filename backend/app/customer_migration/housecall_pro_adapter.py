@@ -285,6 +285,15 @@ def _billing_flag(value: str | None, field: str) -> bool:
     raise CustomerAdapterValidationError("unsupported_billing_flag", fields=(field,))
 
 
+def _boolean_flag(value: str | None, field: str) -> bool:
+    normalized = (value or "").strip().lower()
+    if normalized == "false":
+        return False
+    if normalized == "true":
+        return True
+    raise CustomerAdapterValidationError("unsupported_boolean_flag", fields=(field,))
+
+
 class HousecallProCustomerExportAdapter:
     """Transform known Customer exports without depending on column positions."""
 
@@ -423,10 +432,13 @@ class HousecallProCustomerExportAdapter:
         first = _optional(row, "First Name")
         last = _optional(row, "Last Name")
         company = _optional(row, "Company")
-        display: str | None = _optional(row, "Display Name") or " ".join(
-            value for value in (first, last) if value
+        person_name = " ".join(value for value in (first, last) if value) or None
+        primary_name = (
+            company if customer_type == CustomerType.COMMERCIAL else person_name
         )
-        display = display or company
+        # Display Name is genuine source evidence, but only a fallback when the
+        # type-specific customer-owned primary fields are absent.
+        display = primary_name or _optional(row, "Display Name")
         if display is None:
             raise CustomerAdapterValidationError(
                 "customer_name_unresolved",
@@ -448,13 +460,18 @@ class HousecallProCustomerExportAdapter:
         mobile = _optional(row, "Mobile Number")
         if home and mobile:
             unmapped["Home Number"] = row["Home Number"]
+        do_not_service = (
+            _boolean_flag(_required(row, "Do Not Service"), "Do Not Service")
+            if "Do Not Service" in contract.scalar_headers
+            else False
+        )
         customer = CustomerCreate(
             customer_type=customer_type,
             display_name=display,
             legal_name=company if customer_type == CustomerType.COMMERCIAL else None,
             marketing_source=_optional(row, "Lead Source"),
             notes=_optional(row, "Notes"),
-            status=self.default_status,
+            status=(CustomerStatus.INACTIVE if do_not_service else self.default_status),
         )
         contact, missing_contact_fields = self._contact(row, title_field)
         if missing_contact_fields:
