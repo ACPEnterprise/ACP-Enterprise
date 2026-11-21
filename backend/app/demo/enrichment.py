@@ -212,6 +212,10 @@ class DemoEnrichmentService:
             if appointment is None:
                 appointment = Appointment(id=_id(company_id, "historical-appointment", index), company_id=company_id, branch_id=branch.id, appointment_number=f"APT-{100000 + index:06d}", customer_id=job.customer_id, service_location_id=job.service_location_id, status="completed" if job.status == "completed" else "scheduled", arrival_window_start_at=start, arrival_window_end_at=start + timedelta(hours=2), expected_duration_minutes=120, capacity_state="reserved", scheduling_timezone="America/New_York", created_by_user_id=actor_id, updated_by_user_id=actor_id, created_at=job.created_at, updated_at=job.updated_at)
                 session.add(appointment)
+                # The dispatch-assignment table has a composite FK to the
+                # appointment row.  Flush the parent before adding its links so
+                # SQLAlchemy cannot order a new assignment ahead of it.
+                await session.flush()
                 session.add(JobAppointmentLink(id=_id(company_id, "historical-job-appointment", index), company_id=company_id, branch_id=branch.id, job_id=job.id, appointment_id=appointment.id, visit_sequence=1, linked_by_user_id=actor_id))
                 if index % 6 != 0:
                     session.add(DispatchAssignment(id=_id(company_id, "historical-dispatch", index), company_id=company_id, branch_id=branch.id, appointment_id=appointment.id, job_id=job.id, primary_employee_id=employees[index % len(employees)].id, status="assigned", assignment_reason="Synthetic historical dispatch evidence", assigned_by_user_id=actor_id, window_start_at=start, window_end_at=start + timedelta(hours=2), effective_at=job.created_at))
