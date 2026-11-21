@@ -40,6 +40,7 @@ const OPERATING_PROFILES = [
   },
   { label: "HELPER", roleCodes: [["TECHNICIAN"], ["ACP_EMPLOYEE_MOBILE"]] },
 ] as const;
+const SALES_DEMO_COMPANY_ID = "c36895cf-8a6f-5c31-a2ed-474dee8d0fc4";
 
 function profileDisplayName(profile: string): string {
   if (profile === "ADMIN") return "Company Administrator";
@@ -48,10 +49,10 @@ function profileDisplayName(profile: string): string {
   return profile === "FIELD_MANAGER" ? "Field Manager" : profile.replaceAll("_", " ");
 }
 
-function accessProfileValue(profile: string): "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_MANAGER" | "FIELD_TECHNICIAN" | "HELPER" {
+function accessProfileValue(profile: string): "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_MANAGER" | "FIELD_TECHNICIAN" | "HELPER" | "SALES_DEMO" {
   if (profile === "ADMIN") return "ADMINISTRATOR";
   if (profile === "FIELD_TECH") return "FIELD_TECHNICIAN";
-  return profile as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_MANAGER" | "FIELD_TECHNICIAN" | "HELPER";
+  return profile as "ADMINISTRATOR" | "OFFICE_MANAGER" | "OFFICE_STAFF" | "FIELD_MANAGER" | "FIELD_TECHNICIAN" | "HELPER" | "SALES_DEMO";
 }
 
 type OperatingProfile = { label: string; roles: CompanyRole[] };
@@ -149,7 +150,10 @@ export function IdentityOnboardingRoute() {
     void listRoles().then((roles) => {
       if (!current) return;
       const systemRoles = roles.filter((role) => role.status === "active" && role.is_system);
-      const profiles = OPERATING_PROFILES.flatMap((profile) => {
+      const profileCatalog = activeCompany?.id === SALES_DEMO_COMPANY_ID
+        ? [...OPERATING_PROFILES, { label: "SALES_DEMO", roleCodes: [["SALES_DEMO"]] as const }]
+        : OPERATING_PROFILES;
+      const profiles = profileCatalog.flatMap((profile) => {
         const resolved = profile.roleCodes.map((alternatives) =>
           systemRoles.find((candidate) => alternatives.some((code) => code === candidate.code)),
         );
@@ -157,7 +161,7 @@ export function IdentityOnboardingRoute() {
           ? [{ label: profile.label, roles: resolved }]
           : [];
       });
-      if (profiles.length !== OPERATING_PROFILES.length) {
+      if (profiles.length !== profileCatalog.length) {
         void getCanonicalRoleSyncPlan().then((reconciliation) => {
           if (!current) return;
           const unavailable = OPERATING_PROFILES
@@ -178,7 +182,7 @@ export function IdentityOnboardingRoute() {
       if (current) setPreparation({ state: "blocked", message: "Employee onboarding readiness could not be verified." });
     });
     return () => { current = false; };
-  }, [authorized, readinessAttempt]);
+  }, [activeCompany?.id, authorized, readinessAttempt]);
 
   if (!authorized) return <Alert variant="danger" announcement="assertive">You are not authorized to add employees.</Alert>;
 

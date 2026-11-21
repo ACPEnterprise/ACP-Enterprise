@@ -17,6 +17,11 @@ from app.platform.security.decisions import (
     AuthorizationDenial,
     authorization_decision_logger,
 )
+from app.access_agreements.service import (
+    AgreementNotConfiguredError,
+    AgreementRequiredError,
+    access_agreement_service,
+)
 
 SecurityDatabaseSession = Annotated[
     AsyncSession, Depends(get_security_database_session, scope="function")
@@ -24,6 +29,48 @@ SecurityDatabaseSession = Annotated[
 
 
 async def get_authorization_context(
+    authenticated: AuthenticatedIdentity,
+    session: SecurityDatabaseSession,
+    company_id: Annotated[UUID, Header(alias="X-Company-ID")],
+    active_branch_id: Annotated[UUID | None, Header(alias="X-Branch-ID")] = None,
+) -> AuthorizationContext:
+    try:
+        context = await authorization_service.resolve(
+            session,
+            authenticated=authenticated,
+            company_id=company_id,
+            branch_id=active_branch_id,
+        )
+        await access_agreement_service.require_access(session, context=context)
+        return context
+    except (AgreementRequiredError, AgreementNotConfiguredError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "ACCESS_AGREEMENT_REQUIRED", "message": str(error)},
+        ) from error
+    except AuthorizationError as error:
+        authorization_decision_logger.denied(
+            AuthorizationDenial(
+                reason=type(error).__name__,
+                actor_user_id=authenticated.user.id,
+                company_id=company_id,
+                branch_id=active_branch_id,
+                resource="tenant_context",
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access denied.",
+        ) from error
+
+
+ResolvedAuthorization = Annotated[
+    AuthorizationContext,
+    Depends(get_authorization_context),
+]
+
+
+async def get_unrestricted_authorization_context(
     authenticated: AuthenticatedIdentity,
     session: SecurityDatabaseSession,
     company_id: Annotated[UUID, Header(alias="X-Company-ID")],
@@ -52,9 +99,9 @@ async def get_authorization_context(
         ) from error
 
 
-ResolvedAuthorization = Annotated[
+UnrestrictedAuthorization = Annotated[
     AuthorizationContext,
-    Depends(get_authorization_context),
+    Depends(get_unrestricted_authorization_context),
 ]
 
 

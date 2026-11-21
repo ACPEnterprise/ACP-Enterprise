@@ -15,6 +15,7 @@ from app.platform.permissions.authorization import (
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import (
     ResolvedAuthorization,
+    UnrestrictedAuthorization,
     require_permission,
 )
 from app.platform.permissions.schemas import (
@@ -31,7 +32,7 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 
 @router.get("/context", response_model=EffectiveAuthorizationResponse)
 async def effective_authorization(
-    context: ResolvedAuthorization,
+    context: UnrestrictedAuthorization,
     session: DatabaseSession,
 ) -> EffectiveAuthorizationResponse:
     platform_permissions = await active_user_platform_permissions(

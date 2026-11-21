@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Alert, Button, Card, Input } from "../ui";
 import { useAuth } from "../auth";
 import { useDemoFeedback, useDemoScenarios, useResetDemo } from "../hooks/useDemo";
 import { askLia } from "../api/lia";
 import { createDemoEstimateDrafts, type DemoEstimateDraft } from "../api/demo";
+
+const DEMO_COMPANY_ID = "c36895cf-8a6f-5c31-a2ed-474dee8d0fc4";
 
 const destinations: Record<string, string> = {
   new_service_call: "/customers", emergency_drain: "/dispatch", water_heater_estimate: "/estimates",
@@ -27,8 +29,14 @@ function scenarioDestination(code: string, refs: Record<string, unknown> = {}) {
 }
 
 export function SalesDemoRoute() {
-  const { refreshAuthorization } = useAuth();
-  const scenarios = useDemoScenarios();
+  const { activeCompany, refreshAuthorization, switchCompany } = useAuth();
+  const [companySwitchError, setCompanySwitchError] = useState<string | null>(null);
+  const switchAttempted = useRef(false);
+  const demoReady = activeCompany?.id === DEMO_COMPANY_ID;
+  const contextError = companySwitchError ?? (!switchCompany && activeCompany && !demoReady
+    ? "This session cannot select the Demo company. Sign in with the supported Demo access account."
+    : null);
+  const scenarios = useDemoScenarios(demoReady, activeCompany?.id);
   const reset = useResetDemo();
   const feedback = useDemoFeedback();
   const [guided, setGuided] = useState(true);
@@ -38,6 +46,13 @@ export function SalesDemoRoute() {
   const [estimateEvidence, setEstimateEvidence] = useState<string[]>([]);
   const [estimateDrafts, setEstimateDrafts] = useState<DemoEstimateDraft[]>([]);
   const [estimateLoading, setEstimateLoading] = useState(false);
+
+  useEffect(() => {
+    if (!activeCompany || demoReady || contextError || switchAttempted.current || !switchCompany) return;
+    switchAttempted.current = true;
+    void switchCompany(DEMO_COMPANY_ID)
+      .catch(() => setCompanySwitchError("TwelveHats Demo Services is not available to this account."));
+  }, [activeCompany, contextError, demoReady, switchCompany]);
 
   const buildEstimate = async () => {
     setEstimateLoading(true);
@@ -63,6 +78,16 @@ export function SalesDemoRoute() {
     await reset.mutateAsync();
     await refreshAuthorization();
   };
+
+  if (!demoReady) {
+    return <Card className="mx-auto max-w-2xl p-6" role="status">
+      <h2 className="text-xl font-semibold">Opening TwelveHats Demo Services</h2>
+      <p className="mt-2 text-sm text-content-muted">
+        The Sales Forward workspace only loads after this session has selected the authorized synthetic Demo company.
+      </p>
+      {contextError && <Alert className="mt-4" variant="danger" title="Demo company unavailable">{contextError}</Alert>}
+    </Card>;
+  }
 
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

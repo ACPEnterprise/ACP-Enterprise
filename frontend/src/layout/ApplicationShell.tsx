@@ -3,6 +3,9 @@ import { createPortal } from "react-dom";
 import { Outlet, useLocation, useMatches, useNavigationType } from "react-router";
 
 import { brandConfig } from "../branding/brandConfig";
+import { AccessAgreementRoute } from "../routes/AccessAgreementRoute";
+import { useCurrentAccessAgreement } from "../hooks/useAccessAgreement";
+import { useAuth } from "../auth";
 import { AIWorkspace } from "./AIWorkspace";
 import { ApplicationHeader } from "./ApplicationHeader";
 import { Sidebar } from "./Sidebar";
@@ -28,11 +31,14 @@ export function ApplicationShell() {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
+  const { activeCompany, status } = useAuth();
+  const agreement = useCurrentAccessAgreement(activeCompany?.id, status === "authenticated");
   const matches = useMatches();
   const location = useLocation();
   const navigationType = useNavigationType();
   const metadata = [...matches].reverse().find((match) => isShellHandle(match.handle))?.handle;
   const workspaceMetadata = isShellHandle(metadata) ? metadata.workspace : fallbackMetadata;
+  const agreementRequired = agreement.data?.required && !agreement.data.accepted;
 
   useEffect(() => {
     document.title = `${workspaceMetadata.pageTitle} | ${brandConfig.applicationTitle}`;
@@ -83,6 +89,10 @@ export function ApplicationShell() {
         document.body,
       )
     : null;
+
+  if (agreementRequired && location.pathname !== "/access-agreement") {
+    return <AccessAgreementRoute />;
+  }
 
   return (
     <div className="theme-shell flex min-h-screen min-h-dvh bg-app-background text-content">

@@ -80,7 +80,6 @@ async def scenarios(
 ) -> list[DemoScenarioResponse]:
     environment = await session.scalar(
         select(DemoEnvironment).where(
-            DemoEnvironment.owner_user_id == context.user.id,
             DemoEnvironment.active_company_id == context.company.id,
             DemoEnvironment.status == "ready",
         )

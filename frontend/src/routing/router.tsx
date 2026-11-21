@@ -110,6 +110,10 @@ export const appRoutes: RouteObject[] = [
             lazy: async () => ({ Component: (await import("../routes/SalesDemoRoute")).SalesDemoRoute }),
           },
           {
+            path: "access-agreement",
+            lazy: async () => ({ Component: (await import("../routes/AccessAgreementRoute")).AccessAgreementRoute }),
+          },
+          {
             path: "account/security",
             handle: accountSecurityHandle,
             lazy: async () => ({

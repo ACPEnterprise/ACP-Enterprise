@@ -46,20 +46,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return result.access_token;
   }, []);
 
-  const resolveCompanyAccess = useCallback(async () => {
+  const resolveCompanyAccess = useCallback(async (preferredCompanyId?: string) => {
     const companies = await listAccessibleCompanies();
     const savedCompanyId = readActiveCompanyId();
-    const company = companies.find((item) => item.id === savedCompanyId) ?? companies[0] ?? null;
+    const company = preferredCompanyId
+      ? companies.find((item) => item.id === preferredCompanyId) ?? null
+      : companies.find((item) => item.id === savedCompanyId) ?? companies[0] ?? null;
     if (!company) {
+      if (preferredCompanyId) throw new Error("The requested company is not available to this account.");
       clearAuthentication();
       throw new Error("No active company access is available.");
     }
+    const previousCompany = activeCompanyRef.current;
     activeCompanyRef.current = company;
-    setActiveCompany(company);
-    writeActiveCompanyId(company.id);
-    const authorization = await getEffectiveAuthorization();
-    setPermissionCodes(authorization.permission_codes);
-    setStatus("authenticated");
+    try {
+      const authorization = await getEffectiveAuthorization();
+      setActiveCompany(company);
+      writeActiveCompanyId(company.id);
+      setPermissionCodes(authorization.permission_codes);
+      setStatus("authenticated");
+    } catch (error) {
+      activeCompanyRef.current = previousCompany;
+      if (previousCompany) {
+        setActiveCompany(previousCompany);
+        writeActiveCompanyId(previousCompany.id);
+      }
+      throw error;
+    }
   }, [clearAuthentication]);
 
   const refresh = useCallback((): Promise<string | null> => {
@@ -126,9 +139,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await resolveCompanyAccess();
   }, [refresh, resolveCompanyAccess]);
 
+  const switchCompany = useCallback(async (companyId: string) => {
+    await resolveCompanyAccess(companyId);
+  }, [resolveCompanyAccess]);
+
   const value = useMemo(
-    () => ({ status, user, activeCompany, permissionCodes, signIn, signOut, signOutAll, refreshAuthorization, requireReauthentication: clearAuthentication }),
-    [activeCompany, clearAuthentication, permissionCodes, refreshAuthorization, signIn, signOut, signOutAll, status, user],
+    () => ({ status, user, activeCompany, permissionCodes, signIn, signOut, signOutAll, switchCompany, refreshAuthorization, requireReauthentication: clearAuthentication }),
+    [activeCompany, clearAuthentication, permissionCodes, refreshAuthorization, signIn, signOut, signOutAll, status, switchCompany, user],
   );
   return <AuthenticationContext.Provider value={value}>{children}</AuthenticationContext.Provider>;
 }

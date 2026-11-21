@@ -11,6 +11,8 @@ export interface AuthenticationContextValue {
   signIn: (credentials: LoginCredentials) => Promise<void>;
   signOut: () => Promise<void>;
   signOutAll: () => Promise<void>;
+  /** Selects an already-authorized company for the current browser session. */
+  switchCompany?: (companyId: string) => Promise<void>;
   refreshAuthorization: () => Promise<void>;
   requireReauthentication: () => void;
 }

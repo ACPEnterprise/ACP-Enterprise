@@ -1,9 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SalesDemoRoute } from "./SalesDemoRoute";
 
-vi.mock("../auth", () => ({ useAuth: () => ({ refreshAuthorization: vi.fn() }) }));
+const authMock = vi.hoisted(() => ({
+  activeCompany: { id: "c36895cf-8a6f-5c31-a2ed-474dee8d0fc4", name: "TwelveHats Demo Services" },
+  refreshAuthorization: vi.fn(),
+  switchCompany: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../auth", () => ({ useAuth: () => authMock }));
 vi.mock("../hooks/useDemo", () => ({
   useDemoScenarios: () => ({ data: [
     { code: "new_service_call", title: "New Service Call", position: 1, guided_steps: [{ order: 1, action: "Create Customer" }], record_refs: { job_id: "job-1" } },
@@ -15,7 +20,11 @@ vi.mock("../hooks/useDemo", () => ({
 }));
 
 describe.each([[390, "mobile"], [820, "tablet"], [1440, "desktop"]])("Sales Demo at %ipx", (width, label) => {
-  beforeEach(() => Object.defineProperty(window, "innerWidth", { value: width, configurable: true }));
+  beforeEach(() => {
+    authMock.activeCompany = { id: "c36895cf-8a6f-5c31-a2ed-474dee8d0fc4", name: "TwelveHats Demo Services" };
+    authMock.switchCompany.mockClear();
+    Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+  });
   it(`renders guided real-product navigation on ${label}`, () => {
     render(<MemoryRouter><SalesDemoRoute /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Intelligent contractor operations" })).toBeInTheDocument();
@@ -30,4 +39,12 @@ describe.each([[390, "mobile"], [820, "tablet"], [1440, "desktop"]])("Sales Demo
     expect(screen.getByRole("link", { name: "Open LIA" })).toHaveAttribute("href", "/lia");
     expect(screen.getByRole("button", { name: "Reset Demo Company" })).toBeInTheDocument();
   });
+});
+
+it("switches away from an All County session before loading Demo data", async () => {
+  authMock.activeCompany = { id: "all-county", name: "All County Plumbing & Leak" };
+  render(<MemoryRouter><SalesDemoRoute /></MemoryRouter>);
+  expect(screen.getByRole("heading", { name: "Opening TwelveHats Demo Services" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Intelligent contractor operations" })).not.toBeInTheDocument();
+  await waitFor(() => expect(authMock.switchCompany).toHaveBeenCalledWith("c36895cf-8a6f-5c31-a2ed-474dee8d0fc4"));
 });

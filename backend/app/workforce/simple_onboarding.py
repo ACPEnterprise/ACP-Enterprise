@@ -44,6 +44,7 @@ class AccessProfile(StrEnum):
     FIELD_TECHNICIAN = "FIELD_TECHNICIAN"
     HELPER = "HELPER"
     FIELD_MANAGER = "FIELD_MANAGER"
+    SALES_DEMO = "SALES_DEMO"
 
 
 ROLE_CODES = {
@@ -58,7 +59,10 @@ ROLE_CODES = {
     AccessProfile.FIELD_MANAGER: frozenset(
         {"FIELD_MANAGER", "TECHNICIAN", "ACP_EMPLOYEE_MOBILE", "DISPATCHER"}
     ),
+    AccessProfile.SALES_DEMO: frozenset({"SALES_DEMO"}),
 }
+
+SALES_DEMO_COMPANY_ID = UUID("c36895cf-8a6f-5c31-a2ed-474dee8d0fc4")
 
 _TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
@@ -217,6 +221,8 @@ class SimpleEmployeeOnboardingService:
         confirm_temporary_password: str,
         require_password_change: bool,
     ) -> SimpleOnboardingResult:
+        if access_profile is AccessProfile.SALES_DEMO and context.company.id != SALES_DEMO_COMPANY_ID:
+            raise SimpleOnboardingConflict("Sales Demo access is restricted to TwelveHats Demo Services.")
         if temporary_password != confirm_temporary_password:
             raise SimpleOnboardingConflict("Temporary password and confirmation must match.")
         existing_request = await session.scalar(
@@ -240,6 +246,23 @@ class SimpleEmployeeOnboardingService:
         )
         if match.outcome is MatchOutcome.AMBIGUOUS:
             raise SimpleOnboardingConflict("Employee identity is ambiguous.")
+        if access_profile is AccessProfile.SALES_DEMO:
+            existing_user = await session.scalar(
+                select(User).where(User.normalized_email == normalize_email(email))
+            )
+            if existing_user is not None:
+                active_memberships = tuple(
+                    await session.scalars(
+                        select(Membership).where(
+                            Membership.user_id == existing_user.id,
+                            Membership.status == "active",
+                        )
+                    )
+                )
+                if active_memberships:
+                    raise SimpleOnboardingConflict(
+                        "This identity already has an active Company membership; review it before creating Demo access."
+                    )
         role_codes = ROLE_CODES[access_profile]
         roles = tuple(
             await session.scalars(
