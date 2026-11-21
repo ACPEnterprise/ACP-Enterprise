@@ -22,12 +22,25 @@ from app.operational_migration.hcp_current_overlay import (
 )
 from app.operational_migration.hcp_current_overlay_native import (
     HcpCurrentOverlayNativeServices,
+    _bounded_hold_code,
 )
 
 DIGEST = "a" * 64
 OTHER_DIGEST = "b" * 64
 BACKUP = "c" * 64
 ACQUIRED = "2026-09-12T16:49:00+00:00"
+
+
+def test_bounded_hold_code_preserves_deterministic_trace_suffix() -> None:
+    reason = "held because required parent is non-operational: service_location:" + (
+        "a" * 80
+    )
+    bounded = _bounded_hold_code(reason)
+
+    assert len(bounded) == 100
+    assert bounded.startswith(reason[:87])
+    assert bounded[-13] == "~"
+    assert _bounded_hold_code(reason) == bounded
 
 
 class MemoryRepository:

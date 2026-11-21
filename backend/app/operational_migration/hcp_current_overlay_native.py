@@ -79,6 +79,19 @@ from app.scheduling.service import (
     RescheduleAppointmentCommand,
     SchedulingService,
 )
+
+
+def _bounded_hold_code(reason: str) -> str:
+    """Fit a hold reason into the persisted 100-character display code.
+
+    The complete reason remains in the signed execution packet and contributes
+    to ``hold_digest``. The database column is bounded, so retain a readable
+    prefix plus a deterministic suffix instead of aborting a safe hold.
+    """
+    if len(reason) <= 100:
+        return reason
+    suffix = hashlib.sha256(reason.encode("utf-8")).hexdigest()[:12]
+    return f"{reason[:87]}~{suffix}"
 from app.scheduling.types import (
     AppointmentReference,
     AppointmentRescheduleReason,
@@ -400,7 +413,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 master_run_id=self.master_run_id,
                 entity_kind=record.domain,
                 native_id=record.source_id,
-                hold_code=record.reason or f"overlay_{record.assertion.value}",
+                hold_code=_bounded_hold_code(
+                    record.reason or f"overlay_{record.assertion.value}"
+                ),
                 package_digest=self.package_digest,
                 evidence_digest=record.source_digest,
                 reconciliation_key=f"{record.domain}:{record.source_id}"[:191],
