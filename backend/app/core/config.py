@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     qbo_production_callback_uri: str | None = None
     qbo_production_runtime_root: str | None = None
     qbo_production_evidence_root: str | None = None
+    qbo_manual_archive_root: str | None = None
     qbo_production_acp_company_id: UUID | None = None
     qbo_production_api_minor_version: int = 75
     qbo_repository_root: str = "/app"

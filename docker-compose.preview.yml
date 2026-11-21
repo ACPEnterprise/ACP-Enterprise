@@ -40,6 +40,7 @@ x-backend-environment: &backend-environment
   QBO_PRODUCTION_CALLBACK_URI: https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/production/oauth/callback
   QBO_PRODUCTION_RUNTIME_ROOT: /var/lib/acp-qbo-production
   QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-qbo-production-evidence
+  QBO_MANUAL_ARCHIVE_ROOT: ${QBO_MANUAL_ARCHIVE_ROOT:-/var/lib/acp-qbo-production-evidence/manual-archive}
 
 x-default-logging: &default-logging
   driver: json-file
