@@ -8,6 +8,7 @@ from app.business_economics import models as business_economics_models  # noqa: 
 from app.communications import (
     suppression as communication_suppression_models,  # noqa: F401
 )
+from app.demo import models as demo_models  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base
 from app.customer_migration import models as customer_migration_models  # noqa: F401
