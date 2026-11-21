@@ -275,7 +275,7 @@ services:
       [
         "sh",
         "-c",
-        "install -d -o acp -g acp -m 700 /var/lib/acp-qbo-production /var/lib/acp-qbo-production-evidence"
+        "install -d /var/lib/acp-qbo-production /var/lib/acp-qbo-production-evidence && chown acp:acp /var/lib/acp-qbo-production /var/lib/acp-qbo-production-evidence && chmod 700 /var/lib/acp-qbo-production /var/lib/acp-qbo-production-evidence"
       ]
     volumes:
       - preview_qbo_production_state:/var/lib/acp-qbo-production

@@ -86,6 +86,11 @@ def test_preview_application_runtimes_are_hardened() -> None:
         assert initializer["user"] == "root"
         assert initializer["restart"] == "no"
 
+    production_init = services["qbo-production-init"]
+    command = " ".join(production_init["command"])
+    assert "chown acp:acp /var/lib/acp-qbo-production" in command
+    assert "chmod 700 /var/lib/acp-qbo-production" in command
+
 
 def test_preview_redis_requires_acl_file_and_secret_indirection() -> None:
     compose = _compose("docker-compose.preview.yml")
