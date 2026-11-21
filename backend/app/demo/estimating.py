@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.business_economics.models import EconomicsProfitabilityResultRecord
 from app.customers.models import Customer, ServiceLocation
 from app.estimates.contracts import CreateEstimateSpec, EstimateLineSpec
-from app.estimates.models import Estimate, EstimateRevision
+from app.estimates.models import Estimate, EstimateNumberSequence, EstimateRevision
 from app.estimates.service import EstimateService
 from app.lia.contracts import EvidenceReference
 from app.platform.permissions.authorization import AuthorizationContext
@@ -148,6 +148,33 @@ async def create_water_heater_drafts(
     )
     if service_location_id is None:
         return None
+    existing_numbers = list(
+        (
+            await session.scalars(
+                select(Estimate.estimate_number).where(
+                    Estimate.company_id == DEMO_COMPANY_ID
+                )
+            )
+        ).all()
+    )
+    sequence_watermark = max(
+        (int(number.removeprefix("EST-")) for number in existing_numbers),
+        default=0,
+    )
+    await session.rollback()
+    sequence = await session.get(EstimateNumberSequence, DEMO_COMPANY_ID)
+    if sequence is None:
+        session.add(
+            EstimateNumberSequence(
+                company_id=DEMO_COMPANY_ID,
+                last_value=sequence_watermark,
+                updated_at=datetime.now(UTC),
+            )
+        )
+    elif sequence.last_value < sequence_watermark:
+        sequence.last_value = sequence_watermark
+        sequence.updated_at = datetime.now(UTC)
+    await session.commit()
     estimate_service = EstimateService()
     drafts: list[dict[str, object]] = []
     for label, snapshot_id, benefit, selling_price in result.packages:
