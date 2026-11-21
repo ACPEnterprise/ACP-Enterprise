@@ -287,6 +287,9 @@ class DemoEnrichmentService:
             proposal.current_revision_id = revision.id
             line = EstimateProposalLine(id=_id(company_id, "estimate-line", index), company_id=company_id, revision_id=revision.id, position=1, title=str(snapshot.snapshot_data.get("description", "Synthetic plumbing service")), description="Synthetic demo estimate line backed by an immutable Price Book snapshot.", quantity=snapshot.quantity, unit_price=snapshot.unit_price, line_total=total, discount_allocation=Decimal("0"), discounted_basis=total, tax_amount=Decimal("0"), taxable=False, currency="USD", created_at=now)
             session.add(line)
+            # The evidence reference has a composite FK to the line item; make
+            # the line durable before inserting that immutable link.
+            await session.flush()
             session.add(EstimateCommercialSnapshotReference(id=_id(company_id, "estimate-snapshot-ref", index), company_id=company_id, revision_id=revision.id, line_item_id=line.id, snapshot_id=snapshot.id, snapshot_digest=snapshot.digest, created_at=now))
             session.add(EstimateLifecycleHistory(id=_id(company_id, "estimate-history", index), company_id=company_id, branch_id=branch.id, estimate_id=estimate_id, from_status=None, to_status=proposal.status, from_acceptance_status=None, to_acceptance_status=proposal.acceptance_status, reason="Synthetic Sales Forward seeded proposal", actor_user_id=actor_id, version=1, occurred_at=now))
             created["estimates"] = created.get("estimates", 0) + 1
