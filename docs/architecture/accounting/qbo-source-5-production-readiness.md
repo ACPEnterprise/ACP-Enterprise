@@ -6,17 +6,21 @@ state. It does not authorize or perform a real-company connection or extraction.
 
 ## Production control boundary
 
-The non-Production ACP Preview control plane exposes the exact callback
-`https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/production/oauth/callback`.
+The governed ACP Beta runtime exposes the exact Production-source callback
+`https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback`.
 Production Intuit credentials, rotating tokens, single-use state, exact expected
 CompanyInfo name, connection marker, diagnostics, and evidence use dedicated
 `/var/lib/acp-qbo-production` and `/var/lib/acp-qbo-production-evidence` volumes.
 They never fall back to `/var/lib/acp-qbo-sandbox`. ACP Production cannot enable
-this control runtime.
+this control runtime. OAuth initiation and callback completion both run in this
+same governed Beta backend and use the same protected runtime volumes. The
+existing Preview sandbox callback and unrelated Preview workflows are unchanged.
 
 The runtime stays disabled until Intuit Production approval, exact redirect
 registration, protected Production client credential provisioning, and protected
-owner-supplied expected CompanyInfo name are all complete. The owner then uses the
+owner-supplied expected CompanyInfo name are all complete. Only the configured All
+County tenant can reach the Production connection or initiation boundary; other
+tenants receive a fail-closed unavailable response. The owner then uses the
 authenticated `COMPANY_ADMINISTER` initiation boundary and selects the real All
 County company in Intuit. Callback processing is state-bound, exchanges the code
 only with Production credentials, binds the returned realm, requests CompanyInfo
@@ -45,7 +49,7 @@ counts, page evidence, snapshot/cutoff identity, start/end timestamps, and expli
 partial failure. No Enterprise accounting table is written.
 
 After a separately authorized connection and extraction decision, the approved OM1
-operator runs, inside the protected Preview backend runtime:
+operator runs, inside the protected Beta backend runtime:
 
 ```text
 python -m app.qbo_source.production --run-id <owner-approved-run-id> --cutoff <YYYY-MM-DD>
@@ -59,12 +63,15 @@ feeds reconciliation and later ACC.MIG transformation under separate authority.
 ## External owner gate
 
 1. Complete Intuit Production app review/questionnaire and obtain Production keys.
-2. Register the exact Production redirect URI above in Intuit; no wildcard.
+2. In the existing ACP Command Center Intuit Production application, add the exact
+   Beta Production redirect URI above; no wildcard, query, fragment, or trailing
+   slash. Retain the existing Preview redirect URI until its separately authorized
+   workflows are retired.
 3. Provision the Production client ID/secret directly into the protected
    `qbo-production/client` namespace without chat, Git, environment dumps, or logs.
 4. Place the exact real `CompanyInfo.CompanyName` in the protected Production
    configuration namespace; do not guess, trim, normalize, or paste it into chat.
-5. Enable only the Preview Production-source control runtime and verify its empty
+5. Enable only the Beta Production-source control runtime and verify its empty
    token/state/connection stores and restricted evidence root.
 6. Separately authorize one browser connection, select only the real All County QBO
    company, and stop after exact CompanyInfo verification.

@@ -128,9 +128,13 @@ schema, Beta-connectivity, and PostgreSQL/Redis identity checks. It does not
 restore database data or downgrade the schema. If the target is omitted, the
 deployer reads the prior target recorded by the active release metadata.
 
-Never delete a release, use `docker compose down -v`, invoke a migration, point
-the tool at `docker-compose.production.yml`, or set
-`QBO_PRODUCTION_ENABLED=true`.
+Never delete a release, use `docker compose down -v`, invoke a migration, or point
+the tool at `docker-compose.production.yml`. `QBO_PRODUCTION_ENABLED=true` remains
+blocked by default. It is accepted only for the exact All County read-only Beta
+contract and only when the release operator supplies
+`--allow-qbo-production-read-only` after the Beta callback is registered, protected
+credentials and exact company-name binding are verified, qualification passes,
+and Enterprise records release GO. The flag grants no financial-write authority.
 
 ## November HCP handoff qualification
 

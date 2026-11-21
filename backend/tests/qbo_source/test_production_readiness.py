@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
+from uuid import UUID
 
 import pytest
 from app.core.config import Settings
@@ -46,6 +47,19 @@ from app.qbo_source.secrets import (
     ProtectedSandboxSecretProvider,
 )
 from fastapi.testclient import TestClient
+
+ALL_COUNTY_COMPANY_ID = UUID("3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd")
+OTHER_COMPANY_ID = UUID("a56fc415-563b-459c-913f-2e6183109119")
+
+
+def _authorization(company_id: UUID = ALL_COUNTY_COMPANY_ID) -> AuthorizationContext:
+    return cast(
+        AuthorizationContext,
+        SimpleNamespace(
+            company=SimpleNamespace(id=company_id),
+            user=SimpleNamespace(id=UUID("11111111-1111-4111-8111-111111111111")),
+        ),
+    )
 
 
 class _Closable:
@@ -212,13 +226,18 @@ async def test_production_connection_evidence_surfaces_verified_readability(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
+        qbo_router_module.settings,
+        "qbo_production_acp_company_id",
+        ALL_COUNTY_COMPANY_ID,
+    )
+    monkeypatch.setattr(
         qbo_router_module,
         "get_production_oauth_runtime",
         lambda: _ConnectionEvidenceRuntime(),
     )
 
     response = await qbo_router_module.qbo_production_connection_evidence(
-        cast(AuthorizationContext, SimpleNamespace())
+        _authorization()
     )
 
     assert response.status_code == 200
@@ -242,13 +261,19 @@ async def test_production_connection_evidence_surfaces_verified_readability(
 async def test_production_connection_evidence_surfaces_missing_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        qbo_router_module.settings,
+        "qbo_production_acp_company_id",
+        ALL_COUNTY_COMPANY_ID,
+    )
+
     def unavailable() -> object:
         raise SandboxRuntimeError("production_oauth_runtime_disabled")
 
     monkeypatch.setattr(qbo_router_module, "get_production_oauth_runtime", unavailable)
 
     response = await qbo_router_module.qbo_production_connection_evidence(
-        cast(AuthorizationContext, SimpleNamespace())
+        _authorization()
     )
 
     assert json.loads(response.body) == {
@@ -264,6 +289,98 @@ async def test_production_connection_evidence_surfaces_missing_authority(
         "acquisition_eligible": False,
         "mutation_authority": "none",
     }
+
+
+@pytest.mark.asyncio
+async def test_production_oauth_is_hidden_from_unrelated_tenants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        qbo_router_module.settings,
+        "qbo_production_acp_company_id",
+        ALL_COUNTY_COMPANY_ID,
+    )
+
+    def forbidden_runtime() -> object:
+        raise AssertionError("unrelated tenant reached the production OAuth runtime")
+
+    monkeypatch.setattr(
+        qbo_router_module, "get_production_oauth_runtime", forbidden_runtime
+    )
+
+    connection = await qbo_router_module.qbo_production_connection_evidence(
+        _authorization(OTHER_COMPANY_ID)
+    )
+    initiation = await qbo_router_module.qbo_production_oauth_authorize(
+        _authorization(OTHER_COMPANY_ID)
+    )
+
+    for response in (connection, initiation):
+        assert response.status_code == 404
+        assert json.loads(response.body) == {
+            "detail": "QBO Production connection is unavailable."
+        }
+
+
+@pytest.mark.asyncio
+async def test_production_initiation_and_callback_share_beta_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    callback_uri = "https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback"
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.events: list[tuple[str, object]] = []
+
+        async def begin(self, *, redirect_uri: str) -> str:
+            self.events.append(("begin", redirect_uri))
+            return "https://appcenter.intuit.com/connect/oauth2?state=opaque"
+
+        async def complete(self, **values: str | None) -> None:
+            self.events.append(("complete", values))
+
+    async def allow_rate_limit(**_values: object) -> None:
+        return None
+
+    runtime = Runtime()
+    monkeypatch.setattr(
+        qbo_router_module.settings,
+        "qbo_production_acp_company_id",
+        ALL_COUNTY_COMPANY_ID,
+    )
+    monkeypatch.setattr(
+        qbo_router_module, "get_production_oauth_runtime", lambda: runtime
+    )
+    monkeypatch.setattr(qbo_router_module._rate_limiter, "enforce", allow_rate_limit)
+
+    initiation = await qbo_router_module.qbo_production_oauth_authorize(
+        _authorization()
+    )
+    callback = await qbo_router_module.qbo_production_oauth_callback(
+        code="synthetic-code",
+        state="opaque-state",
+        realm_id="authorized-realm",
+        provider_error=None,
+        internal_code=None,
+        internal_state=None,
+        internal_realm=None,
+        internal_error=None,
+    )
+
+    assert initiation.status_code == 200
+    assert callback.status_code == 200
+    assert runtime.events == [
+        ("begin", callback_uri),
+        (
+            "complete",
+            {
+                "code": "synthetic-code",
+                "state": "opaque-state",
+                "realm_id": "authorized-realm",
+                "provider_error": None,
+            },
+        ),
+    ]
 
 
 @pytest.mark.asyncio
@@ -384,10 +501,10 @@ async def test_runtime_connection_evidence_rejects_token_realm_conflict(
         await runtime.connection_evidence()
 
 
-def test_production_configuration_requires_exact_isolated_preview_contract(
+def test_production_configuration_requires_exact_isolated_beta_contract(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="must match Preview exactly"):
+    with pytest.raises(ValueError, match="must match Beta exactly"):
         Settings(
             environment="test",
             qbo_production_enabled=True,
@@ -405,7 +522,7 @@ async def test_acquisition_requires_verified_connection_before_any_query(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(tmp_path / "runtime"),
@@ -440,7 +557,7 @@ async def test_acquisition_rejects_api_version_drift_before_any_query(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(runtime),
@@ -481,7 +598,7 @@ async def test_read_probe_requires_verified_connection_before_companyinfo(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(tmp_path / "runtime"),
@@ -530,7 +647,7 @@ async def test_read_probe_seals_only_companyinfo_without_false_empty_families(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(runtime),

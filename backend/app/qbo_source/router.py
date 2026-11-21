@@ -115,10 +115,7 @@ class QboReviewDecisionRequest(BaseModel):
     supersedes_decision_id: UUID | None = None
 
 
-_PRODUCTION_CALLBACK_URI = (
-    "https://preview.allcountyhomeservices.com"
-    "/api/v1/integrations/qbo/production/oauth/callback"
-)
+_PRODUCTION_CALLBACK_URI = "https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback"
 
 _SAFE_HEADERS = {
     "Cache-Control": "no-store",
@@ -610,12 +607,30 @@ def _production_response(status_code: int, result: str) -> JSONResponse:
     )
 
 
+def _production_company_is_authorized(
+    authorization: AuthorizationContext,
+) -> bool:
+    return (
+        settings.qbo_production_acp_company_id is not None
+        and settings.qbo_production_acp_company_id == authorization.company.id
+    )
+
+
+def _production_tenant_unavailable() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": "QBO Production connection is unavailable."},
+        headers=_SAFE_HEADERS,
+    )
+
+
 @router.get(PRODUCTION_CONNECTION_PATH, name="qbo-production-connection-evidence")
 async def qbo_production_connection_evidence(
     authorization: _Administer,
 ) -> JSONResponse:
     """Expose safe production authority/readability evidence; never query QBO."""
-    del authorization
+    if not _production_company_is_authorized(authorization):
+        return _production_tenant_unavailable()
     try:
         evidence = await get_production_oauth_runtime().connection_evidence()
     except (SandboxRuntimeError, SandboxSecretStoreError, OSError, ValueError):
@@ -644,6 +659,8 @@ async def qbo_production_connection_evidence(
 async def qbo_production_oauth_authorize(
     authorization: _Administer,
 ) -> JSONResponse:
+    if not _production_company_is_authorized(authorization):
+        return _production_tenant_unavailable()
     identifier = hashlib.sha256(str(authorization.user.id).encode()).hexdigest()
     try:
         await _rate_limiter.enforce(

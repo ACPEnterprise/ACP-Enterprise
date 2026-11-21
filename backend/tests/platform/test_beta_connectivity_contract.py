@@ -23,7 +23,10 @@ def test_preview_runtime_accepts_both_exact_beta_origins_and_hosts() -> None:
     )
     assert environment["IDENTITY_EMAIL_ACTIVATION_ORIGIN"] == PREVIEW
     assert environment["QBO_SANDBOX_CALLBACK_URI"].startswith(f"{PREVIEW}/")
-    assert environment["QBO_PRODUCTION_CALLBACK_URI"].startswith(f"{PREVIEW}/")
+    assert environment["QBO_PRODUCTION_CALLBACK_URI"].startswith(f"{BETA}/")
+    assert environment["QBO_PRODUCTION_ACP_COMPANY_ID"] == (
+        "${QBO_PRODUCTION_ACP_COMPANY_ID:-3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd}"
+    )
 
 
 def test_beta_edge_preserves_preview_and_blocks_internal_surfaces() -> None:

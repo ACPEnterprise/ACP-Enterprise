@@ -45,6 +45,21 @@ def preview_env(sha: str) -> str:
     ) + "\n"
 
 
+def qbo_production_preview_env(sha: str) -> str:
+    enabled = (
+        "QBO_PRODUCTION_ENABLED=true\n"
+        "QBO_PRODUCTION_CALLBACK_URI=https://beta.twelve-hats.com/api/v1/"
+        "integrations/qbo/production/oauth/callback\n"
+        "QBO_PRODUCTION_ACP_COMPANY_ID=3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd\n"
+        "QBO_PRODUCTION_RUNTIME_ROOT=/var/lib/acp-qbo-production\n"
+        "QBO_PRODUCTION_EVIDENCE_ROOT=/var/lib/acp-qbo-production-evidence\n"
+    )
+    return preview_env(sha).replace(
+        "QBO_PRODUCTION_ENABLED=false\n",
+        enabled,
+    )
+
+
 def source_repo(tmp_path: Path) -> tuple[Path, str]:
     root = tmp_path / "builder"
     root.mkdir()
@@ -214,6 +229,59 @@ def test_stateful_and_migration_services_are_blocked() -> None:
         deployer.selected_services(("backend", "postgres"))
     with pytest.raises(deployer.DeployError, match="forbidden"):
         deployer.selected_services(("backend", "migrate"))
+
+
+def test_qbo_production_requires_exact_read_only_beta_contract(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / ".env.preview"
+    path.write_text(qbo_production_preview_env("a" * 40))
+    path.chmod(0o600)
+
+    values = deployer.validate_runtime_env(path)
+    deployer.require_qbo_production_release_authority(values, explicitly_allowed=True)
+
+    path.write_text(
+        qbo_production_preview_env("a" * 40).replace(
+            "https://beta.twelve-hats.com", "https://untrusted.invalid"
+        )
+    )
+    with pytest.raises(deployer.DeployError, match="CALLBACK_URI"):
+        deployer.validate_runtime_env(path)
+
+
+def test_qbo_production_remains_blocked_without_explicit_release_authority(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / ".env.preview"
+    path.write_text(qbo_production_preview_env("a" * 40))
+    path.chmod(0o600)
+    values = deployer.validate_runtime_env(path)
+
+    with pytest.raises(deployer.DeployError, match="explicit.*release authority"):
+        deployer.require_qbo_production_release_authority(
+            values, explicitly_allowed=False
+        )
+
+
+def test_qbo_read_only_deploy_dry_run_requires_explicit_flag(tmp_path: Path) -> None:
+    source, sha = source_repo(tmp_path)
+    root, previous = runtime_root(tmp_path)
+    (previous / ".env.preview").write_text(qbo_production_preview_env("a" * 40))
+    (previous / ".env.preview").chmod(0o600)
+    command = [
+        "deploy",
+        "--source-root",
+        str(source),
+        "--root",
+        str(root),
+        "--sha",
+        sha,
+        "--dry-run",
+    ]
+
+    assert deployer.main(command) == 1
+    assert deployer.main([*command, "--allow-qbo-production-read-only"]) == 0
 
 
 def test_atomic_switch_replaces_current_symlink(tmp_path: Path) -> None:
