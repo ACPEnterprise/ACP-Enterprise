@@ -51,7 +51,11 @@ from .native_application import (
     qbo_native_application_service,
     review_action_authority,
 )
-from .manual_archive import project_manual_profit_and_loss
+from .manual_archive import (
+    manual_archive_available,
+    manual_archive_readiness,
+    project_manual_profit_and_loss,
+)
 from .production import (
     ProductionAgedReceivablesRequest,
     ProductionProfitAndLossRequest,
@@ -158,6 +162,12 @@ def _sealed_evidence_readiness(
     try:
         packet = latest_bounded_evidence(Path(settings.qbo_production_evidence_root))
         if packet is None:
+            if settings.qbo_manual_archive_root and manual_archive_available(
+                Path(settings.qbo_manual_archive_root)
+            ):
+                return manual_archive_readiness(
+                    root=Path(settings.qbo_manual_archive_root)
+                )
             return {
                 "available": False,
                 "reason": "No complete sealed QuickBooks acquisition is available.",
@@ -177,8 +187,14 @@ def _sealed_evidence_readiness(
                 {"source_family": family, "total_source": total}
                 for family, total in sorted(families.items())
             ],
+            "evidence_mode": "bounded_api_envelopes",
+            "native_admission_ready": True,
         }
     except (KeyError, OSError, ValueError, BoundedEvidenceError):
+        if settings.qbo_manual_archive_root and manual_archive_available(
+            Path(settings.qbo_manual_archive_root)
+        ):
+            return manual_archive_readiness(root=Path(settings.qbo_manual_archive_root))
         return {
             "available": False,
             "reason": "Sealed QuickBooks evidence failed custody or digest validation.",

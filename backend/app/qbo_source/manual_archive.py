@@ -30,6 +30,38 @@ def manual_archive_available(root: Path) -> bool:
     ).is_file()
 
 
+def manual_archive_readiness(*, root: Path) -> dict[str, object]:
+    """Return custody-backed source counts without parsing or admitting records."""
+    root = root.expanduser().resolve()
+    manifest = _read_json(root / "custody-manifest.json")
+    if manifest.get("contract") != "qbo-manual-archive-custody/v1":
+        raise QboEvidenceProjectionError("manual_archive_contract_invalid")
+    files = manifest.get("files")
+    if not isinstance(files, list):
+        raise QboEvidenceProjectionError("manual_archive_file_inventory_invalid")
+    _verify_inventory(root, files)
+    register = _read_json(root / "reconciliation-register.json")
+    acquisition = _mapping(register.get("current_acquisition"))
+    counts = acquisition.get("counts")
+    if not isinstance(counts, Mapping):
+        raise QboEvidenceProjectionError("manual_archive_acquisition_counts_invalid")
+    families = [
+        {"source_family": str(family), "total_source": int(total)}
+        for family, total in sorted(counts.items())
+    ]
+    return {
+        "available": True,
+        "reason": "Verified sealed manual QuickBooks archive; native bounded-envelope admission remains separate.",
+        "source_run_id": str(acquisition.get("run_id") or "qbo-manual-20261119"),
+        "source_manifest_sha256": _sha256(root / "custody-manifest.json"),
+        "acquired_at": str(manifest.get("sealed_at") or ""),
+        "total_source_records": int(acquisition.get("record_count") or sum(int(v) for v in counts.values())),
+        "source_families": families,
+        "evidence_mode": "sealed_manual_archive",
+        "native_admission_ready": False,
+    }
+
+
 def project_manual_archive(*, root: Path, basis: str) -> dict[str, object]:
     root = root.expanduser().resolve()
     manifest = _read_json(root / "custody-manifest.json")
