@@ -737,6 +737,7 @@ async def run_november_execution(
                 record.key: record.prior_source_digest or record.source_digest
                 for record in packet.overlay_manifest.records
             },
+            allow_clean_baseline_bootstrap=envelope.clean_baseline_bootstrap,
         )
         bootstrap = CurrentOverlayLineageBootstrap(binding, packet.overlay_manifest)
         repository = SqlAlchemyCurrentOverlayRepository(
