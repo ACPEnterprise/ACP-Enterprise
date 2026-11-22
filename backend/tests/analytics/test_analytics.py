@@ -370,3 +370,38 @@ async def test_summary_excludes_missing_amount_instead_of_reporting_zero(
     assert value.cash_collected.completeness == "PARTIAL"
     assert value.booked_revenue.value is None
     assert value.booked_revenue.completeness == "PARTIAL"
+
+
+@pytest.mark.asyncio
+async def test_metric_detail_reconciles_and_is_company_scoped(
+    analytics_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = analytics_database
+    fixture = await seed_analytics_fixture(factory)
+    await seed_events(factory, fixture)
+    period_start, period_end = AnalyticsService._today_utc_range()
+    app = build_app(factory, fixture.authenticated)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/analytics/metric-detail",
+            params={
+                "metric": "cash_collected",
+                "period_start": period_start.isoformat(),
+                "period_end": period_end.isoformat(),
+            },
+            headers={"X-Company-ID": str(fixture.company_a_id)},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["company_id"] == str(fixture.company_a_id)
+    assert payload["value"] == "10.10"
+    assert payload["event_count"] == 1
+    assert payload["observed_event_count"] == 1
+    assert payload["excluded_event_count"] == 0
+    assert len(payload["events"]) == 1
+    assert all(
+        event["amount"] != "999999.99" for event in payload["events"]
+    )

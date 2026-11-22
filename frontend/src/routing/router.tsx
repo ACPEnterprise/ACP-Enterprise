@@ -42,6 +42,7 @@ import {
   jobsHandle,
   liaHandle,
   missionControlHandle,
+  missionControlMetricHandle,
   onboardingHandle,
   notFoundHandle,
   priceBookHandle,
@@ -147,6 +148,13 @@ export const appRoutes: RouteObject[] = [
               const module = await import("../routes/MissionControlRoute");
               return { Component: module.MissionControlRoute };
             },
+          },
+          {
+            path: "mission-control/drilldown",
+            handle: missionControlMetricHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/MissionControlMetricRoute")).MissionControlMetricRoute,
+            }),
           },
           {
             path: "customers",

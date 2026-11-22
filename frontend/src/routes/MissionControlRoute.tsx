@@ -4,6 +4,7 @@ import { RevenueTrendChart } from "../components/RevenueTrendChart";
 import { useHasPermission } from "../auth";
 import { KPIStatCard } from "../components/dashboard/KPIStatCard";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import type { AnalyticsMetricKey } from "../types/analytics";
 import { Alert, Card, Spinner } from "../ui";
 
 function formatCurrency(value: string | number | null): string {
@@ -29,11 +30,11 @@ export function MissionControlRoute() {
   const { data, isLoading, isError, dataUpdatedAt } = useAnalyticsSummary(canRead);
   const metrics = data
     ? [
-        { label: data.cash_collected.name, value: formatCurrency(data.cash_collected.value), detail: `${data.cash_collected.event_count ?? 0} admitted of ${data.cash_collected.observed_event_count ?? 0} payment events · ${data.cash_collected.completeness ?? "UNKNOWN"}` },
-        { label: data.booked_revenue.name, value: formatCurrency(data.booked_revenue.value), detail: `${data.booked_revenue.event_count ?? 0} admitted of ${data.booked_revenue.observed_event_count ?? 0} booking events · ${data.booked_revenue.completeness ?? "UNKNOWN"}` },
-        { label: data.new_customers.name, value: String(data.new_customers.value), detail: "Customers created today" },
-        { label: data.appointments_booked.name, value: String(data.appointments_booked.value), detail: "Appointments booked today" },
-        { label: data.total_events.name, value: String(data.total_events.value), detail: "Business events processed" },
+        { key: "cash_collected" as AnalyticsMetricKey, label: data.cash_collected.name, value: formatCurrency(data.cash_collected.value) },
+        { key: "booked_revenue" as AnalyticsMetricKey, label: data.booked_revenue.name, value: formatCurrency(data.booked_revenue.value) },
+        { key: "new_customers" as AnalyticsMetricKey, label: data.new_customers.name, value: String(data.new_customers.value) },
+        { key: "appointments_booked" as AnalyticsMetricKey, label: data.appointments_booked.name, value: String(data.appointments_booked.value) },
+        { key: "total_events" as AnalyticsMetricKey, label: data.total_events.name, value: String(data.total_events.value) },
       ]
     : [];
 
@@ -81,15 +82,18 @@ export function MissionControlRoute() {
             </Alert>
           )}
           <section className="grid gap-ui-3 sm:grid-cols-2 xl:grid-cols-5">
-            {metrics.map((metric) => <KPIStatCard key={metric.label} label={metric.label} value={metric.value} detail={metric.detail} />)}
+            {metrics.map((metric) => {
+              const params = new URLSearchParams({ metric: metric.key, period_start: data.period_start, period_end: data.period_end });
+              return <KPIStatCard key={metric.label} label={metric.label} value={metric.value} href={`/mission-control/drilldown?${params.toString()}`} />;
+            })}
           </section>
           <section className="mt-ui-6 grid gap-ui-5 xl:grid-cols-[1.5fr_1fr]">
-            <Card>
+            <Card className="dashboard-card-border">
               <p className="text-sm text-action-primary">Live Analytics</p>
               <h3 className="mt-1 text-xl font-semibold text-content">Revenue Performance</h3>
               <RevenueTrendChart />
             </Card>
-            <Card>
+            <Card className="dashboard-card-border">
               <p className="text-sm text-action-primary">Business Event Engine</p>
               <h3 className="mt-1 text-xl font-semibold text-content">Recent Activity</h3>
               <div className="mt-ui-5 space-y-ui-4">

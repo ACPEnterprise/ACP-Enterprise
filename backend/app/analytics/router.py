@@ -1,9 +1,12 @@
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.schemas import (
+    AnalyticsDrilldownResponse,
+    AnalyticsMetricKey,
     AnalyticsSummaryResponse,
     RevenueTrendResponse,
 )
@@ -58,3 +61,27 @@ async def get_revenue_trend(
         company_id=authorization.company.id,
         days=days,
     )
+
+
+@router.get(
+    "/metric-detail",
+    response_model=AnalyticsDrilldownResponse,
+)
+async def get_metric_detail(
+    session: DatabaseSession,
+    authorization: AnalyticsReader,
+    metric: AnalyticsMetricKey,
+    period_start: datetime | None = None,
+    period_end: datetime | None = None,
+) -> AnalyticsDrilldownResponse:
+    try:
+        return await AnalyticsService.get_metric_detail(
+            session=session,
+            company_id=authorization.company.id,
+            company_name=authorization.company.name,
+            metric=metric,
+            period_start=period_start,
+            period_end=period_end,
+        )
+    except ValueError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error

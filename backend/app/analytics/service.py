@@ -8,6 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.schemas import (
+    AnalyticsDrilldownEvent,
+    AnalyticsDrilldownResponse,
+    AnalyticsMetricKey,
     AnalyticsSummaryResponse,
     CountMetric,
     MetricValue,
@@ -33,6 +36,14 @@ class AnalyticsService:
     ESTIMATE_APPROVED = "estimate.approved"
     CUSTOMER_CREATED = "customer.created"
     APPOINTMENT_BOOKED = "appointment.booked"
+
+    METRIC_DEFINITIONS: dict[AnalyticsMetricKey, tuple[str, str, bool]] = {
+        "cash_collected": ("Cash Collected", PAYMENT_RECEIVED, True),
+        "booked_revenue": ("Booked Revenue", ESTIMATE_APPROVED, True),
+        "new_customers": ("New Customers", CUSTOMER_CREATED, False),
+        "appointments_booked": ("Appointments Booked", APPOINTMENT_BOOKED, False),
+        "total_events": ("Business Events", "*", False),
+    }
 
     @staticmethod
     def _decimal_from_payload(
@@ -341,4 +352,92 @@ class AnalyticsService:
             completeness=cls._completeness(observed_event_count, excluded_event_count),
             excluded_event_count=excluded_event_count,
             points=points,
+        )
+
+    @classmethod
+    async def get_metric_detail(
+        cls,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        company_name: str,
+        metric: AnalyticsMetricKey,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> AnalyticsDrilldownResponse:
+        definition = cls.METRIC_DEFINITIONS.get(metric)
+        if definition is None:
+            raise ValueError("Unsupported analytics metric.")
+        if (period_start is None) != (period_end is None):
+            raise ValueError("Both period_start and period_end are required together.")
+        if period_start is None or period_end is None:
+            period_start, period_end = cls._today_utc_range()
+        if period_start >= period_end:
+            raise ValueError("period_start must be before period_end.")
+
+        metric_name, event_type, has_amount = definition
+        statement = (
+            select(BusinessEvent)
+            .where(
+                BusinessEvent.company_id == company_id,
+                BusinessEvent.occurred_at >= period_start,
+                BusinessEvent.occurred_at <= period_end,
+            )
+            .order_by(BusinessEvent.occurred_at.desc(), BusinessEvent.created_at.desc())
+        )
+        if event_type != "*":
+            statement = statement.where(BusinessEvent.event_type == event_type)
+
+        events = list((await session.execute(statement)).scalars().all())
+        included = 0
+        excluded = 0
+        total = Decimal("0.00")
+        detail_events: list[AnalyticsDrilldownEvent] = []
+        for event in events:
+            amount_fields = (
+                ("amount", "payment_amount", "total")
+                if metric == "cash_collected"
+                else ("amount", "approved_amount", "estimate_total", "total")
+            )
+            amount = (
+                cls._decimal_from_payload(event.payload, amount_fields)
+                if has_amount
+                else None
+            )
+            if has_amount:
+                if amount is None:
+                    excluded += 1
+                else:
+                    included += 1
+                    total += amount
+            else:
+                included += 1
+            detail_events.append(
+                AnalyticsDrilldownEvent(
+                    id=event.id,
+                    event_type=event.event_type,
+                    entity_type=event.entity_type,
+                    entity_id=event.entity_id,
+                    occurred_at=event.occurred_at,
+                    amount=amount,
+                )
+            )
+
+        value: Decimal | None = total if has_amount else Decimal(included)
+        if has_amount and excluded and not included:
+            value = None
+        return AnalyticsDrilldownResponse(
+            metric=metric,
+            metric_name=metric_name,
+            company_id=company_id,
+            company_name=company_name,
+            period_start=period_start,
+            period_end=period_end,
+            timezone=settings.business_timezone,
+            value=value,
+            event_count=included,
+            observed_event_count=len(events),
+            excluded_event_count=excluded,
+            completeness=cls._completeness(len(events), excluded),
+            events=detail_events,
         )

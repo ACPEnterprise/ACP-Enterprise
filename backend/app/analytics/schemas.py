@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -39,6 +40,41 @@ class AnalyticsSummaryResponse(BaseModel):
     total_events: CountMetric
 
     recent_activity: list[RecentActivityItem]
+
+
+AnalyticsMetricKey = Literal[
+    "cash_collected",
+    "booked_revenue",
+    "new_customers",
+    "appointments_booked",
+    "total_events",
+]
+
+
+class AnalyticsDrilldownEvent(BaseModel):
+    id: UUID
+    event_type: str
+    entity_type: str
+    entity_id: UUID | None
+    occurred_at: datetime
+    amount: Decimal | None = None
+
+
+class AnalyticsDrilldownResponse(BaseModel):
+    metric: AnalyticsMetricKey
+    metric_name: str
+    company_id: UUID
+    company_name: str
+    period_start: datetime
+    period_end: datetime
+    timezone: str
+    value: Decimal | None
+    event_count: int
+    observed_event_count: int
+    excluded_event_count: int
+    completeness: str
+    authority: str = "business_event_projection"
+    events: list[AnalyticsDrilldownEvent]
 
 
 class RevenueTrendPoint(BaseModel):

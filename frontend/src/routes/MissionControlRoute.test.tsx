@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as analyticsHook from "../hooks/useAnalyticsSummary";
@@ -38,7 +39,7 @@ describe("MissionControlRoute", () => {
       isError: false,
       dataUpdatedAt: 0,
     } as never);
-    render(<MissionControlRoute />);
+    render(<MemoryRouter><MissionControlRoute /></MemoryRouter>);
     expect(screen.getByRole("status", { name: "Loading analytics" })).toBeInTheDocument();
     expect(screen.getByText("Checking analytics API")).toBeInTheDocument();
   });
@@ -50,7 +51,7 @@ describe("MissionControlRoute", () => {
       error: new Error("sql://protected-analytics-canary"),
       dataUpdatedAt: 0,
     } as never);
-    render(<MissionControlRoute />);
+    render(<MemoryRouter><MissionControlRoute /></MemoryRouter>);
     expect(screen.getByText("Analytics API unavailable")).toBeInTheDocument();
     expect(screen.queryByText("System Online")).not.toBeInTheDocument();
     expect(screen.queryByText(/protected-analytics-canary/)).not.toBeInTheDocument();
@@ -63,9 +64,11 @@ describe("MissionControlRoute", () => {
       data,
       dataUpdatedAt: Date.now(),
     } as never);
-    render(<MissionControlRoute />);
+    render(<MemoryRouter><MissionControlRoute /></MemoryRouter>);
     expect(screen.getByText("Analytics API available")).toBeInTheDocument();
     expect(screen.getByText("No recent authoritative activity is available.")).toBeInTheDocument();
+    expect(document.querySelectorAll(".dashboard-card-border")).toHaveLength(7);
+    expect(screen.getByRole("link", { name: "Cash Collected: $1,250" })).toHaveAttribute("href", expect.stringContaining("metric=cash_collected"));
     expect(screen.queryByText("Today's Revenue Goal")).not.toBeInTheDocument();
     expect(screen.queryByText("Top Technicians")).not.toBeInTheDocument();
     expect(screen.queryByText("Mike")).not.toBeInTheDocument();
@@ -77,7 +80,7 @@ describe("MissionControlRoute", () => {
       isLoading: false, isError: false, dataUpdatedAt: 0,
     } as never);
 
-    render(<MissionControlRoute />);
+    render(<MemoryRouter><MissionControlRoute /></MemoryRouter>);
 
     expect(analyticsHook.useAnalyticsSummary).toHaveBeenCalledWith(false);
     expect(screen.getByText(/not authorized to view Mission Control/i)).toBeInTheDocument();
@@ -101,9 +104,9 @@ describe("MissionControlRoute", () => {
       },
       dataUpdatedAt: Date.now(),
     } as never);
-    render(<MissionControlRoute />);
+    render(<MemoryRouter><MissionControlRoute /></MemoryRouter>);
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
-    expect(screen.getByText(/0 admitted of 1 payment events · PARTIAL/)).toBeInTheDocument();
+    expect(screen.queryByText(/admitted of .*payment events/)).not.toBeInTheDocument();
     expect(screen.getByText("Some monetary events were excluded")).toBeInTheDocument();
     expect(screen.getByText(/missing amounts were not treated as zero/)).toBeInTheDocument();
   });
@@ -118,7 +121,7 @@ describe("MissionControlRoute", () => {
       },
       dataUpdatedAt: Date.now(),
     } as never);
-    render(<MissionControlRoute />);
+    render(<MemoryRouter><MissionControlRoute /></MemoryRouter>);
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
     expect(screen.queryByText("$0")).not.toBeInTheDocument();
   });

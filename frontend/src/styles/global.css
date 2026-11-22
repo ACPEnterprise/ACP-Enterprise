@@ -294,6 +294,13 @@ body {
   border-color: var(--semantic-primary-panel-border);
 }
 
+/* Dashboard metrics and information panels use a compact, consistent accent
+ * without changing the border treatment of controls or status indicators. */
+.theme-workspace .dashboard-card-border {
+  border-width: 2px;
+  border-color: #D62828;
+}
+
 .twelve-hats-panel-outline[data-panel-tone="neutral"] {
   border-color: var(--semantic-border);
 }

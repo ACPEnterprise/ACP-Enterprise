@@ -57,6 +57,18 @@ export const missionControlHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const missionControlMetricHandle = {
+  workspace: {
+    pageTitle: "Mission Control detail",
+    breadcrumbs: [
+      { label: "Mission Control", path: "/mission-control" },
+      { label: "Metric detail" },
+    ],
+    helpTopic: "mission-control",
+    aiContext: "mission-control",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const customersHandle = {
   workspace: {
     pageTitle: "Customers",

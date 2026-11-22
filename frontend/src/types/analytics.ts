@@ -32,6 +32,39 @@ export interface AnalyticsSummary {
   recent_activity: RecentActivity[];
 }
 
+export type AnalyticsMetricKey =
+  | "cash_collected"
+  | "booked_revenue"
+  | "new_customers"
+  | "appointments_booked"
+  | "total_events";
+
+export interface AnalyticsDrilldownEvent {
+  id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string | null;
+  occurred_at: string;
+  amount: string | null;
+}
+
+export interface AnalyticsDrilldown {
+  metric: AnalyticsMetricKey;
+  metric_name: string;
+  company_id: string;
+  company_name: string;
+  period_start: string;
+  period_end: string;
+  timezone: string;
+  value: string | null;
+  event_count: number;
+  observed_event_count: number;
+  excluded_event_count: number;
+  completeness: "COMPLETE" | "PARTIAL" | "NO_EVENTS";
+  authority: string;
+  events: AnalyticsDrilldownEvent[];
+}
+
 export interface RevenueTrendPoint {
   date: string;
   booked_revenue: string | null;
