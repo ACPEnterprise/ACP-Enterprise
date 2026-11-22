@@ -329,40 +329,44 @@ class CurrentOverlayExecutor:
         ordered_records = _dependency_order(manifest.records)
         journal: list[OverlayJournalEntry] = []
         for record in ordered_records:
-            held_for_parent = False
-            for parent in record.parent_keys:
-                if (
-                    record.assertion
+            blocked_parent = next(
+                (
+                    parent
+                    for parent in record.parent_keys
+                    if record.assertion
                     in {
                         OverlayAssertion.CREATE,
                         OverlayAssertion.UPDATE,
                     }
                     and parent in blocked_keys
-                ):
-                    held = replace(
-                        record,
-                        assertion=OverlayAssertion.HOLD,
-                        payload={},
-                        reason=(
-                            "overlay parent is non-operational: "
-                            f"{parent.domain}:{parent.source_id}"
-                        ),
+                ),
+                None,
+            )
+            if blocked_parent is not None:
+                held_record = replace(
+                    record,
+                    assertion=OverlayAssertion.HOLD,
+                    payload={},
+                    reason=(
+                        "held because required parent is non-operational: "
+                        f"{blocked_parent.domain}:{blocked_parent.source_id}"
+                    ),
+                )
+                await repository.record_non_mutating_assertion(held_record)
+                blocked_keys.add(record.key)
+                journal.append(
+                    OverlayJournalEntry(
+                        record.key,
+                        OverlayAssertion.HOLD,
+                        "held",
+                        None,
+                        None,
+                        None,
+                        None,
                     )
-                    await repository.record_non_mutating_assertion(held)
-                    blocked_keys.add(record.key)
-                    journal.append(
-                        OverlayJournalEntry(
-                            record.key,
-                            record.assertion,
-                            "held",
-                            None,
-                            None,
-                            None,
-                            None,
-                        )
-                    )
-                    held_for_parent = True
-                    break
+                )
+                continue
+            for parent in record.parent_keys:
                 if (
                     parent not in keys
                     and (
@@ -373,21 +377,6 @@ class CurrentOverlayExecutor:
                     and not await repository.source_exists(parent)
                 ):
                     raise ValueError("overlay parent source identity missing")
-            if held_for_parent:
-                continue
-            if record.assertion is OverlayAssertion.HOLD:
-                journal.append(
-                    OverlayJournalEntry(
-                        record.key,
-                        record.assertion,
-                        "held",
-                        None,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-                continue
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
                 after: OverlaySourceState | None
@@ -484,30 +473,7 @@ class CurrentOverlayExecutor:
                     )
                     continue
                 if state is None or record.prior_source_digest != state.source_digest:
-                    # A stale or independently changed source row must not abort
-                    # unrelated historical admission.  Preserve the source
-                    # assertion as a durable hold and continue the atomic packet
-                    # with no native write for this record.
-                    held = replace(
-                        record,
-                        assertion=OverlayAssertion.HOLD,
-                        payload={},
-                        reason="overlay update compare-before-write mismatch",
-                    )
-                    await repository.record_non_mutating_assertion(held)
-                    blocked_keys.add(record.key)
-                    journal.append(
-                        OverlayJournalEntry(
-                            record.key,
-                            record.assertion,
-                            "held",
-                            state.source_digest if state else None,
-                            state.source_digest if state else None,
-                            state.native_id if state else None,
-                            None,
-                        )
-                    )
-                    continue
+                    raise ValueError("overlay update compare-before-write mismatch")
                 if record.native_fingerprint:
                     owners = await repository.fingerprint_owners(
                         record.domain, record.native_fingerprint

@@ -1,6 +1,6 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, TypedDict
+from typing import Any, ClassVar, TypedDict
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -37,7 +37,7 @@ class AnalyticsService:
     CUSTOMER_CREATED = "customer.created"
     APPOINTMENT_BOOKED = "appointment.booked"
 
-    METRIC_DEFINITIONS: dict[AnalyticsMetricKey, tuple[str, str, bool]] = {
+    METRIC_DEFINITIONS: ClassVar[dict[AnalyticsMetricKey, tuple[str, str, bool]]] = {
         "cash_collected": ("Cash Collected", PAYMENT_RECEIVED, True),
         "booked_revenue": ("Booked Revenue", ESTIMATE_APPROVED, True),
         "new_customers": ("New Customers", CUSTOMER_CREATED, False),

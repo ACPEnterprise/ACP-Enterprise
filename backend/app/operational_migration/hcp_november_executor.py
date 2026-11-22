@@ -30,7 +30,6 @@ from app.operational_migration.hcp_current_overlay import (
 )
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_bundle import (
-    AUTHORITY_CONTRACT,
     NovemberQualificationAuthority,
     qualification_digest,
 )
@@ -821,7 +820,9 @@ async def run_november_execution(
             )
         )
         await session.rollback()
-        runtime_package_digest = authority.runtime_package_digest or authority.bundle_sha256
+        runtime_package_digest = (
+            authority.runtime_package_digest or authority.bundle_sha256
+        )
         binding = CurrentOverlayLineageBinding(
             company_id=authority.company_id,
             branch_id=authority.branch_id,

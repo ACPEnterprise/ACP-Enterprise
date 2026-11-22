@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.accounting.banking_router import router as accounting_banking_router
 from app.access_agreements.router import router as access_agreements_router
+from app.accounting.banking_router import router as accounting_banking_router
 from app.accounting.router import router as accounting_router
 from app.accounts_payable.router import router as accounts_payable_router
 from app.analytics.router import router as analytics_router
@@ -16,10 +16,10 @@ from app.beacon.router import router as beacon_router
 from app.business_economics.router import router as business_economics_router
 from app.communications.router import router as communications_router
 from app.core.config import settings
+from app.customer_import.router import router as customer_import_router
 from app.customer_migration.native_location_review import (
     router as location_identity_router,
 )
-from app.customer_import.router import router as customer_import_router
 from app.customer_migration.population_router import (
     router as customer_population_router,
 )

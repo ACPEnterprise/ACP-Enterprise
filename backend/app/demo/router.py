@@ -5,6 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.demo.enrichment import DEMO_COMPANY_ID, demo_enrichment_service
+from app.demo.estimating import create_water_heater_drafts
 from app.demo.models import DemoEnvironment, DemoFeedback, DemoScenario
 from app.demo.schemas import (
     DemoFeedbackCreate,
@@ -13,12 +15,14 @@ from app.demo.schemas import (
     DemoScenarioResponse,
 )
 from app.demo.service import sales_demo_service
-from app.demo.enrichment import DEMO_COMPANY_ID, demo_enrichment_service
-from app.demo.estimating import create_water_heater_drafts
 from app.estimates.errors import EstimateError
-from app.platform.permissions.codes import AdministrationPermission, CustomerPermission, EstimatePermission
 from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import (
+    AdministrationPermission,
+    CustomerPermission,
+    EstimatePermission,
+)
 from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(prefix="/api/v1/demo", tags=["Sales Demo"])
@@ -110,9 +114,7 @@ async def scenarios(
 
 
 @router.post("/enrich", response_model=dict[str, object])
-async def enrich(
-    context: DemoContext, session: DatabaseSession
-) -> dict[str, object]:
+async def enrich(context: DemoContext, session: DatabaseSession) -> dict[str, object]:
     """Resume the bounded synthetic Sales Forward enrichment in place.
 
     This endpoint cannot create tenants or memberships and is hard-scoped to the
@@ -148,9 +150,15 @@ async def water_heater_drafts(
         drafts = await create_water_heater_drafts(session, context=context)
         if drafts is None:
             await session.rollback()
-            raise HTTPException(status_code=422, detail="Synthetic estimating evidence is not ready.")
+            raise HTTPException(
+                status_code=422, detail="Synthetic estimating evidence is not ready."
+            )
         await session.commit()
-        return {"company_id": str(context.company.id), "synthetic": True, "drafts": drafts}
+        return {
+            "company_id": str(context.company.id),
+            "synthetic": True,
+            "drafts": drafts,
+        }
     except EstimateError as error:
         await session.rollback()
         raise HTTPException(status_code=422, detail=str(error)) from error

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -70,7 +70,9 @@ async def build_water_heater_estimate(
             await session.scalars(
                 select(PriceBookCommercialSnapshot).where(
                     PriceBookCommercialSnapshot.company_id == DEMO_COMPANY_ID,
-                    PriceBookCommercialSnapshot.service_item_id.in_([item.id for item in items]),
+                    PriceBookCommercialSnapshot.service_item_id.in_(
+                        [item.id for item in items]
+                    ),
                 )
             )
         ).all()
@@ -92,7 +94,21 @@ async def build_water_heater_estimate(
     )
     observed_at = datetime.now(UTC)
     rows: list[str] = []
-    labels = (("GOOD", "WH-ELECTRIC-50", Decimal("0.35"), "reliable standard replacement"), ("BETTER", "WH-ELECTRIC-50-PREM", Decimal("0.45"), "premium efficiency and longer warranty"), ("BEST", "WH-ELECTRIC-50-PLUS", Decimal("0.55"), "enhanced protection, expansion control, and priority warranty"))
+    labels = (
+        ("GOOD", "WH-ELECTRIC-50", Decimal("0.35"), "reliable standard replacement"),
+        (
+            "BETTER",
+            "WH-ELECTRIC-50-PREM",
+            Decimal("0.45"),
+            "premium efficiency and longer warranty",
+        ),
+        (
+            "BEST",
+            "WH-ELECTRIC-50-PLUS",
+            Decimal("0.55"),
+            "enhanced protection, expansion control, and priority warranty",
+        ),
+    )
     evidence: list[EvidenceReference] = []
     packages: list[tuple[str, UUID, str, Decimal]] = []
     profitability_flags: list[str] = []
@@ -105,29 +121,85 @@ async def build_water_heater_estimate(
         overhead = Decimal(str(data.get("allocated_overhead", "0")))
         direct_cost = material + labor + equipment
         break_even = _money(direct_cost + overhead)
-        target_price = _money(break_even / (Decimal("1") - target_margin))
+        target_price = _money(break_even / (Decimal(1) - target_margin))
         selling_price = _money(snapshot.unit_price)
         direct_profit = selling_price - direct_cost
         contribution = selling_price - direct_cost - overhead
-        direct_margin = _money((direct_profit / selling_price) * Decimal("100")) if selling_price else Decimal("0")
-        contribution_margin = _money((contribution / selling_price) * Decimal("100")) if selling_price else Decimal("0")
-        rows.append(f"{label}: ${selling_price:,.2f} · {benefit}; direct cost ${direct_cost:,.2f}; break-even after allocated overhead ${break_even:,.2f}; target floor ${target_price:,.2f}; direct gross margin {direct_margin:.2f}%; contribution after overhead ${contribution:,.2f} ({contribution_margin:.2f}%).")
+        direct_margin = (
+            _money((direct_profit / selling_price) * Decimal(100))
+            if selling_price
+            else Decimal(0)
+        )
+        contribution_margin = (
+            _money((contribution / selling_price) * Decimal(100))
+            if selling_price
+            else Decimal(0)
+        )
+        rows.append(
+            f"{label}: ${selling_price:,.2f} · {benefit}; direct cost ${direct_cost:,.2f}; break-even after allocated overhead ${break_even:,.2f}; target floor ${target_price:,.2f}; direct gross margin {direct_margin:.2f}%; contribution after overhead ${contribution:,.2f} ({contribution_margin:.2f}%)."
+        )
         if selling_price < break_even:
-            profitability_flags.append(f"{label} is below break-even by ${break_even - selling_price:,.2f}.")
+            profitability_flags.append(
+                f"{label} is below break-even by ${break_even - selling_price:,.2f}."
+            )
         elif selling_price < target_price:
-            profitability_flags.append(f"{label} is below its target-profit floor by ${target_price - selling_price:,.2f}; review scope or price before approval.")
+            profitability_flags.append(
+                f"{label} is below its target-profit floor by ${target_price - selling_price:,.2f}; review scope or price before approval."
+            )
         packages.append((label, snapshot.id, benefit, selling_price))
-        evidence.append(EvidenceReference(domain="price_book", label=f"{label} Price Book snapshot", authority="SYNTHETIC_DEMO_PRICE_BOOK", observed_at=observed_at, freshness="CURRENT_QUERY", entity_id=snapshot.id, evidence_digest=snapshot.digest, count=1, state="ACTIVE", source_contract_version="sales-demo-price-book.v2", company_id=DEMO_COMPANY_ID, branch_ids=(context.active_branch.id,) if context.active_branch else (), limitations=("Synthetic demonstration data; not All County pricing.",)))
+        evidence.append(
+            EvidenceReference(
+                domain="price_book",
+                label=f"{label} Price Book snapshot",
+                authority="SYNTHETIC_DEMO_PRICE_BOOK",
+                observed_at=observed_at,
+                freshness="CURRENT_QUERY",
+                entity_id=snapshot.id,
+                evidence_digest=snapshot.digest,
+                count=1,
+                state="ACTIVE",
+                source_contract_version="sales-demo-price-book.v2",
+                company_id=DEMO_COMPANY_ID,
+                branch_ids=(context.active_branch.id,) if context.active_branch else (),
+                limitations=("Synthetic demonstration data; not All County pricing.",),
+            )
+        )
     economics_digest = "sales-demo-economics-v2".ljust(64, "0")[:64]
-    evidence.append(EvidenceReference(domain="business-economics", label="Comparable completed job-cost evidence", authority="SYNTHETIC_DEMO_JOB_COST", observed_at=observed_at, freshness="CURRENT_QUERY", evidence_digest=economics_digest, count=historical_count, state="ADMITTED", source_contract_version="sales-demo-economics.v2", company_id=DEMO_COMPANY_ID, branch_ids=(context.active_branch.id,) if context.active_branch else (), limitations=("Historical averages support comparison; they are not guaranteed future costs.",)))
-    answer = ("DEMO — SYNTHETIC BUSINESS DATA\n\n"
-              "I found three active Price Book packages and admitted comparable job-cost evidence. "
-              "Break-even includes direct material, labor, equipment, and the disclosed $120 allocated overhead method; it is not an automatically approved customer price.\n\n"
-              + "\n".join(rows)
-              + "\n\nProfitability flags: " + (" ".join(profitability_flags) if profitability_flags else "None; all packages meet break-even and target floors.")
-              + "\n\nThe direct gross margin is shown separately from contribution after allocated overhead. "
-                "Edit scope, quantities, costs, or target margins in the draft Estimate before any external send; approval remains required. Historical evidence is synthetic and tenant-scoped.")
-    return DemoEstimateResult(answer=answer, evidence=tuple(evidence), packages=tuple(packages))
+    evidence.append(
+        EvidenceReference(
+            domain="business-economics",
+            label="Comparable completed job-cost evidence",
+            authority="SYNTHETIC_DEMO_JOB_COST",
+            observed_at=observed_at,
+            freshness="CURRENT_QUERY",
+            evidence_digest=economics_digest,
+            count=historical_count,
+            state="ADMITTED",
+            source_contract_version="sales-demo-economics.v2",
+            company_id=DEMO_COMPANY_ID,
+            branch_ids=(context.active_branch.id,) if context.active_branch else (),
+            limitations=(
+                "Historical averages support comparison; they are not guaranteed future costs.",
+            ),
+        )
+    )
+    answer = (
+        "DEMO — SYNTHETIC BUSINESS DATA\n\n"
+        "I found three active Price Book packages and admitted comparable job-cost evidence. "
+        "Break-even includes direct material, labor, equipment, and the disclosed $120 allocated overhead method; it is not an automatically approved customer price.\n\n"
+        + "\n".join(rows)
+        + "\n\nProfitability flags: "
+        + (
+            " ".join(profitability_flags)
+            if profitability_flags
+            else "None; all packages meet break-even and target floors."
+        )
+        + "\n\nThe direct gross margin is shown separately from contribution after allocated overhead. "
+        "Edit scope, quantities, costs, or target margins in the draft Estimate before any external send; approval remains required. Historical evidence is synthetic and tenant-scoped."
+    )
+    return DemoEstimateResult(
+        answer=answer, evidence=tuple(evidence), packages=tuple(packages)
+    )
 
 
 async def create_water_heater_drafts(
@@ -199,7 +271,15 @@ async def create_water_heater_drafts(
             )
         )
         if existing is not None:
-            drafts.append({"label": label, "estimate_id": str(existing.id), "estimate_number": existing.estimate_number, "status": existing.status, "selling_price": str(selling_price)})
+            drafts.append(
+                {
+                    "label": label,
+                    "estimate_id": str(existing.id),
+                    "estimate_number": existing.estimate_number,
+                    "status": existing.status,
+                    "selling_price": str(selling_price),
+                }
+            )
             continue
         # Evidence lookups autobegin a read transaction; the existing Estimate
         # service owns its own write transaction, so close the read scope first.
@@ -216,8 +296,22 @@ async def create_water_heater_drafts(
                 customer_message=f"DEMO — SYNTHETIC BUSINESS DATA. {label} package: {benefit}. No external communication will be sent.",
                 terms="Review and edit this draft before any approval or external send.",
                 expires_at=None,
-                lines=(EstimateLineSpec(snapshot_id=snapshot_id, title=title, description=f"Synthetic {label} package backed by the Demo Price Book and immutable commercial snapshot."),),
+                lines=(
+                    EstimateLineSpec(
+                        snapshot_id=snapshot_id,
+                        title=title,
+                        description=f"Synthetic {label} package backed by the Demo Price Book and immutable commercial snapshot.",
+                    ),
+                ),
             ),
         )
-        drafts.append({"label": label, "estimate_id": str(created.id), "estimate_number": created.estimate_number, "status": created.status, "selling_price": str(selling_price)})
+        drafts.append(
+            {
+                "label": label,
+                "estimate_id": str(created.id),
+                "estimate_number": created.estimate_number,
+                "status": created.status,
+                "selling_price": str(selling_price),
+            }
+        )
     return tuple(drafts)

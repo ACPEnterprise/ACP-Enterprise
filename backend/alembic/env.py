@@ -1,6 +1,7 @@
 from logging.config import fileConfig
 
 from alembic import context
+from app.access_agreements import models as access_agreement_models  # noqa: F401
 from app.accounting import models as accounting_models  # noqa: F401
 from app.accounts_payable import models as accounts_payable_models  # noqa: F401
 from app.beacon import models as beacon_models  # noqa: F401
@@ -8,11 +9,10 @@ from app.business_economics import models as business_economics_models  # noqa: 
 from app.communications import (
     suppression as communication_suppression_models,  # noqa: F401
 )
-from app.demo import models as demo_models  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base
-from app.customer_migration import models as customer_migration_models  # noqa: F401
 from app.customer_import import models as customer_import_models  # noqa: F401
+from app.customer_migration import models as customer_migration_models  # noqa: F401
 from app.customers import models as customer_models  # noqa: F401
 from app.demo import models as demo_models  # noqa: F401
 from app.dispatch import models as dispatch_models  # noqa: F401

@@ -13,6 +13,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.lia_context import customer_lia_context_service
+from app.demo.estimating import (
+    build_water_heater_estimate,
+    is_good_better_best_question,
+)
 from app.jobs.lia_context import job_lia_context_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.timekeeping.models import PayPeriod
@@ -48,7 +52,6 @@ from .security import (
     matches_any,
 )
 from .temporal import resolve_temporal_context
-from app.demo.estimating import build_water_heater_estimate, is_good_better_best_question
 
 logger = logging.getLogger("app.lia.audit")
 POLICY_VERSION = "lia-governed-assistant/v1"
@@ -204,8 +207,12 @@ class LiaService:
                         "No external AI provider was invoked and no estimate was sent or approved.",
                     ),
                     navigation=(
-                        NavigationSuggestion(label="Open Price Book", internal_path="/price-book"),
-                        NavigationSuggestion(label="Open Estimates", internal_path="/estimates"),
+                        NavigationSuggestion(
+                            label="Open Price Book", internal_path="/price-book"
+                        ),
+                        NavigationSuggestion(
+                            label="Open Estimates", internal_path="/estimates"
+                        ),
                     ),
                     safe_next_action="Review and edit the draft Estimate before requesting approval.",
                 )

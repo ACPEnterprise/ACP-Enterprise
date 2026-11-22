@@ -5,7 +5,6 @@ import zipfile
 from uuid import uuid4
 
 import pytest
-
 from app.customer_import.engine import (
     CustomerImportEngine,
     CustomerImportMapping,
@@ -114,7 +113,7 @@ def test_xlsx_staging_uses_first_worksheet_and_same_validation_contract() -> Non
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
             '<Relationship Id="rId1" Target="worksheets/sheet1.xml" '
             'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/>'
-            '</Relationships>',
+            "</Relationships>",
         )
         workbook.writestr(
             "xl/worksheets/sheet1.xml",
@@ -123,13 +122,15 @@ def test_xlsx_staging_uses_first_worksheet_and_same_validation_contract() -> Non
             '<c r="B1" t="inlineStr"><is><t>Name</t></is></c></row>'
             '<row r="2"><c r="A2" t="inlineStr"><is><t>x-1</t></is></c>'
             '<c r="B2" t="inlineStr"><is><t>Xavier</t></is></c></row></sheetData>'
-            '</worksheet>',
+            "</worksheet>",
         )
     result = CustomerImportEngine().stage(
         content.getvalue(),
         filename="customers.xlsx",
         scope=scope(),
-        mapping=CustomerImportMapping(source_record_id="ID", fields={"display_name": "Name"}),
+        mapping=CustomerImportMapping(
+            source_record_id="ID", fields={"display_name": "Name"}
+        ),
     )
     assert result.file_format == "xlsx"
     assert result.counts.ready == 1
@@ -153,7 +154,9 @@ def test_duplicate_headers_fail_closed() -> None:
             b"ID,ID,Name\nx-1,x-1,Xavier\n",
             filename="customers.csv",
             scope=scope(),
-            mapping=CustomerImportMapping(source_record_id="ID", fields={"display_name": "Name"}),
+            mapping=CustomerImportMapping(
+                source_record_id="ID", fields={"display_name": "Name"}
+            ),
         )
 
 

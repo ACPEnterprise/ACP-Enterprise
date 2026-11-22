@@ -75,18 +75,27 @@ from app.operational_migration.models import (
 from app.operational_migration.repository import OperationalMigrationRepository
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.scheduling.errors import SchedulingValidationError
 from app.scheduling.models import Appointment
 from app.scheduling.service import (
     MigrateAppointmentCommand,
     RescheduleAppointmentCommand,
     SchedulingService,
 )
-from app.scheduling.errors import SchedulingValidationError
 from app.scheduling.types import (
     AppointmentReference,
     AppointmentRescheduleReason,
     AppointmentStatus,
 )
+
+
+def _bounded_hold_code(reason: str) -> str:
+    """Fit a hold reason into the persisted 100-character display code."""
+    if len(reason) <= 100:
+        return reason
+    suffix = hashlib.sha256(reason.encode("utf-8")).hexdigest()[:12]
+    return f"{reason[:87]}~{suffix}"
+
 
 SOURCE_SYSTEM = "housecall_pro_source4"
 TRANSFORMATION_VERSION = "hcp-current-native-overlay/v1"
@@ -367,7 +376,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             KeyError,
             ValueError,
         ) as error:
-            raise OverlayDomainHold(f"source record validation failed: {error}") from error
+            raise OverlayDomainHold(
+                f"source record validation failed: {error}"
+            ) from error
         return OverlaySourceState(record.source_digest, str(native.id), record.payload)
 
     async def update(
@@ -415,7 +426,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 master_run_id=self.master_run_id,
                 entity_kind=record.domain,
                 native_id=record.source_id,
-                hold_code=(record.reason or f"overlay_{record.assertion.value}")[:100],
+                hold_code=_bounded_hold_code(
+                    record.reason or f"overlay_{record.assertion.value}"
+                ),
                 package_digest=self.package_digest,
                 evidence_digest=record.source_digest,
                 reconciliation_key=f"{record.domain}:{record.source_id}"[:191],

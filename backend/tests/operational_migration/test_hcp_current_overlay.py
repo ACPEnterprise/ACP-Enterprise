@@ -128,7 +128,9 @@ def manifest(*records: OverlayRecord) -> CurrentOverlayManifest:
 
 
 def test_hcp_source4_namespace_is_distinct_from_legacy_hcp_namespace() -> None:
-    value = manifest(record("cus_namespace", OverlayAssertion.CREATE, domain="customer"))
+    value = manifest(
+        record("cus_namespace", OverlayAssertion.CREATE, domain="customer")
+    )
 
     assert value.source_system == "housecall_pro_source4"
     with pytest.raises(ValueError, match="current overlay digest mismatch"):
@@ -251,9 +253,13 @@ async def test_ambiguous_customer_match_is_held_and_replay_does_not_mutate() -> 
 
 
 @pytest.mark.asyncio
-async def test_customer_roster_admission_is_independent_of_jobs_and_accounting() -> None:
+async def test_customer_roster_admission_is_independent_of_jobs_and_accounting() -> (
+    None
+):
     repository = MemoryRepository()
-    value = manifest(record("cus_roster_only", OverlayAssertion.CREATE, domain="customer"))
+    value = manifest(
+        record("cus_roster_only", OverlayAssertion.CREATE, domain="customer")
+    )
 
     receipt = await CurrentOverlayExecutor().execute(
         repository,
@@ -267,7 +273,10 @@ async def test_customer_roster_admission_is_independent_of_jobs_and_accounting()
     assert repository.states[OverlayKey("customer", "cus_roster_only")].native_id == (
         "native-cus_roster_only"
     )
-    assert not any(key.domain in {"job", "estimate", "invoice", "payment"} for key in repository.states)
+    assert not any(
+        key.domain in {"job", "estimate", "invoice", "payment"}
+        for key in repository.states
+    )
 
 
 @pytest.mark.asyncio

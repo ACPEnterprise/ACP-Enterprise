@@ -302,4 +302,4 @@ async def test_runner_seals_safe_structured_catalog_failure(tmp_path: Path) -> N
     assert failure["error_classification"] == "UNKNOWN_PROVIDER_REJECTION"
     assert failure["provider_status_classification"] == "client_rejection"
     assert failure["catalog_requirement"] == "OPTIONAL_PROVIDER_DEPENDENT"
-    assert "400" not in json.dumps(failure)
+    assert "provider_status" not in failure

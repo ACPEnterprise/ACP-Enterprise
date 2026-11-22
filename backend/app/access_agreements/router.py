@@ -8,11 +8,15 @@ from app.database.session import get_database_session
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import UnrestrictedAuthorization
 
-from .schemas import AgreementAcceptRequest, AgreementReceiptResponse, CurrentAgreementResponse
+from .schemas import (
+    AgreementAcceptRequest,
+    AgreementReceiptResponse,
+    CurrentAgreementResponse,
+)
 from .service import (
+    SALES_DEMO_ROLE,
     AgreementNotConfiguredError,
     AgreementValidationError,
-    SALES_DEMO_ROLE,
     access_agreement_service,
 )
 
@@ -42,7 +46,9 @@ async def current_agreement(
     context: UnrestrictedAuthorization,
     session: Session,
 ) -> CurrentAgreementResponse:
-    document, acceptance = await access_agreement_service.current(session, context=context)
+    document, acceptance = await access_agreement_service.current(
+        session, context=context
+    )
     if document is None:
         return CurrentAgreementResponse(
             required=SALES_DEMO_ROLE in context.role_codes,
@@ -85,6 +91,7 @@ async def accept_agreement(
         )
         await session.commit()
         from .models import AccessAgreementDocument
+
         document = await session.get(AccessAgreementDocument, receipt.agreement_id)
         assert document is not None
         return _receipt(receipt, document)
@@ -100,11 +107,15 @@ async def get_receipt(
     session: Session,
 ) -> AgreementReceiptResponse:
     from sqlalchemy import select
+
     from .models import AccessAgreementAcceptance, AccessAgreementDocument
 
     row = await session.execute(
         select(AccessAgreementAcceptance, AccessAgreementDocument)
-        .join(AccessAgreementDocument, AccessAgreementDocument.id == AccessAgreementAcceptance.agreement_id)
+        .join(
+            AccessAgreementDocument,
+            AccessAgreementDocument.id == AccessAgreementAcceptance.agreement_id,
+        )
         .where(
             AccessAgreementAcceptance.id == receipt_id,
             AccessAgreementAcceptance.company_id == context.company.id,
@@ -113,6 +124,8 @@ async def get_receipt(
     receipt, document = row.one_or_none() or (None, None)
     if receipt is None:
         raise HTTPException(status_code=404, detail="Agreement receipt not found.")
-    if receipt.user_id != context.user.id and not context.has_permission(AdministrationPermission.COMPANY_ADMINISTER):
+    if receipt.user_id != context.user.id and not context.has_permission(
+        AdministrationPermission.COMPANY_ADMINISTER
+    ):
         raise HTTPException(status_code=403, detail="Agreement receipt access denied.")
     return _receipt(receipt, document)

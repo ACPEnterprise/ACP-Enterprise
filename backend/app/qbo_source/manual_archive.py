@@ -15,8 +15,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from zipfile import ZipFile
+from typing import Any, cast
 from xml.etree import ElementTree
+from zipfile import ZipFile
 
 from .errors import QboEvidenceProjectionError
 
@@ -45,6 +46,7 @@ def manual_archive_readiness(*, root: Path) -> dict[str, object]:
     counts = acquisition.get("counts")
     if not isinstance(counts, Mapping):
         raise QboEvidenceProjectionError("manual_archive_acquisition_counts_invalid")
+    counts = cast(Mapping[str, Any], counts)
     families = [
         {"source_family": str(family), "total_source": int(total)}
         for family, total in sorted(counts.items())
@@ -55,7 +57,10 @@ def manual_archive_readiness(*, root: Path) -> dict[str, object]:
         "source_run_id": str(acquisition.get("run_id") or "qbo-manual-20261119"),
         "source_manifest_sha256": _sha256(root / "custody-manifest.json"),
         "acquired_at": str(manifest.get("sealed_at") or ""),
-        "total_source_records": int(acquisition.get("record_count") or sum(int(v) for v in counts.values())),
+        "total_source_records": int(
+            cast(Any, acquisition.get("record_count"))
+            or sum(int(cast(Any, v)) for v in counts.values())
+        ),
         "source_families": families,
         "evidence_mode": "sealed_manual_archive",
         "native_admission_ready": False,
@@ -84,34 +89,38 @@ def project_manual_archive(*, root: Path, basis: str) -> dict[str, object]:
         f"historical:{realm_id}:{company_name}".encode()
     ).hexdigest()
     as_of = str(acquisition.get("cutoff") or "2026-11-19")
-    acquired_at = str(manifest.get("sealed_at") or datetime.now(timezone.utc).isoformat())
+    acquired_at = str(
+        manifest.get("sealed_at") or datetime.now(timezone.utc).isoformat()
+    )
 
     account_rows = [
         row
         for row in _data_rows(
-        root / "raw" / "All County Plumbing and Leak_Account List.xlsx",
-        header_contains="Account Name",
+            root / "raw" / "All County Plumbing and Leak_Account List.xlsx",
+            header_contains="Account Name",
         )
         if row.get("Account Name") and row.get("Type")
     ]
     invoice_rows = [
         row
         for row in _data_rows(
-        root / "raw" / "All County Plumbing and Leak_Invoice List by Date.xlsx",
-        header_contains="Transaction type",
+            root / "raw" / "All County Plumbing and Leak_Invoice List by Date.xlsx",
+            header_contains="Transaction type",
         )
         if row.get("Transaction type") == "Invoice"
     ]
     vendor_rows = [
         row
         for row in _data_rows(
-        root / "raw" / "All County Plumbing and Leak_Vendor Contact List.xlsx",
-        header_contains="Vendor",
+            root / "raw" / "All County Plumbing and Leak_Vendor Contact List.xlsx",
+            header_contains="Vendor",
         )
         if row.get("Vendor") and row.get("Track 1099") is not None
     ]
     accounts = [_account(row, index) for index, row in enumerate(account_rows)]
-    invoices = [_invoice(row, index) for index, row in enumerate(invoice_rows)]
+    invoices: list[dict[str, Any]] = [
+        _invoice(row, index) for index, row in enumerate(invoice_rows)
+    ]
     vendors = [_vendor(row, index) for index, row in enumerate(vendor_rows)]
     report_controls = _report_controls(root, as_of, basis)
     discrepancies = register.get("discrepancies")
@@ -119,9 +128,12 @@ def project_manual_archive(*, root: Path, basis: str) -> dict[str, object]:
     counts = acquisition.get("counts")
     entity_counts = dict(counts) if isinstance(counts, Mapping) else {}
     open_total = sum(
-        (Decimal(str(item["open_balance"]["amount"])) for item in invoices
-         if item["open_balance"]["amount"] is not None),
-        Decimal("0"),
+        (
+            Decimal(str(item["open_balance"]["amount"]))
+            for item in invoices
+            if item["open_balance"]["amount"] is not None
+        ),
+        Decimal(0),
     )
     return {
         "contract_version": "qbo-accounting-evidence/v1",
@@ -161,10 +173,14 @@ def project_manual_archive(*, root: Path, basis: str) -> dict[str, object]:
             "total_open": _amount(open_total),
             "invoice_evidence_count": len(invoices),
             "open_invoice_count": sum(
-                1 for item in invoices if Decimal(str(item["open_balance"]["amount"] or 0)) > 0
+                1
+                for item in invoices
+                if Decimal(str(item["open_balance"]["amount"] or 0)) > 0
             ),
             "closed_invoice_count": sum(
-                1 for item in invoices if Decimal(str(item["open_balance"]["amount"] or 0)) <= 0
+                1
+                for item in invoices
+                if Decimal(str(item["open_balance"]["amount"] or 0)) <= 0
             ),
             "current": _amount(None),
             "overdue": _amount(None),
@@ -187,7 +203,10 @@ def project_manual_profit_and_loss(
     manifest = _read_json(root / "custody-manifest.json")
     if manifest.get("contract") != "qbo-manual-archive-custody/v1":
         raise QboEvidenceProjectionError("manual_archive_contract_invalid")
-    _verify_inventory(root, manifest.get("files", []))
+    pnl_files = manifest.get("files", [])
+    if not isinstance(pnl_files, list):
+        raise QboEvidenceProjectionError("manual_archive_file_inventory_invalid")
+    _verify_inventory(root, pnl_files)
     register = _read_json(root / "reconciliation-register.json")
     connection = _mapping(register.get("connection"))
     company_name = _required_text(connection, "company_name")
@@ -221,7 +240,9 @@ def project_manual_profit_and_loss(
         for row in rows
         if any(value not in {None, ""} for value in row.values())
     ]
-    raw_digest = _sha256(root / "raw" / "All County Plumbing and Leak_Profit and Loss.xlsx")
+    raw_digest = _sha256(
+        root / "raw" / "All County Plumbing and Leak_Profit and Loss.xlsx"
+    )
     return {
         "contract_version": "qbo-source-backed-financial-report/v1",
         "report_type": "profit_and_loss",
@@ -234,14 +255,21 @@ def project_manual_profit_and_loss(
         "end_date": end_date,
         "accounting_basis": basis,
         "currency": "USD",
-        "source_as_of": str(_mapping(register.get("current_acquisition")).get("cutoff") or end_date),
-        "acquired_at": str(manifest.get("sealed_at") or datetime.now(timezone.utc).isoformat()),
+        "source_as_of": str(
+            _mapping(register.get("current_acquisition")).get("cutoff") or end_date
+        ),
+        "acquired_at": str(
+            manifest.get("sealed_at") or datetime.now(timezone.utc).isoformat()
+        ),
         "columns": ["Account", "Total"],
         "rows": projected,
         "source_digest": raw_digest,
         "accepted_as_acp_accounting": False,
         "mutation_authority": "none",
-        "limitations": ["sealed_manual_report_archive", "report_basis_is_provider_export_metadata"],
+        "limitations": [
+            "sealed_manual_report_archive",
+            "report_basis_is_provider_export_metadata",
+        ],
     }
 
 
@@ -252,7 +280,12 @@ def _verify_inventory(root: Path, files: list[object]) -> None:
         name = entry.get("name")
         expected = entry.get("sha256")
         expected_bytes = entry.get("bytes")
-        if not isinstance(name, str) or "/" in name or not isinstance(expected, str):
+        if (
+            not isinstance(name, str)
+            or "/" in name
+            or not isinstance(expected, str)
+            or not isinstance(expected_bytes, (int, str))
+        ):
             raise QboEvidenceProjectionError("manual_archive_file_inventory_invalid")
         path = root / (Path("raw") / name if name != "custody-manifest.json" else name)
         if not path.is_file() or path.stat().st_size != int(expected_bytes):
@@ -290,7 +323,9 @@ def _xlsx_rows(path: Path) -> list[list[str | None]]:
             try:
                 root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
                 for item in root.findall(_NS + "si"):
-                    shared.append("".join(text.text or "" for text in item.iter(_NS + "t")))
+                    shared.append(
+                        "".join(text.text or "" for text in item.iter(_NS + "t"))
+                    )
             except KeyError:
                 pass
             sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
@@ -327,7 +362,7 @@ def _account(row: Mapping[str, str | None], index: int) -> dict[str, object]:
     }
 
 
-def _invoice(row: Mapping[str, str | None], index: int) -> dict[str, object]:
+def _invoice(row: Mapping[str, str | None], index: int) -> dict[str, Any]:
     return {
         "source_id": f"manual-invoice-{index + 1}",
         "document_number": row.get("Num"),
@@ -402,7 +437,11 @@ def _date(value: str | None) -> str | None:
     if not value:
         return None
     match = _DATE_RE.fullmatch(value.strip())
-    return f"{match.group(3)}-{int(match.group(1)):02d}-{int(match.group(2)):02d}" if match else value
+    return (
+        f"{match.group(3)}-{int(match.group(1)):02d}-{int(match.group(2)):02d}"
+        if match
+        else value
+    )
 
 
 def _mapping(value: object) -> Mapping[str, object]:

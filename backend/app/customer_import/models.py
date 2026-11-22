@@ -34,7 +34,9 @@ class CustomerImportBatch(Base):
     __tablename__ = "customer_import_batches"
     __table_args__ = (
         UniqueConstraint("batch_key", name="uq_customer_import_batch_key"),
-        UniqueConstraint("id", "company_id", "branch_id", name="uq_customer_import_batch_scope"),
+        UniqueConstraint(
+            "id", "company_id", "branch_id", name="uq_customer_import_batch_scope"
+        ),
         UniqueConstraint(
             "company_id",
             "branch_id",
@@ -70,7 +72,9 @@ class CustomerImportBatch(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     batch_key: Mapped[str] = mapped_column(String(64), nullable=False)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -88,12 +92,17 @@ class CustomerImportBatch(Base):
     cursor_row: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="staged")
     migration_run_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("customer_migration_runs.id", ondelete="RESTRICT")
+        PGUUID(as_uuid=True),
+        ForeignKey("customer_migration_runs.id", ondelete="RESTRICT"),
     )
     created_by_user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
@@ -104,8 +113,12 @@ class CustomerImportRow(Base):
 
     __tablename__ = "customer_import_rows"
     __table_args__ = (
-        UniqueConstraint("batch_id", "row_number", name="uq_customer_import_row_number"),
-        UniqueConstraint("batch_id", "source_identity_key", name="uq_customer_import_row_identity"),
+        UniqueConstraint(
+            "batch_id", "row_number", name="uq_customer_import_row_number"
+        ),
+        UniqueConstraint(
+            "batch_id", "source_identity_key", name="uq_customer_import_row_identity"
+        ),
         CheckConstraint(
             "disposition IN ('ready', 'duplicate', 'held', 'rejected')",
             name="ck_customer_import_row_disposition",
@@ -123,7 +136,9 @@ class CustomerImportRow(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     batch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -134,10 +149,14 @@ class CustomerImportRow(Base):
     disposition: Mapped[str] = mapped_column(String(20), nullable=False)
     reason_code: Mapped[str | None] = mapped_column(String(80))
     payload: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
-    validation_errors: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    validation_errors: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
     processed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -146,7 +165,9 @@ class CustomerImportAuditEvent(Base):
 
     __tablename__ = "customer_import_audit_events"
     __table_args__ = (
-        UniqueConstraint("batch_id", "event_key", name="uq_customer_import_audit_event"),
+        UniqueConstraint(
+            "batch_id", "event_key", name="uq_customer_import_audit_event"
+        ),
         ForeignKeyConstraint(
             ["batch_id", "company_id", "branch_id"],
             [
@@ -157,17 +178,30 @@ class CustomerImportAuditEvent(Base):
             name="fk_customer_import_audit_batch_scope",
             ondelete="RESTRICT",
         ),
-        Index("ix_customer_import_audit_tenant_created", "company_id", "branch_id", "created_at"),
+        Index(
+            "ix_customer_import_audit_tenant_created",
+            "company_id",
+            "branch_id",
+            "created_at",
+        ),
     )
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     batch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     event_key: Mapped[str] = mapped_column(String(191), nullable=False)
     event_type: Mapped[str] = mapped_column(String(80), nullable=False)
     actor_user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
     )
-    details: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    details: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

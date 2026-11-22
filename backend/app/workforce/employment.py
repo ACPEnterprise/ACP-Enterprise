@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -79,9 +79,9 @@ class EmployeeEmploymentService:
                         )
                 employee.home_branch_id = data.home_branch_id
             if "phone" in data.model_fields_set:
-                employee.phone = requested_values["phone"]
+                employee.phone = data.phone.strip() if data.phone else None
             if "job_title" in data.model_fields_set:
-                employee.job_title = requested_values["job_title"]
+                employee.job_title = data.job_title.strip() if data.job_title else None
 
             now = datetime.now(timezone.utc)
             employee.updated_at = now

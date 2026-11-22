@@ -402,6 +402,4 @@ async def test_metric_detail_reconciles_and_is_company_scoped(
     assert payload["observed_event_count"] == 1
     assert payload["excluded_event_count"] == 0
     assert len(payload["events"]) == 1
-    assert all(
-        event["amount"] != "999999.99" for event in payload["events"]
-    )
+    assert all(event["amount"] != "999999.99" for event in payload["events"])

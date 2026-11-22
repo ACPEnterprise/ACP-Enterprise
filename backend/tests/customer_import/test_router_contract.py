@@ -1,28 +1,34 @@
 from __future__ import annotations
 
-import os
 import inspect
+import os
 
 os.environ.setdefault("ENVIRONMENT", "test")
-os.environ.setdefault("ACCESS_TOKEN_SIGNING_KEY", "test-customer-import-signing-key-32-chars")
-os.environ.setdefault("SECURITY_TOKEN_HMAC_KEY", "test-customer-import-hmac-key-32-chars")
+os.environ.setdefault(
+    "ACCESS_TOKEN_SIGNING_KEY", "test-customer-import-signing-key-32-chars"
+)
+os.environ.setdefault(
+    "SECURITY_TOKEN_HMAC_KEY", "test-customer-import-hmac-key-32-chars"
+)
 
 from app.customer_import.models import CustomerImportBatch, CustomerImportRow
 from app.customer_import.router import (
     _customer_from_payload,
     _identity_systems,
     _requires_qualified_hcp_admission,
-    _source_system,
     _source_identity_counts,
+    _source_system,
     _verified_new_source_identity,
-    router,
     admit_customer_import,
+    router,
     stage_customer_import,
 )
 
 
 def test_routes_expose_staging_readback_and_resumable_admission() -> None:
-    paths = {(route.path, tuple(sorted(route.methods or ()))) for route in router.routes}
+    paths = {
+        (route.path, tuple(sorted(route.methods or ()))) for route in router.routes
+    }
     assert ("/api/v1/customer-import/batches", ("POST",)) in paths
     assert ("/api/v1/customer-import/batches/{batch_id}", ("GET",)) in paths
     assert ("/api/v1/customer-import/batches/{batch_id}/admit", ("POST",)) in paths
@@ -38,7 +44,9 @@ def test_hcp_aliases_have_distinct_lineage_keys() -> None:
     assert "housecall_pro_source4" in _identity_systems(
         "housecall_pro", "housecall_pro_source4"
     )
-    assert "housecall_pro_source4" in _identity_systems("housecall_pro", "housecall_pro")
+    assert "housecall_pro_source4" in _identity_systems(
+        "housecall_pro", "housecall_pro"
+    )
     assert _requires_qualified_hcp_admission("housecall_pro", "housecall_pro_source4")
     assert not _requires_qualified_hcp_admission("housecall_pro", "housecall_pro")
 
@@ -81,8 +89,13 @@ def test_new_admission_requires_complete_unique_source_identity() -> None:
         "postal_code": "10001",
     }
     assert _verified_new_source_identity(payload, _source_identity_counts([payload]))
-    assert not _verified_new_source_identity({**payload, "email": ""}, _source_identity_counts([{**payload, "email": ""}]))
-    assert not _verified_new_source_identity(payload, _source_identity_counts([payload, {**payload, "display_name": "Ada L."}]))
+    assert not _verified_new_source_identity(
+        {**payload, "email": ""}, _source_identity_counts([{**payload, "email": ""}])
+    )
+    assert not _verified_new_source_identity(
+        payload,
+        _source_identity_counts([payload, {**payload, "display_name": "Ada L."}]),
+    )
 
 
 def test_persisted_models_include_batch_identity_and_processed_cursor() -> None:

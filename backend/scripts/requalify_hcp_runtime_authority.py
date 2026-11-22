@@ -15,7 +15,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-
 RUNTIME_CONTRACT = "hcp-november-preview-runtime-qualification/v1"
 PACKET_CONTRACT = "hcp-november-preview-execution-packet/v1"
 ENVELOPE_CONTRACT = "hcp-november-preview-execution-envelope/v1"
@@ -37,12 +36,16 @@ def sha256(path: Path) -> str:
 
 def write_private(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    path.write_text(
+        json.dumps(value, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
     os.chmod(path, 0o600)
 
 
 def inventory(records: list[dict[str, Any]]) -> dict[str, Any]:
-    counts = {key: 0 for key in ("CREATE", "HOLD", "HOLD_QUARANTINE", "REPLAY", "UPDATE")}
+    counts = {
+        key: 0 for key in ("CREATE", "HOLD", "HOLD_QUARANTINE", "REPLAY", "UPDATE")
+    }
     for record in records:
         counts[str(record["disposition"]).upper()] += 1
     held = counts["HOLD"] + counts["HOLD_QUARANTINE"]
@@ -180,8 +183,12 @@ def main() -> int:
             "rollback_backup_digest": args.backup_sha,
             "qualification_status": "PASS",
             "source_authority_contract": source_authority.get("contract"),
-            "source_authority_repository_sha": source_authority.get("expected_repository_sha"),
-            "source_authority_schema_head": source_authority.get("expected_schema_head"),
+            "source_authority_repository_sha": source_authority.get(
+                "expected_repository_sha"
+            ),
+            "source_authority_schema_head": source_authority.get(
+                "expected_schema_head"
+            ),
             "source_packet_sha256": source_packet_sha,
             "source_packet_digest": source_packet_digest,
             "runtime_package_digest": runtime_package_digest,
@@ -189,17 +196,22 @@ def main() -> int:
     )
     authority_path = args.output_dir / "runtime-hcp-authority.json"
     write_private(authority_path, authority)
-    print(json.dumps({
-        "authority": str(authority_path),
-        "packet": str(packet_path),
-        "envelope": str(envelope_path),
-        "source_packet_sha256": source_packet_sha,
-        "source_packet_digest": source_packet_digest,
-        "runtime_packet_digest": packet["digest"],
-        "runtime_package_digest": runtime_package_digest,
-        "envelope_digest": envelope["authority_digest"],
-        "counts": inv,
-    }, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "authority": str(authority_path),
+                "packet": str(packet_path),
+                "envelope": str(envelope_path),
+                "source_packet_sha256": source_packet_sha,
+                "source_packet_digest": source_packet_digest,
+                "runtime_packet_digest": packet["digest"],
+                "runtime_package_digest": runtime_package_digest,
+                "envelope_digest": envelope["authority_digest"],
+                "counts": inv,
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

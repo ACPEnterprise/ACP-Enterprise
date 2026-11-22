@@ -44,7 +44,9 @@ def sha256(path: Path) -> str:
 
 def write_private(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    path.write_text(
+        json.dumps(value, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
     os.chmod(path, 0o600)
 
 
@@ -64,7 +66,10 @@ def packet_inventory(records: list[dict[str, Any]]) -> dict[str, Any]:
         if (str(parent["domain"]), str(parent["source_id"])) in held_keys
     )
     return {
-        "counts": {key: counts.get(key, 0) for key in ("CREATE", "HOLD", "HOLD_QUARANTINE", "REPLAY", "UPDATE")},
+        "counts": {
+            key: counts.get(key, 0)
+            for key in ("CREATE", "HOLD", "HOLD_QUARANTINE", "REPLAY", "UPDATE")
+        },
         "total_held": held,
         "executable_count": len(records) - held,
         "held_parent_executable_edges": edges,
@@ -93,21 +98,45 @@ def envelope_payload(envelope: dict[str, Any]) -> dict[str, Any]:
     return {
         key: envelope[key]
         for key in (
-            "contract", "source_packet_sha256", "source_packet_digest", "bundle_sha256",
-            "policy_digest", "reconciliation_digest", "company_id", "branch_id",
-            "actor_id", "provider_company_id", "repository_sha", "schema_head",
-            "environment", "packet_counts", "total_held", "executable_count",
-            "unexplained_omissions", "lineage_gaps", "ambiguous_lineage",
-            "held_parent_executable_edges", "operational_hold_policy",
-            "operational_hold_source_ids", "clean_baseline_bootstrap",
+            "contract",
+            "source_packet_sha256",
+            "source_packet_digest",
+            "bundle_sha256",
+            "policy_digest",
+            "reconciliation_digest",
+            "company_id",
+            "branch_id",
+            "actor_id",
+            "provider_company_id",
+            "repository_sha",
+            "schema_head",
+            "environment",
+            "packet_counts",
+            "total_held",
+            "executable_count",
+            "unexplained_omissions",
+            "lineage_gaps",
+            "ambiguous_lineage",
+            "held_parent_executable_edges",
+            "operational_hold_policy",
+            "operational_hold_source_ids",
+            "clean_baseline_bootstrap",
         )
     }
 
 
-async def classify(authority_path: Path) -> tuple[NovemberQualificationAuthority, NovemberExecutionEnvelope, list[Any]]:
+async def classify(
+    authority_path: Path,
+) -> tuple[NovemberQualificationAuthority, NovemberExecutionEnvelope, list[Any]]:
     authority = NovemberQualificationAuthority.load(authority_path)
+    if authority.execution_packet_path is None:
+        raise ValueError("November execution packet path is required")
     envelope = NovemberExecutionEnvelope.load(authority.execution_packet_path)
-    updates = tuple(record for record in envelope.packet.overlay_manifest.records if record.assertion.value == "update")
+    updates = tuple(
+        record
+        for record in envelope.packet.overlay_manifest.records
+        if record.assertion.value == "update"
+    )
     async with AsyncSessionFactory() as session:
         bootstrap = HcpSource4NativeBindingBootstrap(
             company_id=authority.company_id,
@@ -128,10 +157,14 @@ async def main() -> int:
     args = parser.parse_args()
     authority, envelope, candidates = await classify(args.authority_file)
     records = [dict(item) for item in envelope.packet.records]
-    candidate_by_key = {(item.key.domain, item.key.source_id): item for item in candidates}
+    candidate_by_key = {
+        (item.key.domain, item.key.source_id): item for item in candidates
+    }
     blocked = {
-        key for key, candidate in candidate_by_key.items()
-        if candidate.disposition not in {
+        key
+        for key, candidate in candidate_by_key.items()
+        if candidate.disposition
+        not in {
             BindingDisposition.BINDING_ALREADY_PRESENT,
             BindingDisposition.PROVABLE_NATIVE_SUCCESSOR_BINDING,
         }
@@ -158,15 +191,29 @@ async def main() -> int:
         changed = False
         for item in records:
             key = (str(item["domain"]), str(item["source_id"]))
-            if str(item.get("disposition", "")).upper() not in {"CREATE", "UPDATE", "REPLAY"}:
+            if str(item.get("disposition", "")).upper() not in {
+                "CREATE",
+                "UPDATE",
+                "REPLAY",
+            }:
                 continue
-            if any((str(parent["domain"]), str(parent["source_id"])) in blocked for parent in item.get("parent_keys", [])) and key not in blocked:
+            if (
+                any(
+                    (str(parent["domain"]), str(parent["source_id"])) in blocked
+                    for parent in item.get("parent_keys", [])
+                )
+                and key not in blocked
+            ):
                 blocked.add(key)
                 changed = True
     held_by_key = {key: candidate_by_key.get(key) for key in blocked}
     for item in records:
         key = (str(item["domain"]), str(item["source_id"]))
-        if key not in blocked or str(item.get("disposition", "")).upper() not in {"CREATE", "UPDATE", "REPLAY"}:
+        if key not in blocked or str(item.get("disposition", "")).upper() not in {
+            "CREATE",
+            "UPDATE",
+            "REPLAY",
+        }:
             continue
         original = str(item["disposition"]).upper()
         candidate = held_by_key[key]
@@ -174,29 +221,39 @@ async def main() -> int:
             "source_payload": item.get("payload", {}),
             "source_disposition": original,
             "source_digest": item.get("source_digest"),
-            "binding_disposition": candidate.disposition.value if candidate else "HELD_PARENT",
-            "binding_reason": candidate.reason if candidate else "dependent_on_held_parent",
+            "binding_disposition": candidate.disposition.value
+            if candidate
+            else "HELD_PARENT",
+            "binding_reason": candidate.reason
+            if candidate
+            else "dependent_on_held_parent",
         }
         item["source_disposition"] = original
         item["payload"] = {}
         item["disposition"] = "HOLD"
         item["assertion"] = "hold"
         item["reason"] = "native_successor_binding_unresolved"
-    packet = json.loads(json.dumps({
-        "contract": envelope.packet.packet_contract if hasattr(envelope.packet, "packet_contract") else "hcp-november-preview-execution-packet/v1",
-        "qualification_digest": envelope.packet.qualification_digest,
-        "bundle_sha256": envelope.packet.bundle_sha256,
-        "policy_digest": envelope.packet.policy_digest,
-        "reconciliation_digest": envelope.packet.reconciliation_digest,
-        "company_id": envelope.packet.company_id,
-        "branch_id": envelope.packet.branch_id,
-        "actor_id": envelope.packet.actor_id,
-        "provider_company_id": envelope.packet.provider_company_id,
-        "schema_head": envelope.packet.schema_head,
-        "environment": envelope.packet.environment,
-        "records": records,
-        "acquired_at": envelope.packet.overlay_manifest.acquired_at,
-    }))
+    packet = json.loads(
+        json.dumps(
+            {
+                "contract": envelope.packet.packet_contract
+                if hasattr(envelope.packet, "packet_contract")
+                else "hcp-november-preview-execution-packet/v1",
+                "qualification_digest": envelope.packet.qualification_digest,
+                "bundle_sha256": envelope.packet.bundle_sha256,
+                "policy_digest": envelope.packet.policy_digest,
+                "reconciliation_digest": envelope.packet.reconciliation_digest,
+                "company_id": envelope.packet.company_id,
+                "branch_id": envelope.packet.branch_id,
+                "actor_id": envelope.packet.actor_id,
+                "provider_company_id": envelope.packet.provider_company_id,
+                "schema_head": envelope.packet.schema_head,
+                "environment": envelope.packet.environment,
+                "records": records,
+                "acquired_at": envelope.packet.overlay_manifest.acquired_at,
+            }
+        )
+    )
     packet["source_packet_digest"] = envelope.packet.digest
     packet["source_packet_sha256"] = sha256(envelope.source_packet_path)
     packet["digest"] = digest(packet_payload(packet))
@@ -204,18 +261,74 @@ async def main() -> int:
     packet_path = args.output_dir / "runtime-binding-quarantined-packet.json"
     write_private(packet_path, packet)
     inv = packet_inventory(records)
-    new_package_digest = digest({"contract": "hcp-runtime-binding-quarantine/v1", "source": envelope.packet.digest, "packet": packet["digest"]})
-    old_envelope = json.loads(envelope.source_packet_path.parent.joinpath("runtime-bound-hcp-execution-envelope.json").read_text()) if False else json.loads(args.authority_file.parent.joinpath("runtime-bound-hcp-execution-envelope.json").read_text())
+    new_package_digest = digest(
+        {
+            "contract": "hcp-runtime-binding-quarantine/v1",
+            "source": envelope.packet.digest,
+            "packet": packet["digest"],
+        }
+    )
+    old_envelope = (
+        json.loads(
+            envelope.source_packet_path.parent.joinpath(
+                "runtime-bound-hcp-execution-envelope.json"
+            ).read_text()
+        )
+        if False
+        else json.loads(
+            args.authority_file.parent.joinpath(
+                "runtime-bound-hcp-execution-envelope.json"
+            ).read_text()
+        )
+    )
     new_envelope = dict(old_envelope)
-    new_envelope.update({"source_packet_path": str(packet_path), "source_packet_sha256": sha256(packet_path), "source_packet_digest": packet["digest"], "packet_counts": inv["counts"], "total_held": inv["total_held"], "executable_count": inv["executable_count"], "held_parent_executable_edges": inv["held_parent_executable_edges"], "repository_sha": authority.expected_repository_sha, "schema_head": authority.expected_schema_head})
+    new_envelope.update(
+        {
+            "source_packet_path": str(packet_path),
+            "source_packet_sha256": sha256(packet_path),
+            "source_packet_digest": packet["digest"],
+            "packet_counts": inv["counts"],
+            "total_held": inv["total_held"],
+            "executable_count": inv["executable_count"],
+            "held_parent_executable_edges": inv["held_parent_executable_edges"],
+            "repository_sha": authority.expected_repository_sha,
+            "schema_head": authority.expected_schema_head,
+        }
+    )
     new_envelope["authority_digest"] = digest(envelope_payload(new_envelope))
     envelope_path = args.output_dir / "runtime-binding-quarantined-envelope.json"
     write_private(envelope_path, new_envelope)
     new_authority = json.loads(args.authority_file.read_text())
-    new_authority.update({"execution_packet_path": str(envelope_path), "execution_packet_sha256": sha256(envelope_path), "execution_packet_digest": new_envelope["authority_digest"], "runtime_package_digest": new_package_digest})
+    new_authority.update(
+        {
+            "execution_packet_path": str(envelope_path),
+            "execution_packet_sha256": sha256(envelope_path),
+            "execution_packet_digest": new_envelope["authority_digest"],
+            "runtime_package_digest": new_package_digest,
+        }
+    )
     authority_path = args.output_dir / "runtime-binding-quarantined-authority.json"
     write_private(authority_path, new_authority)
-    print(json.dumps({"authority": str(authority_path), "blocked_initial": len(candidate_by_key) - sum(c.disposition in {BindingDisposition.BINDING_ALREADY_PRESENT, BindingDisposition.PROVABLE_NATIVE_SUCCESSOR_BINDING} for c in candidates), "held_total": len(blocked), "counts": inv, "runtime_package_digest": new_package_digest}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "authority": str(authority_path),
+                "blocked_initial": len(candidate_by_key)
+                - sum(
+                    c.disposition
+                    in {
+                        BindingDisposition.BINDING_ALREADY_PRESENT,
+                        BindingDisposition.PROVABLE_NATIVE_SUCCESSOR_BINDING,
+                    }
+                    for c in candidates
+                ),
+                "held_total": len(blocked),
+                "counts": inv,
+                "runtime_package_digest": new_package_digest,
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

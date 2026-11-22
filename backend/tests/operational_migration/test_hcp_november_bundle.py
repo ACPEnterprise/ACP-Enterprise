@@ -11,8 +11,8 @@ from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_bundle import (
     AUTHORITY_CONTRACT,
     BUNDLE_CONTRACT,
-    RUNTIME_AUTHORITY_CONTRACT,
     REQUIRED_FILES,
+    RUNTIME_AUTHORITY_CONTRACT,
     SEALED_HANDOFF_CONTRACT,
     NovemberQualificationAuthority,
 )

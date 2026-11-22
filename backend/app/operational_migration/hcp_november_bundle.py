@@ -248,8 +248,16 @@ class NovemberQualificationAuthority:
                 execution_packet_digest=value.get("execution_packet_digest"),
                 rollback_backup_digest=value.get("rollback_backup_digest"),
                 contract=str(value.get("contract")),
-                database_name=(str(value["expected_database"]) if value.get("expected_database") else None),
-                runtime_package_digest=(str(value["runtime_package_digest"]) if value.get("runtime_package_digest") else None),
+                database_name=(
+                    str(value["expected_database"])
+                    if value.get("expected_database")
+                    else None
+                ),
+                runtime_package_digest=(
+                    str(value["runtime_package_digest"])
+                    if value.get("runtime_package_digest")
+                    else None
+                ),
                 **fields,
             )
         except SafeEvidenceError:
@@ -413,9 +421,15 @@ class NovemberQualificationAuthority:
             for character in self.expected_repository_sha
         ):
             _fail("hcp_november_repository_sha_invalid", self.expected_repository_sha)
-        if self.contract == AUTHORITY_CONTRACT and self.expected_schema_head != EXPECTED_SCHEMA_HEAD:
+        if (
+            self.contract == AUTHORITY_CONTRACT
+            and self.expected_schema_head != EXPECTED_SCHEMA_HEAD
+        ):
             _fail("hcp_november_schema_head_invalid", self.expected_schema_head)
-        if self.contract == RUNTIME_AUTHORITY_CONTRACT and self.expected_schema_head != CURRENT_RUNTIME_SCHEMA_HEAD:
+        if (
+            self.contract == RUNTIME_AUTHORITY_CONTRACT
+            and self.expected_schema_head != CURRENT_RUNTIME_SCHEMA_HEAD
+        ):
             _fail("hcp_november_runtime_schema_head_invalid", self.expected_schema_head)
         for value in (
             self.bundle_sha256,

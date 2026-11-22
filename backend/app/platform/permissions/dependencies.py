@@ -5,6 +5,11 @@ from uuid import UUID
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.access_agreements.service import (
+    AgreementNotConfiguredError,
+    AgreementRequiredError,
+    access_agreement_service,
+)
 from app.database.session import get_security_database_session
 from app.platform.auth.dependencies import AuthenticatedIdentity
 from app.platform.permissions.authorization import (
@@ -16,11 +21,6 @@ from app.platform.permissions.authorization import (
 from app.platform.security.decisions import (
     AuthorizationDenial,
     authorization_decision_logger,
-)
-from app.access_agreements.service import (
-    AgreementNotConfiguredError,
-    AgreementRequiredError,
-    access_agreement_service,
 )
 
 SecurityDatabaseSession = Annotated[

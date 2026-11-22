@@ -23,11 +23,11 @@ from app.workforce.administration_commands import (
     workforce_administration_service,
 )
 from app.workforce.employee_administration import employee_administration_service
+from app.workforce.employee_timeline import employee_timeline_service
 from app.workforce.employment import (
     EmployeeEmploymentConflict,
     employee_employment_service,
 )
-from app.workforce.employee_timeline import employee_timeline_service
 from app.workforce.functional_access import (
     FunctionalAccessConflict,
     FunctionalAccessView,
@@ -48,8 +48,8 @@ from app.workforce.schemas import (
     EmployeeAdministrationDetail,
     EmployeeDeactivationRequest,
     EmployeeNotificationTarget,
-    EmployeeProfileUpdateRequest,
     EmployeePermissionUpdateRequest,
+    EmployeeProfileUpdateRequest,
     EmployeeTimeline,
     FieldReadinessRequest,
     FieldReadinessResponse,

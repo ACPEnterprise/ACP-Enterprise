@@ -13,7 +13,9 @@ from app.operational_migration.hcp_november_executor import run_november_executi
 
 async def main() -> None:
     authority = NovemberQualificationAuthority.load(
-        Path("/var/lib/acp-qbo-production-evidence/hcp-runtime-2307/quarantine/runtime-binding-quarantined-authority.json")
+        Path(
+            "/var/lib/acp-qbo-production-evidence/hcp-runtime-2307/quarantine/runtime-binding-quarantined-authority.json"
+        )
     )
     result = await run_november_execution(authority, factory=AsyncSessionFactory)
     print(json.dumps(result, sort_keys=True))

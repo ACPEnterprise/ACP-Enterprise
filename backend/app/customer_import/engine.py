@@ -20,7 +20,6 @@ from typing import Protocol
 from uuid import UUID
 from xml.etree import ElementTree
 
-
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SUPPORTED_FORMATS = {"csv", "xlsx"}
 SUPPORTED_FIELDS = frozenset(
@@ -63,8 +62,14 @@ class CustomerImportScope:
     def __post_init__(self) -> None:
         for name in ("source_provider", "source_namespace"):
             value = _clean(getattr(self, name)).lower()
-            if not value or len(value) > 80 or not re.fullmatch(r"[a-z0-9][a-z0-9_.:-]*", value):
-                raise ValueError(f"{name} must be a bounded lowercase source identifier")
+            if (
+                not value
+                or len(value) > 80
+                or not re.fullmatch(r"[a-z0-9][a-z0-9_.:-]*", value)
+            ):
+                raise ValueError(
+                    f"{name} must be a bounded lowercase source identifier"
+                )
             object.__setattr__(self, name, value)
 
     def identity_key(self, source_record_id: str) -> str:
@@ -100,7 +105,11 @@ class CustomerImportMapping:
 
     @property
     def digest(self) -> str:
-        return _sha256(json.dumps(dict(sorted(self.fields.items())), separators=(",", ":"), sort_keys=True))
+        return _sha256(
+            json.dumps(
+                dict(sorted(self.fields.items())), separators=(",", ":"), sort_keys=True
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -125,7 +134,9 @@ class ReconciliationCounts:
 
     @property
     def reconciled(self) -> bool:
-        return self.source_rows == self.ready + self.duplicates + self.held + self.rejected
+        return (
+            self.source_rows == self.ready + self.duplicates + self.held + self.rejected
+        )
 
     def as_dict(self) -> dict[str, int | bool]:
         return {
@@ -210,7 +221,9 @@ def _csv_rows(content: bytes) -> tuple[str, list[dict[str, str]]]:
         rows = list(reader)
         if any(None in row for row in rows):
             raise ImportSchemaError("file contains rows with more values than headers")
-        return "csv", [{header: _clean(row.get(header)) for header in headers} for row in rows]
+        return "csv", [
+            {header: _clean(row.get(header)) for header in headers} for row in rows
+        ]
     except (UnicodeDecodeError, csv.Error) as exc:
         raise ImportSchemaError("file is not a valid UTF-8 CSV") from exc
 
@@ -224,18 +237,37 @@ def _xlsx_rows(content: bytes) -> tuple[str, list[dict[str, str]]]:
                 root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
                 ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
                 for item in root.findall("x:si", ns):
-                    shared.append("".join(node.text or "" for node in item.iter() if node.tag.endswith("}t") or node.tag == "t"))
+                    shared.append(
+                        "".join(
+                            node.text or ""
+                            for node in item.iter()
+                            if node.tag.endswith("}t") or node.tag == "t"
+                        )
+                    )
             workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
             rels = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
-            rel_ns = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
-            sheet = workbook.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheets/{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet")
+            rel_ns = (
+                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+            )
+            sheet = workbook.find(
+                "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheets/{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet"
+            )
             if sheet is None:
                 raise ImportSchemaError("xlsx has no worksheet")
             relation = sheet.attrib.get(rel_ns + "id")
-            target = next((item.attrib.get("Target") for item in rels if item.attrib.get("Id") == relation), None)
+            target = next(
+                (
+                    item.attrib.get("Target")
+                    for item in rels
+                    if item.attrib.get("Id") == relation
+                ),
+                None,
+            )
             if not target:
                 raise ImportSchemaError("xlsx worksheet relationship is missing")
-            worksheet_path = "xl/" + target.lstrip("/") if not target.startswith("xl/") else target
+            worksheet_path = (
+                "xl/" + target.lstrip("/") if not target.startswith("xl/") else target
+            )
             root = ElementTree.fromstring(archive.read(worksheet_path))
     except (KeyError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
         raise ImportSchemaError("file is not a valid xlsx workbook") from exc
@@ -247,9 +279,13 @@ def _xlsx_rows(content: bytes) -> tuple[str, list[dict[str, str]]]:
         for cell in row.findall("x:c", ns):
             value = cell.find("x:v", ns)
             if cell.attrib.get("t") == "inlineStr":
-                raw = "".join(node.text or "" for node in cell.iter() if node.tag.endswith("}t") or node.tag == "t")
+                raw = "".join(
+                    node.text or ""
+                    for node in cell.iter()
+                    if node.tag.endswith("}t") or node.tag == "t"
+                )
             else:
-                raw = value.text if value is not None else ""
+                raw = (value.text or "") if value is not None else ""
             if cell.attrib.get("t") == "s" and raw:
                 raw = shared[int(raw)]
             values.append(_clean(raw))
@@ -279,19 +315,36 @@ class CustomerImportEngine:
     ) -> ImportBatchResult:
         file_format = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
         if file_format == "xls":
-            raise ImportSchemaError("legacy .xls is not supported; save the workbook as .xlsx")
+            raise ImportSchemaError(
+                "legacy .xls is not supported; save the workbook as .xlsx"
+            )
         if file_format not in SUPPORTED_FORMATS:
             raise ImportSchemaError("customer import supports .csv and .xlsx files")
-        detected_format, raw_rows = _csv_rows(content) if file_format == "csv" else _xlsx_rows(content)
+        detected_format, raw_rows = (
+            _csv_rows(content) if file_format == "csv" else _xlsx_rows(content)
+        )
         if detected_format != file_format:
             raise ImportSchemaError("file format does not match filename")
         headers = set(raw_rows[0]) if raw_rows else set()
         missing = set(mapping.fields.values()) - headers
         if missing:
-            raise ImportSchemaError(f"mapped source columns are missing: {sorted(missing)}")
+            raise ImportSchemaError(
+                f"mapped source columns are missing: {sorted(missing)}"
+            )
 
         source_sha256 = _sha256(content)
-        batch_key = _sha256("\x1f".join((str(scope.tenant_id), str(scope.branch_id), scope.source_provider, scope.source_namespace, source_sha256, mapping.digest)))
+        batch_key = _sha256(
+            "\x1f".join(
+                (
+                    str(scope.tenant_id),
+                    str(scope.branch_id),
+                    scope.source_provider,
+                    scope.source_namespace,
+                    source_sha256,
+                    mapping.digest,
+                )
+            )
+        )
         existing = self.store.get(batch_key)
         if existing is not None:
             return ImportBatchResult(**{**existing.__dict__, "reused": True})
@@ -299,15 +352,33 @@ class CustomerImportEngine:
         rows: list[StagedCustomerRow] = []
         seen: set[str] = set()
         for row_number, raw in enumerate(raw_rows, start=2):
-            payload = {canonical: _clean(raw.get(header)) for canonical, header in mapping.fields.items()}
+            payload = {
+                canonical: _clean(raw.get(header))
+                for canonical, header in mapping.fields.items()
+            }
             source_id = payload.get("source_record_id", "")
             errors: list[str] = []
             if not source_id:
                 errors.append("missing_source_record_id")
-            if not any(payload.get(field) for field in ("display_name", "first_name", "last_name", "company_name", "email", "phone", "address")):
+            if not any(
+                payload.get(field)
+                for field in (
+                    "display_name",
+                    "first_name",
+                    "last_name",
+                    "company_name",
+                    "email",
+                    "phone",
+                    "address",
+                )
+            ):
                 errors.append("missing_customer_identity_fields")
-            row_digest = _sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")))
-            identity_key = scope.identity_key(source_id) if source_id else f"invalid:{row_number}"
+            row_digest = _sha256(
+                json.dumps(payload, sort_keys=True, separators=(",", ":"))
+            )
+            identity_key = (
+                scope.identity_key(source_id) if source_id else f"invalid:{row_number}"
+            )
             if errors:
                 disposition, reason = "rejected", errors[0]
             elif identity_key in seen:
@@ -315,7 +386,18 @@ class CustomerImportEngine:
             else:
                 disposition, reason = "ready", None
                 seen.add(identity_key)
-            rows.append(StagedCustomerRow(row_number, source_id, identity_key, row_digest, payload, disposition, reason, tuple(errors)))
+            rows.append(
+                StagedCustomerRow(
+                    row_number,
+                    source_id,
+                    identity_key,
+                    row_digest,
+                    payload,
+                    disposition,
+                    reason,
+                    tuple(errors),
+                )
+            )
 
         counts = ReconciliationCounts(
             source_rows=len(rows),
@@ -326,12 +408,34 @@ class CustomerImportEngine:
         )
         if not counts.reconciled:
             raise RuntimeError("customer import reconciliation counts do not balance")
-        result = ImportBatchResult(batch_key, source_sha256, mapping.digest, schema_version, file_format, tuple(rows), counts, False)
+        result = ImportBatchResult(
+            batch_key,
+            source_sha256,
+            mapping.digest,
+            schema_version,
+            file_format,
+            tuple(rows),
+            counts,
+            False,
+        )
         self.store.put(result)
-        self.store.audit(batch_key, ImportAuditEvent("stage", "customer_import_staged", {"counts": counts.as_dict(), "source_provider": scope.source_provider, "source_namespace": scope.source_namespace}))
+        self.store.audit(
+            batch_key,
+            ImportAuditEvent(
+                "stage",
+                "customer_import_staged",
+                {
+                    "counts": counts.as_dict(),
+                    "source_provider": scope.source_provider,
+                    "source_namespace": scope.source_namespace,
+                },
+            ),
+        )
         return result
 
-    def resume(self, batch_key: str, *, limit: int = 100) -> tuple[StagedCustomerRow, ...]:
+    def resume(
+        self, batch_key: str, *, limit: int = 100
+    ) -> tuple[StagedCustomerRow, ...]:
         if limit < 1:
             raise ValueError("limit must be positive")
         batch = self.store.get(batch_key)
@@ -345,5 +449,12 @@ class CustomerImportEngine:
         )
         selected = rows[:limit]
         self.store.mark_processed(batch_key, (row.row_number for row in selected))
-        self.store.audit(batch_key, ImportAuditEvent(f"resume:{len(self.store.events(batch_key))}", "customer_import_resumed", {"limit": limit, "ready_rows": len(rows)}))
+        self.store.audit(
+            batch_key,
+            ImportAuditEvent(
+                f"resume:{len(self.store.events(batch_key))}",
+                "customer_import_resumed",
+                {"limit": limit, "ready_rows": len(rows)},
+            ),
+        )
         return selected

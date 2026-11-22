@@ -27,7 +27,9 @@ class AgreementValidationError(Exception):
 
 
 class AccessAgreementService:
-    async def current(self, session: AsyncSession, *, context: AuthorizationContext) -> tuple[AccessAgreementDocument | None, AccessAgreementAcceptance | None]:
+    async def current(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> tuple[AccessAgreementDocument | None, AccessAgreementAcceptance | None]:
         if SALES_DEMO_ROLE not in context.role_codes:
             return None, None
         document = await session.scalar(
@@ -50,14 +52,20 @@ class AccessAgreementService:
         )
         return document, acceptance
 
-    async def require_access(self, session: AsyncSession, *, context: AuthorizationContext) -> None:
+    async def require_access(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> None:
         if SALES_DEMO_ROLE not in context.role_codes:
             return
         document, acceptance = await self.current(session, context=context)
         if document is None:
-            raise AgreementNotConfiguredError("Required Sales Demo agreement is not published.")
+            raise AgreementNotConfiguredError(
+                "Required Sales Demo agreement is not published."
+            )
         if acceptance is None:
-            raise AgreementRequiredError("Required Sales Demo agreement acceptance is missing.")
+            raise AgreementRequiredError(
+                "Required Sales Demo agreement acceptance is missing."
+            )
 
     async def accept(
         self,
@@ -72,18 +80,31 @@ class AccessAgreementService:
         user_agent: str | None,
     ) -> AccessAgreementAcceptance:
         if SALES_DEMO_ROLE not in context.role_codes:
-            raise AgreementValidationError("This agreement is not required for the active membership.")
+            raise AgreementValidationError(
+                "This agreement is not required for the active membership."
+            )
         document, existing = await self.current(session, context=context)
         if document is None:
-            raise AgreementNotConfiguredError("Required Sales Demo agreement is not published.")
+            raise AgreementNotConfiguredError(
+                "Required Sales Demo agreement is not published."
+            )
         if existing is not None:
             return existing
         if document.id != agreement_id or document.version != version:
-            raise AgreementValidationError("The agreement version is no longer current.")
+            raise AgreementValidationError(
+                "The agreement version is no longer current."
+            )
         if not acknowledge_reviewed or not electronic_signature_consent:
-            raise AgreementValidationError("Both affirmative acknowledgments are required.")
-        if sha256(document.content.encode("utf-8")).hexdigest() != document.content_sha256:
-            raise AgreementValidationError("The agreement document integrity check failed.")
+            raise AgreementValidationError(
+                "Both affirmative acknowledgments are required."
+            )
+        if (
+            sha256(document.content.encode("utf-8")).hexdigest()
+            != document.content_sha256
+        ):
+            raise AgreementValidationError(
+                "The agreement document integrity check failed."
+            )
         receipt = AccessAgreementAcceptance(
             user_id=context.user.id,
             company_id=context.company.id,
