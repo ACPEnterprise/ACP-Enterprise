@@ -753,7 +753,8 @@ async def admit_customer_import(
             row.processed = True
             row.processed_at = datetime.now(timezone.utc)
             replayed += 1
-            run.source_count += 1; run.duplicate_count += 1
+            run.source_count += 1
+            run.duplicate_count += 1
             continue
         try:
             customer_data, contact_data, location_data = _customer_from_payload(
@@ -768,7 +769,8 @@ async def admit_customer_import(
                 row.processed = True
                 row.processed_at = datetime.now(timezone.utc)
                 held += 1
-                run.source_count += 1; run.unresolved_count += 1
+                run.source_count += 1
+                run.unresolved_count += 1
                 continue
             if customer_id is None:
                 if not _verified_new_source_identity(row.payload, source_counts):
@@ -822,7 +824,8 @@ async def admit_customer_import(
             )
             row.processed = True
             row.processed_at = datetime.now(timezone.utc)
-            run.source_count += 1; run.accepted_count += 1
+            run.source_count += 1
+            run.accepted_count += 1
         except (ValueError, TypeError) as error:
             row.disposition = "held"
             row.reason_code = str(error)[:80]

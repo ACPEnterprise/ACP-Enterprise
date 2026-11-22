@@ -122,7 +122,8 @@ def test_completed_admission_replays_durable_receipt() -> None:
 
 def test_migration_run_counts_are_recorded_with_each_row_outcome() -> None:
     source = inspect.getsource(admit_customer_import)
-    assert "run.source_count += 1; run.duplicate_count += 1" in source
-    assert "run.source_count += 1; run.unresolved_count += 1" in source
-    assert "run.source_count += 1; run.accepted_count += 1" in source
+    assert "run.source_count += 1" in source
+    assert "run.duplicate_count += 1" in source
+    assert "run.unresolved_count += 1" in source
+    assert "run.accepted_count += 1" in source
     assert "duplicate_existing_customer_target" in source
