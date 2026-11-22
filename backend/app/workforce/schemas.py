@@ -66,6 +66,9 @@ class WorkforceEmployeeSummary(WorkforceSchema):
     readiness_state: Literal["READY", "BLOCKED", "INSUFFICIENT_EVIDENCE"]
     readiness_blockers: tuple[str, ...]
     updated_at: datetime
+    phone: str | None = None
+    hire_date: date | None = None
+    termination_date: date | None = None
 
 
 class WorkforceEmployeeDetail(WorkforceEmployeeSummary):
@@ -383,6 +386,18 @@ class EmployeeAccessLockRequest(WorkforceSchema):
     locked: bool
     reason: str = Field(min_length=3, max_length=500)
     expected_authorization_version: int = Field(ge=1)
+
+
+class EmployeeProfileUpdateRequest(WorkforceSchema):
+    phone: str | None = Field(default=None, max_length=32)
+    job_title: str | None = Field(default=None, max_length=150)
+    home_branch_id: UUID | None = None
+    expected_updated_at: datetime | None = None
+
+
+class EmployeeDeactivationRequest(WorkforceSchema):
+    effective_date: date
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class WorkforceProfileResponse(WorkforceSchema):

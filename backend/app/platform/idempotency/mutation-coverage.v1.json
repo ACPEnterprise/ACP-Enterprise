@@ -1530,6 +1530,26 @@
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "workforce",
+      "mechanism": "Company-scoped Employee row lock, expected update timestamp, and convergent profile fields",
+      "method": "PATCH",
+      "operation_id": "update_employee_profile_api_v1_workforce_administration_employees__employee_id__profile_patch",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/profile",
+      "reason": "Repeated ordinary profile edits converge on the requested contact, position, and Branch state; stale concurrent edits fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Company-scoped Employee row lock, effective-date state check, and immutable deactivation audit",
+      "method": "POST",
+      "operation_id": "deactivate_employee_api_v1_workforce_administration_employees__employee_id__deactivate_post",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/deactivate",
+      "reason": "Repeating the same deactivation converges on inactive employment with the same effective date; contradictory dates fail closed and access locking remains separate.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
       "mechanism": "Company-scoped Employee/User row lock, expected authorization version, convergent target state, credential version rotation, and complete session revocation",
       "method": "PUT",
       "operation_id": "set_employee_access_lock_api_v1_workforce_administration_employees__employee_id__access_lock_put",
@@ -3428,6 +3448,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "af1a8a04e8ba60c258ab29b20624ed81f0c5ddeca07d761f15ada11c706c6234",
+  "fingerprint": "5ec868151e0af590eee4f92acecfbf6cbbad37227fe84986946993f287afd256",
   "schema_version": "1"
 }

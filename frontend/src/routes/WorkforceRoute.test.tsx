@@ -55,6 +55,7 @@ const summary = {
   readiness_state: "READY" as const,
   readiness_blockers: [],
   updated_at: "2026-08-30T12:00:00Z",
+  phone: "555-0100",
 };
 
 describe("WorkforceRoute", () => {
@@ -142,6 +143,16 @@ describe("WorkforceRoute", () => {
       mutate: vi.fn(),
     } as never);
     vi.mocked(workforceHooks.useEmployeeAccessLock).mockReturnValue({
+      isPending: false,
+      isError: false,
+      mutate: vi.fn(),
+    } as never);
+    vi.mocked(workforceHooks.useEmployeeProfileUpdate).mockReturnValue({
+      isPending: false,
+      isError: false,
+      mutate: vi.fn(),
+    } as never);
+    vi.mocked(workforceHooks.useEmployeeDeactivation).mockReturnValue({
       isPending: false,
       isError: false,
       mutate: vi.fn(),
@@ -237,18 +248,14 @@ describe("WorkforceRoute", () => {
     expect(
       screen.getByRole("heading", { name: "Marisol Rivera" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Spanish")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        (_, node) =>
-          node?.tagName === "P" &&
-          node.textContent?.includes("professional") === true,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Trade credential/)).toBeInTheDocument();
+    expect(screen.getByText("555-0100")).toBeInTheDocument();
+    expect(screen.getByText("Uses Branch schedule")).toBeInTheDocument();
+    expect(screen.queryByText("Spanish")).not.toBeInTheDocument();
     expect(screen.getAllByText(/MAIN/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Active/).length).toBeGreaterThan(0);
     expect(screen.getByRole("tablist", { name: "Employee detail" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Employee history" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "View History" }));
     expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP Employee Mobile role assigned");
     expect(screen.getByRole("region", { name: "Employee history" })).toHaveTextContent("ACP NATIVE");
     expect(
@@ -310,6 +317,7 @@ describe("WorkforceRoute", () => {
   });
 
   it("shows ordinary office identity, delivery, and access status", async () => {
+    authState.permissionCodes = ["COMPANY_ADMINISTER"];
     mockEligibility();
     vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({
       isLoading: false,
@@ -563,6 +571,7 @@ describe("WorkforceRoute", () => {
 
   it("separates Branch-derived availability from demonstrated capability evidence", async () => {
     authState.permissionCodes = [
+      "COMPANY_ADMINISTER",
       "COMPANY_WORKFORCE_CAPABILITY_MANAGE",
       "COMPANY_WORKFORCE_AVAILABILITY_MANAGE",
     ];

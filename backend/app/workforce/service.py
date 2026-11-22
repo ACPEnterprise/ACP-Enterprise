@@ -127,6 +127,9 @@ class WorkforceOperationsService:
             updated_at=max(employee.updated_at, profile.updated_at)
             if profile
             else employee.updated_at,
+            phone=employee.phone,
+            hire_date=employee.hire_date,
+            termination_date=employee.termination_date,
         )
 
     async def directory(

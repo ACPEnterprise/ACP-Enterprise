@@ -23,6 +23,10 @@ from app.workforce.administration_commands import (
     workforce_administration_service,
 )
 from app.workforce.employee_administration import employee_administration_service
+from app.workforce.employment import (
+    EmployeeEmploymentConflict,
+    employee_employment_service,
+)
 from app.workforce.employee_timeline import employee_timeline_service
 from app.workforce.permission_editor import (
     EmployeePermissionEditorConflict,
@@ -41,7 +45,9 @@ from app.workforce.schemas import (
     CertificationEvidenceRequest,
     EmployeeAccessLockRequest,
     EmployeeAdministrationDetail,
+    EmployeeDeactivationRequest,
     EmployeeNotificationTarget,
+    EmployeeProfileUpdateRequest,
     EmployeePermissionUpdateRequest,
     EmployeeTimeline,
     FieldReadinessRequest,
@@ -125,6 +131,14 @@ def _require_employee_administration(context: AuthorizationContext) -> None:
     if not required.issubset(context.permission_codes):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Employee administration authority is required."
+        )
+
+
+def _require_employee_management(context: AuthorizationContext) -> None:
+    _require_employee_administration(context)
+    if WorkforcePermission.MANAGE not in context.permission_codes:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Employee management authority is required."
         )
 
 
@@ -485,6 +499,56 @@ async def set_employee_access_lock(
             expected_authorization_version=data.expected_authorization_version,
         )
     except EmployeeAccessLockConflict as error:
+        raise _workforce_conflict(error) from error
+    result = await employee_administration_service.detail(
+        session, context=context, employee_id=employee_id
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
+    return result
+
+
+@router.patch(
+    "/administration/employees/{employee_id}/profile",
+    response_model=EmployeeAdministrationDetail,
+)
+async def update_employee_profile(
+    employee_id: UUID,
+    data: EmployeeProfileUpdateRequest,
+    context: ManageContext,
+    session: Session,
+) -> EmployeeAdministrationDetail:
+    _require_employee_management(context)
+    try:
+        await employee_employment_service.update_profile(
+            session, context=context, employee_id=employee_id, data=data
+        )
+    except EmployeeEmploymentConflict as error:
+        raise _workforce_conflict(error) from error
+    result = await employee_administration_service.detail(
+        session, context=context, employee_id=employee_id
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee was not found.")
+    return result
+
+
+@router.post(
+    "/administration/employees/{employee_id}/deactivate",
+    response_model=EmployeeAdministrationDetail,
+)
+async def deactivate_employee(
+    employee_id: UUID,
+    data: EmployeeDeactivationRequest,
+    context: ManageContext,
+    session: Session,
+) -> EmployeeAdministrationDetail:
+    _require_employee_management(context)
+    try:
+        await employee_employment_service.deactivate(
+            session, context=context, employee_id=employee_id, data=data
+        )
+    except EmployeeEmploymentConflict as error:
         raise _workforce_conflict(error) from error
     result = await employee_administration_service.detail(
         session, context=context, employee_id=employee_id

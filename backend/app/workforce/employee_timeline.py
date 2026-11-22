@@ -155,6 +155,8 @@ class EmployeeTimelineService:
                         (
                             "workforce.employee_access_locked",
                             "workforce.employee_access_unlocked",
+                            "workforce.employee_profile_updated",
+                            "workforce.employee_deactivated",
                         )
                     ),
                 )
@@ -165,12 +167,25 @@ class EmployeeTimelineService:
             if event.actor_user_id:
                 actor_ids.add(event.actor_user_id)
             locked = event.action.endswith("_locked")
+            deactivated = event.action == "workforce.employee_deactivated"
             items.append(
                 self._item(
-                    "ACCESS_LOCKED" if locked else "ACCESS_UNLOCKED",
+                    "EMPLOYMENT_DEACTIVATED"
+                    if deactivated
+                    else "ACCESS_LOCKED"
+                    if locked
+                    else "ACCESS_UNLOCKED"
+                    if event.action.endswith("_unlocked")
+                    else "PROFILE_UPDATED",
                     event.occurred_at,
-                    "security_audit",
-                    f"Employee access {'locked' if locked else 'unlocked'}; employment and operating history were unchanged.",
+                    "employee_audit",
+                    (
+                        "Employee employment was deactivated; historical jobs, appointments, and time records were preserved."
+                        if deactivated
+                        else "Employee profile details were updated."
+                        if event.action == "workforce.employee_profile_updated"
+                        else f"Employee access {'locked' if locked else 'unlocked'}; employment and operating history were unchanged."
+                    ),
                     employee_id,
                     event.actor_user_id,
                 )

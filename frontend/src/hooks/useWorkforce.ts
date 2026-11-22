@@ -22,6 +22,8 @@ import {
   sendEmployeePasswordReset,
   setEmployeeAccessLock,
   revokeEmployeeFunctionalAccess,
+  updateEmployeeProfile,
+  deactivateEmployee,
 } from "../api/workforce";
 
 export function useWorkforceDirectory() {
@@ -242,6 +244,40 @@ export function useEmployeeAccessLock(employeeId: string | null) {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
         client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+        client.invalidateQueries({ queryKey: ["employee-timeline", employeeId] }),
+      ]);
+    },
+  });
+}
+
+export function useEmployeeProfileUpdate(employeeId: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof updateEmployeeProfile>[1]) =>
+      updateEmployeeProfile(employeeId as string, input),
+    onSuccess: async (data) => {
+      client.setQueryData(["employee-administration", employeeId], data);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["workforce-employee", employeeId] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+        client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
+        client.invalidateQueries({ queryKey: ["employee-timeline", employeeId] }),
+      ]);
+    },
+  });
+}
+
+export function useEmployeeDeactivation(employeeId: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof deactivateEmployee>[1]) =>
+      deactivateEmployee(employeeId as string, input),
+    onSuccess: async (data) => {
+      client.setQueryData(["employee-administration", employeeId], data);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["workforce-employee", employeeId] }),
+        client.invalidateQueries({ queryKey: ["workforce-directory"] }),
+        client.invalidateQueries({ queryKey: ["employee-administration", employeeId] }),
         client.invalidateQueries({ queryKey: ["employee-timeline", employeeId] }),
       ]);
     },

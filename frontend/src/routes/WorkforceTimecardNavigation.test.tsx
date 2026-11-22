@@ -58,6 +58,8 @@ vi.mock("../hooks/useWorkforce", () => ({
     revoke: { mutate: vi.fn(), isPending: false, isError: false },
   }),
   useEmployeeAccessLock: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useEmployeeProfileUpdate: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useEmployeeDeactivation: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useEmployeeAccessMutation: () => ({
     mutate: vi.fn(),
     isPending: false,

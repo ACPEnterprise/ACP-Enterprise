@@ -8,7 +8,7 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { RealRosterActivationConsole } from "../components/workforce/RealRosterActivationConsole";
 import { ReadinessBlockers } from "../components/workforce/ReadinessBlockers";
-import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeePermissionUpdate, useEmployeeTimeline, useHistoricalWorkforceIdentities, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessLock, useEmployeeAccessMutation, useEmployeeAdministration, useEmployeeDeactivation, useEmployeeFunctionalAccess, useEmployeePasswordReset, useEmployeePermissionUpdate, useEmployeeProfileUpdate, useEmployeeTimeline, useHistoricalWorkforceIdentities, useSourceCertification, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
 import { useRoles } from "../features/administration/hooks";
 import { listPermissions } from "../features/administration/api";
@@ -98,6 +98,13 @@ export function WorkforceRoute() {
   const [readinessFilter, setReadinessFilter] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "org-chart">("list");
   const [detailTab, setDetailTab] = useState<"overview" | "access" | "time" | "payroll" | "history">("overview");
+  const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
+  const [editPhone, setEditPhone] = useState("");
+  const [editJobTitle, setEditJobTitle] = useState("");
+  const [editBranchId, setEditBranchId] = useState("");
+  const [deactivationReason, setDeactivationReason] = useState("");
+  const [deactivationDate, setDeactivationDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [confirmDeactivation, setConfirmDeactivation] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [permissionDrafts, setPermissionDrafts] = useState<Record<string, string[]>>({});
   const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
@@ -125,6 +132,8 @@ export function WorkforceRoute() {
   const [confirmAccessLock, setConfirmAccessLock] = useState(false);
   const [accessLockReason, setAccessLockReason] = useState("");
   const accessLock = useEmployeeAccessLock(nativeSelected);
+  const profileUpdate = useEmployeeProfileUpdate(nativeSelected);
+  const deactivation = useEmployeeDeactivation(nativeSelected);
   const accessMutation = useEmployeeAccessMutation(nativeSelected);
   const canManageMembership = permissionCodes.includes("COMPANY_MEMBERSHIP_MANAGE");
   const canManageBranches = permissionCodes.includes("COMPANY_BRANCH_ACCESS_MANAGE");
@@ -931,27 +940,55 @@ export function WorkforceRoute() {
               <div className="flex flex-wrap items-center gap-2"><Readiness state={detail.data.readiness_state} /><button type="button" className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold hover:bg-surface-subtle" onClick={closeEmployee}>Back to Workforce</button></div>
             </div>
             <nav aria-label="Employee detail" className="mt-5 flex gap-1 overflow-x-auto border-b border-stroke pb-1" role="tablist">
-              {(["overview", "access", "time", "payroll", "history"] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={detailTab === tab} className={`whitespace-nowrap rounded-t-lg px-3 py-2 text-sm font-semibold ${detailTab === tab ? "border-b-2 border-action-primary text-action-primary" : "text-content-muted hover:bg-surface-subtle hover:text-content"}`} onClick={() => setDetailTab(tab)}>{tab === "overview" ? "Overview" : tab[0].toUpperCase() + tab.slice(1)}</button>)}
+              {((canAdministerIdentity ? ["overview", "access", "time", "payroll", "history"] : ["overview", "time", "payroll", "history"]) as Array<typeof detailTab>).map((tab) => <button key={tab} type="button" role="tab" aria-selected={detailTab === tab} className={`whitespace-nowrap rounded-t-lg px-3 py-2 text-sm font-semibold ${detailTab === tab ? "border-b-2 border-action-primary text-action-primary" : "text-content-muted hover:bg-surface-subtle hover:text-content"}`} onClick={() => setDetailTab(tab)}>{tab === "overview" ? "Overview" : tab[0].toUpperCase() + tab.slice(1)}</button>)}
             </nav>
             {detailTab === "overview" && <section id="employee-personal" className="mt-5 space-y-5" aria-label="Employee overview">
               <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div><dt className="text-content-muted">Position</dt><dd className="font-medium">{visiblePosition(detail.data)}</dd></div>
                 <div><dt className="text-content-muted">Status</dt><dd className="font-medium">{detail.data.employee_status === "active" ? "ACTIVE" : detail.data.employee_status.toUpperCase()}</dd></div>
                 <div><dt className="text-content-muted">Branch</dt><dd className="font-medium">{branchName(detail.data.home_branch_id)}</dd></div>
-                <div><dt className="text-content-muted">Login</dt><dd className="break-all font-medium">{administration.data?.login_email ?? "Not configured"}</dd></div>
+                <div><dt className="text-content-muted">Phone</dt><dd className="font-medium">{detail.data.phone ?? "Not provided"}</dd></div>
+                <div><dt className="text-content-muted">Email</dt><dd className="break-all font-medium">{administration.data?.login_email ?? "Not configured"}</dd></div>
+                <div><dt className="text-content-muted">Employment dates</dt><dd className="font-medium">{detail.data.hire_date ?? "Hire date unavailable"} – {detail.data.termination_date ?? "Present"}</dd></div>
+                <div><dt className="text-content-muted">Availability</dt><dd className="font-medium">{detail.data.availability.length ? `${detail.data.availability.length} recorded window${detail.data.availability.length === 1 ? "" : "s"}` : "Uses Branch schedule"}</dd></div>
               </dl>
+              {detail.data.availability.length > 0 && <div className="rounded-xl bg-surface-subtle p-3 text-sm">
+                <p className="font-semibold">Scheduling availability</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {detail.data.availability.slice(0, 4).map((item) => <p key={`${item.branch_id}-${item.start_at}-${item.end_at}`}><span className="font-medium">{item.status}</span> · {new Date(item.start_at).toLocaleString()} – {new Date(item.end_at).toLocaleString()}</p>)}
+                </div>
+              </div>}
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl bg-surface-subtle p-3"><p className="text-xs text-content-muted">Login</p><p className="mt-1 font-semibold">{administration.data?.access_status === "ACTIVE" ? "LOGIN READY" : "LOGIN NEEDS SETUP"}</p></div>
                 <div className="rounded-xl bg-surface-subtle p-3"><p className="text-xs text-content-muted">Mobile</p><p className="mt-1 font-semibold">{administration.data?.mobile_readiness === "READY" ? "MOBILE READY" : "REVIEW NEEDED"}</p></div>
                 <div className="rounded-xl bg-surface-subtle p-3"><p className="text-xs text-content-muted">Payroll</p><p className="mt-1 font-semibold">PAYROLL REVIEW</p></div>
               </div>
               <div className="flex flex-wrap gap-2" aria-label="Employee quick actions">
-                {canAdministerIdentity && administration.data?.user_id && administration.data.access_status === "ACTIVE" && <Button variant="secondary" onClick={() => setConfirmPasswordReset(true)}>Reset password</Button>}
-                {canAdministerIdentity && administration.data?.user_id && administration.data.authorization_version && <Button variant="outline" onClick={() => { setAccessLockReason(""); setConfirmAccessLock(true); }}>{administration.data.access_status === "LOCKED" ? "Unlock access" : "Lock access"}</Button>}
-                <Button variant="outline" disabled title="Employment termination remains subject to assignment and payroll review">Terminate employee</Button>
+                <Button type="button" variant="secondary" disabled={!canAdministerEmployees} onClick={() => { setEditPhone(detail.data.phone ?? ""); setEditJobTitle(detail.data.job_title ?? ""); setEditBranchId(detail.data.home_branch_id ?? ""); setEditingEmployee(detail.data.employee_id); }}>Edit Employee</Button>
+                <Button type="button" variant="outline" onClick={() => setDetailTab("history")}>View History</Button>
+                {canAdministerEmployees && detail.data.employee_status === "active" && <Button type="button" variant="destructive" onClick={() => { setDeactivationReason(""); setConfirmDeactivation(true); }}>Deactivate Employee</Button>}
               </div>
+              {editingEmployee === detail.data.employee_id && <form className="rounded-xl border border-stroke bg-surface-subtle p-4" onSubmit={(event) => {
+                event.preventDefault();
+                profileUpdate.mutate({
+                  phone: editPhone.trim() || null,
+                  job_title: editJobTitle.trim() || null,
+                  home_branch_id: editBranchId || null,
+                  expected_updated_at: detail.data.updated_at,
+                }, { onSuccess: () => setEditingEmployee(null) });
+              }}>
+                <h4 className="font-semibold">Edit Employee</h4>
+                <p className="mt-1 text-sm text-content-muted">Update ordinary employee details. Access roles and security controls remain in Administration.</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm">Phone<Input className="mt-1" value={editPhone} onChange={(event) => setEditPhone(event.target.value)} /></label>
+                  <label className="text-sm">Position<Input className="mt-1" value={editJobTitle} onChange={(event) => setEditJobTitle(event.target.value)} /></label>
+                  <label className="text-sm">Branch<select className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2" value={editBranchId} onChange={(event) => setEditBranchId(event.target.value)}><option value="">Company-wide / unassigned</option>{(activeCompany?.branches ?? []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+                </div>
+                {profileUpdate.isError && <Alert className="mt-3" variant="danger">Employee details were not saved. Refresh and try again if another administrator changed this profile.</Alert>}
+                <div className="mt-4 flex flex-wrap gap-2"><Button type="submit" disabled={profileUpdate.isPending}>{profileUpdate.isPending ? "Saving…" : "Save Employee"}</Button><Button type="button" variant="outline" onClick={() => setEditingEmployee(null)}>Cancel</Button></div>
+              </form>}
             </section>}
-            {detailTab === "access" && <section className="mt-5 space-y-5" aria-label="Employee access editor">
+            {detailTab === "access" && canAdministerIdentity && <section className="mt-5 space-y-5" aria-label="Employee access editor">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-semibold">Access profile</h4>{permissionDraftDirty && <Badge variant="warning">UNSAVED CHANGES</Badge>}{selectedProfile === "CUSTOM" && <Badge variant="warning">CUSTOMIZED</Badge>}</div>
                 <p className="mt-1 text-sm text-content-muted">Choose a standard profile, then adjust individual permissions. Nothing is saved until you choose Save changes.</p>
@@ -971,8 +1008,21 @@ export function WorkforceRoute() {
             </section>}
             {detailTab === "time" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">Time</h4><p className="mt-1 text-sm text-content-muted">Review current time and attendance from the Time workspace.</p>{canReviewTime ? <a className="mt-3 inline-block font-semibold text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Open time review</a> : <p className="mt-3 text-sm text-content-muted">Time review is not available for this account.</p>}</section>}
             {detailTab === "payroll" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">Payroll</h4><p className="mt-1 text-sm text-content-muted">Payroll readiness is reviewed separately from access. No payroll action is performed from this summary.</p>{permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="mt-3 inline-block font-semibold text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Open payroll setup</Link>}</section>}
-            {detailTab === "history" && <section className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4"><h4 className="text-lg font-semibold">History</h4><p className="mt-1 text-sm text-content-muted">Source, audit, and evidence details are available only when deliberately expanded.</p><a className="mt-3 inline-block font-semibold text-action-primary underline" href="#employee-advanced">Open Source &amp; Audit</a></section>}
-            <details id="employee-advanced" className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4">
+            {detailTab === "history" && <section id="employee-history" className="mt-5 rounded-xl border border-stroke p-4" aria-label="Employee history">
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-semibold">Employee history</h4><p className="mt-1 text-sm text-content-muted">Complete audit and operational history for this employee.</p></div><Badge variant="neutral">{timeline.data?.items.length ?? 0} events</Badge></div>
+              {timeline.isLoading && <div className="mt-3"><Spinner label="Loading Employee history" /></div>}
+              {timeline.isError && <div className="mt-3"><Alert variant="warning">Employee history is unavailable. No historical event was inferred.</Alert></div>}
+              {timeline.data && <ol className="mt-3 space-y-3">
+                {timeline.data.items.map((item, index) => <li className="rounded-lg bg-surface-subtle p-3 text-sm" key={`${item.event_type}-${item.occurred_at}-${index}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2"><strong>{item.event_type.replaceAll("_", " ")}</strong><Badge variant={item.authority === "ACP_NATIVE" ? "success" : "neutral"}>{item.authority.replaceAll("_", " ")}</Badge></div>
+                  <p className="mt-1">{item.description}</p>
+                  <p className="mt-1 text-xs text-content-muted">{new Date(item.occurred_at).toLocaleString()} · {item.source.replaceAll("_", " ")}{item.actor_display_name ? ` · ${item.actor_display_name}` : ""}</p>
+                  {item.navigation_reference && <Link className="mt-2 inline-block font-semibold text-action-primary" to={item.navigation_reference}>Open related workspace</Link>}
+                </li>)}
+                {timeline.data.items.length === 0 && <li className="text-sm text-content-muted">No employee history is available.</li>}
+              </ol>}
+            </section>}
+            {canAdministerIdentity && <details id="employee-advanced" className="mt-5 rounded-xl border border-stroke bg-surface-subtle p-4">
               <summary className="cursor-pointer font-semibold">Advanced / Evidence</summary>
               <div className="mt-4 space-y-5">
             {detail.data.readiness_blockers.length > 0 && (
@@ -1296,26 +1346,8 @@ export function WorkforceRoute() {
                 </div>
               </section>
             </div>
-            <section id="employee-history" className="mt-5 scroll-mt-4 rounded-xl border border-stroke p-4" aria-label="Employee history">
-              <h4 className="font-semibold">Employee history</h4>
-              <p className="mt-1 text-sm text-content-muted">Canonical ACP events are labeled by authority. Source-backed evidence remains explicitly source-backed when available.</p>
-              {timeline.isLoading && <div className="mt-3"><Spinner label="Loading Employee history" /></div>}
-              {timeline.isError && <div className="mt-3"><Alert variant="warning">Employee history is unavailable. No historical event was inferred.</Alert></div>}
-              {timeline.data && <ol className="mt-3 space-y-3">
-                {timeline.data.items.map((item, index) => <li className="rounded-lg bg-surface-subtle p-3 text-sm" key={`${item.event_type}-${item.occurred_at}-${index}`}>
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <strong>{item.event_type.replaceAll("_", " ")}</strong>
-                    <Badge variant={item.authority === "ACP_NATIVE" ? "success" : "neutral"}>{item.authority.replaceAll("_", " ")}</Badge>
-                  </div>
-                  <p className="mt-1">{item.description}</p>
-                  <p className="mt-1 text-xs text-content-muted">{new Date(item.occurred_at).toLocaleString()} · {item.source.replaceAll("_", " ")}{item.actor_display_name ? ` · ${item.actor_display_name}` : ""}</p>
-                  {item.navigation_reference && <Link className="mt-2 inline-block font-semibold text-action-primary" to={item.navigation_reference}>Open related workspace</Link>}
-                </li>)}
-                {timeline.data.items.length === 0 && <li className="text-sm text-content-muted">No canonical Employee history is available.</li>}
-              </ol>}
-            </section>
               </div>
-            </details>
+            </details>}
       </Card>
         )}
       {pendingPermissionNavigation && (
@@ -1336,6 +1368,32 @@ export function WorkforceRoute() {
           onCancel={() => setConfirmPasswordReset(false)}
           onConfirm={() => passwordReset.mutation.mutate(undefined, { onSuccess: () => setConfirmPasswordReset(false) })}
         />
+      )}
+      {confirmDeactivation && detail.data && (
+        <ConfirmationDialog
+          title="Deactivate employee?"
+          description="This ends active employment for scheduling and workforce readiness. Existing jobs, appointments, time records, and audit history remain preserved. It does not perform an emergency access lock."
+          confirmLabel="Deactivate Employee"
+          destructive
+          pending={deactivation.isPending}
+          onCancel={() => setConfirmDeactivation(false)}
+          onConfirm={() => {
+            if (deactivationReason.trim().length < 3 || !deactivationDate) return;
+            deactivation.mutate(
+              { effective_date: deactivationDate, reason: deactivationReason.trim() },
+              { onSuccess: () => setConfirmDeactivation(false) },
+            );
+          }}
+        >
+          <div className="space-y-3">
+            <label className="block text-sm font-medium" htmlFor="employee-deactivation-date">Effective date</label>
+            <Input id="employee-deactivation-date" type="date" value={deactivationDate} onChange={(event) => setDeactivationDate(event.target.value)} required />
+            <label className="block text-sm font-medium" htmlFor="employee-deactivation-reason">Reason</label>
+            <Input id="employee-deactivation-reason" value={deactivationReason} onChange={(event) => setDeactivationReason(event.target.value)} minLength={3} maxLength={500} required placeholder="Reason for ending active employment" />
+            {deactivationReason.trim().length > 0 && deactivationReason.trim().length < 3 && <p className="text-sm text-status-danger">Enter at least 3 characters.</p>}
+            {deactivation.isError && <Alert variant="danger">The employee was not deactivated. Refresh the profile and verify current authority.</Alert>}
+          </div>
+        </ConfirmationDialog>
       )}
       {confirmAccessLock && administration.data?.user_id && administration.data.authorization_version && (
         <ConfirmationDialog

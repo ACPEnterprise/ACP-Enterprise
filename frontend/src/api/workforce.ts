@@ -16,6 +16,9 @@ export interface WorkforceEmployeeSummary {
   readiness_state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE";
   readiness_blockers: string[];
   updated_at: string;
+  phone?: string | null;
+  hire_date?: string | null;
+  termination_date?: string | null;
 }
 
 export interface WorkforceEmployeeDetail extends WorkforceEmployeeSummary {
@@ -461,6 +464,35 @@ export async function setEmployeeAccessLock(
   return (
     await apiClient.put<EmployeeAdministrationDetail>(
       `/api/v1/workforce/administration/employees/${employeeId}/access-lock`,
+      input,
+    )
+  ).data;
+}
+
+export async function updateEmployeeProfile(
+  employeeId: string,
+  input: {
+    phone: string | null;
+    job_title: string | null;
+    home_branch_id: string | null;
+    expected_updated_at: string;
+  },
+): Promise<EmployeeAdministrationDetail> {
+  return (
+    await apiClient.patch<EmployeeAdministrationDetail>(
+      `/api/v1/workforce/administration/employees/${employeeId}/profile`,
+      input,
+    )
+  ).data;
+}
+
+export async function deactivateEmployee(
+  employeeId: string,
+  input: { effective_date: string; reason: string },
+): Promise<EmployeeAdministrationDetail> {
+  return (
+    await apiClient.post<EmployeeAdministrationDetail>(
+      `/api/v1/workforce/administration/employees/${employeeId}/deactivate`,
       input,
     )
   ).data;
