@@ -57,5 +57,29 @@ export function useTimeclock(service: TimekeepingService, network: NetworkMonito
     }
   }, [applyFailure, busy, network, punchState, refresh, service]);
 
-  return { status, punchState, timecard, message, busy, refresh, punch };
+  const submitEntry = useCallback(async (revisionId: string) => {
+    if (busy || !(await network.isConnected())) {
+      if (!busy) { setStatus("offline"); setMessage("You're offline. Time submission is unavailable."); }
+      return;
+    }
+    setStatus("submitting"); setMessage("Submitting time for manager approval…");
+    try {
+      const submitted = await service.submit(revisionId);
+      setTimecard((current) => current ? {
+        ...current,
+        entries: current.entries.map((entry) => entry.entry_id === submitted.entry_id ? submitted : entry),
+      } : current);
+      setStatus("ready"); setMessage("Time submitted for manager approval.");
+      try { setTimecard(await service.timecard()); } catch { /* The transition response remains authoritative. */ }
+    } catch (error) {
+      const kind = error instanceof ApiFailure ? error.kind : "unavailable";
+      if (kind === "conflict" || kind === "timeout" || kind === "unavailable" || kind === "malformed_response") {
+        setStatus("recovering"); setMessage("Confirming the authoritative timecard…");
+        const recovered = await refresh();
+        if (recovered) setMessage("The timecard changed or the submission outcome was uncertain. Review the current entry state before retrying.");
+      } else applyFailure(error);
+    }
+  }, [applyFailure, busy, network, refresh, service]);
+
+  return { status, punchState, timecard, message, busy, refresh, punch, submitEntry };
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("ACCESS_TOKEN_SIGNING_KEY", "test-customer-import-signing-key-32-chars")
@@ -12,7 +13,11 @@ from app.customer_import.router import (
     _identity_systems,
     _requires_qualified_hcp_admission,
     _source_system,
+    _source_identity_counts,
+    _verified_new_source_identity,
     router,
+    admit_customer_import,
+    stage_customer_import,
 )
 
 
@@ -33,6 +38,7 @@ def test_hcp_aliases_have_distinct_lineage_keys() -> None:
     assert "housecall_pro_source4" in _identity_systems(
         "housecall_pro", "housecall_pro_source4"
     )
+    assert "housecall_pro_source4" in _identity_systems("housecall_pro", "housecall_pro")
     assert _requires_qualified_hcp_admission("housecall_pro", "housecall_pro_source4")
     assert not _requires_qualified_hcp_admission("housecall_pro", "housecall_pro")
 
@@ -64,8 +70,46 @@ def test_admission_projection_keeps_contact_and_location_evidence() -> None:
     assert location is not None and location.postal_code == "10001"
 
 
+def test_new_admission_requires_complete_unique_source_identity() -> None:
+    payload = {
+        "display_name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "phone": "5551234567",
+        "address": "1 Analytical Way",
+        "city": "Example",
+        "state": "NY",
+        "postal_code": "10001",
+    }
+    assert _verified_new_source_identity(payload, _source_identity_counts([payload]))
+    assert not _verified_new_source_identity({**payload, "email": ""}, _source_identity_counts([{**payload, "email": ""}]))
+    assert not _verified_new_source_identity(payload, _source_identity_counts([payload, {**payload, "display_name": "Ada L."}]))
+
+
 def test_persisted_models_include_batch_identity_and_processed_cursor() -> None:
     assert "batch_key" in CustomerImportBatch.__table__.columns
     assert "migration_run_id" in CustomerImportBatch.__table__.columns
     assert "processed" in CustomerImportRow.__table__.columns
+
+
+def test_http_import_boundaries_commit_staging_and_admission() -> None:
+    # The database dependency is request-scoped and deliberately does not
+    # auto-commit. Keep this regression beside the route contract so a future
+    # refactor cannot turn a successful response into a non-durable preview.
+    assert "await session.commit()" in inspect.getsource(stage_customer_import)
+    assert "await session.commit()" in inspect.getsource(admit_customer_import)
     assert "attempt_count" in CustomerImportRow.__table__.columns
+
+
+def test_completed_admission_replays_durable_receipt() -> None:
+    source = inspect.getsource(admit_customer_import)
+    assert 'batch.status == "completed"' in source
+    assert 'event_key == f"admit:{run.id}"' in source
+    assert "processed=run.source_count" in source
+
+
+def test_migration_run_counts_are_recorded_with_each_row_outcome() -> None:
+    source = inspect.getsource(admit_customer_import)
+    assert "run.source_count += 1; run.duplicate_count += 1" in source
+    assert "run.source_count += 1; run.unresolved_count += 1" in source
+    assert "run.source_count += 1; run.accepted_count += 1" in source
+    assert "duplicate_existing_customer_target" in source

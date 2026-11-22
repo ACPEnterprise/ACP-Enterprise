@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from uuid import uuid4
 
 import pytest
 from app.core.config import Settings, settings
+from app.core.redis import redis_client
 from app.platform.auth.errors import (
     RateLimitExceededError,
     RateLimitUnavailableError,
@@ -14,6 +14,7 @@ from app.platform.auth.rate_limit import AuthenticationRateLimiter
 from app.platform.health.contracts import HealthState
 from app.platform.health.service import PlatformHealthService
 from redis.asyncio import Redis
+from redis.exceptions import AuthenticationError, ResponseError
 
 
 def _configuration(redis_url: str) -> Settings:
@@ -21,6 +22,8 @@ def _configuration(redis_url: str) -> Settings:
         environment="test",
         database_url=settings.database_url,
         redis_url=redis_url,
+        redis_username=settings.redis_username,
+        redis_password_file=settings.redis_password_file,
         redis_required_for_readiness=True,
         access_token_signing_key="synthetic-redis-test-signing-key-0001",
         security_token_hmac_key="synthetic-redis-test-hmac-key-000001",
@@ -28,22 +31,34 @@ def _configuration(redis_url: str) -> Settings:
 
 
 @pytest.mark.asyncio
-async def test_real_redis_round_trip_serialization_ttl_and_cleanup() -> None:
-    client = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
-    key = f"qualification:round-trip:{uuid4()}"
-    payload = {"classification": "synthetic", "version": 1}
+async def test_real_redis_authenticated_acl_round_trip_and_expiry() -> None:
+    client = redis_client(_configuration(settings.redis_url))
+    key = f"auth-rate:qualification:{uuid4()}"
     try:
         assert await client.ping() is True
-        assert await client.set(key, json.dumps(payload, sort_keys=True), ex=1) is True
-        stored = await client.get(key)
-        assert stored is not None
-        assert json.loads(stored) == payload
-        ttl = await client.ttl(key)
-        assert 0 <= ttl <= 1
+        transaction = client.pipeline(transaction=True)
+        transaction.incrby(key, 1)
+        transaction.expire(key, 1)
+        assert await transaction.execute() == [1, True]
         await asyncio.sleep(1.1)
-        assert await client.get(key) is None
+        transaction = client.pipeline(transaction=True)
+        transaction.incrby(key, 1)
+        transaction.expire(key, 1)
+        assert await transaction.execute() == [1, True]
+        with pytest.raises(ResponseError):
+            await client.config_get("*")
     finally:
-        await client.delete(key)
+        await asyncio.sleep(1.1)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_real_redis_rejects_unauthenticated_clients() -> None:
+    client = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+    try:
+        with pytest.raises(AuthenticationError):
+            await client.ping()
+    finally:
         await client.aclose()
 
 
@@ -65,15 +80,6 @@ async def test_rate_limit_is_atomic_expiring_isolated_and_reconnectable() -> Non
     await limiter.enforce(
         bucket="login", identifier_hash=second, limit=1, window_seconds=5
     )
-
-    client = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
-    try:
-        assert await client.get(f"auth-rate:login:{first}") == "3"
-        assert await client.ttl(f"auth-rate:login:{first}") > 0
-        assert await client.get(f"auth-rate:login:{second}") == "1"
-    finally:
-        await client.delete(f"auth-rate:login:{first}", f"auth-rate:login:{second}")
-        await client.aclose()
 
     # Each enforcement owns and closes its client; a later call reconnects cleanly.
     await limiter.enforce(

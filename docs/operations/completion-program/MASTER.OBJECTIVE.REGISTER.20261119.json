@@ -1,0 +1,235 @@
+{
+  "schema_version": "twelvehats-master-objective-register/v1",
+  "program": "TWELVEHATS_MASTER_COMPLETION_PROGRAM",
+  "as_of": "2026-11-20T09:04:26-05:00",
+  "protected_authority": "origin/integration/platform-master@970a437b304756b31a7e66464e10650f1a56430e",
+  "working_authority": "release/customer-correction-20261119@970a437b304756b31a7e66464e10650f1a56430e",
+  "status_values": ["NOT STARTED", "IN PROGRESS", "IMPLEMENTED", "TESTING", "INTEGRATION READY", "INTEGRATED", "ACCEPTED", "BLOCKED"],
+  "guardrails": ["NO_PRODUCTION_DEPLOY", "NO_QBO_WRITES", "NO_HCP_WRITES", "NO_LIVE_PAYROLL", "NO_BANK_TRANSFER", "NO_UNAUTHORIZED_FINANCIAL_POSTING", "NO_UNVERIFIED_SSH_HOST"],
+  "objectives": [
+    {
+      "id": "OBJ-001", "domain": "program-control", "outcome": "One durable machine-readable source of objective truth.", "status": "ACCEPTED",
+      "known_defects": ["Initial evidence normalization is incomplete."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["docs/operations/completion-program", "scripts/validate_master_objective_register.py"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": [], "implementation_steps": ["Validate schema", "Update after every handoff and integration"], "data_migrations": [], "security_permissions": ["Repository write only"],
+      "acceptance_tests": ["Register validator passes", "All mandated IDs and fields exist"], "simulator_scenarios": [], "integration_requirements": ["Commit with qualified program changes"], "evidence_required": ["Validator output", "Commit SHA"],
+      "priority": "P0", "estimated_remaining_hours": 0, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["All 32 mandated objectives validate against scripts/validate_master_objective_register.py", "Execution evidence is checkpointed in the version-controlled JSONL journal"]
+    },
+    {
+      "id": "OBJ-002", "domain": "worker-orchestration", "outcome": "Every available worker has nonoverlapping executable work.", "status": "IN PROGRESS",
+      "known_defects": ["Only three concurrent worker slots are exposed to this master."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["worker orchestration"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-001"], "implementation_steps": ["Track worker state", "Reassign completed workers"], "data_migrations": [], "security_permissions": ["Workers may not alter protected release authority"],
+      "acceptance_tests": ["No available worker idle while unblocked work exists"], "simulator_scenarios": [], "integration_requirements": ["Master-only protected integration"], "evidence_required": ["Worker handoff evidence"],
+      "priority": "P0", "estimated_remaining_hours": 12, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["beta_access_recheck assigned OBJ-100/101", "live_cohort_verify assigned OBJ-010/011", "release_dryrun assigned OBJ-090/092"]
+    },
+    {
+      "id": "OBJ-003", "domain": "program-continuity", "outcome": "Interrupted work resumes from durable commits and journal checkpoints.", "status": "ACCEPTED",
+      "known_defects": ["Autonomous process lifetime is controlled by the execution host."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["docs/operations/completion-program/MASTER.EXECUTION.JOURNAL.20261119.jsonl"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-001"], "implementation_steps": ["Append checkpoint after each material result", "Record exact resumption command"], "data_migrations": [], "security_permissions": ["No secrets in journal"],
+      "acceptance_tests": ["Every in-progress objective has durable evidence or resumption instructions"], "simulator_scenarios": ["Scenario G"], "integration_requirements": ["Journal remains version controlled"], "evidence_required": ["Journal entries", "Commit SHAs"],
+      "priority": "P0", "estimated_remaining_hours": 0, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Qualified commits and resumption evidence published through the dedicated handoff ref", "No protected branch mutation or deployment occurred"]
+    },
+    {
+      "id": "OBJ-010", "domain": "customers", "outcome": "Corrected customer database and history available in the application.", "status": "INTEGRATION READY",
+      "known_defects": ["Corrected population is not proven on Beta."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/customer_migration", "backend/app/customers", "frontend/src/components/customers"]}, "assignment": {"worker": "live_cohort_verify", "machine": "OM1 local"},
+      "dependencies": ["OBJ-100", "OBJ-102"], "implementation_steps": ["Verify release artifact", "Integrate through protected governance", "Apply only after backup/preflight"], "data_migrations": ["Idempotent customer correction"], "security_permissions": ["Tenant-scoped migration authority", "No fuzzy identity merge"],
+      "acceptance_tests": ["5464/5464 source identities", "Historical relationships preserved", "Idempotent rerun"], "simulator_scenarios": ["Scenario E", "Scenario I"], "integration_requirements": ["Data and Product candidate SHAs", "Restorable Beta backup"], "evidence_required": ["Source reconciliation", "Applied release SHA"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "EXTERNAL", "escalation": "Beta trusted access required"}, "completion_evidence": ["Local corrected release lineage present through 7012e24d"]
+    },
+    {
+      "id": "OBJ-011", "domain": "customers", "outcome": "Actual application acceptance for all customers and representative cohort.", "status": "BLOCKED",
+      "known_defects": ["No trusted Beta read path for live cohort verification."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/customer_migration/live_acceptance_cohort.py", "backend/scripts/verify_customer_acceptance_cohort.py"]}, "assignment": {"worker": "live_cohort_verify", "machine": "OM1 plus Beta target"},
+      "dependencies": ["OBJ-010", "OBJ-100", "OBJ-103"], "implementation_steps": ["Run read-only verifier", "Verify Richard Ratliff", "Verify 25-customer cohort", "Exercise UI search/detail"], "data_migrations": [], "security_permissions": ["Read-only tenant-scoped DB access"],
+      "acceptance_tests": ["5464 identities", "Richard Ratliff PASS", "25-customer PASS", "Cross-tenant denial"], "simulator_scenarios": ["Scenario E", "Scenario F"], "integration_requirements": ["Deployed corrected SHA"], "evidence_required": ["Mode-0600 cohort report", "UI persistence evidence"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "EXTERNAL", "escalation": "Restore trusted Beta SSH/DB read authority"}, "completion_evidence": ["Verifier implementation qualified: 14 tests, Ruff, format, MyPy PASS", "Preview read-only cohort: 20/25 selected verified, 5 missing, Richard Ratliff anchor verified, 0 holds; report sha256 17fb98063ce3e40ecc47f69f7b69d71e09348bf7972cacc6286e75bc187a0fbc", "Preview is not Beta acceptance: Beta remains stale at 1804e3d7"]
+    },
+    {
+      "id": "OBJ-020", "domain": "scheduling", "outcome": "Persistent calendar and appointment scheduling with conflict and timezone controls.", "status": "INTEGRATION READY",
+      "known_defects": ["Actual deployed multi-session behavior unverified."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/scheduling", "frontend/src/components/scheduling", "frontend/src/components/appointments"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 local"},
+      "dependencies": ["OBJ-010", "OBJ-040"], "implementation_steps": ["Run scheduling suites", "Exercise persistence and conflict cases"], "data_migrations": [], "security_permissions": ["Scheduler roles"],
+      "acceptance_tests": ["Create/edit/reschedule", "Conflict detection", "Timezone correctness", "Session persistence"], "simulator_scenarios": ["Scenario A", "Scenario B", "Scenario H"], "integration_requirements": ["Customer and employee identities"], "evidence_required": ["Persisted appointment IDs"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-021", "domain": "dispatch", "outcome": "Dispatcher assigns and tracks work with reliable readback.", "status": "INTEGRATION READY",
+      "known_defects": ["Actual deployed role/readback acceptance unverified."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/dispatch", "frontend/src/components/dispatch"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 local"},
+      "dependencies": ["OBJ-020", "OBJ-040"], "implementation_steps": ["Run dispatch persistence and reassignment tests", "Exercise role denial"], "data_migrations": [], "security_permissions": ["Dispatcher role"],
+      "acceptance_tests": ["Assign/reassign/status/readback", "Unauthorized denial"], "simulator_scenarios": ["Scenario A", "Scenario H"], "integration_requirements": ["Scheduling and workforce"], "evidence_required": ["Assignment IDs and state transitions"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-022", "domain": "technician", "outcome": "Technician My Day supports assigned work, status, time, and authorized revenue actions.", "status": "INTEGRATION READY",
+      "known_defects": ["Physical-device and live credential acceptance incomplete."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["frontend/src/features/technician", "mobile", "backend/app/field_service"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 local"},
+      "dependencies": ["OBJ-021", "OBJ-041"], "implementation_steps": ["Run mobile/frontend tests", "Exercise assigned-job flow"], "data_migrations": [], "security_permissions": ["Technician role"],
+      "acceptance_tests": ["Assigned jobs", "Customer/address", "Status and time persistence", "Unauthorized action denial"], "simulator_scenarios": ["Scenario A", "Scenario G"], "integration_requirements": ["Dispatch, timekeeping, invoicing"], "evidence_required": ["Persisted job/time IDs", "Mobile test output"],
+      "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "PARTIAL", "escalation": "Physical device credentials remain external"}, "completion_evidence": ["Mobile qualification: 160/160 tests, typecheck, lint and Beta config validation passed", "Three moderate Expo-chain advisories remain disclosed; zero critical/high"]
+    },
+    {
+      "id": "OBJ-030", "domain": "pricebook", "outcome": "Tenant-specific searchable flat-rate services preserve historical prices.", "status": "INTEGRATION READY",
+      "known_defects": ["Operational tenant configuration not accepted."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/price_book", "docs/operations/price-book"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": [], "implementation_steps": ["Qualify service search and historical snapshots"], "data_migrations": [], "security_permissions": ["Tenant pricebook permission"],
+      "acceptance_tests": ["CRUD", "Active/inactive", "Tenant isolation", "Historical preservation"], "simulator_scenarios": ["Scenario A", "Scenario B"], "integration_requirements": ["Estimate and invoice adapters"], "evidence_required": ["Selected item and persisted price IDs"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-031", "domain": "estimating", "outcome": "Versioned customer/job estimates calculate correctly and convert to invoices.", "status": "INTEGRATION READY",
+      "known_defects": ["End-to-end approval and conversion evidence pending."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/estimates", "frontend/src/components/estimates"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-030", "OBJ-010"], "implementation_steps": ["Exercise totals/revisions/approval/conversion"], "data_migrations": [], "security_permissions": ["Estimate permissions"],
+      "acceptance_tests": ["Quantity/labor/material/tax/discount", "Revision history", "Conversion idempotency"], "simulator_scenarios": ["Scenario B"], "integration_requirements": ["Pricebook and invoicing"], "evidence_required": ["Estimate and invoice IDs", "Calculation trace"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-032", "domain": "invoicing-payments", "outcome": "Invoices, partial payments, credits, refunds, and journals remain idempotent and related.", "status": "INTEGRATION READY",
+      "known_defects": ["No authorized real-payment processing acceptance."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/invoicing", "backend/app/payments", "frontend/src/components/invoices", "frontend/src/components/payments"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-031", "OBJ-050"], "implementation_steps": ["Run isolated posting and duplicate tests", "Exercise partial/refund flow with synthetic data"], "data_migrations": [], "security_permissions": ["No real processor authority"],
+      "acceptance_tests": ["Numbering", "Partial payment", "Refund/credit", "Duplicate prevention", "Journal balance"], "simulator_scenarios": ["Scenario A", "Scenario B", "Scenario G"], "integration_requirements": ["Accounting posting"], "evidence_required": ["Synthetic transaction and journal IDs"],
+      "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-040", "domain": "workforce", "outcome": "Secure employee identity, history, roles, assignments, and compensation configuration.", "status": "INTEGRATION READY",
+      "known_defects": ["Verified production compensation configuration is incomplete."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/workforce", "backend/app/employee_operations", "backend/app/platform/employees", "frontend/src/components/workforce"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-060"], "implementation_steps": ["Inventory identities", "Verify historical mapping", "Qualify compensation access controls"], "data_migrations": ["Historical QBO employee mapping rehearsal"], "security_permissions": ["Payroll/workforce PII restricted"],
+      "acceptance_tests": ["Active/terminated history", "Role boundaries", "Compensation confidentiality"], "simulator_scenarios": ["Scenario C", "Scenario F"], "integration_requirements": ["Scheduling, timekeeping, payroll"], "evidence_required": ["Synthetic employee mappings and denial evidence"],
+      "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "PARTIAL", "escalation": "Verified employee compensation inputs required"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-041", "domain": "timekeeping", "outcome": "Auditable cross-device time, breaks, corrections, approvals, and payroll grouping.", "status": "INTEGRATED",
+      "known_defects": ["Operational physical multi-device acceptance pending."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/timekeeping", "mobile", "frontend/src/features/workforce"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-040"], "implementation_steps": ["Run clock/break/correction/approval suites", "Exercise restart persistence"], "data_migrations": [], "security_permissions": ["Employee and manager scoped permissions"],
+      "acceptance_tests": ["Clock in/out", "Breaks", "Overtime", "Correction audit", "Period grouping"], "simulator_scenarios": ["Scenario A", "Scenario C", "Scenario G"], "integration_requirements": ["Payroll input contract"], "evidence_required": ["Time entry and audit IDs", "Calculation trace"],
+      "priority": "P0", "estimated_remaining_hours": 1, "blocker": {"state": "EXTERNAL", "escalation": "Accept on physical devices with real Company policy and identities"}, "completion_evidence": ["112 focused tests passed: 40 backend on disposable PostgreSQL 16, 21 frontend, 47 mobile, 4 overtime policy/calculation", "Clock/break/job time, replay, persistence, correction lineage, backend submit/approve, self-approval denial, pay-period sealing, tenant/role denial, and overtime calculation qualified", "Employee web/mobile submit and permission-gated manager approval UI integrated at 970a437b304756b31a7e66464e10650f1a56430e", "Frontend 779/779 plus lint and production build PASS; mobile 162/162 plus lint, typecheck, and configuration validation PASS"]
+    },
+    {
+      "id": "OBJ-050", "domain": "accounting-migration", "outcome": "Historical QBO records rehearse deterministically without writes or duplicate native records.", "status": "IN PROGRESS",
+      "known_defects": ["No admission mappings exist in TwelveHats", "A/R crosswalk exception remains"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/qbo_source", "backend/app/accounting_migration", "backend/app/accounting"]}, "assignment": {"worker": "master", "machine": "OM1 plus authorized Preview QBO evidence volume"},
+      "dependencies": ["OBJ-051"], "implementation_steps": ["Run deterministic no-write admission rehearsal", "Prove idempotency", "Emit exception packet"], "data_migrations": ["Future controlled QBO admission only after acceptance"], "security_permissions": ["Read-only QBO evidence", "No QBO writes"],
+      "acceptance_tests": ["20702 records", "97093 relationships", "Source IDs preserved", "Double rehearsal identical"], "simulator_scenarios": ["Scenario D", "Scenario I"], "integration_requirements": ["Account/customer/vendor crosswalk authority"], "evidence_required": ["Rehearsal digest", "Duplicate and conflict counts"],
+      "priority": "P1", "estimated_remaining_hours": 4, "blocker": {"state": "PARTIAL", "escalation": "Accountant acceptance needed before admission"}, "completion_evidence": ["QBO manifest b9a8bd5139bf70e80131c0c8096459e4f1c65576049ee58d91b683d8eeb5378f", "20702 sealed records", "Deterministic read-only rehearsal digest 236c5ea97007a2a8b2dcaa24614e676972079ed0e1d50900f9df3b0e008d37d3; report sha256 6b99654147f82a7eca5e6296b09dd4aa99256d7eea1099bee3e60aff94325f33", "0 application records and 0 accounting facts created; 1171/1171 payment-invoice links resolved"]
+    },
+    {
+      "id": "OBJ-051", "domain": "financial-reconciliation", "outcome": "Admitted data reproduces controlled financial statements with explicit exceptions.", "status": "IN PROGRESS",
+      "known_defects": ["Invoice open balance exceeds Balance Sheet A/R by 100801.91", "73 unlinked payments"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/financial_reporting", "backend/app/accounting/opening_controls.py"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-050"], "implementation_steps": ["Build deterministic A/R bridge", "Classify unlinked payments", "Preserve exception"], "data_migrations": [], "security_permissions": ["No fabricated payments"],
+      "acceptance_tests": ["TB 2021520.50 per side", "BS equation 730223.61", "Net income 373644.93"], "simulator_scenarios": ["Scenario D"], "integration_requirements": ["Admitted accounting facts"], "evidence_required": ["Dollar-level reconciliation register"],
+      "priority": "P1", "estimated_remaining_hours": 4, "blocker": {"state": "BUSINESS_REVIEW", "escalation": "Accountant reviews A/R and unapplied cash"}, "completion_evidence": ["Source reports reconcile at control level with zero control-dollar difference"]
+    },
+    {
+      "id": "OBJ-052", "domain": "banking", "outcome": "Bank/card imports, matching, categorization, and reconciliation queues are safe and duplicate-aware.", "status": "TESTING",
+      "known_defects": ["102 Amex rows unposted", "4 exact repeats", "Capital One feed stale since 2026-08-30"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/accounting", "backend/app/procurement_matching", "frontend/src/components/accounting"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-050"], "implementation_steps": ["Exercise unposted candidate queue", "Verify transfer/card-payment classification", "Add stale-feed evidence"], "data_migrations": [], "security_permissions": ["No bank posting or transfer"],
+      "acceptance_tests": ["Duplicate detection", "Unmatched queue", "Statement comparison", "No automatic posting"], "simulator_scenarios": ["Scenario D", "Scenario G"], "integration_requirements": ["Chart of accounts and posting service"], "evidence_required": ["Candidate IDs and no-write assertion"],
+      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "BUSINESS_REVIEW", "escalation": "Accountant-approved Company/account/statement authority and explicit dispositions for four indistinguishable repeat pairs are required"}, "completion_evidence": ["102-row source is mode 0600; SHA-256 4501a4db22ef45928a6f072488dd3329cfdc77892c3e36a43cc1ad6efb1078c5; custody set digest dc682d25fa20327ee0c7663835a99f61feefdc93e1161466a5f0528c37d998ed", "102 rows parse, 98 are exact-unique, four repeat groups occur twice; source category text remains advisory and all rows remain unposted", "37 backend banking/authority/handoff tests and 10 Banking UI tests passed", "Provider-neutral CURRENT/STALE/NO_EVIDENCE feed health committed at 0e99d31d4738ec8e7c65020f7ddcaa28ae7dea49", "Ruff, format, MyPy, ESLint, and tenant-isolation qualification passed; no provider call or financial mutation", "Generic JSON preview is non-mutating and duplicate-aware; Amex CSV normalization is blocked because the source lacks stable per-row identity, currency/state semantics, target account authority, and repeat-pair dispositions"]
+    },
+    {
+      "id": "OBJ-053", "domain": "financial-reporting", "outcome": "Auditable financial reports and drill-down run from admitted facts.", "status": "TESTING",
+      "known_defects": ["Real admitted accounting population is absent."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/financial_reporting", "backend/app/accounts_payable", "frontend/src/components/accounting"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-050", "OBJ-051"], "implementation_steps": ["Qualify synthetic reporting", "Re-run against admitted data when authorized"], "data_migrations": [], "security_permissions": ["Accounting report permissions"],
+      "acceptance_tests": ["GL/TB/BS/P&L", "A/R and A/P", "Drill-down", "Audit trail"], "simulator_scenarios": ["Scenario D"], "integration_requirements": ["Accounting facts and source provenance"], "evidence_required": ["Report totals and drill-down IDs"],
+      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "DEPENDENCY", "escalation": "Complete admission rehearsal and acceptance"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-060", "domain": "payroll-readiness", "outcome": "Verified next-payroll preview with independent gross-to-net validation.", "status": "IN PROGRESS",
+      "known_defects": ["Verified current employee rates, tax elections, commissions, and post-September checks are incomplete", "No live payroll authority"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/payroll", "frontend/src/components/payroll"]}, "assignment": {"worker": "master", "machine": "OM1 isolated test environment"},
+      "dependencies": ["OBJ-040", "OBJ-041", "OBJ-062"], "implementation_steps": ["Inventory verified inputs", "Run controlled preview", "Independently cross-check calculations", "Emit exceptions"], "data_migrations": ["No production payroll migration until acceptance"], "security_permissions": ["Restricted payroll PII", "No live payroll"],
+      "acceptance_tests": ["Hourly/salary/commission/overtime", "Deductions/FICA/tax", "Liability journal", "Independent recalculation"], "simulator_scenarios": ["Scenario C"], "integration_requirements": ["Approved policies and timesheets"], "evidence_required": ["Synthetic payroll register", "Calculation trace", "Missing-input register"],
+      "priority": "P0", "estimated_remaining_hours": 6, "blocker": {"state": "DATA", "escalation": "Verified current payroll configuration required for actual employee preview"}, "completion_evidence": ["709 historical paycheck rows sealed", "2026 wages reconcile to P&L at 302958.77", "95 focused calculation/readiness/tax/reporting tests passed", "Real preview remains blocked by unadmitted compensation, time, W-4, jurisdiction, deduction, YTD and tax-table authority"]
+    },
+    {
+      "id": "OBJ-061", "domain": "payroll-execution", "outcome": "Lawful payroll register/check/provider workflow with explicit external responsibilities.", "status": "BLOCKED",
+      "known_defects": ["No authorized payroll provider write connection", "No authority for payments, deposits, or filings"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/payroll", "docs/operations"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-060"], "implementation_steps": ["Document interim approved check process", "Validate liability outputs", "Identify provider handoff"], "data_migrations": [], "security_permissions": ["Explicit owner authorization required for live execution"],
+      "acceptance_tests": ["Register generation", "Check instruction generation in test mode", "Liability/filing evidence tracking"], "simulator_scenarios": ["Scenario C"], "integration_requirements": ["Provider/regulatory approval"], "evidence_required": ["Capability matrix", "Approved external procedure"],
+      "priority": "P0", "estimated_remaining_hours": 4, "blocker": {"state": "EXTERNAL", "escalation": "Owner selects/authorizes payroll provider and payment/tax procedure"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-062", "domain": "payroll-history", "outcome": "Post-QBO paper payroll is reconstructed without duplicate wages or uncertain tax treatment.", "status": "IN PROGRESS",
+      "known_defects": ["Payroll Summary exceeds paycheck-history gross by 41734.39 and net by 35846.00", "Post-September paper-check details are missing"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/payroll", "backend/app/qbo_source"]}, "assignment": {"worker": "master", "machine": "OM1 secure custody"},
+      "dependencies": ["OBJ-060"], "implementation_steps": ["Prepare secure intake", "Match checks to bank evidence", "Flag tax exceptions"], "data_migrations": ["Future payroll-history admission"], "security_permissions": ["Mode-0600 payroll evidence outside Git"],
+      "acceptance_tests": ["No duplicate pay/check identities", "Gross/net/bank bridge", "Missing fields explicit"], "simulator_scenarios": ["Scenario I"], "integration_requirements": ["Employee identity mapping"], "evidence_required": ["Coverage and discrepancy register"],
+      "priority": "P1", "estimated_remaining_hours": 4, "blocker": {"state": "DATA", "escalation": "Obtain post-September check stubs and bank-clearing evidence"}, "completion_evidence": ["Secure November 19 payroll archive sealed outside Git"]
+    },
+    {
+      "id": "OBJ-070", "domain": "csr", "outcome": "Operational first-login command center supports caller-to-booking workflow.", "status": "BLOCKED",
+      "known_defects": ["Canonical CSR and SERVICE_CSR roles lack COMPANY_SCHEDULING_MANAGE and COMPANY_JOB_MANAGE required by atomic service-request booking."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["frontend/src/components/command-center", "frontend/src/components/search", "backend/app/customers", "backend/app/jobs"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 local"},
+      "dependencies": ["OBJ-010", "OBJ-020"], "implementation_steps": ["Exercise configured-tenant routing", "Run customer-to-job booking flow"], "data_migrations": [], "security_permissions": ["CSR role"],
+      "acceptance_tests": ["Search/create/location/job/appointment", "History and notes", "Role denial"], "simulator_scenarios": ["Scenario A", "Scenario H"], "integration_requirements": ["Customer, scheduling, dispatch"], "evidence_required": ["Persisted customer/job/appointment IDs"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "SECURITY_POLICY", "escalation": "Approve a dedicated route permission such as COMPANY_SERVICE_REQUEST_BOOK for CSR, SERVICE_CSR, or both; do not silently broaden role permissions"}, "completion_evidence": ["54 backend and 54 frontend focused CSR tests passed on disposable PostgreSQL 16/Redis 7", "Configured owner tenant lands on Command Center", "CSR/customer-service landing repaired to authorized Customers operations at 5afec0c061e4e969afe1d4759987686d558f1774 without expanding permissions", "Existing scheduling/job manage permissions were rejected for CSR booking because they authorize unrelated lifecycle mutations"]
+    },
+    {
+      "id": "OBJ-080", "domain": "lia-accounting", "outcome": "LIA explains accounting exceptions without silently posting changes.", "status": "TESTING",
+      "known_defects": ["Real admitted financial population absent."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/lia", "backend/app/luminary", "frontend/src/components/lia"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-050", "OBJ-052"], "implementation_steps": ["Exercise fact/recommendation separation", "Verify no-write boundaries"], "data_migrations": [], "security_permissions": ["No autonomous financial posts"],
+      "acceptance_tests": ["Duplicate/uncategorized/stale-feed/payroll anomaly explanations", "No mutation"], "simulator_scenarios": ["Scenario D"], "integration_requirements": ["Accounting evidence adapters"], "evidence_required": ["Explanation packet with provenance"],
+      "priority": "P1", "estimated_remaining_hours": 3, "blocker": {"state": "DEPENDENCY", "escalation": "Admitted or synthetic financial facts required"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-081", "domain": "lia-operations", "outcome": "LIA assists operations while preserving permissions and verified facts.", "status": "INTEGRATION READY",
+      "known_defects": ["Integrated role-scoped scenario evidence incomplete."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/lia", "frontend/src/components/lia"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-070", "OBJ-020", "OBJ-021"], "implementation_steps": ["Run role-scoped retrieval and recommendation tests"], "data_migrations": [], "security_permissions": ["Tenant and role scoped retrieval"],
+      "acceptance_tests": ["CSR/scheduling/customer/estimate guidance", "Cross-tenant denial", "No speculative mutation"], "simulator_scenarios": ["Scenario A", "Scenario F"], "integration_requirements": ["Operational retrieval sources"], "evidence_required": ["Scoped responses and denial evidence"],
+      "priority": "P1", "estimated_remaining_hours": 2, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-090", "domain": "simulation", "outcome": "Existing simulator is located, qualified, and repaired where bounded.", "status": "ACCEPTED",
+      "known_defects": ["Execution entry point and scenario coverage are being reverified."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/simulation", "backend/app/demo", "backend/tests"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 isolated local"},
+      "dependencies": [], "implementation_steps": ["Inventory simulator", "Run existing scenarios", "Identify smallest repair"], "data_migrations": ["Synthetic fixtures only"], "security_permissions": ["Test-only data"],
+      "acceptance_tests": ["Documented entry point", "Reproducible output", "No external writes"], "simulator_scenarios": ["Scenario A", "Scenario F", "Scenario G"], "integration_requirements": ["Local isolated database"], "evidence_required": ["Commands, IDs, pass/fail report"],
+      "priority": "P1", "estimated_remaining_hours": 0, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Synthetic connected lifecycle 16/16 assertions, 18 entities, 21 operations, digest 8e0381bcf768e267901af7e790bd23128e0280ad5661e83c82ecd2ef3e0ac636", "43 selected operational tests passed; persistent P0 workflow passed on pristine PostgreSQL 16 at dm1v1a3c5e7g"]
+    },
+    {
+      "id": "OBJ-091", "domain": "test-tenant", "outcome": "Sales Forward is a complete isolated synthetic contractor tenant.", "status": "INTEGRATED",
+      "known_defects": ["Accounting and payroll-provider execution remain intentionally absent from the fixture."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/platform/onboarding/sales_forward_fixture.py", "backend/scripts/preview_synthetic_tenant_fixture.py"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 isolated local"},
+      "dependencies": ["OBJ-090"], "implementation_steps": ["Locate tenant fixture", "Inventory entities", "Repair with synthetic data if needed"], "data_migrations": ["Test-only fixture load"], "security_permissions": ["Synthetic PII only"],
+      "acceptance_tests": ["Tenant/users/customers/pricebook/jobs/invoices/accounting/payroll configuration"], "simulator_scenarios": ["Scenario J"], "integration_requirements": ["Demo-control schema"], "evidence_required": ["Fixture IDs and tenant-isolation proof"],
+      "priority": "P1", "estimated_remaining_hours": 0, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Distinct Preview-only Sales Forward company 7fbe4c2e-1a3d-5f67-9b80-c2d4e6f8a091 and branch 8acd5d3f-2b4e-5078-ac91-d3e5f709b102 integrated at f1fa4d88b05e940a52d8e8b636e21c4a2f9a7cd5", "18 unit/regression and 10 fresh-PostgreSQL tests passed; existing ACP synthetic tenant unchanged", "Connected Customer, location, employee, pricebook, appointment, job, dispatch, time, estimate, invoice and unposted receipt fixture is idempotent and fails closed on material drift"]
+    },
+    {
+      "id": "OBJ-092", "domain": "simulation", "outcome": "Ten end-to-end contractor scenarios persist correct state and calculations.", "status": "IN PROGRESS",
+      "known_defects": ["Full scenario matrix not yet executed on current head."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/tests", "frontend/src/test", "mobile/__tests__"]}, "assignment": {"worker": "release_dryrun", "machine": "OM1 isolated local"},
+      "dependencies": ["OBJ-090", "OBJ-091"], "implementation_steps": ["Run smallest P0 sequence", "Expand to A-J", "Record actual IDs and failures"], "data_migrations": ["Isolated synthetic database"], "security_permissions": ["No external writes"],
+      "acceptance_tests": ["Scenarios A-J"], "simulator_scenarios": ["Scenario A", "Scenario B", "Scenario C", "Scenario D", "Scenario E", "Scenario F", "Scenario G", "Scenario H", "Scenario I", "Scenario J"], "integration_requirements": ["Qualified domain modules"], "evidence_required": ["Scenario report with IDs and persisted readback"],
+      "priority": "P1", "estimated_remaining_hours": 8, "blocker": {"state": "PARTIAL", "escalation": "Continue independent scenarios when a dependency blocks"}, "completion_evidence": ["43 unique operational/simulation tests passed, 0 product failures", "Persistent CSR-to-job-to-dispatch-to-My-Day-to-time-to-pricebook-to-estimate-to-invoice-to-payment-to-accounting/payroll projection sequence verified in isolated PostgreSQL"]
+    },
+    {
+      "id": "OBJ-100", "domain": "beta-access", "outcome": "Trusted governed access to the correct Beta target.", "status": "BLOCKED",
+      "known_defects": ["Dedicated private key /Users/michaelbfouse/.ssh/acp_beta_clean_ed25519 is absent from the active execution environment."], "ownership": {"repository": "infrastructure/external", "modules": ["Beta SSH authority", "known_hosts"]}, "assignment": {"worker": "beta_access_recheck", "machine": "OM1 to Beta target"},
+      "dependencies": [], "implementation_steps": ["Verify host identity and approved key", "Record exact recovery action"], "data_migrations": [], "security_permissions": ["Pinned host verification required"],
+      "acceptance_tests": ["Strict host-key SSH succeeds", "Target identity and current SHA read back"], "simulator_scenarios": [], "integration_requirements": ["Approved infrastructure authority"], "evidence_required": ["Pinned fingerprint and read-only target evidence"],
+      "priority": "P0", "estimated_remaining_hours": 1, "blocker": {"state": "EXTERNAL", "escalation": "Restore the dedicated private key at /Users/michaelbfouse/.ssh/acp_beta_clean_ed25519 with mode 0600; do not substitute another identity"}, "completion_evidence": ["Public Beta HTTPS healthy at 162.243.232.59; DB and Redis healthy; deployed SHA 1804e3d7418810bc30bb204761e009d768c9f8e4", "Independently scanned server ED25519 fingerprint matches SHA256:J7ecBX1x9S1K3TOEX6VsrO6bN85Hbna+B1jS3XeXlMQ", "Dedicated client key expected at /Users/michaelbfouse/.ssh/acp_beta_clean_ed25519 is absent; unrelated default key was not used"]
+    },
+    {
+      "id": "OBJ-101", "domain": "beta-configuration", "outcome": "Beta deploy cannot perform unintended production QBO operations.", "status": "INTEGRATION READY",
+      "known_defects": ["Prior deployer rejected QBO_PRODUCTION_ENABLED=true."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["scripts", "docker-compose.preview.yml", "backend/app/qbo_source"]}, "assignment": {"worker": "beta_access_recheck", "machine": "OM1 plus Beta target"},
+      "dependencies": ["OBJ-100"], "implementation_steps": ["Inspect sanctioned configuration", "Prove read/write guardrails", "Do not alter live credentials"], "data_migrations": [], "security_permissions": ["No QBO production operations from Beta"],
+      "acceptance_tests": ["Deployer preflight accepts safe config", "QBO writes impossible", "Secrets absent from artifacts"], "simulator_scenarios": ["Scenario G"], "integration_requirements": ["Release runner"], "evidence_required": ["Configuration readback and preflight packet"],
+      "priority": "P0", "estimated_remaining_hours": 2, "blocker": {"state": "DEPENDENCY", "escalation": "Beta access required for live readback"}, "completion_evidence": ["Deployed and protected source default QBO_PRODUCTION_ENABLED=false", "Sanctioned deployer rejects QBO_PRODUCTION_ENABLED=true and production reads fail closed when disabled"]
+    },
+    {
+      "id": "OBJ-102", "domain": "release-integration", "outcome": "Qualified work enters protected authority with migration and rollback evidence.", "status": "INTEGRATED",
+      "known_defects": [], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["scripts/enterprise-release-qualify", "release governance"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-001"], "implementation_steps": ["Review diffs", "Qualify", "Integrate minimally", "Verify remote protected SHA only with authority"], "data_migrations": ["Single Alembic head and backup-first deployment"], "security_permissions": ["Master-only protected integration"],
+      "acceptance_tests": ["Static/tests/security/tenant isolation", "Migration/rollback", "No secrets"], "simulator_scenarios": ["Scenario G"], "integration_requirements": ["Qualified candidate SHAs"], "evidence_required": ["Protected SHA", "Qualification packet"],
+      "priority": "P0", "estimated_remaining_hours": 0, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": ["Offline promotion and rollback dry run PASS at 1e1a0227", "24 release/backup/resilience tests passed", "Disposable loopback PostgreSQL 16 and authenticated Redis 7 backend qualification harness integrated at 5ef139115ef7a82263918e641034d0bda5cecbf3", "Full backend qualification: 3851 passed, 0 failed, 45 warnings; Alembic dm1v1a3c5e7g single head/no drift; cleanup verified", "Ruff 0, Ruff format 1566 files, MyPy 0 across 959 source files", "Frontend 776/776 and production build passed; frontend audit zero vulnerabilities", "Mobile 160/160, typecheck/lint/config passed; zero critical/high and three disclosed moderate advisories", "Qualified handoff 7ed72e1c26b7dbf80458429d11409e7a1a76499d admitted by non-force fast-forward", "Qualified Time Clock repair admitted; origin/integration/platform-master verified at 970a437b304756b31a7e66464e10650f1a56430e"]
+    },
+    {
+      "id": "OBJ-103", "domain": "beta-acceptance", "outcome": "Owner-accessible Beta exposes qualified workflows and rollback instructions.", "status": "BLOCKED",
+      "known_defects": ["Dedicated Beta SSH private key is absent from the active execution environment", "Corrected customer release is protected but not deployed"], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["Beta deployment", "docs/operations"]}, "assignment": {"worker": "master", "machine": "OM1 plus Beta target"},
+      "dependencies": ["OBJ-100", "OBJ-101", "OBJ-102"], "implementation_steps": ["Backup", "Preflight", "Deploy governed SHA", "Verify health and workflows", "Publish checklist"], "data_migrations": ["Backup-first qualified migrations"], "security_permissions": ["Authorized Beta deploy only"],
+      "acceptance_tests": ["URL/login", "Deployed SHA", "Health", "P0 workflows", "Rollback"], "simulator_scenarios": ["Scenario A", "Scenario E", "Scenario G"], "integration_requirements": ["Trusted target and qualified protected SHA"], "evidence_required": ["Beta SHA, URL, backup digest, UI acceptance"],
+      "priority": "P0", "estimated_remaining_hours": 3, "blocker": {"state": "EXTERNAL", "escalation": "Restore trusted Beta access"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-110", "domain": "commercial-onboarding", "outcome": "Standard contractors onboard and re-import without custom code or cross-tenant leakage.", "status": "TESTING",
+      "known_defects": ["Full commercial onboarding scenario not accepted."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/platform/onboarding", "backend/app/migration_factory", "frontend/src/onboarding"]}, "assignment": {"worker": "master", "machine": "OM1 isolated local"},
+      "dependencies": ["OBJ-090", "OBJ-091"], "implementation_steps": ["Run synthetic onboarding", "Exercise repeated imports and exceptions"], "data_migrations": ["Synthetic fixture imports"], "security_permissions": ["Tenant provisioning authority in test only"],
+      "acceptance_tests": ["Tenant creation", "Invites/roles", "Imports", "Idempotency", "Isolation"], "simulator_scenarios": ["Scenario F", "Scenario I", "Scenario J"], "integration_requirements": ["Platform onboarding and migration factory"], "evidence_required": ["Tenant and import run IDs"],
+      "priority": "P2", "estimated_remaining_hours": 8, "blocker": {"state": "NONE", "escalation": "NONE"}, "completion_evidence": []
+    },
+    {
+      "id": "OBJ-111", "domain": "commercial-operations", "outcome": "Commercial billing, administration, recovery, support, audit, and documentation are qualified.", "status": "TESTING",
+      "known_defects": ["Capability inventory and end-to-end commercial acceptance incomplete."], "ownership": {"repository": "ACP-Enterprise-PlatformMaster", "modules": ["backend/app/platform", "backend/app/analytics", "docs"]}, "assignment": {"worker": "master", "machine": "OM1 local"},
+      "dependencies": ["OBJ-110"], "implementation_steps": ["Inventory existing capabilities", "Prioritize launch blockers", "Qualify recovery and access controls"], "data_migrations": [], "security_permissions": ["No live billing without authorization"],
+      "acceptance_tests": ["Plans/billing test mode", "Provisioning", "Export", "Backup/restore", "Audit", "Credential management"], "simulator_scenarios": ["Scenario J", "Scenario G"], "integration_requirements": ["Commercial tenant lifecycle"], "evidence_required": ["Capability matrix and recovery packet"],
+      "priority": "P2", "estimated_remaining_hours": 12, "blocker": {"state": "PARTIAL", "escalation": "External payment/provider setup remains separate"}, "completion_evidence": []
+    }
+  ]
+}

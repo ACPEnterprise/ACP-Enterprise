@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import json
+from copy import deepcopy
 
 import pytest
-
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
+from app.operational_migration.hcp_november_executor import _digest
 from app.operational_migration.hcp_november_packet_adapter import (
     EXPECTED_COUNTS,
     SOURCE_PACKET_CONTRACT,
     adapt_source_packet,
 )
-from app.operational_migration.hcp_november_executor import _digest
-
 
 COMPANY = "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd"
 BRANCH = "887f413a-70dc-4ab1-98aa-8e84f4e7efd0"
@@ -56,7 +54,9 @@ def _source_packet() -> dict:
                     "original_gate_disposition": disposition,
                     "parent_lineage": [],
                     "payload_locator": f"private/{domain}.json#{source_id}",
-                    "prior_source_digest": "b" * 64 if disposition == "UPDATE" else None,
+                    "prior_source_digest": "b" * 64
+                    if disposition == "UPDATE"
+                    else None,
                     "reason": "synthetic",
                     "source_digest": "a" * 64,
                 }
@@ -140,18 +140,39 @@ def test_final_packet_adapts_without_dropping_records() -> None:
 @pytest.mark.parametrize(
     "change,code",
     [
-        (lambda packet: packet.update(contract="wrong/v1"), "hcp_november_adapter_source_contract"),
-        (lambda packet: packet["classification_totals"].update(CREATE=510), "hcp_november_adapter_count_mismatch"),
-        (lambda packet: packet["records"][0].update(parent_lineage=[{"domain": "job", "source_id": "missing", "disposition": "CREATE"}]), "hcp_november_adapter_lineage_ambiguous"),
-        (lambda packet: packet["records"][0].update(domain="unknown"), "hcp_november_adapter_unknown_domain"),
-        (lambda packet: packet["records"][0].update(disposition="MUTATE"), "hcp_november_adapter_unknown_disposition"),
+        (
+            lambda packet: packet.update(contract="wrong/v1"),
+            "hcp_november_adapter_source_contract",
+        ),
+        (
+            lambda packet: packet["classification_totals"].update(CREATE=510),
+            "hcp_november_adapter_count_mismatch",
+        ),
+        (
+            lambda packet: packet["records"][0].update(
+                parent_lineage=[
+                    {"domain": "job", "source_id": "missing", "disposition": "CREATE"}
+                ]
+            ),
+            "hcp_november_adapter_lineage_ambiguous",
+        ),
+        (
+            lambda packet: packet["records"][0].update(domain="unknown"),
+            "hcp_november_adapter_unknown_domain",
+        ),
+        (
+            lambda packet: packet["records"][0].update(disposition="MUTATE"),
+            "hcp_november_adapter_unknown_disposition",
+        ),
     ],
 )
 def test_malformed_source_fails_closed(change, code: str) -> None:
     source = _source_packet()
     change(source)
     if source.get("contract") == SOURCE_PACKET_CONTRACT:
-        source["digest"] = _digest({key: value for key, value in source.items() if key != "digest"})
+        source["digest"] = _digest(
+            {key: value for key, value in source.items() if key != "digest"}
+        )
     with pytest.raises(SafeEvidenceError, match=code):
         _adapt(source)
 
@@ -159,7 +180,9 @@ def test_malformed_source_fails_closed(change, code: str) -> None:
 def test_count_drift_in_records_fails_closed() -> None:
     source = _source_packet()
     source["records"].pop()
-    source["digest"] = _digest({key: value for key, value in source.items() if key != "digest"})
+    source["digest"] = _digest(
+        {key: value for key, value in source.items() if key != "digest"}
+    )
     with pytest.raises(SafeEvidenceError, match="hcp_november_adapter_count_mismatch"):
         _adapt(source)
 
@@ -169,10 +192,18 @@ def test_executable_child_of_held_parent_fails_closed() -> None:
     held = next(item for item in source["records"] if item["disposition"] == "HOLD")
     child = next(item for item in source["records"] if item["executable"])
     child["parent_lineage"] = [
-        {"domain": held["domain"], "source_id": held["source_id"], "disposition": held["disposition"]}
+        {
+            "domain": held["domain"],
+            "source_id": held["source_id"],
+            "disposition": held["disposition"],
+        }
     ]
-    source["digest"] = _digest({key: value for key, value in source.items() if key != "digest"})
-    with pytest.raises(SafeEvidenceError, match="hcp_november_adapter_held_parent_executable_edge"):
+    source["digest"] = _digest(
+        {key: value for key, value in source.items() if key != "digest"}
+    )
+    with pytest.raises(
+        SafeEvidenceError, match="hcp_november_adapter_held_parent_executable_edge"
+    ):
         _adapt(source)
 
 
@@ -183,4 +214,9 @@ def test_source_digest_and_output_are_deterministic() -> None:
     assert first == second
     assert first["source_packet_digest"] == source["digest"]
     assert first["adapter_version"]
-    assert hashlib.sha256(json.dumps(source, sort_keys=True, separators=(",", ":")).encode()).hexdigest() != first["digest"]
+    assert (
+        hashlib.sha256(
+            json.dumps(source, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        != first["digest"]
+    )

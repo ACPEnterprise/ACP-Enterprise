@@ -13,6 +13,8 @@ export interface QboSourceEvidenceReadiness {
   acquired_at?: string;
   total_source_records?: number;
   source_families?: QboSourceFamilyAvailability[];
+  evidence_mode?: "bounded_api_envelopes" | "sealed_manual_archive";
+  native_admission_ready?: boolean;
 }
 
 export interface QboFamilyDisposition {

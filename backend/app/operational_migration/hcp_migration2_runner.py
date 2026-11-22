@@ -64,10 +64,10 @@ EXPECTED_PACKAGE_DIGEST = (
     "f77e3e09457efcbf6d42137be1af43be6ad0adbea8eab2c12ca320730fd96901"
 )
 EXPECTED_HYBRID_DIGEST = (
-    "228f2e1b1f9050066cd8de5cddfceff6a62461864c0d6a90361040801132cbad"
+    "7205c86cf389ae951fd588ed6cb6b1dc67eeb7772fe4b6324fbaec46cad7a187"
 )
 EXPECTED_PARENT_CLOSURE_DIGEST = (
-    "05fd508921de0c9521ac7c7be9632489a7ade3ab90ae2f0bb5c59a5d709e502b"
+    "0093df82e68a898cc0f0d065a736678511158cdad6a24fdf58cb5a20a962562e"
 )
 
 
@@ -287,8 +287,8 @@ class ProtectedSource4Loader:
             "referenced_details": 43,
             "control_assertions": 5248,
             "customer_union": 5296,
-            "contacts": 4148,
-            "locations": 5339,
+            "contacts": 4143,
+            "locations": 4939,
             "location_exceptions": 294,
             "job_parent_references": 5801,
         }:
@@ -420,7 +420,7 @@ class HcpMigration2ExecutionPlan:
                 **{
                     ("EXPLICIT_EXCEPTION", key): value
                     for key, value in self.completion.exception_counts.items()
-                    if key != "service_location" and value
+                    if key not in {"customer", "contact", "service_location"} and value
                 },
                 **{
                     ("REJECTED", key): value
@@ -430,7 +430,9 @@ class HcpMigration2ExecutionPlan:
                 **{
                     ("INTENTIONALLY_NON_APPLICABLE", key): value
                     for key, value in self.completion.non_applicable_counts.items()
-                    if key != "employee" and value
+                    if key
+                    not in {"customer", "contact", "service_location", "employee"}
+                    and value
                 },
             }
         )

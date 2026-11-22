@@ -57,6 +57,21 @@ describe("permission-driven field product contracts", () => {
     await waitFor(() => expect(onOpenJob).toHaveBeenCalledWith(item, "2026-09-02"));
   });
 
+  it("deduplicates overlapping daily assignments without a React key warning", async () => {
+    const item = { appointment_id: "30000000-0000-4000-8000-000000000001", appointment_number: "APT-1", job_id: "40000000-0000-4000-8000-000000000001", job_number: "JOB-1", job_status: "ready", job_version: 1, customer_display_name: "Synthetic Customer", service_location_label: "Synthetic Site", window_start_at: "2026-09-02T12:00:00Z", window_end_at: "2026-09-02T13:00:00Z", assignment_status: "assigned", assignment_version: 1, arrival_state: "pending" as const, field_execution_enabled: true };
+    const service = { itinerary: jest.fn(async (date: string) => ({ service_date: date, technician_display_name: "Synthetic", items: [item] })), state: jest.fn(), arrival: jest.fn(), transition: jest.fn(), workSummary: jest.fn(), customerDisposition: jest.fn(), note: jest.fn(), approval: jest.fn(), refreshHandoff: jest.fn() };
+    const network = { isConnected: jest.fn(async () => true), subscribe: jest.fn(() => () => undefined) };
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      render(<JobsScreen service={service} network={network} />);
+      await waitFor(() => expect(service.itinerary).toHaveBeenCalledTimes(3));
+      expect(screen.getAllByText("Job JOB-1")).toHaveLength(1);
+      expect(consoleError.mock.calls.flat().join(" ")).not.toContain("same key");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("uses assignment-scoped successor projections without client identity scope", async () => {
     const request = jest.fn()
       .mockResolvedValueOnce({ job_id: "40000000-0000-4000-8000-000000000001", history_limit: 10, attachment_upload_state: "source_required", items: [] })

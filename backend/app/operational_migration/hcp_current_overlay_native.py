@@ -17,24 +17,26 @@ from app.customer_migration.models import (
     CustomerSourceIdentity,
     ServiceLocationSourceIdentity,
 )
-from app.financials.service import (
-    FinancialService,
-    MigrateEstimate,
-    MigrateInvoice,
-    MigratedLineItem,
-)
 from app.customers.models import Customer, ServiceLocation
 from app.customers.schemas import (
     ContactCreate,
     CustomerCreate,
     CustomerStatus,
-    CustomerType,
     CustomerUpdateRequest,
     ServiceLocationCreate,
 )
 from app.customers.service import CustomerService
 from app.customers.update import CustomerUpdateService, customer_update_service
+from app.financials.models import Estimate, Invoice
+from app.financials.service import (
+    FinancialService,
+    FinancialValidationError,
+    MigratedLineItem,
+    MigrateEstimate,
+    MigrateInvoice,
+)
 from app.jobs.commands import MigrateJob, UpdateJob
+from app.jobs.errors import JobValidationError
 from app.jobs.models import Job, JobAppointmentLink
 from app.jobs.service import JobService
 from app.jobs.types import JobPriority
@@ -47,17 +49,18 @@ from app.operational_migration.hcp_current_overlay import (
 from app.operational_migration.hcp_current_overlay_adapter import (
     CurrentOverlayDomainServices,
 )
-from app.operational_migration.hcp_source4_contracts import JOB_STATUS
-from app.operational_migration.hcp_source4_native_binding import (
-    HcpSource4NativeBindingBootstrap,
-)
+from app.operational_migration.hcp_hybrid_customer import hcp_customer_name
 from app.operational_migration.hcp_migration2b import (
     EmployeeCrosswalkCommand,
     persist_employee_crosswalk,
 )
 from app.operational_migration.hcp_source4_contracts import (
+    JOB_STATUS,
     build_estimate,
     build_invoice,
+)
+from app.operational_migration.hcp_source4_native_binding import (
+    HcpSource4NativeBindingBootstrap,
 )
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
@@ -70,7 +73,6 @@ from app.operational_migration.models import (
     JobSourceIdentity,
 )
 from app.operational_migration.repository import OperationalMigrationRepository
-from app.financials.models import Estimate, Invoice
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.models import Appointment
@@ -79,19 +81,7 @@ from app.scheduling.service import (
     RescheduleAppointmentCommand,
     SchedulingService,
 )
-
-
-def _bounded_hold_code(reason: str) -> str:
-    """Fit a hold reason into the persisted 100-character display code.
-
-    The complete reason remains in the signed execution packet and contributes
-    to ``hold_digest``. The database column is bounded, so retain a readable
-    prefix plus a deterministic suffix instead of aborting a safe hold.
-    """
-    if len(reason) <= 100:
-        return reason
-    suffix = hashlib.sha256(reason.encode("utf-8")).hexdigest()[:12]
-    return f"{reason[:87]}~{suffix}"
+from app.scheduling.errors import SchedulingValidationError
 from app.scheduling.types import (
     AppointmentReference,
     AppointmentRescheduleReason,
@@ -303,7 +293,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             if customer is None or customer.company_id != self.context.company.id:
                 return None
         elif domain in {"estimate", "invoice"}:
-            if native.company_id != self.context.company.id or native.branch_id != self.branch.id:
+            if (
+                native.company_id != self.context.company.id
+                or native.branch_id != self.branch.id
+            ):
                 return None
         elif native.company_id != self.context.company.id:
             return None
@@ -350,22 +343,31 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
     async def create(
         self, session: AsyncSession, record: OverlayRecord
     ) -> OverlaySourceState:
-        if record.domain == "customer":
-            native: Any = await self._create_customer(session, record)
-        elif record.domain == "service_location":
-            native = await self._create_location(session, record)
-        elif record.domain == "job":
-            native = await self._create_job(session, record)
-        elif record.domain == "appointment":
-            native = await self._create_appointment(session, record)
-        elif record.domain == "employee":
-            native = await self._create_employee(session, record)
-        elif record.domain == "estimate":
-            native = await self._create_estimate(session, record)
-        elif record.domain == "invoice":
-            native = await self._create_invoice(session, record)
-        else:
-            raise ValueError("financial overlay mutation is prohibited")
+        try:
+            if record.domain == "customer":
+                native: Any = await self._create_customer(session, record)
+            elif record.domain == "service_location":
+                native = await self._create_location(session, record)
+            elif record.domain == "job":
+                native = await self._create_job(session, record)
+            elif record.domain == "appointment":
+                native = await self._create_appointment(session, record)
+            elif record.domain == "employee":
+                native = await self._create_employee(session, record)
+            elif record.domain == "estimate":
+                native = await self._create_estimate(session, record)
+            elif record.domain == "invoice":
+                native = await self._create_invoice(session, record)
+            else:
+                raise ValueError("financial overlay mutation is prohibited")
+        except (
+            JobValidationError,
+            FinancialValidationError,
+            SchedulingValidationError,
+            KeyError,
+            ValueError,
+        ) as error:
+            raise OverlayDomainHold(f"source record validation failed: {error}") from error
         return OverlaySourceState(record.source_digest, str(native.id), record.payload)
 
     async def update(
@@ -413,9 +415,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 master_run_id=self.master_run_id,
                 entity_kind=record.domain,
                 native_id=record.source_id,
-                hold_code=_bounded_hold_code(
-                    record.reason or f"overlay_{record.assertion.value}"
-                ),
+                hold_code=(record.reason or f"overlay_{record.assertion.value}")[:100],
                 package_digest=self.package_digest,
                 evidence_digest=record.source_digest,
                 reconciliation_key=f"{record.domain}:{record.source_id}"[:191],
@@ -433,21 +433,16 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         payload = record.payload
         first = _text(payload.get("first_name"))
         last = _text(payload.get("last_name"))
-        company = _text(payload.get("company") or payload.get("company_name"))
-        display_name = company or " ".join(value for value in (first, last) if value)
-        if not display_name:
+        name = hcp_customer_name(payload)
+        if name is None:
             raise ValueError("source Customer has no authoritative display name")
         customer = await self.customers.stage_migrated_customer(
             session,
             context=self.context,
             customer_data=CustomerCreate(
-                customer_type=(
-                    CustomerType.COMMERCIAL
-                    if payload.get("kind") == "business"
-                    else CustomerType.RESIDENTIAL
-                ),
-                display_name=display_name,
-                legal_name=company,
+                customer_type=name.customer_type,
+                display_name=name.display_name,
+                legal_name=name.legal_name,
                 marketing_source=_text(payload.get("lead_source")),
                 notes=_text(payload.get("notes")),
                 status=CustomerStatus.ACTIVE,
@@ -676,7 +671,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         await session.flush()
         return employee
 
-    async def _job_identity(self, session: AsyncSession, parents: tuple[OverlayKey, ...]):
+    async def _job_identity(
+        self, session: AsyncSession, parents: tuple[OverlayKey, ...]
+    ):
         key = next((item for item in parents if item.domain == "job"), None)
         if key is None:
             raise ValueError("financial record Job parent is missing")
@@ -697,9 +694,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         payload = dict(record.payload)
         payload.setdefault("_source_digest", record.source_digest)
         payload.setdefault("_owner_disposition", record.source_disposition or "CREATE")
-        payload.setdefault("_source_job_id", next(
-            key.source_id for key in record.parent_keys if key.domain == "job"
-        ))
+        payload.setdefault(
+            "_source_job_id",
+            next(key.source_id for key in record.parent_keys if key.domain == "job"),
+        )
         source = build_estimate(payload)
         estimate, items = await self.financials.stage_migrated_estimate(
             session,
@@ -712,7 +710,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 subtotal_amount=source.subtotal_amount,
                 tax_amount=source.tax_amount,
                 total_amount=source.total_amount,
-                line_items=tuple(MigratedLineItem(**vars(item)) for item in source.line_items),
+                line_items=tuple(
+                    MigratedLineItem(**vars(item)) for item in source.line_items
+                ),
                 presented_at=source.presented_at,
                 expires_on=source.expires_on,
             ),
@@ -774,7 +774,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 subtotal_amount=source.subtotal_amount,
                 tax_amount=source.tax_amount,
                 total_amount=source.total_amount,
-                line_items=tuple(MigratedLineItem(**vars(item)) for item in source.line_items),
+                line_items=tuple(
+                    MigratedLineItem(**vars(item)) for item in source.line_items
+                ),
                 issued_at=source.issued_at,
                 due_on=source.due_on,
             ),
@@ -832,14 +834,16 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
                 "newer native Customer state is authoritative and remains unchanged"
             )
         first, last = _text(payload.get("first_name")), _text(payload.get("last_name"))
-        company = _text(payload.get("company"))
-        display_name = company or " ".join(value for value in (first, last) if value)
+        name = hcp_customer_name(payload)
+        if name is None:
+            raise OverlayDomainHold("source Customer has no customer-owned name")
+        company = name.legal_name
         return await self.customer_updates.stage_update(
             session,
             context=self.context,
             customer_id=UUID(state.native_id),
             data=CustomerUpdateRequest(
-                display_name=display_name or None,
+                display_name=name.display_name,
                 legal_name=company,
                 marketing_source=_text(payload.get("lead_source")),
                 notes=_text(payload.get("notes")),

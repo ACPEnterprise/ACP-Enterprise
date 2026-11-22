@@ -56,6 +56,57 @@ def test_preview_infrastructure_does_not_publish_a_host_port() -> None:
     assert "ports" not in compose["services"]["backend"]
 
 
+def test_disposable_qualification_services_are_internal_only() -> None:
+    for compose_name, network_name in (
+        ("docker-compose.migration-rehearsal.yml", "migration_rehearsal"),
+        ("docker-compose.redis-qualification.yml", "qualification"),
+        ("docker-compose.release-qualification.yml", "qualification"),
+    ):
+        compose = _compose(compose_name)
+        assert compose["networks"][network_name]["internal"] is True
+        for service in compose["services"].values():
+            assert "ports" not in service
+
+
+def test_redis_qualification_uses_production_acl_and_secret_indirection() -> None:
+    compose = _compose("docker-compose.redis-qualification.yml")
+    redis = compose["services"]["redis"]
+    qualification = compose["services"]["qualification"]
+
+    assert "--aclfile" in redis["command"]
+    assert redis["command"][redis["command"].index("--protected-mode") + 1] == "yes"
+    assert "--user acp-health" in redis["healthcheck"]["test"][1]
+    assert qualification["environment"]["REDIS_USERNAME"] == "acp-application"
+    assert qualification["environment"]["REDIS_PASSWORD_FILE"].startswith(
+        "/run/secrets/"
+    )
+    assert "REDIS_PASSWORD" not in qualification["environment"]
+    assert compose["secrets"]["redis_qualification_acl"]["file"].endswith("/users.acl")
+
+
+def test_release_qualification_has_fresh_restore_and_readiness_targets() -> None:
+    compose = _compose("docker-compose.release-qualification.yml")
+    services = compose["services"]
+
+    assert services["postgres"]["image"].startswith("postgres:16-alpine@sha256:")
+    assert services["restore-postgres"]["image"] == services["postgres"]["image"]
+    assert services["postgres"]["volumes"] != services["restore-postgres"]["volumes"]
+    for service_name in ("postgres", "restore-postgres"):
+        service = services[service_name]
+        assert service["environment"]["POSTGRES_PASSWORD_FILE"] == (
+            "/run/secrets/postgres-password"
+        )
+        assert service["environment"]["POSTGRES_INITDB_ARGS"] == "--encoding=UTF8"
+        assert "POSTGRES_PASSWORD" not in service["environment"]
+    assert services["readiness"]["depends_on"]["restore-postgres"]["condition"] == (
+        "service_healthy"
+    )
+    assert services["readiness"]["depends_on"]["redis"]["condition"] == (
+        "service_healthy"
+    )
+    assert "/health/ready" in services["readiness"]["healthcheck"]["test"][3]
+
+
 def test_preview_application_runtimes_are_hardened() -> None:
     compose = _compose("docker-compose.preview.yml")
     services = compose["services"]

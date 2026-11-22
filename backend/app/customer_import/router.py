@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
@@ -95,7 +96,9 @@ def _identity_systems(provider: str, namespace: str) -> tuple[str, ...]:
     """Return the new scoped key plus only the known legacy HCP key."""
     scoped = _source_system(provider, namespace)
     if provider.lower() == "housecall_pro":
-        return (scoped, namespace.lower())
+        # Preserve exact native identities written by the earlier SOURCE.4
+        # admission while binding a replay to the current explicit namespace.
+        return (scoped, namespace.lower(), "housecall_pro_source4")
     return (scoped,)
 
 
@@ -211,7 +214,7 @@ async def _match_existing(session: AsyncSession, company_id: UUID, payload: dict
             signals.setdefault(item, set()).add("phone")
     address = tuple(payload.get(key, "").strip() for key in ("address", "city", "state", "postal_code"))
     if all(address):
-        normalized_address = build_normalized_address(*address)
+        normalized_address = build_normalized_address(address[0], None, address[1], address[2], address[3])
         ids = (await session.scalars(select(ServiceLocation.customer_id).join(Customer, Customer.id == ServiceLocation.customer_id).where(Customer.company_id == company_id, ServiceLocation.normalized_address == normalized_address))).all()
         for item in ids:
             signals.setdefault(item, set()).add("address")
@@ -222,6 +225,58 @@ async def _match_existing(session: AsyncSession, company_id: UUID, payload: dict
     if best >= 2 and len(candidates) == 1:
         return candidates[0], False
     return None, True
+
+
+def _source_identity_values(payload: dict[str, str]) -> tuple[str, str, str, str]:
+    """Return normalized source identity fields used by safe-new admission."""
+    name = normalize_search_text(
+        payload.get("display_name")
+        or payload.get("company_name")
+        or " ".join((payload.get("first_name", ""), payload.get("last_name", ""))).strip()
+    )
+    try:
+        email = normalize_email(payload.get("email", "").strip()) if payload.get("email", "").strip() else ""
+    except ValueError:
+        email = ""
+    try:
+        phone = normalize_phone(payload.get("phone", "").strip()) if payload.get("phone", "").strip() else ""
+    except ValueError:
+        phone = ""
+    address = tuple(payload.get(key, "").strip() for key in ("address", "city", "state", "postal_code"))
+    normalized_address = build_normalized_address(address[0], None, address[1], address[2], address[3]) if all(address) else ""
+    return name, email, phone, normalized_address
+
+
+def _source_identity_counts(source_payloads: list[dict[str, str]]) -> tuple[Counter[str], Counter[str], Counter[tuple[str, str]]]:
+    email_counts: Counter[str] = Counter()
+    phone_counts: Counter[str] = Counter()
+    name_address_counts: Counter[tuple[str, str]] = Counter()
+    for payload in source_payloads:
+        name, email, phone, address = _source_identity_values(payload)
+        if email:
+            email_counts[email] += 1
+        if phone:
+            phone_counts[phone] += 1
+        if name and address:
+            name_address_counts[(name, address)] += 1
+    return email_counts, phone_counts, name_address_counts
+
+
+def _verified_new_source_identity(payload: dict[str, str], source_counts: tuple[Counter[str], Counter[str], Counter[tuple[str, str]]]) -> bool:
+    """Allow a new customer only with complete, unique source evidence.
+
+    Missing crosswalk evidence is not enough by itself. A source row must have
+    a complete name/contact/address identity, a unique contact value within the
+    source batch, and a unique normalized name/address pair within that batch.
+    """
+    name, email, phone, address = _source_identity_values(payload)
+    if not name or not email or not phone or not address:
+        return False
+    email_counts, phone_counts, name_address_counts = source_counts
+    email_count = email_counts[email]
+    phone_count = phone_counts[phone]
+    name_address_count = name_address_counts[(name, address)]
+    return email_count == 1 and phone_count == 1 and name_address_count == 1
 
 
 @router.post("/batches", response_model=ImportBatchResponse, status_code=status.HTTP_201_CREATED)
@@ -302,6 +357,10 @@ async def stage_customer_import(
         actor_user_id=context.user.id, company_id=context.company.id, branch_id=context.active_branch.id,
         details={"source_sha256": result.source_sha256, "source_rows": result.counts.source_rows},
     ))
+    # The request-scoped session does not auto-commit. A successful staging
+    # response must therefore be durable before the caller can safely retry or
+    # resume the batch.
+    await session.commit()
     response.headers["Cache-Control"] = "private, no-store"
     return _batch_response(batch)
 
@@ -332,19 +391,39 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
     run = None
     if batch.migration_run_id is not None:
         run = await session.get(CustomerMigrationRun, batch.migration_run_id, with_for_update=True)
+    if batch.status == "completed" and run is not None:
+        receipt = await session.scalar(
+            select(CustomerImportAuditEvent).where(
+                CustomerImportAuditEvent.batch_id == batch.id,
+                CustomerImportAuditEvent.event_key == f"admit:{run.id}",
+            )
+        )
+        details = receipt.details if receipt is not None else {}
+        return ImportAdmissionResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            created=int(details.get("created", 0)),
+            matched=int(details.get("matched", 0)),
+            replayed=int(details.get("replayed", 0)),
+            held=int(details.get("held", 0)),
+            rejected=int(details.get("rejected", 0)),
+            processed=run.source_count,
+        )
     if run is None:
         run = CustomerMigrationRun(company_id=context.company.id, branch_id=context.active_branch.id, initiated_by_user_id=context.user.id, source_system=_source_system(batch.source_provider, batch.source_namespace), source_sha256=batch.source_sha256, mode="import", status="running", source_count=0, accepted_count=0, rejected_count=0, duplicate_count=0, unresolved_count=0)
         session.add(run)
         await session.flush()
         batch.migration_run_id = run.id
-    rows = (await session.scalars(select(CustomerImportRow).where(CustomerImportRow.batch_id == batch.id, CustomerImportRow.processed.is_(False), CustomerImportRow.disposition == "ready").order_by(CustomerImportRow.row_number).limit(limit).with_for_update(skip_locked=True))).all()
+    all_ready_rows = (await session.scalars(select(CustomerImportRow).where(CustomerImportRow.batch_id == batch.id, CustomerImportRow.processed.is_(False), CustomerImportRow.disposition == "ready").order_by(CustomerImportRow.row_number))).all()
+    rows = all_ready_rows[:limit]
+    source_payloads = [row.payload for row in all_ready_rows]
+    source_counts = _source_identity_counts(source_payloads)
     created = matched = replayed = held = rejected = 0
     customer_service = CustomerService()
     identity_system = _source_system(batch.source_provider, batch.source_namespace)
     identity_systems = _identity_systems(batch.source_provider, batch.source_namespace)
     for row in rows:
         row.attempt_count += 1
-        run.source_count += 1
         await session.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"customer-import:{context.company.id}:{batch.source_provider}:{batch.source_namespace}:{row.source_record_id}"))))
         identity = await session.scalar(select(CustomerSourceIdentity).where(CustomerSourceIdentity.company_id == context.company.id, CustomerSourceIdentity.branch_id == context.active_branch.id, CustomerSourceIdentity.source_system.in_(identity_systems), CustomerSourceIdentity.source_customer_id == row.source_record_id))
         if identity is not None:
@@ -352,21 +431,33 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
                 scoped_identity = await session.scalar(select(CustomerSourceIdentity).where(CustomerSourceIdentity.company_id == context.company.id, CustomerSourceIdentity.branch_id == context.active_branch.id, CustomerSourceIdentity.source_system == identity_system, CustomerSourceIdentity.source_customer_id == row.source_record_id))
                 if scoped_identity is None:
                     session.add(CustomerSourceIdentity(company_id=context.company.id, branch_id=context.active_branch.id, customer_id=identity.customer_id, source_system=identity_system, source_customer_id=row.source_record_id, first_run_id=run.id))
-            row.disposition = "duplicate"; row.processed = True; row.processed_at = datetime.now(timezone.utc); replayed += 1; run.duplicate_count += 1; continue
+            row.disposition = "duplicate"; row.processed = True; row.processed_at = datetime.now(timezone.utc); replayed += 1; run.source_count += 1; run.duplicate_count += 1; continue
         try:
             customer_data, contact_data, location_data = _customer_from_payload(row.payload)
             customer_id, ambiguous = await _match_existing(session, context.company.id, row.payload)
             if ambiguous:
-                row.disposition = "held"; row.reason_code = "ambiguous_existing_customer_match"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.unresolved_count += 1; continue
+                row.disposition = "held"; row.reason_code = "ambiguous_existing_customer_match"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1; continue
             if customer_id is None:
+                if not _verified_new_source_identity(row.payload, source_counts):
+                    row.disposition = "held"; row.reason_code = "unverified_new_customer_identity"; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1; continue
                 customer = await customer_service.stage_migrated_customer(session, context=context, customer_data=customer_data, contact_data=contact_data, service_location_data=location_data, billing_address_data=None)
                 customer_id = customer.id; created += 1
             else:
                 matched += 1
+            existing_target_identity = await session.scalar(
+                select(CustomerSourceIdentity.id).where(
+                    CustomerSourceIdentity.company_id == context.company.id,
+                    CustomerSourceIdentity.branch_id == context.active_branch.id,
+                    CustomerSourceIdentity.source_system == identity_system,
+                    CustomerSourceIdentity.customer_id == customer_id,
+                )
+            )
+            if existing_target_identity is not None:
+                row.disposition = "held"; row.reason_code = "duplicate_existing_customer_target"; row.processed = True; row.processed_at = datetime.now(timezone.utc); matched -= 1; held += 1; run.source_count += 1; run.unresolved_count += 1; continue
             session.add(CustomerSourceIdentity(company_id=context.company.id, branch_id=context.active_branch.id, customer_id=customer_id, source_system=identity_system, source_customer_id=row.source_record_id, first_run_id=run.id))
-            row.processed = True; row.processed_at = datetime.now(timezone.utc); run.accepted_count += 1
+            row.processed = True; row.processed_at = datetime.now(timezone.utc); run.source_count += 1; run.accepted_count += 1
         except (ValueError, TypeError) as error:
-            row.disposition = "held"; row.reason_code = str(error)[:80]; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.unresolved_count += 1
+            row.disposition = "held"; row.reason_code = str(error)[:80]; row.processed = True; row.processed_at = datetime.now(timezone.utc); held += 1; run.source_count += 1; run.unresolved_count += 1
     remaining_ready = await session.scalar(select(func.count()).select_from(CustomerImportRow).where(CustomerImportRow.batch_id == batch.id, CustomerImportRow.disposition == "ready", CustomerImportRow.processed.is_(False)))
     run.status = "completed" if not remaining_ready else "running"
     run.completed_at = datetime.now(timezone.utc) if run.status == "completed" else None
@@ -380,4 +471,5 @@ async def admit_customer_import(batch_id: UUID, context: CustomerManager, sessio
     batch.duplicate_count += replayed
     batch.held_count += held
     session.add(CustomerImportAuditEvent(batch_id=batch.id, company_id=context.company.id, branch_id=context.active_branch.id, event_key=f"admit:{run.id}", event_type="customer_import_admitted", actor_user_id=context.user.id, details={"created": created, "matched": matched, "replayed": replayed, "held": held}))
+    await session.commit()
     return ImportAdmissionResponse(batch_id=batch.id, status=batch.status, created=created, matched=matched, replayed=replayed, held=held, rejected=rejected, processed=len(rows))

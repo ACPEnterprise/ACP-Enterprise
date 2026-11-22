@@ -72,4 +72,14 @@ describe("ApplicationHeader", () => {
     );
     expect(container.querySelector("header")).toHaveClass("safe-area-header");
   });
+
+  it("opens customer global search from the header", async () => {
+    const user = userEvent.setup();
+    render(<AuthenticatedHeader metadata={{ pageTitle: "Customers", breadcrumbs: [] }} />);
+
+    await user.click(screen.getByRole("button", { name: "Global search" }));
+
+    expect(screen.getByRole("dialog", { name: "Search customers and history" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search customers and history" })).toBeVisible();
+  });
 });

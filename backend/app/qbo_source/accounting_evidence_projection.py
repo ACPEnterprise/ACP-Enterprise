@@ -12,13 +12,11 @@ from .bounded_evidence import (
     latest_bounded_evidence,
     load_bounded_raw_rows,
 )
+from .errors import QboEvidenceProjectionError
+from .manual_archive import manual_archive_available, project_manual_archive
 
 Basis = Literal["cash", "accrual"]
 _MAX_ROWS_PER_FAMILY = 2000
-
-
-class QboEvidenceProjectionError(RuntimeError):
-    pass
 
 
 def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, object]:
@@ -69,11 +67,17 @@ def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, obj
 
 
 def project_latest_qbo_workspace(
-    *, evidence_root: Path, basis: Basis, runtime_root: Path | None = None
+    *,
+    evidence_root: Path,
+    basis: Basis,
+    runtime_root: Path | None = None,
+    manual_archive_root: Path | None = None,
 ) -> dict[str, object]:
     """Project a bounded sealed production snapshot without creating native truth."""
     root = evidence_root.expanduser().resolve()
     if not root.is_dir():
+        if manual_archive_root and manual_archive_available(manual_archive_root):
+            return project_manual_archive(root=manual_archive_root, basis=basis)
         return unavailable_qbo_workspace(
             basis=basis, limitation="production_qbo_evidence_unavailable"
         )
@@ -82,6 +86,8 @@ def project_latest_qbo_workspace(
     except BoundedEvidenceError as error:
         raise QboEvidenceProjectionError(str(error)) from error
     if run is None:
+        if manual_archive_root and manual_archive_available(manual_archive_root):
+            return project_manual_archive(root=manual_archive_root, basis=basis)
         return unavailable_qbo_workspace(
             basis=basis, limitation="sealed_production_snapshot_unavailable"
         )

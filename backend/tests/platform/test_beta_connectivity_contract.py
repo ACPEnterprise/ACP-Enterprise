@@ -47,7 +47,7 @@ def test_beta_edge_preserves_preview_and_blocks_internal_surfaces() -> None:
     assert "app.twelve-hats.com" not in caddy
 
 
-def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
+def test_beta_verifier_covers_independent_health_tls_cors_and_isolation() -> None:
     verifier = (REPOSITORY_ROOT / "scripts/verify-beta-connectivity.sh").read_text(
         encoding="utf-8"
     )
@@ -63,8 +63,10 @@ def test_beta_verifier_covers_tls_health_routes_cors_and_isolation() -> None:
     assert "access-control-allow-origin" in verifier
     assert "openssl s_client" in verifier
     assert 'openssl x509 -in "$certificate_file" -noout -checkend 1209600' in verifier
-    assert "Preview and Beta backend health projections differ" in verifier
-    assert "VERIFY_PREVIEW_BETA_PARITY" in verifier
+    assert 'for base_url in "$preview_url" "$beta_url"; do' in verifier
+    assert "Preview and Beta backend health projections differ" not in verifier
+    assert "VERIFY_PREVIEW_BETA_PARITY" not in verifier
+    assert 'cmp -s "$preview_health" "$beta_health"' not in verifier
     assert "https://untrusted.invalid" in verifier
     assert "require_single_header content-security-policy" in verifier
     for directive in (

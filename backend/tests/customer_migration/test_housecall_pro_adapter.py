@@ -75,9 +75,7 @@ def test_450_contract_preserves_and_applies_do_not_service() -> None:
     assert report.schema_version == "housecall_pro_customer_450_v1"
     assert report.accepted == 1
     assert report.records[0].customer.status == CustomerStatus.INACTIVE
-    assert report.records[0].unmapped_fields == {
-        "Do Not Service": "true"
-    }
+    assert report.records[0].unmapped_fields == {"Do Not Service": "true"}
 
 
 def test_type_specific_name_precedes_display_name_with_validated_fallback() -> None:

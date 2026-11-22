@@ -5,6 +5,7 @@ x-backend-environment: &backend-environment
   PREVIEW_ACCEPTANCE_FIXTURE_ENABLED: ${PREVIEW_ACCEPTANCE_FIXTURE_ENABLED:-false}
   SALES_DEMO_ENABLED: ${SALES_DEMO_ENABLED:-false}
   BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-America/New_York}
+  BANK_FEED_STALE_AFTER_HOURS: ${BANK_FEED_STALE_AFTER_HOURS:-72}
   DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.preview}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   REDIS_USERNAME: ${REDIS_USERNAME:-acp-application}
@@ -40,6 +41,7 @@ x-backend-environment: &backend-environment
   QBO_PRODUCTION_CALLBACK_URI: https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/production/oauth/callback
   QBO_PRODUCTION_RUNTIME_ROOT: /var/lib/acp-qbo-production
   QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-qbo-production-evidence
+  QBO_MANUAL_ARCHIVE_ROOT: ${QBO_MANUAL_ARCHIVE_ROOT:-/var/lib/acp-qbo-production-evidence/manual-archive}
 
 x-default-logging: &default-logging
   driver: json-file

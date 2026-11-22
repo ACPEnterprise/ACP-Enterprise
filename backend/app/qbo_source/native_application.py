@@ -23,6 +23,12 @@ from app.customers.models import Customer
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.migration_source_parity import (
+    ParityDisposition,
+    SourceDisposition,
+    SourceParityCertificate,
+    build_source_parity_certificate,
+)
 from app.platform.audit.service import AuditEntry, AuditService
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AccountingPermission
@@ -241,6 +247,83 @@ class QboNativeApplicationService:
             ).one()
         return ApplicationLedgerSummary(
             total_dispositions=int(row[0] or 0), last_applied_at=row[1]
+        )
+
+    async def source_parity_certificate(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        source_as_of: str,
+        required_families: Sequence[str],
+    ) -> SourceParityCertificate:
+        """Certify the current QBO application ledger without provider access.
+
+        Unsupported and explicitly rejected records remain explained quarantine;
+        they are never discarded or represented as canonical Accounting data.
+        An empty family is only a proven zero when the caller's sealed acquisition
+        manifest includes that family in ``required_families``.
+        """
+        self._authorize(context)
+        async with factory() as session:
+            rows = tuple(
+                (
+                    await session.scalars(
+                        select(QboNativeApplicationRecord).where(
+                            QboNativeApplicationRecord.company_id == context.company.id,
+                            QboNativeApplicationRecord.superseded_at.is_(None),
+                        )
+                    )
+                ).all()
+            )
+        source_identities: dict[str, list[str]] = {
+            family: [] for family in required_families
+        }
+        dispositions: list[SourceDisposition] = []
+        canonical_states = {
+            ApplicationDisposition.APPLIED.value,
+            ApplicationDisposition.BOUND.value,
+        }
+        quarantine_states = {
+            ApplicationDisposition.QUARANTINED.value,
+            ApplicationDisposition.UNSUPPORTED.value,
+            ApplicationDisposition.REJECTED_WITH_REASON.value,
+        }
+        for row in rows:
+            if row.source_family not in source_identities:
+                raise QboApplicationError(
+                    "application ledger family is absent from acquisition manifest: "
+                    f"{row.source_family}"
+                )
+            source_identities[row.source_family].append(row.provider_record_id)
+            if row.disposition in canonical_states:
+                state = ParityDisposition.CANONICAL
+            elif row.disposition in quarantine_states:
+                state = ParityDisposition.QUARANTINED
+            elif row.disposition == ApplicationDisposition.PROVIDER_UNAVAILABLE.value:
+                state = ParityDisposition.PROVIDER_UNAVAILABLE
+            else:
+                raise QboApplicationError(
+                    "application ledger disposition is not certifiable: "
+                    f"{row.disposition}"
+                )
+            dispositions.append(
+                SourceDisposition(
+                    family=row.source_family,
+                    provider_record_id=row.provider_record_id,
+                    disposition=state,
+                    explanation=f"{row.reason_code}: {row.explanation}",
+                    canonical_id=str(row.native_id)
+                    if state is ParityDisposition.CANONICAL and row.native_id
+                    else None,
+                )
+            )
+        return build_source_parity_certificate(
+            provider="quickbooks_online",
+            source_as_of=source_as_of,
+            source_identities=source_identities,
+            dispositions=dispositions,
+            required_families=required_families,
         )
 
     async def decide_review(

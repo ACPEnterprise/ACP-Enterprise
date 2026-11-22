@@ -317,56 +317,52 @@ class CurrentOverlayExecutor:
         }
         if executable_domains is not None:
             for item in manifest.records:
-                if item.assertion not in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE} and item.domain not in executable_domains:
-                    raise ValueError(f"overlay executable domain is unsupported: {item.domain}")
+                if (
+                    item.assertion
+                    not in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
+                    and item.domain not in executable_domains
+                ):
+                    raise ValueError(
+                        f"overlay executable domain is unsupported: {item.domain}"
+                    )
 
         ordered_records = _dependency_order(manifest.records)
         journal: list[OverlayJournalEntry] = []
         for record in ordered_records:
-            blocked_parent = next(
-                (
-                    parent
-                    for parent in record.parent_keys
-                    if record.assertion
+            held_for_parent = False
+            for parent in record.parent_keys:
+                if (
+                    record.assertion
                     in {
                         OverlayAssertion.CREATE,
                         OverlayAssertion.UPDATE,
                     }
                     and parent in blocked_keys
-                ),
-                None,
-            )
-            if blocked_parent is not None:
-                # A parent can become held during execution (for example, a
-                # newer native customer edit can be authoritative even when
-                # the source packet originally classified the customer as an
-                # UPDATE).  Descendants must inherit that non-mutating hold;
-                # aborting the whole packet would either block unrelated
-                # records or encourage unsafe manual intervention.
-                held_record = replace(
-                    record,
-                    assertion=OverlayAssertion.HOLD,
-                    payload={},
-                    reason=(
-                        "held because required parent is non-operational: "
-                        f"{blocked_parent.domain}:{blocked_parent.source_id}"
-                    ),
-                )
-                await repository.record_non_mutating_assertion(held_record)
-                blocked_keys.add(record.key)
-                journal.append(
-                    OverlayJournalEntry(
-                        record.key,
-                        OverlayAssertion.HOLD,
-                        "held",
-                        None,
-                        None,
-                        None,
-                        None,
+                ):
+                    held = replace(
+                        record,
+                        assertion=OverlayAssertion.HOLD,
+                        payload={},
+                        reason=(
+                            "overlay parent is non-operational: "
+                            f"{parent.domain}:{parent.source_id}"
+                        ),
                     )
-                )
-                continue
-            for parent in record.parent_keys:
+                    await repository.record_non_mutating_assertion(held)
+                    blocked_keys.add(record.key)
+                    journal.append(
+                        OverlayJournalEntry(
+                            record.key,
+                            record.assertion,
+                            "held",
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                    )
+                    held_for_parent = True
+                    break
                 if (
                     parent not in keys
                     and (
@@ -377,6 +373,21 @@ class CurrentOverlayExecutor:
                     and not await repository.source_exists(parent)
                 ):
                     raise ValueError("overlay parent source identity missing")
+            if held_for_parent:
+                continue
+            if record.assertion is OverlayAssertion.HOLD:
+                journal.append(
+                    OverlayJournalEntry(
+                        record.key,
+                        record.assertion,
+                        "held",
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                )
+                continue
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
                 after: OverlaySourceState | None
@@ -391,7 +402,9 @@ class CurrentOverlayExecutor:
                     source_disposition = (record.source_disposition or "CREATE").upper()
                     if source_disposition in {"UPDATE", "REPLAY"}:
                         if not allow_clean_baseline_bootstrap:
-                            raise ValueError("clean-baseline bootstrap authority is required")
+                            raise ValueError(
+                                "clean-baseline bootstrap authority is required"
+                            )
                         action = (
                             "BOOTSTRAP_CREATE_FROM_UPDATE"
                             if source_disposition == "UPDATE"
@@ -433,16 +446,26 @@ class CurrentOverlayExecutor:
                     )
                 )
             elif record.assertion is OverlayAssertion.UPDATE:
-                if state is None and (record.source_disposition or "").upper() == "UPDATE":
+                if (
+                    state is None
+                    and (record.source_disposition or "").upper() == "UPDATE"
+                ):
                     if not allow_clean_baseline_bootstrap:
-                        raise ValueError("clean-baseline bootstrap authority is required")
+                        raise ValueError(
+                            "clean-baseline bootstrap authority is required"
+                        )
                     try:
                         after = await repository.create(record)
                         outcome = "bootstrapped"
                         action = "BOOTSTRAP_CREATE_FROM_UPDATE"
                     except OverlayDomainHold as error:
                         await repository.record_non_mutating_assertion(
-                            replace(record, assertion=OverlayAssertion.HOLD, payload={}, reason=str(error))
+                            replace(
+                                record,
+                                assertion=OverlayAssertion.HOLD,
+                                payload={},
+                                reason=str(error),
+                            )
                         )
                         blocked_keys.add(record.key)
                         after = state
@@ -461,7 +484,30 @@ class CurrentOverlayExecutor:
                     )
                     continue
                 if state is None or record.prior_source_digest != state.source_digest:
-                    raise ValueError("overlay update compare-before-write mismatch")
+                    # A stale or independently changed source row must not abort
+                    # unrelated historical admission.  Preserve the source
+                    # assertion as a durable hold and continue the atomic packet
+                    # with no native write for this record.
+                    held = replace(
+                        record,
+                        assertion=OverlayAssertion.HOLD,
+                        payload={},
+                        reason="overlay update compare-before-write mismatch",
+                    )
+                    await repository.record_non_mutating_assertion(held)
+                    blocked_keys.add(record.key)
+                    journal.append(
+                        OverlayJournalEntry(
+                            record.key,
+                            record.assertion,
+                            "held",
+                            state.source_digest if state else None,
+                            state.source_digest if state else None,
+                            state.native_id if state else None,
+                            None,
+                        )
+                    )
+                    continue
                 if record.native_fingerprint:
                     owners = await repository.fingerprint_owners(
                         record.domain, record.native_fingerprint
@@ -558,7 +604,9 @@ def _dependency_order(
     while ready:
         key = ready.pop(0)
         ordered.append(by_key[key])
-        for child in sorted(children[key], key=lambda value: (value.domain, value.source_id)):
+        for child in sorted(
+            children[key], key=lambda value: (value.domain, value.source_id)
+        ):
             indegree[child] -= 1
             if indegree[child] == 0:
                 ready.append(child)

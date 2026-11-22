@@ -4,13 +4,194 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 compose_file="$root/docker-compose.release-qualification.yml"
 project="acp_release_qualify_$(git -C "$root" rev-parse --short=12 HEAD)_$$"
+qualification_root=$(mktemp -d "${TMPDIR:-/tmp}/acp-release-qualification.XXXXXX")
+secret_dir="$qualification_root/secrets"
+backup="$qualification_root/release-qualification.dump"
+manifest="$backup.manifest.json"
+cleaned=false
 
-cleanup() {
-  docker compose -p "$project" -f "$compose_file" down --volumes --remove-orphans >/dev/null 2>&1 || true
+compose() {
+  docker compose -p "$project" -f "$compose_file" "$@"
 }
-trap cleanup EXIT INT TERM
 
-docker compose -p "$project" -f "$compose_file" up \
-  --build \
-  --abort-on-container-exit \
-  --exit-code-from qualifier
+cleanup_resources() {
+  cleanup_status=0
+  RELEASE_QUALIFICATION_SECRET_DIR="$secret_dir" \
+    docker compose -p "$project" -f "$compose_file" \
+    --profile restore down --volumes --remove-orphans >/dev/null 2>&1 || cleanup_status=$?
+  cleaned=true
+  rm -rf "$qualification_root" || cleanup_status=$?
+  return "$cleanup_status"
+}
+
+cleanup_on_exit() {
+  original_status=$?
+  trap - EXIT HUP INT TERM
+  cleanup_status=0
+  cleanup_resources || cleanup_status=$?
+  if [ "$original_status" -eq 0 ] && [ "$cleanup_status" -ne 0 ]; then
+    original_status=70
+  fi
+  exit "$original_status"
+}
+trap cleanup_on_exit EXIT HUP INT TERM
+
+umask 077
+mkdir -m 700 "$secret_dir"
+printf '%s\n' "release-application-qualification-$project" > "$secret_dir/application-password"
+printf '%s\n' "release-health-qualification-$project" > "$secret_dir/health-password"
+printf '%s\n' "release-breakglass-qualification-$project" > "$secret_dir/breakglass-password"
+printf '%s\n' "release-postgres-qualification-$project" > "$secret_dir/postgres-password"
+"$root/scripts/render-redis-acl" \
+  "$secret_dir/application-password" \
+  "$secret_dir/health-password" \
+  "$secret_dir/breakglass-password" \
+  "$secret_dir/users.acl"
+
+export RELEASE_QUALIFICATION_SECRET_DIR="$secret_dir"
+compose --profile restore config --quiet
+compose up -d --build --wait postgres redis
+compose run --rm --no-deps qualifier
+
+postgres_version=$(compose exec -T postgres psql -Atq -U release_qualification -d release_qualification -c "SHOW server_version_num")
+case "$postgres_version" in
+  16????) ;;
+  *) echo "PostgreSQL 16 is required; observed server_version_num=$postgres_version" >&2; exit 1 ;;
+esac
+postgres_encoding=$(compose exec -T postgres psql -Atq -U release_qualification -d release_qualification -c "SHOW server_encoding")
+test "$postgres_encoding" = UTF8
+
+schema_head=$(compose exec -T postgres psql -Atq -U release_qualification -d release_qualification -c "SELECT version_num FROM alembic_version")
+test -n "$schema_head"
+test "$(printf '%s\n' "$schema_head" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')" = 1
+
+compose exec -T postgres pg_dump \
+  -U release_qualification \
+  -d release_qualification \
+  --format=custom \
+  --no-owner > "$backup"
+test -s "$backup"
+chmod 600 "$backup"
+compose exec -T postgres pg_restore --list < "$backup" >/dev/null
+
+python3 - "$backup" "$manifest" "$schema_head" "$(git -C "$root" rev-parse HEAD)" <<'PY'
+from datetime import datetime, timezone
+from hashlib import sha256
+import json
+from pathlib import Path
+import sys
+
+backup = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+payload = {
+    "authority_sha": sys.argv[4],
+    "backup_file": backup.name,
+    "contract_version": "platform-resilience.backup.v1",
+    "created_at": datetime.now(timezone.utc).isoformat(),
+    "database_identity": "release-qualification-source",
+    "environment": "test",
+    "format": "postgresql-custom",
+    "schema_head": sys.argv[3],
+    "sha256": sha256(backup.read_bytes()).hexdigest(),
+    "size_bytes": backup.stat().st_size,
+}
+manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+manifest_path.chmod(0o600)
+print(f"BACKUP_SHA256={payload['sha256']}")
+PY
+
+python3 - "$backup" "$manifest" <<'PY'
+from hashlib import sha256
+import json
+from pathlib import Path
+import stat
+import sys
+
+backup = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+manifest = json.loads(manifest_path.read_text())
+assert manifest["contract_version"] == "platform-resilience.backup.v1"
+assert manifest["format"] == "postgresql-custom"
+assert manifest["backup_file"] == backup.name
+assert manifest["size_bytes"] == backup.stat().st_size
+assert manifest["sha256"] == sha256(backup.read_bytes()).hexdigest()
+assert stat.S_IMODE(backup.stat().st_mode) & 0o077 == 0
+assert stat.S_IMODE(manifest_path.stat().st_mode) & 0o077 == 0
+print("BACKUP_MANIFEST=VERIFIED")
+PY
+backup_sha=$(python3 - "$manifest" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+print(json.loads(Path(sys.argv[1]).read_text())["sha256"])
+PY
+)
+
+compose --profile restore up -d --wait restore-postgres
+existing_relations=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_qualification -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND c.relkind IN ('r','p','v','m','f')")
+test "$existing_relations" = 0
+restore_encoding=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_qualification -c "SHOW server_encoding")
+test "$restore_encoding" = UTF8
+compose exec -T restore-postgres pg_restore \
+  --exit-on-error \
+  --single-transaction \
+  --no-owner \
+  --username release_qualification \
+  --dbname acp_resilience_restore_qualification \
+  < "$backup"
+
+restored_head=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_qualification -c "SELECT version_num FROM alembic_version")
+test "$restored_head" = "$schema_head"
+compose --profile restore up -d --build --wait readiness
+readiness_state=$(compose exec -T readiness python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3))['state'])")
+test "$readiness_state" = HEALTHY
+
+container_ids=$(compose --profile restore ps -q)
+test -n "$container_ids"
+# Intentional word splitting passes each inspected container as a separate argument.
+# shellcheck disable=SC2086
+docker inspect $container_ids | python3 -c 'import json,sys; containers=json.load(sys.stdin); assert all(not any((c.get("HostConfig", {}).get("PortBindings") or {}).values()) for c in containers); assert all(not any((c.get("NetworkSettings", {}).get("Ports") or {}).values()) for c in containers)'
+network_id=$(docker network ls -q --filter "label=com.docker.compose.project=$project")
+test -n "$network_id"
+test "$(docker network inspect -f '{{.Internal}}' "$network_id")" = true
+
+printf 'POSTGRES_VERSION_NUM=%s\n' "$postgres_version"
+printf 'POSTGRES_ENCODING=%s\n' "$postgres_encoding"
+printf 'ALEMBIC_HEAD=%s\n' "$schema_head"
+printf 'RESTORE_TARGET_EMPTY=VERIFIED\n'
+printf 'RESTORE_HEAD=%s\n' "$restored_head"
+printf 'POST_RESTORE_READINESS=%s\n' "$readiness_state"
+printf 'HOST_PORTS=NONE\n'
+
+python3 - "$postgres_version" "$postgres_encoding" "$schema_head" "$backup_sha" "$restored_head" "$readiness_state" "$(git -C "$root" rev-parse HEAD)" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "authority_sha": sys.argv[7],
+    "backup_sha256": sys.argv[4],
+    "contract": "enterprise-release.database-qualification/v1",
+    "database_was_pristine": True,
+    "head": sys.argv[3],
+    "host_ports": "none",
+    "network": "internal",
+    "postgres_encoding": sys.argv[2],
+    "postgres_version_num": int(sys.argv[1]),
+    "readiness": sys.argv[6],
+    "restore_head": sys.argv[5],
+    "restore_target_was_empty": True,
+    "secret_indirection": True,
+}, sort_keys=True))
+PY
+
+if ! cleanup_resources; then
+  exit 70
+fi
+trap - EXIT HUP INT TERM
+test "$cleaned" = true
+test -z "$(docker ps -aq --filter "label=com.docker.compose.project=$project")"
+test -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$project")"
+test -z "$(docker network ls -q --filter "label=com.docker.compose.project=$project")"
+test ! -e "$qualification_root"
+printf 'CLEANUP=VERIFIED\n'

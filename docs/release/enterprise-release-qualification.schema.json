@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "enterprise-release-qualification/v2",
+  "title": "Enterprise release qualification evidence packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_sha",
+    "contract",
+    "deployment_authorized",
+    "digest",
+    "executed",
+    "generated_at",
+    "observed_head",
+    "preview_revision",
+    "preview_url",
+    "profile",
+    "release_decision",
+    "results",
+    "rollback_receipts",
+    "schema",
+    "status_counts"
+  ],
+  "properties": {
+    "candidate_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "contract": {"const": "enterprise-release-qualification/v2"},
+    "deployment_authorized": {"const": false},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "executed": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "observed_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "preview_revision": {"type": "string"},
+    "preview_url": {"type": "string"},
+    "profile": {"enum": ["plan", "local", "database", "preview", "postdeploy", "commissioning"]},
+    "release_decision": {"enum": ["PASS", "FAIL", "BLOCKED", "NOT YET EXECUTED"]},
+    "results": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "rollback_receipts": {"type": "object"},
+    "schema": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "docs/release/enterprise-release-qualification.schema.json"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "status_counts": {"type": "object"}
+  }
+}

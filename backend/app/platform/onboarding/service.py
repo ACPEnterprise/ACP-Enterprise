@@ -18,7 +18,11 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, audit_service
-from app.platform.auth.services import credential_service, normalize_email
+from app.platform.auth.services import (
+    AuthenticationService,
+    credential_service,
+    normalize_email,
+)
 from app.platform.auth.tokens import SecurityTokenService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
@@ -424,6 +428,7 @@ class IdentityOnboardingService:
                         "Active Company Branch was not found."
                     )
                 source_employee = None
+                credential_repair_receipt: IdentityOnboardingRequest | None = None
                 if command.existing_employee_id is not None:
                     source_employee = await session.scalar(
                         select(Employee)
@@ -463,16 +468,67 @@ class IdentityOnboardingService:
                         or source_employee.last_name != command.last_name.strip()
                         or source_employee.display_name != command.display_name.strip()
                     ):
-                        if source_employee is not None and source_employee.status not in {
-                            "active",
-                            "inactive",
-                        }:
+                        if (
+                            source_employee is not None
+                            and source_employee.status
+                            not in {
+                                "active",
+                                "inactive",
+                            }
+                        ):
                             raise OnboardingConflictError(
                                 "Eligible existing Employee is not available for onboarding."
                             )
                         raise OnboardingConflictError(
                             "Source Employee candidate conflicts with current authority."
                         )
+                if command.existing_user_id is not None and source_employee is None:
+                    linked_employee = await session.scalar(
+                        select(Employee)
+                        .join(Membership, Membership.id == Employee.membership_id)
+                        .where(
+                            Membership.user_id == command.existing_user_id,
+                            Membership.company_id == context.company.id,
+                            Membership.status == "active",
+                            Employee.company_id == context.company.id,
+                        )
+                        .with_for_update()
+                    )
+                    if linked_employee is not None:
+                        if (
+                            command.admin_password is None
+                            or linked_employee.status != "active"
+                            or linked_employee.archived_at is not None
+                            or linked_employee.home_branch_id != branch.id
+                            or linked_employee.employee_type != command.employee_type
+                            or linked_employee.first_name != command.first_name.strip()
+                            or linked_employee.last_name != command.last_name.strip()
+                            or linked_employee.display_name
+                            != command.display_name.strip()
+                        ):
+                            raise OnboardingConflictError(
+                                "Existing Employee identity conflicts with current authority."
+                            )
+                        source_employee = linked_employee
+                        credential_repair_receipt = await session.scalar(
+                            select(IdentityOnboardingRequest)
+                            .where(
+                                IdentityOnboardingRequest.company_id
+                                == context.company.id,
+                                IdentityOnboardingRequest.user_id
+                                == command.existing_user_id,
+                                IdentityOnboardingRequest.employee_id
+                                == linked_employee.id,
+                                IdentityOnboardingRequest.status == "activated",
+                            )
+                            .order_by(IdentityOnboardingRequest.created_at.desc())
+                            .limit(1)
+                            .with_for_update()
+                        )
+                        if credential_repair_receipt is None:
+                            raise OnboardingConflictError(
+                                "Existing onboarding authority was not found."
+                            )
                 employee_number = None
                 if source_employee is None:
                     policy = await session.scalar(
@@ -590,6 +646,44 @@ class IdentityOnboardingService:
                             credential.password_change_required_by_user_id = None
                             credential.password_change_required_company_id = None
                             credential.password_change_required_cleared_at = None
+                        await AuthenticationService.revoke_user_sessions(
+                            session,
+                            user_id=user.id,
+                            reason="administrator_password_reset",
+                            now=now,
+                        )
+                        BusinessEventService.stage(
+                            session,
+                            BusinessEventCreate(
+                                event_type=EventType.IDENTITY_PASSWORD_RESET_COMPLETED,
+                                entity_type="user_identity",
+                                entity_id=user.id,
+                                company_id=context.company.id,
+                                branch_id=branch.id,
+                                user_id=context.user.id,
+                                payload={
+                                    "require_password_change": (
+                                        command.require_password_change
+                                    )
+                                },
+                            ),
+                        )
+                        audit_service.stage(
+                            session,
+                            AuditEntry(
+                                action="identity.password_reset_completed",
+                                resource_type="user_identity",
+                                resource_id=user.id,
+                                actor_user_id=context.user.id,
+                                company_id=context.company.id,
+                                branch_id=branch.id,
+                                details={
+                                    "require_password_change": (
+                                        command.require_password_change
+                                    )
+                                },
+                            ),
+                        )
                     linked_employee = await session.scalar(
                         select(Employee.id).where(
                             Employee.membership_id == membership.id
@@ -611,12 +705,13 @@ class IdentityOnboardingService:
                             and linked_record is not None
                             and linked_record.status == "inactive"
                             and linked_record.company_id == source_employee.company_id
-                            and linked_record.home_branch_id == source_employee.home_branch_id
-                            and linked_record.display_name == source_employee.display_name
+                            and linked_record.home_branch_id
+                            == source_employee.home_branch_id
+                            and linked_record.display_name
+                            == source_employee.display_name
                         )
                         if not (
-                            same_canonical_employee
-                            or inactive_duplicate_is_compatible
+                            same_canonical_employee or inactive_duplicate_is_compatible
                         ):
                             raise OnboardingConflictError(
                                 "Membership is already linked to an Employee."
@@ -625,8 +720,11 @@ class IdentityOnboardingService:
                         # atomically reusing the explicitly matched canonical
                         # Employee identity for this login.
                         if not same_canonical_employee:
+                            assert linked_record is not None
                             linked_record.membership_id = None
                             await session.flush()
+                    if credential_repair_receipt is not None:
+                        return credential_repair_receipt
                     issue_invitation = False
                 else:
                     assert email is not None
@@ -639,15 +737,21 @@ class IdentityOnboardingService:
                         first_name=command.first_name.strip(),
                         last_name=command.last_name.strip(),
                         display_name=command.display_name.strip(),
-                        status="active" if command.admin_password is not None else "invited",
-                        email_verified_at=now if command.admin_password is not None else None,
+                        status="active"
+                        if command.admin_password is not None
+                        else "invited",
+                        email_verified_at=now
+                        if command.admin_password is not None
+                        else None,
                     )
                     session.add(user)
                     await session.flush()
                     membership = Membership(
                         user_id=user.id,
                         company_id=context.company.id,
-                        status="active" if command.admin_password is not None else "invited",
+                        status="active"
+                        if command.admin_password is not None
+                        else "invited",
                         default_branch_id=branch.id,
                         has_all_branch_access=False,
                         invited_at=now,

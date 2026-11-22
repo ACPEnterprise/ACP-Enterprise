@@ -4,12 +4,14 @@ import {
   getOwnPunchState,
   getOwnTimecard,
   getAdminTimecardReview,
+  approveTimeEntry,
   correctTimeEntry,
   getAdminTimecardOperations,
   getCurrentPayPeriod,
   getPayPeriods,
   createPayPeriod,
   recordOwnPunch,
+  submitTimeEntry,
   type PunchAction,
   type TimeCorrectionInput,
   type PayPeriodCreateInput,
@@ -41,6 +43,30 @@ export function useTimeCorrection() {
     mutationFn: ({ revisionId, input }: { revisionId: string; input: TimeCorrectionInput }) => correctTimeEntry(revisionId, input),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: workdayKeys.adminReview() });
+    },
+  });
+}
+
+export function useSubmitOwnTimeEntry() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: submitTimeEntry,
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: workdayKeys.timecard() });
+    },
+  });
+}
+
+export function useApproveTimeEntry() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: approveTimeEntry,
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: workdayKeys.adminReview() }),
+        client.invalidateQueries({ queryKey: ["workday", "admin-operations"] }),
+        client.invalidateQueries({ queryKey: ["payroll"] }),
+      ]);
     },
   });
 }

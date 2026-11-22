@@ -78,7 +78,7 @@ def test_complete_source4_plan_is_deterministic_and_reconciled(
     assert len(first.unlinked_estimates) == 24
     assert len(first.holds) == 594
     assert len(first.plan_outcomes) == 4905
-    assert first.completion.location_exceptions == 294
+    assert first.completion.location_exceptions == 277
     assert first.completion.holds_by_code == {
         "CANCELED_JOB_BALANCE_RECONCILIATION": 296,
         "UNRESOLVED_FINANCIAL_BALANCE": 298,

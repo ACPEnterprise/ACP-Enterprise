@@ -28,16 +28,17 @@ from app.workforce.employment import (
     employee_employment_service,
 )
 from app.workforce.employee_timeline import employee_timeline_service
-from app.workforce.permission_editor import (
-    EmployeePermissionEditorConflict,
-    employee_permission_editor_service,
-)
 from app.workforce.functional_access import (
     FunctionalAccessConflict,
     FunctionalAccessView,
     functional_access_service,
 )
+from app.workforce.historical_identity import historical_workforce_identity_service
 from app.workforce.notification_targeting import employee_notification_targeting_service
+from app.workforce.permission_editor import (
+    EmployeePermissionEditorConflict,
+    employee_permission_editor_service,
+)
 from app.workforce.real_roster_service import RealRosterConflict, real_roster_service
 from app.workforce.schemas import (
     AvailabilityEvidenceRequest,
@@ -56,6 +57,8 @@ from app.workforce.schemas import (
     FunctionalAccessItem,
     FunctionalAccessResponse,
     FunctionalAccessRevokeRequest,
+    HistoricalWorkforceDirectory,
+    HistoricalWorkforceIdentityItem,
     LanguageEvidenceRequest,
     RealRosterBindingRequest,
     RealRosterOnboardingPreview,
@@ -69,8 +72,6 @@ from app.workforce.schemas import (
     SourceCertificationDecisionRequest,
     SourceCertificationLedger,
     WorkforceDirectory,
-    HistoricalWorkforceDirectory,
-    HistoricalWorkforceIdentityItem,
     WorkforceEligibilityRequest,
     WorkforceEligibilityResponse,
     WorkforceEmployeeDetail,
@@ -78,7 +79,6 @@ from app.workforce.schemas import (
     WorkforceProfileResponse,
 )
 from app.workforce.service import workforce_operations_service
-from app.workforce.historical_identity import historical_workforce_identity_service
 from app.workforce.simple_onboarding import (
     AccessProfile,
     SimpleOnboardingConflict,
@@ -152,25 +152,77 @@ def _workforce_conflict(error: Exception) -> HTTPException:
     return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
 
 
-@router.post("/administration/employee-onboarding/match", response_model=SimpleEmployeeMatchResponse)
-async def match_employee_for_onboarding(data: SimpleEmployeeMatchRequest, context: OnboardingManageContext, session: Session) -> SimpleEmployeeMatchResponse:
+@router.post(
+    "/administration/employee-onboarding/match",
+    response_model=SimpleEmployeeMatchResponse,
+)
+async def match_employee_for_onboarding(
+    data: SimpleEmployeeMatchRequest, context: OnboardingManageContext, session: Session
+) -> SimpleEmployeeMatchResponse:
     try:
-        result = await simple_employee_onboarding_service.match(session, context=context, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone)
+        result = await simple_employee_onboarding_service.match(
+            session,
+            context=context,
+            branch_id=data.branch_id,
+            first_name=data.first_name,
+            last_name=data.last_name,
+            email=data.email,
+            phone=data.phone,
+        )
     except (SimpleOnboardingConflict, OnboardingConflictError) as error:
         raise _workforce_conflict(error) from error
-    return SimpleEmployeeMatchResponse(outcome=result.outcome.value, candidates=tuple(SimpleEmployeeMatchCandidate(employee_id=item.employee_id, source_system=item.source_system, source_employee_id=item.source_employee_id) for item in result.candidates))
+    return SimpleEmployeeMatchResponse(
+        outcome=result.outcome.value,
+        candidates=tuple(
+            SimpleEmployeeMatchCandidate(
+                employee_id=item.employee_id,
+                source_system=item.source_system,
+                source_employee_id=item.source_employee_id,
+            )
+            for item in result.candidates
+        ),
+    )
 
 
-@router.post("/administration/employee-onboarding", response_model=SimpleEmployeeOnboardingResponse, status_code=status.HTTP_201_CREATED)
-async def onboard_employee(data: SimpleEmployeeOnboardingRequest, context: OnboardingManageContext, session: Session) -> SimpleEmployeeOnboardingResponse:
+@router.post(
+    "/administration/employee-onboarding",
+    response_model=SimpleEmployeeOnboardingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def onboard_employee(
+    data: SimpleEmployeeOnboardingRequest,
+    context: OnboardingManageContext,
+    session: Session,
+) -> SimpleEmployeeOnboardingResponse:
     try:
-        result = await simple_employee_onboarding_service.onboard(session, context=context, request_key=data.request_key, branch_id=data.branch_id, first_name=data.first_name, last_name=data.last_name, email=data.email, phone=data.phone, access_profile=AccessProfile(data.access_profile), temporary_password=data.temporary_password, confirm_temporary_password=data.confirm_temporary_password, require_password_change=data.require_password_change)
+        result = await simple_employee_onboarding_service.onboard(
+            session,
+            context=context,
+            request_key=data.request_key,
+            branch_id=data.branch_id,
+            first_name=data.first_name,
+            last_name=data.last_name,
+            email=data.email,
+            phone=data.phone,
+            access_profile=AccessProfile(data.access_profile),
+            temporary_password=data.temporary_password,
+            confirm_temporary_password=data.confirm_temporary_password,
+            require_password_change=data.require_password_change,
+        )
     except PasswordPolicyError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
     except SimpleOnboardingConflict as error:
         raise _workforce_conflict(error) from error
     record = result.record
-    return SimpleEmployeeOnboardingResponse(onboarding_request_id=record.id, employee_id=record.employee_id, membership_id=record.membership_id, branch_id=record.branch_id, status=record.status, invitation_eligible=False, temporary_password=result.temporary_password)
+    return SimpleEmployeeOnboardingResponse(
+        onboarding_request_id=record.id,
+        employee_id=record.employee_id,
+        membership_id=record.membership_id,
+        branch_id=record.branch_id,
+        status=record.status,
+        invitation_eligible=False,
+        temporary_password=result.temporary_password,
+    )
 
 
 def _functional_access_response(
@@ -261,9 +313,7 @@ async def directory(context: ReadContext, session: Session) -> WorkforceDirector
     return await workforce_operations_service.directory(session, context=context)
 
 
-@router.get(
-    "/historical-identities", response_model=HistoricalWorkforceDirectory
-)
+@router.get("/historical-identities", response_model=HistoricalWorkforceDirectory)
 async def historical_identities(
     context: ReadContext, session: Session
 ) -> HistoricalWorkforceDirectory:

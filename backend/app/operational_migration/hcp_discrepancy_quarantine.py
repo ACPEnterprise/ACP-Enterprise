@@ -17,19 +17,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.operational_migration.hcp_hybrid_customer import hcp_customer_name
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_executor import (
-    HOLD_DISPOSITIONS,
-    NovemberExecutionPacket,
     PACKET_CONTRACT,
     WRITE_DISPOSITIONS,
+    NovemberExecutionPacket,
     _packet_inventory,
 )
 from app.operational_migration.hcp_november_supplemental_authority import (
     SupplementalCurrentStateAuthority,
 )
-from app.operational_migration.hcp_source4_contracts import JOB_STATUS, build_estimate, build_invoice
-
+from app.operational_migration.hcp_source4_contracts import (
+    JOB_STATUS,
+    build_estimate,
+    build_invoice,
+)
 
 CONTRACT = "hcp-november-discrepancy-quarantine-authority/v1"
 QUARANTINE_REASON = "estimate_job_lineage_missing"
@@ -108,10 +111,7 @@ def _derive_records(
 
     def customer_invalid(item: dict[str, Any]) -> bool:
         payload = item.get("payload") or {}
-        first = str(payload.get("first_name") or "").strip()
-        last = str(payload.get("last_name") or "").strip()
-        company = str(payload.get("company") or payload.get("company_name") or "").strip()
-        return not (company or (first and last))
+        return hcp_customer_name(payload) is None
 
     def location_invalid(item: dict[str, Any]) -> bool:
         payload = item.get("payload") or {}
@@ -119,9 +119,10 @@ def _derive_records(
 
     def employee_invalid(item: dict[str, Any]) -> bool:
         payload = item.get("payload") or {}
-        return not str(payload.get("first_name") or "").strip() or not str(
-            payload.get("last_name") or ""
-        ).strip()
+        return (
+            not str(payload.get("first_name") or "").strip()
+            or not str(payload.get("last_name") or "").strip()
+        )
 
     def estimate_invalid(item: dict[str, Any]) -> bool:
         payload = dict(item.get("payload") or {})
@@ -147,7 +148,9 @@ def _derive_records(
     invalid_customers = {
         str(item["source_id"])
         for item in records
-        if item.get("domain") == "customer" and is_write(item) and customer_invalid(item)
+        if item.get("domain") == "customer"
+        and is_write(item)
+        and customer_invalid(item)
     }
     invalid_locations = {
         str(item["source_id"])
@@ -166,21 +169,26 @@ def _derive_records(
         completed_at = _parse_datetime(timestamps.get("completed_at"))
         ordered = [value for value in (created_at, started_at, completed_at) if value]
         job_invalid = (
-            status not in {"draft", ""}
-            and created_at is None
-        ) or (
-            status in {"in progress", "complete rated", "complete unrated"}
-            and started_at is None
-        ) or (
-            status in {"complete rated", "complete unrated"}
-            and completed_at is None
-        ) or ordered != sorted(ordered)
+            (status not in {"draft", ""} and created_at is None)
+            or (
+                status in {"in progress", "complete rated", "complete unrated"}
+                and started_at is None
+            )
+            or (
+                status in {"complete rated", "complete unrated"}
+                and completed_at is None
+            )
+            or ordered != sorted(ordered)
+        )
         if (
             item.get("domain") == "job"
             and is_write(item)
             and (
                 not {"customer", "service_location"}.issubset(
-                    {str(parent.get("domain")) for parent in item.get("parent_keys", [])}
+                    {
+                        str(parent.get("domain"))
+                        for parent in item.get("parent_keys", [])
+                    }
                 )
                 or any(
                     str(parent.get("domain")) == "customer"
@@ -202,9 +210,13 @@ def _derive_records(
     for original in records:
         item = dict(original)
         is_executable = str(item.get("disposition", "")).upper() in WRITE_DISPOSITIONS
-        is_executable_estimate = item.get("domain") == QUARANTINE_DOMAIN and is_executable
+        is_executable_estimate = (
+            item.get("domain") == QUARANTINE_DOMAIN and is_executable
+        )
         is_executable_job = item.get("domain") == "job" and is_executable
-        is_executable_location = item.get("domain") == "service_location" and is_executable
+        is_executable_location = (
+            item.get("domain") == "service_location" and is_executable
+        )
         is_executable_customer = item.get("domain") == "customer" and is_executable
         is_executable_employee = item.get("domain") == "employee" and is_executable
         is_child_of_blocked_job = (
@@ -223,7 +235,9 @@ def _derive_records(
             payload.setdefault("_owner_disposition", item.get("disposition"))
             try:
                 build_invoice(payload)
-                invoice_payload_invalid = not isinstance(payload.get("items"), list) or not payload["items"]
+                invoice_payload_invalid = (
+                    not isinstance(payload.get("items"), list) or not payload["items"]
+                )
             except Exception:  # noqa: BLE001 - quarantine every unsupported source payload
                 invoice_payload_invalid = True
         job_payload_invalid = False
@@ -234,26 +248,32 @@ def _derive_records(
             created_at = _parse_datetime(payload.get("created_at"))
             started_at = _parse_datetime(timestamps.get("started_at"))
             completed_at = _parse_datetime(timestamps.get("completed_at"))
-            ordered = [value for value in (created_at, started_at, completed_at) if value]
-            if status in {"pro canceled", "user canceled"} or (
-                status not in JOB_STATUS
-            ) or (
-                status not in {"draft", ""}
-                and created_at is None
-            ) or (
-                status in {"in progress", "complete rated", "complete unrated"}
-                and started_at is None
-            ) or (
-                status in {"complete rated", "complete unrated"}
-                and completed_at is None
-            ) or ordered != sorted(ordered):
+            ordered = [
+                value for value in (created_at, started_at, completed_at) if value
+            ]
+            if (
+                status in {"pro canceled", "user canceled"}
+                or (status not in JOB_STATUS)
+                or (status not in {"draft", ""} and created_at is None)
+                or (
+                    status in {"in progress", "complete rated", "complete unrated"}
+                    and started_at is None
+                )
+                or (
+                    status in {"complete rated", "complete unrated"}
+                    and completed_at is None
+                )
+                or ordered != sorted(ordered)
+            ):
                 job_payload_invalid = True
         appointment_schedule_invalid = False
         if item.get("domain") == "appointment" and is_executable:
             payload = item.get("payload") or {}
             start = _parse_datetime(payload.get("start_time"))
             end = _parse_datetime(payload.get("end_time"))
-            if (payload.get("start_time") and not start) or (payload.get("end_time") and not end):
+            if (payload.get("start_time") and not start) or (
+                payload.get("end_time") and not end
+            ):
                 appointment_schedule_invalid = True
             elif start and end:
                 duration = int((end - start).total_seconds() // 60)
@@ -271,8 +291,7 @@ def _derive_records(
                     or duration % 15
                 )
         has_job_parent = any(
-            str(parent.get("domain")) == "job"
-            for parent in item.get("parent_keys", [])
+            str(parent.get("domain")) == "job" for parent in item.get("parent_keys", [])
         )
         if is_executable_customer and str(item["source_id"]) in invalid_customers:
             reason = "customer_payload_not_normalizable"
@@ -405,7 +424,9 @@ class DiscrepancyQuarantineAuthority:
             lineage_gaps=int(value["lineage_gaps"]),
             ambiguous_lineage=int(value["ambiguous_lineage"]),
             held_parent_executable_edges=int(value["held_parent_executable_edges"]),
-            quarantined_records=tuple(dict(item) for item in value["quarantined_records"]),
+            quarantined_records=tuple(
+                dict(item) for item in value["quarantined_records"]
+            ),
             authority_digest=str(value["authority_digest"]),
             packet=packet,
             clean_baseline_bootstrap=bool(value.get("clean_baseline_bootstrap", True)),
@@ -418,25 +439,58 @@ class DiscrepancyQuarantineAuthority:
 
     def verify(self, value: dict[str, Any] | None = None) -> None:
         if value is None:
-            value = _private_json(self.authority_path, "hcp_discrepancy_authority_missing")
+            value = _private_json(
+                self.authority_path, "hcp_discrepancy_authority_missing"
+            )
         if self.authority_digest != _digest(self._payload(value)):
             _fail("hcp_discrepancy_authority_digest_mismatch")
         if self.target != "preview" or self.schema_head != "r4s6u8w0y2a4":
             _fail("hcp_discrepancy_runtime_boundary_invalid")
-        if len(self.repository_sha) != 40 or any(c not in "0123456789abcdef" for c in self.repository_sha):
+        if len(self.repository_sha) != 40 or any(
+            c not in "0123456789abcdef" for c in self.repository_sha
+        ):
             _fail("hcp_discrepancy_repository_sha_invalid")
-        if _sha256(self.packet_path) != self.packet_sha256 or self.packet.digest != self.packet_digest:
+        if (
+            _sha256(self.packet_path) != self.packet_sha256
+            or self.packet.digest != self.packet_digest
+        ):
             _fail("hcp_discrepancy_packet_binding_mismatch")
         base = SupplementalCurrentStateAuthority.load(self.base_authority_path)
         if base.authority_digest != self.base_authority_digest:
             _fail("hcp_discrepancy_base_authority_mismatch")
-        for field in ("source_packet_sha256", "source_packet_digest", "bundle_sha256", "policy_digest", "reconciliation_digest", "company_id", "branch_id", "actor_id", "provider_company_id"):
-            if getattr(self, field) != getattr(base, "immutable_source_packet_sha256" if field == "source_packet_sha256" else "immutable_source_packet_digest" if field == "source_packet_digest" else field):
+        for field in (
+            "source_packet_sha256",
+            "source_packet_digest",
+            "bundle_sha256",
+            "policy_digest",
+            "reconciliation_digest",
+            "company_id",
+            "branch_id",
+            "actor_id",
+            "provider_company_id",
+        ):
+            if getattr(self, field) != getattr(
+                base,
+                "immutable_source_packet_sha256"
+                if field == "source_packet_sha256"
+                else "immutable_source_packet_digest"
+                if field == "source_packet_digest"
+                else field,
+            ):
                 _fail("hcp_discrepancy_base_binding_mismatch", field)
         inventory = _packet_inventory(self.packet.records)
-        if self.counts != inventory["counts"] or self.executable_count != inventory["executable"] or self.held_count != inventory["total_held"]:
+        if (
+            self.counts != inventory["counts"]
+            or self.executable_count != inventory["executable"]
+            or self.held_count != inventory["total_held"]
+        ):
             _fail("hcp_discrepancy_inventory_mismatch")
-        if self.unexplained_omissions or self.lineage_gaps or self.ambiguous_lineage or inventory["held_parent_executable_edges"]:
+        if (
+            self.unexplained_omissions
+            or self.lineage_gaps
+            or self.ambiguous_lineage
+            or inventory["held_parent_executable_edges"]
+        ):
             _fail("hcp_discrepancy_qualification_gap")
         expected = {item["source_id"] for item in self.quarantined_records}
         actual = {
@@ -459,10 +513,26 @@ class DiscrepancyQuarantineAuthority:
         ):
             _fail("hcp_discrepancy_quarantine_inventory_mismatch")
         for item in self.quarantined_records:
-            matches = [record for record in self.packet.records if record["source_id"] == item["source_id"]]
-            if len(matches) != 1 or matches[0].get("disposition") != "HOLD" or matches[0].get("reason") not in QUARANTINE_REASONS or matches[0].get("source_disposition") not in WRITE_DISPOSITIONS:
+            matches = [
+                record
+                for record in self.packet.records
+                if record["source_id"] == item["source_id"]
+            ]
+            if (
+                len(matches) != 1
+                or matches[0].get("disposition") != "HOLD"
+                or matches[0].get("reason") not in QUARANTINE_REASONS
+                or matches[0].get("source_disposition") not in WRITE_DISPOSITIONS
+            ):
                 _fail("hcp_discrepancy_hold_policy_mismatch", item)
-        if any(record.get("disposition") in WRITE_DISPOSITIONS and any(parent.get("source_id") in expected for parent in record.get("parent_keys", [])) for record in self.packet.records):
+        if any(
+            record.get("disposition") in WRITE_DISPOSITIONS
+            and any(
+                parent.get("source_id") in expected
+                for parent in record.get("parent_keys", [])
+            )
+            for record in self.packet.records
+        ):
             _fail("hcp_discrepancy_held_parent_edge")
 
 
@@ -484,7 +554,9 @@ def build_private_derivation(
     packet_value["digest"] = _digest(_packet_payload(packet_value))
     output_dir.mkdir(parents=True, exist_ok=True)
     packet_path = output_dir / "hcp-november-discrepancy-quarantine-packet.json"
-    packet_path.write_text(json.dumps(packet_value, sort_keys=True, separators=(",", ":")))
+    packet_path.write_text(
+        json.dumps(packet_value, sort_keys=True, separators=(",", ":"))
+    )
     os.chmod(packet_path, 0o600)
     packet = NovemberExecutionPacket.load(packet_path)
     inventory = _packet_inventory(packet.records)
@@ -520,7 +592,9 @@ def build_private_derivation(
     }
     authority_value["authority_digest"] = _digest(authority_value)
     authority_path = output_dir / "authority.json"
-    authority_path.write_text(json.dumps(authority_value, sort_keys=True, separators=(",", ":")))
+    authority_path.write_text(
+        json.dumps(authority_value, sort_keys=True, separators=(",", ":"))
+    )
     os.chmod(authority_path, 0o600)
     DiscrepancyQuarantineAuthority.load(authority_path)
     return authority_path

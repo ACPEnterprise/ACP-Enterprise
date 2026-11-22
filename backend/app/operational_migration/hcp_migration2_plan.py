@@ -832,9 +832,14 @@ class HcpMigration2ExecutionPlanBuilder:
         )
 
         source_counts = {
-            "customer": 5296,
-            "contact": 4148,
-            "service_location": 5633,
+            "customer": len(customers.admission.candidates),
+            "contact": sum(
+                item.contact_present for item in customers.admission.candidates
+            ),
+            "service_location": sum(
+                len(item.location_ids) + len(item.location_exception_ids)
+                for item in customers.admission.candidates
+            ),
             "employee": len(employees_raw),
             "job": len(jobs_raw),
             "appointment": len(all_appointment_rows),
@@ -846,9 +851,9 @@ class HcpMigration2ExecutionPlanBuilder:
             "unlinked_estimate": len(unlinked_commands),
         }
         persisted = {
-            "customer": 5296,
-            "contact": 4148,
-            "service_location": 5339,
+            "customer": customers.boundary.expected.customers,
+            "contact": customers.boundary.expected.contacts,
+            "service_location": customers.boundary.expected.service_locations,
             "employee": 6,
             "job": len(job_report.records),
             "appointment": len(appointment_report.records),
@@ -860,7 +865,11 @@ class HcpMigration2ExecutionPlanBuilder:
             "unlinked_estimate": len(unlinked_commands),
         }
         exceptions = {
-            "service_location": 294,
+            "customer": customers.reviewed.rejected_count,
+            "contact": source_counts["contact"] - persisted["contact"],
+            "service_location": (
+                source_counts["service_location"] - persisted["service_location"]
+            ),
             "job": len(job_parent_exceptions),
             "appointment": len(appointment_parent_exceptions),
             "estimate": len(unlinked_commands)
@@ -1030,9 +1039,11 @@ class HcpMigration2ExecutionPlanBuilder:
         # Invoice source subjects are accounted as HOLD; durable hold rows are their own persisted entity.
         hold_counts["invoice"] = 298
         requirements = CompletionRequirements(
-            customer_lineage=5296,
-            location_identities=5339,
-            location_exceptions=294,
+            customer_lineage=customers.boundary.expected.customers,
+            location_identities=customers.boundary.expected.service_locations,
+            location_exceptions=len(
+                customers.reviewed.child_exception_source_identities
+            ),
             employee_crosswalks=7,
             employee_candidates=6,
             employee_excluded=1,
@@ -1497,9 +1508,8 @@ class HcpMigration2Application:
                 len(item.service_location_json)
                 for item in plan.customers.reviewed.aggregates
             ),
-            "child_exceptions": sum(
-                len(item.location_exception_ids)
-                for item in plan.customers.admission.candidates
+            "child_exceptions": len(
+                plan.customers.reviewed.child_exception_source_identities
             ),
         }
         staging_digest = canonical_sha256(

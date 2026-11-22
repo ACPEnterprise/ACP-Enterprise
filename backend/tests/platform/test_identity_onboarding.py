@@ -10,8 +10,8 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.core.config import Settings, settings
+from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
 from app.platform.auth.errors import PasswordChangeRequiredError, PasswordPolicyError
@@ -1473,8 +1473,16 @@ async def test_existing_verified_user_admin_password_reset_clears_forced_reset(
         initial = await service.initiate(
             session,
             context=context,
-            command=replace(command(context, existing_user_id=context.user.id), admin_password="Initial-secure-passphrase-42!", require_password_change=True),
+            command=replace(
+                command(context, existing_user_id=context.user.id),
+                admin_password="Initial-secure-passphrase-42!",
+                require_password_change=True,
+            ),
         )
+        employee = await session.get(Employee, initial.employee_id)
+        assert employee is not None
+        employee.phone = "+15555550123"
+        await session.commit()
         record = await service.initiate(
             session,
             context=context,
@@ -1487,6 +1495,8 @@ async def test_existing_verified_user_admin_password_reset_clears_forced_reset(
         )
         assert record.id == initial.id
         assert record.user_id == context.user.id
+        await session.refresh(employee)
+        assert employee.phone == "+15555550123"
         stored = await session.scalar(
             select(UserCredential).where(UserCredential.user_id == context.user.id)
         )
@@ -1494,6 +1504,38 @@ async def test_existing_verified_user_admin_password_reset_clears_forced_reset(
         assert stored.password_change_required is False
         assert stored.password_change_required_at is None
         assert stored.password_change_required_reason_code is None
+        assert password_service.verify_password(
+            stored.password_hash, "New-secure-passphrase-42!"
+        )
+        assert not password_service.verify_password(
+            stored.password_hash, "Initial-secure-passphrase-42!"
+        )
+        assert (
+            await session.scalar(
+                select(func.count(Employee.id)).where(
+                    Employee.membership_id == context.membership.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(IdentityOnboardingRequest.id)).where(
+                    IdentityOnboardingRequest.user_id == context.user.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(AuditRecord.id).where(
+                    AuditRecord.action == "identity.password_reset_completed",
+                    AuditRecord.resource_id == context.user.id,
+                    AuditRecord.actor_user_id == context.user.id,
+                )
+            )
+            is not None
+        )
 
 
 @pytest.mark.asyncio

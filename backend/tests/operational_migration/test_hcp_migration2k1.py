@@ -25,6 +25,12 @@ NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 MASTER_ID = UUID("63273602-8619-5c0b-8b49-8537338b04b5")
 REPAIR_ID = UUID("5e17975d-0461-5187-b0ea-f1cbe7b58df1")
 OLD_DIGEST = "64df671d21ab95818ae6035949202e6d61195733013ff63485471164e9b64d8a"
+REQUALIFIED_REPAIR_DIGEST = (
+    "aaf029072652061c7af7183a56bce6dab72a893d03fb2e6c5763be83b3cd3e1b"
+)
+REQUALIFIED_SEQUENCE_DIGEST = (
+    "a6eda2f6af8595173a81a02ee5b8209ee215a39ffab31d43f03d739cd5bc0cfe"
+)
 
 
 def appointment(source_id: str, job_id: str, hour: int, *, end_minutes: int = 30):
@@ -298,11 +304,9 @@ def test_sealed_repair_appointment_sequence_population() -> None:
         persisted_customer_ids=customers,
         persisted_location_ids=locations,
     )
-    assert repair.repair_plan_digest == OLD_DIGEST
+    assert repair.repair_plan_digest == REQUALIFIED_REPAIR_DIGEST
     sequence = build_appointment_sequence_plan(repair.operational.appointments)
-    assert sequence.digest == (
-        "9e77ed819ee488ac5114d6fda26d9ae422b081cdfa9785fb56bbf679d6fa7acb"
-    )
+    assert sequence.digest == REQUALIFIED_SEQUENCE_DIGEST
     assert (
         sequence.job_count,
         sequence.single_visit_job_count,
@@ -310,4 +314,4 @@ def test_sealed_repair_appointment_sequence_population() -> None:
         sequence.multi_visit_appointment_count,
         sequence.visits_beyond_first,
         sequence.maximum_visits,
-    ) == (992, 911, 81, 338, 257, 36)
+    ) == (974, 898, 76, 320, 244, 36)

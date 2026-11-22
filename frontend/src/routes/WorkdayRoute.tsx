@@ -20,6 +20,7 @@ import {
   useOwnPunch,
   useOwnTimecard,
   useOwnWorkdayState,
+  useSubmitOwnTimeEntry,
 } from "../hooks/useWorkdayTime";
 import {
   Alert,
@@ -106,10 +107,12 @@ export function WorkdayRoute() {
   const state = useOwnWorkdayState(canRead);
   const timecard = useOwnTimecard(canRead);
   const punch = useOwnPunch();
+  const submitTimeEntry = useSubmitOwnTimeEntry();
   const refetchState = state.refetch;
   const refetchTimecard = timecard.refetch;
   const punchInFlight = useRef(false);
   const [notice, setNotice] = useState<"accepted" | "reconciling" | null>(null);
+  const [timecardNotice, setTimecardNotice] = useState<"submitted" | "failed" | null>(null);
 
   useEffect(() => {
     const reconcile = () => {
@@ -246,6 +249,16 @@ export function WorkdayRoute() {
         {timecard.isError && (
           <Alert variant="warning" title="Timecard unavailable">Your current clock state may still be available. Refresh to try loading the timecard again.</Alert>
         )}
+        {timecardNotice === "submitted" && (
+          <Alert variant="success" title="Time submitted">
+            The server recorded this revision for manager approval.
+          </Alert>
+        )}
+        {timecardNotice === "failed" && (
+          <Alert variant="danger" title="Time was not submitted">
+            Refresh the current timecard and verify that this is still the latest recorded revision.
+          </Alert>
+        )}
         {timecard.data?.entries.length === 0 && (
           <EmptyState icon={<CalendarClock />} title="No current-period entries" description="No authoritative time entries are available for this period." />
         )}
@@ -274,6 +287,23 @@ export function WorkdayRoute() {
                           ? `Correction noted: ${entry.correction_reason}`
                           : "This entry is visible but is not yet approved Payroll time evidence."}
                       </p>
+                    )}
+                    {(entry.state === "recorded" || entry.state === "corrected") && (
+                      <Button
+                        variant="primary"
+                        loading={submitTimeEntry.isPending}
+                        loadingLabel="Submitting time"
+                        disabled={submitTimeEntry.isPending}
+                        onClick={() => {
+                          setTimecardNotice(null);
+                          submitTimeEntry.mutate(entry.revision_id, {
+                            onSuccess: () => setTimecardNotice("submitted"),
+                            onError: () => setTimecardNotice("failed"),
+                          });
+                        }}
+                      >
+                        Submit for approval
+                      </Button>
                     )}
                   </CardContent>
                 </Card>

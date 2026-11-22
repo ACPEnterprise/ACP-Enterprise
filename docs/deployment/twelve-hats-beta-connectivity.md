@@ -1,9 +1,11 @@
 # Twelve Hats Beta connectivity
 
-Twelve Hats Beta reuses the existing Preview application runtime without renaming,
-redirecting, or removing `preview.allcountyhomeservices.com`. All County Plumbing &
-Leak remains the tenant and owns its business data. `beta.twelve-hats.com` is the
-Twelve Hats-owned public beta entry point. This packet does not touch
+Twelve Hats Beta runs on the clean Beta host independently of the preserved legacy
+Preview runtime at `preview.allcountyhomeservices.com`. All County Plumbing & Leak
+remains the tenant and owns its business data. `beta.twelve-hats.com` is the
+Twelve Hats-owned public beta entry point. Preview and Beta can advance through
+separate approved release lineages; neither host is evidence for the other's runtime,
+database, backup, or acceptance state. This packet does not touch
 `app.twelve-hats.com` and creates no Production resource.
 
 ## Current evidence — 2026-11-15
@@ -83,12 +85,15 @@ App Store Connect. Do not invent policy or contact language in infrastructure.
 Install a root-owned systemd oneshot/timer that runs the repository verification every
 five minutes after Beta DNS activation. Results go to journald and a nonzero exit is
 visible through `systemctl --failed` and `journalctl`; this is local detection, not
-paging. The verifier requires exact DNS, HTTPS redirects, route health, identical
-Preview/Beta backend projections, one edge security-header policy, trusted and
-untrusted CORS behavior, internal-route isolation, and at least 14 days of TLS
-validity. Continue checking container health, Caddy status and disk utilization as
-separate host-level signals. A named human and external alert delivery remain required
-for unattended beta operations.
+paging. The verifier checks legacy Preview and clean Beta independently: each must
+preserve its own HTTPS redirect, route health, unauthenticated-session boundary, and
+single edge security-header policy. Clean Beta additionally requires its exact DNS,
+trusted and untrusted CORS behavior, internal-route isolation, and at least 14 days of
+TLS validity. Their release and health projection payloads are intentionally not
+required to be identical because the two hosts can advance through separate approved
+release lineages. Continue checking container health, Caddy status and disk
+utilization as separate host-level signals. A named human and external alert delivery
+remain required for unattended beta operations.
 
 Set `REQUIRE_PUBLIC_METADATA=1` only after approved support and privacy content is
 published. That release gate rejects either URL while it still returns the generic

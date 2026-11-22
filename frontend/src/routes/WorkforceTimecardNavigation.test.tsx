@@ -1,13 +1,17 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { WorkforceRoute } from "./WorkforceRoute";
+
+const approveMutation = vi.hoisted(() => vi.fn());
 
 vi.mock("../auth", () => ({
   useAuth: () => ({
     activeCompany: { id: "company-1" },
     permissionCodes: [
       "COMPANY_TIMEKEEPING_ADMIN_READ",
+      "COMPANY_TIMEKEEPING_APPROVE",
       "COMPANY_PAYROLL_REPORTING_READ",
     ],
   }),
@@ -79,14 +83,43 @@ vi.mock("../hooks/useWorkforce", () => ({
 vi.mock("../hooks/useWorkdayTime", () => ({
   useAdminTimecardReview: () => ({
     data: {
-      pay_period: null,
-      items: [],
+      pay_period: { id: "period-1", period_start: "2026-09-06", period_end: "2026-09-12" },
+      items: [{
+        employee_id: "employee-approval",
+        employee_number: "EMP-2",
+        display_name: "Approval Employee",
+        entry_count: 1,
+        total_minutes: 480,
+        exception_codes: [],
+        entries: [{
+          entry_id: "entry-approval",
+          revision_id: "revision-submitted",
+          revision_number: 2,
+          work_date: "2026-09-07",
+          timezone: "America/New_York",
+          provenance: "employee_punch",
+          start_at: "2026-09-07T13:00:00Z",
+          end_at: "2026-09-07T21:00:00Z",
+          approved_duration_minutes: 480,
+          state: "submitted",
+          supersedes_revision_id: null,
+          correction_reason: null,
+          correction_kind: null,
+          reviewed_by_user_id: "employee-user",
+          approved_at: null,
+        }],
+      }],
     },
     isLoading: false,
     isError: false,
   }),
   useTimeCorrection: () => ({
     mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+  useApproveTimeEntry: () => ({
+    mutate: approveMutation,
     isPending: false,
     isError: false,
   }),
@@ -186,5 +219,14 @@ describe("Workforce timecard navigation", () => {
     expect(
       screen.getByRole("link", { name: "Time & Attendance" }),
     ).toHaveAttribute("href", "#timecard-operations");
+  });
+
+  it("requires explicit confirmation before approving a submitted revision", async () => {
+    approveMutation.mockClear();
+    render(<MemoryRouter initialEntries={["/employees?employee=employee-1&period=period-1#timecard-operations"]}><WorkforceRoute /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Approve 2026-09-07" }));
+    expect(screen.getByRole("dialog", { name: "Approve submitted time?" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Approve time" }));
+    expect(approveMutation).toHaveBeenCalledWith("revision-submitted", expect.any(Object));
   });
 });

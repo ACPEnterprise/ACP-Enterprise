@@ -471,10 +471,21 @@ class CustomerSearchQuery(StrictSchema):
         return self
 
 
+class CustomerSearchLocationResponse(StrictSchema):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: UUID
+    address_line_1: str
+    city: str
+    state: str
+    postal_code: str
+
+
 class CustomerSearchItem(CustomerResponse):
     """Roster projection with authoritative effective-contact context."""
 
     preferred_contact: ContactResponse | None
+    primary_location: CustomerSearchLocationResponse | None = None
 
 
 class CustomerSearchResponse(StrictSchema):

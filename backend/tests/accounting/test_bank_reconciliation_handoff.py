@@ -41,9 +41,7 @@ async def test_prepare_derives_authenticated_user_and_membership() -> None:
     actor = context()
     account_id = uuid4()
     session = SimpleNamespace(
-        scalar=AsyncMock(
-            side_effect=[SimpleNamespace(id=account_id), 0, None]
-        ),
+        scalar=AsyncMock(side_effect=[SimpleNamespace(id=account_id), 0, None]),
         flush=AsyncMock(),
         add=Mock(),
     )

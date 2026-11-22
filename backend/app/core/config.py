@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "development"
     business_timezone: str = "America/New_York"
+    bank_feed_stale_after_hours: int = Field(default=72, ge=1, le=2160)
 
     database_url: str = (
         "postgresql+asyncpg://acp_enterprise:"
@@ -45,6 +46,7 @@ class Settings(BaseSettings):
     qbo_production_callback_uri: str | None = None
     qbo_production_runtime_root: str | None = None
     qbo_production_evidence_root: str | None = None
+    qbo_manual_archive_root: str | None = None
     qbo_production_acp_company_id: UUID | None = None
     qbo_production_api_minor_version: int = 75
     qbo_repository_root: str = "/app"

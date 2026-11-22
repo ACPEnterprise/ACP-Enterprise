@@ -145,22 +145,26 @@ def reason_about_dispatch(
         limitations.extend(dispatch.limitations)
 
     primary = next(
-        (item for item in slots if item.slot_class is GhostSlotClass.PRIMARY_GHOST_SLOT),
+        (
+            item
+            for item in slots
+            if item.slot_class is GhostSlotClass.PRIMARY_GHOST_SLOT
+        ),
         _unavailable_slot(tuple(limitations)),
     )
     alternates = tuple(
-        item for item in slots if item.slot_class is not GhostSlotClass.PRIMARY_GHOST_SLOT
+        item
+        for item in slots
+        if item.slot_class is not GhostSlotClass.PRIMARY_GHOST_SLOT
     )
     if primary.slot_class is GhostSlotClass.PRIMARY_GHOST_SLOT:
-        recommendation = "Offer the primary slot for human review; do not assign it automatically."
-        interpretation = (
-            "Canonical Dispatch evidence supports at least one currently eligible option."
+        recommendation = (
+            "Offer the primary slot for human review; do not assign it automatically."
         )
+        interpretation = "Canonical Dispatch evidence supports at least one currently eligible option."
         why = primary.why
     else:
-        recommendation = (
-            "Continue clarification and refresh canonical availability before offering a slot."
-        )
+        recommendation = "Continue clarification and refresh canonical availability before offering a slot."
         interpretation = (
             "The current facts do not support an eligible primary Dispatch option."
         )
@@ -168,11 +172,7 @@ def reason_about_dispatch(
 
     evidence = tuple(
         sorted(
-            {
-                item
-                for fact in _call_facts(context)
-                for item in fact.evidence
-            }
+            {item for fact in _call_facts(context) for item in fact.evidence}
             | set(dispatch.evidence if dispatch else ()),
             key=lambda item: (item.authority, item.identity, item.digest),
         )
@@ -236,9 +236,7 @@ def reason_about_dispatch(
 
 
 def _facts(context: CallReasoningContext) -> tuple[str, ...]:
-    return tuple(
-        f"{item.name}: {_fact_display(item)}" for item in _call_facts(context)
-    )
+    return tuple(f"{item.name}: {_fact_display(item)}" for item in _call_facts(context))
 
 
 def _call_facts(context: CallReasoningContext) -> tuple[CallFact, ...]:
@@ -274,12 +272,17 @@ def _next_question(context: CallReasoningContext) -> str | None:
 
 def _limitations(context: CallReasoningContext) -> tuple[str, ...]:
     values = []
-    if context.urgency.state is ResolutionState.RESOLVED and not context.urgency.evidence:
+    if (
+        context.urgency.state is ResolutionState.RESOLVED
+        and not context.urgency.evidence
+    ):
         values.append(
             "Urgency lacks configured policy evidence and is not used as a priority."
         )
     if context.location.state is ResolutionState.UNRESOLVED:
-        values.append("Location-dependent eligibility and travel evidence are unavailable.")
+        values.append(
+            "Location-dependent eligibility and travel evidence are unavailable."
+        )
     if context.membership.state is ResolutionState.UNRESOLVED:
         values.append("Membership entitlement is unresolved and is not assumed.")
     return tuple(values)
@@ -303,10 +306,14 @@ def _slot(
         for constraint in item.constraints
         if constraint.result is ConstraintResult.PASS
     )
-    why = passed if item.eligible else tuple(
-        constraint.explanation
-        for constraint in item.constraints
-        if constraint.result is not ConstraintResult.PASS
+    why = (
+        passed
+        if item.eligible
+        else tuple(
+            constraint.explanation
+            for constraint in item.constraints
+            if constraint.result is not ConstraintResult.PASS
+        )
     )
     return GhostSlot(
         slot_class=slot_class,

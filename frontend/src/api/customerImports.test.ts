@@ -36,6 +36,7 @@ describe("customer import API", () => {
       provider: "file",
       namespace: "file",
       mapping: { source_record_id: "ID", display_name: "Name" },
+      branchId: "branch-1",
     });
 
     const [path, body, config] = vi.mocked(client.apiClient.post).mock.calls[0] ?? [];
@@ -47,6 +48,7 @@ describe("customer import API", () => {
         "Idempotency-Key": "preview-key",
         "X-Customer-Import-Provider": "file",
         "X-Customer-Import-Namespace": "file",
+        "X-Branch-ID": "branch-1",
       },
     });
   });
@@ -65,12 +67,15 @@ describe("customer import API", () => {
       },
     } as never);
 
-    const result = await admitCustomerImport("batch-1");
+    const result = await admitCustomerImport("batch-1", "company-1", "branch-1");
     expect(result.created + result.matched).toBe(2);
     expect(client.apiClient.post).toHaveBeenCalledWith(
-      "/api/v1/customer-import/batches/batch-1/admit?limit=500",
+      "/api/v1/customer-import/batches/batch-1/admit?limit=10000",
       {},
-      expect.objectContaining({ timeout: 1_800_000 }),
+      expect.objectContaining({
+        timeout: 1_800_000,
+        headers: { "Content-Type": "application/json", "X-Branch-ID": "branch-1" },
+      }),
     );
   });
 

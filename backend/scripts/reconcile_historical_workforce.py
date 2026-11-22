@@ -35,7 +35,9 @@ def _historical_rows(native: dict[str, UUID]) -> tuple[dict[str, object], ...]:
             "provenance_reference": "hcp-workforce-source-authority/v1; sealed-November-crosswalk",
             "evidence_digest": "b39b926208ae0769850ffb7580fa4826563462c53f6a5b7a42b417dd3c8ed51f",
             "unresolved_reason": None,
-            "evidence_metadata": {"owner_disposition": "OWNER_IDENTITY_DECISION_REQUIRED"},
+            "evidence_metadata": {
+                "owner_disposition": "OWNER_IDENTITY_DECISION_REQUIRED"
+            },
         },
         {
             "source_system": "HCP",
@@ -107,7 +109,10 @@ def _historical_rows(native: dict[str, UUID]) -> tuple[dict[str, object], ...]:
             "provenance_reference": "qualified-November-gate-packet; hcp_migration_holds",
             "evidence_digest": "3a1ae01003503166e5a0b0f99be2add841245b8d89ad1557cf088cd3e8589d95",
             "unresolved_reason": "Source identity is held but the retained evidence does not prove the person-level name.",
-            "evidence_metadata": {"operational_effects_enabled": False, "financial_truth_accepted": False},
+            "evidence_metadata": {
+                "operational_effects_enabled": False,
+                "financial_truth_accepted": False,
+            },
         },
         {
             "source_system": "ACP_NATIVE",
@@ -137,14 +142,13 @@ def _historical_rows(native: dict[str, UUID]) -> tuple[dict[str, object], ...]:
 
 
 async def reconcile() -> dict[str, int]:
-    from sqlalchemy import select
-
     from app.database.session import AsyncSessionFactory
     from app.platform.company.membership_models import Membership
     from app.platform.employees.models import Employee
     from app.platform.permissions.models import MembershipRole
     from app.platform.users.models import User, UserCredential
     from app.workforce.models import HistoricalWorkforceIdentity
+    from sqlalchemy import select
 
     async with AsyncSessionFactory() as session:
         async with session.begin():
@@ -154,15 +158,21 @@ async def reconcile() -> dict[str, int]:
                 )
             ).all()
             active_alex = [
-                employee for employee in employee_rows
-                if employee.display_name == "Alex Donahue" and employee.status == "active"
+                employee
+                for employee in employee_rows
+                if employee.display_name == "Alex Donahue"
+                and employee.status == "active"
             ]
             stale_alex = [
-                employee for employee in employee_rows
-                if employee.display_name == "Alex Donahue" and employee.status == "inactive"
+                employee
+                for employee in employee_rows
+                if employee.display_name == "Alex Donahue"
+                and employee.status == "inactive"
             ]
             if len(active_alex) != 1 or len(stale_alex) != 1:
-                raise RuntimeError("expected exactly one active and one inactive Alex row")
+                raise RuntimeError(
+                    "expected exactly one active and one inactive Alex row"
+                )
             employees = {
                 employee.display_name: employee
                 for employee in employee_rows
@@ -200,8 +210,10 @@ async def reconcile() -> dict[str, int]:
                 row = await session.scalar(
                     select(HistoricalWorkforceIdentity).where(
                         HistoricalWorkforceIdentity.company_id == COMPANY_ID,
-                        HistoricalWorkforceIdentity.source_system == values["source_system"],
-                        HistoricalWorkforceIdentity.source_identity == values["source_identity"],
+                        HistoricalWorkforceIdentity.source_system
+                        == values["source_system"],
+                        HistoricalWorkforceIdentity.source_identity
+                        == values["source_identity"],
                     )
                 )
                 if row is None:
@@ -240,9 +252,11 @@ async def reconcile() -> dict[str, int]:
             if membership is not None:
                 membership.status = "revoked"
                 membership.revoked_at = datetime.now(timezone.utc)
-            user = await session.scalar(
-                select(User).where(User.id == membership.user_id)
-            ) if membership is not None else None
+            user = (
+                await session.scalar(select(User).where(User.id == membership.user_id))
+                if membership is not None
+                else None
+            )
             if user is not None:
                 user.status = "locked"
                 user.disabled_at = datetime.now(timezone.utc)
@@ -263,9 +277,15 @@ async def reconcile() -> dict[str, int]:
                 ).all()
                 for role in role_rows:
                     role.revoked_at = datetime.now(timezone.utc)
-                    role.revocation_reason = "disposable_beta_acceptance_fixture_retired"
+                    role.revocation_reason = (
+                        "disposable_beta_acceptance_fixture_retired"
+                    )
 
-        return {"historical_created": created, "historical_updated": updated, "disposable_retired": 1}
+        return {
+            "historical_created": created,
+            "historical_updated": updated,
+            "disposable_retired": 1,
+        }
 
 
 def main() -> int:

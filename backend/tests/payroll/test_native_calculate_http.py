@@ -55,7 +55,9 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest_asyncio.fixture
-async def native_calculate_database() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+async def native_calculate_database() -> AsyncIterator[
+    async_sessionmaker[AsyncSession]
+]:
     engine = create_async_engine(settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
@@ -77,9 +79,15 @@ def _protected_payload() -> dict[str, object]:
     }
 
 
-async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, UUID, str]:
+async def _seed_case(
+    factory: async_sessionmaker[AsyncSession],
+) -> tuple[UUID, UUID, str]:
     company_id, employee_id, actor_id, branch_id, period_id = (
-        uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+        uuid4(),
+        uuid4(),
+        uuid4(),
+        uuid4(),
+        uuid4(),
     )
     now = datetime(2026, 9, 15, tzinfo=timezone.utc)
     start, end = date(2026, 9, 7), date(2026, 9, 13)
@@ -149,7 +157,10 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
             approved_at=now,
             authority_digest="",
         )
-        policy_value = replace(policy_value, authority_digest=canonical_digest(policy_value.canonical_content()))
+        policy_value = replace(
+            policy_value,
+            authority_digest=canonical_digest(policy_value.canonical_content()),
+        )
         policy = CompanyPayrollPolicyVersion(
             id=policy_value.policy_id,
             company_id=company_id,
@@ -167,7 +178,10 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
             audit_reason="isolated first-calculation fixture",
         )
         compensation_value = fixture_compensation(
-            company_id, employee_id, kind=CompensationType.SALARIED, rate=Decimal("1000.00")
+            company_id,
+            employee_id,
+            kind=CompensationType.SALARIED,
+            rate=Decimal("1000.00"),
         )
         compensation_value = replace(
             compensation_value,
@@ -175,7 +189,10 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
             approved_at=now,
             authority_digest="",
         )
-        compensation_value = replace(compensation_value, authority_digest=canonical_digest(compensation_value.canonical_content()))
+        compensation_value = replace(
+            compensation_value,
+            authority_digest=canonical_digest(compensation_value.canonical_content()),
+        )
         compensation = EmployeeCompensationAuthorityVersion(
             id=compensation_value.authority_id,
             company_id=company_id,
@@ -206,7 +223,9 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
         nonce = b"0123456789ab"
         import json
 
-        ciphertext = encrypted.encrypt(nonce, json.dumps(payload).encode(), str(company_id).encode())
+        ciphertext = encrypted.encrypt(
+            nonce, json.dumps(payload).encode(), str(company_id).encode()
+        )
         envelope_id = uuid4()
         session.add(
             PayrollProtectedInputEnvelope(
@@ -221,29 +240,33 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
         )
         await session.flush()
         authorities: list[PayrollInputAuthorityVersion] = []
-        for key in ("federal_income_tax", "social_security_employee", "medicare_employee"):
+        for key in (
+            "federal_income_tax",
+            "social_security_employee",
+            "medicare_employee",
+        ):
             authority = PayrollInputAuthorityVersion(
-                    company_id=company_id,
-                    employee_id=employee_id,
-                    authority_domain="tax",
-                    authority_key=key,
-                    authority_version=1,
-                    definition_version="payroll.tax-deduction-authority.v1",
-                    applicability="required",
-                    effective_start=start,
-                    lifecycle="approved",
-                    jurisdiction_reference="US-FL",
-                    calculation_basis="fixture",
-                    priority=None,
-                    public_parameters={},
-                    evidence_digest="e" * 64,
-                    authority_digest="0" * 64,
-                    protected_envelope_id=envelope_id,
-                    drafted_by_user_id=actor_id,
-                    approved_by_user_id=actor_id,
-                    approved_at=now,
-                    audit_reason="isolated first-calculation fixture",
-                )
+                company_id=company_id,
+                employee_id=employee_id,
+                authority_domain="tax",
+                authority_key=key,
+                authority_version=1,
+                definition_version="payroll.tax-deduction-authority.v1",
+                applicability="required",
+                effective_start=start,
+                lifecycle="approved",
+                jurisdiction_reference="US-FL",
+                calculation_basis="fixture",
+                priority=None,
+                public_parameters={},
+                evidence_digest="e" * 64,
+                authority_digest="0" * 64,
+                protected_envelope_id=envelope_id,
+                drafted_by_user_id=actor_id,
+                approved_by_user_id=actor_id,
+                approved_at=now,
+                audit_reason="isolated first-calculation fixture",
+            )
             session.add(authority)
             authorities.append(authority)
         await session.flush()
@@ -254,7 +277,13 @@ async def _seed_case(factory: async_sessionmaker[AsyncSession]) -> tuple[UUID, U
                     authority, protected_digest=protected_digest
                 )
             )
-        run_digest = canonical_digest({"company_id": str(company_id), "period": str(period_id), "employee": str(employee_id)})
+        run_digest = canonical_digest(
+            {
+                "company_id": str(company_id),
+                "period": str(period_id),
+                "employee": str(employee_id),
+            }
+        )
         run = PayrollRunRecord(
             company_id=company_id,
             pay_period_id=period_id,
@@ -300,9 +329,13 @@ async def _context_for(
     async with factory() as session:
         company = await session.get(Company, company_id)
         actor = await session.scalar(
-            select(User).join(Membership, Membership.user_id == User.id).where(Membership.company_id == company_id)
+            select(User)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.company_id == company_id)
         )
-        membership = await session.scalar(select(Membership).where(Membership.company_id == company_id))
+        membership = await session.scalar(
+            select(Membership).where(Membership.company_id == company_id)
+        )
         permissions = list((await session.scalars(select(Permission))).all())
         required = {
             PayrollPermission.CALCULATION_EXECUTE,
@@ -315,7 +348,14 @@ async def _context_for(
         }
         known = {item.code for item in permissions}
         for code in sorted(required - known):
-            value = Permission(code=code, name=code, description="isolated Payroll qualification permission", resource="payroll", action=code.lower(), status="active")
+            value = Permission(
+                code=code,
+                name=code,
+                description="isolated Payroll qualification permission",
+                resource="payroll",
+                action=code.lower(),
+                status="active",
+            )
             session.add(value)
             permissions.append(value)
         await session.flush()
@@ -328,13 +368,17 @@ async def _context_for(
             authorized_branches=(),
             active_branch=None,
             effective_roles=(),
-            effective_permissions=tuple(item for item in permissions if item.code not in excluded),
+            effective_permissions=tuple(
+                item for item in permissions if item.code not in excluded
+            ),
             credential_version=1,
             authorization_version=1,
         )
 
 
-def _app_for(factory: async_sessionmaker[AsyncSession], context: AuthorizationContext) -> FastAPI:
+def _app_for(
+    factory: async_sessionmaker[AsyncSession], context: AuthorizationContext
+) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
 
@@ -351,21 +395,43 @@ def _app_for(factory: async_sessionmaker[AsyncSession], context: AuthorizationCo
 
 
 async def test_first_calculation_http_persists_new_authority(
-    native_calculate_database: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+    native_calculate_database: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     company_id, run_id, run_digest = await _seed_case(native_calculate_database)
     monkeypatch.setattr(settings, "payroll_input_active_kid", "native-test")
-    monkeypatch.setattr(settings, "payroll_input_encryption_keys", {"native-test": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm4="})
+    monkeypatch.setattr(
+        settings,
+        "payroll_input_encryption_keys",
+        {"native-test": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm4="},
+    )
 
     async with native_calculate_database() as session:
-        member = await session.scalar(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.run_id == run_id))
+        member = await session.scalar(
+            select(PayrollRunMemberRecord).where(
+                PayrollRunMemberRecord.run_id == run_id
+            )
+        )
         assert member is not None
         assert member.gross_result_id is None and member.tax_result_id is None
-        assert await session.scalar(select(PayrollGrossCalculationResultRecord.id).where(PayrollGrossCalculationResultRecord.pay_period_id == member.run_id)) is None
+        assert (
+            await session.scalar(
+                select(PayrollGrossCalculationResultRecord.id).where(
+                    PayrollGrossCalculationResultRecord.pay_period_id == member.run_id
+                )
+            )
+            is None
+        )
 
         company = await session.get(Company, company_id)
-        actor = await session.scalar(select(User).join(Membership, Membership.user_id == User.id).where(Membership.company_id == company_id))
-        membership = await session.scalar(select(Membership).where(Membership.company_id == company_id))
+        actor = await session.scalar(
+            select(User)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.company_id == company_id)
+        )
+        membership = await session.scalar(
+            select(Membership).where(Membership.company_id == company_id)
+        )
         permissions = list((await session.scalars(select(Permission))).all())
         required_permissions = {
             PayrollPermission.CALCULATION_EXECUTE,
@@ -390,9 +456,35 @@ async def test_first_calculation_http_persists_new_authority(
             permissions.append(value)
         await session.flush()
         assert company is not None and actor is not None and membership is not None
-        assert await session.scalar(select(CompanyPayrollPolicyVersion).where(CompanyPayrollPolicyVersion.company_id == company_id)) is not None
-        assert await session.scalar(select(EmployeeCompensationAuthorityVersion).where(EmployeeCompensationAuthorityVersion.company_id == company_id, EmployeeCompensationAuthorityVersion.employee_id == member.employee_id)) is not None
-        context = AuthorizationContext(user=actor, company=company, membership=membership, authorized_branches=(), active_branch=None, effective_roles=(), effective_permissions=tuple(permissions), credential_version=1, authorization_version=1)
+        assert (
+            await session.scalar(
+                select(CompanyPayrollPolicyVersion).where(
+                    CompanyPayrollPolicyVersion.company_id == company_id
+                )
+            )
+            is not None
+        )
+        assert (
+            await session.scalar(
+                select(EmployeeCompensationAuthorityVersion).where(
+                    EmployeeCompensationAuthorityVersion.company_id == company_id,
+                    EmployeeCompensationAuthorityVersion.employee_id
+                    == member.employee_id,
+                )
+            )
+            is not None
+        )
+        context = AuthorizationContext(
+            user=actor,
+            company=company,
+            membership=membership,
+            authorized_branches=(),
+            active_branch=None,
+            effective_roles=(),
+            effective_permissions=tuple(permissions),
+            credential_version=1,
+            authorization_version=1,
+        )
 
     app = FastAPI()
     app.include_router(router)
@@ -406,38 +498,92 @@ async def test_first_calculation_http_persists_new_authority(
 
     app.dependency_overrides[get_database_session] = db_override
     app.dependency_overrides[get_authorization_context] = context_override
-    payload = {"idempotency_key": "native-first-calculate", "expected_run_digest": run_digest}
+    payload = {
+        "idempotency_key": "native-first-calculate",
+        "expected_run_digest": run_digest,
+    }
     async with (
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as concurrent_client,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as concurrent_client,
     ):
         response, concurrent_response = await asyncio.gather(
-            client.post(f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload),
-            concurrent_client.post(f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload),
+            client.post(
+                f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload
+            ),
+            concurrent_client.post(
+                f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload
+            ),
         )
-        replay_response = await client.post(f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload)
+        replay_response = await client.post(
+            f"/api/v1/payroll/operator/runs/{run_id}/calculate", json=payload
+        )
         contradictory_response = await client.post(
             f"/api/v1/payroll/operator/runs/{run_id}/calculate",
-            json={"idempotency_key": payload["idempotency_key"], "expected_run_digest": "0" * 64},
+            json={
+                "idempotency_key": payload["idempotency_key"],
+                "expected_run_digest": "0" * 64,
+            },
         )
     assert response.status_code == 200, response.text
     assert concurrent_response.status_code == 200, concurrent_response.text
-    assert sorted([response.json()["replayed"], concurrent_response.json()["replayed"]]) == [False, True]
+    assert sorted(
+        [response.json()["replayed"], concurrent_response.json()["replayed"]]
+    ) == [False, True]
     assert replay_response.status_code == 200, replay_response.text
     assert replay_response.json()["replayed"] is True
     assert contradictory_response.status_code == 409
     body = response.json()
     assert body["status"] == "calculated"
     async with native_calculate_database() as session:
-        member = await session.scalar(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.run_id == run_id))
-        assert member is not None and member.gross_result_id is not None and member.tax_result_id is not None
-        assert await session.scalar(select(PayrollCalculationInputSnapshotRecord).where(PayrollCalculationInputSnapshotRecord.run_id == run_id)) is not None
-        assert await session.scalar(select(MutationReceipt).where(MutationReceipt.idempotency_key == "native-first-calculate")) is not None
-        assert await session.scalar(select(AuditRecord).where(AuditRecord.resource_id == run_id)) is not None
-        assert await session.scalar(select(BusinessEvent).where(BusinessEvent.entity_id == run_id)) is not None
+        member = await session.scalar(
+            select(PayrollRunMemberRecord).where(
+                PayrollRunMemberRecord.run_id == run_id
+            )
+        )
+        assert (
+            member is not None
+            and member.gross_result_id is not None
+            and member.tax_result_id is not None
+        )
+        assert (
+            await session.scalar(
+                select(PayrollCalculationInputSnapshotRecord).where(
+                    PayrollCalculationInputSnapshotRecord.run_id == run_id
+                )
+            )
+            is not None
+        )
+        assert (
+            await session.scalar(
+                select(MutationReceipt).where(
+                    MutationReceipt.idempotency_key == "native-first-calculate"
+                )
+            )
+            is not None
+        )
+        assert (
+            await session.scalar(
+                select(AuditRecord).where(AuditRecord.resource_id == run_id)
+            )
+            is not None
+        )
+        assert (
+            await session.scalar(
+                select(BusinessEvent).where(BusinessEvent.entity_id == run_id)
+            )
+            is not None
+        )
         tax = await session.get(PayrollTaxDeductionResultRecord, member.tax_result_id)
         assert tax is not None and tax.net_pay_candidate > 0
-        replay = await session.scalar(select(MutationReceipt).where(MutationReceipt.idempotency_key == "native-first-calculate"))
+        replay = await session.scalar(
+            select(MutationReceipt).where(
+                MutationReceipt.idempotency_key == "native-first-calculate"
+            )
+        )
         assert replay is not None and replay.result_id == run_id
 
 
@@ -448,15 +594,28 @@ async def test_calculate_wrong_company_is_denied_without_mutation(
     other_company_id, _, _ = await _seed_case(native_calculate_database)
     context = await _context_for(native_calculate_database, other_company_id)
     app = _app_for(native_calculate_database, context)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.post(
             f"/api/v1/payroll/operator/runs/{run_id}/calculate",
-            json={"idempotency_key": "wrong-company", "expected_run_digest": run_digest},
+            json={
+                "idempotency_key": "wrong-company",
+                "expected_run_digest": run_digest,
+            },
         )
     assert response.status_code == 404
     async with native_calculate_database() as session:
-        member = await session.scalar(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.run_id == run_id))
-        assert member is not None and member.gross_result_id is None and member.tax_result_id is None
+        member = await session.scalar(
+            select(PayrollRunMemberRecord).where(
+                PayrollRunMemberRecord.run_id == run_id
+            )
+        )
+        assert (
+            member is not None
+            and member.gross_result_id is None
+            and member.tax_result_id is None
+        )
 
 
 async def test_calculate_unauthorized_is_denied_without_mutation(
@@ -464,20 +623,36 @@ async def test_calculate_unauthorized_is_denied_without_mutation(
 ) -> None:
     _, run_id, run_digest = await _seed_case(native_calculate_database)
     company_id = await _company_for_run(native_calculate_database, run_id)
-    context = await _context_for(native_calculate_database, company_id, remove_permissions={PayrollPermission.CALCULATION_EXECUTE})
+    context = await _context_for(
+        native_calculate_database,
+        company_id,
+        remove_permissions={PayrollPermission.CALCULATION_EXECUTE},
+    )
     app = _app_for(native_calculate_database, context)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.post(
             f"/api/v1/payroll/operator/runs/{run_id}/calculate",
             json={"idempotency_key": "unauthorized", "expected_run_digest": run_digest},
         )
     assert response.status_code == 403
     async with native_calculate_database() as session:
-        member = await session.scalar(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.run_id == run_id))
-        assert member is not None and member.gross_result_id is None and member.tax_result_id is None
+        member = await session.scalar(
+            select(PayrollRunMemberRecord).where(
+                PayrollRunMemberRecord.run_id == run_id
+            )
+        )
+        assert (
+            member is not None
+            and member.gross_result_id is None
+            and member.tax_result_id is None
+        )
 
 
-async def _company_for_run(factory: async_sessionmaker[AsyncSession], run_id: UUID) -> UUID:
+async def _company_for_run(
+    factory: async_sessionmaker[AsyncSession], run_id: UUID
+) -> UUID:
     async with factory() as session:
         run = await session.get(PayrollRunRecord, run_id)
         assert run is not None
@@ -490,23 +665,55 @@ async def test_calculate_engine_failure_rolls_back_authority(
 ) -> None:
     company_id, run_id, run_digest = await _seed_case(native_calculate_database)
     monkeypatch.setattr(settings, "payroll_input_active_kid", "native-test")
-    monkeypatch.setattr(settings, "payroll_input_encryption_keys", {"native-test": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm4="})
+    monkeypatch.setattr(
+        settings,
+        "payroll_input_encryption_keys",
+        {"native-test": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm4="},
+    )
     context = await _context_for(native_calculate_database, company_id)
     app = _app_for(native_calculate_database, context)
 
     def fail_calculation(*args: object, **kwargs: object) -> object:
         raise GrossPayCalculationError("qualification engine failure")
 
-    monkeypatch.setattr("app.payroll.operator_router.PayrollGrossCalculationEngine.calculate", fail_calculation)
+    monkeypatch.setattr(
+        "app.payroll.operator_router.PayrollGrossCalculationEngine.calculate",
+        fail_calculation,
+    )
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             f"/api/v1/payroll/operator/runs/{run_id}/calculate",
-            json={"idempotency_key": "engine-failure", "expected_run_digest": run_digest},
+            json={
+                "idempotency_key": "engine-failure",
+                "expected_run_digest": run_digest,
+            },
         )
     assert response.status_code == 500
     async with native_calculate_database() as session:
-        member = await session.scalar(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.run_id == run_id))
-        assert member is not None and member.gross_result_id is None and member.tax_result_id is None
-        assert await session.scalar(select(PayrollGrossCalculationResultRecord).where(PayrollGrossCalculationResultRecord.company_id == company_id)) is None
-        assert await session.scalar(select(PayrollTaxDeductionResultRecord).where(PayrollTaxDeductionResultRecord.company_id == company_id)) is None
+        member = await session.scalar(
+            select(PayrollRunMemberRecord).where(
+                PayrollRunMemberRecord.run_id == run_id
+            )
+        )
+        assert (
+            member is not None
+            and member.gross_result_id is None
+            and member.tax_result_id is None
+        )
+        assert (
+            await session.scalar(
+                select(PayrollGrossCalculationResultRecord).where(
+                    PayrollGrossCalculationResultRecord.company_id == company_id
+                )
+            )
+            is None
+        )
+        assert (
+            await session.scalar(
+                select(PayrollTaxDeductionResultRecord).where(
+                    PayrollTaxDeductionResultRecord.company_id == company_id
+                )
+            )
+            is None
+        )

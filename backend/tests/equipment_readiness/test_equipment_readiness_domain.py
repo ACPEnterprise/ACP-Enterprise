@@ -14,16 +14,44 @@ from app.platform.permissions.codes import AssetPermission
 
 
 def test_employee_setting_controls_prompt_independently_of_position():
-    assert equipment_checklist_prompt_required("not_required", has_custody_items=True, already_confirmed=False) is False
-    assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=True, already_confirmed=False) is True
-    assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=True, already_confirmed=True) is False
-    assert equipment_checklist_prompt_required("required_at_clock_in", has_custody_items=False, already_confirmed=False) is False
+    assert (
+        equipment_checklist_prompt_required(
+            "not_required", has_custody_items=True, already_confirmed=False
+        )
+        is False
+    )
+    assert (
+        equipment_checklist_prompt_required(
+            "required_at_clock_in", has_custody_items=True, already_confirmed=False
+        )
+        is True
+    )
+    assert (
+        equipment_checklist_prompt_required(
+            "required_at_clock_in", has_custody_items=True, already_confirmed=True
+        )
+        is False
+    )
+    assert (
+        equipment_checklist_prompt_required(
+            "required_at_clock_in", has_custody_items=False, already_confirmed=False
+        )
+        is False
+    )
 
 
 def test_position_only_supplies_non_authoritative_setup_hint():
-    assert suggested_equipment_checklist_requirement("Technician") == "required_at_clock_in"
+    assert (
+        suggested_equipment_checklist_requirement("Technician")
+        == "required_at_clock_in"
+    )
     assert suggested_equipment_checklist_requirement("Helper") == "not_required"
-    assert suggested_equipment_checklist_requirement("Field Service Manager") == "not_required"
+    assert (
+        suggested_equipment_checklist_requirement("Field Service Manager")
+        == "not_required"
+    )
+
+
 from app.equipment_readiness.schemas import DailyConfirmationRequest
 
 
@@ -43,16 +71,37 @@ def test_ready_capability_satisfies_job_requirement():
 
 def test_projection_preserves_unknown_incomplete_and_service_states():
     assert projection_state(set(), has_expected_equipment=False) == "EQUIPMENT_UNKNOWN"
-    assert projection_state({"ready", "unknown"}, has_expected_equipment=True) == "EQUIPMENT_UNKNOWN"
-    assert projection_state({"ready", "out_of_service"}, has_expected_equipment=True) == "EQUIPMENT_OUT_OF_SERVICE"
-    assert projection_state({"ready", "incomplete"}, has_expected_equipment=True) == "EQUIPMENT_SET_INCOMPLETE"
-    assert projection_state({"ready"}, has_expected_equipment=True) == "AVAILABLE_AND_EQUIPPED"
+    assert (
+        projection_state({"ready", "unknown"}, has_expected_equipment=True)
+        == "EQUIPMENT_UNKNOWN"
+    )
+    assert (
+        projection_state({"ready", "out_of_service"}, has_expected_equipment=True)
+        == "EQUIPMENT_OUT_OF_SERVICE"
+    )
+    assert (
+        projection_state({"ready", "incomplete"}, has_expected_equipment=True)
+        == "EQUIPMENT_SET_INCOMPLETE"
+    )
+    assert (
+        projection_state({"ready"}, has_expected_equipment=True)
+        == "AVAILABLE_AND_EQUIPPED"
+    )
 
 
 def test_upcoming_job_elevates_attention_without_beacon():
-    assert attention_priority(upcoming_job_impacted=True, state="unknown") == "critical_before_job"
-    assert attention_priority(upcoming_job_impacted=False, state="missing") == "needs_attention"
-    assert attention_priority(upcoming_job_impacted=False, state="unknown") == "information"
+    assert (
+        attention_priority(upcoming_job_impacted=True, state="unknown")
+        == "critical_before_job"
+    )
+    assert (
+        attention_priority(upcoming_job_impacted=False, state="missing")
+        == "needs_attention"
+    )
+    assert (
+        attention_priority(upcoming_job_impacted=False, state="unknown")
+        == "information"
+    )
 
 
 def test_management_routing_uses_roles_not_employee_names():

@@ -1,0 +1,98 @@
+{
+  "contract": "om2a-source-acquisition-completion/v1",
+  "observed_at": "2026-11-18T21:00:00-05:00",
+  "source_write_performed": false,
+  "qbo": {
+    "acquired": false,
+    "authorization_scope": "com.intuit.quickbooks.accounting",
+    "domains": {
+      "Company": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Accounts": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Customers": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Vendors": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Items": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Invoices": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Payments": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Bills": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "BillPayments": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Purchases": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Deposits": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Transfers": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "JournalEntries": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Tax": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "Employees": "PROTECTED_RUNTIME_INACCESSIBLE",
+      "TimeActivity": "PROTECTED_RUNTIME_INACCESSIBLE"
+    },
+    "unexplained_delta": null,
+    "blocker": {
+      "classification": "EXTERNAL_PROTECTED_RUNTIME_ACCESS",
+      "local_runtime_root_present": false,
+      "local_evidence_root_present": false,
+      "preview_runtime_declared": "/var/lib/acp-qbo-production",
+      "preview_evidence_declared": "/var/lib/acp-qbo-production-evidence",
+      "approved_ssh_identity_authenticated": false,
+      "required_resolution": "Grant the existing approved SSH identity read/execute access to the Preview deployment user, or have an authorized Preview operator run the sanctioned GET-only production acquisition and export its sealed evidence volume."
+    },
+    "historical_reports": {
+      "profit_and_loss_q3_2025": "BLOCKED_WITH_QBO_RUNTIME",
+      "profit_and_loss_fy2025": "BLOCKED_WITH_QBO_RUNTIME",
+      "balance_sheet_2025_12_31": "BLOCKED_WITH_QBO_RUNTIME"
+    },
+    "payroll": "UNAVAILABLE_NOT_AUTHORIZED"
+  },
+  "hcp": {
+    "protected_handoff": "hcp-cutover-94f05c12",
+    "source4_package": "hcp-source-4-20260827T223858Z",
+    "source4_manifest_sha256": "2845b7a6b503071f0d4a9c53ba65b99f07e5fe7bbd2b1efbb8cb0591aad62075",
+    "audit_digest": "9ea201f78509fddd1c586347826085138890308cfc914d7255b109f8c8c4cc3e",
+    "locations": {
+      "source_count": 5630,
+      "relationship_conflicts": 0,
+      "status": "QUALIFIED_LIVE"
+    },
+    "payments": {
+      "source_count": 4308,
+      "duplicate_count": 0,
+      "invoice_parent_complete": true,
+      "status": "QUALIFIED_LIVE",
+      "accounting_tie_out": "REQUIRES_QBO_RECONCILIATION"
+    },
+    "refunds": {
+      "source_count": 28,
+      "exact_native_identity_count": 12,
+      "unidentified_count": 16,
+      "status": "PARTIAL"
+    },
+    "appointments": {
+      "request_count": 3950,
+      "returned_parent_count": 3030,
+      "appointment_record_count": 3219,
+      "original_http_400_count": 920,
+      "recovered_count": 0,
+      "classified_count": 920,
+      "classification": "UNCLASSIFIED_PROVIDER_RESPONSE",
+      "retry_sample_count": 12,
+      "retry_sample_http_400_count": 12,
+      "status": "PARTIAL"
+    },
+    "attachments": {
+      "status": "UNAVAILABLE_FROM_PROVIDER",
+      "fallback": "provider export or owner-supplied original documents"
+    },
+    "employee_crosswalk": {
+      "sealed_source_identities": 7,
+      "accepted_candidate_identities": 6,
+      "relevant_historical_job_assignments": 1825,
+      "evidence_packet_ready": true,
+      "owner_identity_decisions_still_required": true
+    }
+  },
+  "data_master_handoff": {
+    "canonical_historical_read_contract_ready": true,
+    "hcp_evidence_ready": true,
+    "hcp_only_admission_ready": true,
+    "qbo_accounting_evidence_ready": false,
+    "qbo_blocker_isolated_from_hcp_admission": true,
+    "overall_ready": false
+  }
+}

@@ -13,14 +13,13 @@ import json
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn, TypedDict
 
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_executor import (
     NovemberExecutionPacket,
     _packet_inventory,
 )
-
 
 CONTRACT = "hcp-november-supplemental-current-state-authority/v1"
 EXPECTED_ENVIRONMENT = "preview"
@@ -29,12 +28,24 @@ EXPECTED_COMPANY_ID = "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd"
 EXPECTED_BRANCH_ID = "887f413a-70dc-4ab1-98aa-8e84f4e7efd0"
 EXPECTED_ACTOR_ID = "c427ebd1-7583-4c0d-9c54-55a0c1214174"
 EXPECTED_PROVIDER_COMPANY_ID = "aba4de03-d1b7-4c4e-8fb6-32a3fca713f5"
-EXPECTED_SOURCE_PACKET_SHA256 = "8d2b9c056f5eeaaf5b0eb96431c9ccd9906a6db89094bc677ef8a115136fd8a4"
-EXPECTED_SOURCE_PACKET_DIGEST = "dfa44599b3bfaf604f16a3117d5925eff8ec6fc25f5e0a35a0e4e64a3459bdb3"
-EXPECTED_DERIVED_PACKET_SHA256 = "81c0caba12e6e37f9ae55c956a3870007ed1ffc9df0a697461ef229b64cfce3b"
-EXPECTED_DERIVED_PACKET_DIGEST = "dfd5d30c02a3e97ef5bce5aa0f9dd223bd50689a00f27dc00cae7505ce14db20"
-EXPECTED_SUPPLEMENTAL_MANIFEST_DIGEST = "94bb2277b77510432369d8752c74ef3fe1dcf77056f5d51ac91854079f155d70"
-EXPECTED_QUALIFIED_AUTHORITY_DIGEST = "c3aba6e3316bbce9b626c6fef5d6df6ba867db016d0dad1e4730307050dec809"
+EXPECTED_SOURCE_PACKET_SHA256 = (
+    "8d2b9c056f5eeaaf5b0eb96431c9ccd9906a6db89094bc677ef8a115136fd8a4"
+)
+EXPECTED_SOURCE_PACKET_DIGEST = (
+    "dfa44599b3bfaf604f16a3117d5925eff8ec6fc25f5e0a35a0e4e64a3459bdb3"
+)
+EXPECTED_DERIVED_PACKET_SHA256 = (
+    "81c0caba12e6e37f9ae55c956a3870007ed1ffc9df0a697461ef229b64cfce3b"
+)
+EXPECTED_DERIVED_PACKET_DIGEST = (
+    "dfd5d30c02a3e97ef5bce5aa0f9dd223bd50689a00f27dc00cae7505ce14db20"
+)
+EXPECTED_SUPPLEMENTAL_MANIFEST_DIGEST = (
+    "94bb2277b77510432369d8752c74ef3fe1dcf77056f5d51ac91854079f155d70"
+)
+EXPECTED_QUALIFIED_AUTHORITY_DIGEST = (
+    "c3aba6e3316bbce9b626c6fef5d6df6ba867db016d0dad1e4730307050dec809"
+)
 APPROVED_CURRENT_ESTIMATE_IDS = frozenset(
     {
         "csr_1128117a7bee4730a6c3938d84d7efad",
@@ -57,6 +68,40 @@ EXPECTED_COUNTS = {
 }
 
 
+class _AuthorityFields(TypedDict):
+    authority_path: Path
+    packet_path: Path
+    packet_sha256: str
+    packet_digest: str
+    supplemental_manifest_path: Path
+    supplemental_manifest_digest: str
+    qualified_authority_digest: str
+    immutable_source_packet_sha256: str
+    immutable_source_packet_digest: str
+    original_derived_packet_sha256: str
+    original_derived_packet_digest: str
+    bundle_sha256: str
+    policy_digest: str
+    reconciliation_digest: str
+    company_id: str
+    branch_id: str
+    actor_id: str
+    provider_company_id: str
+    repository_sha: str
+    schema_head: str
+    target: str
+    approved_current_source_ids: frozenset[str]
+    quarantined_source_ids: frozenset[str]
+    counts: dict[str, int]
+    executable_count: int
+    held_count: int
+    unexplained_omissions: int
+    lineage_gaps: int
+    held_parent_executable_edges: int
+    rollback_backup_digest: str
+    authority_digest: str
+
+
 def _digest(value: object) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
@@ -71,7 +116,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _fail(code: str, value: object = "") -> None:
+def _fail(code: str, value: object = "") -> NoReturn:
     raise SafeEvidenceError(code, _digest(value))
 
 
@@ -142,18 +187,30 @@ class SupplementalCurrentStateAuthority:
             candidate = Path(str(_required(value, name)))
             return candidate if candidate.is_absolute() else path.parent / candidate
 
-        fields = {
+        fields: _AuthorityFields = {
             "authority_path": path,
             "packet_path": resolve("packet_path"),
             "packet_sha256": str(_required(value, "packet_sha256")),
             "packet_digest": str(_required(value, "packet_digest")),
             "supplemental_manifest_path": resolve("supplemental_manifest_path"),
-            "supplemental_manifest_digest": str(_required(value, "supplemental_manifest_digest")),
-            "qualified_authority_digest": str(_required(value, "qualified_authority_digest")),
-            "immutable_source_packet_sha256": str(_required(value, "immutable_source_packet_sha256")),
-            "immutable_source_packet_digest": str(_required(value, "immutable_source_packet_digest")),
-            "original_derived_packet_sha256": str(_required(value, "original_derived_packet_sha256")),
-            "original_derived_packet_digest": str(_required(value, "original_derived_packet_digest")),
+            "supplemental_manifest_digest": str(
+                _required(value, "supplemental_manifest_digest")
+            ),
+            "qualified_authority_digest": str(
+                _required(value, "qualified_authority_digest")
+            ),
+            "immutable_source_packet_sha256": str(
+                _required(value, "immutable_source_packet_sha256")
+            ),
+            "immutable_source_packet_digest": str(
+                _required(value, "immutable_source_packet_digest")
+            ),
+            "original_derived_packet_sha256": str(
+                _required(value, "original_derived_packet_sha256")
+            ),
+            "original_derived_packet_digest": str(
+                _required(value, "original_derived_packet_digest")
+            ),
             "bundle_sha256": str(_required(value, "bundle_sha256")),
             "policy_digest": str(_required(value, "policy_digest")),
             "reconciliation_digest": str(_required(value, "reconciliation_digest")),
@@ -164,18 +221,29 @@ class SupplementalCurrentStateAuthority:
             "repository_sha": str(_required(value, "repository_sha")),
             "schema_head": str(_required(value, "schema_head")),
             "target": str(_required(value, "target")),
-            "approved_current_source_ids": frozenset(str(item) for item in _required(value, "approved_current_source_ids")),
-            "quarantined_source_ids": frozenset(str(item) for item in _required(value, "quarantined_source_ids")),
-            "counts": {str(key): int(item) for key, item in dict(_required(value, "counts")).items()},
+            "approved_current_source_ids": frozenset(
+                str(item) for item in _required(value, "approved_current_source_ids")
+            ),
+            "quarantined_source_ids": frozenset(
+                str(item) for item in _required(value, "quarantined_source_ids")
+            ),
+            "counts": {
+                str(key): int(item)
+                for key, item in dict(_required(value, "counts")).items()
+            },
             "executable_count": int(_required(value, "executable_count")),
             "held_count": int(_required(value, "held_count")),
             "unexplained_omissions": int(_required(value, "unexplained_omissions")),
             "lineage_gaps": int(_required(value, "lineage_gaps")),
-            "held_parent_executable_edges": int(_required(value, "held_parent_executable_edges")),
+            "held_parent_executable_edges": int(
+                _required(value, "held_parent_executable_edges")
+            ),
             "rollback_backup_digest": str(_required(value, "rollback_backup_digest")),
             "authority_digest": str(_required(value, "authority_digest")),
         }
-        authority = cls(**fields, packet=NovemberExecutionPacket.load(fields["packet_path"]))
+        authority = cls(
+            **fields, packet=NovemberExecutionPacket.load(fields["packet_path"])
+        )
         authority.verify(value)
         return authority
 
@@ -186,7 +254,10 @@ class SupplementalCurrentStateAuthority:
         if value is None:
             value = json.loads(self.authority_path.read_bytes())
         if self.authority_digest != _digest(self._authority_payload(value)):
-            _fail("hcp_november_supplemental_authority_digest_mismatch", self.authority_digest)
+            _fail(
+                "hcp_november_supplemental_authority_digest_mismatch",
+                self.authority_digest,
+            )
         if (
             self.target != EXPECTED_ENVIRONMENT
             or self.schema_head != EXPECTED_SCHEMA
@@ -200,7 +271,8 @@ class SupplementalCurrentStateAuthority:
             or self.immutable_source_packet_digest != EXPECTED_SOURCE_PACKET_DIGEST
             or self.original_derived_packet_sha256 != EXPECTED_DERIVED_PACKET_SHA256
             or self.original_derived_packet_digest != EXPECTED_DERIVED_PACKET_DIGEST
-            or self.supplemental_manifest_digest != EXPECTED_SUPPLEMENTAL_MANIFEST_DIGEST
+            or self.supplemental_manifest_digest
+            != EXPECTED_SUPPLEMENTAL_MANIFEST_DIGEST
             or self.qualified_authority_digest != EXPECTED_QUALIFIED_AUTHORITY_DIGEST
         ):
             _fail("hcp_november_supplemental_runtime_boundary_invalid")
@@ -217,9 +289,14 @@ class SupplementalCurrentStateAuthority:
             self.reconciliation_digest,
             self.rollback_backup_digest,
         ):
-            if len(digest) not in (40, 64) or any(char not in "0123456789abcdef" for char in digest):
+            if len(digest) not in (40, 64) or any(
+                char not in "0123456789abcdef" for char in digest
+            ):
                 _fail("hcp_november_supplemental_digest_invalid", digest)
-        if _sha256(self.packet_path) != self.packet_sha256 or self.packet.digest != self.packet_digest:
+        if (
+            _sha256(self.packet_path) != self.packet_sha256
+            or self.packet.digest != self.packet_digest
+        ):
             _fail("hcp_november_supplemental_packet_binding_mismatch")
         if {
             "bundle_sha256": self.packet.bundle_sha256,
@@ -243,20 +320,43 @@ class SupplementalCurrentStateAuthority:
             "environment": self.target,
         }:
             _fail("hcp_november_supplemental_source_packet_binding_mismatch")
-        manifest = json.loads(_private_file(self.supplemental_manifest_path, "hcp_november_supplemental_manifest_missing"))
+        manifest = json.loads(
+            _private_file(
+                self.supplemental_manifest_path,
+                "hcp_november_supplemental_manifest_missing",
+            )
+        )
         if manifest.get("digest") != self.supplemental_manifest_digest:
             _fail("hcp_november_supplemental_manifest_binding_mismatch")
         if self.approved_current_source_ids != APPROVED_CURRENT_ESTIMATE_IDS:
-            _fail("hcp_november_supplemental_approved_estimate_set_mismatch", sorted(self.approved_current_source_ids))
+            _fail(
+                "hcp_november_supplemental_approved_estimate_set_mismatch",
+                sorted(self.approved_current_source_ids),
+            )
         if self.quarantined_source_ids != QUARANTINED_CURRENT_IDS:
-            _fail("hcp_november_supplemental_quarantine_set_mismatch", sorted(self.quarantined_source_ids))
-        if self.counts != EXPECTED_COUNTS or self.executable_count != 5188 or self.held_count != 2105:
+            _fail(
+                "hcp_november_supplemental_quarantine_set_mismatch",
+                sorted(self.quarantined_source_ids),
+            )
+        if (
+            self.counts != EXPECTED_COUNTS
+            or self.executable_count != 5188
+            or self.held_count != 2105
+        ):
             _fail("hcp_november_supplemental_inventory_mismatch", self.counts)
-        if self.unexplained_omissions or self.lineage_gaps or self.held_parent_executable_edges:
+        if (
+            self.unexplained_omissions
+            or self.lineage_gaps
+            or self.held_parent_executable_edges
+        ):
             _fail("hcp_november_supplemental_qualification_gap")
         packet = {record["source_id"]: record for record in self.packet.records}
-        manifest_records = {record["source_id"]: record for record in manifest.get("records", [])}
-        if not self.approved_current_source_ids.issubset(manifest_records) or not self.quarantined_source_ids.issubset(manifest_records):
+        manifest_records = {
+            record["source_id"]: record for record in manifest.get("records", [])
+        }
+        if not self.approved_current_source_ids.issubset(
+            manifest_records
+        ) or not self.quarantined_source_ids.issubset(manifest_records):
             _fail("hcp_november_supplemental_manifest_inventory_mismatch")
         for source_id in self.approved_current_source_ids:
             record = packet.get(source_id)
@@ -266,9 +366,11 @@ class SupplementalCurrentStateAuthority:
                 or record.get("domain") != "estimate"
                 or record.get("disposition") != "REPLAY"
                 or record.get("original_gate_disposition") != "REPLAY"
-                or record.get("original_source_digest") != current.get("original_source_digest")
+                or record.get("original_source_digest")
+                != current.get("original_source_digest")
                 or record.get("source_digest") != current.get("current_source_digest")
-                or record.get("current_state_authority") != "approved-current-operational-estimate"
+                or record.get("current_state_authority")
+                != "approved-current-operational-estimate"
                 or current.get("classification") != "BUSINESS_STATE_CHANGED"
             ):
                 _fail("hcp_november_supplemental_approved_record_mismatch", source_id)
@@ -286,4 +388,3 @@ class SupplementalCurrentStateAuthority:
                 _fail("hcp_november_supplemental_quarantine_record_mismatch", source_id)
         if _packet_inventory(self.packet.records)["held_parent_executable_edges"] != 0:
             _fail("hcp_november_supplemental_held_parent_edge")
-

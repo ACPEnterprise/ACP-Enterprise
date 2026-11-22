@@ -1549,6 +1549,56 @@
     },
     {
       "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "access_agreements",
+      "mechanism": "Tenant-scoped agreement-version acceptance uniqueness and immutable electronic-signature receipt",
+      "method": "POST",
+      "operation_id": "accept_agreement_api_v1_access_agreements_accept_post",
+      "path": "/api/v1/access-agreements/accept",
+      "reason": "Repeated acceptance of the same published agreement version returns the durable receipt; a changed agreement version requires a new explicit acceptance.",
+      "tenant_scope": "COMPANY_WITH_MEMBERSHIP_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "customer_import",
+      "mechanism": "Tenant/Branch-scoped source and mapping digests with immutable staged rows",
+      "method": "POST",
+      "operation_id": "stage_customer_import_api_v1_customer_import_batches_post",
+      "path": "/api/v1/customer-import/batches",
+      "reason": "Re-uploading the same source artifact with the same mapping reuses the existing batch and preserves the original staged rows.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "customer_import",
+      "mechanism": "Company/Branch batch row lock, durable migration run, and convergent source-identity admission",
+      "method": "POST",
+      "operation_id": "admit_customer_import_api_v1_customer_import_batches__batch_id__admit_post",
+      "path": "/api/v1/customer-import/batches/{batch_id}/admit",
+      "reason": "Repeating admission resumes the durable batch and returns the existing receipt without duplicating Customers or source identities.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "sales_demo",
+      "mechanism": "Demo-company scoped enrichment version and deterministic existing-record checks",
+      "method": "POST",
+      "operation_id": "enrich_api_v1_demo_enrich_post",
+      "path": "/api/v1/demo/enrich",
+      "reason": "Repeated enrichment resumes the same synthetic version and reuses existing Demo records without creating duplicates.",
+      "tenant_scope": "DEMO_COMPANY_ONLY"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "sales_demo",
+      "mechanism": "Demo-company scoped draft keys and existing-estimate reuse",
+      "method": "POST",
+      "operation_id": "water_heater_drafts_api_v1_demo_estimating_water_heater_drafts_post",
+      "path": "/api/v1/demo/estimating/water-heater-drafts",
+      "reason": "Repeated Good/Better/Best generation reuses the existing synthetic draft set rather than creating duplicate estimates.",
+      "tenant_scope": "DEMO_COMPANY_ONLY"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
       "domain": "workforce",
       "mechanism": "Company-scoped Employee/User row lock, expected authorization version, convergent target state, credential version rotation, and complete session revocation",
       "method": "PUT",
@@ -3446,8 +3496,338 @@
         "tests/qbo_source/test_native_application.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company-scoped account identity and complete target status",
+      "method": "PATCH",
+      "operation_id": "update_account_status_api_v1_accounting_accounts__account_id__status_patch",
+      "path": "/api/v1/accounting/accounts/{account_id}/status",
+      "reason": "Repeated status updates converge on the submitted active or archived target state.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company and provider source-account identity with exact source digest comparison",
+      "method": "POST",
+      "operation_id": "create_bank_account_api_v1_accounting_banking_accounts_post",
+      "path": "/api/v1/accounting/banking/accounts",
+      "reason": "Exact source-account replay returns the existing bank account and changed evidence fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company-scoped statement identity bound to a server-issued preview digest",
+      "method": "POST",
+      "operation_id": "confirm_bank_import_api_v1_accounting_banking_accounts__bank_account_id__imports_confirm_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/imports/confirm",
+      "reason": "Confirmation binds the normalized statement to its preview and source transaction identities prevent duplicate ingestion.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "accounting",
+      "mechanism": "Pure normalized statement preview with no persistence side effects",
+      "method": "POST",
+      "operation_id": "preview_bank_import_api_v1_accounting_banking_accounts__bank_account_id__imports_preview_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/imports/preview",
+      "reason": "The request body is used to calculate preview evidence and does not mutate accounting authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company, bank account, and statement identity with canonical reconciliation digest",
+      "method": "POST",
+      "operation_id": "prepare_bank_reconciliation_api_v1_accounting_banking_accounts__bank_account_id__reconciliations_prepare_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/reconciliations/prepare",
+      "reason": "Exact statement preparation replay returns one reconciliation and contradictory evidence fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "accounting",
+      "mechanism": "Pure reconciliation calculation over submitted transaction identities",
+      "method": "POST",
+      "operation_id": "preview_bank_reconciliation_api_v1_accounting_banking_accounts__bank_account_id__reconciliations_preview_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/reconciliations/preview",
+      "reason": "Preview computes difference and readiness without persisting a reconciliation.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Locked reconciliation, expected version, and terminal closed state",
+      "method": "POST",
+      "operation_id": "close_bank_reconciliation_api_v1_accounting_banking_accounts__bank_account_id__reconciliations__reconciliation_id__close_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/reconciliations/{reconciliation_id}/close",
+      "reason": "Close is a state transition on one reconciliation and repeated closure cannot create another close.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Locked reconciliation, expected version, and convergent submitted state",
+      "method": "POST",
+      "operation_id": "submit_bank_reconciliation_api_v1_accounting_banking_accounts__bank_account_id__reconciliations__reconciliation_id__submit_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/reconciliations/{reconciliation_id}/submit",
+      "reason": "An already submitted reconciliation is returned while stale contradictory transitions fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company, bank account, provider, and external transaction identity with source digest",
+      "method": "POST",
+      "operation_id": "ingest_bank_transaction_api_v1_accounting_banking_accounts__bank_account_id__transactions_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/transactions",
+      "reason": "Exact provider transaction replay returns the existing fact and source drift fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "One deterministic match decision digest per Company-scoped bank transaction",
+      "method": "POST",
+      "operation_id": "match_bank_transaction_api_v1_accounting_banking_accounts__bank_account_id__transactions__transaction_id__match_post",
+      "path": "/api/v1/accounting/banking/accounts/{bank_account_id}/transactions/{transaction_id}/match",
+      "reason": "Exact match replay returns one decision and a different decision for the transaction fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company-scoped sealed package identity and server-owned evidence digest",
+      "method": "POST",
+      "operation_id": "submit_sealed_opening_state_controls_api_v1_accounting_opening_controls_sealed_post",
+      "path": "/api/v1/accounting/opening-controls/sealed",
+      "reason": "A sealed source package is admitted once and exact evidence replay returns the same control package.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "accounting",
+      "mechanism": "Server-owned sealed package resolution and validation without persistence",
+      "method": "POST",
+      "operation_id": "preview_sealed_opening_state_controls_api_v1_accounting_opening_controls_sealed_preview_post",
+      "path": "/api/v1/accounting/opening-controls/sealed-preview",
+      "reason": "Preview reads protected source evidence and computes readiness without mutating accounting authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Locked opening package, expected version, evidence digest, and journal identity",
+      "method": "POST",
+      "operation_id": "apply_opening_state_controls_api_v1_accounting_opening_controls__package_id__apply_post",
+      "path": "/api/v1/accounting/opening-controls/{package_id}/apply",
+      "reason": "Application is a versioned terminal transition bound to one journal and evidence digest.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Locked opening package, expected version, and immutable approval evidence digest",
+      "method": "POST",
+      "operation_id": "approve_opening_state_controls_api_v1_accounting_opening_controls__package_id__approve_post",
+      "path": "/api/v1/accounting/opening-controls/{package_id}/approve",
+      "reason": "Approval advances one package version and stale or contradictory transitions fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "accounting",
+      "mechanism": "Company, operation kind, and external reference identity with evidence comparison",
+      "method": "POST",
+      "operation_id": "create_accounting_operation_api_v1_accounting_operations_post",
+      "path": "/api/v1/accounting/operations",
+      "reason": "Exact operation-reference replay returns the existing register fact and conflicting evidence fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "identity_onboarding",
+      "mechanism": "Authenticated credential rotation verifies the current secret and revokes prior sessions atomically",
+      "method": "POST",
+      "operation_id": "change_password_api_v1_auth_password_change_post",
+      "path": "/api/v1/auth/password-change",
+      "reason": "Interactive password replacement intentionally has no replay key; replay with the old credential fails authentication.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "equipment_readiness",
+      "mechanism": "Deterministic attention identity and upsert over the submitted Branch horizon",
+      "method": "POST",
+      "operation_id": "refresh_upcoming_api_v1_equipment_readiness_attention_refresh_upcoming_post",
+      "path": "/api/v1/equipment-readiness/attention/refresh-upcoming",
+      "reason": "Refreshing the same governed horizon converges on the same attention identities.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "equipment_readiness",
+      "mechanism": "Company-scoped attention lock, expected version, and resolved target state",
+      "method": "POST",
+      "operation_id": "resolve_attention_api_v1_equipment_readiness_attention__attention_id__resolve_post",
+      "path": "/api/v1/equipment-readiness/attention/{attention_id}/resolve",
+      "reason": "Resolution is a versioned state transition and stale repeats cannot resolve the record twice.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "equipment_readiness",
+      "mechanism": "Company-scoped catalog code uniqueness with exact target facts",
+      "method": "POST",
+      "operation_id": "create_catalog_api_v1_equipment_readiness_catalog_post",
+      "path": "/api/v1/equipment-readiness/catalog",
+      "reason": "Exact catalog-code replay returns the existing item and changed facts fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "equipment_readiness",
+      "mechanism": "Company, catalog item, and component code uniqueness with exact target facts",
+      "method": "POST",
+      "operation_id": "add_component_api_v1_equipment_readiness_catalog__catalog_item_id__components_post",
+      "path": "/api/v1/equipment-readiness/catalog/{catalog_item_id}/components",
+      "reason": "Exact component replay returns one component while conflicting component facts fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "equipment_readiness",
+      "mechanism": "Company-scoped confirmation key expanded into deterministic per-item replay identities",
+      "method": "POST",
+      "operation_id": "confirm_api_v1_equipment_readiness_daily_confirmations_post",
+      "path": "/api/v1/equipment-readiness/daily-confirmations",
+      "reason": "Daily confirmation replay cannot duplicate custody evidence and contradictory key reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "equipment_readiness",
+      "mechanism": "Company-scoped placement key with canonical request digest and durable initial custody event",
+      "method": "POST",
+      "operation_id": "create_placement_api_v1_equipment_readiness_placements_post",
+      "path": "/api/v1/equipment-readiness/placements",
+      "reason": "Exact placement replay returns one placement and changed facts under the key fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "equipment_readiness",
+      "mechanism": "Company-scoped custody key, request digest, placement lock, and expected version",
+      "method": "POST",
+      "operation_id": "transfer_api_v1_equipment_readiness_placements__placement_id__custody_post",
+      "path": "/api/v1/equipment-readiness/placements/{placement_id}/custody",
+      "reason": "Exact custody replay returns one event and contradictory reuse or stale placement state fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "equipment_readiness",
+      "mechanism": "Company, source entity, source type, and capability uniqueness",
+      "method": "POST",
+      "operation_id": "add_requirement_api_v1_equipment_readiness_requirements_post",
+      "path": "/api/v1/equipment-readiness/requirements",
+      "reason": "Repeated requirement admission returns the existing governed requirement.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "identity_onboarding",
+      "mechanism": "Company-admin authorized credential row replacement and forced-reset delivery rotation",
+      "method": "POST",
+      "operation_id": "reset_administrative_password_api_v1_identity_admin_users__user_id__password_reset_post",
+      "path": "/api/v1/identity-admin/users/{user_id}/password-reset",
+      "reason": "Owner-entered temporary credential replacement intentionally has no replay key and each accepted request rotates credential authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "customers",
+      "mechanism": "Authenticated append-only support request with generated server identity",
+      "method": "POST",
+      "operation_id": "create_case_api_v1_migration_support_cases_post",
+      "path": "/api/v1/migration-support/cases",
+      "reason": "A support case is a deliberate human-authored append with no client replay identity.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "sales_demo",
+      "mechanism": "Representative-scoped advisory lock with deterministic environment identity and ready-state reuse",
+      "method": "POST",
+      "operation_id": "provision_api_v1_demo_provision_post",
+      "path": "/api/v1/demo/provision",
+      "reason": "Repeated provision requests for a ready representative environment return the existing active demo generation.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "sales_demo",
+      "mechanism": "Authorized non-production reset deliberately advances the representative-scoped demo generation under an advisory lock",
+      "method": "POST",
+      "operation_id": "reset_api_v1_demo_reset_post",
+      "path": "/api/v1/demo/reset",
+      "reason": "Each accepted reset intentionally retires the prior synthetic generation and creates a new one; replay is not equivalent to the original operator action.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "sales_demo",
+      "mechanism": "Authenticated append-only synthetic-demo feedback with generated server identity",
+      "method": "POST",
+      "operation_id": "create_feedback_api_v1_demo_feedback_post",
+      "path": "/api/v1/demo/feedback",
+      "reason": "Feedback is a deliberate human-authored append and has no client replay identity.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "workforce",
+      "mechanism": "Company-scoped onboarding request key with durable identity-onboarding request uniqueness",
+      "method": "POST",
+      "operation_id": "onboard_employee_api_v1_workforce_administration_employee_onboarding_post",
+      "path": "/api/v1/workforce/administration/employee-onboarding",
+      "reason": "The request key prevents duplicate Employee creation, but exact replay returns a conflict rather than a prior response, so the operation is not classified as replay-safe.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "workforce",
+      "mechanism": "Tenant-scoped identity collision projection without persistence",
+      "method": "POST",
+      "operation_id": "match_employee_for_onboarding_api_v1_workforce_administration_employee_onboarding_match_post",
+      "path": "/api/v1/workforce/administration/employee-onboarding/match",
+      "reason": "The sensitive match request is carried in a POST body but only returns candidate evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "equipment_readiness",
+      "mechanism": "Company-scoped Employee setting with a complete target value",
+      "method": "PUT",
+      "operation_id": "set_checklist_setting_api_v1_equipment_readiness_employees__employee_id__checklist_setting_put",
+      "path": "/api/v1/equipment-readiness/employees/{employee_id}/checklist-setting",
+      "reason": "Repeated PUT requests converge on the submitted checklist requirement.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Company-scoped Employee authorization version and complete permission target set",
+      "method": "PUT",
+      "operation_id": "update_employee_permissions_api_v1_workforce_administration_employees__employee_id__permissions_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/permissions",
+      "reason": "The versioned PUT replaces the full permission target and rejects stale authorization state.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "5ec868151e0af590eee4f92acecfbf6cbbad37227fe84986946993f287afd256",
+  "fingerprint": "76768bd8cb621f969d6b1f653f239a743e8c96814bde99eaa7a67cb8219bc13b",
   "schema_version": "1"
 }

@@ -1,11 +1,12 @@
 import { CircleCheck, LogOut, Menu, Search, UserRound } from "lucide-react";
-import type { RefObject } from "react";
+import { useCallback, useState, type RefObject } from "react";
 import { Link } from "react-router";
 
 import type { BrandConfiguration } from "../branding/types";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme/useTheme";
 import { IconButton, Select, VisuallyHidden } from "../ui";
+import { GlobalSearchDialog } from "../components/search/GlobalSearchDialog";
 import { NotificationCenterRegion } from "./NotificationCenterRegion";
 import type { WorkspaceMetadata } from "./types";
 
@@ -19,6 +20,8 @@ interface ApplicationHeaderProps {
 export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigationTriggerRef }: ApplicationHeaderProps) {
   const { preference, setPreference } = useTheme();
   const { activeCompany, signOut, user } = useAuth();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
 
   return (
     <header className="theme-header safe-area-header sticky top-0 z-[var(--layer-sticky)] border-b border-stroke bg-header">
@@ -70,7 +73,7 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
             Authenticated session
           </span>
           <div className="hidden sm:contents">
-            <IconButton icon={<Search />} label="Global search is not yet available" variant="ghost" disabled />
+            <IconButton icon={<Search />} label="Global search" variant="ghost" onClick={() => setSearchOpen(true)} />
             <NotificationCenterRegion />
           </div>
           <label className="relative">
@@ -99,6 +102,7 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
           <IconButton icon={<LogOut />} label="Sign out" variant="ghost" onClick={() => void signOut()} />
         </div>
       </div>
+      {searchOpen && <GlobalSearchDialog onClose={closeSearch} />}
     </header>
   );
 }

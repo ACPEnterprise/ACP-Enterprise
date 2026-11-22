@@ -31,7 +31,11 @@ def _next_bucket(value: date, granularity: str) -> date:
     if granularity == "week":
         return value + timedelta(days=7)
     if granularity == "month":
-        return date(value.year + (value.month == 12), 1 if value.month == 12 else value.month + 1, 1)
+        return date(
+            value.year + (value.month == 12),
+            1 if value.month == 12 else value.month + 1,
+            1,
+        )
     return date(value.year + 1, 1, 1)
 
 
@@ -54,10 +58,18 @@ class JobReportingService:
             from app.jobs.errors import JobNotFoundError
 
             raise JobNotFoundError(branch_id)
-        branches = context.authorized_branch_ids if branch_id is None else frozenset({branch_id})
+        branches = (
+            context.authorized_branch_ids
+            if branch_id is None
+            else frozenset({branch_id})
+        )
         local_zone = ZoneInfo(context.company.timezone)
-        range_start = datetime.combine(period_start, time.min, local_zone).astimezone(timezone.utc)
-        range_end = datetime.combine(period_end + timedelta(days=1), time.min, local_zone).astimezone(timezone.utc)
+        range_start = datetime.combine(period_start, time.min, local_zone).astimezone(
+            timezone.utc
+        )
+        range_end = datetime.combine(
+            period_end + timedelta(days=1), time.min, local_zone
+        ).astimezone(timezone.utc)
         rows = tuple(
             (
                 await session.execute(
@@ -76,8 +88,10 @@ class JobReportingService:
                     .outerjoin(
                         EstimateRevision,
                         and_(
-                            EstimateRevision.company_id == EstimateJobConversion.company_id,
-                            EstimateRevision.id == EstimateJobConversion.estimate_revision_id,
+                            EstimateRevision.company_id
+                            == EstimateJobConversion.company_id,
+                            EstimateRevision.id
+                            == EstimateJobConversion.estimate_revision_id,
                         ),
                     )
                     .where(
@@ -106,9 +120,12 @@ class JobReportingService:
             visible_end_exclusive = min(next_cursor, period_end + timedelta(days=1))
             bucket_rows = grouped.get(cursor, [])
             missing_count = sum(1 for amount, _ in bucket_rows if amount is None)
-            currencies = {row_currency for _, row_currency in bucket_rows if row_currency}
+            currencies = {
+                row_currency for _, row_currency in bucket_rows if row_currency
+            }
             known_value = sum(
-                (amount for amount, _ in bucket_rows if amount is not None), Decimal("0.00")
+                (amount for amount, _ in bucket_rows if amount is not None),
+                Decimal("0.00"),
             )
             if len(currencies) > 1:
                 evidence_state = "CONFLICTING_CURRENCIES"
@@ -122,8 +139,12 @@ class JobReportingService:
             else:
                 evidence_state = "AVAILABLE"
                 produced_value = known_value
-            start_at = datetime.combine(visible_start, time.min, local_zone).astimezone(timezone.utc)
-            end_at = datetime.combine(visible_end_exclusive, time.min, local_zone).astimezone(timezone.utc)
+            start_at = datetime.combine(visible_start, time.min, local_zone).astimezone(
+                timezone.utc
+            )
+            end_at = datetime.combine(
+                visible_end_exclusive, time.min, local_zone
+            ).astimezone(timezone.utc)
             label = (
                 visible_start.strftime("%b %-d")
                 if granularity in {"day", "week"}

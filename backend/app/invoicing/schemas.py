@@ -123,7 +123,9 @@ class InvoiceWorkspaceItem(InvoiceSchema):
 
 
 class ReceivablesAgingBucket(InvoiceSchema):
-    key: Literal["not_due", "due_today", "past_due_1_15", "past_due_16_30", "past_due_31_plus"]
+    key: Literal[
+        "not_due", "due_today", "past_due_1_15", "past_due_16_30", "past_due_31_plus"
+    ]
     label: str
     invoice_count: int = Field(ge=0)
     amount: Decimal | None

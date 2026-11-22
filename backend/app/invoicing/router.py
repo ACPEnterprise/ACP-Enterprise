@@ -57,9 +57,7 @@ Apply = Annotated[
 ]
 ManualPayment = Annotated[
     AuthorizationContext,
-    Depends(
-        require_permission(InvoicePermission.MANUAL_PAYMENT_RECORD)
-    ),
+    Depends(require_permission(InvoicePermission.MANUAL_PAYMENT_RECORD)),
 ]
 PaymentHistoryRead = Annotated[
     AuthorizationContext,
@@ -121,7 +119,8 @@ async def invoice_workspace(
     branch_id: UUID | None = None,
     aging_bucket: Literal[
         "not_due", "due_today", "past_due_1_15", "past_due_16_30", "past_due_31_plus"
-    ] | None = None,
+    ]
+    | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[InvoiceWorkspaceItem]:

@@ -11,7 +11,9 @@ ReadinessState = Literal[
 EquipmentChecklistRequirement = Literal["not_required", "required_at_clock_in"]
 
 
-def suggested_equipment_checklist_requirement(position: str | None) -> EquipmentChecklistRequirement:
+def suggested_equipment_checklist_requirement(
+    position: str | None,
+) -> EquipmentChecklistRequirement:
     """A setup hint only; it never writes or overrides an Employee setting."""
     normalized = (position or "").strip().upper().replace(" ", "_")
     if normalized in {"TECHNICIAN", "FIELD_TECHNICIAN"}:
@@ -20,10 +22,17 @@ def suggested_equipment_checklist_requirement(position: str | None) -> Equipment
 
 
 def equipment_checklist_prompt_required(
-    requirement: EquipmentChecklistRequirement, *, has_custody_items: bool, already_confirmed: bool
+    requirement: EquipmentChecklistRequirement,
+    *,
+    has_custody_items: bool,
+    already_confirmed: bool,
 ) -> bool:
     """Employee setting is authoritative; custody only supplies checklist items."""
-    return requirement == "required_at_clock_in" and has_custody_items and not already_confirmed
+    return (
+        requirement == "required_at_clock_in"
+        and has_custody_items
+        and not already_confirmed
+    )
 
 
 @dataclass(frozen=True)
@@ -45,7 +54,9 @@ def equipment_fit(
     )
 
 
-def projection_state(states: set[str], *, has_expected_equipment: bool) -> ReadinessState:
+def projection_state(
+    states: set[str], *, has_expected_equipment: bool
+) -> ReadinessState:
     if not has_expected_equipment or not states or states & {"unknown", "missing"}:
         return "EQUIPMENT_UNKNOWN"
     if "out_of_service" in states:

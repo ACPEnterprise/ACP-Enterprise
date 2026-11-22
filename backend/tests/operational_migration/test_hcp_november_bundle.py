@@ -7,16 +7,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_bundle import (
     AUTHORITY_CONTRACT,
     BUNDLE_CONTRACT,
-    NovemberQualificationAuthority,
+    RUNTIME_AUTHORITY_CONTRACT,
     REQUIRED_FILES,
     SEALED_HANDOFF_CONTRACT,
+    NovemberQualificationAuthority,
 )
-
 
 COMPANY = "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd"
 BRANCH = "887f413a-70dc-4ab1-98aa-8e84f4e7efd0"
@@ -30,7 +29,14 @@ SCHEMA_HEAD = "r4s6u8w0y2a4"
 POLICY = "285d288b98da96140fff9e25200b95beb120d05a2b5196560a89d0a616dd7c0e"
 
 
-def _record(source_id: str, domain: str, disposition: str, *, allowed: bool, reason: str | None = None) -> dict[str, Any]:
+def _record(
+    source_id: str,
+    domain: str,
+    disposition: str,
+    *,
+    allowed: bool,
+    reason: str | None = None,
+) -> dict[str, Any]:
     value: dict[str, Any] = {
         "source_id": source_id,
         "domain": domain,
@@ -45,10 +51,37 @@ def _record(source_id: str, domain: str, disposition: str, *, allowed: bool, rea
 
 def _manifest() -> dict[str, Any]:
     records = [
-        *(_record(f"job-{index}", "job", "HOLD_QUARANTINE", allowed=False) for index in range(22)),
-        *(_record(f"appointment-duplicate-{index}", "appointment", "HOLD", allowed=False, reason="duplicate_risk") for index in range(13)),
-        *(_record(f"technician-{index}", "technician", "HOLD", allowed=False, reason="unresolved_technician") for index in range(2)),
-        _record("appointment-unassigned", "appointment", "HOLD", allowed=False, reason="unassigned"),
+        *(
+            _record(f"job-{index}", "job", "HOLD_QUARANTINE", allowed=False)
+            for index in range(22)
+        ),
+        *(
+            _record(
+                f"appointment-duplicate-{index}",
+                "appointment",
+                "HOLD",
+                allowed=False,
+                reason="duplicate_risk",
+            )
+            for index in range(13)
+        ),
+        *(
+            _record(
+                f"technician-{index}",
+                "technician",
+                "HOLD",
+                allowed=False,
+                reason="unresolved_technician",
+            )
+            for index in range(2)
+        ),
+        _record(
+            "appointment-unassigned",
+            "appointment",
+            "HOLD",
+            allowed=False,
+            reason="unassigned",
+        ),
         _record("job-clean", "job", "CREATE", allowed=True),
         _record("appointment-clean", "appointment", "UPDATE", allowed=True),
         _record("customer-replay", "customer", "REPLAY", allowed=True),
@@ -87,14 +120,18 @@ def _manifest() -> dict[str, Any]:
     }
 
 
-def _write_bundle(tmp_path: Path, *, mutate: Any = None) -> tuple[Path, NovemberQualificationAuthority]:
+def _write_bundle(
+    tmp_path: Path, *, mutate: Any = None
+) -> tuple[Path, NovemberQualificationAuthority]:
     payloads = {
         name: json.dumps({"fixture": name}, sort_keys=True).encode()
         for name in REQUIRED_FILES
         if name != "BUNDLE-MANIFEST.json"
     }
     manifest = _manifest()
-    manifest["file_sha256"] = {name: hashlib.sha256(value).hexdigest() for name, value in payloads.items()}
+    manifest["file_sha256"] = {
+        name: hashlib.sha256(value).hexdigest() for name, value in payloads.items()
+    }
     if mutate:
         mutate(manifest)
     payloads["BUNDLE-MANIFEST.json"] = json.dumps(manifest, sort_keys=True).encode()
@@ -117,6 +154,7 @@ def _write_bundle(tmp_path: Path, *, mutate: Any = None) -> tuple[Path, November
         expected_acquisition_digest=ACQUISITION,
         expected_reconciliation_digest=RECONCILIATION,
         expected_attachment_custody_digest=ATTACHMENT_CUSTODY,
+        contract=RUNTIME_AUTHORITY_CONTRACT,
     )
 
 
@@ -134,14 +172,37 @@ def test_november_bundle_qualifies_without_attachment_bodies(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     "mutate,code",
     [
-        (lambda manifest: manifest["dispositions"]["locationless_open_jobs"].update(count=21), "hcp_november_disposition_count_mismatch"),
-        (lambda manifest: manifest["attachments"].update(bodies_included=True), "hcp_november_attachment_bodies_present"),
-        (lambda manifest: manifest["record_assertions"][0].update(admission_allowed=True), "hcp_november_held_identity_admittable"),
-        (lambda manifest: manifest["record_assertions"][0].update(lineage="AMBIGUOUS"), "hcp_november_record_lineage_invalid"),
-        (lambda manifest: manifest["qualification"].pop("missing_lineage"), "hcp_november_qualification_gap"),
+        (
+            lambda manifest: manifest["dispositions"]["locationless_open_jobs"].update(
+                count=21
+            ),
+            "hcp_november_disposition_count_mismatch",
+        ),
+        (
+            lambda manifest: manifest["attachments"].update(bodies_included=True),
+            "hcp_november_attachment_bodies_present",
+        ),
+        (
+            lambda manifest: manifest["record_assertions"][0].update(
+                admission_allowed=True
+            ),
+            "hcp_november_held_identity_admittable",
+        ),
+        (
+            lambda manifest: manifest["record_assertions"][0].update(
+                lineage="AMBIGUOUS"
+            ),
+            "hcp_november_record_lineage_invalid",
+        ),
+        (
+            lambda manifest: manifest["qualification"].pop("missing_lineage"),
+            "hcp_november_qualification_gap",
+        ),
     ],
 )
-def test_november_bundle_fails_closed_on_unsafe_evidence(tmp_path: Path, mutate, code: str) -> None:
+def test_november_bundle_fails_closed_on_unsafe_evidence(
+    tmp_path: Path, mutate, code: str
+) -> None:
     _, authority = _write_bundle(tmp_path, mutate=mutate)
 
     with pytest.raises(SafeEvidenceError) as error:
@@ -212,7 +273,8 @@ def _write_sealed_handoff(
                 "unassigned_open_work_appointments_intent_not_proven": 1,
                 "strict_open_appointment_relationship_failures": 0,
             }
-        }, sort_keys=True
+        },
+        sort_keys=True,
     ).encode()
     payloads["policy/final-operational-cutover-disposition.json"] = json.dumps(
         {
@@ -222,8 +284,12 @@ def _write_sealed_handoff(
             "live_database_access": False,
             "network_access": False,
             "held_quarantined": {
-                "locationless_open_jobs": {"source_ids": [f"job-{i}" for i in range(locationless_count)]},
-                "legacy_duplicate_risk_appointments": {"source_ids": [f"appt-dup-{i}" for i in range(13)]},
+                "locationless_open_jobs": {
+                    "source_ids": [f"job-{i}" for i in range(locationless_count)]
+                },
+                "legacy_duplicate_risk_appointments": {
+                    "source_ids": [f"appt-dup-{i}" for i in range(13)]
+                },
                 "technician_conflicts": {"source_ids": ["tech-0", "tech-1"]},
                 "unassigned_appointment": {"source_id": "appt-unassigned"},
             },
@@ -248,7 +314,8 @@ def _write_sealed_handoff(
                 },
             ],
             "source_prior_policy_digest": "e" * 64,
-        }, sort_keys=True
+        },
+        sort_keys=True,
     ).encode()
     for name, value in payloads.items():
         destination = root / name
@@ -299,17 +366,22 @@ def _write_sealed_handoff(
         expected_reconciliation_digest=RECONCILIATION,
         expected_attachment_custody_digest=ATTACHMENT_CUSTODY,
         expected_policy_digest=POLICY,
+        contract=SEALED_HANDOFF_CONTRACT,
     )
 
 
-def test_sealed_tar_handoff_qualifies_from_private_unpacked_root(tmp_path: Path) -> None:
+def test_sealed_tar_handoff_qualifies_from_private_unpacked_root(
+    tmp_path: Path,
+) -> None:
     result = _write_sealed_handoff(tmp_path).verify()
 
     assert result["bundle_contract"] == SEALED_HANDOFF_CONTRACT
     assert result["hold_source_ids"]["locationless_open_jobs"] == tuple(
         f"job-{i}" for i in range(23)
     )
-    assert len(result["hold_source_ids"]["legacy_duplicate_risk_appointments"]) + 1 == 14
+    assert (
+        len(result["hold_source_ids"]["legacy_duplicate_risk_appointments"]) + 1 == 14
+    )
     assert result["final_policy_dispositions"] == {
         "locationless_open_jobs": 23,
         "legacy_duplicate_risk_appointments": 13,
@@ -331,7 +403,9 @@ def test_sealed_tar_handoff_rejects_obsolete_22_locationless_policy(
 
 def test_sealed_tar_handoff_rejects_prior_hold_release(tmp_path: Path) -> None:
     authority = _write_sealed_handoff(tmp_path)
-    policy_path = authority.bundle_root / "policy/final-operational-cutover-disposition.json"  # type: ignore[union-attr]
+    policy_path = (
+        authority.bundle_root / "policy/final-operational-cutover-disposition.json"
+    )  # type: ignore[union-attr]
     policy = json.loads(policy_path.read_bytes())
     policy["resolved_original_gate_omissions"][0]["final_disposition"] = "CREATE"
     policy_bytes = json.dumps(policy, sort_keys=True).encode()

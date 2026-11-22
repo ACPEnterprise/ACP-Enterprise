@@ -208,9 +208,7 @@ class HcpSource4NativeBindingBootstrap:
         source4 = await self._identity(session, record.key, SOURCE4_SOURCE)
         legacy = await self._identity(session, record.key, LEGACY_SOURCE)
         if source4 is not None:
-            if legacy is not None and _native_id(source4, record.domain) != _native_id(
-                legacy, record.domain
-            ):
+            if legacy is not None and _native_id(source4, record.domain) != _native_id(legacy, record.domain):
                 return self._candidate(
                     record,
                     BindingDisposition.CONFLICTING_SOURCE4_BINDING,
@@ -218,9 +216,7 @@ class HcpSource4NativeBindingBootstrap:
                     legacy.id,
                     "SOURCE.4 and exact legacy identities target different native records",
                 )
-            if await self._native_exists(
-                session, record.domain, _native_id(source4, record.domain)
-            ):
+            if await self._native_exists(session, record.domain, _native_id(source4, record.domain)):
                 return self._candidate(
                     record,
                     BindingDisposition.BINDING_ALREADY_PRESENT,

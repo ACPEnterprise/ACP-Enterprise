@@ -140,6 +140,7 @@ class CustomerRepository:
             .where(
                 Customer.id == customer_id,
                 Customer.company_id == company_id,
+                Customer.archived_at.is_(None),
             )
             .options(
                 joinedload(Customer.primary_contact),
@@ -317,6 +318,7 @@ class CustomerRepository:
                     .options(
                         joinedload(Customer.primary_contact),
                         selectinload(Customer.contacts),
+                        selectinload(Customer.locations),
                     )
                     .where(*filters)
                     .order_by(

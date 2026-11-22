@@ -10,6 +10,7 @@ import pytest
 from app.platform.employees.models import Employee
 from app.platform.permissions.codes import AdministrationPermission
 from app.workforce.real_roster import REAL_ALL_COUNTY_ROSTER
+from app.workforce.schemas import SimpleEmployeeOnboardingRequest
 from app.workforce.simple_onboarding import (
     ROLE_CODES,
     AccessProfile,
@@ -18,7 +19,6 @@ from app.workforce.simple_onboarding import (
     SimpleOnboardingConflict,
     normalize_phone,
 )
-from app.workforce.schemas import SimpleEmployeeOnboardingRequest
 
 
 def context(company_id, branch_id):  # type: ignore[no-untyped-def]

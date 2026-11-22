@@ -61,7 +61,9 @@ def _candidate(
         component_identities=components,
         source_system=source_system,
         source_digest=source_digest,
-        evidence_strength=("exact_source_lineage" if deterministic else "structured_review"),
+        evidence_strength=(
+            "exact_source_lineage" if deterministic else "structured_review"
+        ),
         expected_direction=direction,
     )
 
@@ -233,7 +235,9 @@ def accounting_movement_candidate(
         source_system=f"accounting:{journal.source_system}",
         source_digest=journal.source_digest,
         components=(f"journal_line:{line.id}",),
-        deterministic=(not is_owner and (journal.source_type != "bank_transfer" or transfer_paired)),
+        deterministic=(
+            not is_owner and (journal.source_type != "bank_transfer" or transfer_paired)
+        ),
         direction="inflow" if line.debit > 0 else "outflow",
     )
 
@@ -263,9 +267,8 @@ class BankMatchCandidateAdapterService:
                         PaymentReceipt.company_id == company_id,
                         PaymentReceipt.currency == currency,
                         PaymentReceipt.captured_at >= period_start,
-                        PaymentReceipt.captured_at < period_end.fromordinal(
-                            period_end.toordinal() + 1
-                        ),
+                        PaymentReceipt.captured_at
+                        < period_end.fromordinal(period_end.toordinal() + 1),
                         PaymentIntent.status == "captured",
                     )
                 )
@@ -329,7 +332,9 @@ class BankMatchCandidateAdapterService:
                 await session.scalars(
                     select(DepositReceipt).where(
                         DepositReceipt.company_id == company_id,
-                        DepositReceipt.deposit_id.in_(tuple(row.id for row in deposits)),
+                        DepositReceipt.deposit_id.in_(
+                            tuple(row.id for row in deposits)
+                        ),
                     )
                 )
             ).all()
@@ -340,9 +345,7 @@ class BankMatchCandidateAdapterService:
                 f"payment_receipt:{link.receipt_id}"
             )
         return tuple(
-            grouped_deposit_projection(
-                row, tuple(sorted(components.get(row.id, ())))
-            )
+            grouped_deposit_projection(row, tuple(sorted(components.get(row.id, ()))))
             for row in deposits
         )
 
@@ -466,7 +469,12 @@ class BankMatchCandidateAdapterService:
                         PayrollPaymentExecutionRecord.authorized_at
                         < period_end.fromordinal(period_end.toordinal() + 1),
                         PayrollPaymentExecutionRecord.lifecycle.in_(
-                            ("provider_acknowledged", "settlement_pending", "partially_settled", "settled")
+                            (
+                                "provider_acknowledged",
+                                "settlement_pending",
+                                "partially_settled",
+                                "settled",
+                            )
                         ),
                         PayrollPaymentExecutionItemRecord.lifecycle.in_(
                             ("acknowledged", "settlement_pending", "settled")

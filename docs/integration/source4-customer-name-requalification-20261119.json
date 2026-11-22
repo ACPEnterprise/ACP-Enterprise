@@ -1,0 +1,64 @@
+{
+  "contract": "hcp-source4-customer-name-requalification/v1",
+  "requalified_at": "2026-11-19",
+  "source_package_digest": "f77e3e09457efcbf6d42137be1af43be6ad0adbea8eab2c12ca320730fd96901",
+  "source_package_unchanged": true,
+  "reason": "The corrected transformation excludes the provider company_name label from customer identity and admits only customer-owned person or business names.",
+  "prior_hybrid_admission_digest": "228f2e1b1f9050066cd8de5cddfceff6a62461864c0d6a90361040801132cbad",
+  "requalified_hybrid_admission_digest": "7205c86cf389ae951fd588ed6cb6b1dc67eeb7772fe4b6324fbaec46cad7a187",
+  "requalified_parent_closure_digest": "0093df82e68a898cc0f0d065a736678511158cdad6a24fdf58cb5a20a962562e",
+  "authority_identity_counts": {
+    "customers": 5296,
+    "contacts": 4148,
+    "service_locations": 5633,
+    "jobs": 5801
+  },
+  "admission_counts": {
+    "persistable_customers": 4905,
+    "explicit_exception_customers": 391,
+    "rejected_customers": 0,
+    "persisted_contacts": 4143,
+    "customer_parent_held_contacts": 5,
+    "persisted_service_locations": 4939,
+    "customer_parent_held_complete_service_locations": 400,
+    "persisted_customer_incomplete_service_locations": 277,
+    "customer_parent_held_incomplete_service_locations": 17
+  },
+  "parent_closure_counts": {
+    "resolved_to_persistable_customer": 5395,
+    "resolved_to_explicit_exception": 406,
+    "resolved_to_rejected_customer": 0,
+    "missing_authoritative_customer_evidence": 0
+  },
+  "derived_repair_authority": {
+    "repair_plan_digest": "aaf029072652061c7af7183a56bce6dab72a893d03fb2e6c5763be83b3cd3e1b",
+    "persisted_jobs": 1075,
+    "persisted_appointments": 1218,
+    "appointment_sequence_digest": "a6eda2f6af8595173a81a02ee5b8209ee215a39ffab31d43f03d739cd5bc0cfe",
+    "appointment_sequence_jobs": 974,
+    "appointment_sequence_single_visit_jobs": 898,
+    "appointment_sequence_multi_visit_jobs": 76,
+    "appointment_sequence_multi_visit_appointments": 320,
+    "appointment_sequence_visits_beyond_first": 244,
+    "appointment_sequence_maximum_visits": 36,
+    "persisted_estimates": 14,
+    "persisted_invoices": 768,
+    "persisted_payments": 666,
+    "additional_explicit_exceptions": 13791
+  },
+  "derived_financial_supersession": {
+    "plan_id": "066cba1d-1fdf-5242-8957-3bd29343de09",
+    "plan_digest": "564e4a0d76a1dfa239c256b56b97b6e1955542d946d0d0e86fdf0dfa0ceb2c08",
+    "persisted_invoices": 653,
+    "invoice_exceptions": 4714,
+    "persisted_payments": 666
+  },
+  "preservation": {
+    "source_identities_removed": 0,
+    "source_payloads_modified": 0,
+    "fuzzy_matches": 0,
+    "held_children_remain_in_sealed_parent_evidence": true
+  },
+  "requalified_plan_id": "58d1da9b-9576-5ed3-9bbf-5d624b80a5b8",
+  "requalified_plan_digest": "ddc09d49d88c9a07001d5d69d377e1a8edc71a4445f1233648768b8df7fe2417"
+}

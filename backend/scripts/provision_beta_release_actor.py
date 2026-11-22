@@ -46,9 +46,7 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--company-id", required=True, type=UUID)
     result.add_argument("--minutes", type=int, default=60, choices=range(5, 61))
-    result.add_argument(
-        "--token-output", default="/run/secrets/release_actor_token"
-    )
+    result.add_argument("--token-output", default="/run/secrets/release_actor_token")
     return result
 
 

@@ -8,6 +8,11 @@ import { useCustomerCleanMajorityAdmission, useCustomerPopulationRefresh } from 
 import { CustomerImportPanel } from "./CustomerImportPanel";
 
 vi.mock("../../api/client", () => ({ activeCompanyId: vi.fn() }));
+vi.mock("../../auth", () => ({
+  useAuth: () => ({
+    activeCompany: { default_branch_id: "branch-1", branches: [] },
+  }),
+}));
 vi.mock("../../api/customerImports", () => ({
   admitCustomerImport: vi.fn(),
   stageCustomerImport: vi.fn(),

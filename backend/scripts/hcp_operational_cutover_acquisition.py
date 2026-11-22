@@ -499,9 +499,9 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         )
         appointment_http_statuses[str(status)] += 1
         if status == 200 and isinstance(value, dict):
-            rows = value.get("appointments")
-            if isinstance(rows, list):
-                for row in rows:
+            appointment_values = value.get("appointments")
+            if isinstance(appointment_values, list):
+                for row in appointment_values:
                     if isinstance(row, dict) and isinstance(row.get("id"), str):
                         appointment_rows.append((job_id, row))
         if index % 50 == 0:
@@ -527,10 +527,13 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             )
     estimate_scope: list[dict[str, Any]] = []
     for row in records["estimates"]:
-        customer_id = _parent_id(row, "customer")
-        location_id = _location_id(row)
+        estimate_customer_id = _parent_id(row, "customer")
+        estimate_location_id = _location_id(row)
         if row["id"] in referenced_estimates or (
-            (customer_id in open_customer_ids or location_id in open_locations)
+            (
+                estimate_customer_id in open_customer_ids
+                or estimate_location_id in open_locations
+            )
             and _status(row) in OPEN_JOB_STATUSES | {"created job from estimate"}
         ):
             estimate_scope.append(row)
@@ -570,18 +573,22 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     location_reconciliation: list[dict[str, Any]] = []
     unresolved_location_jobs: set = set()
     for job_id in sorted(prior_locationless):
-        row = jobs_by_id.get(job_id)
-        if row is None:
+        location_job = jobs_by_id.get(job_id)
+        if location_job is None:
             result = "ABSENT_FROM_CURRENT_COLLECTION"
         elif job_id not in open_job_ids:
             result = "NO_LONGER_CURRENT_OPEN"
-        elif _location_id(job_details.get(job_id, row)):
+        elif _location_id(job_details.get(job_id, location_job)):
             result = "RESOLVED_LOCATION_ID_PRESENT"
         else:
             result = "STILL_LOCATION_LESS_OPEN"
             unresolved_location_jobs.add(job_id)
         location_reconciliation.append(
-            {"provider_job_id": job_id, "result": result, "status": _status(row or {})}
+            {
+                "provider_job_id": job_id,
+                "result": result,
+                "status": _status(location_job or {}),
+            }
         )
 
     appointments_by_job: dict[str, list[dict[str, Any]]] = {}
@@ -860,12 +867,14 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
                 )
     for row in scope_jobs:
         parents = []
-        customer_id = _parent_id(row, "customer")
-        location_id = _location_id(row)
-        if customer_id:
-            parents.append({"domain": "customer", "source_id": customer_id})
-        if location_id:
-            parents.append({"domain": "service_location", "source_id": location_id})
+        parent_customer_id = _parent_id(row, "customer")
+        parent_location_id = _location_id(row)
+        if parent_customer_id:
+            parents.append({"domain": "customer", "source_id": parent_customer_id})
+        if parent_location_id:
+            parents.append(
+                {"domain": "service_location", "source_id": parent_location_id}
+            )
         observation_payloads[("job", row["id"])] = (row, parents)
     for job_id, row in appointment_rows:
         observation_payloads[("appointment", row["id"])] = (

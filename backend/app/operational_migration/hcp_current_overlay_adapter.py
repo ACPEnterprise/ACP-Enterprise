@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.operational_migration.hcp_current_overlay import (
     EXECUTOR_CONTRACT,
     CurrentOverlayRepository,
-    OverlayExecutionReceipt,
     OverlayAssertion,
+    OverlayExecutionReceipt,
     OverlayJournalEntry,
     OverlayKey,
     OverlayRecord,
@@ -116,7 +116,9 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
                     if locked is not True:
                         raise ValueError("concurrent HCP overlay admission is active")
                 if self._lineage_bootstrap is not None:
-                    self._master = await self._lineage_bootstrap.establish(self._session)
+                    self._master = await self._lineage_bootstrap.establish(
+                        self._session
+                    )
                     if self._master.id != self._master_run_id:
                         raise ValueError("overlay bootstrap master identity mismatch")
                     assert self._lineage_bootstrap.customer_run is not None
@@ -159,8 +161,12 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         self, manifest_digest: str, package_digest: str
     ) -> OverlayExecutionReceipt | None:
         """Read a prior receipt before any new lineage bootstrap is attempted."""
-        owned_transaction = self._session.in_transaction()
-        try:
+        if self._session.in_transaction():
+            raise ValueError("overlay replay lookup requires a clean session")
+        # Keep the replay probe in its own read transaction.  AsyncSession
+        # autobegins on SELECT; allowing that implicit transaction to escape
+        # would make transaction() reject the subsequent atomic admission.
+        async with self._session.begin():
             masters = await self._session.scalars(
                 select(HcpMigrationMasterRun).where(
                     HcpMigrationMasterRun.package_digest == package_digest
@@ -168,9 +174,7 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
             )
             for master in masters:
                 root = (
-                    master.replay_state
-                    if isinstance(master.replay_state, dict)
-                    else {}
+                    master.replay_state if isinstance(master.replay_state, dict) else {}
                 )
                 state = root.get(STATE_KEY)
                 receipts = state.get("receipts") if isinstance(state, dict) else None
@@ -181,14 +185,7 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
                 )
                 if value is not None:
                     return _receipt(value)
-            return None
-        finally:
-            # A read on an AsyncSession may implicitly open a transaction.  The
-            # executor must own the following transaction so lineage bootstrap
-            # and native writes remain atomic.  Never disturb a transaction
-            # owned by the caller.
-            if not owned_transaction and self._session.in_transaction():
-                await self._session.rollback()
+        return None
 
     async def source_state(self, key: OverlayKey) -> OverlaySourceState | None:
         cached = self._state()["source_states"].get(_key(key))

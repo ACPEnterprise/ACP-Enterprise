@@ -11,8 +11,8 @@ from app.platform.company.membership_models import Membership, MembershipBranchA
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.models import (
-    MembershipRole,
     MembershipPermissionOverride,
+    MembershipRole,
     Permission,
     Role,
     RolePermission,
@@ -457,7 +457,10 @@ class AuthorizationService:
         overrides = (
             await session.execute(
                 select(MembershipPermissionOverride, Permission)
-                .join(Permission, Permission.id == MembershipPermissionOverride.permission_id)
+                .join(
+                    Permission,
+                    Permission.id == MembershipPermissionOverride.permission_id,
+                )
                 .where(
                     MembershipPermissionOverride.company_id == company.id,
                     MembershipPermissionOverride.membership_id == membership.id,
@@ -472,7 +475,10 @@ class AuthorizationService:
             else:
                 effective_permissions_by_id.pop(permission.id, None)
         effective_permissions = tuple(
-            sorted(effective_permissions_by_id.values(), key=lambda item: (item.code, item.id))
+            sorted(
+                effective_permissions_by_id.values(),
+                key=lambda item: (item.code, item.id),
+            )
         )
 
         if (

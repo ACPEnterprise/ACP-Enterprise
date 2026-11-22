@@ -10,7 +10,11 @@ import pytest
 
 
 def _load_exporter():
-    path = Path(__file__).parents[2] / "scripts" / "export_hcp_isolated_native_observations.py"
+    path = (
+        Path(__file__).parents[2]
+        / "scripts"
+        / "export_hcp_isolated_native_observations.py"
+    )
     spec = importlib.util.spec_from_file_location("hcp_isolated_exporter", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -170,5 +174,5 @@ def test_rehearsal_compose_has_no_published_port(restore) -> None:
     }
     restore.validate_compose_config(compose)
     compose["services"]["postgres"]["ports"] = ["127.0.0.1:55432:5432"]
-    with pytest.raises(ValueError, match="published"):
+    with pytest.raises(ValueError, match="must not publish"):
         restore.validate_compose_config(compose)

@@ -6,12 +6,11 @@ import argparse
 import asyncio
 import json
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 from uuid import UUID
-
-from sqlalchemy import select
 
 from app import main as application_main  # noqa: F401
 from app.customer_migration.models import (
@@ -36,9 +35,10 @@ from app.operational_migration.models import (
     HcpSource4NativeBindingEvidence,
 )
 from app.platform.company.models import Company  # noqa: F401
+from sqlalchemy import select
 
 
-def _rows(root: Path, family: str):
+def _rows(root: Path, family: str) -> Iterator[dict[str, Any]]:
     for path in sorted((root / "raw" / family).glob("*.json")):
         payload = json.loads(path.read_text())
         for row in payload.get(family, []):
@@ -47,7 +47,7 @@ def _rows(root: Path, family: str):
             yield row
 
 
-def _address(row: dict, identity: str) -> AddressEvidence:
+def _address(row: dict[str, Any], identity: str) -> AddressEvidence:
     return AddressEvidence(
         identity,
         str(row.get("street") or row.get("address_line_1") or ""),
@@ -164,30 +164,29 @@ async def run(
             by_contact[contact.customer_id].append(contact)
         for location in locations:
             by_location[location.customer_id].append(location)
-        for identity_row in identities:
-            if identity_row.source_system == "housecall_pro_source4":
-                by_identity[identity_row.customer_id].append(
-                    identity_row.source_customer_id
-                )
+        for identity in identities:
+            if identity.source_system == "housecall_pro_source4":
+                by_identity[identity.customer_id].append(identity.source_customer_id)
         for location_identity in location_identities:
             by_location_identity[location_identity.service_location_id].append(
                 location_identity.source_location_id
             )
         canonical = tuple(
             CanonicalCustomerEvidence(
-                str(row.id),
-                row.display_name,
-                row.email
+                str(customer.id),
+                customer.display_name,
+                customer.email
                 or next(
-                    (item.email for item in by_contact[row.id] if item.email), None
+                    (item.email for item in by_contact[customer.id] if item.email),
+                    None,
                 ),
                 tuple(
                     value
                     for value in (
-                        row.primary_phone,
-                        row.secondary_phone,
-                        *(item.mobile_phone for item in by_contact[row.id]),
-                        *(item.office_phone for item in by_contact[row.id]),
+                        customer.primary_phone,
+                        customer.secondary_phone,
+                        *(item.mobile_phone for item in by_contact[customer.id]),
+                        *(item.office_phone for item in by_contact[customer.id]),
                     )
                     if value
                 ),
@@ -204,11 +203,11 @@ async def run(
                         ),
                         tuple(by_location_identity[item.id]),
                     )
-                    for item in by_location[row.id]
+                    for item in by_location[customer.id]
                 ),
-                tuple(by_identity[row.id]),
+                tuple(by_identity[customer.id]),
             )
-            for row in customers
+            for customer in customers
         )
         plan = build_historical_identity_bridge(source=source, canonical=canonical)
         result = None
@@ -264,7 +263,7 @@ async def run(
                 else "unmatched"
             )
         source_by_id = {item.source_customer_id: item for item in source}
-        domains: dict[str, dict[str, object]] = {}
+        domains: dict[str, dict[str, int]] = {}
         new_location_ids = set(
             (
                 await session.scalars(
@@ -312,7 +311,7 @@ async def run(
             str(item["id"]): str((item.get("customer") or {}).get("id") or "")
             for item in jobs
         }
-        domain_rows = {
+        domain_rows: dict[str, list[str]] = {
             "jobs": [job_customer.get(str(item.get("id")), "") for item in jobs],
             "appointments": [
                 job_customer.get(

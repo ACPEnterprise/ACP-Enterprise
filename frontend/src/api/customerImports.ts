@@ -34,6 +34,7 @@ export async function stageCustomerImport(
     namespace: string;
     mapping: Record<string, string>;
     expectedTenantId?: string;
+    branchId?: string;
     signal?: AbortSignal;
   },
 ): Promise<CustomerImportBatchResponse> {
@@ -53,6 +54,7 @@ export async function stageCustomerImport(
         "X-Customer-Import-Provider": options.provider,
         "X-Customer-Import-Namespace": options.namespace,
         "X-Customer-Import-Mapping": JSON.stringify(options.mapping),
+        ...(options.branchId ? { "X-Branch-ID": options.branchId } : {}),
         "Content-Type": file.type || (file.name.toLowerCase().endsWith(".xlsx") ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv"),
       },
       signal: options.signal,
@@ -64,6 +66,7 @@ export async function stageCustomerImport(
 export async function admitCustomerImport(
   batchId: string,
   expectedTenantId?: string,
+  branchId?: string,
 ): Promise<CustomerImportAdmissionResponse> {
   const tenantId = activeCompanyId();
   if (!tenantId) throw new Error("Choose an active company before admitting customers.");
@@ -71,11 +74,14 @@ export async function admitCustomerImport(
     throw new Error("The active company changed. Reopen this import from the original company.");
   }
   const response = await apiClient.post<CustomerImportAdmissionResponse>(
-    `/api/v1/customer-import/batches/${encodeURIComponent(batchId)}/admit?limit=500`,
+    `/api/v1/customer-import/batches/${encodeURIComponent(batchId)}/admit?limit=10000`,
     {},
     {
       timeout: 1_800_000,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(branchId ? { "X-Branch-ID": branchId } : {}),
+      },
     },
   );
   return response.data;

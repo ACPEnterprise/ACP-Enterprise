@@ -114,7 +114,11 @@ def test_estimate_without_job_parent_is_quarantined_without_reclassification_los
 
 def test_estimate_with_job_parent_remains_executable():
     records, quarantined = _derive_records(
-        [_valid_estimate_record("estimate-1", parents=({"domain": "job", "source_id": "job_1"},))]
+        [
+            _valid_estimate_record(
+                "estimate-1", parents=({"domain": "job", "source_id": "job_1"},)
+            )
+        ]
     )
 
     assert quarantined == []
@@ -133,10 +137,17 @@ def test_existing_hold_is_preserved():
 def test_invalid_location_quarantines_job_and_operational_children():
     location = _domain_record("service_location", "adr-1")
     job = _domain_record(
-        "job", "job-1", parents=({"domain": "customer", "source_id": "customer-1"}, {"domain": "service_location", "source_id": "adr-1"})
+        "job",
+        "job-1",
+        parents=(
+            {"domain": "customer", "source_id": "customer-1"},
+            {"domain": "service_location", "source_id": "adr-1"},
+        ),
     )
     appointment = _domain_record(
-        "appointment", "appointment-1", parents=({"domain": "job", "source_id": "job-1"},)
+        "appointment",
+        "appointment-1",
+        parents=({"domain": "job", "source_id": "job-1"},),
     )
 
     records, quarantined = _derive_records([location, job, appointment])

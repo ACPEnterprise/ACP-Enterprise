@@ -14,26 +14,26 @@ import json
 import os
 import stat
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, NoReturn
 
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayExecutor,
     CurrentOverlayManifest,
     OverlayAssertion,
+    OverlayExecutionReceipt,
     OverlayKey,
     OverlayRecord,
-    OverlayExecutionReceipt,
 )
+from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_november_bundle import (
     AUTHORITY_CONTRACT,
     NovemberQualificationAuthority,
     qualification_digest,
 )
-from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
-
 
 PACKET_CONTRACT = "hcp-november-preview-execution-packet/v1"
 ENVELOPE_CONTRACT = "hcp-november-preview-execution-envelope/v1"
@@ -45,7 +45,15 @@ WRITE_DISPOSITIONS = frozenset({"CREATE", "UPDATE", "REPLAY"})
 # safely apply; the packet contract must nevertheless account for every
 # qualified executable assertion before execution begins.
 EXECUTABLE_DOMAINS = frozenset(
-    {"customer", "service_location", "job", "appointment", "estimate", "invoice", "employee"}
+    {
+        "customer",
+        "service_location",
+        "job",
+        "appointment",
+        "estimate",
+        "invoice",
+        "employee",
+    }
 )
 PACKET_DISPOSITIONS = WRITE_DISPOSITIONS | HOLD_DISPOSITIONS
 FINAL_OPERATIONAL_HOLD_POLICY = {
@@ -62,7 +70,7 @@ def _digest(value: object) -> str:
     ).hexdigest()
 
 
-def _fail(code: str, value: object = "") -> None:
+def _fail(code: str, value: object = "") -> NoReturn:
     raise SafeEvidenceError(code, _digest(value))
 
 
@@ -71,7 +79,12 @@ def require_execution_authorization(authorized: bool) -> None:
         _fail("explicit_execution_authorization_required")
 
 
-def validate_runtime_boundary(environment: str, production: bool, preview: bool, external_writes: Mapping[str, str] | None = None) -> None:
+def validate_runtime_boundary(
+    environment: str,
+    production: bool,
+    preview: bool,
+    external_writes: Mapping[str, str] | None = None,
+) -> None:
     if environment != "preview" or production or not preview:
         _fail("preview_runtime_boundary_invalid")
     for name, value in (external_writes or {}).items():
@@ -230,7 +243,13 @@ class NovemberExecutionPacket:
             return packet
         except SafeEvidenceError:
             raise
-        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        except (
+            OSError,
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as error:
             _fail("hcp_november_execution_packet_invalid", str(error))
         raise AssertionError("unreachable")
 
@@ -269,16 +288,27 @@ class NovemberExecutionPacket:
         if self.digest not in {_digest(payload), _digest(legacy_payload)}:
             _fail("hcp_november_execution_packet_digest_mismatch", self.digest)
         inventory = _packet_inventory(self.records)
-        if len({(str(item.get("domain")), str(item.get("source_id"))) for item in self.records}) != len(self.records):
+        if len(
+            {
+                (str(item.get("domain")), str(item.get("source_id")))
+                for item in self.records
+            }
+        ) != len(self.records):
             _fail("hcp_november_execution_duplicate_source_identity", self.digest)
         for record in self.records:
             if (
                 str(record.get("disposition", "")).upper() in WRITE_DISPOSITIONS
                 and str(record.get("domain")) not in EXECUTABLE_DOMAINS
             ):
-                _fail("hcp_november_execution_executable_domain_unsupported", record.get("domain"))
+                _fail(
+                    "hcp_november_execution_executable_domain_unsupported",
+                    record.get("domain"),
+                )
         if inventory["held_parent_executable_edges"]:
-            _fail("hcp_november_execution_held_parent_edge", inventory["held_parent_executable_edges"])
+            _fail(
+                "hcp_november_execution_held_parent_edge",
+                inventory["held_parent_executable_edges"],
+            )
 
     def verify_against(
         self,
@@ -286,9 +316,18 @@ class NovemberExecutionPacket:
         qualified_packet: dict[str, Any] | None,
     ) -> None:
         self.verify_packet()
-        if authority.qualification_status != "PASS" or not authority.qualification_digest:
-            _fail("hcp_november_prior_qualification_missing", authority.qualification_status)
-        if qualified_packet is not None and authority.qualification_digest != qualification_digest(qualified_packet):
+        if (
+            authority.qualification_status != "PASS"
+            or not authority.qualification_digest
+        ):
+            _fail(
+                "hcp_november_prior_qualification_missing",
+                authority.qualification_status,
+            )
+        if (
+            qualified_packet is not None
+            and authority.qualification_digest != qualification_digest(qualified_packet)
+        ):
             _fail("hcp_november_qualification_digest_mismatch")
         expected = {
             "bundle_sha256": authority.bundle_sha256,
@@ -311,7 +350,10 @@ class NovemberExecutionPacket:
             "environment": self.environment,
         }
         if actual != expected:
-            _fail("hcp_november_execution_authority_mismatch", {"expected": expected, "actual": actual})
+            _fail(
+                "hcp_november_execution_authority_mismatch",
+                {"expected": expected, "actual": actual},
+            )
         # Legacy unit fixtures carry the small bundle hold inventory directly.
         # Envelope-bound execution deliberately uses the full packet inventory,
         # not the old 38-record qualification projection.
@@ -326,7 +368,13 @@ class NovemberExecutionPacket:
                 for _domain, source_id in _packet_inventory(self.records)["held_keys"]
             }
             if packet_holds != qualified_holds:
-                _fail("hcp_november_execution_hold_inventory_mismatch", {"qualified": sorted(qualified_holds), "packet": sorted(packet_holds)})
+                _fail(
+                    "hcp_november_execution_hold_inventory_mismatch",
+                    {
+                        "qualified": sorted(qualified_holds),
+                        "packet": sorted(packet_holds),
+                    },
+                )
 
 
 @dataclass(frozen=True)
@@ -367,7 +415,10 @@ class NovemberExecutionEnvelope:
             if stat.S_IMODE(path.stat().st_mode) & 0o077:
                 _fail("hcp_november_execution_envelope_permissions", str(path))
             value = json.loads(path.read_bytes())
-            if not isinstance(value, dict) or value.get("contract") != ENVELOPE_CONTRACT:
+            if (
+                not isinstance(value, dict)
+                or value.get("contract") != ENVELOPE_CONTRACT
+            ):
                 _fail("hcp_november_execution_envelope_contract", value.get("contract"))
             source_path = Path(str(value["source_packet_path"]))
             if not source_path.is_absolute():
@@ -394,27 +445,43 @@ class NovemberExecutionEnvelope:
                 repository_sha=str(value["repository_sha"]),
                 schema_head=str(value["schema_head"]),
                 environment=str(value["environment"]),
-                packet_counts={str(key): int(item) for key, item in dict(value["packet_counts"]).items()},
+                packet_counts={
+                    str(key): int(item)
+                    for key, item in dict(value["packet_counts"]).items()
+                },
                 total_held=int(value["total_held"]),
                 executable_count=int(value["executable_count"]),
                 unexplained_omissions=int(value["unexplained_omissions"]),
                 lineage_gaps=int(value["lineage_gaps"]),
                 ambiguous_lineage=int(value["ambiguous_lineage"]),
                 held_parent_executable_edges=int(value["held_parent_executable_edges"]),
-                operational_hold_policy={str(key): int(item) for key, item in dict(value["operational_hold_policy"]).items()},
+                operational_hold_policy={
+                    str(key): int(item)
+                    for key, item in dict(value["operational_hold_policy"]).items()
+                },
                 operational_hold_source_ids={
                     str(key): tuple(str(source_id) for source_id in source_ids)
-                    for key, source_ids in dict(value["operational_hold_source_ids"]).items()
+                    for key, source_ids in dict(
+                        value["operational_hold_source_ids"]
+                    ).items()
                 },
                 authority_digest=str(value["authority_digest"]),
                 packet=packet,
-                clean_baseline_bootstrap=bool(value.get("clean_baseline_bootstrap", False)),
+                clean_baseline_bootstrap=bool(
+                    value.get("clean_baseline_bootstrap", False)
+                ),
             )
             envelope.verify()
             return envelope
         except SafeEvidenceError:
             raise
-        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        except (
+            OSError,
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as error:
             _fail("hcp_november_execution_envelope_invalid", str(error))
         raise AssertionError("unreachable")
 
@@ -449,12 +516,20 @@ class NovemberExecutionEnvelope:
         if self.environment != "preview":
             _fail("hcp_november_execution_environment_invalid", self.environment)
         if self.packet.digest != self.source_packet_digest:
-            _fail("hcp_november_source_packet_digest_mismatch", self.source_packet_digest)
+            _fail(
+                "hcp_november_source_packet_digest_mismatch", self.source_packet_digest
+            )
         if self.authority_digest != _digest(self._authority_payload()):
-            _fail("hcp_november_execution_authority_digest_mismatch", self.authority_digest)
+            _fail(
+                "hcp_november_execution_authority_digest_mismatch",
+                self.authority_digest,
+            )
         inventory = _packet_inventory(self.packet.records)
         if self.packet_counts != inventory["counts"]:
-            _fail("hcp_november_execution_packet_counts_mismatch", {"expected": self.packet_counts, "actual": inventory["counts"]})
+            _fail(
+                "hcp_november_execution_packet_counts_mismatch",
+                {"expected": self.packet_counts, "actual": inventory["counts"]},
+            )
         for field, inventory_field in (
             ("total_held", "total_held"),
             ("executable_count", "executable"),
@@ -465,9 +540,15 @@ class NovemberExecutionEnvelope:
         if self.unexplained_omissions or self.lineage_gaps or self.ambiguous_lineage:
             _fail("hcp_november_execution_qualification_gap", self._authority_payload())
         if self.held_parent_executable_edges:
-            _fail("hcp_november_execution_held_parent_edge", self.held_parent_executable_edges)
+            _fail(
+                "hcp_november_execution_held_parent_edge",
+                self.held_parent_executable_edges,
+            )
         if self.operational_hold_policy != FINAL_OPERATIONAL_HOLD_POLICY:
-            _fail("hcp_november_execution_operational_hold_policy_mismatch", self.operational_hold_policy)
+            _fail(
+                "hcp_november_execution_operational_hold_policy_mismatch",
+                self.operational_hold_policy,
+            )
         held_by_key = {
             key: str(item.get("disposition", "")).upper()
             for item in self.packet.records
@@ -481,16 +562,25 @@ class NovemberExecutionEnvelope:
             "unassigned_appointments": ("appointment", "HOLD"),
         }
         if set(self.operational_hold_source_ids) != set(expected_domains):
-            _fail("hcp_november_execution_operational_hold_source_mismatch", self.operational_hold_source_ids)
+            _fail(
+                "hcp_november_execution_operational_hold_source_mismatch",
+                self.operational_hold_source_ids,
+            )
         classified: set[tuple[str, str]] = set()
         for category, source_ids in self.operational_hold_source_ids.items():
-            if category not in expected_domains or len(source_ids) != self.operational_hold_policy.get(category):
-                _fail("hcp_november_execution_operational_hold_source_mismatch", category)
+            if category not in expected_domains or len(
+                source_ids
+            ) != self.operational_hold_policy.get(category):
+                _fail(
+                    "hcp_november_execution_operational_hold_source_mismatch", category
+                )
             domain, disposition = expected_domains[category]
             for source_id in source_ids:
                 key = (domain, source_id)
                 if key in classified or held_by_key.get(key) != disposition:
-                    _fail("hcp_november_execution_operational_hold_source_mismatch", key)
+                    _fail(
+                        "hcp_november_execution_operational_hold_source_mismatch", key
+                    )
                 classified.add(key)
 
     def verify_against(self, authority: NovemberQualificationAuthority) -> None:
@@ -520,7 +610,10 @@ class NovemberExecutionEnvelope:
             "environment": self.environment,
         }
         if actual != expected:
-            _fail("hcp_november_execution_authority_mismatch", {"expected": expected, "actual": actual})
+            _fail(
+                "hcp_november_execution_authority_mismatch",
+                {"expected": expected, "actual": actual},
+            )
 
 
 class NovemberBoundedExecutor:
@@ -543,7 +636,10 @@ class NovemberBoundedExecutor:
             _fail("hcp_november_execution_database_mismatch", database_identity)
         if schema_head != authority.expected_schema_head:
             _fail("hcp_november_execution_schema_mismatch", schema_head)
-        if not authority.rollback_backup_digest or len(authority.rollback_backup_digest) != 64:
+        if (
+            not authority.rollback_backup_digest
+            or len(authority.rollback_backup_digest) != 64
+        ):
             _fail("hcp_november_execution_backup_authority_missing")
         if envelope is not None:
             envelope.verify_against(authority)
@@ -559,7 +655,7 @@ class NovemberBoundedExecutor:
             outcomes = Counter(item.outcome for item in receipt.journal)
             return {
                 "contract": EXECUTOR_CONTRACT,
-                "authority_contract": AUTHORITY_CONTRACT,
+                "authority_contract": authority.contract,
                 "qualification_digest": authority.qualification_digest,
                 "bundle_sha256": authority.bundle_sha256,
                 "policy_digest": authority.expected_policy_digest,
@@ -611,7 +707,9 @@ class NovemberBoundedExecutor:
                     if qualified_packet is not None
                     else 0
                 ),
-                "held_parent_executable_edges": inventory["held_parent_executable_edges"],
+                "held_parent_executable_edges": inventory[
+                    "held_parent_executable_edges"
+                ],
                 "affected_source_native_ids": [
                     {
                         "domain": item.key.domain,
@@ -652,14 +750,18 @@ async def run_november_execution(
         {
             name: os.getenv(name, "false")
             for name in (
-        "HCP_PROVIDER_WRITE_ENABLED",
-        "HCP_LIVE_ACCESS_ENABLED",
-        "QBO_PRODUCTION_ENABLED",
-        "PAYROLL_EXECUTION_ENABLED",
+                "HCP_PROVIDER_WRITE_ENABLED",
+                "HCP_LIVE_ACCESS_ENABLED",
+                "QBO_PRODUCTION_ENABLED",
+                "PAYROLL_EXECUTION_ENABLED",
             )
         },
     )
-    if authority.execution_packet_path is None or not authority.execution_packet_sha256 or not authority.execution_packet_digest:
+    if (
+        authority.execution_packet_path is None
+        or not authority.execution_packet_sha256
+        or not authority.execution_packet_digest
+    ):
         _fail("hcp_november_execution_packet_authority_missing")
 
     qualified = authority.verify()
@@ -673,6 +775,8 @@ async def run_november_execution(
     packet = envelope.packet
 
     from sqlalchemy import text
+
+    from app.core.config import settings
     from app.operational_migration.hcp_current_overlay_adapter import (
         SqlAlchemyCurrentOverlayRepository,
     )
@@ -687,7 +791,6 @@ async def run_november_execution(
         resolve_rehearsal_context,
     )
     from app.platform.permissions.codes import MigrationPermission
-    from app.core.config import settings
 
     repository_sha = os.getenv("APP_VERSION", "")
     if repository_sha != authority.expected_repository_sha:
@@ -705,7 +808,11 @@ async def run_november_execution(
             or not context.has_permission(MigrationPermission.EXECUTE_REHEARSAL)
         ):
             _fail("hcp_november_execution_scope_invalid")
-        schema = tuple((await session.scalars(text("SELECT version_num FROM alembic_version"))).all())
+        schema = tuple(
+            (
+                await session.scalars(text("SELECT version_num FROM alembic_version"))
+            ).all()
+        )
         if schema != (authority.expected_schema_head,):
             _fail("hcp_november_execution_schema_mismatch", schema)
         database_identity = str(
@@ -714,12 +821,13 @@ async def run_november_execution(
             )
         )
         await session.rollback()
+        runtime_package_digest = authority.runtime_package_digest or authority.bundle_sha256
         binding = CurrentOverlayLineageBinding(
             company_id=authority.company_id,
             branch_id=authority.branch_id,
             actor_id=authority.actor_id,
-            source4_package_identity="hcp-clean-beta-november",
-            base_source4_digest=authority.bundle_sha256,
+            source4_package_identity=f"hcp-clean-beta-november:{runtime_package_digest[:16]}",
+            base_source4_digest=runtime_package_digest,
             overlay_manifest_digest=packet.overlay_manifest.digest,
             overlay_file_digest=authority.execution_packet_sha256,
             hold_digest=authority.expected_policy_digest or "",
@@ -732,7 +840,7 @@ async def run_november_execution(
             master_run_id=binding.master_run_id,
             customer_run_id=binding.master_run_id,
             operational_run_id=binding.master_run_id,
-            package_digest=authority.bundle_sha256,
+            package_digest=runtime_package_digest,
             base_source_digests={
                 record.key: record.prior_source_digest or record.source_digest
                 for record in packet.overlay_manifest.records

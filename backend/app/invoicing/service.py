@@ -112,7 +112,9 @@ class InvoiceService:
                     ).where(
                         Invoice.company_id == company_id,
                         Invoice.branch_id.in_(scoped_branches),
-                        Invoice.status.in_(("draft", "issued", "partially_paid", "adjusted")),
+                        Invoice.status.in_(
+                            ("draft", "issued", "partially_paid", "adjusted")
+                        ),
                         Invoice.open_amount > 0,
                     )
                 )
@@ -149,7 +151,9 @@ class InvoiceService:
             "currency": currency,
             "evidence_state": evidence_state,
             "open_invoice_count": len(rows),
-            "total_open_amount": None if conflicting else sum(amounts.values(), Decimal("0.00")),
+            "total_open_amount": None
+            if conflicting
+            else sum(amounts.values(), Decimal("0.00")),
             "due_today_amount": None if conflicting else amounts["due_today"],
             "buckets": tuple(
                 {

@@ -45,14 +45,17 @@ def test_restore_refuses_wrong_identity_before_running(tmp_path, monkeypatch) ->
     backup.write_bytes(b"safe synthetic backup")
     backup.chmod(0o600)
     manifest = {
+        "backup_file": backup.name,
         "contract_version": "platform-resilience.backup.v1",
         "environment": "test",
         "database_identity": "source-a",
+        "format": "postgresql-custom",
+        "size_bytes": backup.stat().st_size,
         "sha256": module.sha256(backup),
     }
-    backup.with_suffix(".dump.manifest.json").write_text(
-        __import__("json").dumps(manifest)
-    )
+    manifest_path = backup.with_suffix(".dump.manifest.json")
+    manifest_path.write_text(__import__("json").dumps(manifest))
+    manifest_path.chmod(0o600)
     monkeypatch.setattr(module, "run", lambda *_args, **_kwargs: "")
     with pytest.raises(ValueError, match="does not match"):
         module.restore(
@@ -84,16 +87,54 @@ def test_corrupt_backup_fails_checksum_before_restore(tmp_path, monkeypatch) -> 
     backup.write_bytes(b"original")
     backup.chmod(0o600)
     manifest = {
+        "backup_file": backup.name,
         "contract_version": "platform-resilience.backup.v1",
+        "format": "postgresql-custom",
+        "size_bytes": backup.stat().st_size,
         "sha256": module.sha256(backup),
     }
-    backup.with_suffix(".dump.manifest.json").write_text(
-        __import__("json").dumps(manifest)
-    )
-    backup.write_bytes(b"truncated")
+    manifest_path = backup.with_suffix(".dump.manifest.json")
+    manifest_path.write_text(__import__("json").dumps(manifest))
+    manifest_path.chmod(0o600)
+    backup.write_bytes(b"tampered")
     monkeypatch.setattr(module, "run", lambda *_args, **_kwargs: "")
     with pytest.raises(ValueError, match="checksum"):
         module.load_verified(backup)
+
+
+def test_restore_refuses_nonempty_target_before_pg_restore(
+    tmp_path, monkeypatch
+) -> None:
+    backup = tmp_path / "backup.dump"
+    backup.write_bytes(b"safe synthetic backup")
+    backup.chmod(0o600)
+    manifest = {
+        "backup_file": backup.name,
+        "contract_version": "platform-resilience.backup.v1",
+        "database_identity": "source-a",
+        "environment": "test",
+        "format": "postgresql-custom",
+        "sha256": module.sha256(backup),
+        "size_bytes": backup.stat().st_size,
+    }
+    manifest_path = backup.with_suffix(".dump.manifest.json")
+    manifest_path.write_text(__import__("json").dumps(manifest))
+    manifest_path.chmod(0o600)
+
+    def run(command, **_kwargs):
+        return "1" if command[0] == "psql" else ""
+
+    monkeypatch.setattr(module, "run", run)
+    with pytest.raises(ValueError, match="not empty"):
+        module.restore(
+            Namespace(
+                environment="test",
+                target_identity="isolated-target",
+                backup=str(backup),
+                expected_source_identity="source-a",
+                database_url="postgresql://u:p@db/acp_resilience_restore_test",
+            )
+        )
 
 
 def test_release_check_fails_all_inconsistent_release_dimensions(capsys) -> None:
