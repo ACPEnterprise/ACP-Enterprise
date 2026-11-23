@@ -55,6 +55,7 @@ def test_release_catalog_covers_required_gates() -> None:
         "api_health",
         "authentication_smoke",
         "authorization_smoke",
+        "tenant_isolation",
         "critical_crud",
         "background_services",
         "postgres_health",
@@ -66,6 +67,8 @@ def test_release_catalog_covers_required_gates() -> None:
         "rollback_readiness",
         "preview_approval",
         "postdeploy_routes",
+        "protected_schema",
+        "protected_release_metadata",
     } <= keys
 
 
@@ -98,6 +101,13 @@ def test_protected_check_dispatch_is_explicit_and_service_specific() -> None:
         "database_security": "database-security",
         "postgres_health": "postgres",
         "redis_health": "redis",
+        "authentication_smoke": "authentication",
+        "authorization_smoke": "authorization",
+        "tenant_isolation": "tenant-isolation",
+        "background_services": "background-services",
+        "postdeploy_routes": "routes",
+        "protected_schema": "schema",
+        "protected_release_metadata": "release-metadata",
     }
 
 

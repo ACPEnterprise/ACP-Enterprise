@@ -75,10 +75,17 @@ def test_database_security_rejects_privileged_role(monkeypatch: pytest.MonkeyPat
     def fake(command: list[str]) -> str:
         if "alembic" in command:
             return "s1a3g5k7m9q2 (head)"
-        return "true|false|false|false|false|0|0"
+        return json.dumps({
+            "role": "postgres",
+            "application_table_count": 429,
+            "tenant_table_count": 411,
+            "forced_rls_count": 411,
+            "tenant_tables_without_rls": 0,
+            "tenant_tables_without_forced_rls": 0,
+        })
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    with pytest.raises(checked.RuntimeCheckError, match="elevated role privileges"):
+    with pytest.raises(checked.RuntimeCheckError, match="incomplete evidence"):
         checked.check_database_security(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
 
 
@@ -89,11 +96,49 @@ def test_database_security_rejects_missing_forced_rls(monkeypatch: pytest.Monkey
     def fake(command: list[str]) -> str:
         if "alembic" in command:
             return "s1a3g5k7m9q2 (head)"
-        return "false|false|false|false|false|2|1"
+        return json.dumps({
+            "role": "acp_app",
+            "application_table_count": 429,
+            "tenant_table_count": 411,
+            "forced_rls_count": 410,
+            "tenant_tables_without_rls": 0,
+            "tenant_tables_without_forced_rls": 1,
+        })
 
     monkeypatch.setattr(checked, "run_read_only", fake)
     with pytest.raises(checked.RuntimeCheckError, match="row-level security"):
         checked.check_database_security(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+
+
+def test_database_security_dispatches_to_backend_application_probe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    checked = module()
+    root = runtime(tmp_path)
+    calls: list[list[str]] = []
+
+    def fake(command: list[str]) -> str:
+        calls.append(command)
+        if "alembic" in command:
+            return "s1a3g5k7m9q2 (head)"
+        return json.dumps({
+            "role": "acp_app",
+            "application_table_count": 429,
+            "tenant_table_count": 411,
+            "forced_rls_count": 411,
+            "tenant_tables_without_rls": 0,
+            "tenant_tables_without_forced_rls": 0,
+        })
+
+    monkeypatch.setattr(checked, "run_read_only", fake)
+    result = checked.check_database_security(
+        root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2"
+    )
+    assert result["identity"] == "acp_app"
+    probe_command = " ".join(calls[-1])
+    assert "backend" in probe_command
+    assert "protected-database-security-probe.py" in probe_command
+    assert "postgres" not in probe_command
 
 
 def test_postgres_superuser_state_is_reported(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

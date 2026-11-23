@@ -8,6 +8,8 @@ changed by the release tooling.
 
 - `acp_app`: application runtime only; `LOGIN`, no `SUPERUSER`, `CREATEROLE`,
   `CREATEDB`, `REPLICATION`, or `BYPASSRLS`.
+- `acp_schema_owner`: `NOLOGIN` owner of application schema objects; it is
+  granted only to the controlled migration identity.
 - `acp_migrate`: protected maintenance identity used only by the governed
   migration step; never mounted into ordinary application containers.
 - `acp_backup`: backup/restore operator identity held by the protected backup
@@ -27,10 +29,26 @@ without a verified backup and isolated restore rehearsal.
 
 ## Qualification
 
-`scripts/protected-runtime-check.py --service database-security` verifies the
-authenticated runtime identity, all five elevated-role flags, and tenant-table
-RLS/forced-RLS counts. It fails closed on unavailable evidence, an elevated
-role, or any tenant table without forced RLS. The check is read-only.
+`scripts/protected-runtime-check.py --service database-security` executes
+`scripts/protected-database-security-probe.py` inside the backend container.
+The probe parses the backend's actual `DATABASE_URL`, verifies the active
+PostgreSQL identity is `acp_app`, checks all five elevated-role flags, and
+counts application and tenant-policy tables through the same connection. It
+excludes only named qualification probes and fails closed on missing or
+inconsistent evidence. The check is read-only; it never trusts the Postgres
+container's `POSTGRES_USER` as a proxy for the API identity.
+
+Migrations use `scripts/run-preview-migrations.sh`, which requires
+`MIGRATION_DATABASE_URL` with username `acp_migrate`, requires the explicit
+`PREVIEW_RELEASE=true` guard, clears the runtime `DATABASE_URL`, and runs
+Alembic only from the backend environment. A missing or legacy application URL
+cannot silently become the migration credential.
+
+Protected Preview registers independent smoke implementations for backend
+health, PostgreSQL, Redis, authentication, authorization, tenant isolation,
+background services, routes, schema state, and release metadata. Authenticated
+smoke checks require a mounted short-lived credential at the protected runtime
+path and fail closed when it is absent; no fixture or bypass token is used.
 
 The required transition rehearsal is:
 

@@ -122,56 +122,54 @@ def check_backend(runtime_root: Path, project: str, expected_sha: str, expected_
 
 
 def check_database_security(
-    runtime_root: Path, project: str, expected_sha: str, expected_schema: str
+    runtime_root: Path,
+    project: str,
+    expected_sha: str,
+    expected_schema: str,
+    expected_application_table_count: int = 429,
+    expected_forced_rls_count: int = 411,
 ) -> dict[str, str]:
     verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
     base = compose_base(runtime_root, project)
-    query = (
-        "WITH tenant_tables AS ("
-        "SELECT c.oid, c.relrowsecurity, c.relforcerowsecurity "
-        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-        "WHERE n.nspname = 'public' AND c.relkind = 'r' AND EXISTS ("
-        "SELECT 1 FROM information_schema.columns col "
-        "WHERE col.table_schema = n.nspname AND col.table_name = c.relname "
-        "AND col.column_name IN ('company_id','branch_id'))) "
-        "SELECT r.rolsuper::text || '|' || r.rolcreaterole::text || '|' || "
-        "r.rolcreatedb::text || '|' || r.rolreplication::text || '|' || "
-        "r.rolbypassrls::text || '|' || "
-        "(SELECT count(*) FROM tenant_tables WHERE NOT relrowsecurity) || '|' || "
-        "(SELECT count(*) FROM tenant_tables WHERE relrowsecurity AND NOT relforcerowsecurity) "
-        "FROM pg_roles r WHERE r.rolname = current_user"
-    )
     command = base + [
         "exec",
         "-T",
-        "postgres",
-        "sh",
-        "-eu",
-        "-c",
-        f"PGPASSWORD=\"$POSTGRES_PASSWORD\" psql -X -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atqc \"{query}\"",
+        "backend",
+        "python",
+        "scripts/protected-database-security-probe.py",
+        "--expected-role",
+        "acp_app",
+        "--expected-application-table-count",
+        str(expected_application_table_count),
+        "--expected-forced-rls-count",
+        str(expected_forced_rls_count),
     ]
     try:
         result = run_read_only(command)
     except RuntimeCheckError as exc:
         raise RuntimeCheckError("PostgreSQL security audit is unavailable") from exc
-    fields = result.split("|")
-    if len(fields) != 7 or not all(fields):
+    try:
+        payload = json.loads(result)
+    except json.JSONDecodeError as exc:
+        raise RuntimeCheckError("application database security probe returned invalid evidence") from exc
+    if not isinstance(payload, dict) or payload.get("role") != "acp_app":
         raise RuntimeCheckError("PostgreSQL security audit returned incomplete evidence")
-    issues: list[str] = []
-    if any(fields[index].lower() != "false" for index in range(5)):
-        issues.append("application database identity retains elevated role privileges")
-    if fields[5] != "0" or fields[6] != "0":
-        issues.append(
-            f"tenant tables lack required forced row-level security ({fields[5]} without RLS, {fields[6]} without FORCE)"
-        )
-    if issues:
-        raise RuntimeCheckError("; ".join(issues))
+    if (
+        payload.get("application_table_count") != expected_application_table_count
+        or payload.get("forced_rls_count") != expected_forced_rls_count
+        or payload.get("tenant_tables_without_rls") != 0
+        or payload.get("tenant_tables_without_forced_rls") != 0
+    ):
+        raise RuntimeCheckError("PostgreSQL row-level security coverage does not match the release contract")
     return {
         "service": "database-security",
         "status": "PASS",
-        "identity": "application-role",
-        "tenant_tables_without_rls": fields[5],
-        "tenant_tables_without_forced_rls": fields[6],
+        "identity": str(payload["role"]),
+        "application_table_count": str(payload["application_table_count"]),
+        "forced_rls_count": str(payload["forced_rls_count"]),
+        "tenant_table_count": str(payload["tenant_table_count"]),
+        "tenant_tables_without_rls": str(payload["tenant_tables_without_rls"]),
+        "tenant_tables_without_forced_rls": str(payload["tenant_tables_without_forced_rls"]),
     }
 
 
@@ -194,11 +192,65 @@ def check_redis(runtime_root: Path, project: str, expected_sha: str, expected_sc
     return {"service": "redis", "status": "PASS", "identity": "acp-health"}
 
 
+def check_smoke(
+    runtime_root: Path,
+    project: str,
+    expected_sha: str,
+    expected_schema: str,
+    smoke_check: str,
+) -> dict[str, str]:
+    verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
+    credential_file = "/run/secrets/preview-smoke-token"
+    base = compose_base(runtime_root, project)
+    command = base + [
+        "exec",
+        "-T",
+        "backend",
+        "python",
+        "scripts/protected-smoke-check.py",
+        "--check",
+        smoke_check,
+        "--credential-file",
+        credential_file,
+    ]
+    if smoke_check == "routes":
+        command.extend(["--route", "/health", "--route", "/api/v1/companies"])
+    try:
+        result = run_read_only(command)
+    except RuntimeCheckError as exc:
+        raise RuntimeCheckError(f"protected {smoke_check} smoke is unavailable") from exc
+    try:
+        payload = json.loads(result)
+    except json.JSONDecodeError as exc:
+        raise RuntimeCheckError(f"protected {smoke_check} smoke returned invalid evidence") from exc
+    if payload.get("check") != smoke_check or payload.get("status") != "PASS":
+        raise RuntimeCheckError(f"protected {smoke_check} smoke did not pass")
+    return {"service": smoke_check, "status": "PASS", "identity": "preview-smoke"}
+
+
+def check_schema(runtime_root: Path, project: str, expected_sha: str, expected_schema: str) -> dict[str, str]:
+    verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
+    return {"service": "schema", "status": "PASS", "identity": expected_schema}
+
+
+def check_release_metadata(runtime_root: Path, project: str, expected_sha: str, expected_schema: str) -> dict[str, str]:
+    verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
+    return {"service": "release-metadata", "status": "PASS", "identity": expected_sha}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-root", type=Path, required=True)
     parser.add_argument("--project", required=True)
-    parser.add_argument("--service", choices=("backend", "database-security", "postgres", "redis"), required=True)
+    parser.add_argument(
+        "--service",
+        choices=(
+            "backend", "database-security", "postgres", "redis", "authentication",
+            "authorization", "tenant-isolation", "routes", "background-services",
+            "schema", "release-metadata",
+        ),
+        required=True,
+    )
     parser.add_argument("--expected-sha", required=True)
     parser.add_argument("--expected-schema-head", required=True)
     return parser.parse_args()
@@ -213,6 +265,12 @@ def main() -> int:
             result = check_database_security(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
         elif args.service == "postgres":
             result = check_postgres(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
+        elif args.service in {"authentication", "authorization", "tenant-isolation", "routes", "background-services"}:
+            result = check_smoke(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head, args.service)
+        elif args.service == "schema":
+            result = check_schema(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
+        elif args.service == "release-metadata":
+            result = check_release_metadata(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
         else:
             result = check_redis(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
     except RuntimeCheckError as exc:

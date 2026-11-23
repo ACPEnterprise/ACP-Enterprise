@@ -32,6 +32,13 @@ PROTECTED_RUNTIME_SERVICES: Final = {
     "database_security": "database-security",
     "postgres_health": "postgres",
     "redis_health": "redis",
+    "authentication_smoke": "authentication",
+    "authorization_smoke": "authorization",
+    "tenant_isolation": "tenant-isolation",
+    "background_services": "background-services",
+    "postdeploy_routes": "routes",
+    "protected_schema": "schema",
+    "protected_release_metadata": "release-metadata",
 }
 
 
@@ -327,6 +334,13 @@ def checks() -> tuple[Check, ...]:
             "Cross-role, cross-Branch, and cross-Company requests fail closed",
         ),
         Check(
+            "tenant_isolation",
+            "Tenant-isolation smoke",
+            ("postdeploy",),
+            None,
+            "A valid smoke principal cannot read another tenant through a direct request",
+        ),
+        Check(
             "critical_crud",
             "Critical CRUD smoke",
             ("commissioning",),
@@ -420,6 +434,20 @@ def checks() -> tuple[Check, ...]:
             ("postdeploy",),
             None,
             "Health, SPA routes, API revision, auth, and RBAC checks pass",
+        ),
+        Check(
+            "protected_schema",
+            "Protected schema state",
+            ("postdeploy",),
+            None,
+            "Protected runtime reports the exact approved Alembic head",
+        ),
+        Check(
+            "protected_release_metadata",
+            "Protected release metadata",
+            ("postdeploy",),
+            None,
+            "Protected runtime metadata binds the actual serving application SHA",
         ),
     )
 
@@ -993,8 +1021,11 @@ def main() -> int:
         elif check.key in {
             "api_health",
             "postdeploy_routes",
+            "protected_schema",
+            "protected_release_metadata",
             "authentication_smoke",
             "authorization_smoke",
+            "tenant_isolation",
             "background_services",
             "postgres_health",
             "redis_health",
