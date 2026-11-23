@@ -426,7 +426,7 @@ def checks() -> tuple[Check, ...]:
             "Enterprise-signed Preview revision approval",
             ("preview",),
             None,
-            "An unexpired, independently verifiable OM1E approval binds candidate, migration, rollback, receipts, and Beta-only scope",
+            "An unexpired owner-enrolled Enterprise authority approval binds independent review, candidate, migration, rollback, receipts, and Beta-only scope",
         ),
         Check(
             "postdeploy_routes",
@@ -624,7 +624,9 @@ def run_command(
         status, reason = "FAIL", warnings[0]
     if check.key == "repository_cleanliness" and raw_output:
         status, reason = "FAIL", "working tree is not clean"
-    if check.key == "repository_provenance" and raw_output.strip() != (tooling_sha or candidate):
+    if check.key == "repository_provenance" and raw_output.strip() != (
+        tooling_sha or candidate
+    ):
         status, reason = "FAIL", "HEAD does not equal candidate SHA"
     if check.key == "migration_heads" and status == "PASS":
         try:
@@ -895,6 +897,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-backup-receipt-sha256")
     parser.add_argument("--expected-restore-receipt-sha256")
     parser.add_argument("--approval-artifact", type=Path)
+    parser.add_argument("--authority-registry", type=Path)
     parser.add_argument("--trusted-issuer-key", type=Path)
     parser.add_argument("--trusted-issuer-key-id")
     parser.add_argument("--migration-head")
@@ -929,7 +932,9 @@ def main() -> int:
     if baseline_sha is None:
         baseline_sha = head
     if not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):
-        raise SystemExit("protected baseline SHA must be a full 40-character lowercase SHA")
+        raise SystemExit(
+            "protected baseline SHA must be a full 40-character lowercase SHA"
+        )
     resolved_application = subprocess.run(
         ("git", "rev-parse", "--verify", f"{candidate}^{{commit}}"),
         cwd=root,
@@ -938,7 +943,10 @@ def main() -> int:
         stderr=subprocess.DEVNULL,
         check=False,
     )
-    if resolved_application.returncode != 0 or resolved_application.stdout.strip() != candidate:
+    if (
+        resolved_application.returncode != 0
+        or resolved_application.stdout.strip() != candidate
+    ):
         raise SystemExit("application candidate SHA is not independently resolvable")
     prepare_evidence_directory(args.evidence_dir)
     results: list[Result] = []
@@ -971,6 +979,7 @@ def main() -> int:
         elif check.key == "preview_approval":
             required = (
                 args.approval_artifact,
+                args.authority_registry,
                 args.trusted_issuer_key,
                 args.trusted_issuer_key_id,
                 args.migration_head,
@@ -997,6 +1006,8 @@ def main() -> int:
                         "scripts/validate-preview-approval.py",
                         "--artifact",
                         str(args.approval_artifact),
+                        "--authority-registry",
+                        str(args.authority_registry),
                         "--trusted-issuer-key",
                         str(args.trusted_issuer_key),
                         "--trusted-key-id",
@@ -1017,7 +1028,9 @@ def main() -> int:
                     check.expected,
                     (sys.executable,),
                 )
-                results.append(run_command(approval_check, root, artifact, candidate, tooling_sha))
+                results.append(
+                    run_command(approval_check, root, artifact, candidate, tooling_sha)
+                )
         elif check.key in {
             "api_health",
             "postdeploy_routes",
@@ -1040,7 +1053,11 @@ def main() -> int:
                 service = PROTECTED_RUNTIME_SERVICES.get(check.key)
                 if service is None:
                     results.append(
-                        placeholder(check, "BLOCKED", "no protected implementation is registered for this check")
+                        placeholder(
+                            check,
+                            "BLOCKED",
+                            "no protected implementation is registered for this check",
+                        )
                     )
                     continue
                 runtime_check = Check(
@@ -1064,7 +1081,9 @@ def main() -> int:
                     check.expected,
                     (sys.executable,),
                 )
-                results.append(run_command(runtime_check, root, artifact, candidate, tooling_sha))
+                results.append(
+                    run_command(runtime_check, root, artifact, candidate, tooling_sha)
+                )
             else:
                 results.append(
                     placeholder(

@@ -1,58 +1,41 @@
-# Enterprise Preview Release Approval
+# Enterprise Preview Release Approval v2
 
-`enterprise-preview-release-approval/v1` is the immutable, signed approval
-required by the protected Preview qualification profile. It is separate from a
-normal qualification packet, which must continue to contain
-`deployment_authorized=false`.
+`enterprise-preview-release-approval/v2` is the immutable, signed approval
+required by protected Beta qualification. It replaces the machine/worker name
+`OM1E` with the owner-enrolled logical authority
+`twelvehats-beta-release-authority`.
 
-## Authority boundary
+## Trust boundary
 
-Only the documented Enterprise release authority `OM1E` may issue the artifact.
-Laptop Master and the candidate developer have validation authority only. The
-validator trusts an Ed25519 public key supplied by protected release custody;
-the private issuer key never belongs in Git, the candidate worktree, or a
-qualification packet.
+The authority is operated from Laptop Master, but its encrypted private key,
+trust registry, approval artifacts, and audit chain live outside every candidate
+worktree. Candidate code has validation authority only. The protected public key
+and key ID are pinned independently; changing candidate code cannot enroll a new
+issuer.
 
-The artifact is immutable by contract: its canonical unsigned payload is
-SHA-256 bound in `artifact_digest`, and the complete payload including that
-digest is signed. Any field change, including the candidate, migration head,
-receipt, rollback, scope, issuer, or expiration, invalidates the signature or
-the requested binding.
+The enrolled human custodian is Michael Fouse. Enrollment also names an
+independent qualification reviewer whose identity differs from the custodian.
+The issuer refuses to sign unless a current review receipt binds the exact
+candidate, migration, backup/restore receipts, rollback target, evidence archive,
+and a zero-defect mandatory-gate decision.
 
 ## Required bindings
 
-The artifact must bind:
+An approval binds:
 
-- exact candidate SHA;
-- candidate migration head;
-- backup and isolated-restore receipt SHA-256 values;
+- exact candidate SHA and migration head;
+- fresh protected backup and isolated-restore receipt SHA-256 values;
 - rollback release and SHA;
 - exact `BETA_PREVIEW` scope;
-- UTC issue and expiration timestamps, with a maximum 24-hour lifetime; and
-- issuer `OM1E`, role `Enterprise Release Authority`, and trusted key ID.
+- owner-enrolled authority, human custodian, key ID, and enrollment digest;
+- immutable independent-review receipt and evidence-archive digests;
+- UTC issue and expiration times, with a maximum 24-hour lifetime; and
+- an Ed25519 signature over the canonical complete payload.
 
-The validator also requires the artifact and trusted public key to be protected
-regular files and rejects expired, not-yet-valid, mismatched, forged, or
-candidate-issued approvals.
+Expired, future-dated, revoked, untrusted, improperly reviewed, candidate-issued,
+or mismatched approvals fail closed.
 
-## Protected runtime checks
-
-When Preview qualification runs in the protected execution environment, pass
-the protected runtime root, Compose project, current runtime SHA/schema, signed
-approval artifact, trusted issuer key, and expected receipt/rollback bindings.
-The runner then executes `scripts/protected-runtime-check.py` for PostgreSQL and
-Redis.
-
-The PostgreSQL check uses the service's own password-backed identity, verifies
-`pg_isready`, current user/database, and records the runtime role's superuser
-state for Enterprise review. The check does not change the existing runtime
-role or turn a configuration observation into a false health failure. The Redis
-check reads the mounted health secret without printing it and requires an
-authenticated `acp-health` `PING`. Both checks first verify the protected
-release metadata and Alembic head. Missing runtime metadata, credentials,
-identity mismatch, failed health, or inconsistent schema is `BLOCKED`.
-
-Example protected qualification shape:
+## Protected qualification
 
 ```sh
 scripts/enterprise-release-qualify \
@@ -61,8 +44,9 @@ scripts/enterprise-release-qualify \
   --preview-revision "$CANDIDATE_SHA" \
   --migration-head "$CANDIDATE_MIGRATION_HEAD" \
   --approval-artifact /protected/release/preview-approval.json \
-  --trusted-issuer-key /protected/release/om1e-preview-release.pub \
-  --trusted-issuer-key-id om1e-preview-2026-01 \
+  --authority-registry /protected/release/authority.json \
+  --trusted-issuer-key /protected/release/twelvehats-beta-release-authority.pub \
+  --trusted-issuer-key-id "$ENTERPRISE_AUTHORITY_KEY_ID" \
   --expected-backup-receipt-sha256 "$BACKUP_RECEIPT_SHA256" \
   --expected-restore-receipt-sha256 "$RESTORE_RECEIPT_SHA256" \
   --rollback-target-sha "$ROLLBACK_SHA" \
@@ -76,6 +60,6 @@ scripts/enterprise-release-qualify \
   --evidence-dir /protected/release/qualification
 ```
 
-The command performs no deployment, migration, OAuth, application mutation, or
-financial action. Enterprise must independently validate the sealed packet and
-then record Release GO through its existing governance process.
+This command validates authority and qualification evidence. It does not deploy,
+migrate, create credentials, initiate OAuth, or perform application/financial
+mutations.

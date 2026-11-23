@@ -44,11 +44,14 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
                 lifetime=timedelta(minutes=args.minutes),
             )
     output = Path(args.token_output).resolve()
+    if str(output) != "/run/acp-release/acceptance-reader/access-token":
+        raise ValueError("Acceptance reader token must use canonical custody path.")
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(output.parent, 0o700)
     descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         os.write(descriptor, issued.access_token.encode("utf-8"))
+        os.fsync(descriptor)
     finally:
         os.close(descriptor)
     os.chmod(output, 0o600)
