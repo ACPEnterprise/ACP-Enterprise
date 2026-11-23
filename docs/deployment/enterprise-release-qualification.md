@@ -4,6 +4,13 @@
 runner for every cumulative candidate. The runner records all gates even when a
 gate is blocked or belongs to a later environment. It never merges or deploys.
 
+Qualification packet v3 keeps application provenance separate from release
+tooling provenance. `--candidate-sha` identifies the application candidate;
+`--tooling-sha` must equal the executing worktree HEAD; and
+`--protected-baseline-sha` identifies the protected release baseline. An
+application candidate may therefore be qualified from a later tooling
+successor without falsely comparing the two SHAs.
+
 Run it from the repository root with the repository's Python 3.12 environment.
 `pytest.ini` supplies the `backend` import root, and the runner resolves paths
 from its repository location, so neither repository-root nor outside-`backend`
@@ -32,12 +39,16 @@ SHA obtained after fetching current remote authority.
 
 ```bash
 git fetch --prune origin
-CANDIDATE_SHA=$(git rev-parse HEAD)
+CANDIDATE_SHA=... # exact application candidate SHA
+TOOLING_SHA=$(git rev-parse HEAD)
+PROTECTED_BASELINE_SHA=... # exact protected baseline SHA
 install -d -m 700 /var/tmp/enterprise-release-${CANDIDATE_SHA}
 
 scripts/enterprise-release-qualify \
   --profile local --execute \
   --candidate-sha "$CANDIDATE_SHA" \
+  --tooling-sha "$TOOLING_SHA" \
+  --protected-baseline-sha "$PROTECTED_BASELINE_SHA" \
   --evidence-dir "/var/tmp/enterprise-release-${CANDIDATE_SHA}/local"
 ```
 

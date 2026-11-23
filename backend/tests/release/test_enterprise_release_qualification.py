@@ -59,6 +59,7 @@ def test_release_catalog_covers_required_gates() -> None:
         "background_services",
         "postgres_health",
         "redis_health",
+        "database_security",
         "preview_configuration",
         "secret_custody",
         "release_revision",
@@ -87,6 +88,17 @@ def test_every_executed_profile_is_bound_to_clean_candidate_provenance() -> None
 
     for key in ("repository_cleanliness", "repository_provenance", "release_revision"):
         assert set(by_key[key].profiles) == expected
+
+
+def test_protected_check_dispatch_is_explicit_and_service_specific() -> None:
+    module = _module()
+
+    assert module.PROTECTED_RUNTIME_SERVICES == {
+        "api_health": "backend",
+        "database_security": "database-security",
+        "postgres_health": "postgres",
+        "redis_health": "redis",
+    }
 
 
 def test_status_vocabulary_is_closed() -> None:
@@ -345,6 +357,28 @@ def test_candidate_provenance_mismatch_fails_closed(tmp_path: Path) -> None:
     assert observed.reason == "HEAD does not equal candidate SHA"
 
 
+def test_application_and_tooling_provenance_are_independent(tmp_path: Path) -> None:
+    module = _module()
+    check = module.Check(
+        "repository_provenance",
+        "Repository provenance",
+        ("local",),
+        (sys.executable, "-c", "print('b' * 40)"),
+        "tooling HEAD",
+        (sys.executable,),
+    )
+
+    observed = module.run_command(
+        check,
+        tmp_path,
+        tmp_path / "provenance.log",
+        "a" * 40,
+        tooling_sha="b" * 40,
+    )
+
+    assert observed.status == "PASS"
+
+
 def test_captured_output_redacts_environment_assignments_and_url_credentials(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -395,6 +429,9 @@ def _valid_packet(module, root: Path, evidence: Path) -> dict[str, object]:
     packet: dict[str, object] = {
         "contract": module.CONTRACT,
         "candidate_sha": "a" * 40,
+        "application_sha": "a" * 40,
+        "tooling_sha": "a" * 40,
+        "protected_baseline_sha": "a" * 40,
         "observed_head": "a" * 40,
         "profile": "local",
         "executed": True,

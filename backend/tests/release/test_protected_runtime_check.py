@@ -49,6 +49,53 @@ def test_postgres_check_requires_authenticated_identity(monkeypatch: pytest.Monk
     assert any("pg_isready" in item for command in calls for item in command)
 
 
+def test_backend_check_is_not_dispatched_to_redis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    checked = module()
+    root = runtime(tmp_path)
+    calls: list[list[str]] = []
+
+    def fake(command: list[str]) -> str:
+        calls.append(command)
+        if "alembic" in command:
+            return "s1a3g5k7m9q2 (head)"
+        return ""
+
+    monkeypatch.setattr(checked, "run_read_only", fake)
+    result = checked.check_backend(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+
+    assert result["service"] == "backend"
+    assert any("127.0.0.1:8000/health" in item for command in calls for item in command)
+    assert all("redis" not in item for command in calls for item in command)
+
+
+def test_database_security_rejects_privileged_role(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    checked = module()
+    root = runtime(tmp_path)
+
+    def fake(command: list[str]) -> str:
+        if "alembic" in command:
+            return "s1a3g5k7m9q2 (head)"
+        return "true|false|false|false|false|0|0"
+
+    monkeypatch.setattr(checked, "run_read_only", fake)
+    with pytest.raises(checked.RuntimeCheckError, match="elevated role privileges"):
+        checked.check_database_security(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+
+
+def test_database_security_rejects_missing_forced_rls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    checked = module()
+    root = runtime(tmp_path)
+
+    def fake(command: list[str]) -> str:
+        if "alembic" in command:
+            return "s1a3g5k7m9q2 (head)"
+        return "false|false|false|false|false|2|1"
+
+    monkeypatch.setattr(checked, "run_read_only", fake)
+    with pytest.raises(checked.RuntimeCheckError, match="row-level security"):
+        checked.check_database_security(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+
+
 def test_postgres_superuser_state_is_reported(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     checked = module()
     root = runtime(tmp_path)

@@ -1,11 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "enterprise-release-qualification/v2",
+  "$id": "enterprise-release-qualification/v3",
   "title": "Enterprise release qualification evidence packet",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "candidate_sha",
+    "application_sha",
+    "tooling_sha",
+    "protected_baseline_sha",
     "contract",
     "deployment_authorized",
     "digest",
@@ -23,8 +26,11 @@
   ],
   "properties": {
     "candidate_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-    "contract": {"const": "enterprise-release-qualification/v2"},
+    "contract": {"const": "enterprise-release-qualification/v3"},
     "deployment_authorized": {"const": false},
+    "application_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "tooling_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "protected_baseline_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "executed": {"type": "boolean"},
     "generated_at": {"type": "string", "format": "date-time"},

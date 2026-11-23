@@ -24,9 +24,15 @@ from pathlib import Path
 from typing import Final
 
 STATUSES: Final = {"PASS", "FAIL", "BLOCKED", "NOT APPLICABLE", "NOT YET EXECUTED"}
-CONTRACT: Final = "enterprise-release-qualification/v2"
+CONTRACT: Final = "enterprise-release-qualification/v3"
 SEAL_CONTRACT: Final = "enterprise-release-evidence-seal/v1"
 SCHEMA_PATH: Final = Path("docs/release/enterprise-release-qualification.schema.json")
+PROTECTED_RUNTIME_SERVICES: Final = {
+    "api_health": "backend",
+    "database_security": "database-security",
+    "postgres_health": "postgres",
+    "redis_health": "redis",
+}
 
 
 @dataclass(frozen=True)
@@ -350,6 +356,13 @@ def checks() -> tuple[Check, ...]:
             "Authenticated health user returns PONG",
         ),
         Check(
+            "database_security",
+            "PostgreSQL least-privilege and tenant RLS",
+            ("preview", "postdeploy"),
+            None,
+            "Application role is non-privileged and tenant-owned tables use forced row-level security",
+        ),
+        Check(
             "preview_configuration",
             "Preview configuration",
             ("preview",),
@@ -509,7 +522,13 @@ def write_private_artifact(path: Path, content: str) -> None:
         stream.write(content)
 
 
-def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Result:
+def run_command(
+    check: Check,
+    root: Path,
+    artifact: Path,
+    candidate: str,
+    tooling_sha: str | None = None,
+) -> Result:
     assert check.command is not None
     missing = [tool for tool in check.required_tools if not tool_available(tool)]
     reason: str | None = None
@@ -577,7 +596,7 @@ def run_command(check: Check, root: Path, artifact: Path, candidate: str) -> Res
         status, reason = "FAIL", warnings[0]
     if check.key == "repository_cleanliness" and raw_output:
         status, reason = "FAIL", "working tree is not clean"
-    if check.key == "repository_provenance" and raw_output.strip() != candidate:
+    if check.key == "repository_provenance" and raw_output.strip() != (tooling_sha or candidate):
         status, reason = "FAIL", "HEAD does not equal candidate SHA"
     if check.key == "migration_heads" and status == "PASS":
         try:
@@ -690,6 +709,13 @@ def validate_packet(packet: dict[str, object], root: Path) -> None:
         r"[0-9a-f]{40}", packet["candidate_sha"]
     ):
         raise ValueError("packet candidate SHA is invalid")
+    if packet["application_sha"] != packet["candidate_sha"]:
+        raise ValueError("application SHA and candidate SHA differ")
+    for field in ("tooling_sha", "protected_baseline_sha"):
+        if not isinstance(packet[field], str) or not re.fullmatch(
+            r"[0-9a-f]{40}", packet[field]
+        ):
+            raise ValueError(f"packet {field} is invalid")
     if not isinstance(packet["observed_head"], str) or not re.fullmatch(
         r"[0-9a-f]{40}", packet["observed_head"]
     ):
@@ -832,6 +858,8 @@ def parse_args() -> argparse.Namespace:
         default="plan",
     )
     parser.add_argument("--candidate-sha")
+    parser.add_argument("--tooling-sha")
+    parser.add_argument("--protected-baseline-sha")
     parser.add_argument("--preview-revision")
     parser.add_argument("--preview-url")
     parser.add_argument("--backup-receipt", type=Path)
@@ -860,8 +888,30 @@ def main() -> int:
         ("git", "rev-parse", "HEAD"), cwd=root, text=True
     ).strip()
     candidate = args.candidate_sha or head
+    tooling_sha = args.tooling_sha or head
+    baseline_sha = args.protected_baseline_sha
     if not re.fullmatch(r"[0-9a-f]{40}", candidate):
         raise SystemExit("candidate SHA must be a full 40-character lowercase SHA")
+    if not re.fullmatch(r"[0-9a-f]{40}", tooling_sha):
+        raise SystemExit("tooling SHA must be a full 40-character lowercase SHA")
+    if tooling_sha != head:
+        raise SystemExit("tooling SHA must equal the executing repository HEAD")
+    if args.execute and not re.fullmatch(r"[0-9a-f]{40}", baseline_sha or ""):
+        raise SystemExit("executed qualification requires --protected-baseline-sha")
+    if baseline_sha is None:
+        baseline_sha = head
+    if not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):
+        raise SystemExit("protected baseline SHA must be a full 40-character lowercase SHA")
+    resolved_application = subprocess.run(
+        ("git", "rev-parse", "--verify", f"{candidate}^{{commit}}"),
+        cwd=root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if resolved_application.returncode != 0 or resolved_application.stdout.strip() != candidate:
+        raise SystemExit("application candidate SHA is not independently resolvable")
     prepare_evidence_directory(args.evidence_dir)
     results: list[Result] = []
     for check in checks():
@@ -881,7 +931,7 @@ def main() -> int:
                 placeholder(check, "NOT YET EXECUTED", "execution flag not supplied")
             )
         elif check.command is not None:
-            results.append(run_command(check, root, artifact, candidate))
+            results.append(run_command(check, root, artifact, candidate, tooling_sha))
         elif check.key == "rollback_readiness":
             receipt_status, receipt_reason = rollback_readiness(
                 args.backup_receipt,
@@ -939,7 +989,7 @@ def main() -> int:
                     check.expected,
                     (sys.executable,),
                 )
-                results.append(run_command(approval_check, root, artifact, candidate))
+                results.append(run_command(approval_check, root, artifact, candidate, tooling_sha))
         elif check.key in {
             "api_health",
             "postdeploy_routes",
@@ -948,6 +998,7 @@ def main() -> int:
             "background_services",
             "postgres_health",
             "redis_health",
+            "database_security",
         }:
             if (
                 args.protected_runtime_root
@@ -955,7 +1006,12 @@ def main() -> int:
                 and args.runtime_sha
                 and args.runtime_schema_head
             ):
-                service = "postgres" if check.key == "postgres_health" else "redis"
+                service = PROTECTED_RUNTIME_SERVICES.get(check.key)
+                if service is None:
+                    results.append(
+                        placeholder(check, "BLOCKED", "no protected implementation is registered for this check")
+                    )
+                    continue
                 runtime_check = Check(
                     check.key,
                     check.title,
@@ -977,7 +1033,7 @@ def main() -> int:
                     check.expected,
                     (sys.executable,),
                 )
-                results.append(run_command(runtime_check, root, artifact, candidate))
+                results.append(run_command(runtime_check, root, artifact, candidate, tooling_sha))
             else:
                 results.append(
                     placeholder(
@@ -1017,6 +1073,9 @@ def main() -> int:
     packet = {
         "contract": CONTRACT,
         "candidate_sha": candidate,
+        "application_sha": candidate,
+        "tooling_sha": tooling_sha,
+        "protected_baseline_sha": baseline_sha,
         "observed_head": head,
         "profile": args.profile,
         "executed": args.execute,
