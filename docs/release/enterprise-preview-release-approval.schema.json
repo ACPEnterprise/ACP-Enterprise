@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "enterprise-preview-release-approval/v1",
-  "title": "Enterprise Beta-only Preview release approval",
+  "$id": "enterprise-preview-release-approval/v2",
+  "title": "Owner-enrolled Beta-only Enterprise release approval",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,11 +16,13 @@
     "issued_at",
     "expires_at",
     "authorized_issuer",
+    "authority_enrollment_digest",
+    "independent_review",
     "artifact_digest",
     "signature"
   ],
   "properties": {
-    "contract": {"const": "enterprise-preview-release-approval/v1"},
+    "contract": {"const": "enterprise-preview-release-approval/v2"},
     "approval_id": {"type": "string", "format": "uuid"},
     "candidate_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "migration_head": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{11,63}$"},
@@ -41,11 +43,41 @@
     "authorized_issuer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "role", "key_id"],
+      "required": ["id", "role", "custodian_id", "custodian_name", "key_id"],
       "properties": {
-        "id": {"const": "OM1E"},
+        "id": {"const": "twelvehats-beta-release-authority"},
         "role": {"const": "Enterprise Release Authority"},
+        "custodian_id": {"type": "string", "minLength": 3},
+        "custodian_name": {"type": "string", "minLength": 1},
         "key_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "authority_enrollment_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "independent_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_id",
+        "reviewer",
+        "review_receipt_sha256",
+        "evidence_archive_sha256",
+        "reviewed_at"
+      ],
+      "properties": {
+        "review_id": {"type": "string", "format": "uuid"},
+        "reviewer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name", "role"],
+          "properties": {
+            "id": {"type": "string", "minLength": 3},
+            "name": {"type": "string", "minLength": 1},
+            "role": {"const": "Enterprise Independent Qualification Reviewer"}
+          }
+        },
+        "review_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "evidence_archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reviewed_at": {"type": "string", "format": "date-time"}
       }
     },
     "artifact_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},

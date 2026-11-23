@@ -74,7 +74,9 @@ def verify_runtime_identity(
         raise RuntimeCheckError("protected runtime schema identity mismatch")
 
 
-def check_postgres(runtime_root: Path, project: str, expected_sha: str, expected_schema: str) -> dict[str, str]:
+def check_postgres(
+    runtime_root: Path, project: str, expected_sha: str, expected_schema: str
+) -> dict[str, str]:
     verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
     base = compose_base(runtime_root, project)
     command = base + [
@@ -84,12 +86,14 @@ def check_postgres(runtime_root: Path, project: str, expected_sha: str, expected
         "sh",
         "-eu",
         "-c",
-        "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" >/dev/null; PGPASSWORD=\"$POSTGRES_PASSWORD\" psql -X -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -Atqc \"SELECT current_user || '|' || current_database() || '|' || rolsuper::text FROM pg_roles WHERE rolname=current_user\"",
+        'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null; PGPASSWORD="$POSTGRES_PASSWORD" psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT current_user || \'|\' || current_database() || \'|\' || rolsuper::text FROM pg_roles WHERE rolname=current_user"',
     ]
     try:
         identity = run_read_only(command)
     except RuntimeCheckError as exc:
-        raise RuntimeCheckError("PostgreSQL authenticated health is unavailable") from exc
+        raise RuntimeCheckError(
+            "PostgreSQL authenticated health is unavailable"
+        ) from exc
     parts = identity.split("|")
     if len(parts) != 3 or not all(parts):
         raise RuntimeCheckError("PostgreSQL authenticated identity is unavailable")
@@ -103,7 +107,9 @@ def check_postgres(runtime_root: Path, project: str, expected_sha: str, expected
     }
 
 
-def check_backend(runtime_root: Path, project: str, expected_sha: str, expected_schema: str) -> dict[str, str]:
+def check_backend(
+    runtime_root: Path, project: str, expected_sha: str, expected_schema: str
+) -> dict[str, str]:
     verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
     base = compose_base(runtime_root, project)
     command = base + [
@@ -117,7 +123,9 @@ def check_backend(runtime_root: Path, project: str, expected_sha: str, expected_
     try:
         run_read_only(command)
     except RuntimeCheckError as exc:
-        raise RuntimeCheckError("backend API health or runtime version is unavailable") from exc
+        raise RuntimeCheckError(
+            "backend API health or runtime version is unavailable"
+        ) from exc
     return {"service": "backend", "status": "PASS", "identity": expected_sha}
 
 
@@ -151,16 +159,22 @@ def check_database_security(
     try:
         payload = json.loads(result)
     except json.JSONDecodeError as exc:
-        raise RuntimeCheckError("application database security probe returned invalid evidence") from exc
+        raise RuntimeCheckError(
+            "application database security probe returned invalid evidence"
+        ) from exc
     if not isinstance(payload, dict) or payload.get("role") != "acp_app":
-        raise RuntimeCheckError("PostgreSQL security audit returned incomplete evidence")
+        raise RuntimeCheckError(
+            "PostgreSQL security audit returned incomplete evidence"
+        )
     if (
         payload.get("application_table_count") != expected_application_table_count
         or payload.get("forced_rls_count") != expected_forced_rls_count
         or payload.get("tenant_tables_without_rls") != 0
         or payload.get("tenant_tables_without_forced_rls") != 0
     ):
-        raise RuntimeCheckError("PostgreSQL row-level security coverage does not match the release contract")
+        raise RuntimeCheckError(
+            "PostgreSQL row-level security coverage does not match the release contract"
+        )
     return {
         "service": "database-security",
         "status": "PASS",
@@ -169,11 +183,15 @@ def check_database_security(
         "forced_rls_count": str(payload["forced_rls_count"]),
         "tenant_table_count": str(payload["tenant_table_count"]),
         "tenant_tables_without_rls": str(payload["tenant_tables_without_rls"]),
-        "tenant_tables_without_forced_rls": str(payload["tenant_tables_without_forced_rls"]),
+        "tenant_tables_without_forced_rls": str(
+            payload["tenant_tables_without_forced_rls"]
+        ),
     }
 
 
-def check_redis(runtime_root: Path, project: str, expected_sha: str, expected_schema: str) -> dict[str, str]:
+def check_redis(
+    runtime_root: Path, project: str, expected_sha: str, expected_schema: str
+) -> dict[str, str]:
     verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
     base = compose_base(runtime_root, project)
     command = base + [
@@ -183,12 +201,14 @@ def check_redis(runtime_root: Path, project: str, expected_sha: str, expected_sc
         "sh",
         "-eu",
         "-c",
-        "test -r /run/secrets/redis/health-password; REDISCLI_AUTH=\"$(cat /run/secrets/redis/health-password)\"; export REDISCLI_AUTH; test \"$(redis-cli --user acp-health PING)\" = PONG",
+        'test -r /run/secrets/redis/health-password; REDISCLI_AUTH="$(cat /run/secrets/redis/health-password)"; export REDISCLI_AUTH; test "$(redis-cli --user acp-health PING)" = PONG',
     ]
     try:
         run_read_only(command)
     except RuntimeCheckError as exc:
-        raise RuntimeCheckError("Redis health credentials or connection are unavailable") from exc
+        raise RuntimeCheckError(
+            "Redis health credentials or connection are unavailable"
+        ) from exc
     return {"service": "redis", "status": "PASS", "identity": "acp-health"}
 
 
@@ -207,33 +227,44 @@ def check_smoke(
         "-T",
         "backend",
         "python",
-        "scripts/protected-smoke-check.py",
+        "-m",
+        "scripts.protected_smoke_check",
         "--check",
         smoke_check,
         "--credential-file",
         credential_file,
     ]
     if smoke_check == "routes":
-        command.extend(["--route", "/health", "--route", "/api/v1/companies"])
+        command.extend(
+            ["--route", "/health", "--route", "/api/v1/authorization/companies"]
+        )
     try:
         result = run_read_only(command)
     except RuntimeCheckError as exc:
-        raise RuntimeCheckError(f"protected {smoke_check} smoke is unavailable") from exc
+        raise RuntimeCheckError(
+            f"protected {smoke_check} smoke is unavailable"
+        ) from exc
     try:
         payload = json.loads(result)
     except json.JSONDecodeError as exc:
-        raise RuntimeCheckError(f"protected {smoke_check} smoke returned invalid evidence") from exc
+        raise RuntimeCheckError(
+            f"protected {smoke_check} smoke returned invalid evidence"
+        ) from exc
     if payload.get("check") != smoke_check or payload.get("status") != "PASS":
         raise RuntimeCheckError(f"protected {smoke_check} smoke did not pass")
     return {"service": smoke_check, "status": "PASS", "identity": "preview-smoke"}
 
 
-def check_schema(runtime_root: Path, project: str, expected_sha: str, expected_schema: str) -> dict[str, str]:
+def check_schema(
+    runtime_root: Path, project: str, expected_sha: str, expected_schema: str
+) -> dict[str, str]:
     verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
     return {"service": "schema", "status": "PASS", "identity": expected_schema}
 
 
-def check_release_metadata(runtime_root: Path, project: str, expected_sha: str, expected_schema: str) -> dict[str, str]:
+def check_release_metadata(
+    runtime_root: Path, project: str, expected_sha: str, expected_schema: str
+) -> dict[str, str]:
     verify_runtime_identity(runtime_root, project, expected_sha, expected_schema)
     return {"service": "release-metadata", "status": "PASS", "identity": expected_sha}
 
@@ -245,9 +276,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--service",
         choices=(
-            "backend", "database-security", "postgres", "redis", "authentication",
-            "authorization", "tenant-isolation", "routes", "background-services",
-            "schema", "release-metadata",
+            "backend",
+            "database-security",
+            "postgres",
+            "redis",
+            "authentication",
+            "authorization",
+            "tenant-isolation",
+            "routes",
+            "background-services",
+            "schema",
+            "release-metadata",
         ),
         required=True,
     )
@@ -260,19 +299,61 @@ def main() -> int:
     args = parse_args()
     try:
         if args.service == "backend":
-            result = check_backend(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
+            result = check_backend(
+                args.runtime_root,
+                args.project,
+                args.expected_sha,
+                args.expected_schema_head,
+            )
         elif args.service == "database-security":
-            result = check_database_security(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
+            result = check_database_security(
+                args.runtime_root,
+                args.project,
+                args.expected_sha,
+                args.expected_schema_head,
+            )
         elif args.service == "postgres":
-            result = check_postgres(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
-        elif args.service in {"authentication", "authorization", "tenant-isolation", "routes", "background-services"}:
-            result = check_smoke(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head, args.service)
+            result = check_postgres(
+                args.runtime_root,
+                args.project,
+                args.expected_sha,
+                args.expected_schema_head,
+            )
+        elif args.service in {
+            "authentication",
+            "authorization",
+            "tenant-isolation",
+            "routes",
+            "background-services",
+        }:
+            result = check_smoke(
+                args.runtime_root,
+                args.project,
+                args.expected_sha,
+                args.expected_schema_head,
+                args.service,
+            )
         elif args.service == "schema":
-            result = check_schema(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
+            result = check_schema(
+                args.runtime_root,
+                args.project,
+                args.expected_sha,
+                args.expected_schema_head,
+            )
         elif args.service == "release-metadata":
-            result = check_release_metadata(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
+            result = check_release_metadata(
+                args.runtime_root,
+                args.project,
+                args.expected_sha,
+                args.expected_schema_head,
+            )
         else:
-            result = check_redis(args.runtime_root, args.project, args.expected_sha, args.expected_schema_head)
+            result = check_redis(
+                args.runtime_root,
+                args.project,
+                args.expected_sha,
+                args.expected_schema_head,
+            )
     except RuntimeCheckError as exc:
         print(f"BLOCKED: {exc}", file=sys.stderr)
         return 2

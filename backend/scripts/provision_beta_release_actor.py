@@ -17,7 +17,7 @@ from app.platform.service_principals.release_actor import release_actor_service
 
 async def run(args: argparse.Namespace) -> dict[str, object]:
     output = Path(args.token_output).resolve()
-    if str(output) != "/run/secrets/release_actor_token":
+    if str(output) != "/run/acp-release/release-actor/access-token":
         raise ValueError("Release actor token must use canonical secret custody path.")
     async with AsyncSessionFactory() as session, session.begin():
         issued = await release_actor_service.provision_and_rotate(
@@ -46,7 +46,9 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--company-id", required=True, type=UUID)
     result.add_argument("--minutes", type=int, default=60, choices=range(5, 61))
-    result.add_argument("--token-output", default="/run/secrets/release_actor_token")
+    result.add_argument(
+        "--token-output", default="/run/acp-release/release-actor/access-token"
+    )
     return result
 
 

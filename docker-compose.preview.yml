@@ -42,6 +42,7 @@ x-backend-environment: &backend-environment
   QBO_PRODUCTION_RUNTIME_ROOT: /var/lib/acp-qbo-production
   QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-qbo-production-evidence
   QBO_MANUAL_ARCHIVE_ROOT: ${QBO_MANUAL_ARCHIVE_ROOT:-/var/lib/acp-qbo-production-evidence/manual-archive}
+  SMOKE_DENIED_COMPANY_ID: ${SMOKE_DENIED_COMPANY_ID:?Set SMOKE_DENIED_COMPANY_ID in .env.preview}
 
 x-default-logging: &default-logging
   driver: json-file
@@ -191,6 +192,7 @@ services:
       - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
       - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro
       - ${REDIS_SECRET_DIR_HOST:?Set REDIS_SECRET_DIR_HOST in .env.preview}:/run/secrets/redis:ro
+      - ${PREVIEW_SMOKE_TOKEN_FILE_HOST:?Set PREVIEW_SMOKE_TOKEN_FILE_HOST in .env.preview}:/run/secrets/preview-smoke-token:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
       interval: 10s
@@ -239,6 +241,7 @@ services:
       - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
       - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro
       - ${REDIS_SECRET_DIR_HOST:?Set REDIS_SECRET_DIR_HOST in .env.preview}:/run/secrets/redis:ro
+      - ${PREVIEW_SMOKE_TOKEN_FILE_HOST:?Set PREVIEW_SMOKE_TOKEN_FILE_HOST in .env.preview}:/run/secrets/preview-smoke-token:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
       interval: 10s
