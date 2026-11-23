@@ -42,6 +42,8 @@ x-backend-environment: &backend-environment
   QBO_PRODUCTION_RUNTIME_ROOT: /var/lib/acp-qbo-production
   QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-qbo-production-evidence
   QBO_MANUAL_ARCHIVE_ROOT: ${QBO_MANUAL_ARCHIVE_ROOT:-/var/lib/acp-qbo-production-evidence/manual-archive}
+  SMOKE_COMPANY_ID: ${SMOKE_COMPANY_ID:?Set SMOKE_COMPANY_ID in .env.preview}
+  SMOKE_BRANCH_ID: ${SMOKE_BRANCH_ID:?Set SMOKE_BRANCH_ID in .env.preview}
   SMOKE_DENIED_COMPANY_ID: ${SMOKE_DENIED_COMPANY_ID:?Set SMOKE_DENIED_COMPANY_ID in .env.preview}
 
 x-default-logging: &default-logging

@@ -40,14 +40,42 @@ def _set_transaction_tenant_context(
     context = get_database_tenant_context()
     if context is None:
         return
-    connection.execute(
-        text("SELECT set_config('app.company_id', :company_id, true)"),
-        {"company_id": str(context.company_id)},
-    )
-    connection.execute(
-        text("SELECT set_config('app.branch_ids', :branch_ids, true)"),
-        {"branch_ids": ",".join(str(value) for value in context.branch_ids)},
-    )
+    if context.company_id is not None:
+        connection.execute(
+            text("SELECT set_config('app.company_id', :company_id, true)"),
+            {"company_id": str(context.company_id)},
+        )
+        connection.execute(
+            text("SELECT set_config('app.branch_ids', :branch_ids, true)"),
+            {"branch_ids": ",".join(str(value) for value in context.branch_ids)},
+        )
+    if context.user_id is not None:
+        connection.execute(
+            text("SELECT set_config('app.user_id', :user_id, true)"),
+            {"user_id": str(context.user_id)},
+        )
+
+
+async def apply_database_tenant_context(session: AsyncSession) -> None:
+    """Apply the current transaction-local context after a transaction began."""
+
+    context = get_database_tenant_context()
+    if context is None:
+        return
+    if context.company_id is not None:
+        await session.execute(
+            text("SELECT set_config('app.company_id', :company_id, true)"),
+            {"company_id": str(context.company_id)},
+        )
+        await session.execute(
+            text("SELECT set_config('app.branch_ids', :branch_ids, true)"),
+            {"branch_ids": ",".join(str(value) for value in context.branch_ids)},
+        )
+    if context.user_id is not None:
+        await session.execute(
+            text("SELECT set_config('app.user_id', :user_id, true)"),
+            {"user_id": str(context.user_id)},
+        )
 
 
 async def get_database_session() -> AsyncGenerator[AsyncSession, None]:

@@ -15,8 +15,9 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class DatabaseTenantContext:
-    company_id: UUID
+    company_id: UUID | None = None
     branch_ids: tuple[UUID, ...] = ()
+    user_id: UUID | None = None
 
 
 _current_context: ContextVar[DatabaseTenantContext | None] = ContextVar(
@@ -35,8 +36,26 @@ def set_database_tenant_context(
     replaces it with the verified branch set.
     """
 
+    current = _current_context.get()
     _current_context.set(
-        DatabaseTenantContext(company_id=company_id, branch_ids=tuple(branch_ids))
+        DatabaseTenantContext(
+            company_id=company_id,
+            branch_ids=tuple(branch_ids),
+            user_id=current.user_id if current is not None else None,
+        )
+    )
+
+
+def set_database_identity_context(user_id: UUID) -> None:
+    """Bind an authenticated identity for RLS-safe company discovery."""
+
+    current = _current_context.get()
+    _current_context.set(
+        DatabaseTenantContext(
+            company_id=current.company_id if current is not None else None,
+            branch_ids=current.branch_ids if current is not None else (),
+            user_id=user_id,
+        )
     )
 
 

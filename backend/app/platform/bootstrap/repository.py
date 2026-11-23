@@ -117,12 +117,22 @@ class BootstrapRepository:
         session.add(membership)
         return membership
 
-    def create_permissions(
+    async def create_permissions(
         self,
         session: AsyncSession,
         definitions: Iterable[PermissionDefinition],
     ) -> dict[str, Permission]:
+        definitions = tuple(definitions)
+        codes = tuple(definition.code for definition in definitions)
         permissions = {
+            permission.code: permission
+            for permission in (
+                await session.scalars(
+                    select(Permission).where(Permission.code.in_(codes))
+                )
+            ).all()
+        }
+        missing = {
             definition.code: Permission(
                 code=definition.code,
                 name=definition.name,
@@ -132,8 +142,11 @@ class BootstrapRepository:
                 status="active",
             )
             for definition in definitions
+            if definition.code not in permissions
         }
-        session.add_all(permissions.values())
+        session.add_all(missing.values())
+        permissions.update(missing)
+        await session.flush()
         return permissions
 
     def create_system_roles(

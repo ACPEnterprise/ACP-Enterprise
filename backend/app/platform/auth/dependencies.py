@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_security_database_session
+from app.database.tenant_context import set_database_identity_context
 from app.platform.auth.errors import AuthenticationError
 from app.platform.auth.services import (
     AuthenticatedContext,
@@ -33,7 +34,9 @@ async def get_authenticated_context(
         )
     try:
         claims = access_token_service.decode(credentials.credentials)
-        return await authentication_service.validate_access_context(session, claims)
+        context = await authentication_service.validate_access_context(session, claims)
+        set_database_identity_context(context.user.id)
+        return context
     except AuthenticationError as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -35,6 +35,7 @@ def request(
     token: str | None = None,
     *,
     company_id: str | None = None,
+    branch_id: str | None = None,
 ) -> tuple[int, bytes]:
     base_url = os.environ.get("SMOKE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
     headers = {"Accept": "application/json"}
@@ -42,6 +43,8 @@ def request(
         headers["Authorization"] = f"Bearer {token}"
     if company_id is not None:
         headers["X-Company-ID"] = company_id
+    if branch_id is not None:
+        headers["X-Branch-ID"] = branch_id
     request_obj = urllib.request.Request(
         f"{base_url}/{path.lstrip('/')}", headers=headers
     )
@@ -54,57 +57,113 @@ def request(
         raise SmokeBlocked("protected smoke endpoint is unavailable") from exc
 
 
+def tenant_binding() -> tuple[str, str]:
+    company_id = os.environ.get("SMOKE_COMPANY_ID")
+    branch_id = os.environ.get("SMOKE_BRANCH_ID")
+    if not company_id or not branch_id:
+        raise SmokeBlocked("authorized smoke tenant and branch bindings are unavailable")
+    return company_id, branch_id
+
+
 def check_authentication(path: str, credential_file: Path) -> dict[str, str]:
     anonymous_status, _ = request(path)
     if anonymous_status not in {401, 403}:
         raise SmokeBlocked("anonymous protected request was not rejected")
-    authorized_status, _ = request(path, secret(credential_file))
+    token = secret(credential_file)
+    if path == "/api/v1/authorization/companies":
+        authorized_status, _ = request(path, token)
+    else:
+        company_id, branch_id = tenant_binding()
+        authorized_status, _ = request(
+            path, token, company_id=company_id, branch_id=branch_id
+        )
     if authorized_status != 200:
         raise SmokeBlocked("authorized smoke principal was not accepted")
     return {"check": "authentication", "status": "PASS"}
 
 
 def check_authorization(path: str, credential_file: Path) -> dict[str, str]:
-    status, _ = request(path, secret(credential_file))
-    if status not in {401, 403, 404}:
-        raise SmokeBlocked("least-privilege smoke principal was not denied")
+    token = secret(credential_file)
+    company_id, branch_id = tenant_binding()
+    authorized_status, _ = request(
+        path, token, company_id=company_id, branch_id=branch_id
+    )
+    if authorized_status != 200:
+        raise SmokeBlocked("authorized request did not establish the real resource")
+    denied_company = os.environ.get("SMOKE_DENIED_COMPANY_ID")
+    if not denied_company:
+        raise SmokeBlocked("denied tenant binding is unavailable")
+    denied_status, _ = request(
+        path,
+        token,
+        company_id=denied_company,
+        branch_id=os.environ.get("SMOKE_DENIED_BRANCH_ID"),
+    )
+    if denied_status not in {401, 403}:
+        raise SmokeBlocked("unauthorized request to the real resource was not denied")
     return {"check": "authorization", "status": "PASS"}
 
 
 def check_tenant_isolation(path: str, credential_file: Path) -> dict[str, str]:
+    token = secret(credential_file)
     denied_company = os.environ.get("SMOKE_DENIED_COMPANY_ID")
     if not denied_company:
         raise SmokeBlocked("denied tenant binding is unavailable")
+    company_id, branch_id = tenant_binding()
+    authorized_status, _ = request(
+        path,
+        token,
+        company_id=company_id,
+        branch_id=branch_id,
+    )
+    if authorized_status != 200:
+        raise SmokeBlocked("authorized tenant request did not establish the real resource")
     status, _ = request(
         path,
-        secret(credential_file),
+        token,
         company_id=denied_company,
+        branch_id=os.environ.get("SMOKE_DENIED_BRANCH_ID"),
     )
-    if status not in {401, 403, 404}:
+    if status not in {401, 403}:
         raise SmokeBlocked("cross-tenant request was not denied")
     return {"check": "tenant-isolation", "status": "PASS"}
 
 
 def check_routes(paths: tuple[str, ...], credential_file: Path) -> dict[str, str]:
     token = secret(credential_file)
+    company_id = os.environ.get("SMOKE_COMPANY_ID")
+    branch_id = os.environ.get("SMOKE_BRANCH_ID")
     for path in paths:
-        status, _ = request(path, token)
+        status, _ = request(
+            path,
+            token,
+            company_id=None if path in {"/health", "/health/live", "/health/ready", "/api/v1/authorization/companies"} else company_id,
+            branch_id=None if path in {"/health", "/health/live", "/health/ready", "/api/v1/authorization/companies"} else branch_id,
+        )
         if status >= 400:
             raise SmokeBlocked("protected route smoke failed")
     return {"check": "routes", "status": "PASS", "route_count": str(len(paths))}
 
 
 def check_background(path: str, credential_file: Path) -> dict[str, str]:
-    status, body = request(path, secret(credential_file))
+    secret(credential_file)
+    status, body = request(path)
     if status != 200:
-        raise SmokeBlocked("background-service health endpoint failed")
+        raise SmokeBlocked("application readiness endpoint failed")
     try:
         payload = json.loads(body)
     except json.JSONDecodeError as exc:
         raise SmokeBlocked("background-service health evidence is invalid") from exc
-    if payload.get("status") != "healthy":
-        raise SmokeBlocked("background-service heartbeat is not healthy")
-    return {"check": "background-services", "status": "PASS"}
+    if payload.get("state") != "HEALTHY":
+        raise SmokeBlocked("application readiness is not healthy")
+    components = payload.get("components")
+    if not isinstance(components, list) or not components or any(
+        item.get("state") != "HEALTHY"
+        for item in components
+        if isinstance(item, dict)
+    ):
+        raise SmokeBlocked("application readiness component is not healthy")
+    return {"check": "background-services", "status": "PASS", "source": path}
 
 
 def parse_args() -> argparse.Namespace:
@@ -131,7 +190,7 @@ def main() -> int:
     try:
         if args.check == "authentication":
             result = check_authentication(
-                args.path or "/api/v1/auth/session", args.credential_file
+                args.path or "/api/v1/authorization/companies", args.credential_file
             )
         elif args.check == "authorization":
             result = check_authorization(
@@ -147,7 +206,7 @@ def main() -> int:
                 raise SmokeBlocked("protected route list is required")
             result = check_routes(tuple(args.route), args.credential_file)
         else:
-            result = check_background(args.path or "/health", args.credential_file)
+            result = check_background(args.path or "/health/ready", args.credential_file)
     except SmokeBlocked as exc:
         print(f"BLOCKED: {exc}")
         return 2

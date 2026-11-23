@@ -24,6 +24,10 @@ class BootstrapConfiguration(BaseModel):
     administrator_first_name: str = Field(min_length=1, max_length=100)
     administrator_last_name: str = Field(min_length=1, max_length=100)
     administrator_display_name: str | None = Field(default=None, max_length=200)
+    # The normal production bootstrap remains a Company Administrator.  A
+    # separately controlled owner bootstrap is allowed for first-install
+    # acceptance and other explicitly governed provisioning flows.
+    administrator_role_code: str = Field(default="COMPANY_ADMINISTRATOR", max_length=64)
     administrator_password: SecretStr
 
     model_config = ConfigDict(extra="forbid")
@@ -56,6 +60,16 @@ class BootstrapConfiguration(BaseModel):
         normalized = value.strip().lower()
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
             raise ValueError("administrator email is invalid")
+        return normalized
+
+    @field_validator("administrator_role_code")
+    @classmethod
+    def validate_role_code(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"COMPANY_ADMINISTRATOR", "OWNER"}:
+            raise ValueError(
+                "bootstrap administrator role must be COMPANY_ADMINISTRATOR or OWNER"
+            )
         return normalized
 
     @field_validator("administrator_display_name")

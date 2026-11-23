@@ -88,10 +88,10 @@ def validate_compose_config(config: dict[str, Any]) -> None:
         raise ValueError("Rehearsal Compose must contain only postgres and exporter")
     postgres = services.get("postgres")
     if not isinstance(postgres, dict):
-        raise ValueError("Rehearsal postgres service is missing")
+        raise TypeError("Rehearsal postgres service is missing")
     labels = postgres.get("labels", {})
     if not isinstance(labels, dict):
-        raise ValueError("Rehearsal postgres labels are missing")
+        raise TypeError("Rehearsal postgres labels are missing")
     if labels.get("acp.environment") != COMPOSE_ENVIRONMENT:
         raise ValueError("Rehearsal environment label is not migration_rehearsal")
     if labels.get("acp.production_access") not in {False, "false"}:

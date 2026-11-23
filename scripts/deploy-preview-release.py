@@ -20,12 +20,11 @@ import sys
 import tarfile
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 from urllib.error import URLError
 from urllib.request import urlopen
-
 
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 RELEASE_PREFIX = "enterprise-beta-"
@@ -664,7 +663,7 @@ def deploy(args: argparse.Namespace) -> int:
                     beta=False,
                 )
                 print(f"Rollback completed to {previous}", file=sys.stderr)
-            except Exception as rollback_exc:
+            except Exception as rollback_exc:  # noqa: BLE001 - rollback must report any failure
                 print(f"AUTOMATIC ROLLBACK FAILED: {rollback_exc}", file=sys.stderr)
         raise DeployError(str(exc)) from exc
     print(f"Deployed Preview/Beta release: {target}")
@@ -718,7 +717,7 @@ def rollback(args: argparse.Namespace) -> int:
                 build(current, services)
                 atomic_switch(root, current)
                 recreate(current, services)
-            except Exception as rollback_exc:
+            except Exception as rollback_exc:  # noqa: BLE001 - rollback-of-rollback must report any failure
                 print(f"ROLLBACK-OF-ROLLBACK FAILED: {rollback_exc}", file=sys.stderr)
         raise DeployError(str(exc)) from exc
     print(f"Rolled back Preview/Beta release to: {target}")

@@ -1,0 +1,150 @@
+# Disposable assembled-runtime acceptance only. Never point this file at Beta.
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    environment:
+      POSTGRES_DB: acp_application_acceptance
+      POSTGRES_USER: acceptance_admin
+      POSTGRES_PASSWORD: ${ACCEPTANCE_ADMIN_PASSWORD:?Set a disposable acceptance admin password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acceptance_admin -d acp_application_acceptance"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [acceptance]
+    volumes:
+      - acceptance-postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [acceptance]
+
+  provision-roles:
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${ACCEPTANCE_ADMIN_PASSWORD:?Set a disposable acceptance admin password}
+      ACCEPTANCE_APP_PASSWORD: ${ACCEPTANCE_APP_PASSWORD:?Set a disposable application password}
+      ACCEPTANCE_MIGRATE_PASSWORD: ${ACCEPTANCE_MIGRATE_PASSWORD:?Set a disposable migration password}
+      ACCEPTANCE_BACKUP_PASSWORD: ${ACCEPTANCE_BACKUP_PASSWORD:?Set a disposable backup password}
+    volumes:
+      - ./scripts/qualify-database-roles.sql:/run/qualify-database-roles.sql:ro
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        psql -h postgres -U acceptance_admin -d acp_application_acceptance -f /run/qualify-database-roles.sql
+        psql -h postgres -U acceptance_admin -d acp_application_acceptance -c "ALTER ROLE acp_app PASSWORD '$${ACCEPTANCE_APP_PASSWORD}'; ALTER ROLE acp_migrate PASSWORD '$${ACCEPTANCE_MIGRATE_PASSWORD}'; ALTER ROLE acp_backup PASSWORD '$${ACCEPTANCE_BACKUP_PASSWORD}';"
+    networks: [acceptance]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.preview
+    depends_on:
+      provision-roles:
+        condition: service_completed_successfully
+    environment: &application-environment
+      ENVIRONMENT: preview
+      APP_NAME: TwelveHats Isolated Acceptance
+      APP_VERSION: ${ACCEPTANCE_APP_VERSION:-application-integration-acceptance}
+      DATABASE_URL: postgresql+asyncpg://acp_migrate:${ACCEPTANCE_MIGRATE_PASSWORD:?Set a disposable migration password}@postgres:5432/acp_application_acceptance
+      REDIS_URL: redis://redis:6379/0
+      REDIS_REQUIRED_FOR_READINESS: "true"
+      ACCESS_TOKEN_KEYS: '{"acceptance":"acceptance-disposable-signing-key-32-bytes-long"}'
+      ACCESS_TOKEN_ACTIVE_KID: acceptance
+      SECURITY_TOKEN_HMAC_KEY: acceptance-disposable-security-hmac-key-32-bytes
+      PLATFORM_CONTRACT_EXPECTED_FINGERPRINT: ead157139c57e1adc422e7e96627aa1a549ad99bc99457560604af458da89a31
+      CORS_ALLOWED_ORIGINS: '["https://acceptance.local"]'
+      SECURITY_HEADERS_ENABLED: "true"
+      HSTS_ENABLED: "true"
+      PREVIEW_ACCEPTANCE_FIXTURE_ENABLED: "false"
+    command: ["/bin/sh", "-ec", "alembic upgrade head && python -m app.platform.permissions.sync_catalog"]
+    networks: [acceptance]
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.preview
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *application-environment
+      DATABASE_URL: postgresql+asyncpg://acp_app:${ACCEPTANCE_APP_PASSWORD:?Set a disposable application password}@postgres:5432/acp_application_acceptance
+      BOOTSTRAP_COMPANY_NAME: TwelveHats Isolated Acceptance
+      BOOTSTRAP_COMPANY_CODE: ACCEPTANCE
+      BOOTSTRAP_COMPANY_TIMEZONE: America/New_York
+      BOOTSTRAP_BRANCH_NAME: Main Branch
+      BOOTSTRAP_BRANCH_CODE: MAIN
+      BOOTSTRAP_ADMINISTRATOR_EMAIL: acceptance-owner@example.invalid
+      BOOTSTRAP_ADMINISTRATOR_FIRST_NAME: Acceptance
+      BOOTSTRAP_ADMINISTRATOR_LAST_NAME: Owner
+      BOOTSTRAP_ADMINISTRATOR_DISPLAY_NAME: Acceptance Owner
+      BOOTSTRAP_ADMINISTRATOR_ROLE_CODE: OWNER
+      BOOTSTRAP_ADMINISTRATOR_PASSWORD: ${ACCEPTANCE_OWNER_PASSWORD:?Set a disposable owner password}
+    command: ["python", "-m", "app.platform.bootstrap"]
+    networks: [acceptance]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.preview
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *application-environment
+      DATABASE_URL: postgresql+asyncpg://acp_app:${ACCEPTANCE_APP_PASSWORD:?Set a disposable application password}@postgres:5432/acp_application_acceptance
+      ALLOWED_HOSTS: '["backend","frontend","localhost","127.0.0.1"]'
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-access-log"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=3)); assert d['state']=='HEALTHY'"]
+      interval: 2s
+      timeout: 5s
+      start_period: 5s
+      retries: 30
+    networks: [acceptance]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${ACCEPTANCE_FRONTEND_PORT:-18181}:80"
+    # The acceptance client reaches Nginx from the host, not through a
+    # governed reverse-proxy chain. Remove the preview file's forwarded-client
+    # headers in this disposable container so the backend correctly rejects
+    # no untrusted proxy metadata; protected Preview/Beta keeps its configured
+    # trusted proxy CIDRs unchanged.
+    command:
+      - /bin/sh
+      - -ec
+      - sed -i 's/proxy_set_header X-Forwarded-For .*/proxy_set_header X-Forwarded-For "";/' /etc/nginx/conf.d/default.conf
+        && sed -i 's/proxy_set_header X-Forwarded-Proto .*/proxy_set_header X-Forwarded-Proto "";/' /etc/nginx/conf.d/default.conf
+        && exec nginx -g 'daemon off;'
+    networks: [acceptance]
+
+networks:
+  # The disposable frontend is exercised through its published loopback port.
+  # Keep the project isolated by name and tear it down after the run; Docker's
+  # internal bridge mode prevents the published port from being reachable on
+  # the supported Docker Desktop runtime.
+  acceptance:
+
+volumes:
+  acceptance-postgres:

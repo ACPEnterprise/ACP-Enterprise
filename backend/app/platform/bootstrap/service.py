@@ -4,10 +4,12 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database.session import apply_database_tenant_context
+from app.database.tenant_context import set_database_tenant_context
 from app.platform.auth.passwords import PasswordService
 from app.platform.bootstrap.config import BootstrapConfiguration
 from app.platform.bootstrap.repository import BootstrapRepository
-from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
+from app.platform.launch_controls import LAUNCH_ROLE_MATRIX
 from app.platform.permissions.catalog import permission_catalog
 
 
@@ -53,6 +55,10 @@ class BootstrapService:
                 timezone=configuration.company_timezone,
             )
             await session.flush()
+            # The transaction began before the new company UUID existed. Set
+            # the transaction-local RLS context before creating tenant rows.
+            set_database_tenant_context(company.id)
+            await apply_database_tenant_context(session)
             branch = self.repository.create_branch(
                 session,
                 company_id=company.id,
@@ -60,6 +66,12 @@ class BootstrapService:
                 code=configuration.branch_code,
                 timezone=configuration.company_timezone,
             )
+            # Flush before projecting the branch context.  SQLAlchemy assigns
+            # the UUID default at INSERT time; using ``branch.id`` before the
+            # flush would publish an empty/None branch context to RLS.
+            await session.flush()
+            set_database_tenant_context(company.id, (branch.id,))
+            await apply_database_tenant_context(session)
             administrator = self.repository.create_administrator(
                 session,
                 email=str(configuration.administrator_email),
@@ -79,7 +91,7 @@ class BootstrapService:
                 branch_id=branch.id,
                 now=now,
             )
-            permissions = self.repository.create_permissions(
+            permissions = await self.repository.create_permissions(
                 session, permission_catalog.definitions
             )
             roles = self.repository.create_system_roles(
@@ -99,7 +111,7 @@ class BootstrapService:
                     actor_user_id=administrator.id,
                     now=now,
                 )
-            administrator_role = roles[LaunchRoleCode.COMPANY_ADMINISTRATOR.value]
+            administrator_role = roles[configuration.administrator_role_code]
             self.repository.assign_role(
                 session,
                 company_id=company.id,
