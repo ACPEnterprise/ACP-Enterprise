@@ -147,15 +147,19 @@ def test_preview_migrations_use_a_separate_maintenance_database_identity() -> No
     compose = _compose("docker-compose.preview.yml")
 
     runtime_database_url = compose["x-backend-environment"]["DATABASE_URL"]
-    migration_database_url = compose["services"]["migrate"]["environment"]["DATABASE_URL"]
+    migration_database_url = compose["services"]["migrate"]["environment"][
+        "DATABASE_URL"
+    ]
 
     assert runtime_database_url == "${DATABASE_URL:?Set DATABASE_URL in .env.preview}"
     assert migration_database_url == (
         "${MIGRATION_DATABASE_URL:?Set MIGRATION_DATABASE_URL in .env.preview}"
     )
     assert migration_database_url != runtime_database_url
-    assert compose["services"]["migrate"]["command"][-1].strip().endswith(
-        "python -m app.platform.permissions.sync_catalog"
+    assert (
+        compose["services"]["migrate"]["command"][-1]
+        .strip()
+        .endswith("python -m app.platform.permissions.sync_catalog")
     )
 
 
@@ -165,7 +169,9 @@ def test_preview_backup_service_mounts_protected_backup_secret() -> None:
 
     assert backup["profiles"] == ["backup"]
     assert backup["image"].startswith("postgres:16-alpine@sha256:")
-    assert backup["environment"]["PGUSER"] == "${PREVIEW_BACKUP_DATABASE_USER:-acp_backup}"
+    assert (
+        backup["environment"]["PGUSER"] == "${PREVIEW_BACKUP_DATABASE_USER:-acp_backup}"
+    )
     assert backup["environment"]["BACKUP_PASSWORD_FILE"] == (
         "/run/secrets/acp_backup_password"
     )
@@ -176,7 +182,7 @@ def test_preview_backup_service_mounts_protected_backup_secret() -> None:
     command = " ".join(backup["command"])
     assert "pg_dump --format=custom" in command
     assert "pg_restore --list" in command
-    assert "mktemp \"$$BACKUP_ROOT/.preview-$$timestamp.dump.XXXXXX\"" in command
+    assert 'mktemp "$$BACKUP_ROOT/.preview-$$timestamp.dump.XXXXXX"' in command
     assert compose["secrets"]["preview_backup_password"]["file"] == (
         "${PREVIEW_BACKUP_SECRET_FILE_HOST:?Set PREVIEW_BACKUP_SECRET_FILE_HOST in .env.preview}"
     )
@@ -195,7 +201,10 @@ def test_preview_backend_images_include_release_security_executables() -> None:
     dockerfile = (REPOSITORY_ROOT / "backend/Dockerfile.preview").read_text(
         encoding="utf-8"
     )
-    assert "COPY --chown=acp:acp scripts/protected-database-security-probe.py" in dockerfile
+    assert (
+        "COPY --chown=acp:acp scripts/protected-database-security-probe.py"
+        in dockerfile
+    )
     assert "COPY --chown=acp:acp scripts/protected-runtime-check.py" in dockerfile
     assert "COPY --chown=acp:acp scripts/protected-smoke-check.py" in dockerfile
 

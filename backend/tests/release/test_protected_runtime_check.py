@@ -30,7 +30,9 @@ def runtime(tmp_path: Path) -> Path:
     return root
 
 
-def test_postgres_check_requires_authenticated_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_postgres_check_requires_authenticated_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
     calls: list[list[str]] = []
@@ -42,14 +44,18 @@ def test_postgres_check_requires_authenticated_identity(monkeypatch: pytest.Monk
         return "app_user|preview|false"
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    result = checked.check_postgres(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+    result = checked.check_postgres(
+        root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2"
+    )
 
     assert result["status"] == "PASS"
     assert result["superuser"] == "false"
     assert any("pg_isready" in item for command in calls for item in command)
 
 
-def test_backend_check_is_not_dispatched_to_redis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_backend_check_is_not_dispatched_to_redis(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
     calls: list[list[str]] = []
@@ -61,53 +67,67 @@ def test_backend_check_is_not_dispatched_to_redis(monkeypatch: pytest.MonkeyPatc
         return ""
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    result = checked.check_backend(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+    result = checked.check_backend(
+        root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2"
+    )
 
     assert result["service"] == "backend"
     assert any("127.0.0.1:8000/health" in item for command in calls for item in command)
     assert all("redis" not in item for command in calls for item in command)
 
 
-def test_database_security_rejects_privileged_role(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_database_security_rejects_privileged_role(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
 
     def fake(command: list[str]) -> str:
         if "alembic" in command:
             return "s1a3g5k7m9q2 (head)"
-        return json.dumps({
-            "role": "postgres",
-            "application_table_count": 429,
-            "tenant_table_count": 411,
-            "forced_rls_count": 411,
-            "tenant_tables_without_rls": 0,
-            "tenant_tables_without_forced_rls": 0,
-        })
+        return json.dumps(
+            {
+                "role": "postgres",
+                "application_table_count": 429,
+                "tenant_table_count": 411,
+                "forced_rls_count": 411,
+                "tenant_tables_without_rls": 0,
+                "tenant_tables_without_forced_rls": 0,
+            }
+        )
 
     monkeypatch.setattr(checked, "run_read_only", fake)
     with pytest.raises(checked.RuntimeCheckError, match="incomplete evidence"):
-        checked.check_database_security(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+        checked.check_database_security(
+            root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2"
+        )
 
 
-def test_database_security_rejects_missing_forced_rls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_database_security_rejects_missing_forced_rls(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
 
     def fake(command: list[str]) -> str:
         if "alembic" in command:
             return "s1a3g5k7m9q2 (head)"
-        return json.dumps({
-            "role": "acp_app",
-            "application_table_count": 429,
-            "tenant_table_count": 411,
-            "forced_rls_count": 410,
-            "tenant_tables_without_rls": 0,
-            "tenant_tables_without_forced_rls": 1,
-        })
+        return json.dumps(
+            {
+                "role": "acp_app",
+                "application_table_count": 429,
+                "tenant_table_count": 411,
+                "forced_rls_count": 410,
+                "tenant_tables_without_rls": 0,
+                "tenant_tables_without_forced_rls": 1,
+            }
+        )
 
     monkeypatch.setattr(checked, "run_read_only", fake)
     with pytest.raises(checked.RuntimeCheckError, match="row-level security"):
-        checked.check_database_security(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+        checked.check_database_security(
+            root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2"
+        )
 
 
 def test_database_security_dispatches_to_backend_application_probe(
@@ -121,14 +141,16 @@ def test_database_security_dispatches_to_backend_application_probe(
         calls.append(command)
         if "alembic" in command:
             return "s1a3g5k7m9q2 (head)"
-        return json.dumps({
-            "role": "acp_app",
-            "application_table_count": 429,
-            "tenant_table_count": 411,
-            "forced_rls_count": 411,
-            "tenant_tables_without_rls": 0,
-            "tenant_tables_without_forced_rls": 0,
-        })
+        return json.dumps(
+            {
+                "role": "acp_app",
+                "application_table_count": 429,
+                "tenant_table_count": 411,
+                "forced_rls_count": 411,
+                "tenant_tables_without_rls": 0,
+                "tenant_tables_without_forced_rls": 0,
+            }
+        )
 
     monkeypatch.setattr(checked, "run_read_only", fake)
     result = checked.check_database_security(
@@ -141,24 +163,28 @@ def test_database_security_dispatches_to_backend_application_probe(
     assert "postgres" not in probe_command
 
 
-def test_postgres_superuser_state_is_reported(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_postgres_superuser_state_is_reported(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
 
     def fake(command: list[str]) -> str:
         return (
-            "s1a3g5k7m9q2 (head)"
-            if "alembic" in command
-            else "postgres|preview|true"
+            "s1a3g5k7m9q2 (head)" if "alembic" in command else "postgres|preview|true"
         )
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    result = checked.check_postgres(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+    result = checked.check_postgres(
+        root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2"
+    )
     assert result["status"] == "PASS"
     assert result["superuser"] == "true"
 
 
-def test_redis_check_requires_authenticated_health_secret(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_redis_check_requires_authenticated_health_secret(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
     calls: list[list[str]] = []
@@ -170,16 +196,20 @@ def test_redis_check_requires_authenticated_health_secret(monkeypatch: pytest.Mo
         return ""
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    result = checked.check_redis(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
+    result = checked.check_redis(
+        root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2"
+    )
 
     assert result == {"service": "redis", "status": "PASS", "identity": "acp-health"}
     redis_command = " ".join(calls[-1])
     assert "/run/secrets/redis/health-password" in redis_command
-    assert "REDISCLI_AUTH=\"$(cat" in redis_command
+    assert 'REDISCLI_AUTH="$(cat' in redis_command
     assert "ACL WHOAMI" not in redis_command
 
 
-def test_runtime_identity_mismatch_blocks_before_health(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_runtime_identity_mismatch_blocks_before_health(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
     (root / "current" / ".release-metadata.json").write_text(
@@ -193,12 +223,16 @@ def test_runtime_identity_mismatch_blocks_before_health(monkeypatch: pytest.Monk
         return ""
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    with pytest.raises(checked.RuntimeCheckError, match="application identity mismatch"):
+    with pytest.raises(
+        checked.RuntimeCheckError, match="application identity mismatch"
+    ):
         checked.check_redis(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
     assert called is False
 
 
-def test_postgres_failed_health_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_postgres_failed_health_blocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
 
@@ -208,11 +242,16 @@ def test_postgres_failed_health_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path
         raise checked.RuntimeCheckError("protected health command failed")
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    with pytest.raises(checked.RuntimeCheckError, match="PostgreSQL authenticated health is unavailable"):
+    with pytest.raises(
+        checked.RuntimeCheckError,
+        match="PostgreSQL authenticated health is unavailable",
+    ):
         checked.check_postgres(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")
 
 
-def test_redis_missing_health_credentials_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_redis_missing_health_credentials_blocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     checked = module()
     root = runtime(tmp_path)
 
@@ -222,5 +261,8 @@ def test_redis_missing_health_credentials_blocks(monkeypatch: pytest.MonkeyPatch
         raise checked.RuntimeCheckError("protected health command failed")
 
     monkeypatch.setattr(checked, "run_read_only", fake)
-    with pytest.raises(checked.RuntimeCheckError, match="Redis health credentials or connection are unavailable"):
+    with pytest.raises(
+        checked.RuntimeCheckError,
+        match="Redis health credentials or connection are unavailable",
+    ):
         checked.check_redis(root, "acp-enterprise-preview", "a" * 40, "s1a3g5k7m9q2")

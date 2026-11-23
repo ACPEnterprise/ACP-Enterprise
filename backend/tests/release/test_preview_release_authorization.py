@@ -26,7 +26,9 @@ def approval_fixture(tmp_path: Path) -> tuple[object, Path, Path, dict[str, obje
     private = Ed25519PrivateKey.generate()
     public_path = tmp_path / "issuer-public.pem"
     public_path.write_bytes(
-        private.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+        private.public_key().public_bytes(
+            Encoding.PEM, PublicFormat.SubjectPublicKeyInfo
+        )
     )
     public_path.chmod(0o600)
     issued = datetime.now(timezone.utc) - timedelta(minutes=1)
@@ -76,7 +78,9 @@ def expected(module: object) -> dict[str, str]:
     }
 
 
-def test_enterprise_approval_validates_and_binds_all_release_inputs(tmp_path: Path) -> None:
+def test_enterprise_approval_validates_and_binds_all_release_inputs(
+    tmp_path: Path,
+) -> None:
     module, artifact, public_key, _ = approval_fixture(tmp_path)
 
     result = module.validate_approval(artifact, public_key, **expected(module))
@@ -91,7 +95,11 @@ def test_enterprise_approval_validates_and_binds_all_release_inputs(tmp_path: Pa
     (
         ("candidate_sha", "e" * 40, "candidate does not match"),
         ("backup_receipt_sha256", "f" * 64, "backup receipt does not match"),
-        ("rollback_target", {"sha": "e" * 40, "release": "wrong"}, "rollback target does not match"),
+        (
+            "rollback_target",
+            {"sha": "e" * 40, "release": "wrong"},
+            "rollback target does not match",
+        ),
     ),
 )
 def test_approval_mismatch_fails_closed(
@@ -124,7 +132,9 @@ def test_approval_artifact_cannot_be_issued_by_candidate(tmp_path: Path) -> None
     artifact_path.write_text(json.dumps(artifact) + "\n", encoding="utf-8")
     artifact_path.chmod(0o600)
 
-    with pytest.raises(module.ApprovalError, match="not the Enterprise release authority"):
+    with pytest.raises(
+        module.ApprovalError, match="not the Enterprise release authority"
+    ):
         module.validate_approval(artifact_path, public_key, **expected(module))
 
 

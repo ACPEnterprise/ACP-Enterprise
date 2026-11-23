@@ -75,8 +75,8 @@ def test_notifications_exist_only_when_owner_action_can_change_state() -> None:
         )
 
 
-from tests.engineering_execution.test_engineering_execution import approved_command  # noqa: E402
-from tests.worker_control.test_worker_control import (  # noqa: E402
+from tests.engineering_execution.test_engineering_execution import approved_command
+from tests.worker_control.test_worker_control import (
     register_available_worker,
 )
 

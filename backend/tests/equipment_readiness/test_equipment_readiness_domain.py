@@ -52,7 +52,7 @@ def test_position_only_supplies_non_authoritative_setup_hint():
     )
 
 
-from app.equipment_readiness.schemas import DailyConfirmationRequest  # noqa: E402
+from app.equipment_readiness.schemas import DailyConfirmationRequest
 
 
 def test_equipment_mismatch_is_a_soft_warning_not_scheduling_ineligibility():

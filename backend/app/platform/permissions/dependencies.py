@@ -49,7 +49,9 @@ async def get_authorization_context(
         )
         # Replace the preliminary branch with the complete verified set for
         # subsequent application transactions in this request.
-        set_database_tenant_context(context.company.id, tuple(context.authorized_branch_ids))
+        set_database_tenant_context(
+            context.company.id, tuple(context.authorized_branch_ids)
+        )
         await access_agreement_service.require_access(session, context=context)
         return context
     except (AgreementRequiredError, AgreementNotConfiguredError) as error:
@@ -95,7 +97,9 @@ async def get_unrestricted_authorization_context(
             company_id=company_id,
             branch_id=active_branch_id,
         )
-        set_database_tenant_context(context.company.id, tuple(context.authorized_branch_ids))
+        set_database_tenant_context(
+            context.company.id, tuple(context.authorized_branch_ids)
+        )
         return context
     except AuthorizationError as error:
         authorization_decision_logger.denied(
