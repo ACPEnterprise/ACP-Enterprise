@@ -21,6 +21,10 @@ class SmokeBlocked(RuntimeError):
     pass
 
 
+DEFAULT_AUTHENTICATED_ROUTE = "/api/v1/customers"
+DEFAULT_AUTHORIZATION_ROUTE = "/api/v1/company-admin/permissions"
+
+
 def secret(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
         raise SmokeBlocked("approved smoke credential file is unavailable")
@@ -121,9 +125,13 @@ def main() -> int:
         if args.credential_file is None:
             raise SmokeBlocked("approved smoke credential file is required")
         if args.check == "authentication":
-            result = check_authentication(args.path or "/api/v1/auth/me", args.credential_file)
+            result = check_authentication(
+                args.path or DEFAULT_AUTHENTICATED_ROUTE, args.credential_file
+            )
         elif args.check == "authorization":
-            result = check_authorization(args.path or "/api/v1/admin/permissions", args.credential_file)
+            result = check_authorization(
+                args.path or DEFAULT_AUTHORIZATION_ROUTE, args.credential_file
+            )
         elif args.check == "tenant-isolation":
             result = check_tenant_isolation(args.path or "/api/v1/companies/current", args.credential_file)
         elif args.check == "routes":
