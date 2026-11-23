@@ -78,6 +78,8 @@ schema, and Redis healthy.
 - Old credential rejected after rotation: PASS
 - Fresh app container with rotated secret: HEALTHY
 - Invalid credential container: blocked before healthy readiness
+- Missing backup credential file: backup blocked before dump publication
+- Injected migration error: transactional DDL rolled back with no probe table
 - Existing pool remained healthy until controlled restart
 - Rollback to prior credential and fresh app container: HEALTHY
 - Connection-limit exhaustion: detected and denied
