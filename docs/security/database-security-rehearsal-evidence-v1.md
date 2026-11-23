@@ -41,6 +41,8 @@ metadata inventory is preserved separately as
 - `acp_tenant_isolation` policies: 411
 - Isolated `acp_app` role flags: `NOSUPERUSER`, `NOCREATEROLE`, `NOCREATEDB`,
   `NOREPLICATION`, `NOBYPASSRLS`
+- Isolated role-flag qualification also passed for the reference
+  `acp_migrate` and `acp_backup` roles.
 
 The reusable security probe passed:
 
@@ -91,3 +93,8 @@ This is not a candidate failure. It is the required live-change gate: the
 application role, migration role, backup role, protected runtime secrets,
 RLS migration, and rollback plan must be approved and applied by Enterprise
 as one reversible change set. No live transition was attempted.
+
+The existing backup script still uses the container owner for `pg_dump`; a
+full-database backup path compatible with forced RLS is therefore an explicit
+Enterprise approval item. The rehearsal does not claim that the live backup
+role has been granted or that the live backup script has been switched.

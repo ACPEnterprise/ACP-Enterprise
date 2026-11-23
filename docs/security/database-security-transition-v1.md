@@ -56,6 +56,16 @@ The application must never own the migration or backup role.  Rotation is a
 credential-provider operation with a rollback credential retained until the
 transition is accepted.
 
+The isolated rehearsal verifies the role capability flags, but it does not
+claim that the current Beta backup script is ready for the transition: that
+script still invokes `pg_dump` through the container owner.  Because forced
+RLS also applies to table owners, Enterprise must choose and qualify one
+controlled full-database backup path before the live switch: an approved
+physical/database snapshot service, or a separately protected backup
+principal with the minimum approved capability to capture every tenant and
+restore it.  `acp_backup` must not be used by the API and its final privilege
+shape is a live-change approval item.
+
 The Redis ACL used by the runtime must disable the default user (`user default
 off`) and grant only the named runtime/health principals.  An ACL that leaves
 the default user enabled can make protected-mode health checks fail or create an
