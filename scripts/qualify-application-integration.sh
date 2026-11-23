@@ -175,18 +175,25 @@ async def main():
 asyncio.run(main())
 PY
 
-# Prove the image contains the executable used by the governed protected-smoke
-# path.  The HTTP acceptance above exercises the same real routes; this check
-# prevents a release image from silently omitting the verifier itself.
+# Prove the image contains every executable used by the governed database,
+# runtime, and protected-smoke paths. The HTTP acceptance above exercises the
+# real routes; this check prevents a release image from silently omitting a
+# verifier or substituting a host-only checkout.
 compose exec --no-TTY backend python - <<'PY'
 from pathlib import Path
 
-executable = Path("/app/scripts/protected_smoke_check.py")
-if not executable.is_file():
-    raise SystemExit("protected smoke executable is missing from the backend image")
+executables = (
+    Path("/app/scripts/protected-database-security-probe.py"),
+    Path("/app/scripts/protected-runtime-check.py"),
+    Path("/app/scripts/protected-smoke-check.py"),
+    Path("/app/scripts/protected_smoke_check.py"),
+)
+missing = [str(path) for path in executables if not path.is_file()]
+if missing:
+    raise SystemExit(f"release executable(s) missing from backend image: {missing}")
 import scripts.protected_smoke_check  # noqa: F401
 
-print("backend smoke executable and import: PASS")
+print("backend security and smoke executables plus import: PASS")
 
 PY
 
