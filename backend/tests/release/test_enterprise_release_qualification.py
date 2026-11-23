@@ -63,6 +63,7 @@ def test_release_catalog_covers_required_gates() -> None:
         "secret_custody",
         "release_revision",
         "rollback_readiness",
+        "preview_approval",
         "postdeploy_routes",
     } <= keys
 

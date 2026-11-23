@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "enterprise-preview-release-approval/v1",
+  "title": "Enterprise Beta-only Preview release approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "approval_id",
+    "candidate_sha",
+    "migration_head",
+    "backup_receipt_sha256",
+    "restore_receipt_sha256",
+    "rollback_target",
+    "scope",
+    "issued_at",
+    "expires_at",
+    "authorized_issuer",
+    "artifact_digest",
+    "signature"
+  ],
+  "properties": {
+    "contract": {"const": "enterprise-preview-release-approval/v1"},
+    "approval_id": {"type": "string", "format": "uuid"},
+    "candidate_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "migration_head": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{11,63}$"},
+    "backup_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "restore_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "rollback_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha", "release"],
+      "properties": {
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "release": {"type": "string", "minLength": 1}
+      }
+    },
+    "scope": {"const": "BETA_PREVIEW"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "authorized_issuer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "key_id"],
+      "properties": {
+        "id": {"const": "OM1E"},
+        "role": {"const": "Enterprise Release Authority"},
+        "key_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "encoding", "value"],
+      "properties": {
+        "algorithm": {"const": "Ed25519"},
+        "encoding": {"const": "base64"},
+        "value": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
