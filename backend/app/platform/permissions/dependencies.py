@@ -11,6 +11,7 @@ from app.access_agreements.service import (
     access_agreement_service,
 )
 from app.database.session import get_security_database_session
+from app.database.tenant_context import set_database_tenant_context
 from app.platform.auth.dependencies import AuthenticatedIdentity
 from app.platform.permissions.authorization import (
     AuthorizationContext,
@@ -35,12 +36,20 @@ async def get_authorization_context(
     active_branch_id: Annotated[UUID | None, Header(alias="X-Branch-ID")] = None,
 ) -> AuthorizationContext:
     try:
+        # Bound pre-authentication reads to the requested tenant.  The
+        # authorization service still verifies the membership and branch.
+        set_database_tenant_context(
+            company_id, (active_branch_id,) if active_branch_id else ()
+        )
         context = await authorization_service.resolve(
             session,
             authenticated=authenticated,
             company_id=company_id,
             branch_id=active_branch_id,
         )
+        # Replace the preliminary branch with the complete verified set for
+        # subsequent application transactions in this request.
+        set_database_tenant_context(context.company.id, tuple(context.authorized_branch_ids))
         await access_agreement_service.require_access(session, context=context)
         return context
     except (AgreementRequiredError, AgreementNotConfiguredError) as error:
@@ -77,12 +86,17 @@ async def get_unrestricted_authorization_context(
     active_branch_id: Annotated[UUID | None, Header(alias="X-Branch-ID")] = None,
 ) -> AuthorizationContext:
     try:
-        return await authorization_service.resolve(
+        set_database_tenant_context(
+            company_id, (active_branch_id,) if active_branch_id else ()
+        )
+        context = await authorization_service.resolve(
             session,
             authenticated=authenticated,
             company_id=company_id,
             branch_id=active_branch_id,
         )
+        set_database_tenant_context(context.company.id, tuple(context.authorized_branch_ids))
+        return context
     except AuthorizationError as error:
         authorization_decision_logger.denied(
             AuthorizationDenial(

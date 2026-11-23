@@ -1,13 +1,17 @@
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import event, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.database.tenant_context import get_database_tenant_context
 
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
@@ -19,6 +23,31 @@ AsyncSessionFactory = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+@event.listens_for(Session, "after_begin")
+def _set_transaction_tenant_context(
+    session: Session, transaction: object, connection: Connection
+) -> None:
+    """Project the request context into this transaction only.
+
+    ``connection`` is a synchronous SQLAlchemy connection here because this
+    listener runs on AsyncSession's underlying sync session.  No global or
+    pooled-connection ``SET`` is used.
+    """
+
+    del session, transaction
+    context = get_database_tenant_context()
+    if context is None:
+        return
+    connection.execute(
+        text("SELECT set_config('app.company_id', :company_id, true)"),
+        {"company_id": str(context.company_id)},
+    )
+    connection.execute(
+        text("SELECT set_config('app.branch_ids', :branch_ids, true)"),
+        {"branch_ids": ",".join(str(value) for value in context.branch_ids)},
+    )
 
 
 async def get_database_session() -> AsyncGenerator[AsyncSession, None]:

@@ -26,6 +26,7 @@ from app.customer_migration.population_router import (
 from app.customers.router import router as customers_router
 from app.data_quality.router import router as data_quality_router
 from app.database.session import AsyncSessionFactory, engine
+from app.database.tenant_context_middleware import DatabaseTenantContextMiddleware
 from app.demo.router import router as demo_router
 from app.dispatch.router import router as dispatch_router
 from app.employee_operations.router import router as employee_operations_router
@@ -181,6 +182,7 @@ app.add_middleware(
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(TrustedProxyMiddleware, configuration=settings)
 app.add_middleware(SecurityHeadersMiddleware, configuration=settings)
+app.add_middleware(DatabaseTenantContextMiddleware)
 app.add_middleware(CorrelationMiddleware)
 
 app.include_router(health_router)
