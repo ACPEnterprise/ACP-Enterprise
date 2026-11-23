@@ -14,13 +14,19 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
     && pip uninstall --yes pip \
     && /usr/local/bin/python -m pip uninstall --yes pip
 
-COPY --chown=acp:acp . .
+COPY --chown=acp:acp backend/ .
+# Release qualification invokes these checks from inside the assembled backend
+# image. Keep the exact reviewed implementations in the image rather than
+# relying on a host-only checkout or an unverified bind mount.
+COPY --chown=acp:acp scripts/protected-database-security-probe.py /app/scripts/protected-database-security-probe.py
+COPY --chown=acp:acp scripts/protected-runtime-check.py /app/scripts/protected-runtime-check.py
+COPY --chown=acp:acp scripts/protected-smoke-check.py /app/scripts/protected-smoke-check.py
 
 USER acp
 

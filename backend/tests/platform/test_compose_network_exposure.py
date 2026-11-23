@@ -143,6 +143,86 @@ def test_preview_application_runtimes_are_hardened() -> None:
     assert "chmod 700 /var/lib/acp-qbo-production" in command
 
 
+def test_preview_migrations_use_a_separate_maintenance_database_identity() -> None:
+    compose = _compose("docker-compose.preview.yml")
+
+    runtime_database_url = compose["x-backend-environment"]["DATABASE_URL"]
+    migration_database_url = compose["services"]["migrate"]["environment"]["DATABASE_URL"]
+
+    assert runtime_database_url == "${DATABASE_URL:?Set DATABASE_URL in .env.preview}"
+    assert migration_database_url == (
+        "${MIGRATION_DATABASE_URL:?Set MIGRATION_DATABASE_URL in .env.preview}"
+    )
+    assert migration_database_url != runtime_database_url
+    assert compose["services"]["migrate"]["command"][-1].strip().endswith(
+        "python -m app.platform.permissions.sync_catalog"
+    )
+
+
+def test_preview_backup_service_mounts_protected_backup_secret() -> None:
+    compose = _compose("docker-compose.preview.yml")
+    backup = compose["services"]["backup"]
+
+    assert backup["profiles"] == ["backup"]
+    assert backup["image"].startswith("postgres:16-alpine@sha256:")
+    assert backup["environment"]["PGUSER"] == "${PREVIEW_BACKUP_DATABASE_USER:-acp_backup}"
+    assert backup["environment"]["BACKUP_PASSWORD_FILE"] == (
+        "/run/secrets/acp_backup_password"
+    )
+    assert backup["secrets"] == [
+        {"source": "preview_backup_password", "target": "acp_backup_password"}
+    ]
+    assert any(":/backups" in volume for volume in backup["volumes"])
+    command = " ".join(backup["command"])
+    assert "pg_dump --format=custom" in command
+    assert "pg_restore --list" in command
+    assert "mktemp \"$$BACKUP_ROOT/.preview-$$timestamp.dump.XXXXXX\"" in command
+    assert compose["secrets"]["preview_backup_password"]["file"] == (
+        "${PREVIEW_BACKUP_SECRET_FILE_HOST:?Set PREVIEW_BACKUP_SECRET_FILE_HOST in .env.preview}"
+    )
+
+
+def test_preview_backend_images_include_release_security_executables() -> None:
+    compose = _compose("docker-compose.preview.yml")
+    for service in compose["services"].values():
+        if "build" not in service:
+            continue
+        if service["build"].get("dockerfile") != "backend/Dockerfile.preview":
+            continue
+        assert service["build"]["context"] == "."
+        assert service["build"]["dockerfile"] == "backend/Dockerfile.preview"
+
+    dockerfile = (REPOSITORY_ROOT / "backend/Dockerfile.preview").read_text(
+        encoding="utf-8"
+    )
+    assert "COPY --chown=acp:acp scripts/protected-database-security-probe.py" in dockerfile
+    assert "COPY --chown=acp:acp scripts/protected-runtime-check.py" in dockerfile
+    assert "COPY --chown=acp:acp scripts/protected-smoke-check.py" in dockerfile
+
+
+def test_preview_network_ranges_are_overrideable_for_isolated_rehearsals() -> None:
+    compose = _compose("docker-compose.preview.yml")
+    networks = compose["networks"]
+
+    assert networks["preview"]["ipam"]["config"][0]["subnet"] == (
+        "${PREVIEW_NETWORK_SUBNET:-172.30.0.0/24}"
+    )
+    assert networks["mission-control"]["ipam"]["config"][0]["subnet"] == (
+        "${MISSION_CONTROL_NETWORK_SUBNET:-172.32.0.0/24}"
+    )
+
+
+def test_migration_role_can_create_trusted_extensions_without_elevating_app() -> None:
+    sql = (REPOSITORY_ROOT / "scripts/qualify-database-roles.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert "GRANT CREATE ON DATABASE" in sql
+    assert "TO acp_schema_owner" in sql
+    assert "ALTER ROLE acp_app NOSUPERUSER" in sql
+    assert "NOBYPASSRLS" in sql
+
+
 def test_preview_redis_requires_acl_file_and_secret_indirection() -> None:
     compose = _compose("docker-compose.preview.yml")
     redis = compose["services"]["redis"]

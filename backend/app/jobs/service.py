@@ -1174,7 +1174,7 @@ class JobService:
         )
 
 
-from app.field_service.guards import field_job_guard
+from app.field_service.guards import field_job_guard  # noqa: E402
 
 job_service = JobService(
     completion_guards=(field_job_guard,), execution_guards=(field_job_guard,)

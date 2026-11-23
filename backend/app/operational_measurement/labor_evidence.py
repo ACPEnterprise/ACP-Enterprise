@@ -149,7 +149,7 @@ def compose_labor_evidence(
     link_keys = {(x.employee_id, x.job_id, x.appointment_id) for x in links}
 
     paid_by_employee: dict[UUID, list[LaborInterval]] = defaultdict(list)
-    job_intervals: dict[tuple[UUID, UUID, UUID | None], list[LaborInterval]] = (
+    job_intervals: dict[tuple[UUID, UUID | None, UUID | None], list[LaborInterval]] = (
         defaultdict(list)
     )
     for interval in intervals:

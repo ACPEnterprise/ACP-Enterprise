@@ -37,7 +37,7 @@ def test_mission_control_proxy_alias_is_isolated_and_trusted_exactly() -> None:
     assert web["networks"] == {"mission-control": None}
     assert "preview" not in web["networks"]
     assert compose["networks"]["mission-control"]["ipam"]["config"] == [
-        {"subnet": "172.32.0.0/24"}
+        {"subnet": "${MISSION_CONTROL_NETWORK_SUBNET:-172.32.0.0/24}"}
     ]
 
 

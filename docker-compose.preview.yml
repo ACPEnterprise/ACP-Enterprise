@@ -87,10 +87,73 @@ services:
   migrate:
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
-    environment: *backend-environment
-    command: ["alembic", "upgrade", "head"]
+      context: .
+      dockerfile: backend/Dockerfile.preview
+    environment:
+      <<: *backend-environment
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set MIGRATION_DATABASE_URL in .env.preview}
+    # A pristine database must receive the canonical permission catalog before
+    # the backend starts its fail-closed persistence-contract check.  This is
+    # an idempotent, schema-owned maintenance action and does not grant roles.
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        alembic upgrade head
+        python -m app.platform.permissions.sync_catalog
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      preview:
+
+  backup:
+    logging: *default-logging
+    profiles: ["backup"]
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    user: "0:0"
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-acp_enterprise_preview}
+      PGUSER: ${PREVIEW_BACKUP_DATABASE_USER:-acp_backup}
+      BACKUP_ROOT: /backups
+      BACKUP_PASSWORD_FILE: /run/secrets/acp_backup_password
+    secrets:
+      - source: preview_backup_password
+        target: acp_backup_password
+    volumes:
+      - ${PREVIEW_BACKUP_ROOT_HOST:?Set PREVIEW_BACKUP_ROOT_HOST in .env.preview}:/backups
+    command:
+      - sh
+      - -ec
+      - |
+        test -r "$$BACKUP_PASSWORD_FILE"
+        install -d -m 700 "$$BACKUP_ROOT"
+        timestamp="$$(date -u +%Y%m%dT%H%M%SZ)"
+        final_dump="$$BACKUP_ROOT/preview-$$timestamp.dump"
+        temporary_dump="$$(mktemp "$$BACKUP_ROOT/.preview-$$timestamp.dump.XXXXXX")"
+        trap 'rm -f "$$temporary_dump" "$$temporary_dump.sha256"' EXIT HUP INT TERM
+        PGPASSWORD="$$(cat "$$BACKUP_PASSWORD_FILE")" pg_dump --format=custom >"$$temporary_dump"
+        test -s "$$temporary_dump"
+        pg_restore --list <"$$temporary_dump" >/dev/null
+        chmod 600 "$$temporary_dump"
+        checksum="$$(sha256sum "$$temporary_dump" | awk '{print $$1}')"
+        printf '%s  %s\n' "$$checksum" "$$(basename "$$final_dump")" >"$$temporary_dump.sha256"
+        chmod 600 "$$temporary_dump.sha256"
+        mv "$$temporary_dump" "$$final_dump"
+        mv "$$temporary_dump.sha256" "$$final_dump.sha256"
+        trap - EXIT HUP INT TERM
+        echo "preview_backup=$$final_dump"
+        echo "preview_backup_sha256=$$final_dump.sha256"
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,8 +171,8 @@ services:
   backend:
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     environment: *backend-environment
     expose:
       - "8000"
@@ -154,8 +217,8 @@ services:
     profiles: ["mission-control"]
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     environment:
       <<: *backend-environment
       TRUSTED_PROXY_CIDRS: '["172.32.0.0/24"]'
@@ -229,8 +292,8 @@ services:
   identity-delivery-worker:
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     environment:
       <<: *backend-environment
       IDENTITY_OUTBOX_WORKER_ENABLED: "true"
@@ -252,8 +315,8 @@ services:
   qbo-sandbox-init:
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     user: root
     command:
       [
@@ -270,8 +333,8 @@ services:
   qbo-production-init:
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     user: root
     command:
       [
@@ -290,8 +353,8 @@ services:
     logging: *default-logging
     profiles: ["worker"]
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     environment:
       ACP_WORKER_BASE_URL: ${ACP_WORKER_BASE_URL:-http://backend:8000}
       ACP_WORKER_ID: ${ACP_WORKER_ID:-00000000-0000-0000-0000-000000000000}
@@ -332,8 +395,8 @@ services:
     logging: *default-logging
     profiles: ["worker-provision"]
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     environment:
       <<: *backend-environment
       ACP_WORKER_COMPANY_CODE: ${ACP_WORKER_COMPANY_CODE:?Set ACP_WORKER_COMPANY_CODE}
@@ -361,8 +424,8 @@ services:
     logging: *default-logging
     profiles: ["factory-control"]
     build:
-      context: ./backend
-      dockerfile: Dockerfile.preview
+      context: .
+      dockerfile: backend/Dockerfile.preview
     environment:
       FACTORY_CONTROL_BASE_URL: ${FACTORY_CONTROL_BASE_URL:-http://backend:8000}
       FACTORY_CONTROL_WORKER_ID: ${FACTORY_CONTROL_WORKER_ID:-00000000-0000-0000-0000-000000000000}
@@ -433,12 +496,16 @@ volumes:
   preview_qbo_production_state:
   preview_qbo_production_evidence:
 
+secrets:
+  preview_backup_password:
+    file: ${PREVIEW_BACKUP_SECRET_FILE_HOST:?Set PREVIEW_BACKUP_SECRET_FILE_HOST in .env.preview}
+
 networks:
   preview:
     ipam:
       config:
-        - subnet: 172.30.0.0/24
+        - subnet: ${PREVIEW_NETWORK_SUBNET:-172.30.0.0/24}
   mission-control:
     ipam:
       config:
-        - subnet: 172.32.0.0/24
+        - subnet: ${MISSION_CONTROL_NETWORK_SUBNET:-172.32.0.0/24}

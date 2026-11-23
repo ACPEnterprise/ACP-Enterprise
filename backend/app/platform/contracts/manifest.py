@@ -56,7 +56,7 @@ def _build_manifest() -> PlatformContractManifest:
             }
             for item in permission_catalog.definitions
         ),
-        key=lambda item: item["code"],
+        key=lambda item: str(item["code"]),
     )
     codes_digest = _digest([item["code"] for item in definitions])
     catalog_digest = _digest(definitions)

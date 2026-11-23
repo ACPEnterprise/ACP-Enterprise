@@ -23,6 +23,19 @@ ALTER ROLE acp_schema_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLIC
 GRANT acp_schema_owner TO acp_migrate;
 ALTER ROLE acp_migrate SET ROLE acp_schema_owner;
 
+-- Some historical migrations create trusted PostgreSQL extensions (for
+-- example pg_trgm).  Grant database CREATE only to the controlled NOLOGIN
+-- schema owner so acp_migrate can complete that migration through SET ROLE;
+-- acp_app and acp_backup never receive this privilege.
+DO $$
+BEGIN
+  EXECUTE format(
+    'GRANT CREATE ON DATABASE %I TO acp_schema_owner',
+    current_database()
+  );
+END
+$$;
+
 -- Ownership is transferred only by the separately authorized maintenance
 -- operator.  The loop is deterministic and covers current tables/sequences;
 -- default privileges below cover objects created by future migrations.
