@@ -50,21 +50,20 @@ authority, not by an application migration:
 |---|---:|---|---|
 | `acp_app` | yes | API/runtime queries and business mutations | `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `BYPASSRLS` |
 | `acp_migrate` | controlled | Alembic and schema maintenance | application/API use; shared with runtime |
-| `acp_backup` | controlled | backup/restore custody | application/API use; tenant data access outside backup procedure |
+| `acp_backup` | controlled | backup custody | `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`; application/API use |
 
 The application must never own the migration or backup role.  Rotation is a
 credential-provider operation with a rollback credential retained until the
 transition is accepted.
 
-The isolated rehearsal verifies the role capability flags, but it does not
-claim that the current Beta backup script is ready for the transition: that
-script still invokes `pg_dump` through the container owner.  Because forced
-RLS also applies to table owners, Enterprise must choose and qualify one
-controlled full-database backup path before the live switch: an approved
-physical/database snapshot service, or a separately protected backup
-principal with the minimum approved capability to capture every tenant and
-restore it.  `acp_backup` must not be used by the API and its final privilege
-shape is a live-change approval item.
+The isolated rehearsal qualifies `acp_backup` as a separately controlled,
+non-superuser backup principal with `pg_read_all_data` and `BYPASSRLS`.  The
+RLS bypass is required only because a complete backup must capture every
+tenant after `FORCE ROW LEVEL SECURITY`; it is not granted to `acp_app` or
+`acp_migrate`, and `acp_backup` is never used by the API.  Restore is performed
+by the controlled maintenance/database-owner procedure, not by the backup
+principal.  The live backup script must be switched to this protected path as
+part of the approved transition.
 
 The Redis ACL used by the runtime must disable the default user (`user default
 off`) and grant only the named runtime/health principals.  An ACL that leaves

@@ -41,8 +41,10 @@ metadata inventory is preserved separately as
 - `acp_tenant_isolation` policies: 411
 - Isolated `acp_app` role flags: `NOSUPERUSER`, `NOCREATEROLE`, `NOCREATEDB`,
   `NOREPLICATION`, `NOBYPASSRLS`
-- Isolated role-flag qualification also passed for the reference
-  `acp_migrate` and `acp_backup` roles.
+- Isolated role qualification also passed for `acp_migrate` as a non-superuser,
+  non-BYPASSRLS maintenance login, and `acp_backup` as a non-superuser backup
+  login with `pg_read_all_data` plus the narrowly scoped `BYPASSRLS` capability
+  required for a complete forced-RLS backup.
 
 The reusable security probe passed:
 
@@ -94,7 +96,7 @@ application role, migration role, backup role, protected runtime secrets,
 RLS migration, and rollback plan must be approved and applied by Enterprise
 as one reversible change set. No live transition was attempted.
 
-The existing backup script still uses the container owner for `pg_dump`; a
-full-database backup path compatible with forced RLS is therefore an explicit
-Enterprise approval item. The rehearsal does not claim that the live backup
-role has been granted or that the live backup script has been switched.
+The live backup script still uses the container owner for `pg_dump`; switching
+it to the qualified protected backup path remains an explicit Enterprise
+approval item. The rehearsal does not claim that live roles or secrets have
+been changed.

@@ -16,7 +16,11 @@ $$;
 
 ALTER ROLE acp_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 ALTER ROLE acp_migrate NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-ALTER ROLE acp_backup NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+-- A complete backup must capture every tenant despite FORCE RLS.  BYPASSRLS
+-- is therefore limited to this separately controlled backup principal; it is
+-- never granted to the application or migration runtime.
+ALTER ROLE acp_backup NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS;
+GRANT pg_read_all_data TO acp_backup;
 
 -- Grants are intentionally table/schema-specific and must be generated from
 -- the target schema during the isolated rehearsal.  No blanket PUBLIC or
