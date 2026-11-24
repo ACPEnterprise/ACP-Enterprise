@@ -83,6 +83,25 @@ git remote -v
 git worktree list
 ```
 
+If the existing checkout does not yet contain the inventory command, use the
+read-only fallback below first, then fetch the exact handoff branch and create
+an isolated worktree only after Laptop Master verifies the receipt:
+
+```sh
+hostname
+uname -a
+pwd
+git status --short --branch
+git rev-parse HEAD
+git remote -v
+git worktree list
+git fetch --no-tags origin handoff/continuous-engineering-activation-633ad6cd
+git show --stat --oneline FETCH_HEAD
+```
+
+The fetch is not an activation or deployment. Do not checkout, reset, clean,
+stash, merge, or overwrite the existing checkout.
+
 Return the JSON receipt and the exact output of the four Git commands through
 the approved coordination channel. Do not include environment dumps, secret
 values, private-key material, OAuth tokens, database URLs, or customer data.
@@ -108,6 +127,11 @@ report, as booleans only, whether the already-authorized HCP/QBO custody roots
 are mounted; it must not print paths containing secrets or copy source data into
 ordinary logs. No OAuth, provider write, live admission, or customer-data export
 is part of activation.
+
+The laptop currently has read-only custody evidence in Downloads: the HCP CSV
+matches the accepted 4,056,093-byte / 450-column / 5,464-record source digest,
+and the QBO archive matches its accepted SHA and sealed acquisition structure.
+This does not authorize OM2 to copy, extract, admit, or transmit that evidence.
 
 ## Activation acceptance
 
