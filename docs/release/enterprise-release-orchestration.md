@@ -59,6 +59,33 @@ review validation and records all other checks as not yet executed. It is not a
 deployment authorization and cannot produce a `deployment_authorized=true`
 packet.
 
+## Smoke-principal sequencing
+
+Pre-signing smoke readiness is a non-secret contract, not a live credential. It
+validates the canonical token path, mode-0600 root custody, read-only container
+mount, verified company/branch and denial-tenant IDs, the exact provisioner
+digest, and an isolated provisioner rehearsal. Its artifact must explicitly say
+`token_issued: false` and `token_required_for_live_acceptance: true`.
+
+The short-lived release actor and acceptance reader are provisioned only after
+the signed approval validates and the successor schema is current. Their token
+files must be nonempty before post-deployment smoke begins. A missing token is
+therefore a post-approval execution block, never a reason to make pre-signing
+readiness circular or to accept a placeholder token.
+
+The immutable evidence chain is:
+
+```text
+application SHA + tooling SHA
+        -> release-binding manifest digest
+        -> independent-review evidence_archive_sha256
+        -> signed approval independent_review.review_receipt_sha256
+        -> pre-execution evidence validation
+```
+
+This binds release tooling without changing the enrolled issuer utility or
+trust registry.
+
 ## Baseline versus successor
 
 The protected Beta baseline is evidence, not a qualification target for the
@@ -103,4 +130,11 @@ artifact, compatible configuration contract, current schema compatibility,
 credential requirements, health result, and restore procedure. Application
 rollback precedes any database restoration; schema downgrade is not an
 automatic rollback.
+
+For the current Beta baseline, the verified immediate target is
+`enterprise-beta-3d415c07`
+(`3d415c07f4438bbb0cdd93bbf7c6a78f3798457c`). The older
+`enterprise-beta-33f9aca5` is only the predecessor recorded by that release and
+must not be substituted as the successor's rollback target without a separate
+compatibility rehearsal.
 

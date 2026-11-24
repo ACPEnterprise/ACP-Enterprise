@@ -9,6 +9,14 @@ Provisioning is allowed only after a candidate-bound v2 Enterprise approval
 validates successfully and the protected schema is current. It does not itself
 constitute Release GO.
 
+Before approval, release qualification validates only the non-secret smoke
+readiness contract: the canonical token path, root/mode-0600 custody, tenant
+bindings, read-only mount, exact provisioner digest, and an isolated rehearsal.
+The readiness artifact must state that no token has been issued. A real token is
+created only in the approved change window after the signed approval and schema
+readiness gates pass; live authenticated acceptance still requires that real
+token.
+
 ## Protected host custody
 
 On the Beta host, the release actor and reader use separate, root-controlled

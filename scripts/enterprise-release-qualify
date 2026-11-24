@@ -437,6 +437,20 @@ def checks() -> tuple[Check, ...]:
             "An enrolled independent reviewer receipt binds the candidate, migration, receipts, rollback, evidence, and review decision",
         ),
         Check(
+            "smoke_readiness",
+            "Smoke-principal readiness without token issuance",
+            ("presigning", "preview"),
+            None,
+            "Protected token custody, tenant bindings, provisioner sequencing, and isolated procedure evidence pass without an issued token",
+        ),
+        Check(
+            "release_evidence_binding",
+            "Application/tooling release evidence binding",
+            ("presigning", "preview"),
+            None,
+            "Immutable evidence binds application SHA, tooling SHA, migration, receipts, rollback, and smoke readiness",
+        ),
+        Check(
             "postdeploy_routes",
             "Post-deployment route smoke",
             ("postdeploy",),
@@ -916,6 +930,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-restore-receipt-sha256")
     parser.add_argument("--approval-artifact", type=Path)
     parser.add_argument("--review-receipt", type=Path)
+    parser.add_argument("--evidence-manifest", type=Path)
+    parser.add_argument("--smoke-readiness", type=Path)
+    parser.add_argument("--smoke-company-id")
+    parser.add_argument("--smoke-branch-id")
+    parser.add_argument("--smoke-denied-company-id")
+    parser.add_argument("--smoke-provisioner-path", type=Path)
     parser.add_argument("--authority-registry", type=Path)
     parser.add_argument("--trusted-issuer-key", type=Path)
     parser.add_argument("--trusted-issuer-key-id")
@@ -1053,14 +1073,21 @@ def main() -> int:
         elif check.key == "independent_review":
             required = (
                 args.review_receipt,
+                args.evidence_manifest,
+                args.smoke_readiness,
                 args.authority_registry,
                 args.trusted_issuer_key,
                 args.trusted_issuer_key_id,
+                tooling_sha,
                 args.migration_head,
                 args.expected_backup_receipt_sha256,
                 args.expected_restore_receipt_sha256,
                 args.rollback_target_sha,
                 args.rollback_target_release,
+                args.smoke_company_id,
+                args.smoke_branch_id,
+                args.smoke_denied_company_id,
+                args.smoke_provisioner_path,
             )
             if any(value is None for value in required):
                 results.append(
@@ -1080,6 +1107,20 @@ def main() -> int:
                         "scripts/validate-independent-review.py",
                         "--review-receipt",
                         str(args.review_receipt),
+                        "--evidence-manifest",
+                        str(args.evidence_manifest),
+                        "--smoke-readiness",
+                        str(args.smoke_readiness),
+                        "--tooling-sha",
+                        tooling_sha,
+                        "--company-id",
+                        str(args.smoke_company_id),
+                        "--branch-id",
+                        str(args.smoke_branch_id),
+                        "--denied-company-id",
+                        str(args.smoke_denied_company_id),
+                        "--provisioner-path",
+                        str(args.smoke_provisioner_path),
                         "--registry",
                         str(args.authority_registry),
                         "--trusted-key",
@@ -1104,6 +1145,116 @@ def main() -> int:
                 )
                 results.append(
                     run_command(review_check, root, artifact, candidate, tooling_sha)
+                )
+        elif check.key == "smoke_readiness":
+            required = (
+                args.smoke_readiness,
+                args.smoke_company_id,
+                args.smoke_branch_id,
+                args.smoke_denied_company_id,
+                args.smoke_provisioner_path,
+            )
+            if any(value is None for value in required):
+                results.append(
+                    placeholder(
+                        check,
+                        "BLOCKED",
+                        "non-secret smoke-readiness evidence and verified tenant bindings are required",
+                    )
+                )
+            else:
+                smoke_check = Check(
+                    check.key,
+                    check.title,
+                    check.profiles,
+                    (
+                        sys.executable,
+                        "scripts/validate-release-evidence.py",
+                        "smoke-readiness",
+                        "--artifact",
+                        str(args.smoke_readiness),
+                        "--candidate-sha",
+                        candidate,
+                        "--tooling-sha",
+                        tooling_sha,
+                        "--company-id",
+                        str(args.smoke_company_id),
+                        "--branch-id",
+                        str(args.smoke_branch_id),
+                        "--denied-company-id",
+                        str(args.smoke_denied_company_id),
+                        "--provisioner-path",
+                        str(args.smoke_provisioner_path),
+                    ),
+                    check.expected,
+                    (sys.executable,),
+                )
+                results.append(
+                    run_command(smoke_check, root, artifact, candidate, tooling_sha)
+                )
+        elif check.key == "release_evidence_binding":
+            required = (
+                args.evidence_manifest,
+                args.smoke_readiness,
+                args.migration_head,
+                args.expected_backup_receipt_sha256,
+                args.expected_restore_receipt_sha256,
+                args.rollback_target_sha,
+                args.rollback_target_release,
+                args.smoke_company_id,
+                args.smoke_branch_id,
+                args.smoke_denied_company_id,
+                args.smoke_provisioner_path,
+            )
+            if any(value is None for value in required):
+                results.append(
+                    placeholder(
+                        check,
+                        "BLOCKED",
+                        "immutable release evidence, smoke readiness, and complete bindings are required",
+                    )
+                )
+            else:
+                evidence_check = Check(
+                    check.key,
+                    check.title,
+                    check.profiles,
+                    (
+                        sys.executable,
+                        "scripts/validate-release-evidence.py",
+                        "evidence-binding",
+                        "--manifest",
+                        str(args.evidence_manifest),
+                        "--smoke-readiness",
+                        str(args.smoke_readiness),
+                        "--candidate-sha",
+                        candidate,
+                        "--tooling-sha",
+                        tooling_sha,
+                        "--company-id",
+                        str(args.smoke_company_id),
+                        "--branch-id",
+                        str(args.smoke_branch_id),
+                        "--denied-company-id",
+                        str(args.smoke_denied_company_id),
+                        "--provisioner-path",
+                        str(args.smoke_provisioner_path),
+                        "--migration-head",
+                        str(args.migration_head),
+                        "--backup-receipt-sha256",
+                        str(args.expected_backup_receipt_sha256),
+                        "--restore-receipt-sha256",
+                        str(args.expected_restore_receipt_sha256),
+                        "--rollback-target-sha",
+                        str(args.rollback_target_sha),
+                        "--rollback-target-release",
+                        str(args.rollback_target_release),
+                    ),
+                    check.expected,
+                    (sys.executable,),
+                )
+                results.append(
+                    run_command(evidence_check, root, artifact, candidate, tooling_sha)
                 )
         elif check.key in {
             "api_health",
