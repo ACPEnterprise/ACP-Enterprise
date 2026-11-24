@@ -288,6 +288,31 @@ def test_runtime_import_isolation_finding(tmp_path: Path) -> None:
     assert any(item.rule_id == "runtime.factory_import" for item in findings)
 
 
+def test_runtime_factory_source_label_is_not_an_import_finding(tmp_path: Path) -> None:
+    service = tmp_path / "backend/app/platform/factory_control/service.py"
+    service.parent.mkdir(parents=True)
+    service.write_text(
+        'event = {"source": "development_factory_controller"}\n',
+        encoding="utf-8",
+    )
+    findings = scan_policies(
+        tmp_path, {"policy": {"allowlisted_paths": [], "suppressions": []}}
+    )
+    assert not any(item.rule_id == "runtime.factory_import" for item in findings)
+
+
+def test_virtual_environment_is_excluded_from_repository_policy_scan(
+    tmp_path: Path,
+) -> None:
+    vendored = tmp_path / "backend/.venv/lib/python3.13/site-packages/vendor.py"
+    vendored.parent.mkdir(parents=True)
+    vendored.write_text("<<<<<<< vendored marker\n", encoding="utf-8")
+    findings = scan_policies(
+        tmp_path, {"policy": {"allowlisted_paths": [], "suppressions": []}}
+    )
+    assert not any(item.path.startswith("backend/.venv/") for item in findings)
+
+
 def test_suppression_requires_rationale_and_remains_visible(tmp_path: Path) -> None:
     router = tmp_path / "backend/app/jobs/router.py"
     router.parent.mkdir(parents=True)

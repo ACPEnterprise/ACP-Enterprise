@@ -15,6 +15,7 @@ EXCLUDED_PARTS = {
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    ".venv",
     "node_modules",
     "dist",
     "__pycache__",
@@ -84,16 +85,6 @@ def _conflict_markers(path: str, text: str) -> list[Finding]:
 
 def _runtime_checks(path: str, text: str) -> list[Finding]:
     findings: list[Finding] = []
-    if "development_factory" in text:
-        findings.append(
-            Finding(
-                "runtime.factory_import",
-                "error",
-                "Runtime application code references Development Factory tooling",
-                path,
-                _line(text, "development_factory"),
-            )
-        )
     if re.search(r"(test_only|bypass_auth|fake_auth)", text, re.IGNORECASE):
         findings.append(
             Finding(
