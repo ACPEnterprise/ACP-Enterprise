@@ -74,9 +74,13 @@ def request(
     try:
         value = json.loads(raw or b"{}")
     except json.JSONDecodeError as error:
-        raise AcceptanceFailure(f"endpoint returned non-JSON status {status}") from error
+        raise AcceptanceFailure(
+            f"endpoint returned non-JSON status {status}"
+        ) from error
     if not isinstance(value, (dict, list)):
-        raise AcceptanceFailure(f"endpoint returned an invalid JSON value status {status}")
+        raise AcceptanceFailure(
+            f"endpoint returned an invalid JSON value status {status}"
+        )
     if expected is not None and status not in expected:
         raise AcceptanceFailure(
             f"unexpected status {status} for {method} {path}: {value}"
@@ -89,7 +93,11 @@ def login(base_url: str, email: str, password: str) -> dict[str, object]:
         base_url,
         "POST",
         "/api/v1/auth/login",
-        body={"email": email, "password": password, "device_label": "isolated-acceptance"},
+        body={
+            "email": email,
+            "password": password,
+            "device_label": "isolated-acceptance",
+        },
         expected={200},
     )
     if not isinstance(result.get("access_token"), str):
@@ -102,7 +110,11 @@ def tenant_headers(
 ) -> tuple[str, str]:
     company_id = str(company["id"])
     branches = company.get("branches")
-    if not isinstance(branches, list) or not branches or not isinstance(branches[0], dict):
+    if (
+        not isinstance(branches, list)
+        or not branches
+        or not isinstance(branches[0], dict)
+    ):
         raise AcceptanceFailure("authenticated company has no discoverable branch")
     branch_id = str(branches[0]["id"])
     return company_id, branch_id
@@ -150,7 +162,9 @@ def initial_flow(
         expected={422},
     )
     if status != 422:
-        raise AcceptanceFailure("tenant headers were not required by the customer route")
+        raise AcceptanceFailure(
+            "tenant headers were not required by the customer route"
+        )
 
     suffix = uuid4().hex[:10]
     customer_status, customer = request(
@@ -169,7 +183,9 @@ def initial_flow(
         expected={201},
     )
     if customer_status != 201 or not customer.get("id"):
-        raise AcceptanceFailure("customer creation did not return an authoritative identity")
+        raise AcceptanceFailure(
+            "customer creation did not return an authoritative identity"
+        )
     customer_id = str(customer["id"])
 
     # Exercise the same real resource after an authorized request. A random
@@ -237,9 +253,9 @@ def initial_flow(
     employee_id = str(technician["employee_id"])
     now = datetime.now(UTC)
     next_slot_minutes = ((now.minute // 30) + 1) * 30
-    window_start = now.replace(
-        minute=0, second=0, microsecond=0
-    ) + timedelta(minutes=next_slot_minutes)
+    window_start = now.replace(minute=0, second=0, microsecond=0) + timedelta(
+        minutes=next_slot_minutes
+    )
     window_end = window_start + timedelta(minutes=60)
     request(
         base_url,
@@ -271,7 +287,12 @@ def initial_flow(
             "slot_interval_minutes": 30,
             "default_capacity_units": "1.00",
             "weekly_intervals": [
-                {"day_of_week": day, "start_minute": 0, "end_minute": 1440, "capacity_units": "1.00"}
+                {
+                    "day_of_week": day,
+                    "start_minute": 0,
+                    "end_minute": 1440,
+                    "capacity_units": "1.00",
+                }
                 for day in range(7)
             ],
             "reason": "Isolated application integration acceptance",
@@ -350,7 +371,9 @@ def initial_flow(
         expected={200},
     )
     if str(assignment.get("primary_employee_id")) != employee_id:
-        raise AcceptanceFailure("Dispatch assignment did not preserve technician identity")
+        raise AcceptanceFailure(
+            "Dispatch assignment did not preserve technician identity"
+        )
 
     technician_login = login(base_url, tech_email, tech_password)
     tech_token = str(technician_login["access_token"])
@@ -379,7 +402,9 @@ def initial_flow(
     }
     receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     receipt_path.chmod(0o600)
-    print(json.dumps({"status": "PASS", "phase": "initial", "receipt": receipt_path.name}))
+    print(
+        json.dumps({"status": "PASS", "phase": "initial", "receipt": receipt_path.name})
+    )
 
 
 def readback(base_url: str, credentials: dict[str, object], receipt_path: Path) -> None:

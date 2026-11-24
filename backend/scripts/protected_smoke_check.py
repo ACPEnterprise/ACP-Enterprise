@@ -61,7 +61,9 @@ def tenant_binding() -> tuple[str, str]:
     company_id = os.environ.get("SMOKE_COMPANY_ID")
     branch_id = os.environ.get("SMOKE_BRANCH_ID")
     if not company_id or not branch_id:
-        raise SmokeBlocked("authorized smoke tenant and branch bindings are unavailable")
+        raise SmokeBlocked(
+            "authorized smoke tenant and branch bindings are unavailable"
+        )
     return company_id, branch_id
 
 
@@ -117,7 +119,9 @@ def check_tenant_isolation(path: str, credential_file: Path) -> dict[str, str]:
         branch_id=branch_id,
     )
     if authorized_status != 200:
-        raise SmokeBlocked("authorized tenant request did not establish the real resource")
+        raise SmokeBlocked(
+            "authorized tenant request did not establish the real resource"
+        )
     status, _ = request(
         path,
         token,
@@ -137,8 +141,24 @@ def check_routes(paths: tuple[str, ...], credential_file: Path) -> dict[str, str
         status, _ = request(
             path,
             token,
-            company_id=None if path in {"/health", "/health/live", "/health/ready", "/api/v1/authorization/companies"} else company_id,
-            branch_id=None if path in {"/health", "/health/live", "/health/ready", "/api/v1/authorization/companies"} else branch_id,
+            company_id=None
+            if path
+            in {
+                "/health",
+                "/health/live",
+                "/health/ready",
+                "/api/v1/authorization/companies",
+            }
+            else company_id,
+            branch_id=None
+            if path
+            in {
+                "/health",
+                "/health/live",
+                "/health/ready",
+                "/api/v1/authorization/companies",
+            }
+            else branch_id,
         )
         if status >= 400:
             raise SmokeBlocked("protected route smoke failed")
@@ -157,10 +177,14 @@ def check_background(path: str, credential_file: Path) -> dict[str, str]:
     if payload.get("state") != "HEALTHY":
         raise SmokeBlocked("application readiness is not healthy")
     components = payload.get("components")
-    if not isinstance(components, list) or not components or any(
-        item.get("state") != "HEALTHY"
-        for item in components
-        if isinstance(item, dict)
+    if (
+        not isinstance(components, list)
+        or not components
+        or any(
+            item.get("state") != "HEALTHY"
+            for item in components
+            if isinstance(item, dict)
+        )
     ):
         raise SmokeBlocked("application readiness component is not healthy")
     return {"check": "background-services", "status": "PASS", "source": path}
@@ -206,7 +230,9 @@ def main() -> int:
                 raise SmokeBlocked("protected route list is required")
             result = check_routes(tuple(args.route), args.credential_file)
         else:
-            result = check_background(args.path or "/health/ready", args.credential_file)
+            result = check_background(
+                args.path or "/health/ready", args.credential_file
+            )
     except SmokeBlocked as exc:
         print(f"BLOCKED: {exc}")
         return 2
