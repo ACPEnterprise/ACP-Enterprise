@@ -35,6 +35,13 @@ Compose validation or startup:
 PREVIEW_SMOKE_TOKEN_FILE_HOST=/run/acp-release/acceptance-reader/access-token
 ```
 
+The same protected environment must provide `SMOKE_COMPANY_ID`, resolved from
+the authorized release approval and the intended All County company. The
+provisioners reject a command-line company ID that does not exactly match this
+protected binding. They seed the canonical transaction-local RLS context before
+the first query and clear the task-local context after completion; no supplied
+company ID is trusted by itself.
+
 The backend mounts that file at `/run/secrets/preview-smoke-token:ro`. No token
 value belongs in `.env.preview`, a command argument, logs, chat, source control,
 or browser storage.

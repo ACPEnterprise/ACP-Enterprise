@@ -109,6 +109,7 @@ for smoke_check in authentication authorization tenant-isolation; do
       smoke_path=/api/v1/customers
       ;;
   esac
+  echo "protected principal smoke: $smoke_check"
   compose run --rm --no-deps --no-TTY \
     --volume "$SMOKE_TOKEN_FILE:/run/acceptance/smoke-token:ro" \
     --env SMOKE_BASE_URL=http://frontend \
@@ -140,6 +141,209 @@ done
   --credential-file "$CREDENTIAL_FILE" \
   --receipt "$RECEIPT_FILE" \
   --readback
+
+# Exercise the actual protected principal lifecycle under the assembled
+# acp_app runtime.  The token custody directory is disposable, private, and
+# never printed or included in the acceptance receipt.
+PRINCIPAL_CUSTODY_DIR="$WORK_DIR/principal-custody"
+install -d -m 0700 "$PRINCIPAL_CUSTODY_DIR/release-actor" \
+  "$PRINCIPAL_CUSTODY_DIR/acceptance-reader"
+
+actor_output="$(compose run --rm --no-deps --no-TTY \
+  --env SMOKE_COMPANY_ID="$smoke_company_id" \
+  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  backend python -m scripts.provision_beta_release_actor \
+  --company-id "$smoke_company_id" --minutes 5)"
+actor_json="$(printf '%s\n' "$actor_output" | awk '/^\{/{line=$0} END{print line}')"
+if [[ -z "$actor_json" ]]; then
+  echo "release actor provisioning produced no metadata" >&2
+  exit 1
+fi
+actor_session="$(printf '%s' "$actor_json" | jq -r '.session_id')"
+if [[ -z "$actor_session" || "$actor_session" == "null" ]]; then
+  echo "release actor provisioning did not return a session reference" >&2
+  exit 1
+fi
+
+reader_output="$(compose run --rm --no-deps --no-TTY \
+  --env SMOKE_COMPANY_ID="$smoke_company_id" \
+  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --entrypoint /bin/sh backend -eu -c '
+    ACP_RELEASE_ACTOR_TOKEN="$(cat /run/acp-release/release-actor/access-token)"
+    export ACP_RELEASE_ACTOR_TOKEN
+    python -m scripts.provision_acceptance_readonly_principal \
+      --company-id "$SMOKE_COMPANY_ID" \
+      --minutes 5 \
+      --token-output /run/acp-release/acceptance-reader/access-token
+    unset ACP_RELEASE_ACTOR_TOKEN
+  ')"
+reader_json="$(printf '%s\n' "$reader_output" | awk '/^\{/{line=$0} END{print line}')"
+reader_id="$(printf '%s' "$reader_json" | jq -r '.principal_id')"
+reader_created="$(printf '%s' "$reader_json" | jq -r '.created')"
+if [[ -z "$reader_id" || "$reader_id" == "null" || "$reader_created" != "true" ]]; then
+  echo "acceptance reader provisioning did not create a bounded principal" >&2
+  exit 1
+fi
+
+replay_output="$(compose run --rm --no-deps --no-TTY \
+  --env SMOKE_COMPANY_ID="$smoke_company_id" \
+  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --entrypoint /bin/sh backend -eu -c '
+    ACP_RELEASE_ACTOR_TOKEN="$(cat /run/acp-release/release-actor/access-token)"
+    export ACP_RELEASE_ACTOR_TOKEN
+    python -m scripts.provision_acceptance_readonly_principal \
+      --company-id "$SMOKE_COMPANY_ID" \
+      --minutes 5 \
+      --token-output /run/acp-release/acceptance-reader/access-token
+    unset ACP_RELEASE_ACTOR_TOKEN
+  ')"
+replay_json="$(printf '%s\n' "$replay_output" | awk '/^\{/{line=$0} END{print line}')"
+if [[ "$(printf '%s' "$replay_json" | jq -r '.principal_id')" != "$reader_id" \
+  || "$(printf '%s' "$replay_json" | jq -r '.created')" != "false" ]]; then
+  echo "acceptance reader replay was not idempotent" >&2
+  exit 1
+fi
+echo "acceptance reader metadata: principal=$reader_id created=true,replay=false"
+
+compose run --rm --no-deps --no-TTY \
+  --env SMOKE_COMPANY_ID="$smoke_company_id" \
+  --env ACP_ACCEPTANCE_PRINCIPAL_ID="$reader_id" \
+  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --entrypoint /bin/sh backend -eu -c '
+    python - <<'PY'
+import asyncio
+import os
+from datetime import timedelta
+from uuid import UUID
+
+from app import main as application_model_registry  # noqa: F401
+from app.database.session import AsyncSessionFactory
+from app.database.tenant_context import set_database_tenant_context
+from app.platform.auth.errors import SessionInvalidError
+from app.platform.auth.services import access_token_service, authentication_service
+from app.platform.permissions.authorization import authorization_service
+from app.platform.service_principals.service import (
+    AcceptanceServicePrincipalService,
+)
+from app.platform.service_principals.release_actor import utc_now
+
+
+async def main() -> None:
+    company_id = UUID(os.environ["SMOKE_COMPANY_ID"])
+    set_database_tenant_context(company_id)
+    actor_token = open(
+        "/run/acp-release/release-actor/access-token", encoding="utf-8"
+    ).read().strip()
+    actor_claims = access_token_service.decode(actor_token)
+    async with AsyncSessionFactory() as session:
+        authenticated = await authentication_service.validate_access_context(
+            session, actor_claims
+        )
+        context = await authorization_service.resolve(
+            session,
+            authenticated=authenticated,
+            company_id=company_id,
+            branch_id=None,
+        )
+        await session.rollback()
+        async with session.begin():
+            issued = await AcceptanceServicePrincipalService().issue_session(
+                session,
+                context=context,
+                principal_id=UUID(os.environ["ACP_ACCEPTANCE_PRINCIPAL_ID"]),
+                lifetime=timedelta(minutes=5),
+                now=utc_now() - timedelta(minutes=10),
+            )
+    try:
+        async with AsyncSessionFactory() as session:
+            await authentication_service.validate_access_context(
+                session, access_token_service.decode(issued.access_token)
+            )
+    except SessionInvalidError:
+        print("acceptance reader expiration enforcement: PASS")
+    else:
+        raise SystemExit("expired acceptance reader session was accepted")
+
+
+asyncio.run(main())
+PY
+  '
+
+compose run --rm --no-deps --no-TTY \
+  --volume "$PRINCIPAL_CUSTODY_DIR/acceptance-reader/access-token:/run/acceptance-reader/access-token:ro" \
+  --env SMOKE_COMPANY_ID="$smoke_company_id" \
+  backend python - <<'PY'
+import asyncio
+import os
+from pathlib import Path
+from uuid import UUID
+
+from app import main as application_model_registry  # noqa: F401
+from app.database.session import AsyncSessionFactory
+from app.database.tenant_context import set_database_tenant_context
+from app.platform.auth.services import access_token_service, authentication_service
+
+
+async def main() -> None:
+    set_database_tenant_context(UUID(os.environ["SMOKE_COMPANY_ID"]))
+    token = Path("/run/acceptance-reader/access-token").read_text().strip()
+    claims = access_token_service.decode(token)
+    async with AsyncSessionFactory() as session:
+        await authentication_service.validate_access_context(session, claims)
+    print("acceptance reader token authentication: PASS")
+
+
+asyncio.run(main())
+PY
+
+for smoke_check in authentication authorization tenant-isolation; do
+  case "$smoke_check" in
+    authentication)
+      smoke_path=/api/v1/authorization/companies
+      ;;
+    authorization|tenant-isolation)
+      smoke_path=/api/v1/workforce/employees
+      ;;
+  esac
+  echo "acceptance reader smoke: $smoke_check"
+  compose run --rm --no-deps --no-TTY \
+    --volume "$PRINCIPAL_CUSTODY_DIR/acceptance-reader/access-token:/run/acceptance/smoke-token:ro" \
+    --env SMOKE_BASE_URL=http://frontend \
+    --env SMOKE_COMPANY_ID="$smoke_company_id" \
+    --env SMOKE_BRANCH_ID="$smoke_branch_id" \
+    --env SMOKE_DENIED_COMPANY_ID="$smoke_denied_company_id" \
+    --env SMOKE_DENIED_BRANCH_ID="$smoke_branch_id" \
+    backend python /app/scripts/protected_smoke_check.py \
+    --check "$smoke_check" \
+    --path "$smoke_path" \
+    --credential-file /run/acceptance/smoke-token
+done
+
+revoke_reader_output="$(compose run --rm --no-deps --no-TTY \
+  --env SMOKE_COMPANY_ID="$smoke_company_id" \
+  --env ACP_ACCEPTANCE_PRINCIPAL_ID="$reader_id" \
+  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --entrypoint /bin/sh backend -eu -c '
+    ACP_RELEASE_ACTOR_TOKEN="$(cat /run/acp-release/release-actor/access-token)"
+    export ACP_RELEASE_ACTOR_TOKEN
+    python -m scripts.revoke_acceptance_readonly_principal \
+      --company-id "$SMOKE_COMPANY_ID" \
+      --principal-id "$ACP_ACCEPTANCE_PRINCIPAL_ID"
+    unset ACP_RELEASE_ACTOR_TOKEN
+  ')"
+if ! printf '%s\n' "$revoke_reader_output" | grep -q '"state": "revoked"'; then
+  echo "acceptance reader revocation did not complete" >&2
+  exit 1
+fi
+
+compose run --rm --no-deps --no-TTY \
+  --env SMOKE_COMPANY_ID="$smoke_company_id" \
+  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  backend python -m scripts.revoke_beta_release_actor \
+  --company-id "$smoke_company_id"
+rm -f "$PRINCIPAL_CUSTODY_DIR/acceptance-reader/access-token" \
+  "$PRINCIPAL_CUSTODY_DIR/release-actor/access-token"
+echo "protected principal lifecycle: PASS (provision, issue, replay, smoke, revoke, cleanup)"
 
 # Prove the runtime identity, role attributes, and RLS posture from inside the
 # actual backend.  A username-only assertion is insufficient: an elevated

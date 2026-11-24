@@ -16,33 +16,42 @@ from app.platform.auth.services import access_token_service, authentication_serv
 from app.platform.permissions.authorization import authorization_service
 from app.platform.service_principals.service import acceptance_service_principal_service
 
+from scripts.principal_tenant_context import (
+    clear_protected_company_context,
+    establish_protected_company_context,
+)
+
 
 async def run(args: argparse.Namespace) -> dict[str, object]:
     actor_token = os.environ.get("ACP_RELEASE_ACTOR_TOKEN")
     if not actor_token:
         raise RuntimeError("ACP_RELEASE_ACTOR_TOKEN is required.")
     claims = access_token_service.decode(actor_token)
-    async with AsyncSessionFactory() as session:
-        authenticated = await authentication_service.validate_access_context(
-            session, claims
-        )
-        context = await authorization_service.resolve(
-            session,
-            authenticated=authenticated,
-            company_id=args.company_id,
-            branch_id=None,
-        )
-        await session.rollback()
-        async with session.begin():
-            principal = await acceptance_service_principal_service.provision(
-                session, context=context
+    establish_protected_company_context(args.company_id)
+    try:
+        async with AsyncSessionFactory() as session:
+            authenticated = await authentication_service.validate_access_context(
+                session, claims
             )
-            issued = await acceptance_service_principal_service.issue_session(
+            context = await authorization_service.resolve(
                 session,
-                context=context,
-                principal_id=principal.principal_id,
-                lifetime=timedelta(minutes=args.minutes),
+                authenticated=authenticated,
+                company_id=args.company_id,
+                branch_id=None,
             )
+            await session.rollback()
+            async with session.begin():
+                principal = await acceptance_service_principal_service.provision(
+                    session, context=context
+                )
+                issued = await acceptance_service_principal_service.issue_session(
+                    session,
+                    context=context,
+                    principal_id=principal.principal_id,
+                    lifetime=timedelta(minutes=args.minutes),
+                )
+    finally:
+        clear_protected_company_context()
     output = Path(args.token_output).resolve()
     if str(output) != "/run/acp-release/acceptance-reader/access-token":
         raise ValueError("Acceptance reader token must use canonical custody path.")

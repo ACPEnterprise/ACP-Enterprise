@@ -11,12 +11,21 @@ from app import main as application_model_registry  # noqa: F401
 from app.database.session import AsyncSessionFactory, engine
 from app.platform.service_principals.release_actor import release_actor_service
 
+from scripts.principal_tenant_context import (
+    clear_protected_company_context,
+    establish_protected_company_context,
+)
+
 
 async def run(args: argparse.Namespace) -> dict[str, object]:
-    async with AsyncSessionFactory() as session, session.begin():
-        principal_id = await release_actor_service.revoke(
-            session, company_id=args.company_id
-        )
+    establish_protected_company_context(args.company_id)
+    try:
+        async with AsyncSessionFactory() as session, session.begin():
+            principal_id = await release_actor_service.revoke(
+                session, company_id=args.company_id
+            )
+    finally:
+        clear_protected_company_context()
     return {
         "principal_id": str(principal_id),
         "state": "revoked",

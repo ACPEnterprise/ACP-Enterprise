@@ -21,6 +21,7 @@ def test_protected_smoke_has_independent_checks_and_denial_contracts() -> None:
     ):
         assert f'"{check}"' in source
     assert "SMOKE_DENIED_COMPANY_ID" in source
+    assert "tenant-scoped identities" in source
     assert "anonymous protected request was not rejected" in source
     assert "cross-tenant request was not denied" in source
 

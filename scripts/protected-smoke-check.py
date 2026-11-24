@@ -9,6 +9,9 @@ nonexistent endpoint as a denial.
 The implementation requires an approved smoke credential file; it contains
 the authentication, authorization, tenant-isolation, routes, and
 background-services checks and the Authorization header contract.
+
+tenant-scoped identities require the protected company and branch bindings
+used by the real checker before membership-backed authentication is evaluated.
 "authentication" "authorization" "tenant-isolation" "routes"
 "background-services"
 "anonymous protected request was not rejected"

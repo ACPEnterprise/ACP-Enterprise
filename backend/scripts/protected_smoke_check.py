@@ -73,7 +73,14 @@ def check_authentication(path: str, credential_file: Path) -> dict[str, str]:
         raise SmokeBlocked("anonymous protected request was not rejected")
     token = secret(credential_file)
     if path == "/api/v1/authorization/companies":
-        authorized_status, _ = request(path, token)
+        # Service principals are tenant-scoped identities.  Under forced RLS,
+        # company discovery must be bounded by the protected, independently
+        # verified smoke company/branch before authentication can read the
+        # principal session and membership rows.
+        company_id, branch_id = tenant_binding()
+        authorized_status, _ = request(
+            path, token, company_id=company_id, branch_id=branch_id
+        )
     else:
         company_id, branch_id = tenant_binding()
         authorized_status, _ = request(

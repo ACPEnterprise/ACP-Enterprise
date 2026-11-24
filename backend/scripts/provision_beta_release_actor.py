@@ -14,17 +14,26 @@ from app import main as application_model_registry  # noqa: F401
 from app.database.session import AsyncSessionFactory, engine
 from app.platform.service_principals.release_actor import release_actor_service
 
+from scripts.principal_tenant_context import (
+    clear_protected_company_context,
+    establish_protected_company_context,
+)
+
 
 async def run(args: argparse.Namespace) -> dict[str, object]:
     output = Path(args.token_output).resolve()
     if str(output) != "/run/acp-release/release-actor/access-token":
         raise ValueError("Release actor token must use canonical secret custody path.")
-    async with AsyncSessionFactory() as session, session.begin():
-        issued = await release_actor_service.provision_and_rotate(
-            session,
-            company_id=args.company_id,
-            lifetime=timedelta(minutes=args.minutes),
-        )
+    establish_protected_company_context(args.company_id)
+    try:
+        async with AsyncSessionFactory() as session, session.begin():
+            issued = await release_actor_service.provision_and_rotate(
+                session,
+                company_id=args.company_id,
+                lifetime=timedelta(minutes=args.minutes),
+            )
+    finally:
+        clear_protected_company_context()
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(output.parent, 0o700)
     descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
