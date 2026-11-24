@@ -94,6 +94,31 @@ curl --fail --silent --show-error "http://127.0.0.1:${published_frontend_port}/h
   --receipt "$RECEIPT_FILE" \
   --smoke-token-file "$SMOKE_TOKEN_FILE"
 
+# Host-created files are owned by the host-side user.  Stage the token through
+# stdin into a file created by the actual non-root backend identity so a
+# read-only bind mount preserves mode 0600 without requiring root or changing
+# the application container identity.  The token value is never printed.
+runtime_uid="$(compose run --rm --no-deps backend id -u)"
+runtime_gid="$(compose run --rm --no-deps backend id -g)"
+RUNTIME_SMOKE_TOKEN_FILE="$WORK_DIR/runtime-smoke-token"
+compose run --rm --no-deps --user "$runtime_uid:$runtime_gid" \
+  --volume "$WORK_DIR:/run/acceptance-custody" \
+  --entrypoint /bin/sh backend -eu -c '
+    umask 077
+    cat > /run/acceptance-custody/runtime-smoke-token
+    chmod 600 /run/acceptance-custody/runtime-smoke-token
+    test -f /run/acceptance-custody/runtime-smoke-token
+    test "$(stat -c %a /run/acceptance-custody/runtime-smoke-token)" = 600
+    test -r /run/acceptance-custody/runtime-smoke-token
+  ' <"$SMOKE_TOKEN_FILE"
+compose run --rm --no-deps --user "$runtime_uid:$runtime_gid" \
+  --volume "$RUNTIME_SMOKE_TOKEN_FILE:/run/acceptance/smoke-token:ro" \
+  --entrypoint /bin/sh backend -eu -c '
+    test -r /run/acceptance/smoke-token
+    test "$(stat -c %a /run/acceptance/smoke-token)" = 600
+  '
+echo "smoke token custody: PASS (runtime UID/GID $runtime_uid/$runtime_gid, mode 0600, readable non-root)"
+
 smoke_company_id="$(jq -r '.company_id' "$RECEIPT_FILE")"
 smoke_branch_id="$(jq -r '.branch_id' "$RECEIPT_FILE")"
 smoke_denied_company_id="$($PYTHON_BIN -c 'import uuid; print(uuid.uuid4())')"
@@ -111,7 +136,8 @@ for smoke_check in authentication authorization tenant-isolation; do
   esac
   echo "protected principal smoke: $smoke_check"
   compose run --rm --no-deps --no-TTY \
-    --volume "$SMOKE_TOKEN_FILE:/run/acceptance/smoke-token:ro" \
+    --user "$runtime_uid:$runtime_gid" \
+    --volume "$RUNTIME_SMOKE_TOKEN_FILE:/run/acceptance/smoke-token:ro" \
     --env SMOKE_BASE_URL=http://frontend \
     --env SMOKE_COMPANY_ID="$smoke_company_id" \
     --env SMOKE_BRANCH_ID="$smoke_branch_id" \
