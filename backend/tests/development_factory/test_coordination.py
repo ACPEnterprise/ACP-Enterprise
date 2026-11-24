@@ -11,6 +11,7 @@ from development_factory.coordination import (
     validate_inventory,
     validate_queue,
 )
+from development_factory.assignment_bridge import prepare_claim_envelope
 
 
 def queue_payload() -> dict[str, object]:
@@ -56,6 +57,49 @@ def test_unknown_completion_evidence_fails_closed() -> None:
     queue = validate_queue(queue_payload())
     with pytest.raises(CoordinationError, match="unknown completed assignments"):
         eligible_after_activation(queue, ("OM1",), ("NOT-A-QUEUE-ITEM",))
+
+
+def test_claim_envelope_is_bound_to_clean_machine_and_remains_unclaimed() -> None:
+    queue = validate_queue(
+        {
+            **queue_payload(),
+            "assignments": [
+                {
+                    **queue_payload()["assignments"][0],
+                    "allowed_paths": ["backend/tests/**"],
+                    "validation": ["focused tests"],
+                    "stop_conditions": ["live mutation"],
+                },
+                queue_payload()["assignments"][1],
+            ],
+        }
+    )
+    receipt = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": "LAPTOP",
+        "host": {"hostname": "laptop"},
+        "repository": {
+            "root": "/repo",
+            "branch": "work/laptop",
+            "head": "a" * 40,
+            "origin": "https://example.invalid/repo.git",
+            "status_clean": True,
+        },
+    }
+    envelope = prepare_claim_envelope(
+        queue,
+        assignment_id="LAP-ONE",
+        inventory=receipt,
+    )
+    assert envelope["claim_state"] == "PREPARED_NOT_CLAIMED"
+    assert envelope["safety"] == {
+        "claim_issued": False,
+        "lease_issued": False,
+        "approval_issued": False,
+        "git_mutation_performed": False,
+        "live_data_mutation": False,
+    }
+    assert envelope["machine_inventory_digest_sha256"]
 
 
 def test_machine_inventory_requires_secret_free_safety_flags() -> None:

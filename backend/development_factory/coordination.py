@@ -43,6 +43,9 @@ class Assignment:
     state: str
     depends_on: tuple[str, ...]
     objective: str
+    allowed_paths: tuple[str, ...] = ()
+    validation: tuple[str, ...] = ()
+    stop_conditions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -160,6 +163,13 @@ def validate_queue(payload: object) -> CoordinationQueue:
                 state=state,
                 depends_on=tuple(dependencies),
                 objective=str(raw["objective"]),
+                allowed_paths=_string_list(
+                    raw.get("allowed_paths", []), ident, "allowed_paths"
+                ),
+                validation=_string_list(raw.get("validation", []), ident, "validation"),
+                stop_conditions=_string_list(
+                    raw.get("stop_conditions", []), ident, "stop_conditions"
+                ),
             )
         )
 
@@ -177,6 +187,14 @@ def validate_queue(payload: object) -> CoordinationQueue:
             )
     _assert_acyclic(queue)
     return queue
+
+
+def _string_list(value: object, assignment_id: str, field: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item.strip() for item in value
+    ):
+        raise CoordinationError(f"{assignment_id}: {field} must be a list of strings")
+    return tuple(str(item) for item in value)
 
 
 def dependency_layers(queue: CoordinationQueue) -> tuple[tuple[str, ...], ...]:

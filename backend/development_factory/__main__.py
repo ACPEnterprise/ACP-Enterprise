@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from development_factory.assignment_bridge import prepare_claim_envelope
 from development_factory.automation import TaskRunner
 from development_factory.coordination import (
     CoordinationError,
@@ -56,6 +57,23 @@ def main() -> int:
     inventory_check = coordination_commands.add_parser("inventory-check")
     inventory_check.add_argument("receipt", type=Path)
     inventory_check.add_argument("--require-clean", action="store_true")
+    claim_envelope = coordination_commands.add_parser("prepare-claim")
+    claim_envelope.add_argument(
+        "--queue",
+        type=Path,
+        default=Path("development-factory/continuous-engineering-queue.v1.json"),
+    )
+    claim_envelope.add_argument("assignment_id")
+    claim_envelope.add_argument("receipt", type=Path)
+    claim_envelope.add_argument(
+        "--completed-assignment",
+        action="append",
+        default=[],
+        dest="completed_assignments",
+    )
+    claim_envelope.add_argument(
+        "--output", type=Path, required=True, dest="claim_output"
+    )
     coordination_summary = coordination_commands.choices["summary"]
     coordination_summary.add_argument(
         "--active-lane", action="append", default=[], dest="active_lanes"
@@ -170,6 +188,31 @@ def main() -> int:
                 if args.require_clean and not clean:
                     print("BLOCKED: repository has uncommitted changes")
                     return 1
+                return 0
+            if args.coordination_command == "prepare-claim":
+                from development_factory.coordination import load_inventory_file
+
+                receipt_path = args.receipt
+                if not receipt_path.is_absolute():
+                    receipt_path = args.repo_root / receipt_path
+                output = args.claim_output
+                if not output.is_absolute():
+                    output = args.repo_root / output
+                queue = load_queue_file(args.repo_root / args.queue)
+                inventory = load_inventory_file(receipt_path)
+                envelope = prepare_claim_envelope(
+                    queue,
+                    assignment_id=args.assignment_id,
+                    inventory=inventory,
+                    completed_assignments=tuple(args.completed_assignments),
+                )
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(
+                    json.dumps(envelope, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                print(f"Claim envelope prepared: {output}")
+                print("Claim state: PREPARED_NOT_CLAIMED")
                 return 0
             if args.coordination_command == "daily-report":
                 inventory_paths = [
