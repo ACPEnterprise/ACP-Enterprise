@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import time
@@ -138,15 +139,14 @@ class DevelopmentFactory:
                     findings=findings,
                 )
             if check.implementation == "backend_tests":
-                return self._database_check(
+                return self._backend_harness_check(
                     check,
                     started,
-                    f"pytest -q {os.getenv('DF_BACKEND_TEST_TARGET', 'tests')}",
                     migration_lifecycle=False,
                 )
             if check.implementation == "migration_validation":
-                return self._database_check(
-                    check, started, "", migration_lifecycle=True
+                return self._backend_harness_check(
+                    check, started, migration_lifecycle=True
                 )
             return self._result(
                 check, "failed", started, "Unknown check implementation"
@@ -223,6 +223,68 @@ class DevelopmentFactory:
             started,
             summary,
             redact("".join(output)[-20000:]),
+        )
+
+    def _backend_harness_check(
+        self,
+        check: CheckDefinition,
+        started: float,
+        *,
+        migration_lifecycle: bool,
+    ) -> CheckResult:
+        """Run backend qualification against this checkout, never a stale bind mount."""
+        python_bin = os.getenv(
+            "DF_BACKEND_PYTHON", str(self.repo_root / "backend/.venv/bin/python")
+        )
+        harness = self.repo_root / "scripts/qualify-backend-tests"
+        if not Path(python_bin).is_file() or not os.access(python_bin, os.X_OK):
+            return self._result(
+                check,
+                "unavailable",
+                started,
+                f"Pinned backend Python is unavailable: {python_bin}",
+            )
+        if not harness.is_file() or not os.access(harness, os.X_OK):
+            return self._result(
+                check,
+                "unavailable",
+                started,
+                f"Backend qualification harness is unavailable: {harness}",
+            )
+        command = [str(harness)]
+        if migration_lifecycle:
+            command.extend(("--migration-lifecycle", "--migrations-only"))
+        else:
+            command.extend(
+                (
+                    "-q",
+                    *shlex.split(os.getenv("DF_BACKEND_TEST_TARGET", "backend/tests")),
+                )
+            )
+        command.extend(("--python", python_bin))
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=self.repo_root,
+                capture_output=True,
+                text=True,
+                timeout=check.timeout_seconds,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return self._result(check, "failed", started, redact(str(exc)))
+        status = "passed" if completed.returncode == 0 else "failed"
+        summary = (
+            "Current-checkout backend qualification passed"
+            if status == "passed"
+            else f"Current-checkout backend qualification exited with status {completed.returncode}"
+        )
+        return self._result(
+            check,
+            status,
+            started,
+            summary,
+            redact((completed.stdout + completed.stderr)[-20000:]),
         )
 
     def _result(

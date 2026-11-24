@@ -5,8 +5,18 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 postgres_image="postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685"
 redis_image="redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf"
 
-if [ "$#" -lt 3 ] || [ "$1" != "--python" ]; then
-  echo "usage: scripts/qualify-backend-tests --python /path/to/python PYTEST_ARGUMENT..." >&2
+migration_lifecycle=false
+migrations_only=false
+if [ "${1:-}" = "--migration-lifecycle" ]; then
+  migration_lifecycle=true
+  shift
+fi
+if [ "${1:-}" = "--migrations-only" ]; then
+  migrations_only=true
+  shift
+fi
+if [ "$#" -lt 2 ] || [ "$1" != "--python" ]; then
+  echo "usage: scripts/qualify-backend-tests [--migration-lifecycle] [--migrations-only] --python /path/to/python PYTEST_ARGUMENT..." >&2
   exit 64
 fi
 python_executable=$2
@@ -241,11 +251,20 @@ export PYTHONPATH="$root/backend${PYTHONPATH:+:$PYTHONPATH}"
   cd "$root/backend"
   "$python_executable" -m alembic upgrade head
   "$python_executable" -m alembic current --check-heads
+  if [ "$migration_lifecycle" = true ]; then
+    "$python_executable" -m alembic downgrade -1
+    "$python_executable" -m alembic upgrade head
+  fi
   "$python_executable" -m alembic check
+  if [ "$migration_lifecycle" = true ]; then
+    "$python_executable" -m alembic heads
+  fi
 )
 
-cd "$root"
-"$python_executable" -m pytest "$@"
+if [ "$migrations_only" != true ]; then
+  cd "$root"
+  "$python_executable" -m pytest "$@"
+fi
 
 cleanup_status=0
 cleanup_resources || cleanup_status=$?

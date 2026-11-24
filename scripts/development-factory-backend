@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+python_bin=${DF_BACKEND_PYTHON:-$root/backend/.venv/bin/python}
+
+if [ ! -x "$python_bin" ]; then
+  echo "Development Factory backend Python is unavailable: $python_bin" >&2
+  exit 69
+fi
+
+operation=${1:-}
+shift || true
+case "$operation" in
+  ruff|mypy)
+    cd "$root/backend"
+    exec "$python_bin" -m "$operation" "$@"
+    ;;
+  tests)
+    exec "$root/scripts/qualify-backend-tests" --python "$python_bin" "$@"
+    ;;
+  *)
+    echo "usage: scripts/development-factory-backend {ruff|mypy|tests} ..." >&2
+    exit 64
+    ;;
+esac
