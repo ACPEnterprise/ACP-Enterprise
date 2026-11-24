@@ -689,6 +689,8 @@ def qualification_decision(results: list[Result], *, executed: bool) -> str:
         return "FAIL"
     if "BLOCKED" in statuses:
         return "BLOCKED"
+    if "NOT YET EXECUTED" in statuses:
+        return "NOT YET EXECUTED"
     if executed:
         return "PASS"
     return "NOT YET EXECUTED"
@@ -1234,7 +1236,7 @@ def main() -> int:
             sort_keys=True,
         )
     )
-    return 1 if decision in {"FAIL", "BLOCKED"} else 0
+    return 1 if decision in {"FAIL", "BLOCKED", "NOT YET EXECUTED"} else 0
 
 
 if __name__ == "__main__":

@@ -287,14 +287,14 @@ def test_incomplete_executed_qualification_fails_closed(status: str) -> None:
     )
 
 
-def test_executed_profile_can_pass_with_out_of_scope_checks_recorded() -> None:
+def test_executed_profile_cannot_pass_with_out_of_scope_checks_unexecuted() -> None:
     module = _module()
     results = [
         result(module, "PASS"),
         result(module, "NOT YET EXECUTED"),
         result(module, "NOT APPLICABLE"),
     ]
-    assert module.qualification_decision(results, executed=True) == "PASS"
+    assert module.qualification_decision(results, executed=True) == "NOT YET EXECUTED"
 
 
 def test_plan_without_execution_never_claims_pass() -> None:
