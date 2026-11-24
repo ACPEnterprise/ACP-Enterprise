@@ -51,6 +51,9 @@ def main() -> int:
             default=Path("development-factory/continuous-engineering-queue.v1.json"),
             nargs="?",
         )
+    inventory_check = coordination_commands.add_parser("inventory-check")
+    inventory_check.add_argument("receipt", type=Path)
+    inventory_check.add_argument("--require-clean", action="store_true")
     coordination_summary = coordination_commands.choices["summary"]
     coordination_summary.add_argument(
         "--active-lane", action="append", default=[], dest="active_lanes"
@@ -123,6 +126,22 @@ def main() -> int:
 
     try:
         if args.command == "coordination":
+            if args.coordination_command == "inventory-check":
+                from development_factory.coordination import load_inventory_file
+
+                receipt = load_inventory_file(args.receipt)
+                repository = receipt["repository"]
+                assert isinstance(repository, dict)
+                clean = repository.get("status_clean") is True
+                print(
+                    f"Machine inventory valid: {receipt['role_claimed']} "
+                    f"{repository['branch']} {repository['head']}"
+                )
+                print(f"Repository clean: {'YES' if clean else 'NO'}")
+                if args.require_clean and not clean:
+                    print("BLOCKED: repository has uncommitted changes")
+                    return 1
+                return 0
             queue_path = args.queue
             if not queue_path.is_absolute():
                 queue_path = args.repo_root / queue_path

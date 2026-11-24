@@ -7,6 +7,7 @@ from development_factory.coordination import (
     dependency_layers,
     eligible_after_activation,
     load_queue,
+    validate_inventory,
     validate_queue,
 )
 
@@ -46,6 +47,35 @@ def test_dependency_layers_and_activation_projection() -> None:
     queue = validate_queue(queue_payload())
     assert dependency_layers(queue) == (("LAP-ONE",), ("OM1-TWO",))
     assert eligible_after_activation(queue, ("LAPTOP_MASTER",)) == ("LAP-ONE",)
+
+
+def test_machine_inventory_requires_secret_free_safety_flags() -> None:
+    receipt = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": "OM1",
+        "host": {
+            "hostname": "om1",
+            "os": "macOS",
+            "machine": "arm64",
+            "python": "3.12",
+        },
+        "repository": {
+            "root": "/repo",
+            "branch": "work/om1",
+            "head": "a" * 40,
+            "origin": "https://example.invalid/repo.git",
+        },
+        "safety": {
+            "private_keys_read": False,
+            "environment_values_dumped": False,
+            "git_mutation_performed": False,
+            "docker_container_started": False,
+        },
+    }
+    assert validate_inventory(receipt)["role_claimed"] == "OM1"
+    receipt["safety"]["private_keys_read"] = True
+    with pytest.raises(CoordinationError):
+        validate_inventory(receipt)
 
 
 @pytest.mark.parametrize("dependency", ["MISSING", "OM1-TWO"])

@@ -14,6 +14,7 @@ from pathlib import Path
 
 QUEUE_RELATIVE_PATH = Path("development-factory/continuous-engineering-queue.v1.json")
 QUEUE_SCHEMA = "twelfthats.continuous-engineering-queue.v1"
+INVENTORY_SCHEMA = "twelfthats.machine-inventory.v1"
 LANES = frozenset({"LAPTOP_MASTER", "OM1", "OM2", "REVIEWER"})
 STATES = frozenset(
     {
@@ -60,6 +61,53 @@ def load_queue_file(path: Path) -> CoordinationQueue:
     except (OSError, json.JSONDecodeError) as error:
         raise CoordinationError(f"cannot load coordination queue: {error}") from error
     return validate_queue(payload)
+
+
+def load_inventory_file(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CoordinationError(f"cannot load machine inventory: {error}") from error
+    return validate_inventory(payload)
+
+
+def validate_inventory(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise CoordinationError("machine inventory must be an object")
+    if payload.get("schema") != INVENTORY_SCHEMA:
+        raise CoordinationError("unsupported machine inventory schema")
+    role = payload.get("role_claimed")
+    if role not in {"LAPTOP", "OM1", "OM2"}:
+        raise CoordinationError("machine inventory role is invalid")
+    host = payload.get("host")
+    repository = payload.get("repository")
+    safety = payload.get("safety")
+    if not isinstance(host, dict) or not isinstance(repository, dict):
+        raise CoordinationError("machine inventory host/repository evidence is missing")
+    if not isinstance(safety, dict):
+        raise CoordinationError("machine inventory safety evidence is missing")
+    for key in ("hostname", "os", "machine", "python"):
+        if not isinstance(host.get(key), str) or not host[key]:
+            raise CoordinationError(f"machine inventory host.{key} is missing")
+    for key in ("root", "branch", "head", "origin"):
+        if not isinstance(repository.get(key), str) or not repository[key]:
+            raise CoordinationError(f"machine inventory repository.{key} is missing")
+    head = repository["head"]
+    if (
+        not isinstance(head, str)
+        or len(head) != 40
+        or any(character not in "0123456789abcdef" for character in head)
+    ):
+        raise CoordinationError("machine inventory repository.head is not a SHA-1")
+    for key in (
+        "private_keys_read",
+        "environment_values_dumped",
+        "git_mutation_performed",
+        "docker_container_started",
+    ):
+        if safety.get(key) is not False:
+            raise CoordinationError(f"machine inventory safety.{key} is not false")
+    return payload
 
 
 def validate_queue(payload: object) -> CoordinationQueue:
@@ -190,7 +238,9 @@ __all__ = [
     "CoordinationQueue",
     "dependency_layers",
     "eligible_after_activation",
+    "load_inventory_file",
     "load_queue",
     "load_queue_file",
+    "validate_inventory",
     "validate_queue",
 ]
