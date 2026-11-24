@@ -12,10 +12,13 @@ ENV_FILE="$WORK_DIR/compose.env"
 CREDENTIAL_FILE="$WORK_DIR/owner-credentials.json"
 SMOKE_TOKEN_FILE="$WORK_DIR/smoke-token"
 RECEIPT_FILE="$WORK_DIR/acceptance-receipt.json"
+SMOKE_CUSTODY_VOLUME="${PROJECT}-smoke-custody"
+PRINCIPAL_CUSTODY_VOLUME="${PROJECT}-principal-custody"
 
 cleanup() {
   set +e
   docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" --env-file "$ENV_FILE" down --volumes --remove-orphans >/dev/null 2>&1
+  docker volume rm "$SMOKE_CUSTODY_VOLUME" "$PRINCIPAL_CUSTODY_VOLUME" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
 }
 
@@ -28,6 +31,11 @@ on_exit() {
   exit "$status"
 }
 trap on_exit EXIT
+
+docker volume create --label "com.twelvehats.acceptance.project=$PROJECT" \
+  "$SMOKE_CUSTODY_VOLUME" >/dev/null
+docker volume create --label "com.twelvehats.acceptance.project=$PROJECT" \
+  "$PRINCIPAL_CUSTODY_VOLUME" >/dev/null
 
 umask 077
 admin_password="$(openssl rand -hex 32)"
@@ -100,9 +108,20 @@ curl --fail --silent --show-error "http://127.0.0.1:${published_frontend_port}/h
 # the application container identity.  The token value is never printed.
 runtime_uid="$(compose run --rm --no-deps backend id -u)"
 runtime_gid="$(compose run --rm --no-deps backend id -g)"
-RUNTIME_SMOKE_TOKEN_FILE="$WORK_DIR/runtime-smoke-token"
+compose run --rm --no-deps --user 0:0 \
+  --volume "$SMOKE_CUSTODY_VOLUME:/run/acceptance-custody" \
+  --entrypoint /bin/sh \
+  --env CUSTODY_UID="$runtime_uid" --env CUSTODY_GID="$runtime_gid" \
+  backend -eu -c \
+  'chown "$CUSTODY_UID:$CUSTODY_GID" /run/acceptance-custody && chmod 700 /run/acceptance-custody'
+compose run --rm --no-deps --user 0:0 \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release" \
+  --entrypoint /bin/sh \
+  --env CUSTODY_UID="$runtime_uid" --env CUSTODY_GID="$runtime_gid" \
+  backend -eu -c \
+  'chown "$CUSTODY_UID:$CUSTODY_GID" /run/acp-release && chmod 700 /run/acp-release'
 compose run --rm --no-deps --user "$runtime_uid:$runtime_gid" \
-  --volume "$WORK_DIR:/run/acceptance-custody" \
+  --volume "$SMOKE_CUSTODY_VOLUME:/run/acceptance-custody" \
   --entrypoint /bin/sh backend -eu -c '
     umask 077
     cat > /run/acceptance-custody/runtime-smoke-token
@@ -112,12 +131,12 @@ compose run --rm --no-deps --user "$runtime_uid:$runtime_gid" \
     test -r /run/acceptance-custody/runtime-smoke-token
   ' <"$SMOKE_TOKEN_FILE"
 compose run --rm --no-deps --user "$runtime_uid:$runtime_gid" \
-  --volume "$RUNTIME_SMOKE_TOKEN_FILE:/run/acceptance/smoke-token:ro" \
+  --volume "$SMOKE_CUSTODY_VOLUME:/run/acceptance-custody:ro" \
   --entrypoint /bin/sh backend -eu -c '
-    test -r /run/acceptance/smoke-token
-    test "$(stat -c %a /run/acceptance/smoke-token)" = 600
+    test -r /run/acceptance-custody/runtime-smoke-token
+    test "$(stat -c %a /run/acceptance-custody/runtime-smoke-token)" = 600
   '
-echo "smoke token custody: PASS (runtime UID/GID $runtime_uid/$runtime_gid, mode 0600, readable non-root)"
+echo "smoke token custody: PASS (container-owned volume, runtime UID/GID $runtime_uid/$runtime_gid, mode 0600, readable non-root)"
 
 smoke_company_id="$(jq -r '.company_id' "$RECEIPT_FILE")"
 smoke_branch_id="$(jq -r '.branch_id' "$RECEIPT_FILE")"
@@ -137,7 +156,7 @@ for smoke_check in authentication authorization tenant-isolation; do
   echo "protected principal smoke: $smoke_check"
   compose run --rm --no-deps --no-TTY \
     --user "$runtime_uid:$runtime_gid" \
-    --volume "$RUNTIME_SMOKE_TOKEN_FILE:/run/acceptance/smoke-token:ro" \
+    --volume "$SMOKE_CUSTODY_VOLUME:/run/acceptance-custody:ro" \
     --env SMOKE_BASE_URL=http://frontend \
     --env SMOKE_COMPANY_ID="$smoke_company_id" \
     --env SMOKE_BRANCH_ID="$smoke_branch_id" \
@@ -146,7 +165,7 @@ for smoke_check in authentication authorization tenant-isolation; do
     backend python /app/scripts/protected_smoke_check.py \
     --check "$smoke_check" \
     --path "$smoke_path" \
-    --credential-file /run/acceptance/smoke-token
+    --credential-file /run/acceptance-custody/runtime-smoke-token
 done
 
 # Restart the assembled services, then perform a fresh authenticated readback.
@@ -169,15 +188,12 @@ done
   --readback
 
 # Exercise the actual protected principal lifecycle under the assembled
-# acp_app runtime.  The token custody directory is disposable, private, and
-# never printed or included in the acceptance receipt.
-PRINCIPAL_CUSTODY_DIR="$WORK_DIR/principal-custody"
-install -d -m 0700 "$PRINCIPAL_CUSTODY_DIR/release-actor" \
-  "$PRINCIPAL_CUSTODY_DIR/acceptance-reader"
+# acp_app runtime.  Principal tokens use a disposable container-owned volume;
+# host directory ownership cannot affect non-root runtime access.
 
 actor_output="$(compose run --rm --no-deps --no-TTY \
   --env SMOKE_COMPANY_ID="$smoke_company_id" \
-  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release" \
   backend python -m scripts.provision_beta_release_actor \
   --company-id "$smoke_company_id" --minutes 5)"
 actor_json="$(printf '%s\n' "$actor_output" | awk '/^\{/{line=$0} END{print line}')"
@@ -193,7 +209,7 @@ fi
 
 reader_output="$(compose run --rm --no-deps --no-TTY \
   --env SMOKE_COMPANY_ID="$smoke_company_id" \
-  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release" \
   --entrypoint /bin/sh backend -eu -c '
     ACP_RELEASE_ACTOR_TOKEN="$(cat /run/acp-release/release-actor/access-token)"
     export ACP_RELEASE_ACTOR_TOKEN
@@ -213,7 +229,7 @@ fi
 
 replay_output="$(compose run --rm --no-deps --no-TTY \
   --env SMOKE_COMPANY_ID="$smoke_company_id" \
-  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release" \
   --entrypoint /bin/sh backend -eu -c '
     ACP_RELEASE_ACTOR_TOKEN="$(cat /run/acp-release/release-actor/access-token)"
     export ACP_RELEASE_ACTOR_TOKEN
@@ -234,7 +250,7 @@ echo "acceptance reader metadata: principal=$reader_id created=true,replay=false
 compose run --rm --no-deps --no-TTY \
   --env SMOKE_COMPANY_ID="$smoke_company_id" \
   --env ACP_ACCEPTANCE_PRINCIPAL_ID="$reader_id" \
-  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release" \
   --entrypoint /bin/sh backend -eu -c '
     python - <<'PY'
 import asyncio
@@ -296,7 +312,7 @@ PY
   '
 
 compose run --rm --no-deps --no-TTY \
-  --volume "$PRINCIPAL_CUSTODY_DIR/acceptance-reader/access-token:/run/acceptance-reader/access-token:ro" \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release:ro" \
   --env SMOKE_COMPANY_ID="$smoke_company_id" \
   backend python - <<'PY'
 import asyncio
@@ -312,7 +328,9 @@ from app.platform.auth.services import access_token_service, authentication_serv
 
 async def main() -> None:
     set_database_tenant_context(UUID(os.environ["SMOKE_COMPANY_ID"]))
-    token = Path("/run/acceptance-reader/access-token").read_text().strip()
+    token = Path(
+        "/run/acp-release/acceptance-reader/access-token"
+    ).read_text().strip()
     claims = access_token_service.decode(token)
     async with AsyncSessionFactory() as session:
         await authentication_service.validate_access_context(session, claims)
@@ -333,7 +351,7 @@ for smoke_check in authentication authorization tenant-isolation; do
   esac
   echo "acceptance reader smoke: $smoke_check"
   compose run --rm --no-deps --no-TTY \
-    --volume "$PRINCIPAL_CUSTODY_DIR/acceptance-reader/access-token:/run/acceptance/smoke-token:ro" \
+    --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release:ro" \
     --env SMOKE_BASE_URL=http://frontend \
     --env SMOKE_COMPANY_ID="$smoke_company_id" \
     --env SMOKE_BRANCH_ID="$smoke_branch_id" \
@@ -342,13 +360,13 @@ for smoke_check in authentication authorization tenant-isolation; do
     backend python /app/scripts/protected_smoke_check.py \
     --check "$smoke_check" \
     --path "$smoke_path" \
-    --credential-file /run/acceptance/smoke-token
+    --credential-file /run/acp-release/acceptance-reader/access-token
 done
 
 revoke_reader_output="$(compose run --rm --no-deps --no-TTY \
   --env SMOKE_COMPANY_ID="$smoke_company_id" \
   --env ACP_ACCEPTANCE_PRINCIPAL_ID="$reader_id" \
-  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release" \
   --entrypoint /bin/sh backend -eu -c '
     ACP_RELEASE_ACTOR_TOKEN="$(cat /run/acp-release/release-actor/access-token)"
     export ACP_RELEASE_ACTOR_TOKEN
@@ -364,11 +382,9 @@ fi
 
 compose run --rm --no-deps --no-TTY \
   --env SMOKE_COMPANY_ID="$smoke_company_id" \
-  --volume "$PRINCIPAL_CUSTODY_DIR:/run/acp-release" \
+  --volume "$PRINCIPAL_CUSTODY_VOLUME:/run/acp-release" \
   backend python -m scripts.revoke_beta_release_actor \
   --company-id "$smoke_company_id"
-rm -f "$PRINCIPAL_CUSTODY_DIR/acceptance-reader/access-token" \
-  "$PRINCIPAL_CUSTODY_DIR/release-actor/access-token"
 echo "protected principal lifecycle: PASS (provision, issue, replay, smoke, revoke, cleanup)"
 
 # Prove the runtime identity, role attributes, and RLS posture from inside the

@@ -56,10 +56,14 @@ def test_principal_provisioners_enforce_canonical_writable_custody() -> None:
 def test_assembled_acceptance_stages_smoke_token_for_runtime_identity() -> None:
     source = (ROOT / "scripts" / "qualify-application-integration.sh").read_text()
 
+    assert 'SMOKE_CUSTODY_VOLUME="${PROJECT}-smoke-custody"' in source
+    assert 'PRINCIPAL_CUSTODY_VOLUME="${PROJECT}-principal-custody"' in source
+    assert "docker volume create --label" in source
     assert 'runtime_uid="$(compose run --rm --no-deps backend id -u)"' in source
     assert 'runtime_gid="$(compose run --rm --no-deps backend id -g)"' in source
-    assert 'RUNTIME_SMOKE_TOKEN_FILE="$WORK_DIR/runtime-smoke-token"' in source
-    assert '--user "$runtime_uid:$runtime_gid"' in source
     assert "cat > /run/acceptance-custody/runtime-smoke-token" in source
-    assert "stat -c %a /run/acceptance/smoke-token" in source
+    assert 'chown "$CUSTODY_UID:$CUSTODY_GID" /run/acceptance-custody' in source
+    assert 'chown "$CUSTODY_UID:$CUSTODY_GID" /run/acp-release' in source
+    assert '--user "$runtime_uid:$runtime_gid"' in source
+    assert "stat -c %a /run/acceptance-custody/runtime-smoke-token" in source
     assert ":ro" in source
