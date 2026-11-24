@@ -67,11 +67,12 @@ The repository already provides the implementation basis and is retained:
   advisory Factory Control telemetry, and explicit owner/delegation gates.
 
 The current factory does **not** provide unattended cross-machine dispatch. It
-does not commit, push, merge, deploy, or grant authority by itself. The new
-machine inventory command and queue below make activation reproducible without
-creating a second orchestration system. A true cross-machine execution mode
-requires an isolated implementation and independent review of queue authority,
-worker identity, shared-resource fencing, and persistence semantics.
+does not commit, push, merge, deploy, or grant authority by itself. The claim
+envelope bridge makes a validated handoff reproducible without creating a
+second orchestration system; actual cross-machine execution still requires
+authenticated Worker Control registration, queue claim/lease issuance, and
+independent review of worker identity, shared-resource fencing, and recovery
+evidence.
 
 The queue contract is executable through the existing factory CLI:
 
@@ -79,6 +80,7 @@ The queue contract is executable through the existing factory CLI:
 ./scripts/development-factory coordination validate
 ./scripts/development-factory coordination summary --active-lane LAPTOP_MASTER
 ./scripts/development-factory coordination inventory-check /tmp/twelvehats-om1-inventory.json --require-clean
+./scripts/development-factory coordination prepare-claim ASSIGNMENT_ID /tmp/twelvehats-machine-inventory.json --output /tmp/twelvehats-claim.json
 ```
 
 These commands validate dependencies, project eligibility, or an inventory
@@ -87,6 +89,13 @@ Dependent assignments may be projected with repeated
 `--completed-assignment ASSIGNMENT_ID` arguments only when those IDs are backed
 by existing Worker/Engineering Control evidence. A ready predecessor is never
 treated as completed implicitly.
+
+`prepare-claim` emits a deterministic, machine-receipt-bound
+`assignment-claim-envelope.v1` with state `PREPARED_NOT_CLAIMED`. It does not
+issue a claim, lease, approval, checkpoint, commit, push, merge, or deployment.
+The envelope must be submitted through the existing authenticated Engineering
+Control / Worker Control workflow, which remains the durable authority for
+claims, leases, fencing, execution, and recovery.
 
 Backend qualification uses the pinned Python environment and the repository's
 disposable loopback-only harness. It does not use a long-lived Docker bind mount
