@@ -83,6 +83,10 @@ The queue contract is executable through the existing factory CLI:
 
 These commands validate dependencies, project eligibility, or an inventory
 receipt only. They do not activate a machine, claim work, or create a lease.
+Dependent assignments may be projected with repeated
+`--completed-assignment ASSIGNMENT_ID` arguments only when those IDs are backed
+by existing Worker/Engineering Control evidence. A ready predecessor is never
+treated as completed implicitly.
 
 Backend qualification uses the pinned Python environment and the repository's
 disposable loopback-only harness. It does not use a long-lived Docker bind mount

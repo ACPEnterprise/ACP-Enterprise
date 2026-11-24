@@ -48,6 +48,14 @@ def test_dependency_layers_and_activation_projection() -> None:
     queue = validate_queue(queue_payload())
     assert dependency_layers(queue) == (("LAP-ONE",), ("OM1-TWO",))
     assert eligible_after_activation(queue, ("LAPTOP_MASTER",)) == ("LAP-ONE",)
+    assert eligible_after_activation(queue, ("OM1",)) == ()
+    assert eligible_after_activation(queue, ("OM1",), ("LAP-ONE",)) == ("OM1-TWO",)
+
+
+def test_unknown_completion_evidence_fails_closed() -> None:
+    queue = validate_queue(queue_payload())
+    with pytest.raises(CoordinationError, match="unknown completed assignments"):
+        eligible_after_activation(queue, ("OM1",), ("NOT-A-QUEUE-ITEM",))
 
 
 def test_machine_inventory_requires_secret_free_safety_flags() -> None:
@@ -132,6 +140,7 @@ def test_daily_report_projects_inventory_queue_and_unverified_lanes(
         "LAP-SALES-DEMO-ACCESS-01",
         "LAP-WORKFORCE-DISPATCH-READINESS-01",
     ]
+    assert report["queue"]["completed_assignments_supplied"] == []
     assert report["unverified_lanes"] == ["OM1", "OM2", "REVIEWER"]
     assert report["validation"]["status"] == "STALE"
     assert report["validation"]["head"] == "c" * 40

@@ -196,21 +196,35 @@ def dependency_layers(queue: CoordinationQueue) -> tuple[tuple[str, ...], ...]:
 
 
 def eligible_after_activation(
-    queue: CoordinationQueue, active_lanes: Iterable[str]
+    queue: CoordinationQueue,
+    active_lanes: Iterable[str],
+    completed_assignments: Iterable[str] = (),
 ) -> tuple[str, ...]:
-    """Project eligible assignments; durable claiming remains elsewhere."""
+    """Project eligible assignments from explicit completion evidence.
+
+    This is intentionally a projection only. Completion must come from the
+    existing Worker/Engineering Control evidence; a ready predecessor is not
+    treated as completed merely because it appears in an earlier dependency
+    layer.
+    """
     active = set(active_lanes)
     unknown = active - LANES
     if unknown:
         raise CoordinationError(f"unknown active lanes: {sorted(unknown)}")
-    completed: set[str] = set()
+    completed = set(completed_assignments)
+    unknown_completed = completed - set(queue.by_id)
+    if unknown_completed:
+        raise CoordinationError(
+            f"unknown completed assignments: {sorted(unknown_completed)}"
+        )
     result: list[str] = []
     for layer in dependency_layers(queue):
         for ident in layer:
             item = queue.by_id[ident]
             if (
                 item.lane in active
-                and item.state == "READY_AFTER_INVENTORY"
+                and item.id not in completed
+                and item.state in {"READY_AFTER_INVENTORY", "BLOCKED_DEPENDENCY"}
                 and set(item.depends_on) <= completed
             ):
                 result.append(item.id)
@@ -242,6 +256,7 @@ def build_daily_report(
     *,
     inventory_paths: Iterable[Path] = (),
     active_lanes: Iterable[str] = (),
+    completed_assignments: Iterable[str] = (),
     latest_report_path: Path | None = None,
 ) -> dict[str, object]:
     """Build a secret-free daily projection from existing evidence only."""
@@ -278,8 +293,9 @@ def build_daily_report(
             "lane_counts": lane_counts,
             "active_lanes_supplied": list(active),
             "eligible_after_supplied_activation": list(
-                eligible_after_activation(queue, active)
+                eligible_after_activation(queue, active, completed_assignments)
             ),
+            "completed_assignments_supplied": sorted(set(completed_assignments)),
         },
         "repository": {
             "branch": repository.branch,
@@ -322,13 +338,17 @@ def write_daily_report(report: dict[str, object], json_path: Path) -> tuple[Path
 def render_daily_report(report: dict[str, object]) -> str:
     queue = report["queue"]
     assert isinstance(queue, dict)
+    eligible = queue["eligible_after_supplied_activation"]
+    assert isinstance(eligible, list)
+    unverified_lanes = report["unverified_lanes"]
+    assert isinstance(unverified_lanes, list)
     lines = [
         "# TwelveHats Daily Engineering Report",
         "",
         f"- Generated: `{report['generated_at_utc']}`",
         f"- Queue status: `{queue['status']}`",
         f"- Assignments: `{queue['assignment_count']}`",
-        f"- Eligible after supplied activation: {', '.join(queue['eligible_after_supplied_activation']) or 'NONE'}",
+        f"- Eligible after supplied activation: {', '.join(eligible) or 'NONE'}",
         "",
         "## Machines",
         "",
@@ -347,7 +367,7 @@ def render_daily_report(report: dict[str, object]) -> str:
             "",
             "## Unverified lanes",
             "",
-            f"- {', '.join(report['unverified_lanes']) or 'None.'}",
+            f"- {', '.join(unverified_lanes) or 'None.'}",
             "",
             "## Validation",
             "",

@@ -60,12 +60,24 @@ def main() -> int:
     coordination_summary.add_argument(
         "--active-lane", action="append", default=[], dest="active_lanes"
     )
+    coordination_summary.add_argument(
+        "--completed-assignment",
+        action="append",
+        default=[],
+        dest="completed_assignments",
+    )
     daily_report = coordination_commands.add_parser("daily-report")
     daily_report.add_argument(
         "--inventory", action="append", default=[], dest="inventory_paths", type=Path
     )
     daily_report.add_argument(
         "--active-lane", action="append", default=[], dest="active_lanes"
+    )
+    daily_report.add_argument(
+        "--completed-assignment",
+        action="append",
+        default=[],
+        dest="completed_assignments",
     )
     daily_report.add_argument(
         "--latest-report", type=Path, default=None, dest="latest_report_path"
@@ -179,6 +191,7 @@ def main() -> int:
                     args.repo_root,
                     inventory_paths=inventory_paths,
                     active_lanes=args.active_lanes,
+                    completed_assignments=args.completed_assignments,
                     latest_report_path=latest_report_path,
                 )
                 json_path, markdown_path = write_daily_report(report, output)
@@ -195,7 +208,9 @@ def main() -> int:
                     f"{len(dependency_layers(queue))} dependency layers."
                 )
                 return 0
-            eligible = eligible_after_activation(queue, args.active_lanes)
+            eligible = eligible_after_activation(
+                queue, args.active_lanes, args.completed_assignments
+            )
             print(f"Coordination queue status: {queue.status}")
             print(f"Assignments: {len(queue.assignments)}")
             print(
