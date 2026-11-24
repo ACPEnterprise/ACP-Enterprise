@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Emit a secret-free, read-only Development Factory machine receipt.
+
+This command intentionally does not inspect secret contents, mutate Git, create
+worktrees, contact remote machines, or invoke Docker containers.  It is the
+common inventory step used before activating a permanent factory capacity.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import platform
+import shutil
+import socket
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Optional
+
+
+def run(*args: str, cwd: Optional[Path] = None) -> Optional[str]:
+    try:
+        result = subprocess.run(
+            args,
+            cwd=cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env={"PATH": os.environ.get("PATH", "")},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def command_version(command: str, *args: str) -> dict[str, Any]:
+    path = shutil.which(command)
+    if path is None:
+        return {"available": False}
+    version = run(path, *args)
+    return {"available": version is not None, "path": path, "version": version}
+
+
+def git_inventory(root: Path) -> dict[str, Any]:
+    status = run("git", "status", "--short", cwd=root)
+    worktrees = run("git", "worktree", "list", "--porcelain", cwd=root)
+    worktree_lines = worktrees.splitlines() if worktrees else []
+    worktree_paths = [
+        line.removeprefix("worktree ")
+        for line in worktree_lines
+        if line.startswith("worktree ")
+    ]
+    return {
+        "root": str(root),
+        "branch": run("git", "branch", "--show-current", cwd=root),
+        "head": run("git", "rev-parse", "HEAD", cwd=root),
+        "status_clean": status == "",
+        "status_entries": status.splitlines() if status else [],
+        "origin": run("git", "remote", "get-url", "origin", cwd=root),
+        "worktree_count": len(worktree_paths),
+        "worktree_paths_sample": worktree_paths[:20],
+        "worktree_paths_omitted": max(0, len(worktree_paths) - 20),
+    }
+
+
+def memory_bytes() -> int | None:
+    value = run("sysctl", "-n", "hw.memsize")
+    try:
+        return int(value) if value else None
+    except ValueError:
+        return None
+
+
+def disk_free_bytes(path: Path) -> int | None:
+    value = run("df", "-Pk", str(path))
+    if not value:
+        return None
+    try:
+        row = value.splitlines()[-1].split()
+        return int(row[3]) * 1024
+    except (IndexError, ValueError):
+        return None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--role", required=True, choices=("LAPTOP", "OM1", "OM2"))
+    parser.add_argument("--repo-root", type=Path, default=Path.cwd())
+    args = parser.parse_args()
+    root = args.repo_root.resolve()
+    receipt = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": args.role,
+        "collected_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "host": {
+            "hostname": socket.gethostname(),
+            "os": platform.platform(),
+            "machine": platform.machine(),
+            "python": sys.version.split()[0],
+        },
+        "repository": git_inventory(root),
+        "tools": {
+            "codex": command_version("codex", "--version"),
+            "docker": command_version("docker", "version", "--format", "{{.Server.Version}}"),
+            "git": command_version("git", "--version"),
+        },
+        "resources": {
+            "host_memory_bytes": memory_bytes(),
+            "free_bytes_at_repo": disk_free_bytes(root),
+        },
+        "development_factory": {
+            "config_present": (root / "development-factory" / "config.json").is_file(),
+            "manifest_present": (root / "development-factory" / "manifest.json").is_file(),
+            "cli_present": (root / "scripts" / "development-factory").is_file(),
+            "secret_contents_inspected": False,
+            "remote_activation_attempted": False,
+        },
+        "safety": {
+            "private_keys_read": False,
+            "environment_values_dumped": False,
+            "git_mutation_performed": False,
+            "docker_container_started": False,
+        },
+    }
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

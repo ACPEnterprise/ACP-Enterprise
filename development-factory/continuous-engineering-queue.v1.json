@@ -1,0 +1,162 @@
+{
+  "schema_version": "twelfthats.continuous-engineering-queue.v1",
+  "status": "PREPARED_PENDING_MACHINE_ACTIVATION",
+  "authority": {
+    "application_integration_lane": "LAPTOP_MASTER",
+    "factory_lane": "OM1",
+    "operations_data_lane": "OM2",
+    "independent_reviewer": "REVIEWER",
+    "protected_mutations": "OWNER_AND_ENTERPRISE_GATED"
+  },
+  "source_register": {
+    "laptop_inventory_head": "1f213a652b88c97dca738437dc65e291f62cbe90",
+    "protected_integration_branch": "integration/platform-master",
+    "protected_integration_sha": "58dcb301b3d307569f46e095d08c7b3403b81c84",
+    "remote": "https://github.com/ACPEnterprise/ACP-Enterprise.git"
+  },
+  "claim_policy": {
+    "machine_activation_required": true,
+    "atomic_claim_required": true,
+    "lease_expiry_required": true,
+    "stale_worker_fenced": true,
+    "automatic_commit": false,
+    "automatic_push": false,
+    "automatic_merge": false,
+    "automatic_deploy": false,
+    "live_data_mutation": false
+  },
+  "assignments": [
+    {
+      "id": "LAP-ALLCOUNTY-CUSTOMER-RECON-01",
+      "lane": "LAPTOP_MASTER",
+      "priority": "P0",
+      "state": "BLOCKED_EVIDENCE",
+      "depends_on": [],
+      "objective": "Reconcile the 5,464-row HCP customer source and current operational roster without live mutation.",
+      "allowed_paths": ["backend/app/operational_migration/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["source custody digest", "isolated replay", "duplicate and native-change regression"],
+      "stop_conditions": ["missing protected source evidence", "ambiguous identity", "live database target"]
+    },
+    {
+      "id": "LAP-ALLCOUNTY-HISTORY-ACCEPT-01",
+      "lane": "LAPTOP_MASTER",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["LAP-ALLCOUNTY-CUSTOMER-RECON-01", "OM2-HCP-HISTORY-RECON-01"],
+      "objective": "Prepare authenticated customer, location, job, appointment, estimate, invoice, and timeline acceptance.",
+      "allowed_paths": ["frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["owner-session UI evidence", "record-level reconciliation", "tenant-isolation regression"],
+      "stop_conditions": ["fabricated relationship", "unavailable source record presented as present"]
+    },
+    {
+      "id": "LAP-WORKFORCE-DISPATCH-READINESS-01",
+      "lane": "LAPTOP_MASTER",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Verify and repair bounded employee, technician, dispatch, My Day, and timeclock readiness without payroll execution.",
+      "allowed_paths": ["backend/app/workforce/**", "backend/app/dispatch/**", "backend/tests/**", "frontend/src/**"],
+      "validation": ["authenticated dispatcher workflow", "technician My Day", "timeclock supervisor readback"],
+      "stop_conditions": ["invented availability", "unapproved employee mutation", "payroll or money movement"]
+    },
+    {
+      "id": "LAP-SALES-DEMO-ACCESS-01",
+      "lane": "LAPTOP_MASTER",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Verify Keith and owner demo access remains tenant-isolated and NDA-gated.",
+      "allowed_paths": ["backend/app/identity/**", "backend/app/sales_demo/**", "backend/tests/**", "frontend/src/**"],
+      "validation": ["fresh-session demo login", "direct All County denial", "NDA receipt verification"],
+      "stop_conditions": ["All County visibility", "credential exposure", "legacy shared-account reuse"]
+    },
+    {
+      "id": "OM1-DF-DURABLE-COORDINATION-01",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "BLOCKED_MACHINE_INVENTORY",
+      "depends_on": [],
+      "objective": "Extend existing DF worker-control and scheduler contracts with reviewed cross-machine assignment, file/resource fencing, durable checkpoints, and bounded recovery; do not create a second framework.",
+      "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/engineering_execution/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["atomic claim race", "stale lease fencing", "crash/restart recovery", "network interruption", "secret redaction", "resource limits"],
+      "stop_conditions": ["automatic approval", "automatic merge/deploy", "unreviewed schema or security change"]
+    },
+    {
+      "id": "OM1-DF-SYNTHETIC-QUALIFICATION-01",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM1-DF-DURABLE-COORDINATION-01"],
+      "objective": "Run the bounded 24-hour synthetic automation qualification and preserve immutable evidence.",
+      "allowed_paths": ["docs/quality/**", "development-factory/**", "backend/tests/**"],
+      "validation": ["24-hour synthetic run", "bounded retry report", "safe shutdown"],
+      "stop_conditions": ["unqualified unattended execution", "secret in logs", "duplicate claim"]
+    },
+    {
+      "id": "OM1-DF-CONTROLLED-QUALIFICATION-01",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM1-DF-SYNTHETIC-QUALIFICATION-01", "REVIEW-DF-SECURITY-01"],
+      "objective": "Run the subsequent controlled 48-hour qualification within verified subscription and resource limits.",
+      "allowed_paths": ["docs/quality/**", "development-factory/**", "backend/tests/**"],
+      "validation": ["restart recovery", "lease fencing", "resource monitoring", "executive report"],
+      "stop_conditions": ["scope drift", "unapproved external access", "resource exhaustion"]
+    },
+    {
+      "id": "OM2-HCP-HISTORY-RECON-01",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_MACHINE_INVENTORY",
+      "depends_on": [],
+      "objective": "Reconcile HCP customer, location, job, estimate, invoice, payment, and communication evidence in an isolated environment.",
+      "allowed_paths": ["backend/app/operational_migration/**", "backend/app/migration_factory/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["source manifest verification", "record-level crosswalk", "idempotent rehearsal"],
+      "stop_conditions": ["HCP write", "ambiguous identity merge", "unsealed source evidence"]
+    },
+    {
+      "id": "OM2-QBO-HISTORY-RECON-01",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_MACHINE_INVENTORY",
+      "depends_on": [],
+      "objective": "Reconcile QuickBooks source-backed history and native-admission eligibility without OAuth, writes, or financial mutation.",
+      "allowed_paths": ["backend/app/accounting/**", "backend/app/integrations/qbo/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["custody digest", "source relationship reconciliation", "read-only report agreement"],
+      "stop_conditions": ["QBO write", "OAuth initiation", "fabricated posting", "unresolved company binding"]
+    },
+    {
+      "id": "OM2-COMMUNICATIONS-HISTORY-RECON-01",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM2-HCP-HISTORY-RECON-01"],
+      "objective": "Reconcile historical communications evidence and prepare truthful readback without sending messages.",
+      "allowed_paths": ["backend/app/communications/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["source custody", "tenant-scoped readback", "provider-write denial"],
+      "stop_conditions": ["outbound communication", "missing source provenance"]
+    },
+    {
+      "id": "REVIEW-DF-SECURITY-01",
+      "lane": "REVIEWER",
+      "priority": "P0",
+      "state": "BLOCKED_MACHINE_INVENTORY",
+      "depends_on": ["OM1-DF-DURABLE-COORDINATION-01"],
+      "objective": "Independently review queue authority, worker identity, leases, fencing, file boundaries, secret handling, and recovery evidence.",
+      "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["independent worktree", "negative authorization tests", "evidence digest verification"],
+      "stop_conditions": ["self-approval", "missing evidence", "security exception"]
+    },
+    {
+      "id": "REVIEW-ALLCOUNTY-OPERATIONAL-01",
+      "lane": "REVIEWER",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["LAP-ALLCOUNTY-HISTORY-ACCEPT-01", "LAP-WORKFORCE-DISPATCH-READINESS-01", "OM2-QBO-HISTORY-RECON-01"],
+      "objective": "Independently accept or reject the actual All County workflows and evidence; never infer acceptance from test counts.",
+      "allowed_paths": ["docs/quality/**"],
+      "validation": ["fresh authenticated sessions", "owner-visible UI", "record-level evidence", "safety boundary review"],
+      "stop_conditions": ["missing live evidence", "unexplained discrepancy", "unauthorized external write"]
+    }
+  ]
+}
