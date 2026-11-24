@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from development_factory.assignment_bridge import prepare_claim_envelope
 from development_factory.coordination import (
     CoordinationError,
     build_daily_report,
@@ -11,7 +12,6 @@ from development_factory.coordination import (
     validate_inventory,
     validate_queue,
 )
-from development_factory.assignment_bridge import prepare_claim_envelope
 
 
 def queue_payload() -> dict[str, object]:
