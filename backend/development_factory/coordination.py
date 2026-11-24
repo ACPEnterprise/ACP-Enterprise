@@ -10,11 +10,16 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+from development_factory.repository import inspect_repository
 
 QUEUE_RELATIVE_PATH = Path("development-factory/continuous-engineering-queue.v1.json")
 QUEUE_SCHEMA = "twelfthats.continuous-engineering-queue.v1"
 INVENTORY_SCHEMA = "twelfthats.machine-inventory.v1"
+DAILY_REPORT_SCHEMA = "twelfthats.daily-engineering-report.v1"
 LANES = frozenset({"LAPTOP_MASTER", "OM1", "OM2", "REVIEWER"})
 STATES = frozenset(
     {
@@ -232,10 +237,205 @@ def _assert_acyclic(queue: CoordinationQueue) -> None:
         visit(ident)
 
 
+def build_daily_report(
+    repo_root: Path,
+    *,
+    inventory_paths: Iterable[Path] = (),
+    active_lanes: Iterable[str] = (),
+    latest_report_path: Path | None = None,
+) -> dict[str, object]:
+    """Build a secret-free daily projection from existing evidence only."""
+    queue = load_queue(repo_root)
+    repository = inspect_repository(repo_root)
+    active = tuple(active_lanes)
+    inventories = [
+        _inventory_summary(load_inventory_file(path), path) for path in inventory_paths
+    ]
+    latest = _load_latest_validation(
+        latest_report_path or repo_root / ".development-factory/latest.json",
+        current_head=repository.head,
+    )
+    state_counts: dict[str, int] = {}
+    lane_counts: dict[str, int] = {}
+    for assignment in queue.assignments:
+        state_counts[assignment.state] = state_counts.get(assignment.state, 0) + 1
+        lane_counts[assignment.lane] = lane_counts.get(assignment.lane, 0) + 1
+    return {
+        "schema": DAILY_REPORT_SCHEMA,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "authority": {
+            "application_integration_lane": "LAPTOP_MASTER",
+            "factory_lane": "OM1",
+            "operations_data_lane": "OM2",
+            "independent_reviewer": "REVIEWER",
+            "claims_and_leases": "existing Engineering Control / Worker Control",
+            "live_mutation": False,
+        },
+        "queue": {
+            "status": queue.status,
+            "assignment_count": len(queue.assignments),
+            "state_counts": state_counts,
+            "lane_counts": lane_counts,
+            "active_lanes_supplied": list(active),
+            "eligible_after_supplied_activation": list(
+                eligible_after_activation(queue, active)
+            ),
+        },
+        "repository": {
+            "branch": repository.branch,
+            "head": repository.head,
+            "working_tree_clean": repository.working_tree_clean,
+            "index_clean": repository.index_clean,
+        },
+        "machines": inventories,
+        "unverified_lanes": sorted(
+            lane
+            for lane in ("LAPTOP_MASTER", "OM1", "OM2", "REVIEWER")
+            if not any(
+                item["role"] == _inventory_role_for_lane(lane) for item in inventories
+            )
+        ),
+        "validation": latest,
+        "utilization": {
+            "status": "UNAVAILABLE",
+            "reason": "Machine inventory does not collect process utilization.",
+        },
+        "safety": {
+            "source_values_read": False,
+            "private_keys_read": False,
+            "git_mutation_performed": False,
+            "live_data_mutation": False,
+        },
+    }
+
+
+def write_daily_report(report: dict[str, object], json_path: Path) -> tuple[Path, Path]:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    markdown_path = json_path.with_suffix(".md")
+    markdown_path.write_text(render_daily_report(report), encoding="utf-8")
+    return json_path, markdown_path
+
+
+def render_daily_report(report: dict[str, object]) -> str:
+    queue = report["queue"]
+    assert isinstance(queue, dict)
+    lines = [
+        "# TwelveHats Daily Engineering Report",
+        "",
+        f"- Generated: `{report['generated_at_utc']}`",
+        f"- Queue status: `{queue['status']}`",
+        f"- Assignments: `{queue['assignment_count']}`",
+        f"- Eligible after supplied activation: {', '.join(queue['eligible_after_supplied_activation']) or 'NONE'}",
+        "",
+        "## Machines",
+        "",
+    ]
+    machines = report["machines"]
+    assert isinstance(machines, list)
+    if machines:
+        lines.extend(
+            f"- `{item['role']}` — {item['hostname']} — {item['branch']} @ `{item['head']}`; clean={item['clean']}"
+            for item in machines
+        )
+    else:
+        lines.append("- No machine inventory receipts supplied.")
+    lines.extend(
+        [
+            "",
+            "## Unverified lanes",
+            "",
+            f"- {', '.join(report['unverified_lanes']) or 'None.'}",
+            "",
+            "## Validation",
+            "",
+        ]
+    )
+    validation = report["validation"]
+    assert isinstance(validation, dict)
+    repository = report["repository"]
+    assert isinstance(repository, dict)
+    lines.append(f"- Status: `{validation.get('status', 'UNAVAILABLE')}`")
+    lines.append(f"- Readiness: `{validation.get('readiness', 'UNAVAILABLE')}`")
+    lines.append(f"- Validation HEAD: `{validation.get('head', 'UNAVAILABLE')}`")
+    lines.append(f"- Current HEAD: `{repository['head']}`")
+    lines.extend(
+        [
+            "",
+            "## Resource utilization",
+            "",
+            "- UNAVAILABLE — inventory receipts do not collect process utilization.",
+            "",
+            "This report is an evidence projection only; it does not claim work, create leases, or authorize mutations.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _inventory_role_for_lane(lane: str) -> str:
+    return "LAPTOP" if lane == "LAPTOP_MASTER" else lane
+
+
+def _inventory_summary(payload: dict[str, object], path: Path) -> dict[str, object]:
+    host = payload["host"]
+    repository = payload["repository"]
+    resources = payload.get("resources", {})
+    assert isinstance(host, dict)
+    assert isinstance(repository, dict)
+    assert isinstance(resources, dict)
+    return {
+        "role": payload["role_claimed"],
+        "receipt": str(path),
+        "hostname": host["hostname"],
+        "os": host["os"],
+        "branch": repository["branch"],
+        "head": repository["head"],
+        "clean": repository.get("status_clean") is True,
+        "free_bytes_at_repo": resources.get("free_bytes_at_repo"),
+        "host_memory_bytes": resources.get("host_memory_bytes"),
+        "safety": payload["safety"],
+    }
+
+
+def _load_latest_validation(path: Path, *, current_head: str) -> dict[str, object]:
+    try:
+        payload: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "status": "UNAVAILABLE",
+            "reason": "No readable latest validation report.",
+        }
+    if not isinstance(payload, dict):
+        return {
+            "status": "UNAVAILABLE",
+            "reason": "Latest validation report is not an object.",
+        }
+    repository = payload.get("repository")
+    observed_head = (
+        repository.get("head", "UNAVAILABLE")
+        if isinstance(repository, dict)
+        else "UNAVAILABLE"
+    )
+    status = "AVAILABLE" if observed_head == current_head else "STALE"
+    return {
+        "status": status,
+        "readiness": payload.get("readiness", "UNAVAILABLE"),
+        "head": observed_head,
+        "stale_against_head": current_head if status == "STALE" else None,
+        "blocking_failures": payload.get("blocking_failures", []),
+        "generated_at": payload.get("generated_at", "UNAVAILABLE"),
+    }
+
+
 __all__ = [
+    "DAILY_REPORT_SCHEMA",
     "Assignment",
     "CoordinationError",
     "CoordinationQueue",
+    "build_daily_report",
     "dependency_layers",
     "eligible_after_activation",
     "load_inventory_file",
@@ -243,4 +443,5 @@ __all__ = [
     "load_queue_file",
     "validate_inventory",
     "validate_queue",
+    "write_daily_report",
 ]

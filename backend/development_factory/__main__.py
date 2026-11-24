@@ -8,9 +8,11 @@ from pathlib import Path
 from development_factory.automation import TaskRunner
 from development_factory.coordination import (
     CoordinationError,
+    build_daily_report,
     dependency_layers,
     eligible_after_activation,
     load_queue_file,
+    write_daily_report,
 )
 from development_factory.engine import DevelopmentFactory
 from development_factory.lia import LiaSupervisor
@@ -57,6 +59,21 @@ def main() -> int:
     coordination_summary = coordination_commands.choices["summary"]
     coordination_summary.add_argument(
         "--active-lane", action="append", default=[], dest="active_lanes"
+    )
+    daily_report = coordination_commands.add_parser("daily-report")
+    daily_report.add_argument(
+        "--inventory", action="append", default=[], dest="inventory_paths", type=Path
+    )
+    daily_report.add_argument(
+        "--active-lane", action="append", default=[], dest="active_lanes"
+    )
+    daily_report.add_argument(
+        "--latest-report", type=Path, default=None, dest="latest_report_path"
+    )
+    daily_report.add_argument(
+        "--output",
+        type=Path,
+        default=Path(".development-factory/daily-report.json"),
     )
     subparsers.add_parser("report")
     task = subparsers.add_parser("task")
@@ -141,6 +158,32 @@ def main() -> int:
                 if args.require_clean and not clean:
                     print("BLOCKED: repository has uncommitted changes")
                     return 1
+                return 0
+            if args.coordination_command == "daily-report":
+                inventory_paths = [
+                    path if path.is_absolute() else args.repo_root / path
+                    for path in args.inventory_paths
+                ]
+                latest_report_path = args.latest_report_path
+                if (
+                    latest_report_path is not None
+                    and not latest_report_path.is_absolute()
+                ):
+                    latest_report_path = args.repo_root / latest_report_path
+                output = (
+                    args.output
+                    if args.output.is_absolute()
+                    else args.repo_root / args.output
+                )
+                report = build_daily_report(
+                    args.repo_root,
+                    inventory_paths=inventory_paths,
+                    active_lanes=args.active_lanes,
+                    latest_report_path=latest_report_path,
+                )
+                json_path, markdown_path = write_daily_report(report, output)
+                print(f"Daily report JSON: {json_path}")
+                print(f"Daily report Markdown: {markdown_path}")
                 return 0
             queue_path = args.queue
             if not queue_path.is_absolute():

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from development_factory.coordination import (
     CoordinationError,
+    build_daily_report,
     dependency_layers,
     eligible_after_activation,
     load_queue,
@@ -76,6 +77,64 @@ def test_machine_inventory_requires_secret_free_safety_flags() -> None:
     receipt["safety"]["private_keys_read"] = True
     with pytest.raises(CoordinationError):
         validate_inventory(receipt)
+
+
+def test_daily_report_projects_inventory_queue_and_unverified_lanes(
+    tmp_path: Path,
+) -> None:
+    receipt = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": "LAPTOP",
+        "host": {
+            "hostname": "laptop",
+            "os": "macOS",
+            "machine": "arm64",
+            "python": "3.13",
+        },
+        "repository": {
+            "root": "/repo",
+            "branch": "work/laptop",
+            "head": "b" * 40,
+            "origin": "https://example.invalid/repo.git",
+            "status_clean": True,
+        },
+        "resources": {"free_bytes_at_repo": 100, "host_memory_bytes": 200},
+        "safety": {
+            "private_keys_read": False,
+            "environment_values_dumped": False,
+            "git_mutation_performed": False,
+            "docker_container_started": False,
+        },
+    }
+    receipt_path = tmp_path / "laptop.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    latest_path = tmp_path / "latest.json"
+    latest_path.write_text(
+        json.dumps(
+            {
+                "readiness": "Ready for owner review",
+                "repository": {"head": "c" * 40},
+                "blocking_failures": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = build_daily_report(
+        Path(__file__).parents[3],
+        inventory_paths=(receipt_path,),
+        active_lanes=("LAPTOP_MASTER",),
+        latest_report_path=latest_path,
+    )
+
+    assert report["schema"] == "twelfthats.daily-engineering-report.v1"
+    assert report["queue"]["eligible_after_supplied_activation"] == [
+        "LAP-SALES-DEMO-ACCESS-01",
+        "LAP-WORKFORCE-DISPATCH-READINESS-01",
+    ]
+    assert report["unverified_lanes"] == ["OM1", "OM2", "REVIEWER"]
+    assert report["validation"]["status"] == "STALE"
+    assert report["validation"]["head"] == "c" * 40
 
 
 @pytest.mark.parametrize("dependency", ["MISSING", "OM1-TWO"])
