@@ -24,10 +24,14 @@ def parse_args() -> argparse.Namespace:
 async def probe(args: argparse.Namespace) -> dict[str, object]:
     raw_url = os.environ.get("DATABASE_URL")
     if not raw_url:
-        raise SystemExit("DATABASE_URL is required; legacy runtime fallback is forbidden")
+        raise SystemExit(
+            "DATABASE_URL is required; legacy runtime fallback is forbidden"
+        )
     username = urlsplit(raw_url).username
     if username != args.expected_role:
-        raise SystemExit("backend DATABASE_URL does not use the expected application role")
+        raise SystemExit(
+            "backend DATABASE_URL does not use the expected application role"
+        )
 
     engine = create_async_engine(raw_url, pool_pre_ping=True)
     query = text(

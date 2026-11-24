@@ -96,7 +96,9 @@ def main() -> int:
     if not args.allow_rehearsal_database:
         raise SystemExit("refusing to run without --allow-rehearsal-database")
     database_name = os.environ.get("PGDATABASE", args.dsn.rsplit("/", 1)[-1])
-    if not any(token in database_name.lower() for token in ("rehearsal", "qualification")):
+    if not any(
+        token in database_name.lower() for token in ("rehearsal", "qualification")
+    ):
         raise SystemExit("refusing to run against a non-rehearsal database name")
     try:
         with psycopg.connect(args.dsn, autocommit=True) as connection:

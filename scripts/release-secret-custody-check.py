@@ -14,9 +14,7 @@ SECRET_SIGNATURES = {
     "gitlab_token": re.compile(rb"glpat-[A-Za-z0-9_-]{20,}"),
     "google_api_key": re.compile(rb"AIza[0-9A-Za-z_-]{35}"),
     "npm_token": re.compile(rb"npm_[A-Za-z0-9]{36}"),
-    "sendgrid_api_key": re.compile(
-        rb"SG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"
-    ),
+    "sendgrid_api_key": re.compile(rb"SG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"),
     "slack_token": re.compile(rb"xox[baprs]-[A-Za-z0-9-]{10,}"),
     "stripe_live_key": re.compile(rb"sk_live_[A-Za-z0-9]{16,}"),
     "twilio_api_key": re.compile(rb"SK[0-9a-fA-F]{32}"),

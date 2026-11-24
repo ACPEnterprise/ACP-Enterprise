@@ -190,7 +190,11 @@ FAMILIES = (
         "COMMERCIAL",
         "Price Book / Estimates",
         "commercial_pricing",
-        ("backend/app/price_book/**", "backend/app/estimates/**", "frontend/src/routes/EstimatesRoute.tsx"),
+        (
+            "backend/app/price_book/**",
+            "backend/app/estimates/**",
+            "frontend/src/routes/EstimatesRoute.tsx",
+        ),
         ("Financing offers", "accounting policy", "Business Economics recommendations"),
         (
             "Price Book effective-dating and supersession",
@@ -219,7 +223,11 @@ FAMILIES = (
         "REV",
         "Invoicing / Payments",
         "revenue_workflows",
-        ("backend/app/invoicing/**", "backend/app/payments/**", "frontend/src/routes/InvoicesRoute.tsx"),
+        (
+            "backend/app/invoicing/**",
+            "backend/app/payments/**",
+            "frontend/src/routes/InvoicesRoute.tsx",
+        ),
         ("Accounting posting rules", "processor credentials", "real financial import"),
         (
             "Invoice generation from accepted field completion",
@@ -251,7 +259,11 @@ FAMILIES = (
         "Inventory",
         "inventory_stock_truth",
         ("backend/app/inventory/**", "frontend/src/routes/InventoryRoute.tsx"),
-        ("Purchasing-owned purchase orders", "financial valuation", "fabricated opening balances"),
+        (
+            "Purchasing-owned purchase orders",
+            "financial valuation",
+            "fabricated opening balances",
+        ),
         (
             "Inventory opening-completeness evidence model",
             "Truck stock custody workflow",
@@ -327,7 +339,11 @@ FAMILIES = (
         "Workforce",
         "workforce_employee_labor",
         ("backend/app/workforce/**", "backend/app/platform/employees/**"),
-        ("Payroll calculation", "worker factory identity", "autonomous performance decisions"),
+        (
+            "Payroll calculation",
+            "worker factory identity",
+            "autonomous performance decisions",
+        ),
         (
             "Employee operational profile lifecycle",
             "Technician capability effective history",
@@ -413,8 +429,15 @@ FAMILIES = (
         "BEA",
         "Beacon",
         "beacon_signals",
-        ("backend/app/beacon/**", "frontend/src/components/command-center/BeaconPanel.tsx"),
-        ("Autonomous operational mutation", "unsupported economics", "worker scheduling"),
+        (
+            "backend/app/beacon/**",
+            "frontend/src/components/command-center/BeaconPanel.tsx",
+        ),
+        (
+            "Autonomous operational mutation",
+            "unsupported economics",
+            "worker scheduling",
+        ),
         (
             "Operational exception signal catalog",
             "Evidence-bound signal evaluation",
@@ -436,7 +459,11 @@ FAMILIES = (
         "Luminary / LIA",
         "lia_guidance",
         ("backend/app/engineering_execution/**", "docs/engineering/lia-*.md"),
-        ("Autonomous mutation", "worker enrollment", "financial recommendations without evidence"),
+        (
+            "Autonomous mutation",
+            "worker enrollment",
+            "financial recommendations without evidence",
+        ),
         (
             "Enterprise explanation envelope",
             "Evidence citation and provenance contract",
@@ -619,7 +646,10 @@ def build() -> dict[str, Any]:
                     *(["INV.2A@45fda1c"] if milestone_id == "BANK.PUR.001" else []),
                 ],
                 "dependency_type": "HARD_ALL",
-                "readiness_conditions": [readiness, "Current origin is fetched and path ownership is rechecked."],
+                "readiness_conditions": [
+                    readiness,
+                    "Current origin is fetched and path ownership is rechecked.",
+                ],
                 "implementation_boundary": (
                     f"Own only {name.lower()} contracts, persistence or projections, APIs, "
                     f"operator UX, audit, and focused validation inside {family.collision}."
@@ -630,7 +660,11 @@ def build() -> dict[str, Any]:
                 "owner_decision_required": owner,
                 "finance_decision_required": finance,
                 "external_gate": external,
-                "schema_migration_risk": "HIGH" if index in {1, 2, 5} and family.code in {"PUR", "ASSET", "WF", "MIG"} else "MEDIUM" if index % 4 == 0 else "LOW",
+                "schema_migration_risk": "HIGH"
+                if index in {1, 2, 5} and family.code in {"PUR", "ASSET", "WF", "MIG"}
+                else "MEDIUM"
+                if index % 4 == 0
+                else "LOW",
                 "production_risk": "PROHIBITED_UNTIL_SEPARATE_AUTHORIZATION",
                 "validation_contract": [
                     "Focused domain unit and integration tests",
@@ -689,12 +723,27 @@ def validate(bank: dict[str, Any]) -> None:
     if not 200 <= len(milestones) <= 300:
         raise ValueError("Milestone count must be between 200 and 300.")
     required = {
-        "milestone_id", "name", "domain", "objective", "priority", "dependencies",
-        "dependency_type", "readiness_conditions", "implementation_boundary",
-        "excluded_scope", "likely_repository_areas", "collision_domain",
-        "owner_decision_required", "finance_decision_required", "external_gate",
-        "schema_migration_risk", "production_risk", "validation_contract",
-        "completion_evidence", "successor_ids", "readiness_state",
+        "milestone_id",
+        "name",
+        "domain",
+        "objective",
+        "priority",
+        "dependencies",
+        "dependency_type",
+        "readiness_conditions",
+        "implementation_boundary",
+        "excluded_scope",
+        "likely_repository_areas",
+        "collision_domain",
+        "owner_decision_required",
+        "finance_decision_required",
+        "external_gate",
+        "schema_migration_risk",
+        "production_risk",
+        "validation_contract",
+        "completion_evidence",
+        "successor_ids",
+        "readiness_state",
     }
     ids = [item["milestone_id"] for item in milestones]
     if len(ids) != len(set(ids)):
@@ -714,25 +763,38 @@ def validate(bank: dict[str, Any]) -> None:
         if not set(item["dependencies"]) <= known:
             raise ValueError(f"Missing dependency for {item['milestone_id']}")
         if item["readiness_state"] == "READY" and item["dependencies"]:
-            raise ValueError(f"READY item has unresolved bank dependency: {item['milestone_id']}")
+            raise ValueError(
+                f"READY item has unresolved bank dependency: {item['milestone_id']}"
+            )
         if item["readiness_state"] == "READY" and (
             item["owner_decision_required"]
             or item["finance_decision_required"]
             or item["external_gate"] != "none"
         ):
-            raise ValueError(f"READY item has an unresolved gate: {item['milestone_id']}")
+            raise ValueError(
+                f"READY item has an unresolved gate: {item['milestone_id']}"
+            )
         if (
             item["readiness_state"] == "BLOCKED_OWNER_DECISION"
             and not item["owner_decision_required"]
         ):
-            raise ValueError(f"Owner-blocked item lacks its gate: {item['milestone_id']}")
+            raise ValueError(
+                f"Owner-blocked item lacks its gate: {item['milestone_id']}"
+            )
         if (
             item["readiness_state"] == "BLOCKED_FINANCE_DECISION"
             and not item["finance_decision_required"]
         ):
-            raise ValueError(f"Finance-blocked item lacks its gate: {item['milestone_id']}")
-        if item["readiness_state"] == "BLOCKED_EXTERNAL" and item["external_gate"] == "none":
-            raise ValueError(f"Externally blocked item lacks its gate: {item['milestone_id']}")
+            raise ValueError(
+                f"Finance-blocked item lacks its gate: {item['milestone_id']}"
+            )
+        if (
+            item["readiness_state"] == "BLOCKED_EXTERNAL"
+            and item["external_gate"] == "none"
+        ):
+            raise ValueError(
+                f"Externally blocked item lacks its gate: {item['milestone_id']}"
+            )
         for successor in item["successor_ids"]:
             if item["milestone_id"] not in by_id(milestones, successor)["dependencies"]:
                 raise ValueError("Successor edge is not reciprocal.")
@@ -777,7 +839,15 @@ def main() -> None:
     counts: dict[str, int] = {}
     for item in bank["milestones"]:
         counts[item["readiness_state"]] = counts.get(item["readiness_state"], 0) + 1
-    print(json.dumps({"count": len(bank["milestones"]), "readiness": counts, "fingerprint": bank["fingerprint"]}))
+    print(
+        json.dumps(
+            {
+                "count": len(bank["milestones"]),
+                "readiness": counts,
+                "fingerprint": bank["fingerprint"],
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

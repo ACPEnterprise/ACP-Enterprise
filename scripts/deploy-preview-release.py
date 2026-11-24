@@ -97,7 +97,9 @@ def run(
             detail = ""
         else:
             detail = " output was not included to avoid exposing runtime configuration."
-        fail(f"command failed ({completed.returncode}): {command_text(command)}.{detail}")
+        fail(
+            f"command failed ({completed.returncode}): {command_text(command)}.{detail}"
+        )
     return completed.stdout if capture and completed.stdout is not None else ""
 
 
@@ -112,7 +114,9 @@ def require_source(source_root: Path, sha: str) -> tuple[str, str]:
     if not source_root.is_dir():
         fail(f"source root is not a directory: {source_root}")
     try:
-        git_root = Path(git_output(source_root, "rev-parse", "--show-toplevel")).resolve()
+        git_root = Path(
+            git_output(source_root, "rev-parse", "--show-toplevel")
+        ).resolve()
     except DeployError as exc:
         fail(f"source root is not a Git worktree: {source_root} ({exc})")
     if git_root != source_root:
@@ -121,7 +125,9 @@ def require_source(source_root: Path, sha: str) -> tuple[str, str]:
         fail("source worktree is dirty; refusing to build a release")
     resolved = git_output(source_root, "rev-parse", "--verify", f"{sha}^{{commit}}")
     if resolved != sha:
-        fail(f"requested SHA does not resolve exactly: requested {sha}, resolved {resolved}")
+        fail(
+            f"requested SHA does not resolve exactly: requested {sha}, resolved {resolved}"
+        )
     tree = git_output(source_root, "rev-parse", "--verify", f"{sha}^{{tree}}")
     tracked_env = subprocess.run(
         ("git", "-C", str(source_root), "ls-files", "--error-unmatch", ".env.preview"),
@@ -130,9 +136,18 @@ def require_source(source_root: Path, sha: str) -> tuple[str, str]:
         check=False,
     )
     if tracked_env.returncode == 0:
-        fail(".env.preview is tracked by the requested source; runtime secrets cannot be archived")
-    for required in ("docker-compose.preview.yml", "backend/Dockerfile.preview", "scripts/verify-beta-connectivity.sh"):
-        run(("git", "-C", str(source_root), "cat-file", "-e", f"{sha}:{required}"), quiet_failure=True)
+        fail(
+            ".env.preview is tracked by the requested source; runtime secrets cannot be archived"
+        )
+    for required in (
+        "docker-compose.preview.yml",
+        "backend/Dockerfile.preview",
+        "scripts/verify-beta-connectivity.sh",
+    ):
+        run(
+            ("git", "-C", str(source_root), "cat-file", "-e", f"{sha}:{required}"),
+            quiet_failure=True,
+        )
     return resolved, tree
 
 
@@ -151,7 +166,9 @@ def assert_preview_root(root: Path) -> tuple[Path, Path]:
     if not current.is_symlink():
         fail(f"{current} must be an atomic symlink")
     resolved = current.resolve(strict=True)
-    if resolved.parent != releases.resolve() or not resolved.name.startswith(RELEASE_PREFIX):
+    if resolved.parent != releases.resolve() or not resolved.name.startswith(
+        RELEASE_PREFIX
+    ):
         fail(f"current does not point to an enterprise-beta release: {resolved}")
     if not resolved.is_dir() or resolved.is_symlink():
         fail(f"current release is not a real directory: {resolved}")
@@ -177,7 +194,9 @@ def assert_bootstrap_root(root: Path) -> tuple[Path, Path]:
     return root, releases
 
 
-def validate_runtime_env(path: Path, *, expected_sha: str | None = None) -> dict[str, str]:
+def validate_runtime_env(
+    path: Path, *, expected_sha: str | None = None
+) -> dict[str, str]:
     if not path.is_file() or path.is_symlink():
         fail(f"missing or unsafe runtime config: {path}")
     if stat.S_IMODE(path.stat().st_mode) & 0o077:
@@ -248,7 +267,10 @@ def extract_archive(source_root: Path, sha: str, stage: Path) -> None:
             stage_resolved = stage.resolve()
             for member in members:
                 member_path = (stage / member.name).resolve()
-                if member_path != stage_resolved and stage_resolved not in member_path.parents:
+                if (
+                    member_path != stage_resolved
+                    and stage_resolved not in member_path.parents
+                ):
                     fail(f"unsafe path in Git archive: {member.name}")
             archive.extractall(stage, filter="data")
     finally:
@@ -260,7 +282,10 @@ def extract_archive(source_root: Path, sha: str, stage: Path) -> None:
 def copy_runtime_config(previous: Path, stage: Path, sha: str) -> None:
     source = previous / ".env.preview"
     validate_runtime_env(source)
-    write_private(stage / ".env.preview", update_app_version(source.read_text(encoding="utf-8"), sha))
+    write_private(
+        stage / ".env.preview",
+        update_app_version(source.read_text(encoding="utf-8"), sha),
+    )
 
 
 def copy_bootstrap_config(source: Path, stage: Path, sha: str) -> None:
@@ -307,12 +332,20 @@ def selected_services(values: Sequence[str] | None) -> tuple[str, ...]:
     if unknown:
         fail(f"unsupported application service(s): {', '.join(unknown)}")
     if "backend" not in services:
-        fail("backend must be included so APP_VERSION, schema, and health gates remain authoritative")
+        fail(
+            "backend must be included so APP_VERSION, schema, and health gates remain authoritative"
+        )
     return services
 
 
 def profile_args(services: Sequence[str]) -> list[str]:
-    return [item for profile in sorted({PROFILE_FOR_SERVICE[s] for s in services if s in PROFILE_FOR_SERVICE}) for item in ("--profile", profile)]
+    return [
+        item
+        for profile in sorted(
+            {PROFILE_FOR_SERVICE[s] for s in services if s in PROFILE_FOR_SERVICE}
+        )
+        for item in ("--profile", profile)
+    ]
 
 
 def validate_compose(release: Path, *, dry_run: bool) -> None:
@@ -336,9 +369,14 @@ def write_metadata(
         "runtime_files": [".env.preview"],
         "services": list(services),
         "previous_current_target": release.previous_link,
-        "previous_release": str(release.previous_path) if release.previous_path else None,
+        "previous_release": str(release.previous_path)
+        if release.previous_path
+        else None,
     }
-    write_private(release.path / ".release-metadata.json", json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+    write_private(
+        release.path / ".release-metadata.json",
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+    )
 
 
 def atomic_switch(root: Path, target: Path) -> None:
@@ -376,7 +414,16 @@ def wait_for_backend(release: Path, timeout: int) -> None:
         output = run(compose_command(release, ("ps", "-q", "backend")), capture=True)
         identifier = output.strip().splitlines()[-1] if output.strip() else ""
         if identifier:
-            status_output = run(("docker", "inspect", "--format", "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}", identifier), capture=True)
+            status_output = run(
+                (
+                    "docker",
+                    "inspect",
+                    "--format",
+                    "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}",
+                    identifier,
+                ),
+                capture=True,
+            )
             last = status_output.strip()
             if last == "healthy":
                 return
@@ -465,13 +512,23 @@ def verify_http(release: Path, sha: str) -> None:
 
 
 def verify_schema(release: Path) -> None:
-    current = run(compose_command(release, ("exec", "-T", "backend", "alembic", "current")), capture=True)
-    heads = run(compose_command(release, ("exec", "-T", "backend", "alembic", "heads")), capture=True)
+    current = run(
+        compose_command(release, ("exec", "-T", "backend", "alembic", "current")),
+        capture=True,
+    )
+    heads = run(
+        compose_command(release, ("exec", "-T", "backend", "alembic", "heads")),
+        capture=True,
+    )
     run(compose_command(release, ("exec", "-T", "backend", "alembic", "check")))
     revision = re.compile(r"(?m)^([a-z0-9]+)(?:\s|$)")
     current_revisions = revision.findall(current)
     head_revisions = revision.findall(heads)
-    if len(current_revisions) != 1 or len(head_revisions) != 1 or current_revisions != head_revisions:
+    if (
+        len(current_revisions) != 1
+        or len(head_revisions) != 1
+        or current_revisions != head_revisions
+    ):
         fail("Alembic current/head mismatch")
     if "(head)" not in current:
         fail("Alembic current is not marked head")
@@ -481,7 +538,9 @@ def verify_stateful_ids(release: Path, before: dict[str, str]) -> None:
     after = compose_ids(release)
     for service in ("postgres", "redis"):
         if after[service] != before[service]:
-            fail(f"{service} container identity changed during application-only deployment")
+            fail(
+                f"{service} container identity changed during application-only deployment"
+            )
 
 
 def verify_beta(release: Path) -> None:
@@ -511,7 +570,20 @@ def verify_release(
 
 
 def recreate(release: Path, services: Sequence[str]) -> None:
-    run(compose_command(release, (*profile_args(services), "up", "-d", "--no-deps", "--force-recreate", "--no-build", *services)))
+    run(
+        compose_command(
+            release,
+            (
+                *profile_args(services),
+                "up",
+                "-d",
+                "--no-deps",
+                "--force-recreate",
+                "--no-build",
+                *services,
+            ),
+        )
+    )
 
 
 def build(release: Path, services: Sequence[str]) -> None:
@@ -585,7 +657,9 @@ def bootstrap(args: argparse.Namespace) -> int:
         print(f"DRY-RUN: target={target}")
         print(f"DRY-RUN: current would atomically point to {target}")
         print(f"DRY-RUN: services={','.join(services)} (none will start)")
-        print("DRY-RUN: PostgreSQL, Redis, migrations, HCP, QBO, Production, and DNS are untouched.")
+        print(
+            "DRY-RUN: PostgreSQL, Redis, migrations, HCP, QBO, Production, and DNS are untouched."
+        )
         return 0
     releases.mkdir(mode=0o755, parents=True, exist_ok=True)
     release, target = build_bootstrap_release(
@@ -606,7 +680,9 @@ def bootstrap(args: argparse.Namespace) -> int:
         raise DeployError(str(exc)) from exc
     print(f"Bootstrapped Preview/Beta release: {target}")
     print(f"APP_VERSION={sha}")
-    print("No PostgreSQL, Redis, migration, application, HCP, QBO, Production, or DNS action was performed.")
+    print(
+        "No PostgreSQL, Redis, migration, application, HCP, QBO, Production, or DNS action was performed."
+    )
     return 0
 
 
@@ -629,7 +705,9 @@ def deploy(args: argparse.Namespace) -> int:
         print(f"DRY-RUN: target={target}")
         print(f"DRY-RUN: previous={previous} ({previous_link})")
         print(f"DRY-RUN: services={','.join(services)}")
-        print("DRY-RUN: would archive tracked source, copy .env.preview, validate Compose, build application images, atomically switch current, recreate application services, and verify.")
+        print(
+            "DRY-RUN: would archive tracked source, copy .env.preview, validate Compose, build application images, atomically switch current, recreate application services, and verify."
+        )
         print("DRY-RUN: PostgreSQL, Redis, migrations, and Production are untouched.")
         return 0
     before_ids = compose_ids(previous)
@@ -649,7 +727,10 @@ def deploy(args: argparse.Namespace) -> int:
         if not finalized:
             shutil.rmtree(release.path, ignore_errors=True)
         if (root / "current").resolve() == target:
-            print("Release verification failed; attempting application-only rollback.", file=sys.stderr)
+            print(
+                "Release verification failed; attempting application-only rollback.",
+                file=sys.stderr,
+            )
             try:
                 build(previous, services)
                 atomic_switch(root, previous)
@@ -668,7 +749,9 @@ def deploy(args: argparse.Namespace) -> int:
         raise DeployError(str(exc)) from exc
     print(f"Deployed Preview/Beta release: {target}")
     print(f"APP_VERSION={sha}")
-    print(f"Rollback: {Path(sys.argv[0]).resolve()} rollback --root {root} --to {previous}")
+    print(
+        f"Rollback: {Path(sys.argv[0]).resolve()} rollback --root {root} --to {previous}"
+    )
     return 0
 
 
@@ -687,7 +770,11 @@ def rollback(args: argparse.Namespace) -> int:
             fail("current release has no previous release target")
         target = Path(previous).resolve()
     releases = (root / "releases").resolve()
-    if target.parent != releases or not target.name.startswith(RELEASE_PREFIX) or not target.is_dir():
+    if (
+        target.parent != releases
+        or not target.name.startswith(RELEASE_PREFIX)
+        or not target.is_dir()
+    ):
         fail(f"rollback target must be an existing enterprise-beta release: {target}")
     target_sha = release_sha(target)
     if target == current:
@@ -695,8 +782,12 @@ def rollback(args: argparse.Namespace) -> int:
     services = selected_services(args.service)
     validate_compose(target, dry_run=args.dry_run)
     if args.dry_run:
-        print(f"DRY-RUN: rollback current={current} ({current_sha}) to={target} ({target_sha})")
-        print(f"DRY-RUN: services={','.join(services)}; PostgreSQL, Redis, migrations, and Production are untouched.")
+        print(
+            f"DRY-RUN: rollback current={current} ({current_sha}) to={target} ({target_sha})"
+        )
+        print(
+            f"DRY-RUN: services={','.join(services)}; PostgreSQL, Redis, migrations, and Production are untouched."
+        )
         return 0
     before_ids = compose_ids(current)
     try:

@@ -33,9 +33,7 @@ def unpinned_requirements(path: Path) -> tuple[str, ...]:
 
 def main() -> int:
     findings = tuple(
-        finding
-        for path in REQUIREMENT_FILES
-        for finding in unpinned_requirements(path)
+        finding for path in REQUIREMENT_FILES for finding in unpinned_requirements(path)
     )
     if findings:
         print("Backend requirements are not exactly pinned: " + ", ".join(findings))

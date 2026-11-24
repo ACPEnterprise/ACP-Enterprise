@@ -24,7 +24,9 @@ EXPECTED_USER = "acp_hcp_rehearsal"
 EXPECTED_SCHEMA_HEAD = "yp8r0t2v4x6z"
 COMPOSE_ENVIRONMENT = "migration_rehearsal"
 MANIFEST_CONTRACT = "platform-resilience.backup.v1"
-COMPOSE_FILE = Path(__file__).resolve().parents[1] / "docker-compose.migration-rehearsal.yml"
+COMPOSE_FILE = (
+    Path(__file__).resolve().parents[1] / "docker-compose.migration-rehearsal.yml"
+)
 os.umask(0o077)
 
 
@@ -103,7 +105,10 @@ def validate_compose_config(config: dict[str, Any]) -> None:
     networks = postgres.get("networks", {})
     if "migration_rehearsal" not in networks:
         raise ValueError("Rehearsal postgres is outside the private network")
-    if config.get("networks", {}).get("migration_rehearsal", {}).get("internal") is not True:
+    if (
+        config.get("networks", {}).get("migration_rehearsal", {}).get("internal")
+        is not True
+    ):
         raise ValueError("Rehearsal network must be internal")
 
 
@@ -257,7 +262,9 @@ def restore(args: argparse.Namespace) -> None:
         "source_backup_mutated": False,
     }
     write_private_json(Path(args.receipt_output).resolve(), receipt)
-    print(json.dumps({"result": "ISOLATED_RESTORE_COMPLETED", **receipt}, sort_keys=True))
+    print(
+        json.dumps({"result": "ISOLATED_RESTORE_COMPLETED", **receipt}, sort_keys=True)
+    )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -275,7 +282,12 @@ def main() -> None:
     args = parser().parse_args()
     try:
         args.action(args)
-    except (FileNotFoundError, json.JSONDecodeError, subprocess.CalledProcessError, ValueError) as error:
+    except (
+        FileNotFoundError,
+        json.JSONDecodeError,
+        subprocess.CalledProcessError,
+        ValueError,
+    ) as error:
         print(json.dumps({"result": "BLOCKED", "reason": str(error)}), file=sys.stderr)
         raise SystemExit(1) from error
 
