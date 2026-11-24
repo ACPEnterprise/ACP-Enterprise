@@ -70,6 +70,16 @@ creating a second orchestration system. A true cross-machine execution mode
 requires an isolated implementation and independent review of queue authority,
 worker identity, shared-resource fencing, and persistence semantics.
 
+The queue contract is executable through the existing factory CLI:
+
+```sh
+./scripts/development-factory coordination validate
+./scripts/development-factory coordination summary --active-lane LAPTOP_MASTER
+```
+
+These commands validate dependencies and project eligibility only. They do not
+claim work or create a lease.
+
 ## OM1 activation procedure
 
 Run from the existing OM1 repository root. These commands are read-only and

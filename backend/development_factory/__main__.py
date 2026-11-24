@@ -6,6 +6,12 @@ import sys
 from pathlib import Path
 
 from development_factory.automation import TaskRunner
+from development_factory.coordination import (
+    CoordinationError,
+    dependency_layers,
+    eligible_after_activation,
+    load_queue_file,
+)
 from development_factory.engine import DevelopmentFactory
 from development_factory.lia import LiaSupervisor
 from development_factory.lia_contract import LiaContractError
@@ -33,6 +39,22 @@ def main() -> int:
     validate.add_argument("--migrations", action="store_true")
     validate.add_argument("--architecture", action="store_true")
     validate.add_argument("--changed", action="store_true")
+    coordination = subparsers.add_parser("coordination")
+    coordination_commands = coordination.add_subparsers(
+        dest="coordination_command", required=True
+    )
+    for command in ("validate", "summary"):
+        coordination_command = coordination_commands.add_parser(command)
+        coordination_command.add_argument(
+            "queue",
+            type=Path,
+            default=Path("development-factory/continuous-engineering-queue.v1.json"),
+            nargs="?",
+        )
+    coordination_summary = coordination_commands.choices["summary"]
+    coordination_summary.add_argument(
+        "--active-lane", action="append", default=[], dest="active_lanes"
+    )
     subparsers.add_parser("report")
     task = subparsers.add_parser("task")
     task_commands = task.add_subparsers(dest="task_command", required=True)
@@ -100,6 +122,24 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        if args.command == "coordination":
+            queue_path = args.queue
+            if not queue_path.is_absolute():
+                queue_path = args.repo_root / queue_path
+            queue = load_queue_file(queue_path)
+            if args.coordination_command == "validate":
+                print(
+                    f"Coordination queue valid: {len(queue.assignments)} assignments; "
+                    f"{len(dependency_layers(queue))} dependency layers."
+                )
+                return 0
+            eligible = eligible_after_activation(queue, args.active_lanes)
+            print(f"Coordination queue status: {queue.status}")
+            print(f"Assignments: {len(queue.assignments)}")
+            print(
+                f"Eligible after supplied activation: {', '.join(eligible) or 'NONE'}"
+            )
+            return 0
         if args.command == "lia":
             supervisor = LiaSupervisor(args.repo_root)
             if args.lia_command == "review":
@@ -321,6 +361,7 @@ def main() -> int:
         print(f"Classification: {validation_report['readiness']}")
         return int(validation_report["exit_status"])
     except (
+        CoordinationError,
         ManifestError,
         OwnerReviewError,
         ReviewRecordError,
