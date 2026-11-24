@@ -20,6 +20,7 @@ from app.platform.permissions.models import (
     Role,
     RolePermission,
 )
+from app.platform.service_principals.identity import find_existing_service_identity
 from app.platform.service_principals.models import ReleaseServicePrincipal
 from app.platform.users.models import User, UserCredential
 
@@ -49,6 +50,58 @@ class ReleaseActorService:
         if environment not in {"beta", "preview", "test"}:
             raise ValueError("Release actors are forbidden in this environment.")
         return environment
+
+    @staticmethod
+    async def _ensure_release_role(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        permission: Permission,
+        assigned_by_user_id: UUID,
+    ) -> Role:
+        role = await session.scalar(
+            select(Role).where(
+                Role.company_id == company_id,
+                Role.code == RELEASE_ROLE_CODE,
+                Role.archived_at.is_(None),
+            )
+        )
+        if role is None:
+            role = Role(
+                company_id=company_id,
+                code=RELEASE_ROLE_CODE,
+                name="Beta acceptance Release actor",
+                description="Non-human acceptance-principal lifecycle authority",
+                status="active",
+                is_system=True,
+                created_by_user_id=assigned_by_user_id,
+                updated_by_user_id=assigned_by_user_id,
+            )
+            session.add(role)
+            await session.flush()
+            session.add(
+                RolePermission(
+                    role_id=role.id,
+                    permission_id=permission.id,
+                    assigned_by_user_id=assigned_by_user_id,
+                )
+            )
+            return role
+
+        if role.status != "active":
+            raise ValueError("Release actor role is unavailable.")
+        assigned = set(
+            (
+                await session.scalars(
+                    select(Permission.code)
+                    .join(RolePermission, RolePermission.permission_id == Permission.id)
+                    .where(RolePermission.role_id == role.id)
+                )
+            ).all()
+        )
+        if assigned != {ReleasePrincipalPermission.MANAGE}:
+            raise ValueError("Release actor role permission set is not exact.")
+        return role
 
     async def provision_and_rotate(
         self,
@@ -82,6 +135,12 @@ class ReleaseActorService:
         elif permission.status != "active":
             raise ValueError("Release actor permission is unavailable.")
 
+        service_email = f"release-acceptance+{company_id}@service.twelve-hats.invalid"
+        existing_identity = await find_existing_service_identity(
+            session,
+            normalized_email=service_email,
+            company_id=company_id,
+        )
         principal = await session.scalar(
             select(ReleaseServicePrincipal)
             .where(
@@ -93,65 +152,69 @@ class ReleaseActorService:
         user: User
         credential: UserCredential
         if principal is None:
-            user = User(
-                normalized_email=(
-                    f"release-acceptance+{company_id}@service.twelve-hats.invalid"
-                ),
-                first_name="Release",
-                last_name="Actor",
-                display_name="Beta acceptance Release actor",
-                status="active",
-                authorization_version=1,
-                email_verified_at=occurred_at,
-            )
-            session.add(user)
-            await session.flush()
-            credential = UserCredential(
-                user_id=user.id,
-                password_hash=password_service.hash_password(secrets.token_urlsafe(64)),
-                password_changed_at=occurred_at,
-                credential_version=1,
-            )
-            session.add(credential)
-            membership = Membership(
-                user_id=user.id,
-                company_id=company_id,
-                status="active",
-                default_branch_id=None,
-                has_all_branch_access=False,
-                accepted_at=occurred_at,
-            )
-            session.add(membership)
-            await session.flush()
-            role = Role(
-                company_id=company_id,
-                code=RELEASE_ROLE_CODE,
-                name="Beta acceptance Release actor",
-                description="Non-human acceptance-principal lifecycle authority",
-                status="active",
-                is_system=True,
-                created_by_user_id=user.id,
-                updated_by_user_id=user.id,
-            )
-            session.add(role)
-            await session.flush()
-            session.add(
-                RolePermission(
-                    role_id=role.id,
-                    permission_id=permission.id,
-                    assigned_by_user_id=user.id,
+            if existing_identity is None:
+                user = User(
+                    normalized_email=service_email,
+                    first_name="Release",
+                    last_name="Actor",
+                    display_name="Beta acceptance Release actor",
+                    status="active",
+                    authorization_version=1,
+                    email_verified_at=occurred_at,
                 )
-            )
-            session.add(
-                MembershipRole(
+                session.add(user)
+                await session.flush()
+                credential = UserCredential(
+                    user_id=user.id,
+                    password_hash=password_service.hash_password(
+                        secrets.token_urlsafe(64)
+                    ),
+                    password_changed_at=occurred_at,
+                    credential_version=1,
+                )
+                session.add(credential)
+                membership = Membership(
+                    user_id=user.id,
                     company_id=company_id,
-                    membership_id=membership.id,
-                    role_id=role.id,
-                    assigned_by_user_id=user.id,
-                    assigned_at=occurred_at,
-                    grant_reason="release_acceptance_principal_management",
+                    status="active",
+                    default_branch_id=None,
+                    has_all_branch_access=False,
+                    accepted_at=occurred_at,
+                )
+                session.add(membership)
+                await session.flush()
+            else:
+                user = existing_identity.user
+                credential = existing_identity.credential
+                membership = existing_identity.membership
+
+            role = await self._ensure_release_role(
+                session,
+                company_id=company_id,
+                permission=permission,
+                assigned_by_user_id=user.id,
+            )
+            membership_role = await session.scalar(
+                select(MembershipRole).where(
+                    MembershipRole.company_id == company_id,
+                    MembershipRole.membership_id == membership.id,
+                    MembershipRole.role_id == role.id,
+                    MembershipRole.revoked_at.is_(None),
                 )
             )
+            if membership_role is None:
+                session.add(
+                    MembershipRole(
+                        company_id=company_id,
+                        membership_id=membership.id,
+                        role_id=role.id,
+                        assigned_by_user_id=user.id,
+                        assigned_at=occurred_at,
+                        grant_reason="release_acceptance_principal_management",
+                    )
+                )
+            await session.flush()
+            await self._assert_exact_permission(session, membership.id)
             principal = ReleaseServicePrincipal(
                 company_id=company_id,
                 user_id=user.id,
@@ -167,7 +230,19 @@ class ReleaseActorService:
         else:
             if principal.state != "active":
                 raise ValueError("Release actor is revoked.")
-            existing_user = await session.get(User, principal.user_id)
+            existing_identity = await find_existing_service_identity(
+                session,
+                normalized_email=service_email,
+                company_id=company_id,
+            )
+            if (
+                existing_identity is None
+                or existing_identity.user.id != principal.user_id
+            ):
+                raise ValueError(
+                    "Release actor identity does not match the reserved principal."
+                )
+            existing_user = existing_identity.user
             existing_credential = await session.scalar(
                 select(UserCredential)
                 .where(UserCredential.user_id == principal.user_id)

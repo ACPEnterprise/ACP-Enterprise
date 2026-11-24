@@ -26,6 +26,7 @@ from app.platform.service_principals.contracts import (
     READ_PERMISSION_CODES,
     ROLE_CODE,
 )
+from app.platform.service_principals.identity import find_existing_service_identity
 from app.platform.service_principals.models import AcceptanceServicePrincipal
 from app.platform.users.models import User, UserCredential
 
@@ -79,6 +80,7 @@ class AcceptanceServicePrincipalService:
         normalized_name = name.strip()
         if not normalized_name or len(normalized_name) > 100:
             raise ValueError("Service-principal name is invalid.")
+        service_email = f"acceptance+{context.company.id}@service.twelve-hats.invalid"
         existing = await session.scalar(
             select(AcceptanceServicePrincipal).where(
                 AcceptanceServicePrincipal.company_id == context.company.id,
@@ -150,45 +152,68 @@ class AcceptanceServicePrincipalService:
             if assigned != READ_PERMISSION_CODES:
                 raise ValueError("Acceptance service role permission set is not exact.")
 
-        user = User(
-            normalized_email=f"acceptance+{context.company.id}@service.twelve-hats.invalid",
-            first_name="Acceptance",
-            last_name="Reader",
-            display_name=normalized_name,
-            status="active",
-            authorization_version=1,
-            email_verified_at=occurred_at,
-        )
-        session.add(user)
-        await session.flush()
-        session.add(
-            UserCredential(
-                user_id=user.id,
-                password_hash=password_service.hash_password(secrets.token_urlsafe(64)),
-                password_changed_at=occurred_at,
-                credential_version=1,
-            )
-        )
-        membership = Membership(
-            user_id=user.id,
+        existing_identity = await find_existing_service_identity(
+            session,
+            normalized_email=service_email,
             company_id=context.company.id,
-            status="active",
-            default_branch_id=context.membership.default_branch_id,
-            has_all_branch_access=True,
-            accepted_at=occurred_at,
         )
-        session.add(membership)
-        await session.flush()
-        session.add(
-            MembershipRole(
+        if existing_identity is None:
+            user = User(
+                normalized_email=service_email,
+                first_name="Acceptance",
+                last_name="Reader",
+                display_name=normalized_name,
+                status="active",
+                authorization_version=1,
+                email_verified_at=occurred_at,
+            )
+            session.add(user)
+            await session.flush()
+            session.add(
+                UserCredential(
+                    user_id=user.id,
+                    password_hash=password_service.hash_password(
+                        secrets.token_urlsafe(64)
+                    ),
+                    password_changed_at=occurred_at,
+                    credential_version=1,
+                )
+            )
+            membership = Membership(
+                user_id=user.id,
                 company_id=context.company.id,
-                membership_id=membership.id,
-                role_id=role.id,
-                assigned_by_user_id=context.user.id,
-                assigned_at=occurred_at,
-                grant_reason="release_acceptance_readonly",
+                status="active",
+                default_branch_id=context.membership.default_branch_id,
+                has_all_branch_access=True,
+                accepted_at=occurred_at,
+            )
+            session.add(membership)
+            await session.flush()
+        else:
+            user = existing_identity.user
+            membership = existing_identity.membership
+
+        membership_role = await session.scalar(
+            select(MembershipRole).where(
+                MembershipRole.company_id == context.company.id,
+                MembershipRole.membership_id == membership.id,
+                MembershipRole.role_id == role.id,
+                MembershipRole.revoked_at.is_(None),
             )
         )
+        if membership_role is None:
+            session.add(
+                MembershipRole(
+                    company_id=context.company.id,
+                    membership_id=membership.id,
+                    role_id=role.id,
+                    assigned_by_user_id=context.user.id,
+                    assigned_at=occurred_at,
+                    grant_reason="release_acceptance_readonly",
+                )
+            )
+        await session.flush()
+        await self._assert_exact_permissions(session, membership.id)
         principal = AcceptanceServicePrincipal(
             company_id=context.company.id,
             user_id=user.id,
