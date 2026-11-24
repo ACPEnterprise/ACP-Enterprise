@@ -18,7 +18,8 @@ activation package was prepared:
 | OS | macOS `26.5.2`, build `25F84` |
 | Repository | `/Users/michaelfouse/Development/ACP-Enterprise-Master` |
 | Branch at inventory | `work/existing-business-db-compatibility` |
-| HEAD at inventory | `1f213a652b88c97dca738437dc65e291f62cbe90` |
+| Initial inventory HEAD | `1f213a652b88c97dca738437dc65e291f62cbe90` |
+| Current clean checkpoint | `c1021d4acd70f0b2bd5c9692ebdb926579ad23d2` |
 | Origin | `https://github.com/ACPEnterprise/ACP-Enterprise.git` |
 | Worktree at inventory | clean |
 | Codex | `/Users/michaelfouse/.local/bin/codex`, `codex-cli 0.167.0` |
