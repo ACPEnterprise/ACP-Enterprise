@@ -254,14 +254,14 @@ class DevelopmentFactory:
         command = [str(harness)]
         if migration_lifecycle:
             command.extend(("--migration-lifecycle", "--migrations-only"))
-        else:
+        command.extend(("--python", python_bin))
+        if not migration_lifecycle:
             command.extend(
                 (
                     "-q",
                     *shlex.split(os.getenv("DF_BACKEND_TEST_TARGET", "backend/tests")),
                 )
             )
-        command.extend(("--python", python_bin))
         try:
             completed = subprocess.run(
                 command,

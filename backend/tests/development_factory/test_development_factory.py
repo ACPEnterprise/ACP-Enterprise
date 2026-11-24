@@ -155,6 +155,52 @@ def test_missing_dependency_is_classified_unavailable(
     assert "not-installed" in value.summary
 
 
+def test_backend_harness_places_python_before_pytest_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    python_bin = tmp_path / "python"
+    harness = tmp_path / "scripts" / "qualify-backend-tests"
+    python_bin.write_text("", encoding="utf-8")
+    harness.parent.mkdir()
+    harness.write_text("", encoding="utf-8")
+    python_bin.chmod(0o755)
+    harness.chmod(0o755)
+    factory = DevelopmentFactory.__new__(DevelopmentFactory)
+    factory.repo_root = tmp_path
+    check = CheckDefinition(
+        id="backend.tests",
+        name="Backend tests",
+        category="backend",
+        required=True,
+        areas=("backend",),
+        timeout_seconds=10,
+        dependencies=(),
+        failure_classification="test",
+        parallel=False,
+        order=1,
+        implementation="backend_tests",
+    )
+    observed: list[list[str]] = []
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(command: list[str], **_: object) -> Completed:
+        observed.append(command)
+        return Completed()
+
+    monkeypatch.setenv("DF_BACKEND_PYTHON", str(python_bin))
+    monkeypatch.setattr("development_factory.engine.subprocess.run", fake_run)
+    result = factory._backend_harness_check(check, 0.0, migration_lifecycle=False)
+
+    assert result.status == "passed"
+    assert observed == [
+        [str(harness), "--python", str(python_bin), "-q", "backend/tests"]
+    ]
+
+
 def test_report_schema_contract_and_markdown() -> None:
     report = build_report(
         state=clean_state(),
