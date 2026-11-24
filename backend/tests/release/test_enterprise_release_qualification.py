@@ -87,7 +87,14 @@ def test_backend_gate_owns_a_disposable_database_lifecycle() -> None:
 def test_every_executed_profile_is_bound_to_clean_candidate_provenance() -> None:
     module = _module()
     by_key = {check.key: check for check in module.checks()}
-    expected = {"local", "database", "preview", "postdeploy", "commissioning"}
+    expected = {
+        "local",
+        "database",
+        "presigning",
+        "preview",
+        "postdeploy",
+        "commissioning",
+    }
 
     for key in ("repository_cleanliness", "repository_provenance", "release_revision"):
         assert set(by_key[key].profiles) == expected
@@ -109,6 +116,21 @@ def test_protected_check_dispatch_is_explicit_and_service_specific() -> None:
         "protected_schema": "schema",
         "protected_release_metadata": "release-metadata",
     }
+
+
+def test_independent_review_is_a_pre_signing_gate_without_approval() -> None:
+    module = _module()
+    review = next(
+        check for check in module.checks() if check.key == "independent_review"
+    )
+    approval = next(
+        check for check in module.checks() if check.key == "preview_approval"
+    )
+
+    assert review.profiles == ("presigning", "preview")
+    assert approval.profiles == ("preview",)
+    assert review.command is None
+    assert approval.command is None
 
 
 def test_status_vocabulary_is_closed() -> None:

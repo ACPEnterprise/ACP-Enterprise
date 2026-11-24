@@ -56,6 +56,28 @@ mode-`0600` review receipt using
 only when every mandatory gate passed, `defects` is empty, `decision` is
 `APPROVE`, and the receipt is no more than 72 hours old.
 
+The reviewer or the protected review lane validates that receipt before any
+approval is issued:
+
+```sh
+python3 scripts/validate-independent-review.py \
+  --review-receipt /protected/release/independent-review.json \
+  --registry /protected/release/authority.json \
+  --trusted-key /protected/release/twelvehats-beta-release-authority.pub \
+  --key-id "$ENTERPRISE_AUTHORITY_KEY_ID" \
+  --candidate-sha "$CANDIDATE_SHA" \
+  --migration-head "$CANDIDATE_MIGRATION_HEAD" \
+  --backup-receipt-sha256 "$BACKUP_RECEIPT_SHA256" \
+  --restore-receipt-sha256 "$RESTORE_RECEIPT_SHA256" \
+  --rollback-target-sha "$ROLLBACK_SHA" \
+  --rollback-target-release "$ROLLBACK_RELEASE"
+```
+
+This validation has no approval-artifact or private-key prerequisite. The
+custodian's interactive issuer consumes the resulting receipt afterward. The
+two operations are intentionally separate so independent review cannot depend
+on the approval it is meant to precede.
+
 After a fresh protected backup and isolated restore exist, the custodian runs the
 issuer interactively. The issuer checks exact bindings, reviewer enrollment,
 key status and expiry, private/public key correspondence, and the maximum

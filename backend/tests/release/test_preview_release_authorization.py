@@ -6,6 +6,7 @@ import stat
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,17 @@ def module():
     spec = importlib.util.spec_from_file_location(
         "enterprise_release_authority",
         ROOT / "scripts" / "enterprise_release_authority.py",
+    )
+    assert spec and spec.loader
+    loaded = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loaded)
+    return loaded
+
+
+def review_validator():
+    spec = importlib.util.spec_from_file_location(
+        "validate_independent_review",
+        ROOT / "scripts" / "validate-independent-review.py",
     )
     assert spec and spec.loader
     loaded = importlib.util.module_from_spec(spec)
@@ -171,6 +183,46 @@ def test_issuer_requires_exact_independent_review_and_validates_v2_artifact(
     assert result["issuer"] == "twelvehats-beta-release-authority"
     assert result["custodian"] == "Michael Fouse"
     assert result["candidate_sha"] == "a" * 40
+
+
+def test_independent_review_is_validatable_before_signed_approval(
+    tmp_path: Path,
+) -> None:
+    _, _, receipt, registry, public_key, _, review, approval = issue(tmp_path)
+
+    approval.unlink()
+    values = release_values()
+    result = review_validator().validate_independent_review_receipt(
+        SimpleNamespace(
+            review_receipt=review,
+            registry=registry,
+            trusted_key=public_key,
+            key_id=receipt["key_id"],
+            **values,
+        )
+    )
+
+    assert result["contract"] == "enterprise-release-independent-review/v1"
+    assert result["candidate_sha"] == "a" * 40
+    assert result["review_receipt_sha256"]
+
+
+def test_independent_review_validation_does_not_accept_missing_receipt(
+    tmp_path: Path,
+) -> None:
+    _, _, receipt, registry, public_key, _ = enrolled(tmp_path)
+
+    with pytest.raises(ValueError, match="must be a regular file"):
+        values = release_values()
+        review_validator().validate_independent_review_receipt(
+            SimpleNamespace(
+                review_receipt=tmp_path / "missing-review.json",
+                registry=registry,
+                trusted_key=public_key,
+                key_id=receipt["key_id"],
+                **values,
+            )
+        )
 
 
 @pytest.mark.parametrize(
