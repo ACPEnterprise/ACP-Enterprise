@@ -1,0 +1,49 @@
+{
+  "assignment_id": "OM1-DF-FAILURE-INJECTION-04",
+  "automated_claim_used": false,
+  "changed_files": [
+    "backend/development_factory/failure_injection.py",
+    "backend/tests/development_factory/test_failure_injection.py",
+    "docs/engineering/failure-injection-qualification.md"
+  ],
+  "completed_at_utc": "2026-11-25T15:18:47Z",
+  "implementation_sha": "ead8d5a62a8043dcd5d67ca1f5ab36830c8634e9",
+  "machine": {
+    "hostname": "iMac-673.lan",
+    "role": "OM1"
+  },
+  "queue": {
+    "published_ref": "refs/heads/handoff/laptop-om2-history-integration-20261125",
+    "sha": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+    "sha256": "fed97a5408ab17fc5af0919e0fdadf4394b630b637e8f9d8ad6ae34937d3558e"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency": "OM1-DF-SUPERVISOR-RECOVERY-02",
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "bounded_retries": "PASS",
+    "candidate_sha": "ead8d5a62a8043dcd5d67ca1f5ab36830c8634e9",
+    "credential_expiry": "PASS",
+    "deployment_authorized": false,
+    "development_factory_and_release_tests": "263 passed",
+    "evidence_file_sha256": "444e13459878bb742c56ba46a3e07a265c095d80c60757c2533e5f28c4d5c4ee",
+    "evidence_mode": "0600",
+    "health_check_failure": "PASS",
+    "migration_failure": "PASS",
+    "mypy": "PASS (30 source files)",
+    "partial_execution": "PASS",
+    "queue_discovery_failure": "PASS",
+    "report_digest": "37cd7f6ef70b619f1848f46b82f33a3af2b26f6d7f666545659b2fb356ab7e66",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "secret_redaction": "PASS",
+    "truthful_false_pass_rejection": "PASS"
+  }
+}
