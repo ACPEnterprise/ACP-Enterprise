@@ -142,6 +142,31 @@ After Laptop Master verifies the receipt, OM1 may create a new isolated
 worktree from the agreed immutable starting SHA. It must not alter existing
 worktrees or protected branches.
 
+OM1 activation is not complete until the existing authenticated Worker Control
+procedure has also enrolled the node. The administrator must register the
+worker through the permission-checked Worker Control service, not by inserting
+database rows. The registration must bind the Company, provider identifier,
+worker name/version, and only the capabilities needed by the first assignment:
+`transport.connectivity`, `engineering.execute`, `review.package`, and/or
+`validation.run`. The worker's public verification key is registered through the
+existing Worker Identity credential workflow; its private key remains outside
+the repository in a mode-0600 file.
+
+The node runtime is started only after enrollment with the existing entry point:
+
+```sh
+python -m app.worker_runtime
+```
+
+Its protected environment must provide `ACP_WORKER_BASE_URL`, `ACP_WORKER_ID`,
+and `ACP_WORKER_PRIVATE_KEY_FILE`. The activation receipt must report only
+non-secret evidence: Worker ID, provider identifier, capability set, public-key
+fingerprint, authenticated session state, and a fresh healthy heartbeat. It
+must not contain the private-key path contents, access tokens, database URLs, or
+customer data. A connected runtime does not create a lease; the existing Worker
+Control service must issue the assignment-bound lease after the claim envelope
+is accepted.
+
 ## OM2 activation procedure
 
 Run the same read-only procedure from the existing OM2 repository root:
@@ -159,6 +184,12 @@ report, as booleans only, whether the already-authorized HCP/QBO custody roots
 are mounted; it must not print paths containing secrets or copy source data into
 ordinary logs. No OAuth, provider write, live admission, or customer-data export
 is part of activation.
+
+OM2 must use the same Worker Control enrollment and runtime acceptance described
+for OM1. Its first claim must be bound to the exact OM2 assignment, the clean
+worktree HEAD, and the declared HCP/QBO custody booleans. A missing custody root,
+unhealthy heartbeat, stale session, capability mismatch, or changed worktree
+leaves OM2 `UNVERIFIED` and prevents claim issuance.
 
 The laptop currently has read-only custody evidence in Downloads: the HCP CSV
 matches the accepted 4,056,093-byte / 450-column / 5,464-record source digest,
