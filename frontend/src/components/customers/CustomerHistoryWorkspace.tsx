@@ -58,7 +58,7 @@ export function CustomerHistoryWorkspace(props: CustomerHistoryWorkspaceProps) {
   return <div className="mt-5 space-y-4">
     <section aria-label="Customer history overview" className="rounded-xl border border-stroke p-4">
       <h4 className="font-semibold">Customer history overview</h4>
-      <p className="mt-1 text-xs text-content-muted">Counts cover the bounded customer records loaded below.</p>
+      <p className="mt-1 text-xs text-content-muted">This summary shows the customer records currently available here.</p>
       <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-7">
         <div><dt className="text-content-muted">Locations</dt><dd className="text-lg font-semibold">{props.locations.length}</dd></div>
         <div><dt className="text-content-muted">Jobs</dt><dd className="text-lg font-semibold">{allJobs.length}</dd></div>
@@ -72,18 +72,18 @@ export function CustomerHistoryWorkspace(props: CustomerHistoryWorkspaceProps) {
 
     <section aria-label="History completeness" className="rounded-xl border border-stroke p-4">
       <h4 className="font-semibold">History completeness</h4>
-      <p className="mt-1 text-xs text-content-muted">These sections combine the customer’s canonical migrated and TwelveHats activity. Audit details remain available separately.</p>
+      <p className="mt-1 text-xs text-content-muted">This view brings older imported history and newer TwelveHats activity together. Record details remain available for review.</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {completeness("Customer", "COMPLETE", "The Customer record is available.")}
         {completeness("Locations", domainState("Locations"), unavailable.has("Locations") ? "Location evidence could not be loaded." : "Customer locations are available in the unified record.")}
         {completeness("Jobs", domainState("Jobs"), unavailable.has("Jobs") ? "Job evidence could not be loaded." : "Migrated and TwelveHats Jobs are shown together.")}
-        {completeness("Appointments", domainState("Appointments"), unavailable.has("Appointments") ? "Appointment evidence could not be loaded." : "Appointments are bounded to one year before and after today.")}
+        {completeness("Appointments", domainState("Appointments"), unavailable.has("Appointments") ? "Appointment history could not be loaded." : "Appointments shown here cover one year before and after today.")}
         {completeness("Estimates", domainState("Estimates"), unavailable.has("Estimates") ? "Estimate evidence could not be loaded." : "Customer-linked Estimates are shown in the same workflow.")}
-        {completeness("Invoices", invoiceState, "Customer invoices are bounded to the 100 newest records.")}
-        {completeness("Payments", domainState("Payments"), unavailable.has("Payments") ? "Payment evidence could not be loaded." : "Customer payment receipts are bounded to the 100 newest records.")}
-        {completeness("Attachments", "UNAVAILABLE", "No Customer-wide attachment completeness contract exists.")}
+        {completeness("Invoices", invoiceState, "This view shows up to the 100 newest customer invoices.")}
+        {completeness("Payments", domainState("Payments"), unavailable.has("Payments") ? "Payment history could not be loaded." : "This view shows up to the 100 newest customer payment receipts.")}
+        {completeness("Photos & attachments", "UNAVAILABLE", "Photos and attachments are not yet available in this customer history view.")}
       </div>
-      {sourceEvidence.some((item) => item.classification === "UNAVAILABLE") && <p className="mt-3 text-sm text-content-muted">Some supporting evidence is unavailable. Missing evidence is not treated as zero.</p>}
+      {sourceEvidence.some((item) => item.classification === "UNAVAILABLE") && <p className="mt-3 text-sm text-content-muted">Some history could not be loaded. A missing item does not mean there was no activity.</p>}
     </section>
 
     <section aria-label="Service Location history" className="rounded-xl border border-stroke p-4">

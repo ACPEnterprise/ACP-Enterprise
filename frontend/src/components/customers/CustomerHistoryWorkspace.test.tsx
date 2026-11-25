@@ -30,7 +30,9 @@ describe("CustomerHistoryWorkspace", () => {
   it("presents overview, Location history, limitations, and context-preserving links", () => {
     render(<MemoryRouter><CustomerHistoryWorkspace {...baseProps} /></MemoryRouter>);
     expect(screen.getByRole("region", { name: "Customer history overview" })).toHaveTextContent("Jobs1");
-    expect(screen.getByRole("region", { name: "History completeness" })).toHaveTextContent("AttachmentsUNAVAILABLE");
+    const completeness = screen.getByRole("region", { name: "History completeness" });
+    expect(completeness).toHaveTextContent("Photos & attachmentsUNAVAILABLE");
+    expect(completeness).toHaveTextContent("Photos and attachments are not yet available in this customer history view.");
     const locations = screen.getByRole("region", { name: "Service Location history" });
     expect(within(locations).getByText("10 Main Street")).toBeVisible();
     expect(within(locations).getByText(/0 open · 1 closed · 1 Appointments/)).toBeVisible();
