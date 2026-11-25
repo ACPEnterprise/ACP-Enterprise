@@ -17,6 +17,7 @@ class HistoricalDomain(StrEnum):
     INVOICE = "invoice"
     PAYMENT = "payment"
     REFUND = "refund"
+    COMMUNICATION = "communication"
     ACCOUNTING_REPORT = "accounting_report"
 
 

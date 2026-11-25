@@ -100,6 +100,25 @@ protected, and live evidence separately. No OAuth, provider write, financial
 posting, payroll, banking, live admission, or cross-tenant read is authorized.
 Automated claims remain blocked.
 
+## OM2 — Replenished historical-accessibility reservations
+
+Assignments:
+
+- `OM2-HISTORY-DETAIL-READBACK-03`
+- `OM2-IMPORT-MAPPING-02`
+- `OM2-RECONCILIATION-EXCEPTIONS-02`
+- `OM2-QBO-HISTORY-NAVIGATION-03`
+- `OM2-COMMUNICATIONS-TIMELINE-02`
+- `OM2-BROWSER-HISTORY-ACCEPT-03`
+
+These reservations are manually coordinated and bound to the queue file. They
+may use only synthetic or sealed custody evidence. Historical detail must retain
+source identifiers, provenance, unresolved relationships, and unavailable-state
+explanations. CSV/XLSX mapping must be replay-safe and cannot admit records by
+itself. QBO work is source-backed read-only; no OAuth, posting, banking, payroll,
+or financial execution is authorized. Browser acceptance must explicitly label
+synthetic, protected, and live evidence. Automated claims remain blocked.
+
 ## Laptop continuation
 
 Laptop Master continues its reserved All County workflow assignments and may

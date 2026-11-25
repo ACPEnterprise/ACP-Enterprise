@@ -104,6 +104,54 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Historical-only customer UI work is reserved manually; it may use only synthetic or sealed evidence and cannot admit live data."
+    },
+    {
+      "assignment_id": "OM2-HISTORY-DETAIL-READBACK-03",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Follow-on historical detail navigation is manually reserved; source-backed records remain read-only and unresolved relationships must remain visible."
+    },
+    {
+      "assignment_id": "OM2-IMPORT-MAPPING-02",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Reusable CSV/XLSX mapping work is manually reserved; no live admission or source-system write is authorized."
+    },
+    {
+      "assignment_id": "OM2-RECONCILIATION-EXCEPTIONS-02",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Administrator-assisted exception readback is manually reserved; ambiguous identities remain held and provenance is preserved."
+    },
+    {
+      "assignment_id": "OM2-QBO-HISTORY-NAVIGATION-03",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "QBO historical report navigation is manually reserved; sealed evidence is read-only and native posting remains disabled."
+    },
+    {
+      "assignment_id": "OM2-COMMUNICATIONS-TIMELINE-02",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Historical communications timeline integration is manually reserved; no outbound provider activity is authorized."
+    },
+    {
+      "assignment_id": "OM2-BROWSER-HISTORY-ACCEPT-03",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Browser acceptance packet is manually reserved and must distinguish synthetic, protected, and live evidence."
     }
   ],
   "claim_policy": {
@@ -359,6 +407,72 @@
       "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/quality/**"],
       "validation": ["separate worktree", "negative authorization tests", "lease fencing", "evidence digest verification"],
       "stop_conditions": ["self-approval", "missing activation evidence", "secret exposure", "protected mutation"]
+    },
+    {
+      "id": "OM2-HISTORY-DETAIL-READBACK-03",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-CUSTOMER-HISTORY-UI-RECON-02"],
+      "objective": "Complete historical customer, location, job, appointment, estimate, invoice, and payment detail navigation with source lineage and held-state visibility.",
+      "allowed_paths": ["backend/app/migration_factory/**", "backend/app/operational_migration/**", "frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["detail readback", "source identity preservation", "unresolved relationship display", "tenant isolation"],
+      "stop_conditions": ["fabricated relationship", "native overwrite", "live admission", "cross-tenant read"]
+    },
+    {
+      "id": "OM2-IMPORT-MAPPING-02",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Qualify reusable CSV/XLSX field mapping, schema validation, replay, and provenance reporting using synthetic or sealed fixtures only.",
+      "allowed_paths": ["backend/app/customer_migration/**", "backend/app/operational_migration/**", "frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["mapping validation", "idempotent replay", "unused-field preservation", "exception report"],
+      "stop_conditions": ["live admission", "source-system write", "identity fabrication", "secret exposure"]
+    },
+    {
+      "id": "OM2-RECONCILIATION-EXCEPTIONS-02",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-HCP-JOB-RELATIONSHIP-02", "OM2-CUSTOMER-HISTORY-UI-RECON-02"],
+      "objective": "Build administrator-assisted readback for ambiguous identities, missing parents, and source-version exceptions without automatic merges.",
+      "allowed_paths": ["backend/app/migration_factory/**", "backend/app/customer_migration/**", "frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["durable hold queue", "evidence explanation", "no-merge negative test", "tenant isolation"],
+      "stop_conditions": ["automatic identity merge", "fabricated relationship", "live mutation"]
+    },
+    {
+      "id": "OM2-QBO-HISTORY-NAVIGATION-03",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-QBO-REPORT-READBACK-02"],
+      "objective": "Expose source-backed QBO customer, vendor, invoice, payment, expense, and report navigation with provenance and reconciliation exceptions.",
+      "allowed_paths": ["backend/app/accounting/**", "backend/app/integrations/qbo/**", "frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["owner-facing report navigation", "source identity readback", "exception visibility", "read-only enforcement"],
+      "stop_conditions": ["QBO write", "OAuth", "fabricated balance", "native-posting mislabel"]
+    },
+    {
+      "id": "OM2-COMMUNICATIONS-TIMELINE-02",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-COMMUNICATIONS-HISTORY-RECON-01", "OM2-CUSTOMER-HISTORY-UI-RECON-02"],
+      "objective": "Integrate historical communication readback into customer timelines with source provenance and unavailable-evidence states.",
+      "allowed_paths": ["backend/app/communications/**", "backend/app/migration_factory/**", "frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["timeline readback", "source lineage", "missing-evidence display", "provider-write denial"],
+      "stop_conditions": ["outbound communication", "fabricated message", "cross-tenant read"]
+    },
+    {
+      "id": "OM2-BROWSER-HISTORY-ACCEPT-03",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM2-HISTORY-DETAIL-READBACK-03", "OM2-QBO-HISTORY-NAVIGATION-03"],
+      "objective": "Run fresh browser acceptance for historical customer and accounting detail, explicitly separating synthetic, protected, and live evidence.",
+      "allowed_paths": ["frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["fresh browser session", "customer detail", "QBO report detail", "tenant isolation", "evidence classification"],
+      "stop_conditions": ["empty protected snapshot represented as All County data", "source gap hidden", "unauthorized write"]
     }
   ]
 }
