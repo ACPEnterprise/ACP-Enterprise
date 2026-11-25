@@ -65,6 +65,28 @@ schema_head=$(compose exec -T postgres psql -Atq -U release_qualification -d rel
 test -n "$schema_head"
 test "$(printf '%s\n' "$schema_head" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')" = 1
 
+# Keep representative recovery data outside the application schema so Alembic
+# drift checks remain authoritative. The fixed rows make preservation
+# independently measurable without copying customer or financial data.
+compose exec -T postgres psql -v ON_ERROR_STOP=1 -U release_qualification -d release_qualification <<'SQL'
+CREATE SCHEMA qualification_recovery;
+CREATE TABLE qualification_recovery.transaction_probe (
+  id integer PRIMARY KEY,
+  payload text NOT NULL
+);
+INSERT INTO qualification_recovery.transaction_probe (id, payload) VALUES
+  (1, 'preserve-before-failure'),
+  (2, 'preserve-through-rollback');
+SQL
+probe_snapshot=$(compose exec -T postgres psql -Atq -U release_qualification -d release_qualification -c "SELECT json_agg(row_to_json(probe) ORDER BY id)::text FROM qualification_recovery.transaction_probe AS probe")
+probe_digest=$(python3 - "$probe_snapshot" <<'PY'
+from hashlib import sha256
+import sys
+
+print(sha256(sys.argv[1].encode()).hexdigest())
+PY
+)
+
 compose exec -T postgres pg_dump \
   -U release_qualification \
   -d release_qualification \
@@ -143,6 +165,72 @@ compose exec -T restore-postgres pg_restore \
 
 restored_head=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_qualification -c "SELECT version_num FROM alembic_version")
 test "$restored_head" = "$schema_head"
+restored_probe_snapshot=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_qualification -c "SELECT json_agg(row_to_json(probe) ORDER BY id)::text FROM qualification_recovery.transaction_probe AS probe")
+test "$restored_probe_snapshot" = "$probe_snapshot"
+
+# A migration-shaped failure must roll back atomically. A command that reports
+# success here means the failure injection did not execute and is itself fatal.
+if compose exec -T restore-postgres psql -v ON_ERROR_STOP=1 -U release_qualification -d acp_resilience_restore_qualification <<'SQL'
+BEGIN;
+UPDATE qualification_recovery.transaction_probe
+SET payload = 'must-not-survive'
+WHERE id = 1;
+CREATE TABLE qualification_recovery.transaction_must_rollback (id integer);
+DO $$
+BEGIN
+  RAISE EXCEPTION 'intentional isolated migration failure';
+END
+$$;
+COMMIT;
+SQL
+then
+  echo "transaction failure injection unexpectedly succeeded" >&2
+  exit 1
+fi
+post_failure_snapshot=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_qualification -c "SELECT json_agg(row_to_json(probe) ORDER BY id)::text FROM qualification_recovery.transaction_probe AS probe")
+test "$post_failure_snapshot" = "$probe_snapshot"
+rolled_back_table=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_qualification -c "SELECT to_regclass('qualification_recovery.transaction_must_rollback') IS NULL")
+test "$rolled_back_table" = t
+
+# Model non-transactional/partial execution without repairing the dirty target.
+# Recovery is required to use a newly created, empty database instead.
+compose exec -T restore-postgres psql -v ON_ERROR_STOP=1 -U release_qualification -d acp_resilience_restore_qualification -c "CREATE TABLE qualification_recovery.partial_execution_marker (id integer)"
+compose exec -T restore-postgres createdb -U release_qualification acp_resilience_restore_recovery
+recovery_existing_relations=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_recovery -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND c.relkind IN ('r','p','v','m','f')")
+test "$recovery_existing_relations" = 0
+compose exec -T restore-postgres pg_restore \
+  --exit-on-error \
+  --single-transaction \
+  --no-owner \
+  --username release_qualification \
+  --dbname acp_resilience_restore_recovery \
+  < "$backup"
+recovery_partial_marker=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_recovery -c "SELECT to_regclass('qualification_recovery.partial_execution_marker') IS NULL")
+test "$recovery_partial_marker" = t
+recovery_probe_snapshot=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_recovery -c "SELECT json_agg(row_to_json(probe) ORDER BY id)::text FROM qualification_recovery.transaction_probe AS probe")
+test "$recovery_probe_snapshot" = "$probe_snapshot"
+
+# Re-upgrade the recovered baseline from the candidate image. The URL is built
+# only inside the disposable container from a file-backed secret and is never
+# printed or persisted.
+compose run --rm --no-deps qualifier /bin/sh -ec '
+  database_password="$(cat "$DATABASE_PASSWORD_FILE")"
+  export DATABASE_URL="postgresql+asyncpg://release_qualification:${database_password}@restore-postgres:5432/acp_resilience_restore_recovery"
+  python -m alembic upgrade head
+  python -m alembic check
+'
+recovery_head=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_recovery -c "SELECT version_num FROM alembic_version")
+test "$recovery_head" = "$schema_head"
+recovery_probe_snapshot_after_upgrade=$(compose exec -T restore-postgres psql -Atq -U release_qualification -d acp_resilience_restore_recovery -c "SELECT json_agg(row_to_json(probe) ORDER BY id)::text FROM qualification_recovery.transaction_probe AS probe")
+test "$recovery_probe_snapshot_after_upgrade" = "$probe_snapshot"
+recovery_probe_digest=$(python3 - "$recovery_probe_snapshot_after_upgrade" <<'PY'
+from hashlib import sha256
+import sys
+
+print(sha256(sys.argv[1].encode()).hexdigest())
+PY
+)
+test "$recovery_probe_digest" = "$probe_digest"
 compose --profile restore up -d --build --wait readiness
 readiness_state=$(compose exec -T readiness python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3))['state'])")
 test "$readiness_state" = HEALTHY
@@ -162,27 +250,43 @@ printf 'ALEMBIC_HEAD=%s\n' "$schema_head"
 printf 'RESTORE_TARGET_EMPTY=VERIFIED\n'
 printf 'RESTORE_HEAD=%s\n' "$restored_head"
 printf 'POST_RESTORE_READINESS=%s\n' "$readiness_state"
+printf 'TRANSACTION_FAILURE_ROLLBACK=VERIFIED\n'
+printf 'PARTIAL_EXECUTION_TARGET=ABANDONED\n'
+printf 'RECOVERY_TARGET_EMPTY=VERIFIED\n'
+printf 'RECOVERY_HEAD=%s\n' "$recovery_head"
+printf 'RECOVERY_DATA_SHA256=%s\n' "$recovery_probe_digest"
+printf 'REUPGRADE=VERIFIED\n'
 printf 'HOST_PORTS=NONE\n'
 
-python3 - "$postgres_version" "$postgres_encoding" "$schema_head" "$backup_sha" "$restored_head" "$readiness_state" "$(git -C "$root" rev-parse HEAD)" <<'PY'
+python3 - "$postgres_version" "$postgres_encoding" "$schema_head" "$backup_sha" "$restored_head" "$readiness_state" "$(git -C "$root" rev-parse HEAD)" "$probe_digest" "$recovery_head" <<'PY'
+from hashlib import sha256
 import json
 import sys
 
-print(json.dumps({
+receipt = {
     "authority_sha": sys.argv[7],
     "backup_sha256": sys.argv[4],
-    "contract": "enterprise-release.database-qualification/v1",
+    "contract": "enterprise-release.rollback-recovery-qualification/v1",
     "database_was_pristine": True,
+    "data_digest_after": sys.argv[8],
+    "data_digest_before": sys.argv[8],
     "head": sys.argv[3],
     "host_ports": "none",
     "network": "internal",
+    "new_recovery_target": True,
+    "partial_execution_target_abandoned": True,
     "postgres_encoding": sys.argv[2],
     "postgres_version_num": int(sys.argv[1]),
     "readiness": sys.argv[6],
+    "recovery_head": sys.argv[9],
+    "reupgrade": True,
     "restore_head": sys.argv[5],
     "restore_target_was_empty": True,
     "secret_indirection": True,
-}, sort_keys=True))
+    "transaction_failure_rolled_back": True,
+}
+receipt["digest"] = sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+print(json.dumps(receipt, sort_keys=True))
 PY
 
 if ! cleanup_resources; then
