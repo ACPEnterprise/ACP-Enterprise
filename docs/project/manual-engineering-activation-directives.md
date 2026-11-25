@@ -119,6 +119,25 @@ itself. QBO work is source-backed read-only; no OAuth, posting, banking, payroll
 or financial execution is authorized. Browser acceptance must explicitly label
 synthetic, protected, and live evidence. Automated claims remain blocked.
 
+## OM1 — Replenished platform reservations
+
+Assignments:
+
+- `OM1-DF-CI-ARTIFACTS-03`
+- `OM1-DF-PROTECTED-REHEARSAL-03`
+- `OM1-DF-FAILURE-INJECTION-04`
+- `OM1-DF-ROLLBACK-RECOVERY-03`
+- `OM1-DF-CROSS-MACHINE-QUAL-03`
+- `OM1-DF-SUPERVISOR-CONTINUATION-03`
+
+These assignments are manually reserved and dependency-aware. They may use only
+isolated or synthetic environments and existing approved evidence. They must
+preserve immutable candidate identity, fail-closed authorization, rollback
+integrity, queue supersession, machine-specific ownership, and secret-free
+evidence. No private signing-key access, automatic approval, merge, deployment,
+live database mutation, or protected credential use is authorized. Automated
+claims remain blocked.
+
 ## Laptop continuation
 
 Laptop Master continues its reserved All County workflow assignments and may

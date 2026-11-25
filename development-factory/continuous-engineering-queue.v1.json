@@ -152,6 +152,54 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Browser acceptance packet is manually reserved and must distinguish synthetic, protected, and live evidence."
+    },
+    {
+      "assignment_id": "OM1-DF-CI-ARTIFACTS-03",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "CI and immutable-artifact work is manually reserved until Worker Control qualification is complete; no automatic deployment is authorized."
+    },
+    {
+      "assignment_id": "OM1-DF-PROTECTED-REHEARSAL-03",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Protected restored-database rehearsal tooling is manually reserved; live Beta and protected credentials remain gated."
+    },
+    {
+      "assignment_id": "OM1-DF-FAILURE-INJECTION-04",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Release failure-injection coverage is manually reserved; checks must fail closed and cannot deploy or mutate live data."
+    },
+    {
+      "assignment_id": "OM1-DF-ROLLBACK-RECOVERY-03",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Rollback and transaction-preserving recovery work is manually reserved for isolated environments only."
+    },
+    {
+      "assignment_id": "OM1-DF-CROSS-MACHINE-QUAL-03",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Cross-machine coordination qualification is manually reserved; Worker Control leases and fabricated acknowledgments remain prohibited."
+    },
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Supervisor continuation and idle-queue recovery work is manually reserved until the corrected discovery path is independently qualified."
     }
   ],
   "claim_policy": {
@@ -473,6 +521,72 @@
       "allowed_paths": ["frontend/src/**", "backend/tests/**", "docs/quality/**"],
       "validation": ["fresh browser session", "customer detail", "QBO report detail", "tenant isolation", "evidence classification"],
       "stop_conditions": ["empty protected snapshot represented as All County data", "source gap hidden", "unauthorized write"]
+    },
+    {
+      "id": "OM1-DF-CI-ARTIFACTS-03",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-RELEASE-MANIFEST-02"],
+      "objective": "Standardize CI execution and immutable application/tooling artifacts with exact source, dependency, and configuration identity.",
+      "allowed_paths": [".github/**", "scripts/**", "backend/development_factory/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["immutable artifact digest", "reproducible build", "secret redaction", "mismatch rejection"],
+      "stop_conditions": ["private-key access", "automatic deployment", "unreviewed protected configuration"]
+    },
+    {
+      "id": "OM1-DF-PROTECTED-REHEARSAL-03",
+      "lane": "OM1",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-MIGRATION-GRAPH-AUDIT-02"],
+      "objective": "Improve isolated restored-database rehearsal tooling for candidate migrations, role transitions, readiness checks, and evidence sealing.",
+      "allowed_paths": ["scripts/**", "backend/scripts/**", "backend/tests/release/**", "docs/engineering/**", "docs/quality/**"],
+      "validation": ["restored baseline", "role separation", "migration evidence", "rollback receipt"],
+      "stop_conditions": ["live database mutation", "protected credential disclosure", "stale schema acceptance"]
+    },
+    {
+      "id": "OM1-DF-FAILURE-INJECTION-04",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-SUPERVISOR-RECOVERY-02"],
+      "objective": "Extend independent failure-injection coverage for queue discovery, health checks, credentials, migration failure, partial execution, and truthful recovery reporting.",
+      "allowed_paths": ["backend/development_factory/**", "backend/tests/**", "docs/quality/**", "docs/engineering/**"],
+      "validation": ["fail-closed checks", "bounded retries", "restart recovery", "secret-free evidence"],
+      "stop_conditions": ["false PASS", "unbounded retry", "automatic approval", "live deployment"]
+    },
+    {
+      "id": "OM1-DF-ROLLBACK-RECOVERY-03",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-PROTECTED-REHEARSAL-03"],
+      "objective": "Qualify transaction-preserving rollback, recovery, and re-upgrade procedures against representative restored baselines.",
+      "allowed_paths": ["scripts/**", "backend/scripts/**", "backend/tests/release/**", "docs/quality/**", "docs/engineering/**"],
+      "validation": ["rollback integrity", "application readiness", "data preservation", "re-upgrade"],
+      "stop_conditions": ["destructive restore", "unverified target", "live database mutation"]
+    },
+    {
+      "id": "OM1-DF-CROSS-MACHINE-QUAL-03",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-SUPERVISOR-RECOVERY-02"],
+      "objective": "Qualify queue supersession, machine-specific reservations, completed-assignment recognition, and duplicate-execution fencing across OM1 and OM2 simulations.",
+      "allowed_paths": ["backend/development_factory/**", "backend/tests/**", "docs/quality/**", "docs/engineering/**"],
+      "validation": ["two-machine simulation", "stale reference rejection", "queue exhaustion", "duplicate prevention"],
+      "stop_conditions": ["fabricated lease", "competing authority", "secret exposure", "automatic merge"]
+    },
+    {
+      "id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-SUPERVISOR-RECOVERY-02"],
+      "objective": "Continue bounded supervisor recovery for queue exhaustion, restart recovery, idle-machine detection, checkpoint persistence, and safe shutdown.",
+      "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["queue replenishment", "checkpoint integrity", "idle detection", "bounded shutdown"],
+      "stop_conditions": ["unattended protected execution", "automatic approval", "unbounded execution", "secret persistence"]
     }
   ]
 }

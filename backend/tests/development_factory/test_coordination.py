@@ -43,7 +43,7 @@ def queue_payload() -> dict[str, object]:
 
 def test_loads_repository_queue_and_projects_only_activated_lanes() -> None:
     queue = load_queue(Path(__file__).parents[3])
-    assert len(queue.assignments) == 28
+    assert len(queue.assignments) == 34
     assert eligible_after_activation(queue, ()) == ()
 
 
