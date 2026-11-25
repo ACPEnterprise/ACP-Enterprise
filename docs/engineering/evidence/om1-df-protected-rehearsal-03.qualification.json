@@ -1,0 +1,55 @@
+{
+  "assignment_id": "OM1-DF-PROTECTED-REHEARSAL-03",
+  "automated_claim_used": false,
+  "changed_files": [
+    "backend/scripts/verify_protected_rehearsal.py",
+    "backend/tests/release/test_protected_rehearsal_evidence.py",
+    "docs/engineering/protected-restored-database-rehearsal.md",
+    "scripts/platform-resilience"
+  ],
+  "completed_at_utc": "2026-11-25T14:55:25Z",
+  "implementation_sha": "a16fff6bf1233127597af6978af5fe38614ce8e1",
+  "machine": {
+    "hostname": "iMac-673.lan",
+    "role": "OM1"
+  },
+  "queue": {
+    "published_ref": "refs/heads/handoff/laptop-om2-history-integration-20261125",
+    "sha": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+    "sha256": "fed97a5408ab17fc5af0919e0fdadf4394b630b637e8f9d8ad6ae34937d3558e"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "alembic_head": "x3y5z7a9c1e4",
+    "backup_manifest": "VERIFIED",
+    "backup_sha256": "7d3e11b43281f7c034da3d3ccaf10e7938632ce97bc00e32dbf386facc970092",
+    "cleanup": "VERIFIED",
+    "database_was_pristine": true,
+    "deployment_authorized": false,
+    "focused_tests": "14 passed",
+    "host_ports": "NONE",
+    "internal_network": "PASS",
+    "mypy": "PASS",
+    "postgres_encoding": "UTF8",
+    "postgres_version_num": 160015,
+    "release_tests_python_3_12": "107 passed",
+    "restore_head": "x3y5z7a9c1e4",
+    "restore_readiness": "HEALTHY",
+    "restore_target_empty": "VERIFIED",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "schema_drift": "NONE",
+    "schema_object_count": 430,
+    "secret_indirection": true,
+    "tamper_and_stale_evidence_rejection": "PASS",
+    "zero_to_head": "PASS"
+  }
+}
