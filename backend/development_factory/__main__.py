@@ -21,12 +21,28 @@ from development_factory.lia_contract import LiaContractError
 from development_factory.lia_roles import AgentRoleError
 from development_factory.manifest import ManifestError
 from development_factory.owner_review import OwnerReviewError, OwnerReviewManager
+from development_factory.queue_discovery import (
+    GitQueueSource,
+    QueueDiscoverySupervisor,
+)
 from development_factory.reports import render_markdown
 from development_factory.review_records import ReviewRecordError
 from development_factory.task_contract import TaskContractError
 from development_factory.worker_execution import WorkerExecutionError, WorkerExecutor
 from development_factory.workflow import Action, WorkflowError, WorkflowState
 from development_factory.workspaces import WorkspaceError, WorkspaceManager
+
+
+def _add_supervisor_state(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--state",
+        type=Path,
+        default=Path(".development-factory/coordination-discovery.json"),
+    )
+
+
+def _resolve(root: Path, path: Path) -> Path:
+    return path if path.is_absolute() else root / path
 
 
 def main() -> int:
@@ -115,6 +131,41 @@ def main() -> int:
         type=Path,
         default=Path(".development-factory/daily-report.json"),
     )
+    discover = coordination_commands.add_parser("discover")
+    discover.add_argument(
+        "--machine", required=True, choices=("LAPTOP_MASTER", "OM1", "OM2", "REVIEWER")
+    )
+    discover.add_argument("--remote", default="origin")
+    discover.add_argument(
+        "--state",
+        type=Path,
+        default=Path(".development-factory/coordination-discovery.json"),
+    )
+    discover.add_argument(
+        "--completed-assignment",
+        action="append",
+        default=[],
+        dest="completed_assignments",
+    )
+    supervisor_begin = coordination_commands.add_parser("supervisor-begin")
+    supervisor_begin.add_argument("assignment_id")
+    supervisor_begin.add_argument("--queue-digest", required=True)
+    _add_supervisor_state(supervisor_begin)
+    supervisor_recover = coordination_commands.add_parser("supervisor-recover")
+    _add_supervisor_state(supervisor_recover)
+    supervisor_reconcile = coordination_commands.add_parser("supervisor-reconcile")
+    supervisor_reconcile.add_argument("assignment_id")
+    supervisor_reconcile.add_argument("--evidence-sha256", required=True)
+    supervisor_reconcile.add_argument(
+        "--completed", action=argparse.BooleanOptionalAction, required=True
+    )
+    _add_supervisor_state(supervisor_reconcile)
+    supervisor_complete = coordination_commands.add_parser("supervisor-complete")
+    supervisor_complete.add_argument("assignment_id")
+    supervisor_complete.add_argument("--evidence-sha256", required=True)
+    _add_supervisor_state(supervisor_complete)
+    supervisor_shutdown = coordination_commands.add_parser("supervisor-shutdown")
+    _add_supervisor_state(supervisor_shutdown)
     subparsers.add_parser("report")
     task = subparsers.add_parser("task")
     task_commands = task.add_subparsers(dest="task_command", required=True)
@@ -183,6 +234,67 @@ def main() -> int:
 
     try:
         if args.command == "coordination":
+            if args.coordination_command == "discover":
+                state = _resolve(args.repo_root, args.state)
+                source = GitQueueSource(args.repo_root, remote=args.remote)
+                discovery_result = QueueDiscoverySupervisor(state).discover(
+                    source,
+                    machine=args.machine,
+                    supplied_completed=args.completed_assignments,
+                )
+                print(
+                    json.dumps(
+                        {
+                            "status": discovery_result.status,
+                            "queue_commit_sha": discovery_result.queue_commit_sha,
+                            "queue_digest": discovery_result.queue_digest,
+                            "queue_refs": discovery_result.queue_refs,
+                            "eligible_assignments": (
+                                discovery_result.eligible_assignments
+                            ),
+                            "completed_assignments": (
+                                discovery_result.completed_assignments
+                            ),
+                            "attempts": discovery_result.attempts,
+                        },
+                        sort_keys=True,
+                    )
+                )
+                return 0
+            if args.coordination_command.startswith("supervisor-"):
+                state = _resolve(args.repo_root, args.state)
+                discovery_supervisor = QueueDiscoverySupervisor(state)
+                if args.coordination_command == "supervisor-begin":
+                    discovery_supervisor.begin(
+                        args.assignment_id,
+                        queue_digest=args.queue_digest,
+                    )
+                    print(f"Supervisor began: {args.assignment_id}")
+                elif args.coordination_command == "supervisor-recover":
+                    recovered = discovery_supervisor.recover_after_restart()
+                    print(
+                        "Reconciliation required: " + (", ".join(recovered) or "NONE")
+                    )
+                elif args.coordination_command == "supervisor-reconcile":
+                    discovery_supervisor.reconcile(
+                        args.assignment_id,
+                        completed=args.completed,
+                        evidence_sha256=args.evidence_sha256,
+                    )
+                    print(f"Supervisor reconciled: {args.assignment_id}")
+                elif args.coordination_command == "supervisor-complete":
+                    discovery_supervisor.complete(
+                        args.assignment_id,
+                        evidence_sha256=args.evidence_sha256,
+                    )
+                    print(f"Supervisor completed: {args.assignment_id}")
+                else:
+                    interrupted = discovery_supervisor.safe_shutdown()
+                    print(
+                        "Safe shutdown; reconciliation required: "
+                        + (", ".join(interrupted) or "NONE")
+                    )
+                return 0
             if args.coordination_command == "inventory-check":
                 from development_factory.coordination import load_inventory_file
 
