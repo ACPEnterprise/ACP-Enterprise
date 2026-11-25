@@ -32,6 +32,8 @@ from development_factory.worker_execution import WorkerExecutionError, WorkerExe
 from development_factory.workflow import Action, WorkflowError, WorkflowState
 from development_factory.workspaces import WorkspaceError, WorkspaceManager
 
+MACHINES = ("LAPTOP_MASTER", "OM1", "OM2", "REVIEWER")
+
 
 def _add_supervisor_state(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
@@ -39,6 +41,10 @@ def _add_supervisor_state(parser: argparse.ArgumentParser) -> None:
         type=Path,
         default=Path(".development-factory/coordination-discovery.json"),
     )
+
+
+def _add_machine(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--machine", required=True, choices=MACHINES)
 
 
 def _resolve(root: Path, path: Path) -> Path:
@@ -132,9 +138,7 @@ def main() -> int:
         default=Path(".development-factory/daily-report.json"),
     )
     discover = coordination_commands.add_parser("discover")
-    discover.add_argument(
-        "--machine", required=True, choices=("LAPTOP_MASTER", "OM1", "OM2", "REVIEWER")
-    )
+    _add_machine(discover)
     discover.add_argument("--remote", default="origin")
     discover.add_argument(
         "--state",
@@ -150,12 +154,15 @@ def main() -> int:
     supervisor_begin = coordination_commands.add_parser("supervisor-begin")
     supervisor_begin.add_argument("assignment_id")
     supervisor_begin.add_argument("--queue-digest", required=True)
+    _add_machine(supervisor_begin)
     _add_supervisor_state(supervisor_begin)
     supervisor_recover = coordination_commands.add_parser("supervisor-recover")
+    _add_machine(supervisor_recover)
     _add_supervisor_state(supervisor_recover)
     supervisor_reconcile = coordination_commands.add_parser("supervisor-reconcile")
     supervisor_reconcile.add_argument("assignment_id")
     supervisor_reconcile.add_argument("--evidence-sha256", required=True)
+    _add_machine(supervisor_reconcile)
     supervisor_reconcile.add_argument(
         "--completed", action=argparse.BooleanOptionalAction, required=True
     )
@@ -163,8 +170,10 @@ def main() -> int:
     supervisor_complete = coordination_commands.add_parser("supervisor-complete")
     supervisor_complete.add_argument("assignment_id")
     supervisor_complete.add_argument("--evidence-sha256", required=True)
+    _add_machine(supervisor_complete)
     _add_supervisor_state(supervisor_complete)
     supervisor_shutdown = coordination_commands.add_parser("supervisor-shutdown")
+    _add_machine(supervisor_shutdown)
     _add_supervisor_state(supervisor_shutdown)
     subparsers.add_parser("report")
     task = subparsers.add_parser("task")
@@ -268,10 +277,13 @@ def main() -> int:
                     discovery_supervisor.begin(
                         args.assignment_id,
                         queue_digest=args.queue_digest,
+                        machine=args.machine,
                     )
                     print(f"Supervisor began: {args.assignment_id}")
                 elif args.coordination_command == "supervisor-recover":
-                    recovered = discovery_supervisor.recover_after_restart()
+                    recovered = discovery_supervisor.recover_after_restart(
+                        machine=args.machine
+                    )
                     print(
                         "Reconciliation required: " + (", ".join(recovered) or "NONE")
                     )
@@ -280,16 +292,20 @@ def main() -> int:
                         args.assignment_id,
                         completed=args.completed,
                         evidence_sha256=args.evidence_sha256,
+                        machine=args.machine,
                     )
                     print(f"Supervisor reconciled: {args.assignment_id}")
                 elif args.coordination_command == "supervisor-complete":
                     discovery_supervisor.complete(
                         args.assignment_id,
                         evidence_sha256=args.evidence_sha256,
+                        machine=args.machine,
                     )
                     print(f"Supervisor completed: {args.assignment_id}")
                 else:
-                    interrupted = discovery_supervisor.safe_shutdown()
+                    interrupted = discovery_supervisor.safe_shutdown(
+                        machine=args.machine
+                    )
                     print(
                         "Safe shutdown; reconciliation required: "
                         + (", ".join(interrupted) or "NONE")

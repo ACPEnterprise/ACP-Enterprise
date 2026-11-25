@@ -267,6 +267,12 @@ class QueueDiscoverySupervisor:
                     "queue supersession does not descend from checkpoint"
                 )
             assignment_states = cast(dict[str, str], state["assignment_states"])
+            assignment_machines = cast(dict[str, str], state["assignment_machines"])
+            completed |= {
+                assignment_id
+                for assignment_id, status in assignment_states.items()
+                if status == "completed" and assignment_id in queue.by_id
+            }
             for assignment_id in completed:
                 assignment_states[assignment_id] = "completed"
             removed_active = {
@@ -279,6 +285,22 @@ class QueueDiscoverySupervisor:
                 raise QueueDiscoveryError(
                     "active assignment disappeared during queue supersession"
                 )
+            reservation_machines = {
+                reservation.assignment_id: reservation.machine
+                for reservation in queue.manual_reservations
+            }
+            for assignment_id, reserved_machine in reservation_machines.items():
+                previous_machine = assignment_machines.get(assignment_id)
+                if (
+                    previous_machine is not None
+                    and previous_machine != reserved_machine
+                    and assignment_states.get(assignment_id)
+                    in {"running", "reconciliation_required"}
+                ):
+                    raise QueueDiscoveryError(
+                        "active assignment machine ownership changed"
+                    )
+                assignment_machines[assignment_id] = reserved_machine
 
             eligible = _manual_eligible(queue, machine, completed)
             for assignment_id in eligible:
@@ -310,11 +332,12 @@ class QueueDiscoverySupervisor:
             status="AUTHORITATIVE_QUEUE_DISCOVERED",
         )
 
-    def begin(self, assignment_id: str, *, queue_digest: str) -> None:
+    def begin(self, assignment_id: str, *, queue_digest: str, machine: str) -> None:
         with self._locked():
             state = self._load_required()
             if state.get("queue_digest") != queue_digest:
                 raise QueueDiscoveryError("queue digest changed before execution")
+            self._require_machine(state, assignment_id, machine)
             assignment_states = cast(dict[str, str], state["assignment_states"])
             status = assignment_states.get(assignment_id)
             if status != "ready":
@@ -322,15 +345,17 @@ class QueueDiscoverySupervisor:
             assignment_states[assignment_id] = "running"
             self._write(state)
 
-    def recover_after_restart(self) -> tuple[str, ...]:
+    def recover_after_restart(self, *, machine: str) -> tuple[str, ...]:
         with self._locked():
             state = self._load_required()
             assignment_states = cast(dict[str, str], state["assignment_states"])
+            assignment_machines = cast(dict[str, str], state["assignment_machines"])
             recovered = tuple(
                 sorted(
                     assignment_id
                     for assignment_id, status in assignment_states.items()
                     if status == "running"
+                    and assignment_machines.get(assignment_id) == machine
                 )
             )
             for assignment_id in recovered:
@@ -344,11 +369,13 @@ class QueueDiscoverySupervisor:
         *,
         completed: bool,
         evidence_sha256: str,
+        machine: str,
     ) -> None:
         if not SHA64.fullmatch(evidence_sha256):
             raise QueueDiscoveryError("reconciliation evidence digest is invalid")
         with self._locked():
             state = self._load_required()
+            self._require_machine(state, assignment_id, machine)
             assignment_states = cast(dict[str, str], state["assignment_states"])
             if assignment_states.get(assignment_id) != "reconciliation_required":
                 raise QueueDiscoveryError("assignment does not require reconciliation")
@@ -357,11 +384,14 @@ class QueueDiscoverySupervisor:
             reconciliations[assignment_id] = evidence_sha256
             self._write(state)
 
-    def complete(self, assignment_id: str, *, evidence_sha256: str) -> None:
+    def complete(
+        self, assignment_id: str, *, evidence_sha256: str, machine: str
+    ) -> None:
         if not SHA64.fullmatch(evidence_sha256):
             raise QueueDiscoveryError("completion evidence digest is invalid")
         with self._locked():
             state = self._load_required()
+            self._require_machine(state, assignment_id, machine)
             assignment_states = cast(dict[str, str], state["assignment_states"])
             if assignment_states.get(assignment_id) != "running":
                 raise QueueDiscoveryError("assignment is not running")
@@ -370,15 +400,17 @@ class QueueDiscoverySupervisor:
             reconciliations[assignment_id] = evidence_sha256
             self._write(state)
 
-    def safe_shutdown(self) -> tuple[str, ...]:
+    def safe_shutdown(self, *, machine: str) -> tuple[str, ...]:
         with self._locked():
             state = self._load_required()
             assignment_states = cast(dict[str, str], state["assignment_states"])
+            assignment_machines = cast(dict[str, str], state["assignment_machines"])
             interrupted = tuple(
                 sorted(
                     assignment_id
                     for assignment_id, status in assignment_states.items()
                     if status == "running"
+                    and assignment_machines.get(assignment_id) == machine
                 )
             )
             for assignment_id in interrupted:
@@ -386,6 +418,21 @@ class QueueDiscoverySupervisor:
             state["shutdown"] = True
             self._write(state)
             return interrupted
+
+    @staticmethod
+    def _require_machine(
+        state: dict[str, object], assignment_id: str, machine: str
+    ) -> None:
+        if not machine:
+            raise QueueDiscoveryError("machine identity is required")
+        assignment_machines = cast(dict[str, str], state["assignment_machines"])
+        expected = assignment_machines.get(assignment_id)
+        if expected is None:
+            raise QueueDiscoveryError(
+                "assignment machine ownership is unavailable; rediscovery required"
+            )
+        if expected != machine:
+            raise QueueDiscoveryError("assignment is reserved for another machine")
 
     def _load_with_retry(
         self, source: QueueSource
@@ -445,6 +492,7 @@ class QueueDiscoverySupervisor:
                 "network_failures": 0,
                 "shutdown": False,
                 "assignment_states": {},
+                "assignment_machines": {},
                 "reconciliations": {},
                 "state_digest": "",
             }
@@ -465,10 +513,25 @@ class QueueDiscoverySupervisor:
         unsigned = {key: item for key, item in value.items() if key != "state_digest"}
         if canonical_digest(unsigned) != supplied:
             raise QueueDiscoveryError("coordination checkpoint integrity failed")
-        if not isinstance(value.get("assignment_states"), dict) or not isinstance(
-            value.get("reconciliations"), dict
+        if "assignment_machines" not in value:
+            value["assignment_machines"] = {}
+        if (
+            not isinstance(value.get("assignment_states"), dict)
+            or not isinstance(value.get("assignment_machines"), dict)
+            or not isinstance(value.get("reconciliations"), dict)
         ):
             raise QueueDiscoveryError("coordination checkpoint state is invalid")
+        assignment_machines = cast(dict[object, object], value["assignment_machines"])
+        if any(
+            not isinstance(assignment_id, str)
+            or not assignment_id
+            or not isinstance(machine, str)
+            or not machine
+            for assignment_id, machine in assignment_machines.items()
+        ):
+            raise QueueDiscoveryError(
+                "coordination checkpoint machine ownership is invalid"
+            )
         return cast(dict[str, object], value)
 
     def _write(self, state: dict[str, object]) -> None:

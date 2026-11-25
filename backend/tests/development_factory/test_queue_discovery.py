@@ -206,12 +206,12 @@ def test_restart_requires_reconciliation_and_prevents_duplicate_execution(
 ) -> None:
     control = supervisor(tmp_path)
     result = control.discover(Source((candidate(NEW_SHA, payload()),)), machine="OM1")
-    control.begin("OM1-FIRST", queue_digest=result.queue_digest)
+    control.begin("OM1-FIRST", queue_digest=result.queue_digest, machine="OM1")
     with pytest.raises(QueueDiscoveryError, match="not ready"):
-        control.begin("OM1-FIRST", queue_digest=result.queue_digest)
+        control.begin("OM1-FIRST", queue_digest=result.queue_digest, machine="OM1")
 
     restarted = supervisor(tmp_path)
-    assert restarted.recover_after_restart() == ("OM1-FIRST",)
+    assert restarted.recover_after_restart(machine="OM1") == ("OM1-FIRST",)
     after_restart = restarted.discover(
         Source((candidate(NEW_SHA, payload()),)), machine="OM1"
     )
@@ -220,6 +220,7 @@ def test_restart_requires_reconciliation_and_prevents_duplicate_execution(
         "OM1-FIRST",
         completed=False,
         evidence_sha256=EVIDENCE,
+        machine="OM1",
     )
     ready = restarted.discover(Source((candidate(NEW_SHA, payload()),)), machine="OM1")
     assert "OM1-FIRST" in ready.eligible_assignments
@@ -254,18 +255,89 @@ def test_machine_ownership_and_manual_claim_exclusion(tmp_path: Path) -> None:
     ).eligible_assignments == ("OM2-OTHER",)
 
 
+def test_shared_checkpoint_fences_machine_lifecycle_operations(
+    tmp_path: Path,
+) -> None:
+    control = supervisor(tmp_path)
+    source = Source((candidate(NEW_SHA, payload()),))
+    om1 = control.discover(source, machine="OM1")
+    om2 = control.discover(Source((candidate(NEW_SHA, payload()),)), machine="OM2")
+
+    with pytest.raises(QueueDiscoveryError, match="another machine"):
+        control.begin("OM1-FIRST", queue_digest=om1.queue_digest, machine="OM2")
+    control.begin("OM1-FIRST", queue_digest=om1.queue_digest, machine="OM1")
+    control.begin("OM2-OTHER", queue_digest=om2.queue_digest, machine="OM2")
+
+    restarted = supervisor(tmp_path)
+    assert restarted.recover_after_restart(machine="OM1") == ("OM1-FIRST",)
+    assert restarted.recover_after_restart(machine="OM2") == ("OM2-OTHER",)
+    with pytest.raises(QueueDiscoveryError, match="another machine"):
+        restarted.reconcile(
+            "OM1-FIRST",
+            completed=False,
+            evidence_sha256=EVIDENCE,
+            machine="OM2",
+        )
+
+
+def test_local_completion_clears_dependencies_and_prevents_duplicate_execution(
+    tmp_path: Path,
+) -> None:
+    control = supervisor(tmp_path)
+    source = Source((candidate(NEW_SHA, payload()),))
+    first = control.discover(source, machine="OM1")
+    control.begin("OM1-FIRST", queue_digest=first.queue_digest, machine="OM1")
+    control.complete("OM1-FIRST", evidence_sha256=EVIDENCE, machine="OM1")
+
+    follow_on = control.discover(
+        Source((candidate(NEW_SHA, payload()),)), machine="OM1"
+    )
+    assert follow_on.completed_assignments == ("OM1-FIRST",)
+    assert follow_on.eligible_assignments == ("OM1-DEPENDENT",)
+    with pytest.raises(QueueDiscoveryError, match="not ready"):
+        control.begin("OM1-FIRST", queue_digest=first.queue_digest, machine="OM1")
+
+    control.begin("OM1-DEPENDENT", queue_digest=follow_on.queue_digest, machine="OM1")
+    control.complete("OM1-DEPENDENT", evidence_sha256="b" * 64, machine="OM1")
+    exhausted = control.discover(
+        Source((candidate(NEW_SHA, payload()),)), machine="OM1"
+    )
+    assert exhausted.eligible_assignments == ()
+
+
+def test_queue_supersession_cannot_move_a_running_assignment_between_machines(
+    tmp_path: Path,
+) -> None:
+    control = supervisor(tmp_path)
+    original = payload()
+    first = control.discover(Source((candidate(OLD_SHA, original),)), machine="OM1")
+    control.begin("OM1-FIRST", queue_digest=first.queue_digest, machine="OM1")
+    successor = json.loads(json.dumps(original))
+    successor["assignments"][0]["lane"] = "OM2"
+    successor["manual_reservations"][0]["machine"] = "OM2"
+
+    with pytest.raises(QueueDiscoveryError, match="machine ownership changed"):
+        control.discover(
+            Source(
+                (candidate(NEW_SHA, successor),),
+                ancestry={(OLD_SHA, NEW_SHA)},
+            ),
+            machine="OM2",
+        )
+
+
 def test_checkpoint_integrity_and_safe_shutdown(tmp_path: Path) -> None:
     control = supervisor(tmp_path)
     result = control.discover(Source((candidate(NEW_SHA, payload()),)), machine="OM1")
-    control.begin("OM1-FIRST", queue_digest=result.queue_digest)
-    assert control.safe_shutdown() == ("OM1-FIRST",)
+    control.begin("OM1-FIRST", queue_digest=result.queue_digest, machine="OM1")
+    assert control.safe_shutdown(machine="OM1") == ("OM1-FIRST",)
 
     state_path = tmp_path / "coordination-state.json"
     state = json.loads(state_path.read_text())
     state["assignment_states"]["OM1-FIRST"] = "completed"
     state_path.write_text(json.dumps(state))
     with pytest.raises(QueueDiscoveryError, match="integrity failed"):
-        control.recover_after_restart()
+        control.recover_after_restart(machine="OM1")
 
 
 def test_resource_limits_fail_closed(tmp_path: Path) -> None:
