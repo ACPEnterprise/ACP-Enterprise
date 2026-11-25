@@ -157,6 +157,83 @@
       "allowed_paths": ["docs/quality/**"],
       "validation": ["fresh authenticated sessions", "owner-visible UI", "record-level evidence", "safety boundary review"],
       "stop_conditions": ["missing live evidence", "unexplained discrepancy", "unauthorized external write"]
+    },
+    {
+      "id": "LAP-ALLCOUNTY-HISTORY-UI-ACCEPT-02",
+      "lane": "LAPTOP_MASTER",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["LAP-ALLCOUNTY-CUSTOMER-RECON-01", "OM2-HCP-HISTORY-RECON-01"],
+      "objective": "Run authenticated customer, location, job, appointment, estimate, invoice, and timeline acceptance against only admitted source-backed records.",
+      "allowed_paths": ["frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["fresh owner session", "Richard Ratliff readback", "record-level reconciliation", "tenant-isolation regression"],
+      "stop_conditions": ["missing source payload presented as present", "fabricated relationship", "live data mutation"]
+    },
+    {
+      "id": "LAP-WORKFORCE-ACCEPTANCE-02",
+      "lane": "LAPTOP_MASTER",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["LAP-WORKFORCE-DISPATCH-READINESS-01"],
+      "objective": "Complete authenticated dispatcher, technician My Day, and supervisor timeclock readback acceptance without payroll execution.",
+      "allowed_paths": ["backend/app/workforce/**", "backend/app/dispatch/**", "backend/tests/**", "frontend/src/**", "docs/quality/**"],
+      "validation": ["dispatcher booking", "technician My Day", "clock-in/out persistence", "supervisor readback"],
+      "stop_conditions": ["invented schedule", "unapproved employee mutation", "payroll or money movement"]
+    },
+    {
+      "id": "OM1-DF-RELEASE-MANIFEST-02",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM1-DF-DURABLE-COORDINATION-01"],
+      "objective": "Standardize immutable application/tooling/migration/backup/rollback manifest generation and independent verification.",
+      "allowed_paths": ["scripts/**", "backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/engineering_execution/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["candidate binding", "digest verification", "mismatch rejection", "secret redaction"],
+      "stop_conditions": ["self-approval", "private-key access", "automatic deployment"]
+    },
+    {
+      "id": "OM1-DF-FAILURE-INJECTION-03",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM1-DF-SYNTHETIC-QUALIFICATION-01"],
+      "objective": "Exercise independent release-check failure injection, bounded retries, restart recovery, and truthful executive reporting.",
+      "allowed_paths": ["development-factory/**", "backend/tests/**", "docs/quality/**", "docs/engineering/**"],
+      "validation": ["database failure", "Redis failure", "credential expiry", "worker crash", "rollback evidence"],
+      "stop_conditions": ["false PASS", "unbounded retry", "secret in logs", "live deployment"]
+    },
+    {
+      "id": "OM2-HCP-JOB-RELATIONSHIP-02",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM2-HCP-HISTORY-RECON-01"],
+      "objective": "Reconcile admissible HCP jobs, appointments, locations, estimates, invoices, and payments to verified customer identities in isolation.",
+      "allowed_paths": ["backend/app/operational_migration/**", "backend/app/migration_factory/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["job-parent crosswalk", "location reconciliation", "idempotent replay", "held-exception register"],
+      "stop_conditions": ["ambiguous identity merge", "fabricated lifecycle state", "HCP write", "unsealed source"]
+    },
+    {
+      "id": "OM2-QBO-REPORT-READBACK-02",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM2-QBO-HISTORY-RECON-01"],
+      "objective": "Reconcile sealed QuickBooks source-backed accounts and reports in isolation without OAuth, provider writes, or financial mutation.",
+      "allowed_paths": ["backend/app/accounting/**", "backend/app/integrations/qbo/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["custody digest", "relationship totals", "report readback", "known exception preservation"],
+      "stop_conditions": ["QBO write", "OAuth initiation", "fabricated posting", "unresolved company binding"]
+    },
+    {
+      "id": "REVIEW-CROSS-MACHINE-SECURITY-02",
+      "lane": "REVIEWER",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["REVIEW-DF-SECURITY-01"],
+      "objective": "Independently verify cross-machine worker identity, assignment fencing, evidence custody, and All County safety boundaries before integration.",
+      "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["separate worktree", "negative authorization tests", "lease fencing", "evidence digest verification"],
+      "stop_conditions": ["self-approval", "missing activation evidence", "secret exposure", "protected mutation"]
     }
   ]
 }
