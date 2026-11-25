@@ -1,0 +1,50 @@
+{
+  "assignment_id": "OM1-DF-CROSS-MACHINE-QUAL-03",
+  "automated_claim_used": false,
+  "changed_files": [
+    "backend/development_factory/__main__.py",
+    "backend/development_factory/queue_discovery.py",
+    "backend/tests/development_factory/test_queue_discovery.py",
+    "docs/engineering/authoritative-queue-discovery.md"
+  ],
+  "completed_at_utc": "2026-11-25T15:23:45Z",
+  "implementation_sha": "8dba56c7098ca07ece03c3f109f33141fc3b9498",
+  "machine": {
+    "hostname": "iMac-673.lan",
+    "role": "OM1"
+  },
+  "queue": {
+    "published_ref": "refs/heads/handoff/laptop-om2-history-integration-20261125",
+    "sha": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+    "sha256": "fed97a5408ab17fc5af0919e0fdadf4394b630b637e8f9d8ad6ae34937d3558e"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency": "OM1-DF-SUPERVISOR-RECOVERY-02",
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "automated_claim_created": false,
+    "completed_assignment_recognition": "PASS",
+    "dependency_clearance": "PASS",
+    "development_factory_tests": "168 passed",
+    "duplicate_execution_prevention": "PASS",
+    "machine_bound_begin": "PASS",
+    "machine_bound_completion": "PASS",
+    "machine_bound_reconciliation": "PASS",
+    "machine_bound_restart_recovery": "PASS",
+    "machine_ownership_supersession": "FAIL CLOSED",
+    "mypy": "PASS (29 source files)",
+    "queue_exhaustion": "PASS",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "stale_reference_rejection": "PASS",
+    "targeted_queue_tests": "14 passed",
+    "two_machine_simulation": "PASS"
+  }
+}
