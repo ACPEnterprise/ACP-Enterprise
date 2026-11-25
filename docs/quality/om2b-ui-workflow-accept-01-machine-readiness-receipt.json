@@ -1,0 +1,60 @@
+{
+  "schema": "twelvehats.machine-readiness-receipt.v1",
+  "generated_on": "2026-11-25",
+  "execution_identity": "OM2-B",
+  "machine": "OM2",
+  "assignment_id": "OM2-B-UI-WORKFLOW-ACCEPT-01",
+  "authority": {
+    "packet_branch": "handoff/six-lane-execution-addendum-20261125",
+    "packet_sha": "9fd59a6c01c7714831ace0f6f265149d67908b6f",
+    "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "baseline_reconciled": true,
+    "queue_sha256": "6f954b32235ffb0db6082a84768f0f368285e0b5b49a42775e1f020a1a4a5359",
+    "automated_claim": false
+  },
+  "workspace": {
+    "authoritative_path": "/Users/michaelfouse/Development/ACP-Enterprise-OM2B-Application-20261125",
+    "execution_checkout": "/Users/michaelfouse/Development/ACP-Enterprise-OM2B-Application-20261125/.om2b-execution-ui-workflow-accept-01",
+    "checkout_reason": "authoritative workspace Git metadata is read-only",
+    "branch": "work/om2b-ui-workflow-accept-01",
+    "branch_point": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "worktree_clean_before_activation": true
+  },
+  "resources": {
+    "logical_cpus": 6,
+    "memory_gib": 16,
+    "disk_available_tib": 1.5,
+    "load_average": [7.41, 7.34, 7.52],
+    "docker_containers_observed": 0,
+    "resource_disposition": "ELEVATED_LOAD_COORDINATE_HEAVY_BUILDS",
+    "isolated_browser_port": 18181,
+    "occupied_relevant_ports": [3210, 5432, 8765, 11434]
+  },
+  "assignment": {
+    "ownership_acknowledged": true,
+    "dependency_evidence": {
+      "machine_resource_receipt": "SATISFIED_BY_THIS_RECEIPT",
+      "current_baseline_receipt": "SATISFIED",
+      "isolated_browser_runtime": "RESERVED_NOT_STARTED"
+    },
+    "allowed_paths": [
+      "frontend/",
+      "backend/app/",
+      "backend/tests/",
+      "frontend/tests/",
+      "docs/quality/"
+    ],
+    "qualification": [
+      "customer, CSR, scheduling, dispatch, employee, My Day, price-book, estimating, invoicing browser flows",
+      "tenant isolation",
+      "restart persistence"
+    ],
+    "exclusions": [
+      "All County live acceptance claim from synthetic data",
+      "deployment",
+      "source writes",
+      "external communication"
+    ]
+  },
+  "status": "READY_FOR_BOUNDED_EXECUTION"
+}
