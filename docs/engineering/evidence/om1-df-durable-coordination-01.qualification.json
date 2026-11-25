@@ -1,0 +1,89 @@
+{
+  "schema": "twelfthats.engineering-task-qualification.v1",
+  "assignment_id": "OM1-DF-DURABLE-COORDINATION-01",
+  "authority": {
+    "mode": "manual_reservation",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL",
+    "automated_claims_blocked": true,
+    "worker_control_lease_claimed": false,
+    "queue_source_sha": "6d7fb866524a1ae68e72674132b08ed6c1a282d4",
+    "recovery_source_sha": "ffc2039466c013125fff8d3c4f3fa3db81b1aeb7",
+    "queue_file_sha256": "df01d17666031f422bbfe6cfd4f56a78c488a680272c34dc9b8f521340e4f991"
+  },
+  "machine": {
+    "role": "OM1",
+    "hostname": "iMac-663.lan",
+    "repository": "/Users/michaelbfouse/Development/ACP-Enterprise-om1-df-durable-coordination-01",
+    "branch": "work/om1-df-durable-coordination-01",
+    "machine_inventory_sha256": "94f88ed8c2bce340989dcc64e3d1267410e451f7149497fe27cacd429e7df6f9",
+    "conflicting_execution_observed": false
+  },
+  "implementation": {
+    "commit": "d7c46b2c600d341bf5f1c37f83d224b851a0e73b",
+    "tree": "14c2fd61cc193c536fb25467a37fd9c3379fa807",
+    "schema_changes": false,
+    "dependency_changes": false,
+    "protected_mutation": false,
+    "deployment_performed": false,
+    "external_system_write": false,
+    "capabilities": [
+      "authoritative lease-bound local claims",
+      "atomic assignment, execution, file, and resource fencing",
+      "monotonic stale-lease fencing",
+      "SHA-256 checkpoint chains and state integrity",
+      "fail-closed crash and restart reconciliation",
+      "bounded transient network retries",
+      "hard execution and evidence resource ceilings",
+      "recursive secret redaction",
+      "atomic fsync-backed owner-only journal persistence"
+    ]
+  },
+  "qualification": {
+    "python": "3.12.13",
+    "postgresql": "16",
+    "alembic_head": "w2x4z6a8c0e3",
+    "single_alembic_head": true,
+    "schema_drift": false,
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "mypy": "PASS",
+    "tests": {
+      "development_factory": {
+        "passed": 168,
+        "failed": 0
+      },
+      "worker_control_and_transport": {
+        "passed": 32,
+        "failed": 0
+      },
+      "controlled_execution_and_recovery": {
+        "passed": 29,
+        "failed": 0
+      },
+      "total_unique": {
+        "passed": 229,
+        "failed": 0
+      }
+    },
+    "required_scenarios": {
+      "atomic_claim_race": "PASS",
+      "stale_lease_fencing": "PASS",
+      "checkpoint_integrity": "PASS",
+      "crash_restart_recovery": "PASS",
+      "network_interruption_bounded_retry": "PASS",
+      "secret_redaction": "PASS",
+      "resource_limits": "PASS"
+    },
+    "disposable_database_cleanup_verified": true,
+    "allowed_path_boundary": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "handoff": {
+    "independent_review_required": true,
+    "automatic_approval": false,
+    "automatic_merge": false,
+    "automatic_deployment": false,
+    "recommended_action": "Laptop Master independently reviews and integrates the published non-protected task branch."
+  }
+}
