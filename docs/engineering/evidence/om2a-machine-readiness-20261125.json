@@ -1,0 +1,66 @@
+{
+  "schema": "twelvehats.machine-readiness-receipt.v1",
+  "execution_identity": "OM2-A",
+  "machine": "OM2",
+  "authority_handoff": {
+    "branch": "handoff/six-lane-execution-addendum-20261125",
+    "sha": "9fd59a6c01c7714831ace0f6f265149d67908b6f",
+    "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "queue_sha256": "6f954b32235ffb0db6082a84768f0f368285e0b5b49a42775e1f020a1a4a5359",
+    "stale_general_baseline_reconciled": "72d0017c48b0a45c9eae13d28e3af3326b2658f7_SUPERSEDED_BY_EXECUTION_ADDENDUM"
+  },
+  "workspace": {
+    "strategy": "isolated_writable_clone",
+    "branch": "work/om2a-machine-readiness-20261125",
+    "head": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "status_clean_before_receipt": true,
+    "origin": "https://github.com/ACPEnterprise/ACP-Enterprise.git"
+  },
+  "machine_facts": {
+    "hostname": "iMac.lan",
+    "os": "Darwin 24.6.0 x86_64",
+    "python": "3.12.14",
+    "node": "22.23.2",
+    "npm": "10.9.8",
+    "docker": "29.6.2",
+    "workspace_volume_available_kib": 1643114316
+  },
+  "resource_readiness": {
+    "repository_access": true,
+    "isolated_branch_creation": true,
+    "network_access": true,
+    "python_312_available": true,
+    "node_runtime_available": true,
+    "docker_cli_available": true,
+    "sufficient_workspace_storage": true
+  },
+  "custody_presence": {
+    "hcp_protected_source_verified": false,
+    "qbo_protected_source_verified": false,
+    "hcp_required_csv_digest_verified": false,
+    "qbo_acquisition_manifest_verified": false
+  },
+  "assignment_acknowledgments": [
+    "OM2-A-HCP-PACKET-RECOVERY-04",
+    "OM2-A-SOURCE-REGISTRATION-04",
+    "OM2-A-POPULATION-RECON-04",
+    "OM2-A-ACCOUNTING-ARAP-READBACK-04"
+  ],
+  "execution_state": {
+    "protected_execution": "BLOCKED_SOURCE_EVIDENCE_UNAVAILABLE",
+    "synthetic_independent_engineering": "READY_WITHIN_ALLOWED_PATHS",
+    "automated_claim": false,
+    "worker_control_lease": false
+  },
+  "safety": {
+    "secret_values_included": false,
+    "private_key_accessed": false,
+    "environment_dumped": false,
+    "protected_data_copied": false,
+    "live_database_mutated": false,
+    "external_system_write": false,
+    "oauth_initiated": false,
+    "financial_execution": false,
+    "deployment_performed": false
+  }
+}
