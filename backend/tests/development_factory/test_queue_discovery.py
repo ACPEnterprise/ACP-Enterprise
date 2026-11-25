@@ -280,6 +280,20 @@ def test_resource_limits_fail_closed(tmp_path: Path) -> None:
         )
 
 
+def test_network_failure_checkpoint_never_persists_secret_text(tmp_path: Path) -> None:
+    class SecretFailureSource(Source):
+        def load(self) -> tuple[QueueCandidate, ...]:
+            raise QueueNetworkError("token=not-a-real-secret-for-testing")
+
+    control = supervisor(tmp_path, max_attempts=1)
+    with pytest.raises(QueueDiscoveryError, match="retry budget exhausted"):
+        control.discover(SecretFailureSource(()), machine="OM1")
+
+    checkpoint = (tmp_path / "coordination-state.json").read_text()
+    assert "not-a-real-secret-for-testing" not in checkpoint
+    assert "token=" not in checkpoint
+
+
 def test_git_source_contract_scans_all_handoff_refs() -> None:
     source = GitQueueSource(Path.cwd())
     assert source.remote == "origin"
