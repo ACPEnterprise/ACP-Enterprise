@@ -85,4 +85,24 @@ describe("CustomerCommunicationHistory", () => {
     resolveHistory([]);
     expect(await screen.findByText(/No communication requests have been recorded/)).toBeInTheDocument();
   });
+
+  it("shows historical source lineage and unavailable evidence without send controls", async () => {
+    vi.mocked(communicationsApi.listCustomerCommunicationHistory).mockResolvedValue([{
+      id: "historical-1", communication_type: "appointment_reminder",
+      channel: "sms", customer_id: "customer-1", contact_id: "contact-1",
+      recipient_display: "Historical recipient withheld", state: "delivered", retry_count: 0,
+      terminal_failure: false, scheduled_at: "2025-01-01T12:00:00Z",
+      sent_at: "2025-01-01T12:00:00Z", failed_at: null, error_code: null,
+      error_category: null, created_at: "2025-01-01T12:00:00Z",
+      authority: "source_backed_history", source_provider: "housecall_pro",
+      source_id: "message-100", evidence_digest: null, evidence_state: "unavailable",
+    }]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><CustomerCommunicationHistory customerId="customer-1" /></QueryClientProvider>);
+
+    expect(await screen.findByText("Historical source evidence")).toBeVisible();
+    expect(screen.getByText(/Source ID message-100/)).toBeVisible();
+    expect(screen.getByText(/No message content was fabricated/)).toBeVisible();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
 });

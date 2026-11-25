@@ -100,11 +100,13 @@ export function CustomerCommunicationHistory({ customerId }: { customerId: strin
               <p className="mt-1 break-all text-sm text-content-muted">{item.channel.toUpperCase()} · {item.recipient_display}</p>
               <p className="mt-1 text-xs text-content-muted">Requested {new Date(item.created_at).toLocaleString()}{item.retry_count ? ` · ${item.retry_count} retries` : ""}</p>
               <p className="mt-2 text-xs text-content-muted">{presentation.detail}</p>
+              {item.authority === "source_backed_history" && <div className="mt-2 rounded-lg border border-stroke bg-surface p-2 text-xs text-content-muted"><p><strong className="text-content">Historical source evidence</strong> · {item.source_provider ?? "provider unavailable"} · Source ID {item.source_id ?? "unavailable"}</p><p className="mt-1">Evidence {item.evidence_state ?? "unavailable"}{item.evidence_digest ? ` · digest ${item.evidence_digest.slice(0, 12)}…` : " · digest unavailable"}</p><p className="mt-1">Read-only history · no provider write or retry authority</p></div>}
             </div>
           </article>;
         })}
       </div>
       {history.isSuccess && history.data.length === 0 && <p className="mt-4 text-sm text-content-muted">No communication requests have been recorded for this Customer.</p>}
+      {history.isSuccess && history.data.some((item) => item.authority === "source_backed_history" && item.evidence_state === "unavailable") && <Alert variant="warning" title="Historical communication evidence unavailable">At least one historical timeline entry retains its source identity, but its sealed message evidence is unavailable. No message content was fabricated.</Alert>}
     </Card>
   );
 }

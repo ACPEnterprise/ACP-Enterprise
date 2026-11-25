@@ -29,6 +29,11 @@ export interface CommunicationHistoryItem {
   error_code: string | null;
   error_category: string | null;
   created_at: string;
+  authority?: "native_delivery" | "source_backed_history";
+  source_provider?: string | null;
+  source_id?: string | null;
+  evidence_digest?: string | null;
+  evidence_state?: "available" | "unavailable" | "conflicting";
 }
 
 export interface OperationalMessageCatalogItem {
