@@ -1,0 +1,45 @@
+{
+  "assignment_id": "OM1-DF-RELEASE-MANIFEST-02",
+  "automated_claim_used": false,
+  "changed_files": [
+    "backend/development_factory/release_manifest.py",
+    "backend/tests/development_factory/test_release_manifest.py",
+    "docs/engineering/immutable-release-manifest.md",
+    "scripts/release-manifest"
+  ],
+  "completed_at_utc": "2026-11-25T13:53:36Z",
+  "implementation_sha": "128139f78be0da5071e8108abb8646e7d0655d1d",
+  "machine": {
+    "hostname": "iMac-663.lan",
+    "role": "OM1"
+  },
+  "machine_inventory_sha256": "94f88ed8c2bce340989dcc64e3d1267410e451f7149497fe27cacd429e7df6f9",
+  "queue": {
+    "published_ref": "refs/heads/handoff/overnight-follow-on-queue-67bbd83d",
+    "sha": "67bbd83d874f33e4926c530968d5c35e9940a7ba",
+    "sha256": "cfeba3508961a6b45fcc5887155f938c0c92d281094c07e92e7982f8038f96e5"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "source_sha": "ff2666b901f2f5f4e5db371c014069502cce459f",
+  "validation": {
+    "candidate_binding": "PASS",
+    "cli_generation_and_independent_verification": "PASS",
+    "development_factory_tests": "179 passed",
+    "digest_verification": "PASS",
+    "focused_release_manifest_tests": "11 passed",
+    "manifest_mode": "0400",
+    "mismatch_rejection": "PASS",
+    "mypy": "PASS",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "secret_redaction": "PASS"
+  }
+}
