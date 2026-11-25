@@ -92,6 +92,13 @@ def main() -> int:
         "--inventory", action="append", default=[], dest="inventory_paths", type=Path
     )
     daily_report.add_argument(
+        "--activation",
+        action="append",
+        default=[],
+        dest="activation_paths",
+        type=Path,
+    )
+    daily_report.add_argument(
         "--active-lane", action="append", default=[], dest="active_lanes"
     )
     daily_report.add_argument(
@@ -246,6 +253,10 @@ def main() -> int:
                     path if path.is_absolute() else args.repo_root / path
                     for path in args.inventory_paths
                 ]
+                activation_paths = [
+                    path if path.is_absolute() else args.repo_root / path
+                    for path in args.activation_paths
+                ]
                 latest_report_path = args.latest_report_path
                 if (
                     latest_report_path is not None
@@ -260,6 +271,7 @@ def main() -> int:
                 report = build_daily_report(
                     args.repo_root,
                     inventory_paths=inventory_paths,
+                    activation_paths=activation_paths,
                     active_lanes=args.active_lanes,
                     completed_assignments=args.completed_assignments,
                     latest_report_path=latest_report_path,

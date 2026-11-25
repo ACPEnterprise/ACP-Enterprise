@@ -81,6 +81,16 @@ def load_inventory_file(path: Path) -> dict[str, object]:
     return validate_inventory(payload)
 
 
+def load_activation_file(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CoordinationError(f"cannot load machine activation: {error}") from error
+    if not isinstance(payload, dict):
+        raise CoordinationError("machine activation must be an object")
+    return payload
+
+
 def validate_inventory(payload: object) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise CoordinationError("machine inventory must be an object")
@@ -378,6 +388,7 @@ def build_daily_report(
     repo_root: Path,
     *,
     inventory_paths: Iterable[Path] = (),
+    activation_paths: Iterable[Path] = (),
     active_lanes: Iterable[str] = (),
     completed_assignments: Iterable[str] = (),
     latest_report_path: Path | None = None,
@@ -389,6 +400,32 @@ def build_daily_report(
     inventories = [
         _inventory_summary(load_inventory_file(path), path) for path in inventory_paths
     ]
+    inventory_payloads = [load_inventory_file(path) for path in inventory_paths]
+    activations: list[dict[str, object]] = []
+    activated_lanes: list[str] = []
+    for path in activation_paths:
+        activation = load_activation_file(path)
+        role = activation.get("role_claimed")
+        inventory = next(
+            (item for item in inventory_payloads if item.get("role_claimed") == role),
+            None,
+        )
+        if inventory is None:
+            raise CoordinationError(
+                f"activation {path} has no matching machine inventory"
+            )
+        validate_activation(activation, inventory=inventory)
+        lane = _inventory_role_for_lane(str(role))
+        activated_lanes.append(lane)
+        activations.append(
+            {
+                "role": role,
+                "receipt": str(path),
+                "worker_id_present": True,
+                "session_state": "connected",
+                "heartbeat_health": "healthy",
+            }
+        )
     latest = _load_latest_validation(
         latest_report_path or repo_root / ".development-factory/latest.json",
         current_head=repository.head,
@@ -415,6 +452,7 @@ def build_daily_report(
             "state_counts": state_counts,
             "lane_counts": lane_counts,
             "active_lanes_supplied": list(active),
+            "activated_lanes_verified": sorted(set(activated_lanes)),
             "eligible_after_supplied_activation": list(
                 eligible_after_activation(queue, active, completed_assignments)
             ),
@@ -427,6 +465,7 @@ def build_daily_report(
             "index_clean": repository.index_clean,
         },
         "machines": inventories,
+        "activations": activations,
         "unverified_lanes": sorted(
             lane
             for lane in ("LAPTOP_MASTER", "OM1", "OM2", "REVIEWER")

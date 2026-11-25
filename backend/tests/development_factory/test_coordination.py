@@ -302,6 +302,65 @@ def test_daily_report_projects_inventory_queue_and_unverified_lanes(
     assert report["validation"]["head"] == "c" * 40
 
 
+def test_daily_report_accepts_only_inventory_bound_activation_receipts(
+    tmp_path: Path,
+) -> None:
+    inventory = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": "OM1",
+        "host": {
+            "hostname": "om1",
+            "os": "Linux",
+            "machine": "x86_64",
+            "python": "3.12",
+        },
+        "repository": {
+            "root": "/repo",
+            "branch": "work/om1",
+            "head": "e" * 40,
+            "origin": "https://example.invalid/repo.git",
+            "status_clean": True,
+        },
+        "safety": {
+            "private_keys_read": False,
+            "environment_values_dumped": False,
+            "git_mutation_performed": False,
+            "docker_container_started": False,
+        },
+    }
+    activation = {
+        "schema": "twelfthats.machine-activation.v1",
+        "role_claimed": "OM1",
+        "machine_inventory_digest_sha256": canonical_digest(inventory),
+        "worker": {
+            "worker_id": "worker-om1",
+            "provider_identifier": "om1-provider",
+            "capabilities": ["transport.connectivity"],
+            "public_key_fingerprint_sha256": "f" * 64,
+            "session_state": "connected",
+        },
+        "heartbeat": {"health": "healthy", "observed_at_utc": "2026-11-24T00:00:00Z"},
+        "safety": {
+            "private_key_material_included": False,
+            "credential_values_included": False,
+            "customer_data_included": False,
+            "git_mutation_performed": False,
+            "live_data_mutation": False,
+        },
+    }
+    inventory_path = tmp_path / "om1-inventory.json"
+    activation_path = tmp_path / "om1-activation.json"
+    inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+    activation_path.write_text(json.dumps(activation), encoding="utf-8")
+    report = build_daily_report(
+        Path(__file__).parents[3],
+        inventory_paths=(inventory_path,),
+        activation_paths=(activation_path,),
+    )
+    assert report["queue"]["activated_lanes_verified"] == ["OM1"]
+    assert report["activations"][0]["heartbeat_health"] == "healthy"
+
+
 @pytest.mark.parametrize("dependency", ["MISSING", "OM1-TWO"])
 def test_unknown_or_cyclic_dependencies_fail_closed(dependency: str) -> None:
     payload = json.loads(json.dumps(queue_payload()))

@@ -82,6 +82,9 @@ The queue contract is executable through the existing factory CLI:
 ./scripts/development-factory coordination inventory-check /tmp/twelvehats-om1-inventory.json --require-clean
 ./scripts/development-factory coordination activation-check \
   /tmp/twelvehats-om1-inventory.json /tmp/twelvehats-om1-activation.json
+./scripts/development-factory coordination daily-report \
+  --inventory /tmp/twelvehats-om1-inventory.json \
+  --activation /tmp/twelvehats-om1-activation.json
 ./scripts/development-factory coordination prepare-claim ASSIGNMENT_ID /tmp/twelvehats-machine-inventory.json --output /tmp/twelvehats-claim.json
 ```
 
@@ -178,6 +181,11 @@ Laptop Master validates that receipt with `activation-check` before preparing a
 claim envelope. A successful check proves only that the receipt is bound to the
 supplied inventory and contains a connected, healthy, secret-free worker
 assertion; it does not register the worker or issue a claim or lease.
+
+`daily-report --activation` accepts the same receipt and records verified active
+lanes separately from manually supplied projections. A report without an
+activation receipt may describe inventory, but must not be interpreted as proof
+that a Worker Control session or lease exists.
 
 ## OM2 activation procedure
 
