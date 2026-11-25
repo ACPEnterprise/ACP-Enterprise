@@ -64,6 +64,42 @@ Work sequence:
 No HCP writes, QuickBooks writes, OAuth, financial posting, payroll, banking,
 or live admission is authorized by these directives.
 
+## OM1 — Follow-on overnight reservations
+
+Assignments:
+
+- `OM1-DF-RELEASE-MANIFEST-02`
+- `OM1-DF-MIGRATION-GRAPH-AUDIT-02`
+- `OM1-DF-SUPERVISOR-RECOVERY-02`
+
+These are independent manual reservations after the completed durable-
+coordination checkpoint. Work only in the reserved isolated worktree and only
+within the queue's allowed paths. Bind every checkpoint to the exact queue
+digest, assignment ID, source SHA, changed-file list, and machine-generated
+validation output. Reconcile application/tooling/migration/backup/rollback
+identities, exercise failure and restart recovery, and preserve one Alembic
+head. Do not rewrite applied migrations, access protected signing keys, issue
+approval, merge, deploy, or mutate live data. Automated claims remain blocked.
+
+## OM2 — Follow-on overnight reservations
+
+Assignments:
+
+- `OM2-HCP-JOB-RELATIONSHIP-02`
+- `OM2-COMMUNICATIONS-HISTORY-RECON-01`
+- `OM2-QBO-REPORT-READBACK-02`
+- `OM2-CUSTOMER-HISTORY-UI-RECON-02`
+
+These reservations may proceed independently using synthetic or sealed custody
+evidence only. HCP work must preserve source IDs, parent/location relationships,
+and held ambiguity; communications work is readback-only; QBO work is
+readback-only and preserves all accounting exceptions; customer-history UI work
+must remain independent of native customer admission and must not fabricate
+historical records. Browser acceptance packets must identify synthetic,
+protected, and live evidence separately. No OAuth, provider write, financial
+posting, payroll, banking, live admission, or cross-tenant read is authorized.
+Automated claims remain blocked.
+
 ## Laptop continuation
 
 Laptop Master continues its reserved All County workflow assignments and may

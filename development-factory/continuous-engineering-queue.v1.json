@@ -1,6 +1,11 @@
 {
   "schema_version": "twelfthats.continuous-engineering-queue.v1",
   "status": "PREPARED_PENDING_MACHINE_ACTIVATION",
+  "completed_evidence": [
+    {"assignment_id": "OM1-DF-DURABLE-COORDINATION-01", "commit_sha": "ff2666b901f2f5f4e5db371c014069502cce459f", "remote_ref": "refs/heads/work/om1-df-durable-coordination-01", "evidence": "229 tests passed; PostgreSQL 16 race qualification passed; schema drift NONE"},
+    {"assignment_id": "OM2-HCP-HISTORY-RECON-01", "commit_sha": "6c999f50876a227e27488f347e56848250e23264", "remote_ref": "refs/heads/work/om2-hcp-history-recon-01", "evidence": "Synthetic-only read-only HCP history reconciliation; no All County acceptance claimed"},
+    {"assignment_id": "OM2-QBO-HISTORY-RECON-01", "commit_sha": "6793f16d3f6b20ed62ec12dca0626927b695b8be", "remote_ref": "refs/heads/work/om2-qbo-history-recon-01", "evidence": "Synthetic-only read-only QBO projection; no OAuth, custody, posting, or All County acceptance claimed"}
+  ],
   "authority": {
     "application_integration_lane": "LAPTOP_MASTER",
     "factory_lane": "OM1",
@@ -38,6 +43,62 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Worker Control authentication and lease are unavailable; execute the bounded OM2 QBO task in its isolated worktree while custody recovery continues."
+    },
+    {
+      "assignment_id": "OM1-DF-RELEASE-MANIFEST-02",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Follow-on OM1 assignment reserved manually after the durable-coordination checkpoint; Worker Control remains unqualified."
+    },
+    {
+      "assignment_id": "OM2-HCP-JOB-RELATIONSHIP-02",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Follow-on HCP relationship assignment reserved manually after the synthetic reconciliation checkpoint; source custody and HCP writes remain guarded."
+    },
+    {
+      "assignment_id": "OM2-COMMUNICATIONS-HISTORY-RECON-01",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Historical communications assignment reserved manually; readback only, no outbound provider activity."
+    },
+    {
+      "assignment_id": "OM2-QBO-REPORT-READBACK-02",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Follow-on QBO report-readback assignment reserved manually after the synthetic projection checkpoint; OAuth and financial writes remain disabled."
+    },
+    {
+      "assignment_id": "OM1-DF-MIGRATION-GRAPH-AUDIT-02",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Independent OM1 migration-lineage work is reserved manually; applied migrations and protected databases remain untouched."
+    },
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-RECOVERY-02",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Independent OM1 supervisor recovery work is reserved manually until Worker Control is qualified."
+    },
+    {
+      "assignment_id": "OM2-CUSTOMER-HISTORY-UI-RECON-02",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Historical-only customer UI work is reserved manually; it may use only synthetic or sealed evidence and cannot admit live data."
     }
   ],
   "claim_policy": {
@@ -155,8 +216,8 @@
       "id": "OM2-COMMUNICATIONS-HISTORY-RECON-01",
       "lane": "OM2",
       "priority": "P1",
-      "state": "BLOCKED_DEPENDENCY",
-      "depends_on": ["OM2-HCP-HISTORY-RECON-01"],
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
       "objective": "Reconcile historical communications evidence and prepare truthful readback without sending messages.",
       "allowed_paths": ["backend/app/communications/**", "backend/tests/**", "docs/quality/**"],
       "validation": ["source custody", "tenant-scoped readback", "provider-write denial"],
@@ -210,8 +271,8 @@
       "id": "OM1-DF-RELEASE-MANIFEST-02",
       "lane": "OM1",
       "priority": "P1",
-      "state": "BLOCKED_DEPENDENCY",
-      "depends_on": ["OM1-DF-DURABLE-COORDINATION-01"],
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
       "objective": "Standardize immutable application/tooling/migration/backup/rollback manifest generation and independent verification.",
       "allowed_paths": ["scripts/**", "backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/engineering_execution/**", "backend/tests/**", "docs/engineering/**"],
       "validation": ["candidate binding", "digest verification", "mismatch rejection", "secret redaction"],
@@ -232,8 +293,8 @@
       "id": "OM2-HCP-JOB-RELATIONSHIP-02",
       "lane": "OM2",
       "priority": "P0",
-      "state": "BLOCKED_DEPENDENCY",
-      "depends_on": ["OM2-HCP-HISTORY-RECON-01"],
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
       "objective": "Reconcile admissible HCP jobs, appointments, locations, estimates, invoices, and payments to verified customer identities in isolation.",
       "allowed_paths": ["backend/app/operational_migration/**", "backend/app/migration_factory/**", "backend/tests/**", "docs/quality/**"],
       "validation": ["job-parent crosswalk", "location reconciliation", "idempotent replay", "held-exception register"],
@@ -243,12 +304,45 @@
       "id": "OM2-QBO-REPORT-READBACK-02",
       "lane": "OM2",
       "priority": "P0",
-      "state": "BLOCKED_DEPENDENCY",
-      "depends_on": ["OM2-QBO-HISTORY-RECON-01"],
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
       "objective": "Reconcile sealed QuickBooks source-backed accounts and reports in isolation without OAuth, provider writes, or financial mutation.",
       "allowed_paths": ["backend/app/accounting/**", "backend/app/integrations/qbo/**", "backend/tests/**", "docs/quality/**"],
       "validation": ["custody digest", "relationship totals", "report readback", "known exception preservation"],
       "stop_conditions": ["QBO write", "OAuth initiation", "fabricated posting", "unresolved company binding"]
+    },
+    {
+      "id": "OM1-DF-MIGRATION-GRAPH-AUDIT-02",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Reconcile migration graph, single-head validation, and artifact-derived schema expectations without rewriting applied migrations.",
+      "allowed_paths": ["backend/alembic/**", "backend/scripts/**", "backend/tests/release/**", "docs/quality/**", "docs/engineering/**"],
+      "validation": ["one Alembic head", "lineage graph report", "stale-head rejection", "isolated migration rehearsal"],
+      "stop_conditions": ["rewriting applied migration", "live database mutation", "fabricated schema evidence"]
+    },
+    {
+      "id": "OM1-DF-SUPERVISOR-RECOVERY-02",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Harden bounded supervisor restart, checkpoint recovery, stale-worker fencing, and resource-limit reporting without unattended protected execution.",
+      "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["worker crash recovery", "supervisor restart recovery", "stale lease rejection", "resource-limit enforcement", "safe shutdown"],
+      "stop_conditions": ["automatic approval", "automatic merge or deploy", "unbounded execution", "secret exposure"]
+    },
+    {
+      "id": "OM2-CUSTOMER-HISTORY-UI-RECON-02",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Prepare historical-only customer and location search/readback acceptance independent of native customer admission.",
+      "allowed_paths": ["backend/app/migration_factory/**", "backend/app/customer_migration/**", "frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["synthetic or sealed historical fixture", "source identity and provenance readback", "tenant isolation", "browser acceptance packet"],
+      "stop_conditions": ["native customer overwrite", "fabricated history", "cross-tenant read", "live admission"]
     },
     {
       "id": "REVIEW-CROSS-MACHINE-SECURITY-02",
