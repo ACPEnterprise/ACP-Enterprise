@@ -1,0 +1,44 @@
+{
+  "assignment_id": "OM1-A-CI-WORKFLOW-RUNTIME-CORRECTION-04",
+  "authority": {
+    "assignment_source": "direct_owner_directive",
+    "automated_claim_used": false,
+    "integration_authority": "LAPTOP_MASTER",
+    "queue_modified": false
+  },
+  "baseline_sha": "abee6301527d791036c29fa71916a359195fc0cd",
+  "completed_at_utc": "2026-11-25T19:20:29Z",
+  "failed_workflow_runs_reproduced": [
+    45641038393,
+    45657823798,
+    45660828719
+  ],
+  "implementation_sha": "31c909693b6d45f91bbf2eaa6cbc9c3f2d771aa9",
+  "local_artifact_evidence": {
+    "application_sha256": "70826a2a316e3658b6ed6acebc33e9f76a18d8b7f23ae0e57637b1d934787b62",
+    "manifest_file_sha256": "cbb4f5373da8873fa44972be842baf41ac7d357507e3d7b24df712da3c4e87ae",
+    "manifest_payload_sha256": "ec6934ff375d8e46b261a3fb9aa43b29f723d85b50273e4a1d884612150f9a1f",
+    "reproducible": true,
+    "tooling_sha256": "7f1ec94eb19fb47511e6e335aa5e8362194ae97a2d3ae7bd706d093cd29113f1"
+  },
+  "node_runtime": {
+    "frontend_container_digest": "sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5",
+    "version": "24.22.3"
+  },
+  "result": "LOCAL_PASS_HOSTED_PENDING",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "backend_full_pre_correction": "4035 passed, 2 failed, 2 skipped",
+    "backend_regression_after_correction": "58 passed",
+    "dockerfile_checks": "PASS",
+    "frontend_build": "PASS",
+    "frontend_tests": "796 passed",
+    "mobile_config": "PASS",
+    "mobile_tests": "162 passed",
+    "mypy": "PASS (1029 source files)",
+    "npm_audit": "0 vulnerabilities in frontend and mobile installs",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "secret_custody": "PASS"
+  }
+}
