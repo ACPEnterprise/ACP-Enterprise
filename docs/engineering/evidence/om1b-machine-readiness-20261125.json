@@ -1,0 +1,125 @@
+{
+  "schema": "twelfthats.machine-inventory.v1",
+  "role_claimed": "OM1",
+  "execution_identity": "OM1-B",
+  "status": "READY_AWAITING_EXPLICIT_SUCCESSOR_RESERVATION",
+  "collected_at_utc": "2026-11-25T16:40:59.133388+00:00",
+  "host": {
+    "hostname": "iMac-673.lan",
+    "os": "macOS-15.4.1-x86_64-i386-64bit",
+    "machine": "x86_64",
+    "python": "3.9.6"
+  },
+  "repository": {
+    "root": "/Users/michaelbfouse/Development/ACP-Enterprise-OM1B-Automation-20261125",
+    "branch": "handoff/om1b-machine-readiness-20261125",
+    "head": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "baseline_matches": true,
+    "status_clean": true,
+    "status_entries": [],
+    "origin": "https://github.com/ACPEnterprise/ACP-Enterprise.git",
+    "worktree_count": 1,
+    "worktree_paths_sample": [
+      "/Users/michaelbfouse/Development/ACP-Enterprise-OM1B-Automation-20261125"
+    ],
+    "worktree_paths_omitted": 0,
+    "stale_general_packet_identity": {
+      "branch": "handoff/laptop-om2-history-integration-20261125",
+      "head": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+      "reconciled": true,
+      "method": "Created a readiness-only branch from the assignment-specific required baseline; no implementation branch or claim was created."
+    }
+  },
+  "authority": {
+    "integration_authority": "LAPTOP_MASTER",
+    "addendum_ref": "refs/heads/handoff/six-lane-execution-addendum-20261125",
+    "addendum_sha": "9fd59a6c01c7714831ace0f6f265149d67908b6f",
+    "addendum_sha256": "74f31a52609901fdb0ac850c91f073311e8db2261528859df56a2891af08cbcb",
+    "queue_sha256": "6f954b32235ffb0db6082a84768f0f368285e0b5b49a42775e1f020a1a4a5359",
+    "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "automated_claims_blocked": true
+  },
+  "assignment_acknowledgment": {
+    "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
+    "packet_execution_identity": "OM1-B",
+    "disposition": "SUPERSEDED_COMPLETED_ELSEWHERE",
+    "execution_authorized": false,
+    "implementation_begun_by_om1b": false,
+    "overlapping_changes_present": false,
+    "published_completion_ref": "refs/heads/work/om1-df-supervisor-continuation-03",
+    "published_completion_sha": "d04b1d6e072e3d52bb64e745d024ff52d42023b6",
+    "published_implementation_sha": "40f72424cf824bbb8f34a5a58ea8437cd9a06517",
+    "published_evidence_result": "PASS",
+    "independent_verification": {
+      "focused_tests": "32 passed",
+      "development_factory_tests": "171 passed",
+      "ruff": "PASS",
+      "mypy": "PASS",
+      "completion_ref_matches_sha": true,
+      "evidence_present": true
+    },
+    "baseline_observation": {
+      "completion_merge_base_with_required_baseline": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+      "required_baseline_is_completion_ancestor": false,
+      "assessment": "The published completion is functional and independently tested, but it does not descend from the later addendum-required baseline. No replay, repair, or integration is authorized by this receipt."
+    },
+    "next_action": "Await an explicitly reserved, non-overlapping successor assignment from Laptop Master."
+  },
+  "dependency_evidence": {
+    "assignment_id": "OM1-DF-SUPERVISOR-RECOVERY-02",
+    "published_sha": "d807239254887307c74ec6857f7f82b2f1fe58ad",
+    "verified": true,
+    "result": "PASS"
+  },
+  "tools": {
+    "codex": {
+      "available": true,
+      "path": "/Users/michaelbfouse/.local/bin/codex",
+      "version": "codex-cli 0.144.5"
+    },
+    "docker": {
+      "available": true,
+      "path": "/usr/local/bin/docker",
+      "version": "29.6.1"
+    },
+    "git": {
+      "available": true,
+      "path": "/usr/bin/git",
+      "version": "git version 2.39.5 (Apple Git-154)"
+    }
+  },
+  "resources": {
+    "logical_cpu_cores": 12,
+    "host_memory_bytes": 8589934592,
+    "system_memory_free_percent": 50,
+    "free_bytes_at_repo": 19500216320,
+    "existing_docker_containers": 4,
+    "docker_containers_started_by_om1b": 0,
+    "resource_assessment": "AVAILABLE_FOR_LIGHTWEIGHT_ENGINEERING_ONLY"
+  },
+  "development_factory": {
+    "config_present": true,
+    "manifest_present": true,
+    "cli_present": true,
+    "secret_contents_inspected": false,
+    "remote_activation_attempted": false
+  },
+  "safety": {
+    "private_keys_read": false,
+    "environment_values_dumped": false,
+    "git_mutation_performed": false,
+    "docker_container_started": false,
+    "worker_control_lease_created": false,
+    "protected_mutation_performed": false,
+    "deployment_performed": false,
+    "external_system_write_performed": false,
+    "additional_expenditure_incurred": false
+  },
+  "preparation_actions": {
+    "authorized_git_fetch_performed": true,
+    "readiness_branch_created": true,
+    "source_or_application_code_modified": false,
+    "superseded_assignment_executed": false
+  }
+}
