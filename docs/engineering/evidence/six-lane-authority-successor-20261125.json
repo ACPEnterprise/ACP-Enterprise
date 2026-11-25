@@ -27,9 +27,24 @@
       "ruff_format_check": "PASS"
     }
   },
+  "om1_completion_provenance": {
+    "verified_remote_refs": [
+      "refs/heads/work/om1a-ci-workflow-runtime-correction-04",
+      "refs/heads/work/om1-df-migration-graph-audit-02",
+      "refs/heads/work/om1-df-release-manifest-02",
+      "refs/heads/work/om1-df-supervisor-continuation-03"
+    ],
+    "commit_only_reports_without_verified_branch_ref": [
+      "95af0d396bafccecc1330f263df09fd62879cbf2",
+      "dcbe60b671932e841e3f075a02af48fe8f367d48",
+      "06d6679032ee7024e67540e0962b7b2f74ff427e",
+      "401c50bf3d566faa8cbfce2e729d841536cfed2e"
+    ],
+    "review_requirement": "Do not treat the four commit-only reports as independently retrievable until OM1 supplies their exact remote refs or custody artifacts."
+  },
   "queue": {
     "path": "development-factory/continuous-engineering-queue.v1.json",
-    "sha256": "bcdfd2308f4b87887e01db3953028c1029733814b5dc8950f4ad22b89c4dcac3",
+    "sha256": "1a33cb19b5459333d370bc5a3808ffc7d768b3deb5916373be715fc26dc14489",
     "assignments": 46,
     "machine_identities": ["LAPTOP_MASTER", "LAPTOP_REVIEWER", "OM1-A", "OM1-B", "OM2-A", "OM2-B"],
     "automated_claims": "BLOCKED_PENDING_INDEPENDENT_QUALIFICATION",
