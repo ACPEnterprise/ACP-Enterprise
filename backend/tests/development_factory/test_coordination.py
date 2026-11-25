@@ -6,9 +6,11 @@ from development_factory.assignment_bridge import prepare_claim_envelope
 from development_factory.coordination import (
     CoordinationError,
     build_daily_report,
+    canonical_digest,
     dependency_layers,
     eligible_after_activation,
     load_queue,
+    validate_activation,
     validate_inventory,
     validate_queue,
 )
@@ -129,6 +131,107 @@ def test_machine_inventory_requires_secret_free_safety_flags() -> None:
     receipt["safety"]["private_keys_read"] = True
     with pytest.raises(CoordinationError):
         validate_inventory(receipt)
+
+
+def test_worker_activation_requires_bound_identity_session_and_healthy_heartbeat() -> (
+    None
+):
+    inventory = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": "OM1",
+        "host": {
+            "hostname": "om1",
+            "os": "macOS",
+            "machine": "arm64",
+            "python": "3.12",
+        },
+        "repository": {
+            "root": "/repo",
+            "branch": "work/om1",
+            "head": "a" * 40,
+            "origin": "https://example.invalid/repo.git",
+            "status_clean": True,
+        },
+        "safety": {
+            "private_keys_read": False,
+            "environment_values_dumped": False,
+            "git_mutation_performed": False,
+            "docker_container_started": False,
+        },
+    }
+    activation = {
+        "schema": "twelfthats.machine-activation.v1",
+        "role_claimed": "OM1",
+        "machine_inventory_digest_sha256": canonical_digest(inventory),
+        "worker": {
+            "worker_id": "worker-1",
+            "provider_identifier": "om1-provider",
+            "capabilities": ["transport.connectivity", "validation.run"],
+            "public_key_fingerprint_sha256": "b" * 64,
+            "session_state": "connected",
+        },
+        "heartbeat": {"health": "healthy", "observed_at_utc": "2026-11-24T00:00:00Z"},
+        "safety": {
+            "private_key_material_included": False,
+            "credential_values_included": False,
+            "customer_data_included": False,
+            "git_mutation_performed": False,
+            "live_data_mutation": False,
+        },
+    }
+    assert validate_activation(activation, inventory=inventory)["role_claimed"] == "OM1"
+    activation["worker"]["session_state"] = "closed"
+    with pytest.raises(CoordinationError, match="session is not connected"):
+        validate_activation(activation, inventory=inventory)
+
+
+def test_worker_activation_rejects_secret_bearing_fields() -> None:
+    inventory = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": "OM2",
+        "host": {
+            "hostname": "om2",
+            "os": "Linux",
+            "machine": "x86_64",
+            "python": "3.12",
+        },
+        "repository": {
+            "root": "/repo",
+            "branch": "work/om2",
+            "head": "c" * 40,
+            "origin": "https://example.invalid/repo.git",
+            "status_clean": True,
+        },
+        "safety": {
+            "private_keys_read": False,
+            "environment_values_dumped": False,
+            "git_mutation_performed": False,
+            "docker_container_started": False,
+        },
+    }
+    activation = {
+        "schema": "twelfthats.machine-activation.v1",
+        "role_claimed": "OM2",
+        "machine_inventory_digest_sha256": canonical_digest(inventory),
+        "worker": {
+            "worker_id": "worker-2",
+            "provider_identifier": "om2-provider",
+            "capabilities": ["transport.connectivity"],
+            "public_key_fingerprint_sha256": "d" * 64,
+            "session_state": "connected",
+        },
+        "heartbeat": {"health": "healthy", "observed_at_utc": "2026-11-24T00:00:00Z"},
+        "safety": {
+            "private_key_material_included": False,
+            "credential_values_included": False,
+            "customer_data_included": False,
+            "git_mutation_performed": False,
+            "live_data_mutation": False,
+        },
+        "access_token": "must-not-appear",
+    }
+    with pytest.raises(CoordinationError, match="secret-bearing"):
+        validate_activation(activation, inventory=inventory)
 
 
 def test_daily_report_projects_inventory_queue_and_unverified_lanes(

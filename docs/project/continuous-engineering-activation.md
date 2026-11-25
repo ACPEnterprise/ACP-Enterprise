@@ -80,6 +80,8 @@ The queue contract is executable through the existing factory CLI:
 ./scripts/development-factory coordination validate
 ./scripts/development-factory coordination summary --active-lane LAPTOP_MASTER
 ./scripts/development-factory coordination inventory-check /tmp/twelvehats-om1-inventory.json --require-clean
+./scripts/development-factory coordination activation-check \
+  /tmp/twelvehats-om1-inventory.json /tmp/twelvehats-om1-activation.json
 ./scripts/development-factory coordination prepare-claim ASSIGNMENT_ID /tmp/twelvehats-machine-inventory.json --output /tmp/twelvehats-claim.json
 ```
 
@@ -166,6 +168,11 @@ must not contain the private-key path contents, access tokens, database URLs, or
 customer data. A connected runtime does not create a lease; the existing Worker
 Control service must issue the assignment-bound lease after the claim envelope
 is accepted.
+
+Laptop Master validates that receipt with `activation-check` before preparing a
+claim envelope. A successful check proves only that the receipt is bound to the
+supplied inventory and contains a connected, healthy, secret-free worker
+assertion; it does not register the worker or issue a claim or lease.
 
 ## OM2 activation procedure
 

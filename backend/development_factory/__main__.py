@@ -57,6 +57,9 @@ def main() -> int:
     inventory_check = coordination_commands.add_parser("inventory-check")
     inventory_check.add_argument("receipt", type=Path)
     inventory_check.add_argument("--require-clean", action="store_true")
+    activation_check = coordination_commands.add_parser("activation-check")
+    activation_check.add_argument("inventory", type=Path)
+    activation_check.add_argument("activation", type=Path)
     claim_envelope = coordination_commands.add_parser("prepare-claim")
     claim_envelope.add_argument(
         "--queue",
@@ -188,6 +191,30 @@ def main() -> int:
                 if args.require_clean and not clean:
                     print("BLOCKED: repository has uncommitted changes")
                     return 1
+                return 0
+            if args.coordination_command == "activation-check":
+                from development_factory.coordination import (
+                    load_inventory_file,
+                    validate_activation,
+                )
+
+                inventory_path = args.inventory
+                activation_path = args.activation
+                if not inventory_path.is_absolute():
+                    inventory_path = args.repo_root / inventory_path
+                if not activation_path.is_absolute():
+                    activation_path = args.repo_root / activation_path
+                inventory = load_inventory_file(inventory_path)
+                try:
+                    activation = json.loads(activation_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as error:
+                    raise CoordinationError(
+                        f"cannot load machine activation: {error}"
+                    ) from error
+                validate_activation(activation, inventory=inventory)
+                print(f"Machine activation valid: {inventory['role_claimed']}")
+                print("Worker identity, connected session, and healthy heartbeat: YES")
+                print("Claim or lease issued: NO")
                 return 0
             if args.coordination_command == "prepare-claim":
                 from development_factory.coordination import load_inventory_file

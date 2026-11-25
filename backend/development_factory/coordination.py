@@ -7,6 +7,7 @@ the existing Engineering Control / Worker Control services.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ QUEUE_RELATIVE_PATH = Path("development-factory/continuous-engineering-queue.v1.
 QUEUE_SCHEMA = "twelfthats.continuous-engineering-queue.v1"
 INVENTORY_SCHEMA = "twelfthats.machine-inventory.v1"
 DAILY_REPORT_SCHEMA = "twelfthats.daily-engineering-report.v1"
+ACTIVATION_SCHEMA = "twelfthats.machine-activation.v1"
 LANES = frozenset({"LAPTOP_MASTER", "OM1", "OM2", "REVIEWER"})
 STATES = frozenset(
     {
@@ -116,6 +118,104 @@ def validate_inventory(payload: object) -> dict[str, object]:
         if safety.get(key) is not False:
             raise CoordinationError(f"machine inventory safety.{key} is not false")
     return payload
+
+
+def canonical_digest(value: object) -> str:
+    """Return the deterministic digest used for coordination evidence."""
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_activation(
+    payload: object, *, inventory: dict[str, object]
+) -> dict[str, object]:
+    """Validate a secret-free Worker Control activation receipt.
+
+    This is evidence validation only. It does not register a worker, establish a
+    session, claim an assignment, issue a lease, or authorize execution.
+    """
+    if not isinstance(payload, dict):
+        raise CoordinationError("machine activation must be an object")
+    if payload.get("schema") != ACTIVATION_SCHEMA:
+        raise CoordinationError("unsupported machine activation schema")
+    if payload.get("role_claimed") != inventory.get("role_claimed"):
+        raise CoordinationError("activation role does not match machine inventory")
+    if payload.get("machine_inventory_digest_sha256") != canonical_digest(inventory):
+        raise CoordinationError("activation is not bound to the supplied inventory")
+    worker = payload.get("worker")
+    heartbeat = payload.get("heartbeat")
+    safety = payload.get("safety")
+    if not isinstance(worker, dict) or not isinstance(heartbeat, dict):
+        raise CoordinationError(
+            "worker activation identity/heartbeat evidence is missing"
+        )
+    if not isinstance(safety, dict):
+        raise CoordinationError("worker activation safety evidence is missing")
+    for key in (
+        "worker_id",
+        "provider_identifier",
+        "public_key_fingerprint_sha256",
+    ):
+        if not isinstance(worker.get(key), str) or not worker[key]:
+            raise CoordinationError(f"worker activation worker.{key} is missing")
+    fingerprint = worker["public_key_fingerprint_sha256"]
+    if len(fingerprint) != 64 or any(
+        character not in "0123456789abcdef" for character in fingerprint
+    ):
+        raise CoordinationError("worker activation public-key fingerprint is invalid")
+    capabilities = worker.get("capabilities")
+    if (
+        not isinstance(capabilities, list)
+        or not capabilities
+        or not all(
+            isinstance(capability, str) and capability for capability in capabilities
+        )
+    ):
+        raise CoordinationError("worker activation capabilities are missing")
+    if worker.get("session_state") != "connected":
+        raise CoordinationError("worker activation session is not connected")
+    if heartbeat.get("health") != "healthy":
+        raise CoordinationError("worker activation heartbeat is not healthy")
+    if (
+        not isinstance(heartbeat.get("observed_at_utc"), str)
+        or not heartbeat["observed_at_utc"]
+    ):
+        raise CoordinationError("worker activation heartbeat timestamp is missing")
+    for key in (
+        "private_key_material_included",
+        "credential_values_included",
+        "customer_data_included",
+        "git_mutation_performed",
+        "live_data_mutation",
+    ):
+        if safety.get(key) is not False:
+            raise CoordinationError(f"worker activation safety.{key} is not false")
+    _reject_sensitive_keys(payload)
+    return payload
+
+
+def _reject_sensitive_keys(value: object) -> None:
+    prohibited_fragments = (
+        "access_token",
+        "client_secret",
+        "database_url",
+        "password",
+        "private_key_contents",
+        "secret_value",
+        "token_value",
+        "raw_credential",
+    )
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            normalized = str(key).lower()
+            if any(fragment in normalized for fragment in prohibited_fragments):
+                raise CoordinationError(
+                    "worker activation contains a prohibited secret-bearing field"
+                )
+            _reject_sensitive_keys(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _reject_sensitive_keys(nested)
 
 
 def validate_queue(payload: object) -> CoordinationQueue:
