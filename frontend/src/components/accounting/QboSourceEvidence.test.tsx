@@ -152,4 +152,19 @@ describe("QboSourceEvidence", () => {
     });
     expect(useQboAccountingEvidence).toHaveBeenLastCalledWith("accrual", true);
   });
+
+  it("navigates to source-backed report detail with provenance and no posting claim", () => {
+    vi.mocked(useQboAccountingEvidence).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: value,
+    } as unknown as ReturnType<typeof useQboAccountingEvidence>);
+    render(<QboSourceEvidence enabled />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Balance Sheet" }));
+    const detail = screen.getByRole("region", { name: "QBO historical report detail" });
+    expect(detail).toHaveTextContent("balance-sheet");
+    expect(detail).toHaveTextContent("QBO SOURCE BACKED");
+    expect(detail).toHaveTextContent(/accepted as ACP Accounting: no/i);
+    expect(detail).toHaveTextContent(/no posting authority/i);
+  });
 });
