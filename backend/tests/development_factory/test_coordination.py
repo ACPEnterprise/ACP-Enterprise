@@ -98,6 +98,22 @@ def test_manual_reservation_requires_matching_machine_owner_and_block() -> None:
         validate_queue(payload)
 
 
+def test_legacy_manual_reservation_remains_readable_with_inferred_identity() -> None:
+    payload = queue_payload()
+    payload["manual_reservations"] = [
+        {
+            "assignment_id": "OM1-TWO",
+            "machine": "OM1",
+            "owner": "LAPTOP_MASTER",
+            "status": "RESERVED_MANUAL",
+            "automated_claims_blocked": True,
+            "reason": "Historical queue evidence.",
+        }
+    ]
+    queue = validate_queue(payload)
+    assert queue.manual_reservations[0].execution_identity == "OM1-A"
+
+
 def test_reserved_assignment_cannot_prepare_automated_claim() -> None:
     payload = queue_payload()
     payload["manual_reservations"] = [

@@ -330,13 +330,18 @@ def validate_queue(payload: object) -> CoordinationQueue:
         "OM2": frozenset({"OM2-A", "OM2-B"}),
         "REVIEWER": frozenset({"LAPTOP_REVIEWER"}),
     }
+    legacy_identity = {
+        "LAPTOP_MASTER": "LAPTOP_MASTER",
+        "OM1": "OM1-A",
+        "OM2": "OM2-A",
+        "REVIEWER": "LAPTOP_REVIEWER",
+    }
     for raw in raw_reservations:
         if not isinstance(raw, dict):
             raise CoordinationError("each manual reservation must be an object")
         required = {
             "assignment_id",
             "machine",
-            "execution_identity",
             "owner",
             "status",
             "automated_claims_blocked",
@@ -348,7 +353,11 @@ def validate_queue(payload: object) -> CoordinationQueue:
             )
         assignment_id = raw["assignment_id"]
         machine = raw["machine"]
-        execution_identity = raw["execution_identity"]
+        execution_identity = raw.get("execution_identity")
+        if execution_identity is None:
+            # Queues published before six-lane activation remain readable as
+            # historical evidence. Current queues must carry this field.
+            execution_identity = legacy_identity.get(machine)
         owner = raw["owner"]
         status = raw["status"]
         reason = raw["reason"]
@@ -577,6 +586,7 @@ def build_daily_report(
                 {
                     "assignment_id": item.assignment_id,
                     "machine": item.machine,
+                    "execution_identity": item.execution_identity,
                     "owner": item.owner,
                     "status": item.status,
                     "automated_claims_blocked": item.automated_claims_blocked,
