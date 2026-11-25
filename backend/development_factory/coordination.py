@@ -342,7 +342,12 @@ def eligible_after_activation(
             if (
                 item.lane in active
                 and item.id not in completed
-                and item.state in {"READY_AFTER_INVENTORY", "BLOCKED_DEPENDENCY"}
+                and item.state
+                in {
+                    "READY_AFTER_INVENTORY",
+                    "BLOCKED_MACHINE_INVENTORY",
+                    "BLOCKED_DEPENDENCY",
+                }
                 and set(item.depends_on) <= completed
             ):
                 result.append(item.id)

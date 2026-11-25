@@ -55,6 +55,15 @@ def test_dependency_layers_and_activation_projection() -> None:
     assert eligible_after_activation(queue, ("OM1",), ("LAP-ONE",)) == ("OM1-TWO",)
 
 
+def test_machine_inventory_block_is_released_only_for_the_activated_lane() -> None:
+    payload = queue_payload()
+    payload["assignments"][1]["state"] = "BLOCKED_MACHINE_INVENTORY"
+    queue = validate_queue(payload)
+    assert eligible_after_activation(queue, ("OM1",)) == ()
+    assert eligible_after_activation(queue, ("OM1",), ("LAP-ONE",)) == ("OM1-TWO",)
+    assert eligible_after_activation(queue, ("OM2",), ("LAP-ONE",)) == ()
+
+
 def test_unknown_completion_evidence_fails_closed() -> None:
     queue = validate_queue(queue_payload())
     with pytest.raises(CoordinationError, match="unknown completed assignments"):

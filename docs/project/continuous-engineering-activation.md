@@ -92,6 +92,11 @@ Dependent assignments may be projected with repeated
 by existing Worker/Engineering Control evidence. A ready predecessor is never
 treated as completed implicitly.
 
+An assignment in `BLOCKED_MACHINE_INVENTORY` becomes projectable only for its
+activated lane and only after all declared dependencies have explicit completion
+evidence. `BLOCKED_EVIDENCE` remains ineligible. This projection still does not
+issue a Worker Control claim or lease.
+
 `prepare-claim` emits a deterministic, machine-receipt-bound
 `assignment-claim-envelope.v1` with state `PREPARED_NOT_CLAIMED`. It does not
 issue a claim, lease, approval, checkpoint, commit, push, merge, or deployment.
