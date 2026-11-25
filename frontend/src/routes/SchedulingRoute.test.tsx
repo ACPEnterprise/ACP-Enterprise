@@ -150,7 +150,7 @@ describe("SchedulingRoute", () => {
 
   it("shows current time on today's Schedule and Dispatch timelines", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 7, 13, 10, 30));
+    vi.setSystemTime(new Date("2026-08-13T14:30:00Z"));
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
       isError: false,
