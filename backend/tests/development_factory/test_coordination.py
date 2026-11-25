@@ -43,7 +43,7 @@ def queue_payload() -> dict[str, object]:
 
 def test_loads_repository_queue_and_projects_only_activated_lanes() -> None:
     queue = load_queue(Path(__file__).parents[3])
-    assert len(queue.assignments) == 34
+    assert len(queue.assignments) == 41
     assert eligible_after_activation(queue, ()) == ()
 
 
@@ -70,6 +70,7 @@ def test_manual_reservation_blocks_automated_eligibility() -> None:
         {
             "assignment_id": "LAP-ONE",
             "machine": "LAPTOP_MASTER",
+            "execution_identity": "LAPTOP_MASTER",
             "owner": "LAPTOP_MASTER",
             "status": "RESERVED_MANUAL",
             "automated_claims_blocked": True,
@@ -86,6 +87,7 @@ def test_manual_reservation_requires_matching_machine_owner_and_block() -> None:
         {
             "assignment_id": "LAP-ONE",
             "machine": "OM1",
+            "execution_identity": "OM1-A",
             "owner": "LAPTOP_MASTER",
             "status": "RESERVED_MANUAL",
             "automated_claims_blocked": True,
@@ -102,6 +104,7 @@ def test_reserved_assignment_cannot_prepare_automated_claim() -> None:
         {
             "assignment_id": "LAP-ONE",
             "machine": "LAPTOP_MASTER",
+            "execution_identity": "LAPTOP_MASTER",
             "owner": "LAPTOP_MASTER",
             "status": "RESERVED_MANUAL",
             "automated_claims_blocked": True,

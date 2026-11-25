@@ -56,6 +56,7 @@ class Assignment:
 class ManualReservation:
     assignment_id: str
     machine: str
+    execution_identity: str
     owner: str
     status: str
     automated_claims_blocked: bool
@@ -323,12 +324,19 @@ def validate_queue(payload: object) -> CoordinationQueue:
         "OM2": "OM2",
         "REVIEWER": "REVIEWER",
     }
+    machine_identities = {
+        "LAPTOP_MASTER": frozenset({"LAPTOP_MASTER"}),
+        "OM1": frozenset({"OM1-A", "OM1-B"}),
+        "OM2": frozenset({"OM2-A", "OM2-B"}),
+        "REVIEWER": frozenset({"LAPTOP_REVIEWER"}),
+    }
     for raw in raw_reservations:
         if not isinstance(raw, dict):
             raise CoordinationError("each manual reservation must be an object")
         required = {
             "assignment_id",
             "machine",
+            "execution_identity",
             "owner",
             "status",
             "automated_claims_blocked",
@@ -340,12 +348,20 @@ def validate_queue(payload: object) -> CoordinationQueue:
             )
         assignment_id = raw["assignment_id"]
         machine = raw["machine"]
+        execution_identity = raw["execution_identity"]
         owner = raw["owner"]
         status = raw["status"]
         reason = raw["reason"]
         if not all(
             isinstance(value, str) and value.strip()
-            for value in (assignment_id, machine, owner, status, reason)
+            for value in (
+                assignment_id,
+                machine,
+                execution_identity,
+                owner,
+                status,
+                reason,
+            )
         ):
             raise CoordinationError("manual reservation identity fields are invalid")
         if assignment_id not in by_id:
@@ -356,6 +372,10 @@ def validate_queue(payload: object) -> CoordinationQueue:
             raise CoordinationError(f"duplicate manual reservation for {assignment_id}")
         if machine not in machine_lanes:
             raise CoordinationError(f"manual reservation machine is invalid: {machine}")
+        if execution_identity not in machine_identities[machine]:
+            raise CoordinationError(
+                f"manual reservation execution identity is invalid for {assignment_id}"
+            )
         if by_id[assignment_id].lane != machine_lanes[machine]:
             raise CoordinationError(
                 f"manual reservation machine does not own {assignment_id}"
@@ -377,6 +397,7 @@ def validate_queue(payload: object) -> CoordinationQueue:
             ManualReservation(
                 assignment_id=assignment_id,
                 machine=machine,
+                execution_identity=execution_identity,
                 owner=owner,
                 status=status,
                 automated_claims_blocked=True,

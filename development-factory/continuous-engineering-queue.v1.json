@@ -6,10 +6,18 @@
     {"assignment_id": "OM2-HCP-HISTORY-RECON-01", "commit_sha": "6c999f50876a227e27488f347e56848250e23264", "remote_ref": "refs/heads/work/om2-hcp-history-recon-01", "evidence": "Synthetic-only read-only HCP history reconciliation; no All County acceptance claimed"},
     {"assignment_id": "OM2-QBO-HISTORY-RECON-01", "commit_sha": "6793f16d3f6b20ed62ec12dca0626927b695b8be", "remote_ref": "refs/heads/work/om2-qbo-history-recon-01", "evidence": "Synthetic-only read-only QBO projection; no OAuth, custody, posting, or All County acceptance claimed"},
     {"assignment_id": "OM1-DF-RELEASE-MANIFEST-02", "commit_sha": "cdd586147c2f6272ad549dd541b12310fd1baf36", "remote_ref": "refs/heads/work/om1-df-release-manifest-02", "evidence": "Release-manifest and durable-coordination qualification handoff; no protected deployment or authorization claimed"},
+    {"assignment_id": "OM1-DF-MIGRATION-GRAPH-AUDIT-02", "commit_sha": "b596dfac30cd1470bd1d54eb2ba4de8fe182e4a1", "remote_ref": "refs/heads/work/om1-df-migration-graph-audit-02", "evidence": "218-revision single-head audit, isolated migration/restore evidence, and 93 release tests; no live mutation"},
+    {"assignment_id": "OM1-DF-SUPERVISOR-RECOVERY-02", "commit_sha": "d807239254887307c74ec6857f7f82b2f1fe58ad", "remote_ref": "refs/heads/work/om1-df-supervisor-recovery-02", "evidence": "179 Development Factory tests and fail-closed queue discovery recovery; no Worker Control lease fabricated"},
     {"assignment_id": "OM2-HCP-JOB-RELATIONSHIP-02", "commit_sha": "54a5932ec57d3268df8c5ac74f6fdabdeb9b0f37", "remote_ref": "refs/heads/work/om2-hcp-job-relationship-02", "evidence": "Synthetic-only HCP relationship hold propagation; no protected custody, native admission, or All County acceptance claimed"},
     {"assignment_id": "OM2-COMMUNICATIONS-HISTORY-RECON-01", "commit_sha": "e78f5bc3c1a08e7617e6bd03374ef0bd82090dba", "remote_ref": "refs/heads/work/om2-communications-history-recon-01", "evidence": "Synthetic-only provider-neutral historical communications readback; no delivery, OAuth, persistence, or All County acceptance claimed"},
     {"assignment_id": "OM2-QBO-REPORT-READBACK-02", "commit_sha": "df0b353f451e260effbc11e76ee58bb6f4fb5958", "remote_ref": "refs/heads/work/om2-qbo-report-readback-02", "evidence": "Synthetic-only deterministic QBO report projection; no protected custody, OAuth, posting, or All County acceptance claimed"},
     {"assignment_id": "OM2-CUSTOMER-HISTORY-UI-RECON-02", "commit_sha": "06050b0eb3121c67640f09dac350dd1dbe5c4fe7", "remote_ref": "refs/heads/work/om2-customer-history-ui-recon-02", "evidence": "Synthetic-only historical customer search UI contract; no protected custody, native admission, or All County acceptance claimed"}
+    ,{"assignment_id": "OM2-HISTORY-DETAIL-READBACK-03", "commit_sha": "21206cc2b2e216d2c87fa7dc2c6dae9cd9287ffb", "remote_ref": "refs/heads/work/om2-history-detail-readback-03", "evidence": "Source-backed historical detail rendering and lineage readback; browser evidence remains synthetic/protected-only"}
+    ,{"assignment_id": "OM2-IMPORT-MAPPING-02", "commit_sha": "6368cee9e8b2090be9f9cbc4cac27d6337b05b2c", "remote_ref": "refs/heads/work/om2-import-mapping-02", "evidence": "Deterministic import mapping preview with replay-safe validation; no live admission"}
+    ,{"assignment_id": "OM2-RECONCILIATION-EXCEPTIONS-02", "commit_sha": "8c2aa20f090e63dfdbe45273250fefa7af0343b4", "remote_ref": "refs/heads/work/om2-reconciliation-exceptions-02", "evidence": "Durable reconciliation exception readback; ambiguous identities remain held"}
+    ,{"assignment_id": "OM2-QBO-HISTORY-NAVIGATION-03", "commit_sha": "77df9a85f596427ffc3f98426a7df386fd0fcd32", "remote_ref": "refs/heads/work/om2-qbo-history-navigation-03", "evidence": "Read-only QBO source-history navigation; no OAuth, posting, or native-admission claim"}
+    ,{"assignment_id": "OM2-COMMUNICATIONS-TIMELINE-02", "commit_sha": "2b7b3038c9c4efcaaed51be05913a79936cfbdee", "remote_ref": "refs/heads/work/om2-communications-timeline-02", "evidence": "Historical communications timeline lineage readback; no outbound provider activity"}
+    ,{"assignment_id": "OM2-BROWSER-HISTORY-ACCEPT-03", "commit_sha": "a03b2610fb9d204b12b6aba0a82edfae3863487b", "remote_ref": "refs/heads/work/om2-browser-history-accept-03", "evidence": "Synthetic browser acceptance receipt only; not All County operational acceptance"}
   ],
   "authority": {
     "application_integration_lane": "LAPTOP_MASTER",
@@ -28,6 +36,7 @@
     {
       "assignment_id": "OM1-DF-DURABLE-COORDINATION-01",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -36,6 +45,7 @@
     {
       "assignment_id": "OM2-HCP-HISTORY-RECON-01",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -44,6 +54,7 @@
     {
       "assignment_id": "OM2-QBO-HISTORY-RECON-01",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -52,6 +63,7 @@
     {
       "assignment_id": "OM1-DF-RELEASE-MANIFEST-02",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -60,6 +72,7 @@
     {
       "assignment_id": "OM2-HCP-JOB-RELATIONSHIP-02",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -68,6 +81,7 @@
     {
       "assignment_id": "OM2-COMMUNICATIONS-HISTORY-RECON-01",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -76,6 +90,7 @@
     {
       "assignment_id": "OM2-QBO-REPORT-READBACK-02",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -84,6 +99,7 @@
     {
       "assignment_id": "OM1-DF-MIGRATION-GRAPH-AUDIT-02",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -92,6 +108,7 @@
     {
       "assignment_id": "OM1-DF-SUPERVISOR-RECOVERY-02",
       "machine": "OM1",
+      "execution_identity": "OM1-B",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -100,6 +117,7 @@
     {
       "assignment_id": "OM2-CUSTOMER-HISTORY-UI-RECON-02",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -108,6 +126,7 @@
     {
       "assignment_id": "OM2-HISTORY-DETAIL-READBACK-03",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -116,6 +135,7 @@
     {
       "assignment_id": "OM2-IMPORT-MAPPING-02",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -124,6 +144,7 @@
     {
       "assignment_id": "OM2-RECONCILIATION-EXCEPTIONS-02",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -132,6 +153,7 @@
     {
       "assignment_id": "OM2-QBO-HISTORY-NAVIGATION-03",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -140,6 +162,7 @@
     {
       "assignment_id": "OM2-COMMUNICATIONS-TIMELINE-02",
       "machine": "OM2",
+      "execution_identity": "OM2-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -148,6 +171,7 @@
     {
       "assignment_id": "OM2-BROWSER-HISTORY-ACCEPT-03",
       "machine": "OM2",
+      "execution_identity": "OM2-B",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -156,6 +180,7 @@
     {
       "assignment_id": "OM1-DF-CI-ARTIFACTS-03",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -164,6 +189,7 @@
     {
       "assignment_id": "OM1-DF-PROTECTED-REHEARSAL-03",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -172,6 +198,7 @@
     {
       "assignment_id": "OM1-DF-FAILURE-INJECTION-04",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -180,6 +207,7 @@
     {
       "assignment_id": "OM1-DF-ROLLBACK-RECOVERY-03",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -188,6 +216,7 @@
     {
       "assignment_id": "OM1-DF-CROSS-MACHINE-QUAL-03",
       "machine": "OM1",
+      "execution_identity": "OM1-A",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
@@ -196,10 +225,74 @@
     {
       "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
       "machine": "OM1",
+      "execution_identity": "OM1-B",
       "owner": "LAPTOP_MASTER",
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Supervisor continuation and idle-queue recovery work is manually reserved until the corrected discovery path is independently qualified."
+    },
+    {
+      "assignment_id": "OM2-B-UI-WORKFLOW-ACCEPT-01",
+      "machine": "OM2",
+      "execution_identity": "OM2-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "OM2-B browser workflow work is prepared pending machine resource verification; no All County acceptance may be inferred from synthetic data."
+    },
+    {
+      "assignment_id": "OM2-B-REVENUE-WORKFLOW-ACCEPT-01",
+      "machine": "OM2",
+      "execution_identity": "OM2-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "OM2-B price-book, estimating, and invoicing acceptance is prepared pending machine resource verification and protected data availability."
+    },
+    {
+      "assignment_id": "OM2-B-KEITH-DEMO-ACCEPT-01",
+      "machine": "OM2",
+      "execution_identity": "OM2-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Keith synthetic demonstration usability is prepared pending machine resource verification; no external invitation or activation is authorized."
+    },
+    {
+      "assignment_id": "OM2-A-HCP-PACKET-RECOVERY-04",
+      "machine": "OM2",
+      "execution_identity": "OM2-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "HCP packet and execution-envelope recovery is manually reserved; missing custody remains a fail-closed evidence gate and no HCP write is authorized."
+    },
+    {
+      "assignment_id": "OM2-A-SOURCE-REGISTRATION-04",
+      "machine": "OM2",
+      "execution_identity": "OM2-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Protected source registration tooling is manually reserved for sealed custody only; no confidential transfer or live admission is authorized."
+    },
+    {
+      "assignment_id": "OM2-A-POPULATION-RECON-04",
+      "machine": "OM2",
+      "execution_identity": "OM2-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Record-level population and relationship reconciliation is manually reserved; missing records remain explicit exceptions."
+    },
+    {
+      "assignment_id": "OM2-A-ACCOUNTING-ARAP-READBACK-04",
+      "machine": "OM2",
+      "execution_identity": "OM2-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Source-backed QBO A/R and A/P readback is manually reserved; no OAuth, posting, payment, or fabricated balance is authorized."
     }
   ],
   "claim_policy": {
@@ -587,6 +680,83 @@
       "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
       "validation": ["queue replenishment", "checkpoint integrity", "idle detection", "bounded shutdown"],
       "stop_conditions": ["unattended protected execution", "automatic approval", "unbounded execution", "secret persistence"]
+    },
+    {
+      "id": "OM2-B-UI-WORKFLOW-ACCEPT-01",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_MACHINE_INVENTORY",
+      "depends_on": ["OM2-BROWSER-HISTORY-ACCEPT-03"],
+      "objective": "Prepare browser acceptance for customer usability, historical navigation, CSR, scheduling, dispatch, employee management, and technician My Day.",
+      "allowed_paths": ["frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["fresh browser sessions", "role-specific access", "workflow persistence", "tenant isolation"],
+      "stop_conditions": ["unverified All County data", "employee mutation", "fabricated acceptance", "live deployment"]
+    },
+    {
+      "id": "OM2-B-REVENUE-WORKFLOW-ACCEPT-01",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "BLOCKED_MACHINE_INVENTORY",
+      "depends_on": ["OM2-B-UI-WORKFLOW-ACCEPT-01"],
+      "objective": "Prepare browser acceptance for All County price book, estimating, invoicing, and truthful source-backed financial readback.",
+      "allowed_paths": ["frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["price-book readback", "estimate workflow", "invoice workflow", "financial-source labeling"],
+      "stop_conditions": ["synthetic price used as All County", "financial write", "fabricated balance", "live mutation"]
+    },
+    {
+      "id": "OM2-B-KEITH-DEMO-ACCEPT-01",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "BLOCKED_MACHINE_INVENTORY",
+      "depends_on": ["OM2-B-UI-WORKFLOW-ACCEPT-01"],
+      "objective": "Prepare isolated synthetic Keith demonstration acceptance covering authentication, NDA gating, tenant isolation, Luminary, Beacon, LIA, and estimating.",
+      "allowed_paths": ["frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["demo-only login", "NDA receipt", "direct All County denial", "synthetic workflow acceptance"],
+      "stop_conditions": ["All County visibility", "external invitation", "credential exposure", "cross-tenant access"]
+    },
+    {
+      "id": "OM2-A-HCP-PACKET-RECOVERY-04",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_EVIDENCE",
+      "depends_on": [],
+      "objective": "Recover and validate the missing HCP admissible packet and prepare a current-SHA/schema-bound execution envelope without bypassing authority.",
+      "allowed_paths": ["backend/app/operational_migration/**", "backend/scripts/**", "backend/tests/**", "docs/quality/**", "docs/operations/**"],
+      "validation": ["source manifest verification", "current SHA/schema binding", "stale-authority rejection", "secret-free packet receipt"],
+      "stop_conditions": ["missing source custody", "owner signature required", "HCP write", "stale schema acceptance"]
+    },
+    {
+      "id": "OM2-A-SOURCE-REGISTRATION-04",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-A-HCP-PACKET-RECOVERY-04"],
+      "objective": "Implement protected, tenant-scoped registration and verification for sealed HCP/QBO source packages without copying confidential data into ordinary worktrees.",
+      "allowed_paths": ["backend/app/operational_migration/**", "backend/app/accounting/**", "backend/tests/**", "docs/quality/**", "docs/operations/**"],
+      "validation": ["custody digest", "tenant binding", "read-only access", "missing-source error visibility"],
+      "stop_conditions": ["confidential transfer", "provider write", "cross-tenant read", "native posting"]
+    },
+    {
+      "id": "OM2-A-POPULATION-RECON-04",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-A-SOURCE-REGISTRATION-04"],
+      "objective": "Reconcile source populations and relationship completeness at record level, preserving held and unavailable records explicitly.",
+      "allowed_paths": ["backend/app/migration_factory/**", "backend/app/operational_migration/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["record-level counts", "relationship crosswalk", "duplicate prevention", "held-exception report"],
+      "stop_conditions": ["fabricated relationship", "native overwrite", "unsealed source", "live admission"]
+    },
+    {
+      "id": "OM2-A-ACCOUNTING-ARAP-READBACK-04",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-QBO-HISTORY-NAVIGATION-03"],
+      "objective": "Complete source-backed A/R and A/P reporting readback with truthful unavailable states and preserved reconciliation exceptions.",
+      "allowed_paths": ["backend/app/accounting/**", "backend/app/integrations/qbo/**", "frontend/src/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["A/R readback", "A/P readback", "source totals", "exception visibility", "read-only enforcement"],
+      "stop_conditions": ["OAuth", "financial write", "fabricated balance", "native-admission mislabel"]
     }
   ]
 }

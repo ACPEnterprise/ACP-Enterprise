@@ -100,6 +100,20 @@ protected, and live evidence separately. No OAuth, provider write, financial
 posting, payroll, banking, live admission, or cross-tenant read is authorized.
 Automated claims remain blocked.
 
+## OM2-B — Browser and demonstration reservations
+
+Assignments:
+
+- `OM2-B-UI-WORKFLOW-ACCEPT-01`
+- `OM2-B-REVENUE-WORKFLOW-ACCEPT-01`
+- `OM2-B-KEITH-DEMO-ACCEPT-01`
+
+These reservations are prepared but remain blocked pending OM2-B machine and
+resource verification. They are separate from OM2-A source-reconciliation work.
+They may use only isolated or synthetic fixtures until protected All County
+custody is available. No external invitation, HCP/QBO write, financial action,
+or live deployment is authorized.
+
 ## OM2 — Replenished historical-accessibility reservations
 
 Assignments:
@@ -137,6 +151,23 @@ integrity, queue supersession, machine-specific ownership, and secret-free
 evidence. No private signing-key access, automatic approval, merge, deployment,
 live database mutation, or protected credential use is authorized. Automated
 claims remain blocked.
+
+## OM2-A — Replenished source and reconciliation reservations
+
+Assignments:
+
+- `OM2-A-HCP-PACKET-RECOVERY-04`
+- `OM2-A-SOURCE-REGISTRATION-04`
+- `OM2-A-POPULATION-RECON-04`
+- `OM2-A-ACCOUNTING-ARAP-READBACK-04`
+
+These assignments remain manually reserved to OM2-A. HCP packet recovery is
+evidence-blocked until the missing admissible packet and current execution
+authority are legitimately available. Source registration and reconciliation
+must remain tenant-scoped, read-only, provenance-preserving, and explicit about
+missing records. QBO A/R and A/P work must preserve source-version and
+unapplied-payment exceptions; no OAuth, posting, banking, payroll, or financial
+execution is authorized.
 
 ## Laptop continuation
 

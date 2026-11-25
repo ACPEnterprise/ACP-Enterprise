@@ -37,6 +37,7 @@ def queue_digest(queue: CoordinationQueue) -> str:
                 {
                     "assignment_id": item.assignment_id,
                     "machine": item.machine,
+                    "execution_identity": item.execution_identity,
                     "owner": item.owner,
                     "status": item.status,
                     "automated_claims_blocked": item.automated_claims_blocked,

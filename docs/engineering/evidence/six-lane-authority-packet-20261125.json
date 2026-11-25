@@ -1,0 +1,62 @@
+{
+  "schema": "twelvehats.six-lane-authority-packet.v1",
+  "status": "PREPARED_PENDING_WORKSPACE_VERIFICATION",
+  "application_baseline": {
+    "sha": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+    "schema": "x3y5z7a9c1e4",
+    "queue_assignments": 41,
+    "queue_file_sha256": "6f954b32235ffb0db6082a84768f0f368285e0b5b49a42775e1f020a1a4a5359"
+  },
+  "integration_authority": "LAPTOP_MASTER",
+  "identities": {
+    "LAPTOP_MASTER": {
+      "lane": "LAPTOP_MASTER",
+      "scope": "All County integration, protected isolated acceptance, and final handoff",
+      "status": "ACTIVE_IN_CURRENT_WORKTREE"
+    },
+    "LAPTOP_REVIEWER": {
+      "lane": "REVIEWER",
+      "scope": "Independent review only; no implementation, signing, or deployment",
+      "status": "PREPARED_PENDING_SEPARATE_WORKTREE"
+    },
+    "OM1-A": {
+      "lane": "OM1",
+      "scope": "Platform artifacts, rehearsal, failure injection, rollback, and cross-machine qualification",
+      "status": "MANUAL_RESERVATION_PREPARED"
+    },
+    "OM1-B": {
+      "lane": "OM1",
+      "scope": "Supervisor recovery, queue discovery, idle detection, checkpoints, and replenishment",
+      "workspace": "/Users/michaelbfouse/Development/ACP-Enterprise-OM1B-Automation-20261125",
+      "workspace_verification": "UNAVAILABLE_FROM_LAPTOP",
+      "owner_reported_baseline": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+      "status": "MANUAL_RESERVATION_PREPARED_PENDING_WORKSPACE_RECEIPT"
+    },
+    "OM2-A": {
+      "lane": "OM2",
+      "scope": "Protected-source registration, reconciliation, import mapping, and historical detail",
+      "status": "MANUAL_RESERVATION_PREPARED"
+    },
+    "OM2-B": {
+      "lane": "OM2",
+      "scope": "Browser business-workflow acceptance and synthetic demonstration usability",
+      "status": "PREPARED_PENDING_MACHINE_RESOURCE_VERIFICATION"
+    }
+  },
+  "safety": {
+    "automated_claims_blocked": true,
+    "live_deployment": false,
+    "live_database_mutation": false,
+    "external_system_writes": false,
+    "private_key_access": false,
+    "financial_execution": false,
+    "external_invitations": false
+  },
+  "required_receipts_before_activation": [
+    "machine inventory with clean worktree and exact baseline",
+    "workspace ownership and resource verification",
+    "assignment-specific acknowledgment",
+    "independent qualification evidence",
+    "secret-free checkpoint publication"
+  ]
+}

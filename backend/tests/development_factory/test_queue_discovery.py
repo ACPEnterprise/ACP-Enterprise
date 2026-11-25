@@ -72,6 +72,7 @@ def payload(*, include_follow_on: bool = False) -> dict[str, object]:
             {
                 "assignment_id": item["id"],
                 "machine": item["lane"],
+                "execution_identity": ("OM1-A" if item["lane"] == "OM1" else "OM2-A"),
                 "owner": "LAPTOP_MASTER",
                 "status": "RESERVED_MANUAL",
                 "automated_claims_blocked": True,
