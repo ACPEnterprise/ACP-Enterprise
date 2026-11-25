@@ -14,6 +14,7 @@ import { type CustomerInput, type DuplicateMatch } from "../../types/customers";
 import { Alert, Button, Card, EmptyState, Input, Spinner } from "../../ui";
 import { CustomerForm } from "./CustomerForm";
 import { CustomerImportPanel } from "./CustomerImportPanel";
+import { HistoricalCustomerSearch } from "./HistoricalCustomerSearch";
 
 const PAGE_SIZE = 20;
 
@@ -68,6 +69,8 @@ export function CustomerManagement() {
     </section>
 
     {canManage && <CustomerImportPanel key={`customer-import-${activeCompanyId() ?? "no-company"}`} />}
+
+    <HistoricalCustomerSearch />
 
     {canManage && isCreating && <Card className="p-ui-4 sm:p-ui-6"><h3 className="text-xl font-semibold">Create customer</h3><p className="mt-1 text-sm text-content-muted">Create the Customer record first, then add Service Locations and Contacts.</p><div className="mt-6"><CustomerForm duplicateWarnings={duplicateWarnings} isSaving={mutations.create.isPending} isCheckingDuplicates={mutations.duplicateCheck.isPending} error={mutations.create.error ?? mutations.duplicateCheck.error} onCancel={() => setIsCreating(false)} onCheckDuplicates={(input) => mutations.duplicateCheck.mutate({ first_name: input.first_name, last_name: input.last_name, business_name: input.business_name, phone: input.primary_phone, email: input.email }, { onSuccess: setDuplicateWarnings })} onSubmit={(input: CustomerInput) => mutations.create.mutate(input, { onSuccess: (result) => { setDuplicateWarnings(result.duplicate_warnings); setIsCreating(false); navigate(customerDetailPath(result.customer.id)); } })} /></div></Card>}
 
