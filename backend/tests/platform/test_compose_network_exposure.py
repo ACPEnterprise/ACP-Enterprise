@@ -60,6 +60,7 @@ def test_application_acceptance_backend_waits_for_schema_and_bootstrap() -> None
     compose = _compose("docker-compose.application-acceptance.yml")
     depends_on = compose["services"]["backend"]["depends_on"]
 
+    assert compose["services"]["postgres"]["ports"] == ["127.0.0.1:15432:5432"]
     assert depends_on["postgres"]["condition"] == "service_healthy"
     assert depends_on["redis"]["condition"] == "service_healthy"
     assert depends_on["bootstrap"]["condition"] == "service_completed_successfully"
