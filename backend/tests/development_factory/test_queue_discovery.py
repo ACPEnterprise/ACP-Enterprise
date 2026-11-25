@@ -345,6 +345,7 @@ def test_queue_supersession_cannot_move_a_running_assignment_between_machines(
     successor = json.loads(json.dumps(original))
     successor["assignments"][0]["lane"] = "OM2"
     successor["manual_reservations"][0]["machine"] = "OM2"
+    successor["manual_reservations"][0]["execution_identity"] = "OM2-A"
 
     with pytest.raises(QueueDiscoveryError, match="machine ownership changed"):
         control.discover(

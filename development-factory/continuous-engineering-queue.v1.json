@@ -18,6 +18,7 @@
     ,{"assignment_id": "OM2-QBO-HISTORY-NAVIGATION-03", "commit_sha": "77df9a85f596427ffc3f98426a7df386fd0fcd32", "remote_ref": "refs/heads/work/om2-qbo-history-navigation-03", "evidence": "Read-only QBO source-history navigation; no OAuth, posting, or native-admission claim"}
     ,{"assignment_id": "OM2-COMMUNICATIONS-TIMELINE-02", "commit_sha": "2b7b3038c9c4efcaaed51be05913a79936cfbdee", "remote_ref": "refs/heads/work/om2-communications-timeline-02", "evidence": "Historical communications timeline lineage readback; no outbound provider activity"}
     ,{"assignment_id": "OM2-BROWSER-HISTORY-ACCEPT-03", "commit_sha": "a03b2610fb9d204b12b6aba0a82edfae3863487b", "remote_ref": "refs/heads/work/om2-browser-history-accept-03", "evidence": "Synthetic browser acceptance receipt only; not All County operational acceptance"}
+    ,{"assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-03", "commit_sha": "d04b1d6e072e3d52bb64e745d024ff52d42023b6", "remote_ref": "refs/heads/work/om1-df-supervisor-continuation-03", "evidence": "171 Development Factory tests; queue replenishment, restart recovery, idle detection, safe shutdown, and bounded execution passed; automated claims remained blocked"}
   ],
   "authority": {
     "application_integration_lane": "LAPTOP_MASTER",
@@ -223,15 +224,6 @@
       "reason": "Cross-machine coordination qualification is manually reserved; Worker Control leases and fabricated acknowledgments remain prohibited."
     },
     {
-      "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
-      "machine": "OM1",
-      "execution_identity": "OM1-B",
-      "owner": "LAPTOP_MASTER",
-      "status": "RESERVED_MANUAL",
-      "automated_claims_blocked": true,
-      "reason": "Supervisor continuation and idle-queue recovery work is manually reserved until the corrected discovery path is independently qualified."
-    },
-    {
       "assignment_id": "OM2-B-UI-WORKFLOW-ACCEPT-01",
       "machine": "OM2",
       "execution_identity": "OM2-B",
@@ -293,6 +285,15 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Source-backed QBO A/R and A/P readback is manually reserved; no OAuth, posting, payment, or fabricated balance is authorized."
+    },
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-04",
+      "machine": "OM1",
+      "execution_identity": "OM1-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Successor reservation after OM1-A completed OM1-DF-SUPERVISOR-CONTINUATION-03; reuse the qualified supervisor implementation and do not re-execute the completed assignment."
     }
   ],
   "claim_policy": {
@@ -680,6 +681,17 @@
       "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
       "validation": ["queue replenishment", "checkpoint integrity", "idle detection", "bounded shutdown"],
       "stop_conditions": ["unattended protected execution", "automatic approval", "unbounded execution", "secret persistence"]
+    },
+    {
+      "id": "OM1-DF-SUPERVISOR-CONTINUATION-04",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-SUPERVISOR-CONTINUATION-03"],
+      "objective": "Continue bounded supervisor qualification across current queue discovery, replenishment, session recovery, idle detection, resource reporting, and duplicate-execution fencing.",
+      "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["current queue discovery", "queue supersession", "restart recovery", "idle-session detection", "resource monitoring", "duplicate execution prevention", "secret-free checkpoint"],
+      "stop_conditions": ["unattended protected execution", "automatic approval", "unbounded execution", "secret persistence", "competing coordination framework"]
     },
     {
       "id": "OM2-B-UI-WORKFLOW-ACCEPT-01",
