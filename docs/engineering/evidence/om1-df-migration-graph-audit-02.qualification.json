@@ -1,0 +1,60 @@
+{
+  "assignment_id": "OM1-DF-MIGRATION-GRAPH-AUDIT-02",
+  "automated_claim_used": false,
+  "changed_files": [
+    "backend/scripts/verify_migration_lineage.py",
+    "backend/tests/release/test_migration_lineage_evidence_verifier.py",
+    "docs/engineering/migration-lineage-independent-verification.md"
+  ],
+  "completed_at_utc": "2026-11-25T14:06:16Z",
+  "implementation_sha": "36d39d41aa91bfe92d0ea5e65d6babf2c0a72451",
+  "machine": {
+    "hostname": "iMac-663.lan",
+    "role": "OM1"
+  },
+  "machine_inventory_sha256": "94f88ed8c2bce340989dcc64e3d1267410e451f7149497fe27cacd429e7df6f9",
+  "migration_checkpoint": {
+    "evidence_sha256": "b6d26a56ef3ca2e704592c157c771ac3a3008b30b84ae98691e8d6057b6d62b2",
+    "head": "x3y5z7a9c1e4",
+    "lineage_digest": "da533206c29f3dbf6e7b4a24ebeddaa79c9d904b89c49d670999ee445e357bdf",
+    "release_ready": true,
+    "revision_count": 218,
+    "sha": "e3ac2c0647f3afd6b6f9447bf68664032351980b"
+  },
+  "queue": {
+    "published_ref": "refs/heads/handoff/overnight-follow-on-queue-67bbd83d",
+    "sha": "67bbd83d874f33e4926c530968d5c35e9940a7ba",
+    "sha256": "cfeba3508961a6b45fcc5887155f938c0c92d281094c07e92e7982f8038f96e5"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "alembic_single_head": "PASS",
+    "backup_manifest": "VERIFIED",
+    "backup_sha256": "2796c328acf55a851d9902658ff17931d6769f2a6cfc93f5828125eea7dbf3ba",
+    "cleanup": "VERIFIED",
+    "focused_graph_tests": "13 passed",
+    "fresh_database": "PASS",
+    "host_ports": "NONE",
+    "isolated_database_authority_sha": "e3ac2c0647f3afd6b6f9447bf68664032351980b",
+    "isolated_restore": "PASS",
+    "mypy": "PASS",
+    "postgres_encoding": "UTF8",
+    "postgres_version_num": 160015,
+    "release_tests_python_3_12": "93 passed",
+    "restore_readiness": "HEALTHY",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "schema_drift": "NONE",
+    "schema_object_count": 430,
+    "stale_evidence_rejection": "PASS",
+    "zero_to_head": "PASS"
+  }
+}
