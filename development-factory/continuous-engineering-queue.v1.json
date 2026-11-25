@@ -9,7 +9,7 @@
     "protected_mutations": "OWNER_AND_ENTERPRISE_GATED"
   },
   "source_register": {
-    "laptop_inventory_head": "e8d954cd1129cdbddda252b3b3801bac1435e5bb",
+    "laptop_inventory_head": "e730fd58f2a0a5b63184c8d09a423e8f9c7728fc",
     "protected_integration_branch": "integration/platform-master",
     "protected_integration_sha": "58dcb301b3d307569f46e095d08c7b3403b81c84",
     "remote": "https://github.com/ACPEnterprise/ACP-Enterprise.git"

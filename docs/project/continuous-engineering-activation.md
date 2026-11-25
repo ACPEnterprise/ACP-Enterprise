@@ -20,7 +20,8 @@ activation package was prepared:
 | Branch at inventory | `work/existing-business-db-compatibility` |
 | Initial inventory HEAD | `1f213a652b88c97dca738437dc65e291f62cbe90` |
 | Prior clean checkpoint | `c1021d4acd70f0b2bd5c9692ebdb926579ad23d2` |
-| Current clean checkpoint | `e8d954cd1129cdbddda252b3b3801bac1435e5bb` |
+| Current clean checkpoint | `e730fd58f2a0a5b63184c8d09a423e8f9c7728fc` |
+| Latest laptop inventory receipt digest | `e235a2ef543ecefa356e034558e68be49538dfd741bf44ca0e79d032cca54dd4` |
 | Origin | `https://github.com/ACPEnterprise/ACP-Enterprise.git` |
 | Worktree at inventory | clean |
 | Codex | `/Users/michaelfouse/.local/bin/codex`, `codex-cli 0.167.0` |
