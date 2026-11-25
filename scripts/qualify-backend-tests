@@ -25,6 +25,14 @@ if [ ! -x "$python_executable" ]; then
   echo "qualification Python is not executable: $python_executable" >&2
   exit 64
 fi
+qualification_uid=$(id -u)
+qualification_gid=$(id -g)
+case "$qualification_uid:$qualification_gid" in
+  *[!0-9:]*|:*|*:)
+    echo "qualification runtime identity is invalid" >&2
+    exit 64
+    ;;
+esac
 
 project="acp_backend_test_$(git -C "$root" rev-parse --short=12 HEAD)_$$"
 qualification_root=$(mktemp -d "${TMPDIR:-/tmp}/acp-backend-test.XXXXXX")
@@ -143,6 +151,7 @@ redis_container=$(docker run --detach \
   --name "$redis_container_name" \
   --label "$ownership_label" \
   --network "$network_name" \
+  --user "$qualification_uid:$qualification_gid" \
   --publish "127.0.0.1::6379" \
   --tmpfs /data \
   --mount "type=bind,src=$secret_dir/users.acl,dst=/run/secrets/users.acl,readonly" \
