@@ -297,6 +297,51 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Prepare read-only historical photo and attachment presentation; remain evidence-blocked until approved media bodies are available and tenant-bound."
+    },
+    {
+      "assignment_id": "OM1-DF-ARTIFACT-REHEARSAL-05",
+      "machine": "OM1",
+      "execution_identity": "OM1-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Successor platform qualification for immutable artifacts and artifact-derived configuration; isolated only."
+    },
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-UNATTENDED-05",
+      "machine": "OM1",
+      "execution_identity": "OM1-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Successor supervisor qualification after continuation-04; no automatic protected execution."
+    },
+    {
+      "assignment_id": "OM2-A-HCP-SOURCE-COMPLETENESS-06",
+      "machine": "OM2",
+      "execution_identity": "OM2-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Continue HCP source completeness and media-custody reconciliation without provider writes or confidential transfer."
+    },
+    {
+      "assignment_id": "OM2-B-ACCOUNTING-BROWSER-03",
+      "machine": "OM2",
+      "execution_identity": "OM2-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Browser qualification for source-backed QBO reports and revenue workflows; read-only and isolated."
+    },
+    {
+      "assignment_id": "REVIEW-ALLCOUNTY-QUALIFICATION-02",
+      "machine": "REVIEWER",
+      "execution_identity": "LAPTOP_REVIEWER",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Independent review of protected recovery evidence and authenticated acceptance; no implementation or deployment authority."
     }
   ],
   "claim_policy": {
@@ -816,6 +861,61 @@
       "allowed_paths": ["frontend/**", "backend/app/source_history/**", "backend/tests/**", "docs/quality/**"],
       "validation": ["media gallery readback", "attachment metadata", "source digest verification", "missing-body behavior", "tenant isolation"],
       "stop_conditions": ["unsealed media", "fabricated relationship", "cross-tenant read", "external-system write"]
+    },
+    {
+      "id": "OM1-DF-ARTIFACT-REHEARSAL-05",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-CI-ARTIFACTS-03"],
+      "objective": "Qualify immutable application artifacts, artifact-derived configuration, and reproducible release metadata against isolated baselines.",
+      "allowed_paths": [".github/**", "scripts/**", "backend/tests/release/**", "docs/engineering/**", "docs/quality/**"],
+      "validation": ["artifact digest", "configuration provenance", "mismatch rejection", "secret-free evidence"],
+      "stop_conditions": ["private-key access", "live deployment", "protected mutation", "automatic approval"]
+    },
+    {
+      "id": "OM1-DF-SUPERVISOR-UNATTENDED-05",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-SUPERVISOR-CONTINUATION-04"],
+      "objective": "Run bounded unattended-supervisor qualification for restart recovery, queue replenishment, idle detection, and resource limits.",
+      "allowed_paths": ["backend/development_factory/**", "backend/app/engineering_control/**", "backend/app/worker_control/**", "backend/tests/**", "docs/engineering/**"],
+      "validation": ["crash recovery", "stale-worker fencing", "queue supersession", "bounded shutdown", "secret redaction"],
+      "stop_conditions": ["unattended protected execution", "automatic approval", "unbounded retry", "secret persistence"]
+    },
+    {
+      "id": "OM2-A-HCP-SOURCE-COMPLETENESS-06",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["OM2-A-HCP-MEDIA-CUSTODY-05"],
+      "objective": "Reconcile remaining HCP source completeness, missing payloads, media bodies, and record-level relationships without provider writes.",
+      "allowed_paths": ["backend/app/operational_migration/**", "backend/scripts/**", "backend/tests/**", "docs/operations/**", "docs/quality/**"],
+      "validation": ["current-schema authority", "source digest reconciliation", "missing-payload inventory", "media custody", "tenant isolation"],
+      "stop_conditions": ["missing protected source", "provider write", "fabricated relationship", "confidential transfer"]
+    },
+    {
+      "id": "OM2-B-ACCOUNTING-BROWSER-03",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-B-REAL-BROWSER-HISTORY-02"],
+      "objective": "Qualify browser readback of source-backed QBO reports, historical transaction detail, reconciliation exceptions, and revenue labeling.",
+      "allowed_paths": ["frontend/**", "backend/app/qbo_source/**", "backend/app/accounting/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["fresh authenticated browser", "P&L", "balance sheet", "trial balance", "A/R and A/P", "read-only enforcement"],
+      "stop_conditions": ["OAuth", "financial write", "fabricated balance", "native-source mislabel"]
+    },
+    {
+      "id": "REVIEW-ALLCOUNTY-QUALIFICATION-02",
+      "lane": "REVIEWER",
+      "priority": "P0",
+      "state": "BLOCKED_DEPENDENCY",
+      "depends_on": ["LAP-WORKFORCE-DISPATCH-READINESS-01", "OM2-B-REAL-BROWSER-HISTORY-02", "OM2-B-ACCOUNTING-BROWSER-03"],
+      "objective": "Independently review protected All County recovery evidence, authenticated browser workflows, source completeness, accounting readback, and tenant isolation.",
+      "allowed_paths": ["docs/quality/**", "docs/engineering/evidence/**"],
+      "validation": ["fresh authenticated sessions", "record-level evidence", "source provenance", "tenant isolation", "safety-boundary review"],
+      "stop_conditions": ["missing evidence", "unexplained discrepancy", "unauthorized external write", "self-approval"]
     }
   ]
 }

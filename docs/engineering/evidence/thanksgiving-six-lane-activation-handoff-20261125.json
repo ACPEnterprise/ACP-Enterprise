@@ -1,0 +1,30 @@
+{
+  "contract": "twelvehats.six-lane-public-activation-handoff.v1",
+  "status": "PUBLISHED_MANUAL_RESERVATIONS",
+  "application_candidate_sha": "568f33f003a740baa488f03985b324c92ae9c376",
+  "handoff_sha": "4e6c4fc9e1766f7e4de8b6a0720267fd49bd96b6",
+  "queue_path": "development-factory/continuous-engineering-queue.v1.json",
+  "queue_sha256": "2b6d554dce1cff4ee87b78ff7269cfd6ae8d7691eba032fa6538355111867fcf",
+  "assignment_count": 51,
+  "execution_identities": [
+    "LAPTOP_MASTER",
+    "LAPTOP_REVIEWER",
+    "OM1-A",
+    "OM1-B",
+    "OM2-A",
+    "OM2-B"
+  ],
+  "lane_policy": "Manual isolated work is authorized; automated Worker Control claims and leases remain disabled pending independent qualification.",
+  "sensitive_data": "excluded",
+  "protected_business_recovery": "HCP and QBO evidence remain in protected custody; no source payloads or credentials are included.",
+  "safety": {
+    "live_deployment": false,
+    "live_database_mutation": false,
+    "hcp_writes": false,
+    "qbo_writes": false,
+    "oauth": false,
+    "financial_execution": false,
+    "external_invitations": false,
+    "private_signing_key_access": false
+  }
+}
