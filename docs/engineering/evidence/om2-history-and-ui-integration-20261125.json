@@ -1,0 +1,87 @@
+{
+  "schema": "twelvehats.om2-history-ui-integration.v1",
+  "status": "INTEGRATED_WITH_PROTECTED_SOURCE_LIMITATIONS",
+  "application_baseline": "97f0fbabdc17d36426eb638aff16a5dbfb8c7589",
+  "schema_head": "x3y5z7a9c1e4",
+  "integration_branch": "integration/om2-history-and-ui-20261125",
+  "remote_handoffs": [
+    {"assignment_id": "OM2-A-MACHINE-READINESS", "sha": "8c09cffb0120ca2d14a32af901ca977008d25a53", "result": "VERIFIED"},
+    {"assignment_id": "OM2-A-HCP-PACKET-RECOVERY-04", "sha": "065fcc6fe3037e065a26b99f07d7f5b03a067121", "result": "VERIFIED"},
+    {"assignment_id": "OM2-A-SOURCE-REGISTRATION-04", "sha": "2c4f5f0895dc88834b1e6b3fa9f5dbd0299cba41", "result": "VERIFIED"},
+    {"assignment_id": "OM2-A-POPULATION-RECON-04", "sha": "9bac34a85be6d8162f39aa918fccc31a83acd422", "result": "VERIFIED"},
+    {"assignment_id": "OM2-A-ACCOUNTING-ARAP-READBACK-04", "sha": "bc527641fff055d4726d5ca69abed1ccab99bbc8", "result": "VERIFIED"},
+    {"assignment_id": "OM2-B-UI-WORKFLOW-ACCEPT-01", "sha": "d8897ca66ddbb7055760e3e29967293c6600a37e", "result": "VERIFIED"}
+  ],
+  "integrated_commits": [
+    "a95a140e",
+    "155c5b45",
+    "5c987279",
+    "6e0bc532",
+    "176bf670",
+    "89e5256c",
+    "a4186367"
+  ],
+  "qualification": {
+    "backend_source_history_and_arap": "11 passed",
+    "frontend_changed_scope": "16 passed",
+    "frontend_production_build": "PASS",
+    "frontend_lint": "PASS",
+    "backend_ruff": "PASS",
+    "backend_ruff_format": "PASS",
+    "backend_mypy": "PASS",
+    "real_browser_for_integrated_om2b_code": "NOT RUN",
+    "live_deployment": false
+  },
+  "hcp_custody": {
+    "packet_path": "/Users/michaelfouse/Downloads/hcp-november-admissible-records.json",
+    "packet_sha256": "8d2b9c056f5eeaaf5b0eb96431c9ccd9906a6db89094bc677ef8a115136fd8a",
+    "packet_contract": "hcp-november-bounded-admissible-records/v1",
+    "record_count": 7293,
+    "executable_record_count": 5191,
+    "attachment_bodies_included": 0,
+    "attachment_count_in_sealed_manifest": 621,
+    "sealed_attachment_bytes": 3088372246,
+    "raw_acquisition_pages_in_bundle": false,
+    "bundle_path": "/Users/michaelfouse/Downloads/hcp-clean-beta-admission-bundle.tar.gz",
+    "bundle_sha256": "c401e4f59252360861e612d23b160dde55e843b16de5aca125188ad50841bd1f",
+    "authority_input_path": "/Users/michaelfouse/Downloads/hcp-november-execution-authority-input.json",
+    "authority_input_sha256": "1114a7cacbb087ac0698506dfd5d1cc037b92617e287c8ea5794ae32e6eb0a35",
+    "authority_status": "NO_GO",
+    "authority_reason": "executor contract is absent and the input targets stale Master SHA 48f3911f20f8945f0fc183844363999e6d6c9d00 and stale schema yp8r0t2v4x6z"
+  },
+  "owner_acceptance_finding_001": {
+    "customer_number_present_in_restored_db": true,
+    "job_number_present_in_restored_db": true,
+    "source_provider_job_payload_found": true,
+    "source_fields_present": ["description", "assigned_employees", "schedule", "work_timestamps", "invoice_number", "total_amount", "outstanding_balance"],
+    "source_fields_empty_or_absent": ["notes", "original_estimate_id", "original_estimate_uuids", "job_media_keys"],
+    "source_assigned_employee_count": 2,
+    "source_job_attachment_manifest_references": 0,
+    "restored_native_job": {"customer_reported_problem": true, "internal_description": false, "started_at": true, "completed_at": true, "appointment_links": 3, "source_identity_rows": 1, "estimate_conversions": 0, "field_notes": 0, "activity_events": 0},
+    "status": "OPEN_SOURCE_MEDIA_AND_FIELD_COMPLETENESS_NOT_PROVEN"
+  },
+  "qbo": {
+    "custody_root": "/Users/michaelfouse/ReleaseEvidence/qbo-accounting-acquisition-20261119",
+    "manifest_files_verified": 21,
+    "records": 20702,
+    "relationships": 97093,
+    "integrated_behavior": "read-only source registration and A/R/A/P projection contracts",
+    "protected_application_registration": "NOT_EXECUTED",
+    "financial_writes": false
+  },
+  "queue": {
+    "queue_sha256": "35f80c38724177f626ae67fa3c8ed68e44dd9b01a9eeb57f30b0d37eb85f23c1",
+    "assignments": 45,
+    "successors_reserved": ["OM2-A-HCP-MEDIA-CUSTODY-05", "OM2-B-REAL-BROWSER-HISTORY-02", "OM2-B-HISTORICAL-MEDIA-02"]
+  },
+  "safety": {
+    "live_deployment": false,
+    "live_database_mutation": false,
+    "hcp_writes": false,
+    "qbo_writes": false,
+    "oauth": false,
+    "financial_execution": false,
+    "external_invitations": false,
+    "confidential_records_committed_to_git": false
+  }
+}
