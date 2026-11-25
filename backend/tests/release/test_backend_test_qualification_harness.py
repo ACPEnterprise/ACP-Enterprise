@@ -140,6 +140,7 @@ def test_backend_harness_replaces_caller_database_and_cleans_up(
     cleanup_log = docker_log.read_text(encoding="utf-8")
     assert "--health-cmd pg_isready -h 127.0.0.1" in cleanup_log
     assert "--publish 127.0.0.1::6379" in cleanup_log
+    assert f"--user {os.getuid()}:{os.getgid()}" in cleanup_log
     assert "--user acp-health ping" in cleanup_log
     assert "redis-server --save  --appendonly no --aclfile" in cleanup_log
     assert "redis-server --version" in cleanup_log
