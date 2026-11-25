@@ -15,6 +15,8 @@ from .historical_read import HistoricalDomain
 class ReconciliationDisposition(StrEnum):
     PROJECTED = "PROJECTED"
     HELD_MISSING_PARENT = "HELD_MISSING_PARENT"
+    HELD_INVALID_RELATIONSHIP = "HELD_INVALID_RELATIONSHIP"
+    HELD_PARENT_EXCEPTION = "HELD_PARENT_EXCEPTION"
     HELD_CONFLICT = "HELD_CONFLICT"
 
 
@@ -56,9 +58,37 @@ class HistoricalReconciliation:
 
 _ROOT_DOMAINS = {HistoricalDomain.CUSTOMER}
 
+_REQUIRED_PARENT_DOMAINS: dict[HistoricalDomain, frozenset[HistoricalDomain]] = {
+    HistoricalDomain.LOCATION: frozenset({HistoricalDomain.CUSTOMER}),
+    HistoricalDomain.JOB: frozenset(
+        {HistoricalDomain.CUSTOMER, HistoricalDomain.LOCATION}
+    ),
+    HistoricalDomain.APPOINTMENT: frozenset({HistoricalDomain.JOB}),
+    HistoricalDomain.ESTIMATE: frozenset({HistoricalDomain.JOB}),
+    HistoricalDomain.INVOICE: frozenset({HistoricalDomain.JOB}),
+    HistoricalDomain.PAYMENT: frozenset({HistoricalDomain.INVOICE}),
+}
+
+_ALLOWED_PARENT_DOMAINS: dict[HistoricalDomain, frozenset[HistoricalDomain]] = {
+    **_REQUIRED_PARENT_DOMAINS,
+    HistoricalDomain.COMMUNICATION: frozenset(
+        {HistoricalDomain.CUSTOMER, HistoricalDomain.JOB}
+    ),
+}
+
 
 def _key(domain: HistoricalDomain, source_id: str) -> str:
     return f"{domain.value}:{source_id}"
+
+
+def _parent_domain(source_key: str) -> HistoricalDomain | None:
+    namespace, separator, source_id = source_key.partition(":")
+    if not separator or not source_id:
+        return None
+    try:
+        return HistoricalDomain(namespace)
+    except ValueError:
+        return None
 
 
 def reconcile_history(
@@ -72,20 +102,18 @@ def reconcile_history(
         grouped.setdefault(_key(record.domain, record.source_id), []).append(record)
 
     known_ids = set(grouped)
-    output: list[ReconciledHistoryRecord] = []
+    output_by_key: dict[str, ReconciledHistoryRecord] = {}
     for source_key in sorted(grouped):
         candidates = grouped[source_key]
         digests = {item.evidence_digest for item in candidates}
         if len(digests) != 1:
-            output.append(
-                ReconciledHistoryRecord(
-                    source_key,
-                    ReconciliationDisposition.HELD_CONFLICT,
-                    (),
-                    None,
-                    hashlib.sha256("|".join(sorted(digests)).encode()).hexdigest(),
-                    "source identity has conflicting evidence",
-                )
+            output_by_key[source_key] = ReconciledHistoryRecord(
+                source_key,
+                ReconciliationDisposition.HELD_CONFLICT,
+                (),
+                None,
+                hashlib.sha256("|".join(sorted(digests)).encode()).hexdigest(),
+                "source identity has conflicting evidence",
             )
             continue
         record = candidates[0]
@@ -97,26 +125,69 @@ def reconcile_history(
                 if not parent_keys
                 else "unresolved parent: " + ",".join(missing)
             )
-            output.append(
-                ReconciledHistoryRecord(
-                    source_key,
-                    ReconciliationDisposition.HELD_MISSING_PARENT,
-                    parent_keys,
-                    None,
-                    record.evidence_digest,
-                    reason,
-                )
+            output_by_key[source_key] = ReconciledHistoryRecord(
+                source_key,
+                ReconciliationDisposition.HELD_MISSING_PARENT,
+                parent_keys,
+                None,
+                record.evidence_digest,
+                reason,
             )
             continue
-        output.append(
-            ReconciledHistoryRecord(
-                source_key,
-                ReconciliationDisposition.PROJECTED,
-                parent_keys,
-                dict(record.payload),
-                record.evidence_digest,
-            )
+
+        parent_domains = tuple(_parent_domain(parent) for parent in parent_keys)
+        required = _REQUIRED_PARENT_DOMAINS.get(record.domain, frozenset())
+        allowed = _ALLOWED_PARENT_DOMAINS.get(record.domain)
+        present = frozenset(domain for domain in parent_domains if domain is not None)
+        invalid = any(domain is None for domain in parent_domains) or (
+            allowed is not None and not present <= allowed
         )
+        if required - present or invalid:
+            output_by_key[source_key] = ReconciledHistoryRecord(
+                source_key,
+                ReconciliationDisposition.HELD_INVALID_RELATIONSHIP,
+                parent_keys,
+                None,
+                record.evidence_digest,
+                "parent relationship does not satisfy domain contract",
+            )
+            continue
+
+        output_by_key[source_key] = ReconciledHistoryRecord(
+            source_key,
+            ReconciliationDisposition.PROJECTED,
+            parent_keys,
+            dict(record.payload),
+            record.evidence_digest,
+        )
+
+    # A child is never projected through a parent whose evidence is itself held.
+    # Iterate to a fixed point so upstream exceptions propagate deterministically.
+    changed = True
+    while changed:
+        changed = False
+        for source_key in sorted(output_by_key):
+            item = output_by_key[source_key]
+            if item.disposition is not ReconciliationDisposition.PROJECTED:
+                continue
+            held_parents = tuple(
+                parent
+                for parent in item.parent_source_keys
+                if output_by_key[parent].disposition
+                is not ReconciliationDisposition.PROJECTED
+            )
+            if held_parents:
+                output_by_key[source_key] = ReconciledHistoryRecord(
+                    source_key,
+                    ReconciliationDisposition.HELD_PARENT_EXCEPTION,
+                    item.parent_source_keys,
+                    None,
+                    item.evidence_digest,
+                    "parent evidence held: " + ",".join(held_parents),
+                )
+                changed = True
+
+    output = [output_by_key[source_key] for source_key in sorted(output_by_key)]
 
     canonical = [
         {
