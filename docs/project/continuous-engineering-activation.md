@@ -20,12 +20,12 @@ activation package was prepared:
 | Branch at inventory | `work/existing-business-db-compatibility` |
 | Initial inventory HEAD | `1f213a652b88c97dca738437dc65e291f62cbe90` |
 | Prior clean checkpoint | `c1021d4acd70f0b2bd5c9692ebdb926579ad23d2` |
-| Current clean checkpoint | `02ff40b0e56f3ee639e960a464f1e759bfce1106` |
+| Current clean checkpoint | `e8d954cd1129cdbddda252b3b3801bac1435e5bb` |
 | Origin | `https://github.com/ACPEnterprise/ACP-Enterprise.git` |
 | Worktree at inventory | clean |
 | Codex | `/Users/michaelfouse/.local/bin/codex`, `codex-cli 0.167.0` |
 | Docker | `29.6.2`, 10 CPUs, 8 GiB Docker memory |
-| Host resources | approximately 17.18 GiB RAM; approximately 613 GiB free |
+| Host resources | approximately 17.18 GiB RAM; approximately 658 GiB free at the repository |
 | Factory state | DF.1–DF.4D, worker control, authenticated transport, scheduler and Factory Control present |
 
 The current branch is a task worktree, not a claim that it replaces a protected
