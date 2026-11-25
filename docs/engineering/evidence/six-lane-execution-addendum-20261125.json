@@ -1,0 +1,175 @@
+{
+  "schema": "twelvehats.six-lane-execution-addendum.v1",
+  "status": "PUBLISHED_PENDING_MACHINE_RECEIPTS",
+  "published_from": {
+    "execution_identity": "LAPTOP_MASTER",
+    "application_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+    "schema": "x3y5z7a9c1e4",
+    "queue_file": "development-factory/continuous-engineering-queue.v1.json",
+    "queue_sha256": "6f954b32235ffb0db6082a84768f0f368285e0b5b49a42775e1f020a1a4a5359",
+    "automated_claims_blocked": true
+  },
+  "coordination_rules": [
+    "Each assignment has exactly one execution identity.",
+    "A packet is not a Worker Control lease, activation receipt, or proof of execution.",
+    "No packet becomes actionable until its machine receipt proves the exact baseline, clean worktree, dedicated branch, resources, and assignment acknowledgment.",
+    "A stale reported baseline must be refreshed or independently reviewed before implementation.",
+    "Completed assignments remain non-actionable and cannot be claimed again.",
+    "No live deployment, protected mutation, external-system write, private-key access, OAuth, payroll, banking, or financial execution is authorized."
+  ],
+  "packets": [
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
+      "execution_identity": "OM1-B",
+      "machine": "OM1",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT",
+      "workspace": "/Users/michaelbfouse/Development/ACP-Enterprise-OM1B-Automation-20261125",
+      "reported_workspace_baseline": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om1b-supervisor-continuation-03",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": [
+        "development-factory/",
+        "scripts/development-factory",
+        "backend/app/engineering_control/",
+        "backend/app/worker_control/",
+        "backend/tests/engineering_control/",
+        "backend/tests/worker_control/",
+        "docs/engineering/"
+      ],
+      "dependencies": [
+        "OM1-DF-SUPERVISOR-RECOVERY-02:d807239254887307c74ec6857f7f82b2f1fe58ad",
+        "current queue acknowledgment",
+        "machine receipt with clean worktree and current baseline"
+      ],
+      "qualification": [
+        "queue supersession and sole-lineage discovery",
+        "queue exhaustion and replenishment",
+        "idle-session detection",
+        "restart and stale-checkpoint recovery",
+        "duplicate execution prevention",
+        "resource-boundary and secret-redaction tests"
+      ],
+      "exclusions": ["automated claim", "lease fabrication", "merge", "deployment", "protected data access"]
+    },
+    {
+      "assignment_id": "OM2-A-HCP-PACKET-RECOVERY-04",
+      "execution_identity": "OM2-A",
+      "machine": "OM2",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT_AND_SOURCE_EVIDENCE",
+      "workspace": "OM2_MACHINE_RECEIPT_REQUIRED",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om2a-hcp-packet-recovery-04",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": ["backend/app/migrations/", "backend/app/source_history/", "backend/tests/", "docs/operations/", "scripts/"],
+      "dependencies": [
+        "current queue acknowledgment",
+        "machine receipt with clean worktree and current baseline",
+        "verified HCP CSV SHA-256 62e9e91c32a979d501f0ba9f812cb8b065c50783fe821874a65b911855923d4a",
+        "missing admissible packet must be recovered from approved custody or remain blocked"
+      ],
+      "qualification": ["deterministic packet validation", "source-identity and provenance preservation", "held-exception visibility", "no-write and no-fabrication tests"],
+      "exclusions": ["HCP writes", "customer merges", "native admission", "source-data export", "OAuth"]
+    },
+    {
+      "assignment_id": "OM2-A-SOURCE-REGISTRATION-04",
+      "execution_identity": "OM2-A",
+      "machine": "OM2",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT_AND_SOURCE_EVIDENCE",
+      "workspace": "OM2_MACHINE_RECEIPT_REQUIRED",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om2a-source-registration-04",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": ["backend/app/accounting/", "backend/app/source_history/", "backend/tests/", "docs/operations/", "scripts/"],
+      "dependencies": ["current queue acknowledgment", "machine receipt", "sealed QBO/HCP custody availability"],
+      "qualification": ["tenant-scoped registration", "checksum and manifest validation", "source-provenance readback", "missing-evidence fail-closed behavior"],
+      "exclusions": ["OAuth", "QuickBooks writes", "financial posting", "HCP writes", "live admission"]
+    },
+    {
+      "assignment_id": "OM2-A-POPULATION-RECON-04",
+      "execution_identity": "OM2-A",
+      "machine": "OM2",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT",
+      "workspace": "OM2_MACHINE_RECEIPT_REQUIRED",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om2a-population-recon-04",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": ["backend/app/", "backend/tests/", "docs/operations/", "scripts/"],
+      "dependencies": ["source-registration packet", "machine receipt", "approved sanitized or sealed fixtures"],
+      "qualification": ["record-level reconciliation", "relationship completeness", "duplicate prevention", "explicit missing-source reporting"],
+      "exclusions": ["source-system writes", "identity merge", "financial execution"]
+    },
+    {
+      "assignment_id": "OM2-A-ACCOUNTING-ARAP-READBACK-04",
+      "execution_identity": "OM2-A",
+      "machine": "OM2",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT",
+      "workspace": "OM2_MACHINE_RECEIPT_REQUIRED",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om2a-accounting-arap-readback-04",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": ["backend/app/accounting/", "backend/tests/accounting/", "docs/operations/", "scripts/"],
+      "dependencies": ["source registration", "machine receipt", "verified QBO acquisition manifest"],
+      "qualification": ["A/R and A/P readback", "known exception preservation", "source-total reconciliation", "read-only endpoint tests"],
+      "exclusions": ["OAuth", "posting", "banking", "payroll", "money movement"]
+    },
+    {
+      "assignment_id": "OM2-B-UI-WORKFLOW-ACCEPT-01",
+      "execution_identity": "OM2-B",
+      "machine": "OM2",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT",
+      "workspace": "/Users/michaelfouse/Development/ACP-Enterprise-OM2B-Application-20261125",
+      "reported_workspace_baseline": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om2b-ui-workflow-accept-01",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": ["frontend/", "backend/app/", "backend/tests/", "frontend/tests/", "docs/quality/"],
+      "dependencies": ["machine resource receipt", "current baseline receipt", "isolated browser runtime"],
+      "qualification": ["customer, CSR, scheduling, dispatch, employee, My Day, price-book, estimating, invoicing browser flows", "tenant isolation", "restart persistence"],
+      "exclusions": ["All County live acceptance claim from synthetic data", "deployment", "source writes", "external communication"]
+    },
+    {
+      "assignment_id": "OM2-B-REVENUE-WORKFLOW-ACCEPT-01",
+      "execution_identity": "OM2-B",
+      "machine": "OM2",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT",
+      "workspace": "/Users/michaelfouse/Development/ACP-Enterprise-OM2B-Application-20261125",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om2b-revenue-workflow-accept-01",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": ["frontend/", "backend/app/estimating/", "backend/app/price_book/", "backend/tests/", "frontend/tests/", "docs/quality/"],
+      "dependencies": ["OM2-B-UI-WORKFLOW-ACCEPT-01", "machine resource receipt"],
+      "qualification": ["price-book and estimating UI", "invoice draft workflow", "calculation traceability", "synthetic-data labeling"],
+      "exclusions": ["financial posting", "money movement", "live customer communication"]
+    },
+    {
+      "assignment_id": "OM2-B-KEITH-DEMO-ACCEPT-01",
+      "execution_identity": "OM2-B",
+      "machine": "OM2",
+      "status": "RESERVED_PENDING_MACHINE_RECEIPT",
+      "workspace": "/Users/michaelfouse/Development/ACP-Enterprise-OM2B-Application-20261125",
+      "required_baseline": "7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291",
+      "branch": "work/om2b-keith-demo-accept-01",
+      "branch_status": "MUST_CREATE_AFTER_MACHINE_RECEIPT",
+      "allowed_paths": ["frontend/", "backend/app/identity/", "backend/app/sales_demo/", "backend/tests/", "frontend/tests/", "docs/quality/"],
+      "dependencies": ["machine resource receipt", "synthetic demo tenant fixture", "approved NDA source and current acceptance gate"],
+      "qualification": ["NDA display and receipt persistence", "Demo-only authentication", "direct All County denial", "Luminary/Beacon/LIA and estimating navigation"],
+      "exclusions": ["external invitation", "external activation", "All County data access"]
+    }
+  ],
+  "reviewer": {
+    "execution_identity": "LAPTOP_REVIEWER",
+    "workspace": "/Users/michaelfouse/Development/ACP-Enterprise-IndependentReviewer-20261125",
+    "observed_head": "eef99d195eef25eb324d1e314dc9b4f426119623",
+    "workspace_status": "CLEAN_BUT_STALE_BASELINE",
+    "required_action": "Create or use a separate review worktree at 7e8f22bb8faea8fe78d08f7cb2f02fbffdbd4291 without changing the existing reviewer checkout.",
+    "review_scope": ["integrated OM1/OM2 scope", "tenant isolation", "source custody", "migration lineage", "RLS", "browser evidence", "release integrity"],
+    "authority_exclusions": ["implementation", "integration", "owner signing", "deployment"]
+  },
+  "laptop_observations": {
+    "om1b_workspace_mounted": false,
+    "om2b_workspace_mounted": false,
+    "hcp_admissible_packet_present_in_searched_local_custody": false,
+    "note": "These observations are local to Laptop Master and do not assert that the office-machine workspaces are absent on their hosts."
+  }
+}
