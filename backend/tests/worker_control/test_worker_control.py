@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError, replace
 from datetime import timedelta
@@ -543,6 +544,25 @@ async def test_active_lease_is_unique_and_versions_fail_closed(
                 now=now + timedelta(seconds=2),
             )
     async with fixture.factory() as session:
+        renewed = await service.renew_lease(
+            session,
+            worker_context=worker_context,
+            lease_id=lease.id,
+            expected_version=lease.version,
+            lease_seconds=60,
+            now=now + timedelta(seconds=2),
+        )
+    assert renewed.version == lease.version + 1
+    async with fixture.factory() as session:
+        with pytest.raises(WorkerLeaseError, match="stale"):
+            await service.release_lease(
+                session,
+                worker_context=worker_context,
+                lease_id=lease.id,
+                expected_version=lease.version,
+                now=now + timedelta(seconds=3),
+            )
+    async with fixture.factory() as session:
         lease_count = await session.scalar(
             select(func.count(WorkerLease.id)).where(
                 WorkerLease.execution_id == execution.execution_id,
@@ -550,6 +570,61 @@ async def test_active_lease_is_unique_and_versions_fail_closed(
             )
         )
     assert lease_count == 1
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_workers_racing_for_one_execution_have_one_winner(
+    worker_database: ServiceFixture,
+) -> None:
+    fixture = worker_database
+    service, _, first_context, _ = await register_available_worker(
+        fixture, name="race-worker-one"
+    )
+    _, _, second_context, _ = await register_available_worker(
+        fixture, name="race-worker-two"
+    )
+    execution = await disconnected_execution(fixture)
+    now = utc_now()
+    async with fixture.factory() as session:
+        offer = await service.issue_offer(
+            session,
+            context=operator_context(fixture.context),
+            execution_id=execution.execution_id,
+            capability_required=WorkerCapability.ENGINEERING_EXECUTE,
+            lease_seconds=60,
+            now=now,
+        )
+    start = asyncio.Event()
+
+    async def contend(context: AuthenticatedWorkerContext) -> str:
+        await start.wait()
+        async with fixture.factory() as session:
+            try:
+                await service.acquire_lease(
+                    session,
+                    worker_context=context,
+                    offer=offer,
+                    now=now + timedelta(seconds=1),
+                )
+            except WorkerConflictError:
+                return "fenced"
+        return "leased"
+
+    contenders = (
+        asyncio.create_task(contend(first_context)),
+        asyncio.create_task(contend(second_context)),
+    )
+    start.set()
+    outcomes = await asyncio.gather(*contenders)
+    assert sorted(outcomes) == ["fenced", "leased"]
+    async with fixture.factory() as session:
+        active_count = await session.scalar(
+            select(func.count(WorkerLease.id)).where(
+                WorkerLease.execution_id == execution.execution_id,
+                WorkerLease.status == WorkerLeaseStatus.ACTIVE.value,
+            )
+        )
+    assert active_count == 1
 
 
 @pytest.mark.asyncio

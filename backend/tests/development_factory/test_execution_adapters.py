@@ -204,3 +204,24 @@ def test_versioned_examples_match_operations_schema_contract() -> None:
         payload = json.loads(path.read_text())
         assert set(payload) == required
         assert parse_worker_operations(payload).schema_version == "1.0"
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "maximum_operations",
+        "maximum_mutations",
+        "maximum_files_inspected",
+        "maximum_files_changed",
+        "maximum_output_record_bytes",
+        "maximum_validation_selections",
+        "execution_timeout_seconds",
+    ),
+)
+def test_termination_policy_cannot_self_authorize_unbounded_resources(
+    field: str,
+) -> None:
+    payload = operations_payload()
+    payload["termination_policy"][field] = 10_000_001
+    with pytest.raises(ExecutionAdapterError, match="safe maximum"):
+        parse_worker_operations(payload)

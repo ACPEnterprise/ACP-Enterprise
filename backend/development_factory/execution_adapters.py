@@ -10,6 +10,15 @@ from development_factory.lia_contract import ResourceClaim
 from development_factory.reports import redact
 
 OPERATIONS_VERSION = "1.0"
+MAXIMUM_TERMINATION_POLICY = {
+    "maximum_operations": 1_000,
+    "maximum_mutations": 500,
+    "maximum_files_inspected": 10_000,
+    "maximum_files_changed": 1_000,
+    "maximum_output_record_bytes": 1_000_000,
+    "maximum_validation_selections": 100,
+    "execution_timeout_seconds": 3_600,
+}
 OperationKind = Literal[
     "inspect_file",
     "inspect_paths",
@@ -137,6 +146,9 @@ def parse_worker_operations(payload: object) -> WorkerOperations:
     policy_numbers = {
         field: _positive_integer(policy_value[field], field) for field in policy_fields
     }
+    for field, maximum in MAXIMUM_TERMINATION_POLICY.items():
+        if policy_numbers[field] > maximum:
+            raise ExecutionAdapterError(f"{field} exceeds the safe maximum")
     policy = TerminationPolicy(**policy_numbers)
     if len(operations) > policy.maximum_operations:
         raise ExecutionAdapterError("maximum operation count exceeded")
