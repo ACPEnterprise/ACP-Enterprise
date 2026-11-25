@@ -37,6 +37,8 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
   const [invoiceFilter, setInvoiceFilter] = useState<"open" | "closed" | "all">(
     "open",
   );
+  const [selectedReportKey, setSelectedReportKey] = useState<string | null>(null);
+  const selectedReport = value.reports.find((row) => row.report_key === selectedReportKey);
   const arSummary = useQboSourceBackedArSummary(value.as_of ?? "", Boolean(value.as_of));
   const filteredInvoices = value.invoices.filter((invoice) => {
     const amount = Number(invoice.open_balance.amount ?? 0);
@@ -134,6 +136,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                     <th>Type</th>
                     <th>Source balance</th>
                     <th>Evidence state</th>
+                    <th>Source ID</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -146,6 +149,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                       </td>
                       <td>{money(row.balance)}</td>
                       <td className="capitalize">{row.balance.state}</td>
+                      <td className="font-mono text-xs">{row.source_id}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -178,6 +182,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                     <th>Provider workflow</th>
                     <th>Total</th>
                     <th>Open</th>
+                    <th>Source ID</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -194,6 +199,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                       <td>{row.source_status ?? "Unavailable"}</td>
                       <td>{money(row.total)}</td>
                       <td>{money(row.open_balance)}</td>
+                      <td className="font-mono text-xs">{row.source_id}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -270,6 +276,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                     <th>Provider workflow</th>
                     <th>Total</th>
                     <th>Open</th>
+                    <th>Source ID</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -286,6 +293,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                       <td>{row.source_status ?? "Unavailable"}</td>
                       <td>{money(row.total)}</td>
                       <td>{money(row.open_balance)}</td>
+                      <td className="font-mono text-xs">{row.source_id}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -359,6 +367,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                     <th>Amount</th>
                     <th>Status</th>
                     <th>Application</th>
+                    <th>Source ID</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,6 +376,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                       <td className="py-2">
                         {row.transaction_date ?? "Unavailable"}
                       </td>
+                      <td className="font-mono text-xs">{row.source_id}</td>
                       <td>{row.customer_label ?? "Unavailable"}</td>
                       <td>{money(row.amount)}</td>
                       <td>{row.source_status ?? "Unavailable"}</td>
@@ -401,7 +411,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
             <ul className="divide-y divide-stroke">
               {value.reports.map((row) => (
                 <li className="py-3" key={row.report_key}>
-                  <p className="font-medium">{row.label}</p>
+                  <button className="min-h-11 text-left font-medium text-action-primary" type="button" onClick={() => setSelectedReportKey(row.report_key)}>Open {row.label}</button>
                   <p className="text-sm text-content-muted">
                     {row.basis ?? "Basis unavailable"} · as of {when(row.as_of)}{" "}
                     · {row.state}
@@ -415,6 +425,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
               No QBO source reports are available in this snapshot.
             </p>
           )}
+          {selectedReport && <section aria-label="QBO historical report detail" className="mt-4 rounded-lg border border-stroke bg-surface-subtle p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">{selectedReport.label}</h4><span className="rounded-full bg-status-info/15 px-2 py-1 text-xs text-status-info">QBO SOURCE BACKED</span></div><dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-content-muted">Report source key</dt><dd className="font-mono">{selectedReport.report_key}</dd></div><div><dt className="text-content-muted">Basis</dt><dd>{selectedReport.basis ?? "Unavailable"}</dd></div><div><dt className="text-content-muted">As of</dt><dd>{when(selectedReport.as_of)}</dd></div><div><dt className="text-content-muted">Evidence state</dt><dd>{selectedReport.state}</dd></div></dl><p className="mt-3 text-sm text-content-muted">{selectedReport.limitation ?? "No report-specific limitation was supplied; snapshot-level limitations still apply."}</p><p className="mt-2 text-xs text-content-muted">Read-only · accepted as ACP Accounting: no · no posting authority</p></section>}
         </CardContent>
       </Card>
       <p className="break-all text-xs text-content-muted">
