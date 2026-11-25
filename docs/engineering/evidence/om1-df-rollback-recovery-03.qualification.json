@@ -1,0 +1,52 @@
+{
+  "assignment_id": "OM1-DF-ROLLBACK-RECOVERY-03",
+  "automated_claim_used": false,
+  "changed_files": [
+    "backend/tests/release/test_enterprise_release_qualification.py",
+    "backend/tests/release/test_rollback_recovery_qualification.py",
+    "scripts/qualify-release-database"
+  ],
+  "completed_at_utc": "2026-11-25T15:14:17Z",
+  "implementation_sha": "b2982885b1c679c9fac7134ee2f5b2979cffeb05",
+  "machine": {
+    "hostname": "iMac-673.lan",
+    "role": "OM1"
+  },
+  "queue": {
+    "published_ref": "refs/heads/handoff/laptop-om2-history-integration-20261125",
+    "sha": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+    "sha256": "fed97a5408ab17fc5af0919e0fdadf4394b630b637e8f9d8ad6ae34937d3558e"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency": "OM1-DF-PROTECTED-REHEARSAL-03",
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "alembic_head": "x3y5z7a9c1e4",
+    "backup_sha256": "6515fa95007472ba1e82c769b971e9fa574292e1f203cc611a9c518140b8ea19",
+    "cleanup": "VERIFIED",
+    "data_digest_after": "67b63f79bc5f57302e28de80326562bf4488df8efbe6ee27d5282bc579887989",
+    "data_digest_before": "67b63f79bc5f57302e28de80326562bf4488df8efbe6ee27d5282bc579887989",
+    "docker_qualification_sha": "0dc2c97a85abf4b3f68de411d200ba0aaef28bf3",
+    "host_ports": "NONE",
+    "log_sha256": "0f9db79eabab88eaf5c50ef284c45c42d36d7c1498394bfe5503b5ce319486fd",
+    "new_recovery_target": "VERIFIED EMPTY",
+    "partial_execution_target": "ABANDONED",
+    "postgres_encoding": "UTF8",
+    "postgres_version_num": 160015,
+    "readiness": "HEALTHY",
+    "receipt_digest": "b0b5ebf3cdaac3b092b03ee669ddb7ac2b043e04dd8edb17b37ee748cebc8702",
+    "recovery_head": "x3y5z7a9c1e4",
+    "release_and_resilience_tests": "111 passed",
+    "reupgrade": "VERIFIED",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "transaction_failure_rollback": "VERIFIED"
+  }
+}
