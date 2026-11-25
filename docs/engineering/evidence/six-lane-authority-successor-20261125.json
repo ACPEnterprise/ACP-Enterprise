@@ -1,0 +1,72 @@
+{
+  "schema": "twelvehats.six-lane-authority-successor.v1",
+  "status": "PUBLISHED_FOR_MACHINE_ACKNOWLEDGMENT",
+  "application": {
+    "baseline_sha": "abee6301527d791036c29fa71916a359195fc0cd",
+    "candidate_sha": "568f33f003a740baa488f03985b324c92ae9c376",
+    "branch": "integration/ci-runtime-correction-20261125",
+    "schema_head": "x3y5z7a9c1e4",
+    "changes": [
+      "31f20a65: sealed CI runtime-correction evidence",
+      "d78ec518: Linux Redis secret-custody correction",
+      "568f33f0: timezone-stable Scheduling route test"
+    ]
+  },
+  "ci_evidence": {
+    "source_commit": "0b71e6a05655c6c9e42c56fd40b61994cb056dcf",
+    "source_branch": "work/om1a-ci-workflow-runtime-correction-04",
+    "workflow_run": "45686784746",
+    "backend": "4030 passed, 9 skipped",
+    "frontend": "796 passed",
+    "mobile": "162 passed",
+    "static_and_artifact_verification": "PASS",
+    "local_focused_regression": {
+      "backend_harness": "5 passed",
+      "scheduling_route": "29 passed",
+      "ruff_check": "PASS",
+      "ruff_format_check": "PASS"
+    }
+  },
+  "queue": {
+    "path": "development-factory/continuous-engineering-queue.v1.json",
+    "sha256": "bcdfd2308f4b87887e01db3953028c1029733814b5dc8950f4ad22b89c4dcac3",
+    "assignments": 46,
+    "machine_identities": ["LAPTOP_MASTER", "LAPTOP_REVIEWER", "OM1-A", "OM1-B", "OM2-A", "OM2-B"],
+    "automated_claims": "BLOCKED_PENDING_INDEPENDENT_QUALIFICATION",
+    "worker_control_leases": "NONE_FABRICATED"
+  },
+  "reviewer": {
+    "checkout": "/Users/michaelfouse/Development/ACP-Enterprise-IndependentReviewer-Platform-97f0fbab",
+    "observed_sha": "97f0fbabdc17d36426eb638aff16a5dbfb8c7589",
+    "state": "CLEAN_DETACHED",
+    "authority": "INDEPENDENT_REVIEW_ONLY",
+    "checkpoint_reconciliation": {
+      "reported_om1_checkpoint_sha256": "b4a53b951969b4c4090a91e79e3635ca0c773e27772ce9ebfb08913aaec7c21f",
+      "custody_status": "NOT_INDEPENDENTLY_RETRIEVED",
+      "required_action": "Reviewer must obtain and hash the original OM1 checkpoint artifact from approved custody; do not substitute a reconstructed file."
+    }
+  },
+  "protected_business_evidence": {
+    "all_county_runtime": "http://127.0.0.1:18184/",
+    "qbo_runtime": "http://127.0.0.1:18183/accounting/quickbooks-cutover",
+    "hcp_packet_sha256": "8d2b9c056f5eeaaf5b0eb96431c9ccd9906a6db89094bc677ef8a115136fd8a",
+    "hcp_bundle_sha256": "c401e4f59252360861e612d23b160dde55e843b16de5aca125188ad50841bd1f",
+    "hcp_authority": "NO_GO_CURRENT_SCHEMA_BOUND_EXECUTOR_CONTRACT_MISSING",
+    "qbo_manifest_files": 21,
+    "qbo_records": 20702,
+    "qbo_relationships": 97093,
+    "qbo_registration": "NOT_EXECUTED",
+    "owner_acceptance_finding_001": "OPEN_HAMMER_HAAG_JOB_000393_SOURCE_MEDIA_AND_FIELD_COMPLETENESS_NOT_PROVEN"
+  },
+  "safety": {
+    "live_deployment": false,
+    "live_database_mutation": false,
+    "hcp_writes": false,
+    "qbo_writes": false,
+    "oauth": false,
+    "financial_execution": false,
+    "external_invitations": false,
+    "private_signing_key_access": false,
+    "confidential_records_committed": false
+  }
+}
