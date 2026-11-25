@@ -1,0 +1,56 @@
+{
+  "assignment_id": "OM1-DF-CI-ARTIFACTS-03",
+  "automated_claim_used": false,
+  "changed_files": [
+    ".github/workflows/immutable-ci-artifacts.yml",
+    "backend/development_factory/ci_artifacts.py",
+    "backend/tests/development_factory/test_ci_artifacts.py",
+    "docs/engineering/immutable-ci-artifacts.md",
+    "scripts/ci-artifacts"
+  ],
+  "completed_at_utc": "2026-11-25T15:03:47Z",
+  "implementation_sha": "de85a116d0f9cce956ec4c583a7bf6286cc54d5b",
+  "machine": {
+    "hostname": "iMac-673.lan",
+    "role": "OM1"
+  },
+  "prerequisite_recovery": {
+    "integrated_successor_omitted_implementation": true,
+    "preserved_original_commit": "128139f78be0da5071e8108abb8646e7d0655d1d",
+    "replayed_commit": "ab6b46f8656dd35cb10ccadb2d8a3a4b7be86418",
+    "receipt_already_present_in_successor": true
+  },
+  "queue": {
+    "published_ref": "refs/heads/handoff/laptop-om2-history-integration-20261125",
+    "sha": "72d0017c48b0a45c9eae13d28e3af3326b2658f7",
+    "sha256": "fed97a5408ab17fc5af0919e0fdadf4394b630b637e8f9d8ad6ae34937d3558e"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "application_artifact_sha256": "4a7b1de25002f91ac31d7a5160875f6748fa72699acd3ceeea7e8b3360e6b08d",
+    "artifact_rebuild": "REPRODUCIBLE",
+    "artifact_source_sha": "de85a116d0f9cce956ec4c583a7bf6286cc54d5b",
+    "configuration_files_verified": 7,
+    "dependency_files_verified": 4,
+    "deployment_authorized": false,
+    "development_factory_and_release_tests": "276 passed",
+    "focused_tests": "18 passed",
+    "manifest_file_sha256": "39768b86451ceed5979412b1880a087f770822d0c93c44ae4632efdcf68e8296",
+    "manifest_payload_sha256": "be46bf747e46fc6b074e69c5c8b6b2786961df931d4c6aec61bcf91a383c5769",
+    "mypy": "PASS (89 source files)",
+    "ruff": "PASS",
+    "ruff_format": "PASS (1621 files)",
+    "secret_custody": "PASS (0 tracked runtime secrets, 0 credential signatures)",
+    "tooling_artifact_sha256": "1ea18e397c82fe016c1c86b9df7f1a49496c34703eda12c2fe0dac016e575dba",
+    "workflow_action_pins": "FULL SHA",
+    "workflow_remote_execution": "NOT RUN"
+  }
+}
