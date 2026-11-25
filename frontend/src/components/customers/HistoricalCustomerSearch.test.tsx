@@ -61,8 +61,13 @@ describe("HistoricalCustomerSearch", () => {
       isError: false,
       data: sourceId ? {
         source_customer_id: sourceId,
+        source_manifest_sha256: "a".repeat(64),
         counts: { locations: 1, jobs: 4, appointments: 3, estimates: 2, invoices: 2, payments: 1, refunds: 0 },
         locations: [{ source_id: "location-1", address: "123 Main St", city: "Clearwater", state: "FL", postal_code: "33755" }],
+        jobs: [{ source_id: "job-1", source_location_id: null, number: "J-100", status: "completed", assigned_employee_source_ids: [] }],
+        appointments: [{ source_id: "appointment-1", source_job_id: "job-1", scheduled_start: "2026-01-01T12:00:00Z", assigned_employee_source_ids: [] }],
+        estimates: [{ source_id: "estimate-1", number: "E-100", status: "approved", options: [] }],
+        invoices: [{ source_id: "invoice-1", source_job_id: "job-1", number: "I-100", status: "paid", payments: [{ source_id: "payment-1", status: "succeeded", amount_cents: 12500, overlap_disposition: "HCP_ONLY_SOURCE_EVIDENCE" }], refunds: [] }],
       } : undefined,
     }));
     render(<HistoricalCustomerSearch />);
@@ -72,6 +77,10 @@ describe("HistoricalCustomerSearch", () => {
     expect(within(journey).getByText("SOURCE BACKED")).toBeVisible();
     expect(within(journey).getByText("123 Main St")).toBeVisible();
     expect(within(journey).getByText("4")).toBeVisible();
+    expect(within(journey).getByText("Job J-100")).toBeVisible();
+    expect(within(journey).getByText(/Held relationship: source Location unavailable/)).toBeVisible();
+    expect(within(journey).getByText("Invoice I-100")).toBeVisible();
+    expect(within(journey).getByText(/Payment payment-1/)).toBeVisible();
     expect(screen.queryByRole("button", { name: /edit|admit|import|create/i })).not.toBeInTheDocument();
   });
 });
