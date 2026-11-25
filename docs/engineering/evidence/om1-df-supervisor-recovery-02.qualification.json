@@ -1,0 +1,60 @@
+{
+  "assignment_id": "OM1-DF-SUPERVISOR-RECOVERY-02",
+  "automated_claim_used": false,
+  "changed_files": [
+    "backend/development_factory/__main__.py",
+    "backend/development_factory/queue_discovery.py",
+    "backend/tests/development_factory/test_queue_discovery.py",
+    "docs/engineering/authoritative-queue-discovery.md"
+  ],
+  "completed_at_utc": "2026-11-25T14:16:18Z",
+  "discovery_defect": {
+    "cause": "Polling remained bound to obsolete named refs and its fallback ref-name filter omitted both generic queue and overnight names.",
+    "correction": "Inspect every handoff ref for a validated queue file and select the sole ancestry-maximal queue commit.",
+    "initial_directive_queue_sha": "67bbd83d874f33e4926c530968d5c35e9940a7ba"
+  },
+  "implementation_sha": "f83957585461e16f0918e21c044aa37a7ff9c793",
+  "machine": {
+    "hostname": "iMac-663.lan",
+    "role": "OM1"
+  },
+  "machine_inventory_sha256": "94f88ed8c2bce340989dcc64e3d1267410e451f7149497fe27cacd429e7df6f9",
+  "queue": {
+    "canonical_digest_sha256": "71804c33aeb90067881b3b32c0df299decabb91523e986f3a215d33fb8b64374",
+    "file_sha256": "4dd48ca3206c248ddb4f4194175449d4cc171c38a2eade4975b93205e1ddb5d2",
+    "published_ref": "refs/heads/handoff/overnight-follow-on-queue-67bb83d",
+    "sha": "5cd78ed6ff70e5c711ce115f908909f391679394"
+  },
+  "reservation": {
+    "automated_claims_blocked": true,
+    "dependency_state": "CLEARED",
+    "machine": "OM1",
+    "owner": "LAPTOP_MASTER",
+    "status": "RESERVED_MANUAL"
+  },
+  "result": "PASS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "source_sha": "c2353699cef38f34cfaaaac899d8cca8024bb902",
+  "validation": {
+    "authoritative_remote_discovery": "PASS",
+    "bounded_retry_and_network_interruption": "PASS",
+    "checkpoint_integrity": "PASS",
+    "checkpoint_mode": "0600",
+    "completed_assignment_recognition": "PASS",
+    "dependency_clearance": "PASS",
+    "development_factory_tests": "179 passed",
+    "duplicate_execution_prevention": "PASS",
+    "focused_coordination_tests": "33 passed",
+    "machine_specific_ownership": "PASS",
+    "mypy": "PASS",
+    "new_reservation_discovery": "PASS",
+    "queue_supersession": "PASS",
+    "resource_limits": "PASS",
+    "restart_recovery": "PASS",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "safe_shutdown": "PASS",
+    "secret_persistence": "NONE",
+    "stale_queue_rejection": "PASS"
+  }
+}
