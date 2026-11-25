@@ -64,6 +64,67 @@ def test_machine_inventory_block_is_released_only_for_the_activated_lane() -> No
     assert eligible_after_activation(queue, ("OM2",), ("LAP-ONE",)) == ()
 
 
+def test_manual_reservation_blocks_automated_eligibility() -> None:
+    payload = queue_payload()
+    payload["manual_reservations"] = [
+        {
+            "assignment_id": "LAP-ONE",
+            "machine": "LAPTOP_MASTER",
+            "owner": "LAPTOP_MASTER",
+            "status": "RESERVED_MANUAL",
+            "automated_claims_blocked": True,
+            "reason": "Manual isolated execution.",
+        }
+    ]
+    queue = validate_queue(payload)
+    assert eligible_after_activation(queue, ("LAPTOP_MASTER",)) == ()
+
+
+def test_manual_reservation_requires_matching_machine_owner_and_block() -> None:
+    payload = queue_payload()
+    payload["manual_reservations"] = [
+        {
+            "assignment_id": "LAP-ONE",
+            "machine": "OM1",
+            "owner": "LAPTOP_MASTER",
+            "status": "RESERVED_MANUAL",
+            "automated_claims_blocked": True,
+            "reason": "Manual isolated execution.",
+        }
+    ]
+    with pytest.raises(CoordinationError, match="does not own"):
+        validate_queue(payload)
+
+
+def test_reserved_assignment_cannot_prepare_automated_claim() -> None:
+    payload = queue_payload()
+    payload["manual_reservations"] = [
+        {
+            "assignment_id": "LAP-ONE",
+            "machine": "LAPTOP_MASTER",
+            "owner": "LAPTOP_MASTER",
+            "status": "RESERVED_MANUAL",
+            "automated_claims_blocked": True,
+            "reason": "Manual isolated execution.",
+        }
+    ]
+    queue = validate_queue(payload)
+    receipt = {
+        "schema": "twelfthats.machine-inventory.v1",
+        "role_claimed": "LAPTOP",
+        "host": {"hostname": "laptop"},
+        "repository": {
+            "root": "/repo",
+            "branch": "work/laptop",
+            "head": "a" * 40,
+            "origin": "https://example.invalid/repo.git",
+            "status_clean": True,
+        },
+    }
+    with pytest.raises(CoordinationError, match="automated claims are blocked"):
+        prepare_claim_envelope(queue, assignment_id="LAP-ONE", inventory=receipt)
+
+
 def test_unknown_completion_evidence_fails_closed() -> None:
     queue = validate_queue(queue_payload())
     with pytest.raises(CoordinationError, match="unknown completed assignments"):

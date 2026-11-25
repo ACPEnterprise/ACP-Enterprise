@@ -89,6 +89,40 @@ The queue contract is executable through the existing factory CLI:
 ./scripts/development-factory coordination prepare-claim ASSIGNMENT_ID /tmp/twelvehats-machine-inventory.json --output /tmp/twelvehats-claim.json
 ```
 
+## Manual execution during Worker Control recovery
+
+When a machine has a verified inventory but no authenticated Worker Control
+session or assignment-bound lease, the initial OM1/OM2 assignments are recorded
+in the queue's `manual_reservations` list with
+`automated_claims_blocked: true`. This is a coordination reservation, not a
+fabricated lease or activation receipt. The claim-envelope bridge rejects a
+reserved assignment, preventing this coordinator's automated claim path from
+competing with the manually authorized isolated-worktree procedure.
+
+The manually coordinated directives are:
+
+- `OM1-DF-DURABLE-COORDINATION-01`: use the OM1 isolated worktree to qualify
+  the existing Development Factory's durable coordination, fencing, checkpoint,
+  recovery, and resource-boundary contracts. Allowed paths are the existing
+  Factory/Engineering Control/Worker Control/test/documentation paths in the
+  assignment. Publish a task branch and evidence handoff; do not merge, deploy,
+  approve, or mutate protected data.
+- `OM2-HCP-HISTORY-RECON-01`: use only approved sanitized or sealed custody
+  evidence in the OM2 isolated worktree to reconcile HCP customers, locations,
+  jobs, appointments, invoices, payments, and communications. Preserve source
+  identity and held exceptions; do not fabricate relationships, export custody,
+  or write HCP.
+- `OM2-QBO-HISTORY-RECON-01`: use only approved sealed QBO evidence or
+  sanctioned synthetic fixtures to reconcile accounting history and read-only
+  report projections. Preserve source IDs and exceptions; do not initiate OAuth,
+  write QuickBooks, post financial entries, or move money.
+
+Each manual worker must verify its own clean worktree, record the queue and
+assignment digest in its checkpoint, run the declared validation, publish a
+non-protected task branch, and stop at the independent-review boundary. A
+manual reservation is cleared only by a later queue edit with independent
+evidence; a Worker Control heartbeat alone does not clear it.
+
 These commands validate dependencies, project eligibility, or an inventory
 receipt only. They do not activate a machine, claim work, or create a lease.
 Dependent assignments may be projected with repeated

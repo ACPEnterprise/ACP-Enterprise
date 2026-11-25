@@ -295,6 +295,13 @@ def main() -> int:
             )
             print(f"Coordination queue status: {queue.status}")
             print(f"Assignments: {len(queue.assignments)}")
+            if queue.manual_reservations:
+                print(
+                    "Manual reservations: "
+                    + ", ".join(
+                        item.assignment_id for item in queue.manual_reservations
+                    )
+                )
             print(
                 f"Eligible after supplied activation: {', '.join(eligible) or 'NONE'}"
             )

@@ -23,6 +23,8 @@ INVENTORY_SCHEMA = "twelfthats.machine-inventory.v1"
 DAILY_REPORT_SCHEMA = "twelfthats.daily-engineering-report.v1"
 ACTIVATION_SCHEMA = "twelfthats.machine-activation.v1"
 LANES = frozenset({"LAPTOP_MASTER", "OM1", "OM2", "REVIEWER"})
+MANUAL_RESERVATION_STATUS = "RESERVED_MANUAL"
+MANUAL_RESERVATION_OWNER = "LAPTOP_MASTER"
 STATES = frozenset(
     {
         "BLOCKED_DEPENDENCY",
@@ -51,14 +53,29 @@ class Assignment:
 
 
 @dataclass(frozen=True)
+class ManualReservation:
+    assignment_id: str
+    machine: str
+    owner: str
+    status: str
+    automated_claims_blocked: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class CoordinationQueue:
     schema_version: str
     status: str
     assignments: tuple[Assignment, ...]
+    manual_reservations: tuple[ManualReservation, ...] = ()
 
     @property
     def by_id(self) -> dict[str, Assignment]:
         return {item.id: item for item in self.assignments}
+
+    @property
+    def manual_reservation_by_id(self) -> dict[str, ManualReservation]:
+        return {item.assignment_id: item for item in self.manual_reservations}
 
 
 def load_queue(repo_root: Path) -> CoordinationQueue:
@@ -295,6 +312,83 @@ def validate_queue(payload: object) -> CoordinationQueue:
             raise CoordinationError(
                 f"{item.id}: unknown dependencies {sorted(unknown)}"
             )
+    raw_reservations = payload.get("manual_reservations", [])
+    if not isinstance(raw_reservations, list):
+        raise CoordinationError("manual_reservations must be a list")
+    reservations: list[ManualReservation] = []
+    reserved_ids: set[str] = set()
+    machine_lanes = {
+        "LAPTOP_MASTER": "LAPTOP_MASTER",
+        "OM1": "OM1",
+        "OM2": "OM2",
+        "REVIEWER": "REVIEWER",
+    }
+    for raw in raw_reservations:
+        if not isinstance(raw, dict):
+            raise CoordinationError("each manual reservation must be an object")
+        required = {
+            "assignment_id",
+            "machine",
+            "owner",
+            "status",
+            "automated_claims_blocked",
+            "reason",
+        }
+        if not required <= set(raw):
+            raise CoordinationError(
+                f"manual reservation is missing fields: {sorted(required - set(raw))}"
+            )
+        assignment_id = raw["assignment_id"]
+        machine = raw["machine"]
+        owner = raw["owner"]
+        status = raw["status"]
+        reason = raw["reason"]
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (assignment_id, machine, owner, status, reason)
+        ):
+            raise CoordinationError("manual reservation identity fields are invalid")
+        if assignment_id not in by_id:
+            raise CoordinationError(
+                f"manual reservation references unknown assignment {assignment_id}"
+            )
+        if assignment_id in reserved_ids:
+            raise CoordinationError(f"duplicate manual reservation for {assignment_id}")
+        if machine not in machine_lanes:
+            raise CoordinationError(f"manual reservation machine is invalid: {machine}")
+        if by_id[assignment_id].lane != machine_lanes[machine]:
+            raise CoordinationError(
+                f"manual reservation machine does not own {assignment_id}"
+            )
+        if status != MANUAL_RESERVATION_STATUS:
+            raise CoordinationError(
+                f"manual reservation status is invalid for {assignment_id}"
+            )
+        if owner != MANUAL_RESERVATION_OWNER:
+            raise CoordinationError(
+                f"manual reservation owner is invalid for {assignment_id}"
+            )
+        if raw["automated_claims_blocked"] is not True:
+            raise CoordinationError(
+                f"automated claims must be blocked for {assignment_id}"
+            )
+        reserved_ids.add(assignment_id)
+        reservations.append(
+            ManualReservation(
+                assignment_id=assignment_id,
+                machine=machine,
+                owner=owner,
+                status=status,
+                automated_claims_blocked=True,
+                reason=reason,
+            )
+        )
+    queue = CoordinationQueue(
+        schema_version=queue.schema_version,
+        status=queue.status,
+        assignments=queue.assignments,
+        manual_reservations=tuple(reservations),
+    )
     _assert_acyclic(queue)
     return queue
 
@@ -352,6 +446,7 @@ def eligible_after_activation(
             if (
                 item.lane in active
                 and item.id not in completed
+                and item.id not in queue.manual_reservation_by_id
                 and item.state
                 in {
                     "READY_AFTER_INVENTORY",
@@ -457,6 +552,20 @@ def build_daily_report(
                 eligible_after_activation(queue, active, completed_assignments)
             ),
             "completed_assignments_supplied": sorted(set(completed_assignments)),
+            "manual_reservations": [
+                {
+                    "assignment_id": item.assignment_id,
+                    "machine": item.machine,
+                    "owner": item.owner,
+                    "status": item.status,
+                    "automated_claims_blocked": item.automated_claims_blocked,
+                    "reason": item.reason,
+                }
+                for item in queue.manual_reservations
+            ],
+            "automated_claims_blocked_assignment_ids": sorted(
+                queue.manual_reservation_by_id
+            ),
         },
         "repository": {
             "branch": repository.branch,
@@ -617,6 +726,7 @@ __all__ = [
     "Assignment",
     "CoordinationError",
     "CoordinationQueue",
+    "ManualReservation",
     "build_daily_report",
     "dependency_layers",
     "eligible_after_activation",

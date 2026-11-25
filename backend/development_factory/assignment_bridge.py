@@ -33,6 +33,17 @@ def queue_digest(queue: CoordinationQueue) -> str:
         {
             "schema_version": queue.schema_version,
             "status": queue.status,
+            "manual_reservations": [
+                {
+                    "assignment_id": item.assignment_id,
+                    "machine": item.machine,
+                    "owner": item.owner,
+                    "status": item.status,
+                    "automated_claims_blocked": item.automated_claims_blocked,
+                    "reason": item.reason,
+                }
+                for item in queue.manual_reservations
+            ],
             "assignments": [
                 {
                     "id": item.id,
@@ -62,6 +73,11 @@ def prepare_claim_envelope(
     assignment = queue.by_id.get(assignment_id)
     if assignment is None:
         raise CoordinationError(f"unknown assignment: {assignment_id}")
+    if assignment_id in queue.manual_reservation_by_id:
+        raise CoordinationError(
+            f"assignment {assignment_id} is reserved for manual execution; "
+            "automated claims are blocked"
+        )
     role = inventory.get("role_claimed")
     lane = _ROLE_TO_LANE.get(str(role))
     if lane != assignment.lane:

@@ -374,7 +374,7 @@ services:
       ACP_WORKER_RECONNECT_MAX_SECONDS: "30"
     command: ["python", "-m", "app.worker_runtime"]
     volumes:
-      - ${ACP_WORKER_PRIVATE_KEY_FILE_HOST:-/opt/acp-enterprise/shared/secrets/preview-worker.key}:/run/secrets/preview-worker.key:ro
+      - ${ACP_WORKER_PRIVATE_KEY_FILE_HOST:-/opt/acp-enterprise/shared/secrets/worker-preview/preview-worker.key}:/run/secrets/preview-worker.key:ro
       - ${ACP_WORKER_WORKSPACE_ROOT_HOST:-/opt/acp-enterprise/shared/worker-workspaces}:${ACP_WORKER_WORKSPACE_ROOT_CONTAINER:-/workspace}:ro
       - preview_worker_state:/var/lib/acp-worker
     depends_on:

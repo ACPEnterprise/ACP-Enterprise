@@ -188,6 +188,28 @@ def test_preview_backup_service_mounts_protected_backup_secret() -> None:
     )
 
 
+def test_worker_provisioner_and_runtime_mount_the_same_private_key() -> None:
+    compose = _compose("docker-compose.preview.yml")
+    worker = compose["services"]["worker"]
+    provisioner = compose["services"]["worker-provision"]
+    env_example = (REPOSITORY_ROOT / ".env.preview.example").read_text(encoding="utf-8")
+
+    runtime_mounts = worker["volumes"]
+    provisioner_mounts = provisioner["volumes"]
+    assert (
+        "${ACP_WORKER_PRIVATE_KEY_FILE_HOST:-/opt/acp-enterprise/shared/secrets/worker-preview/preview-worker.key}"
+        ":/run/secrets/preview-worker.key:ro"
+    ) in runtime_mounts
+    assert (
+        "${ACP_WORKER_SECRET_DIRECTORY_HOST:-/opt/acp-enterprise/shared/secrets/worker-preview}"
+        ":/run/secrets"
+    ) in provisioner_mounts
+    assert (
+        "ACP_WORKER_PRIVATE_KEY_FILE_HOST=/opt/acp-enterprise/shared/secrets/worker-preview/preview-worker.key"
+        in env_example
+    )
+
+
 def test_preview_backend_images_include_release_security_executables() -> None:
     compose = _compose("docker-compose.preview.yml")
     for service in compose["services"].values():

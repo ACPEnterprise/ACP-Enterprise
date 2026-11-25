@@ -14,6 +14,32 @@
     "protected_integration_sha": "58dcb301b3d307569f46e095d08c7b3403b81c84",
     "remote": "https://github.com/ACPEnterprise/ACP-Enterprise.git"
   },
+  "manual_reservations": [
+    {
+      "assignment_id": "OM1-DF-DURABLE-COORDINATION-01",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Worker Control authentication and lease are unavailable; execute the bounded OM1 task in its isolated worktree while automation recovery continues."
+    },
+    {
+      "assignment_id": "OM2-HCP-HISTORY-RECON-01",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Worker Control authentication and lease are unavailable; execute the bounded OM2 HCP task in its isolated worktree while custody recovery continues."
+    },
+    {
+      "assignment_id": "OM2-QBO-HISTORY-RECON-01",
+      "machine": "OM2",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Worker Control authentication and lease are unavailable; execute the bounded OM2 QBO task in its isolated worktree while custody recovery continues."
+    }
+  ],
   "claim_policy": {
     "machine_activation_required": true,
     "atomic_claim_required": true,
