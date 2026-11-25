@@ -5,6 +5,7 @@ import pytest
 from app.operational_migration.hcp_customer_source_history import (
     HcpCustomerSourceHistoryError,
     project_customer_source_history,
+    search_customer_source_history,
 )
 
 
@@ -29,6 +30,8 @@ def _source(root: Path) -> Path:
         [
             {
                 "id": "customer-1",
+                "display_name": "Richard Example",
+                "email": "richard@example.test",
                 "addresses": [
                     {
                         "id": "location-1",
@@ -151,3 +154,30 @@ def test_rejects_non_read_only_source_package(tmp_path: Path) -> None:
 
     with pytest.raises(HcpCustomerSourceHistoryError, match="not_read_only"):
         project_customer_source_history(root, source_customer_id="customer-1")
+
+
+def test_searches_historical_customer_and_location_without_native_identity(
+    tmp_path: Path,
+) -> None:
+    root = _source(tmp_path)
+    by_name = search_customer_source_history(root, query="richard")
+    by_location = search_customer_source_history(root, query="clearwater")
+    assert by_name["items"] == by_location["items"]
+    assert by_name["items"][0] == {
+        "source_customer_id": "customer-1",
+        "display_name": "Richard Example",
+        "primary_location": "123 Main St, Clearwater, FL, 33755",
+        "authority": "HCP_SOURCE_BACKED_HISTORICAL_CUSTOMER",
+        "accepted_as_native": False,
+    }
+    assert by_name["mutation_authority"] == "none"
+
+
+def test_historical_customer_search_requires_bounded_meaningful_query(
+    tmp_path: Path,
+) -> None:
+    root = _source(tmp_path)
+    with pytest.raises(HcpCustomerSourceHistoryError, match="too_short"):
+        search_customer_source_history(root, query="r")
+    with pytest.raises(HcpCustomerSourceHistoryError, match="limit_invalid"):
+        search_customer_source_history(root, query="richard", limit=51)

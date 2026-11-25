@@ -274,3 +274,94 @@ def project_customer_source_history(
         "estimates": estimate_items,
         "invoices": invoice_items,
     }
+
+
+def search_customer_source_history(
+    root: Path, *, query: str, limit: int = 20
+) -> dict[str, object]:
+    """Search sealed source Customers without requiring native admission."""
+    normalized = " ".join(query.casefold().split())
+    if len(normalized) < 2:
+        raise HcpCustomerSourceHistoryError("search_query_too_short")
+    if not 1 <= limit <= 50:
+        raise HcpCustomerSourceHistoryError("search_limit_invalid")
+
+    manifest_path = root / "acquisition-package-manifest.json"
+    if not manifest_path.exists():
+        manifest_path = root / "current-source-manifest.json"
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    if not (
+        manifest.get("request_methods") == ["GET"]
+        or manifest.get("policy") == "GET_ONLY"
+    ):
+        raise HcpCustomerSourceHistoryError("source_package_not_read_only")
+
+    matches: list[dict[str, object]] = []
+    for customer in _rows(root, "customers"):
+        addresses = [
+            address
+            for address in customer.get("addresses") or []
+            if isinstance(address, Mapping)
+        ]
+        display_name = (
+            customer.get("display_name")
+            or customer.get("company")
+            or " ".join(
+                str(value).strip()
+                for value in (customer.get("first_name"), customer.get("last_name"))
+                if value
+            )
+            or "Name unavailable"
+        )
+        searchable = " ".join(
+            [
+                str(customer.get("id") or ""),
+                str(display_name),
+                str(customer.get("email") or ""),
+                str(customer.get("mobile_number") or customer.get("phone") or ""),
+                *[
+                    " ".join(
+                        str(address.get(field) or "")
+                        for field in ("street", "address", "city", "state", "zip")
+                    )
+                    for address in addresses
+                ],
+            ]
+        ).casefold()
+        if normalized not in searchable:
+            continue
+        matches.append(
+            {
+                "source_customer_id": str(customer["id"]),
+                "display_name": str(display_name),
+                "primary_location": (
+                    ", ".join(
+                        str(addresses[0].get(field)).strip()
+                        for field in ("street", "address", "city", "state", "zip")
+                        if addresses[0].get(field)
+                    )
+                    if addresses
+                    else None
+                ),
+                "authority": "HCP_SOURCE_BACKED_HISTORICAL_CUSTOMER",
+                "accepted_as_native": False,
+            }
+        )
+    ordered = sorted(
+        matches,
+        key=lambda item: (
+            str(item["display_name"]).casefold(),
+            str(item["source_customer_id"]),
+        ),
+    )
+    return {
+        "contract": "hcp-customer-source-search/v1",
+        "authority": "HCP_SOURCE_BACKED_HISTORICAL_CUSTOMER",
+        "mutation_authority": "none",
+        "query": query,
+        "items": ordered[:limit],
+        "match_count": len(ordered),
+        "limited": len(ordered) > limit,
+        "source_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+    }

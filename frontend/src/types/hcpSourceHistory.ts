@@ -84,3 +84,20 @@ export type HcpCustomerSourceHistory = {
     authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY";
   }>;
 };
+
+export type HcpHistoricalCustomerSearch = {
+  contract: "hcp-customer-source-search/v1";
+  authority: "HCP_SOURCE_BACKED_HISTORICAL_CUSTOMER";
+  mutation_authority: "none";
+  query: string;
+  items: Array<{
+    source_customer_id: string;
+    display_name: string;
+    primary_location: string | null;
+    authority: "HCP_SOURCE_BACKED_HISTORICAL_CUSTOMER";
+    accepted_as_native: false;
+  }>;
+  match_count: number;
+  limited: boolean;
+  source_manifest_sha256: string;
+};

@@ -30,6 +30,7 @@ from app.qbo_source.runtime import (
 from .hcp_customer_source_history import (
     HcpCustomerSourceHistoryError,
     project_customer_source_history,
+    search_customer_source_history,
 )
 from .product_projection import build_migration_product_projection
 
@@ -51,6 +52,14 @@ PaymentRead = Annotated[
     AuthorizationContext, Depends(require_permission(PaymentPermission.READ))
 ]
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+
+
+def _history_unavailable(status_code: int = status.HTTP_404_NOT_FOUND) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"detail": "Historical source evidence is not available."},
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/readiness", name="migration-readiness-review")
@@ -162,4 +171,65 @@ async def hcp_customer_source_history(
             content={"detail": "Historical source evidence is unavailable."},
             headers={"Cache-Control": "private, no-store"},
         )
+    return JSONResponse(content=result, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get("/source-history/customers", name="hcp-historical-customer-search")
+async def hcp_historical_customer_search(
+    query: str,
+    context: CustomerRead,
+    limit: int = 20,
+) -> JSONResponse:
+    """Search sealed HCP history independently of native Customer admission."""
+    del context
+    if not settings.hcp_source4_evidence_root:
+        return _history_unavailable()
+    try:
+        result = search_customer_source_history(
+            Path(settings.hcp_source4_evidence_root), query=query, limit=limit
+        )
+    except HcpCustomerSourceHistoryError as error:
+        code = (
+            status.HTTP_422_UNPROCESSABLE_CONTENT
+            if str(error) in {"search_query_too_short", "search_limit_invalid"}
+            else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+        return _history_unavailable(code)
+    except (OSError, ValueError):
+        return _history_unavailable(status.HTTP_503_SERVICE_UNAVAILABLE)
+    return JSONResponse(content=result, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get(
+    "/source-history/customers/by-source/{source_customer_id}",
+    name="hcp-customer-history-by-source",
+)
+async def hcp_customer_history_by_source(
+    source_customer_id: str,
+    context: CustomerRead,
+    estimate_context: EstimateRead,
+    invoice_context: InvoiceRead,
+    payment_context: PaymentRead,
+) -> JSONResponse:
+    """Read one sealed historical Customer without creating a native identity."""
+    if not settings.hcp_source4_evidence_root:
+        return _history_unavailable()
+    if not (
+        context.company.id
+        == estimate_context.company.id
+        == invoice_context.company.id
+        == payment_context.company.id
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": "Historical source scope does not match."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        result = project_customer_source_history(
+            Path(settings.hcp_source4_evidence_root),
+            source_customer_id=source_customer_id,
+        )
+    except (OSError, ValueError, HcpCustomerSourceHistoryError):
+        return _history_unavailable(status.HTTP_503_SERVICE_UNAVAILABLE)
     return JSONResponse(content=result, headers={"Cache-Control": "private, no-store"})
