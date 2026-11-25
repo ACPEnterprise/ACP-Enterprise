@@ -52,6 +52,13 @@ describe("JobDetailRoute", () => {
     renderRoute();
     expect(screen.getByRole("button", { name: "Ask LIA about this Job" })).toBeVisible();
   });
+  it("uses plain language for related invoice navigation", () => {
+    permissions = new Set(["COMPANY_JOB_READ", "COMPANY_INVOICE_READ"]);
+    vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: job } as never);
+    renderRoute();
+    expect(screen.getByText("Find invoices connected to this job. Invoice details open in the Invoices workspace.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View related invoices" })).toHaveAttribute("href", "/invoices?query=JOB-000001");
+  });
   it("shows existing-Job scheduling only with both manage authorities", () => {
     permissions = new Set(["COMPANY_JOB_READ", "COMPANY_JOB_MANAGE", "COMPANY_SCHEDULING_MANAGE"]);
     vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: job } as never);

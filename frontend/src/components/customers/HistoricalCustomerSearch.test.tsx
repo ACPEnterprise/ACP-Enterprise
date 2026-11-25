@@ -17,7 +17,7 @@ describe("HistoricalCustomerSearch", () => {
     historyHook.mockReturnValue({ isLoading: false, isError: false, data: undefined });
   });
 
-  it("searches independently and labels source records as historical only", () => {
+  it("searches independently and explains older history in operator language", () => {
     searchHook.mockImplementation((query: string) => ({
       isLoading: false,
       isError: false,
@@ -38,8 +38,8 @@ describe("HistoricalCustomerSearch", () => {
 
     expect(searchHook).toHaveBeenLastCalledWith("Richard");
     expect(screen.getByText("Richard Example")).toBeVisible();
-    expect(screen.getByText("HISTORICAL ONLY")).toBeVisible();
-    expect(screen.getByText(/not a native Customer record/i)).toBeVisible();
+    expect(screen.getByText("OLDER HISTORY")).toBeVisible();
+    expect(screen.getByText(/Older history is view-only/i)).toBeVisible();
   });
 
   it("opens a source-backed journey without mutation controls", () => {
