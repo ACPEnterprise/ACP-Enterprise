@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from development_factory.queue_discovery import (
+    ContinuationLimits,
     DiscoveryLimits,
     GitQueueSource,
     QueueCandidate,
@@ -115,6 +116,22 @@ class Source:
         return older == newer or (older, newer) in self.ancestry
 
 
+class ReplenishingSource(Source):
+    def __init__(
+        self,
+        snapshots: tuple[tuple[QueueCandidate, ...], ...],
+        *,
+        ancestry: set[tuple[str, str]],
+    ) -> None:
+        super().__init__((), ancestry=ancestry)
+        self.snapshots = snapshots
+
+    def load(self) -> tuple[QueueCandidate, ...]:
+        index = min(self.calls, len(self.snapshots) - 1)
+        self.calls += 1
+        return self.snapshots[index]
+
+
 def supervisor(tmp_path: Path, **changes: object) -> QueueDiscoverySupervisor:
     max_attempts = changes.get("max_attempts", 3)
     max_candidates = changes.get("max_queue_candidates", 128)
@@ -131,6 +148,19 @@ def supervisor(tmp_path: Path, **changes: object) -> QueueDiscoverySupervisor:
         limits=limits,
         sleep=lambda _: None,
     )
+
+
+def completed_payload(*, follow_on: bool = False) -> dict[str, object]:
+    value = payload(include_follow_on=follow_on)
+    completed = ["OM1-FIRST", "OM1-DEPENDENT"]
+    value["completed_evidence"] = [
+        {
+            "assignment_id": assignment_id,
+            "commit_sha": ("a" if index == 0 else "b") * 40,
+        }
+        for index, assignment_id in enumerate(completed)
+    ]
+    return value
 
 
 def test_discovers_new_queue_without_branch_keyword_filter(tmp_path: Path) -> None:
@@ -370,3 +400,89 @@ def test_git_source_contract_scans_all_handoff_refs() -> None:
     source = GitQueueSource(Path.cwd())
     assert source.remote == "origin"
     assert source.limits.max_remote_refs >= source.limits.max_queue_candidates
+
+
+def test_bounded_continuation_discovers_replenished_queue(tmp_path: Path) -> None:
+    old = candidate(OLD_SHA, completed_payload())
+    new = candidate(NEW_SHA, completed_payload(follow_on=True))
+    source = ReplenishingSource(
+        ((old,), (old, new)),
+        ancestry={(OLD_SHA, NEW_SHA)},
+    )
+    delays: list[float] = []
+    control = QueueDiscoverySupervisor(
+        tmp_path / "coordination-state.json",
+        limits=DiscoveryLimits(base_retry_seconds=0, max_retry_seconds=0),
+        sleep=delays.append,
+    )
+
+    result = control.continue_until_work(
+        source,
+        machine="OM1",
+        limits=ContinuationLimits(
+            max_polls=3, base_poll_seconds=0.5, max_poll_seconds=1
+        ),
+    )
+
+    assert result.status == "WORK_AVAILABLE"
+    assert result.polls == 2
+    assert result.eligible_assignments == ("OM1-NEW-QUEUE",)
+    assert delays == [0.5]
+
+
+def test_queue_exhaustion_is_bounded_durable_and_restartable(tmp_path: Path) -> None:
+    state = tmp_path / "coordination-state.json"
+    delays: list[float] = []
+    control = QueueDiscoverySupervisor(state, sleep=delays.append)
+    exhausted = control.continue_until_work(
+        Source((candidate(OLD_SHA, completed_payload()),)),
+        machine="OM1",
+        limits=ContinuationLimits(
+            max_polls=3, base_poll_seconds=0.5, max_poll_seconds=0.75
+        ),
+    )
+
+    assert exhausted.status == "QUEUE_EXHAUSTED_BOUNDED"
+    assert exhausted.idle_detected is True
+    assert exhausted.polls == 3
+    assert delays == [0.5, 0.75]
+    checkpoint = json.loads(state.read_text(encoding="utf-8"))
+    assert checkpoint["idle_poll_count"] == 3
+    assert checkpoint["idle_since_utc"]
+    assert checkpoint["continuations"]["OM1"] == {
+        "polls": 3,
+        "status": "QUEUE_EXHAUSTED_BOUNDED",
+    }
+
+    restarted = QueueDiscoverySupervisor(state, sleep=lambda _delay: None)
+    resumed = restarted.continue_until_work(
+        Source(
+            (candidate(NEW_SHA, completed_payload(follow_on=True)),),
+            ancestry={(OLD_SHA, NEW_SHA)},
+        ),
+        machine="OM1",
+        limits=ContinuationLimits(max_polls=1),
+    )
+    assert resumed.status == "WORK_AVAILABLE"
+    assert resumed.eligible_assignments == ("OM1-NEW-QUEUE",)
+    assert json.loads(state.read_text(encoding="utf-8"))["idle_poll_count"] == 0
+
+
+def test_continuation_safe_shutdown_fences_running_work(tmp_path: Path) -> None:
+    control = supervisor(tmp_path)
+    source = Source((candidate(NEW_SHA, payload()),))
+    discovered = control.discover(source, machine="OM1")
+    control.begin("OM1-FIRST", queue_digest=discovered.queue_digest, machine="OM1")
+
+    stopped = control.continue_until_work(
+        Source((candidate(NEW_SHA, payload()),)),
+        machine="OM1",
+        limits=ContinuationLimits(max_polls=1),
+        stop_requested=lambda: True,
+    )
+
+    assert stopped.status == "SAFE_SHUTDOWN"
+    assert stopped.interrupted_assignments == ("OM1-FIRST",)
+    checkpoint = json.loads((tmp_path / "coordination-state.json").read_text())
+    assert checkpoint["assignment_states"]["OM1-FIRST"] == ("reconciliation_required")
+    assert checkpoint["shutdown_machines"] == ["OM1"]

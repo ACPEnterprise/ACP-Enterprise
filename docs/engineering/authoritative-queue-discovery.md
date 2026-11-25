@@ -34,3 +34,30 @@ shutdown recovery changes only running assignments owned by the calling
 machine. Locally sealed completion is retained across discovery, clears only
 its declared dependents, and cannot cause the completed assignment to be
 offered again.
+
+## Bounded continuation
+
+When Laptop Master is preparing a successor queue, the supervisor can poll the
+same authoritative handoff namespace without reverting to fixed ref names:
+
+```bash
+PYTHONPATH=backend python3 -m development_factory \
+  --repo-root . coordination supervisor-continue \
+  --machine OM1 \
+  --state "$PRIVATE_STATE_PATH" \
+  --max-polls 6 \
+  --base-poll-seconds 5 \
+  --max-poll-seconds 30
+```
+
+Polling and exponential backoff are bounded (`64` polls and `60` seconds per
+delay are hard maxima). The result is exactly one of `WORK_AVAILABLE`,
+`QUEUE_EXHAUSTED_BOUNDED`, or `SAFE_SHUTDOWN`. The mode-`0600` checkpoint
+records idle start, idle poll count, last work time, and per-machine continuation
+status. A replenished descendant queue resets idle state. Restart uses the same
+checkpoint and cannot re-offer completed work.
+
+Safe shutdown moves only the calling machine's running assignments to
+`reconciliation_required`, records the machine, and exits without approval,
+merge, deployment, or protected execution. A later successful discovery clears
+that machine's shutdown marker but does not bypass reconciliation.
