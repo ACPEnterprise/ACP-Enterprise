@@ -56,6 +56,15 @@ def test_preview_infrastructure_does_not_publish_a_host_port() -> None:
     assert "ports" not in compose["services"]["backend"]
 
 
+def test_application_acceptance_backend_waits_for_schema_and_bootstrap() -> None:
+    compose = _compose("docker-compose.application-acceptance.yml")
+    depends_on = compose["services"]["backend"]["depends_on"]
+
+    assert depends_on["postgres"]["condition"] == "service_healthy"
+    assert depends_on["redis"]["condition"] == "service_healthy"
+    assert depends_on["bootstrap"]["condition"] == "service_completed_successfully"
+
+
 def test_disposable_qualification_services_are_internal_only() -> None:
     for compose_name, network_name in (
         ("docker-compose.migration-rehearsal.yml", "migration_rehearsal"),
