@@ -67,6 +67,19 @@ class DiscoveryLimits:
 
 
 @dataclass(frozen=True)
+class ContinuationLimits:
+    max_polls: int = 6
+    base_poll_seconds: float = 5
+    max_poll_seconds: float = 30
+
+    def validate(self) -> None:
+        if not 1 <= self.max_polls <= 64:
+            raise QueueDiscoveryError("continuation poll limit is invalid")
+        if not 0 <= self.base_poll_seconds <= self.max_poll_seconds <= 60:
+            raise QueueDiscoveryError("continuation delay limit is invalid")
+
+
+@dataclass(frozen=True)
 class QueueCandidate:
     ref: str
     head_sha: str
@@ -86,6 +99,17 @@ class DiscoveryResult:
     eligible_assignments: tuple[str, ...]
     completed_assignments: tuple[str, ...]
     attempts: int
+    status: str
+
+
+@dataclass(frozen=True)
+class ContinuationResult:
+    queue_commit_sha: str
+    queue_digest: str
+    eligible_assignments: tuple[str, ...]
+    interrupted_assignments: tuple[str, ...]
+    polls: int
+    idle_detected: bool
     status: str
 
 
@@ -310,15 +334,30 @@ class QueueDiscoverySupervisor:
                 for assignment_id in eligible
                 if assignment_states.get(assignment_id) == "ready"
             )
+            observed_at = _timestamp(now)
+            if offered:
+                state["idle_poll_count"] = 0
+                state["idle_since_utc"] = None
+                state["last_work_at_utc"] = observed_at
+            else:
+                idle_count = state.get("idle_poll_count")
+                if not isinstance(idle_count, int) or isinstance(idle_count, bool):
+                    raise QueueDiscoveryError("checkpoint idle poll count is invalid")
+                if idle_count == 0:
+                    state["idle_since_utc"] = observed_at
+                state["idle_poll_count"] = idle_count + 1
+            shutdown_machines = set(cast(list[str], state["shutdown_machines"]))
+            shutdown_machines.discard(machine)
             state.update(
                 {
                     "queue_commit_sha": selected.queue_commit_sha,
                     "queue_digest": selected.digest,
                     "queue_refs": list(refs),
-                    "last_success_at_utc": _timestamp(now),
+                    "last_success_at_utc": observed_at,
                     "last_attempt_count": attempts,
                     "network_failures": 0,
-                    "shutdown": False,
+                    "shutdown": bool(shutdown_machines),
+                    "shutdown_machines": sorted(shutdown_machines),
                 }
             )
             self._write(state)
@@ -330,6 +369,67 @@ class QueueDiscoverySupervisor:
             completed_assignments=tuple(sorted(completed)),
             attempts=attempts,
             status="AUTHORITATIVE_QUEUE_DISCOVERED",
+        )
+
+    def continue_until_work(
+        self,
+        source: QueueSource,
+        *,
+        machine: str,
+        supplied_completed: Iterable[str] = (),
+        limits: ContinuationLimits | None = None,
+        stop_requested: Callable[[], bool] = lambda: False,
+    ) -> ContinuationResult:
+        continuation = limits or ContinuationLimits()
+        continuation.validate()
+        last: DiscoveryResult | None = None
+        for poll in range(1, continuation.max_polls + 1):
+            last = self.discover(
+                source,
+                machine=machine,
+                supplied_completed=supplied_completed,
+            )
+            if stop_requested():
+                interrupted = self.safe_shutdown(machine=machine)
+                self._record_continuation(machine, "SAFE_SHUTDOWN", poll)
+                return ContinuationResult(
+                    last.queue_commit_sha,
+                    last.queue_digest,
+                    (),
+                    interrupted,
+                    poll,
+                    not last.eligible_assignments,
+                    "SAFE_SHUTDOWN",
+                )
+            if last.eligible_assignments:
+                self._record_continuation(machine, "WORK_AVAILABLE", poll)
+                return ContinuationResult(
+                    last.queue_commit_sha,
+                    last.queue_digest,
+                    last.eligible_assignments,
+                    (),
+                    poll,
+                    False,
+                    "WORK_AVAILABLE",
+                )
+            if poll < continuation.max_polls:
+                delay = min(
+                    continuation.base_poll_seconds * (2 ** (poll - 1)),
+                    continuation.max_poll_seconds,
+                )
+                self.sleep(delay)
+        assert last is not None
+        self._record_continuation(
+            machine, "QUEUE_EXHAUSTED_BOUNDED", continuation.max_polls
+        )
+        return ContinuationResult(
+            last.queue_commit_sha,
+            last.queue_digest,
+            (),
+            (),
+            continuation.max_polls,
+            True,
+            "QUEUE_EXHAUSTED_BOUNDED",
         )
 
     def begin(self, assignment_id: str, *, queue_digest: str, machine: str) -> None:
@@ -415,9 +515,19 @@ class QueueDiscoverySupervisor:
             )
             for assignment_id in interrupted:
                 assignment_states[assignment_id] = "reconciliation_required"
+            shutdown_machines = set(cast(list[str], state["shutdown_machines"]))
+            shutdown_machines.add(machine)
             state["shutdown"] = True
+            state["shutdown_machines"] = sorted(shutdown_machines)
             self._write(state)
             return interrupted
+
+    def _record_continuation(self, machine: str, status: str, polls: int) -> None:
+        with self._locked():
+            state = self._load_required()
+            continuations = cast(dict[str, object], state["continuations"])
+            continuations[machine] = {"polls": polls, "status": status}
+            self._write(state)
 
     @staticmethod
     def _require_machine(
@@ -491,9 +601,14 @@ class QueueDiscoverySupervisor:
                 "last_attempt_count": 0,
                 "network_failures": 0,
                 "shutdown": False,
+                "shutdown_machines": [],
+                "idle_poll_count": 0,
+                "idle_since_utc": None,
+                "last_work_at_utc": None,
                 "assignment_states": {},
                 "assignment_machines": {},
                 "reconciliations": {},
+                "continuations": {},
                 "state_digest": "",
             }
         return self._load_required()
@@ -515,12 +630,29 @@ class QueueDiscoverySupervisor:
             raise QueueDiscoveryError("coordination checkpoint integrity failed")
         if "assignment_machines" not in value:
             value["assignment_machines"] = {}
+        if "shutdown_machines" not in value:
+            value["shutdown_machines"] = []
+        if "idle_poll_count" not in value:
+            value["idle_poll_count"] = 0
+        if "idle_since_utc" not in value:
+            value["idle_since_utc"] = None
+        if "last_work_at_utc" not in value:
+            value["last_work_at_utc"] = None
+        if "continuations" not in value:
+            value["continuations"] = {}
         if (
             not isinstance(value.get("assignment_states"), dict)
             or not isinstance(value.get("assignment_machines"), dict)
             or not isinstance(value.get("reconciliations"), dict)
+            or not isinstance(value.get("continuations"), dict)
+            or not isinstance(value.get("shutdown_machines"), list)
         ):
             raise QueueDiscoveryError("coordination checkpoint state is invalid")
+        if any(
+            not isinstance(machine, str) or not machine
+            for machine in cast(list[object], value["shutdown_machines"])
+        ):
+            raise QueueDiscoveryError("checkpoint shutdown machines are invalid")
         assignment_machines = cast(dict[object, object], value["assignment_machines"])
         if any(
             not isinstance(assignment_id, str)

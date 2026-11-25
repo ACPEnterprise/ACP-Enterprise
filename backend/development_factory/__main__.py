@@ -22,6 +22,7 @@ from development_factory.lia_roles import AgentRoleError
 from development_factory.manifest import ManifestError
 from development_factory.owner_review import OwnerReviewError, OwnerReviewManager
 from development_factory.queue_discovery import (
+    ContinuationLimits,
     GitQueueSource,
     QueueDiscoverySupervisor,
 )
@@ -175,6 +176,19 @@ def main() -> int:
     supervisor_shutdown = coordination_commands.add_parser("supervisor-shutdown")
     _add_machine(supervisor_shutdown)
     _add_supervisor_state(supervisor_shutdown)
+    supervisor_continue = coordination_commands.add_parser("supervisor-continue")
+    _add_machine(supervisor_continue)
+    _add_supervisor_state(supervisor_continue)
+    supervisor_continue.add_argument("--remote", default="origin")
+    supervisor_continue.add_argument("--max-polls", type=int, default=6)
+    supervisor_continue.add_argument("--base-poll-seconds", type=float, default=5)
+    supervisor_continue.add_argument("--max-poll-seconds", type=float, default=30)
+    supervisor_continue.add_argument(
+        "--completed-assignment",
+        action="append",
+        default=[],
+        dest="completed_assignments",
+    )
     subparsers.add_parser("report")
     task = subparsers.add_parser("task")
     task_commands = task.add_subparsers(dest="task_command", required=True)
@@ -273,7 +287,19 @@ def main() -> int:
             if args.coordination_command.startswith("supervisor-"):
                 state = _resolve(args.repo_root, args.state)
                 discovery_supervisor = QueueDiscoverySupervisor(state)
-                if args.coordination_command == "supervisor-begin":
+                if args.coordination_command == "supervisor-continue":
+                    continuation = discovery_supervisor.continue_until_work(
+                        GitQueueSource(args.repo_root, remote=args.remote),
+                        machine=args.machine,
+                        supplied_completed=args.completed_assignments,
+                        limits=ContinuationLimits(
+                            max_polls=args.max_polls,
+                            base_poll_seconds=args.base_poll_seconds,
+                            max_poll_seconds=args.max_poll_seconds,
+                        ),
+                    )
+                    print(json.dumps(continuation.__dict__, sort_keys=True))
+                elif args.coordination_command == "supervisor-begin":
                     discovery_supervisor.begin(
                         args.assignment_id,
                         queue_digest=args.queue_digest,
