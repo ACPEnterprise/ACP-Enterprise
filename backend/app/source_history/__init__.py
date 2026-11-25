@@ -1,1 +1,1 @@
-"""Read-only source-history recovery contracts."""
+"""Read-only source-history recovery and registration contracts."""
