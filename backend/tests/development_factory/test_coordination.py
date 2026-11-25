@@ -42,8 +42,16 @@ def queue_payload() -> dict[str, object]:
 
 
 def test_loads_repository_queue_and_projects_only_activated_lanes() -> None:
-    queue = load_queue(Path(__file__).parents[3])
-    assert len(queue.assignments) == 41
+    repository = Path(__file__).parents[3]
+    queue = load_queue(repository)
+    payload = json.loads(
+        (
+            repository / "development-factory/continuous-engineering-queue.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert {assignment.id for assignment in queue.assignments} == {
+        assignment["id"] for assignment in payload["assignments"]
+    }
     assert eligible_after_activation(queue, ()) == ()
 
 

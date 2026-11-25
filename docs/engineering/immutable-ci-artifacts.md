@@ -4,8 +4,15 @@ The `Immutable CI artifacts` workflow qualifies one exact Git commit and emits
 two deterministic archives plus `enterprise-ci-artifacts/v1` evidence. It has
 read-only repository permission and contains no deployment job or credentials.
 
+CI, the frontend container build, frontend dependencies, mobile dependencies,
+and application-artifact identity use the exact Node.js version committed in
+`.node-version`. The workflow resolves Python after `setup-python`, verifies it
+is an executable absolute path, and passes that path to the backend qualification
+harness.
+
 The application archive contains the committed backend application and Alembic
-sources, frontend and mobile sources, their locked runtime dependencies, and
+sources, frontend and mobile sources, their locked Node.js runtime and
+dependencies, and
 their build definitions. The tooling archive contains committed release,
 qualification, migration, and Development Factory tooling. Both archives are
 created with `git archive` from the full candidate SHA and gzip `mtime=0`, so a
