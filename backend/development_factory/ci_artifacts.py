@@ -22,12 +22,14 @@ SECRET_LIKE: Final = re.compile(
     r"private[_-]?key|secret|token)"
 )
 DEPENDENCY_PATHS: Final = (
+    ".node-version",
     "backend/requirements.txt",
     "backend/requirements-dev.txt",
     "frontend/package-lock.json",
     "mobile/package-lock.json",
 )
 CONFIGURATION_PATHS: Final = (
+    ".node-version",
     ".dockerignore",
     "backend/Dockerfile",
     "frontend/Dockerfile",
@@ -37,6 +39,7 @@ CONFIGURATION_PATHS: Final = (
     "docker-compose.release-qualification.yml",
 )
 APPLICATION_PATHS: Final = (
+    ".node-version",
     "backend/alembic",
     "backend/app",
     "backend/Dockerfile",

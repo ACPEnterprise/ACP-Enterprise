@@ -1,0 +1,38 @@
+{
+  "contract": "twelvehats-manual-reservation-request/v1",
+  "assignment_id": "OM1-DF-PLATFORM-CORRECTION-PRESERVATION-06",
+  "requested_by": "OM1-A",
+  "requested_from": "LAPTOP_MASTER",
+  "status": "REQUESTED_PENDING_AUTHORITATIVE_QUEUE_REGISTRATION",
+  "owner_directive_date": "2026-11-27",
+  "base_candidate_sha": "10e05d132a9299e73e10cca316b4abf263d2d269",
+  "latest_authority_observed": "00ea2c587d6386220ba786815485de63b66bf938",
+  "objective": "Fail closed when a successor integration omits accepted Platform runtime, Redis custody, timezone, release-clock, or Customer test-isolation corrections.",
+  "non_conflict": {
+    "integration_branch_modified": false,
+    "om1b_supervisor_paths_modified": false,
+    "protected_state_modified": false,
+    "external_system_write": false
+  },
+  "allowed_paths_requested": [
+    ".github/workflows/immutable-ci-artifacts.yml",
+    "scripts/verify-platform-corrections.py",
+    "backend/tests/development_factory/test_ci_artifacts.py",
+    "backend/tests/release/test_platform_correction_preservation.py",
+    "docs/engineering/evidence/**"
+  ],
+  "required_validation": [
+    "candidate-bound committed-tree verification",
+    "negative omission regressions",
+    "frontend discrepancy reproduction",
+    "focused release and CI tests",
+    "hosted immutable artifact qualification"
+  ],
+  "safety": {
+    "live_deployment": false,
+    "protected_database_mutation": false,
+    "provider_write": false,
+    "private_key_access": false,
+    "additional_expenditure": false
+  }
+}

@@ -188,13 +188,46 @@ def test_ci_workflow_is_read_only_pinned_and_verifies_before_upload() -> None:
     ).read_text(encoding="utf-8")
     action_refs = re.findall(r"uses: [^@\s]+@([^\s]+)", workflow)
 
-    assert action_refs
+    assert action_refs == [
+        "3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+        "949feb2413d6458794dcd2491c4babbbce0c15c1",
+        "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+    ]
     assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
     assert "contents: read" in workflow
     assert "persist-credentials: false" in workflow
     assert "release-secret-custody-check.py" in workflow
+    assert "node-version-file: .node-version" in workflow
+    assert 'scripts/qualify-backend-tests --python "$QUALIFICATION_PYTHON"' in workflow
+    assert "--python python" not in workflow
+    assert 'qualification_python="$(command -v python)"' in workflow
+    assert "using Node.js 20" not in workflow
+    assert '"$QUALIFICATION_PYTHON" scripts/verify-platform-corrections.py' in workflow
     assert workflow.index("scripts/ci-artifacts verify") < workflow.index(
         "actions/upload-artifact@"
     )
     assert "compression-level: 0" in workflow
     assert "deployment" not in workflow.lower()
+
+
+def test_node_runtime_is_consistent_across_ci_packages_and_artifacts() -> None:
+    repository_root = Path(__file__).parents[3]
+    version = (repository_root / ".node-version").read_text(encoding="utf-8").strip()
+    assert version == "24.22.3"
+    for package in ("frontend", "mobile"):
+        package_json = json.loads(
+            (repository_root / package / "package.json").read_text(encoding="utf-8")
+        )
+        package_lock = json.loads(
+            (repository_root / package / "package-lock.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert package_json["engines"]["node"] == version
+        assert package_lock["packages"][""]["engines"]["node"] == version
+    dockerfile = (repository_root / "frontend/Dockerfile").read_text(encoding="utf-8")
+    assert f"FROM node:{version}-alpine@sha256:" in dockerfile
+    assert ".node-version" in ci_artifacts.DEPENDENCY_PATHS
+    assert ".node-version" in ci_artifacts.CONFIGURATION_PATHS
+    assert ".node-version" in ci_artifacts.APPLICATION_PATHS

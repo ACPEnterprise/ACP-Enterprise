@@ -188,13 +188,15 @@ def test_issuer_requires_exact_independent_review_and_validates_v2_artifact(
 
 
 def test_independent_review_is_validatable_before_signed_approval(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, _, receipt, registry, public_key, _, review, approval = issue(tmp_path)
 
     approval.unlink()
     values = release_values()
-    result = review_validator().validate_independent_review_receipt(
+    validator = review_validator()
+    monkeypatch.setattr(validator, "utc_now", lambda: NOW)
+    result = validator.validate_independent_review_receipt(
         SimpleNamespace(
             review_receipt=review,
             registry=registry,

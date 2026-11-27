@@ -1,0 +1,55 @@
+{
+  "assignment_id": "OM1-DF-ARTIFACT-REHEARSAL-05",
+  "authority": {
+    "application_candidate_sha": "568f33f003a740baa488f03985b324c92ae9c376",
+    "authority_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
+    "authority_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "automated_claim_used": false,
+    "execution_identity": "OM1-A",
+    "integration_authority": "LAPTOP_MASTER",
+    "manual_reservation_verified": true,
+    "queue_sha256": "7a9d473727f4818a627ff3fd48646b5e917530aa56118d580e07d9f507bdc705"
+  },
+  "demonstrated_integration_defect": {
+    "failed_run_id": 46015442264,
+    "failed_run_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "failure": "qualification Python is not executable: python",
+    "finding": "Laptop Master composition retained the Redis and timezone follow-ups from the acknowledged CI correction but omitted its core pinned-runtime commit.",
+    "node_runtime_observed": "20",
+    "result": "REPRODUCED"
+  },
+  "implementation": {
+    "commit_sha": "d9cc1ef5ef9e2faa28354afb6c907d8894d4885f",
+    "node_runtime": "24.22.3",
+    "python_contract": "absolute executable resolved after setup-python",
+    "source": "exact reconciliation of acknowledged correction 0b71e6a05655c6c9e42c56fd40b61994cb056dcf onto current authority"
+  },
+  "local_artifact_evidence": {
+    "application_sha256": "a34607e246ab6b587dce7560bd06e9b565e5e9c5567ec6faab609da1af240de2",
+    "artifacts_verified": 2,
+    "configuration_files_verified": 8,
+    "dependency_files_verified": 5,
+    "manifest_file_sha256": "06337322f31e172b4ca4347995e9bc5ac5225b5fc3d40e0a70ea9d3aaa633d48",
+    "manifest_payload_sha256": "1469640c8863e625d790971a654f585da4407e669c0e77265b1dfce8be0f656f",
+    "reproducible": true,
+    "tooling_sha256": "9c1309a74a36622464418ee9c67500c1e1a50ef51ed2295a476ecbe5e3827ca9"
+  },
+  "qualification": {
+    "artifact_build": "PASS",
+    "artifact_independent_verification": "PASS",
+    "configuration_provenance": "PASS",
+    "focused_regression": "29 passed",
+    "hosted_ci": "PENDING_FOR_PUBLISHED_CHANGED_COMMIT",
+    "mismatch_rejection": "PASS",
+    "secret_free_evidence": "PASS"
+  },
+  "result": "LOCAL_PASS_HOSTED_PENDING",
+  "safety": {
+    "automatic_approval": false,
+    "live_database_mutation": false,
+    "live_deployment": false,
+    "private_key_access": false,
+    "provider_writes": false
+  },
+  "schema": "twelfthats.engineering-qualification/v1"
+}
