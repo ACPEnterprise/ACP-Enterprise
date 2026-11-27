@@ -1,0 +1,48 @@
+name: Development candidate preflight
+
+on:
+  push:
+    branches:
+      - work/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify qualified baseline and accepted corrections
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the exact workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Verify candidate before full qualification
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          qualification_python="$(command -v python)"
+          case "$qualification_python" in
+            /*) ;;
+            *) echo "qualification Python did not resolve to an absolute path" >&2; exit 64 ;;
+          esac
+          test -x "$qualification_python"
+          "$qualification_python" scripts/verify-development-candidate.py \
+            --repository . \
+            --candidate-sha "$CANDIDATE_SHA"
+          "$qualification_python" scripts/verify-platform-corrections.py \
+            --repository . \
+            --candidate-sha "$CANDIDATE_SHA"

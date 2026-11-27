@@ -1,0 +1,41 @@
+{
+  "cancelled_runs": [
+    46017143445,
+    46018221754,
+    46019324812,
+    46023361504,
+    46023408953,
+    46030220605
+  ],
+  "contract": "twelvehats-ci-drift-incident/v1",
+  "failed_runs": {
+    "node_20_incompatibility": [46024693397],
+    "ruff_format_inherited": [
+      46015812751,
+      46022607799,
+      46022862483,
+      46023153800,
+      46030493716
+    ],
+    "stale_python_argument": [
+      46015442264,
+      46016483273,
+      46016686879,
+      46018410608,
+      46019423121,
+      46021663936,
+      46023467474,
+      46023981273,
+      46025594714,
+      46030346759
+    ]
+  },
+  "finding": "Every failed SHA diverged before the qualified common baseline.",
+  "qualified_baseline": {
+    "run_id": 46029775062,
+    "sha": "6aec17be3ac0bc1316975b0222f39bc7c9903837",
+    "status": "success"
+  },
+  "total_cancelled": 6,
+  "total_failed": 16
+}

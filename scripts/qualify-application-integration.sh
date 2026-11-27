@@ -6,6 +6,14 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.application-acceptance.yml"
+COMPOSE_FILES=(--file "$COMPOSE_FILE")
+if [[ -n "${ACCEPTANCE_COMPOSE_OVERRIDE:-}" ]]; then
+  if [[ ! -f "$ACCEPTANCE_COMPOSE_OVERRIDE" ]]; then
+    echo "acceptance Compose override was not found" >&2
+    exit 1
+  fi
+  COMPOSE_FILES+=(--file "$ACCEPTANCE_COMPOSE_OVERRIDE")
+fi
 PROJECT="acp_application_acceptance_$$"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/acp-application-acceptance.XXXXXX")"
 ENV_FILE="$WORK_DIR/compose.env"
@@ -17,7 +25,7 @@ PRINCIPAL_CUSTODY_VOLUME="${PROJECT}-principal-custody"
 
 cleanup() {
   set +e
-  docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" --env-file "$ENV_FILE" down --volumes --remove-orphans >/dev/null 2>&1
+  docker compose --project-name "$PROJECT" "${COMPOSE_FILES[@]}" --env-file "$ENV_FILE" down --volumes --remove-orphans >/dev/null 2>&1
   docker volume rm "$SMOKE_CUSTODY_VOLUME" "$PRINCIPAL_CUSTODY_VOLUME" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
 }
@@ -57,7 +65,7 @@ printf '%s\n' '{"email":"acceptance-owner@example.invalid","password":"'"$owner_
 chmod 600 "$ENV_FILE" "$CREDENTIAL_FILE"
 
 compose() {
-  docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  docker compose --project-name "$PROJECT" "${COMPOSE_FILES[@]}" --env-file "$ENV_FILE" "$@"
 }
 
 PYTHON_BIN="$ROOT_DIR/backend/.venv/bin/python"

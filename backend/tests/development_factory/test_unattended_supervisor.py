@@ -193,7 +193,12 @@ def supervisor(
     )
 
 
-def limits(*, max_assignments: int = 1, max_cycles: int = 0) -> SupervisorLimits:
+def limits(
+    *,
+    max_assignments: int = 1,
+    max_cycles: int = 0,
+    max_discovery_failures: int = 60,
+) -> SupervisorLimits:
     return SupervisorLimits(
         poll_seconds=1,
         max_cycles=max_cycles,
@@ -201,6 +206,7 @@ def limits(*, max_assignments: int = 1, max_cycles: int = 0) -> SupervisorLimits
         max_runtime_seconds=60,
         minimum_free_bytes=1024**3,
         maximum_rss_bytes=64 * 1024**2,
+        max_discovery_failures=max_discovery_failures,
     )
 
 
@@ -332,6 +338,64 @@ def test_descendant_authority_replenishes_supported_profile_without_prompt(
         (tmp_path / "evidence" / "OM1-DF-SUPERVISOR-QUALIFICATION-06.json").read_text()
     )
     assert evidence["authority"]["queue_commit_sha"] == NEXT_QUEUE_SHA
+
+
+def test_rejected_authority_is_retried_then_corrected_descendant_executes(
+    tmp_path: Path,
+) -> None:
+    rejected = payload()
+    rejected["completed_evidence"].append(
+        {"assignment_id": "UNKNOWN-COMPLETION", "commit_sha": "f" * 40}
+    )
+    corrected = payload()
+    control = PersistentSupervisor(
+        tmp_path,
+        discovery=QueueDiscoverySupervisor(tmp_path / "coordination.json"),
+        source=ReplenishingSource(rejected, corrected),
+        plan_path=write_plan(tmp_path, corrected),
+        runtime_state_path=tmp_path / "runtime.json",
+        machine="OM1",
+        execution_identity="OM1-B",
+        sleep=lambda _seconds: None,
+        resource_probe=lambda _root: ResourceSnapshot(
+            12, 1.0, 20 * 1024**3, 32 * 1024**2
+        ),
+    )
+
+    result = control.run(limits=limits())
+
+    assert result.executed_assignments == ("OM1-DF-SUPERVISOR-CONTINUATION-04",)
+    runtime = json.loads((tmp_path / "runtime.json").read_text())
+    assert runtime["consecutive_discovery_failures"] == 0
+    assert runtime["last_error"] is None
+    assert any(
+        event["event"] == "AUTHORITY_DISCOVERY_REJECTED" for event in runtime["events"]
+    )
+
+
+def test_rejected_authority_exhausts_bounded_failure_budget(tmp_path: Path) -> None:
+    rejected = payload()
+    rejected["completed_evidence"].append(
+        {"assignment_id": "UNKNOWN-COMPLETION", "commit_sha": "f" * 40}
+    )
+    control = supervisor(tmp_path, rejected)
+
+    with pytest.raises(
+        UnattendedSupervisorError,
+        match="authority discovery failure budget exhausted",
+    ):
+        control.run(limits=limits(max_discovery_failures=2))
+
+    runtime = json.loads((tmp_path / "runtime.json").read_text())
+    assert runtime["active_pid"] is None
+    assert runtime["consecutive_discovery_failures"] == 2
+    assert (
+        sum(
+            event["event"] == "AUTHORITY_DISCOVERY_REJECTED"
+            for event in runtime["events"]
+        )
+        == 2
+    )
 
 
 def test_execution_plan_supersession_requires_previous_digest(tmp_path: Path) -> None:

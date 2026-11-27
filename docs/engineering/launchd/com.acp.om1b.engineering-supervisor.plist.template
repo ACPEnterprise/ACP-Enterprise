@@ -33,6 +33,8 @@
     <string>5368709120</string>
     <string>--maximum-rss-bytes</string>
     <string>536870912</string>
+    <string>--max-discovery-failures</string>
+    <string>60</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

@@ -6,7 +6,6 @@ on:
     branches:
       - integration/**
       - handoff/**
-      - work/**
   workflow_dispatch:
 
 permissions:
@@ -14,7 +13,9 @@ permissions:
 
 concurrency:
   group: immutable-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Release-bearing candidates must finish qualification. Work-branch pushes use
+  # the separate bounded preflight and may cancel superseded commits there.
+  cancel-in-progress: false
 
 jobs:
   qualify-and-build:
@@ -60,6 +61,9 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ github.sha }}
         run: |
+          "$QUALIFICATION_PYTHON" scripts/verify-development-candidate.py \
+            --repository . \
+            --candidate-sha "$CANDIDATE_SHA"
           "$QUALIFICATION_PYTHON" scripts/verify-platform-corrections.py \
             --repository . \
             --candidate-sha "$CANDIDATE_SHA"
