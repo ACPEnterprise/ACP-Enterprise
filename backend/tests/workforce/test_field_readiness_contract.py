@@ -248,11 +248,14 @@ async def test_field_readiness_fails_closed_without_technician_role(
                 end_at=start + timedelta(hours=1),
                 reason="Owner confirmed shift",
             )
-        assert await session.scalar(
-            select(WorkforceCapabilityProfile).where(
-                WorkforceCapabilityProfile.employee_id == employee_id
+        assert (
+            await session.scalar(
+                select(WorkforceCapabilityProfile).where(
+                    WorkforceCapabilityProfile.employee_id == employee_id
+                )
             )
-        ) is None
+            is None
+        )
 
 
 @pytest.mark.asyncio
@@ -284,11 +287,14 @@ async def test_field_readiness_fails_closed_without_membership_branch_grant(
                 end_at=start + timedelta(hours=1),
                 reason="Owner confirmed shift",
             )
-        assert await session.scalar(
-            select(WorkforceCapabilityProfile).where(
-                WorkforceCapabilityProfile.employee_id == employee_id
+        assert (
+            await session.scalar(
+                select(WorkforceCapabilityProfile).where(
+                    WorkforceCapabilityProfile.employee_id == employee_id
+                )
             )
-        ) is None
+            is None
+        )
 
 
 @pytest.mark.asyncio
