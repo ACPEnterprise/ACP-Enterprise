@@ -192,6 +192,11 @@ def project_manual_archive(*, root: Path, basis: str) -> dict[str, object]:
         "records": [],
         "mutation_authority": "none",
         "source_reconciliation": reconciliation,
+        "historical_reconciliation": _historical_reconciliation(
+            acquisition=acquisition,
+            report_reconciliation=reconciliation,
+            conflicts=conflicts,
+        ),
     }
 
 
@@ -334,6 +339,11 @@ def project_manual_aged_receivables(
 
     register = _read_json(root / "reconciliation-register.json")
     connection = _mapping(register.get("connection"))
+    net_open_ar = _mapping(ar["total_open"])
+    amount = net_open_ar.get("amount")
+    if not isinstance(amount, str):
+        raise QboEvidenceProjectionError("manual_archive_ar_total_invalid")
+    source_digest = str(projected["source_manifest_sha256"])
     return {
         "contract_version": "qbo-source-backed-ar-summary/v1",
         "authority": "QBO_SOURCE_BACKED",
@@ -350,13 +360,17 @@ def project_manual_aged_receivables(
             _read_json(root / "custody-manifest.json").get("sealed_at")
             or datetime.now(timezone.utc).isoformat()
         ),
-        "net_open_ar": ar["total_open"],
+        # This is the gross invoice Balance total.  It intentionally uses the
+        # provider contract's scalar shape while the boolean below prevents a
+        # client from representing it as net of credits/unapplied payments.
+        "net_open_ar": amount,
         "current": _amount(current),
         "overdue": _amount(overdue),
         "invoice_evidence_count": ar["invoice_evidence_count"],
         "open_invoice_count": ar["open_invoice_count"],
         "includes_customer_credits_and_unapplied_payments": False,
-        "source_manifest_sha256": projected["source_manifest_sha256"],
+        "source_digest": source_digest,
+        "source_manifest_sha256": source_digest,
         "accepted_as_acp_accounting": False,
         "mutation_authority": "none",
         "limitations": [
@@ -504,18 +518,69 @@ def _report_controls(root: Path, as_of: str, basis: str) -> list[dict[str, objec
 def _conflicts(value: object) -> list[dict[str, object]]:
     if not isinstance(value, list):
         return []
-    return [
-        {
-            "conflict_id": str(item.get("id") or "unknown"),
-            "subject_label": "All County historical accounting",
-            "fact_name": str(item.get("classification") or "reconciliation"),
-            "state": "unresolved",
-            "source_assertions": [],
-            "limitation": str(item.get("description") or "Source exception preserved."),
-        }
-        for item in value
-        if isinstance(item, Mapping)
-    ]
+    conflicts: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        evidence = [
+            {"name": str(key), "value": str(item[key])}
+            for key in sorted(item)
+            if key not in {"id", "classification", "description", "next_action"}
+            and item[key] is not None
+        ]
+        conflicts.append(
+            {
+                "conflict_id": str(item.get("id") or "unknown"),
+                "subject_label": "All County historical accounting",
+                "fact_name": str(item.get("classification") or "reconciliation"),
+                "state": "unresolved",
+                "source_assertions": [],
+                "limitation": str(
+                    item.get("description") or "Source exception preserved."
+                ),
+                "next_action": str(
+                    item.get("next_action") or "Retain for explicit accounting review."
+                ),
+                "evidence": evidence,
+            }
+        )
+    return conflicts
+
+
+def _historical_reconciliation(
+    *,
+    acquisition: Mapping[str, object],
+    report_reconciliation: Mapping[str, object],
+    conflicts: list[dict[str, object]],
+) -> dict[str, object]:
+    """Project non-PII acquisition controls for authenticated operator review."""
+
+    counts = _mapping(acquisition.get("counts"))
+    invoice = _mapping(acquisition.get("invoice"))
+    payment = _mapping(acquisition.get("payment"))
+    return {
+        "state": "RECONCILED_WITH_DISCLOSED_EXCEPTIONS",
+        "source_record_count": int(cast(Any, acquisition.get("record_count")) or 0),
+        "relationship_id_count": int(
+            cast(Any, acquisition.get("relationship_ids_preserved")) or 0
+        ),
+        "conflict_count": len(conflicts),
+        "customer_count": int(cast(Any, counts.get("customer")) or 0),
+        "invoice_count": int(cast(Any, counts.get("invoice")) or 0),
+        "invoice_line_count": int(cast(Any, invoice.get("line_count")) or 0),
+        "invoice_open_balance": _amount(invoice.get("open_balance")),
+        "payment_count": int(cast(Any, counts.get("payment")) or 0),
+        "payment_total": _amount(payment.get("total_amount")),
+        "payment_invoice_links": int(cast(Any, payment.get("invoice_links")) or 0),
+        "missing_payment_invoice_links": int(
+            cast(Any, payment.get("missing_linked_invoice_ids")) or 0
+        ),
+        "unlinked_payment_count": int(cast(Any, payment.get("without_links")) or 0),
+        "unlinked_payment_total": _amount(payment.get("without_links_total")),
+        "provider_unapplied_amount": _amount(payment.get("unapplied_amount")),
+        "controls": dict(report_reconciliation),
+        "mutation_authority": "none",
+    }
 
 
 def _amount(value: object) -> dict[str, object]:

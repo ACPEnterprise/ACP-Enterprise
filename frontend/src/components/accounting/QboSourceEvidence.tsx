@@ -55,7 +55,18 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
     : ({ amount: null, currency: null, state: "unavailable" as const } satisfies QboAmount);
   const grossAmount = Number(value.ar.total_open.amount);
   const netAmount = Number(arSummary.data?.net_open_ar);
+  const arSummaryLabel = !arSummary.data
+    ? "Net open A/R unavailable"
+    : arSummary.data.includes_customer_credits_and_unapplied_payments
+      ? "Real total open A/R"
+      : "Archive open invoice balance";
+  const arSummaryDescription = !arSummary.data
+    ? "No source-backed A/R summary was available; no value was inferred"
+    : arSummary.data.includes_customer_credits_and_unapplied_payments
+      ? "QBO A/R Aging Summary · net of customer credits and unapplied payments"
+      : "Sealed invoice Balance fields · credits and unapplied payments require the disclosed A/R bridge";
   const creditOffset =
+    arSummary.data?.includes_customer_credits_and_unapplied_payments &&
     Number.isFinite(grossAmount) && Number.isFinite(netAmount)
       ? ({
           amount: (grossAmount - netAmount).toFixed(2),
@@ -117,6 +128,45 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
             ))}
           </ul>
         </Alert>
+      ) : null}
+      {value.historical_reconciliation ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Historical accounting reconciliation</CardTitle>
+            <CardDescription>
+              Sealed, read-only source evidence reconciled with disclosed
+              exceptions. No records were posted to TwelveHats or QuickBooks.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
+              <div>
+                <dt className="text-content-muted">Source records</dt>
+                <dd>{value.historical_reconciliation.source_record_count.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Relationships</dt>
+                <dd>{value.historical_reconciliation.relationship_id_count.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Customers</dt>
+                <dd>{value.historical_reconciliation.customer_count.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Invoices / lines</dt>
+                <dd>{value.historical_reconciliation.invoice_count.toLocaleString()} / {value.historical_reconciliation.invoice_line_count.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Payment→invoice links</dt>
+                <dd>{value.historical_reconciliation.payment_invoice_links.toLocaleString()} · {value.historical_reconciliation.missing_payment_invoice_links} missing</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Disclosed conflicts</dt>
+                <dd>{value.historical_reconciliation.conflict_count}</dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
       ) : null}
       <Card>
         <CardHeader>
@@ -228,10 +278,10 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Real total open A/R</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{arSummaryLabel}</CardTitle></CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{arSummary.isLoading ? "Loading…" : money(netOpenAr)}</p>
-            <p className="text-sm text-content-muted">QBO A/R Aging Summary · net of customer credits and unapplied payments</p>
+            <p className="text-sm text-content-muted">{arSummaryDescription}</p>
           </CardContent>
         </Card>
         <Card>
@@ -337,6 +387,16 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                   <p className="text-sm text-content-muted">
                     {conflict.limitation}
                   </p>
+                  {conflict.evidence?.length ? (
+                    <p className="text-sm text-content-muted">
+                      Evidence: {conflict.evidence.map((item) => `${item.name}=${item.value}`).join(" · ")}
+                    </p>
+                  ) : null}
+                  {conflict.next_action ? (
+                    <p className="text-sm">
+                      <strong>Next action:</strong> {conflict.next_action}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -376,7 +436,6 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                       <td className="py-2">
                         {row.transaction_date ?? "Unavailable"}
                       </td>
-                      <td className="font-mono text-xs">{row.source_id}</td>
                       <td>{row.customer_label ?? "Unavailable"}</td>
                       <td>{money(row.amount)}</td>
                       <td>{row.source_status ?? "Unavailable"}</td>
@@ -386,6 +445,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
                           ? ` · ${row.applied_document_ids.length} document(s)`
                           : ""}
                       </td>
+                      <td className="font-mono text-xs">{row.source_id}</td>
                     </tr>
                   ))}
                 </tbody>

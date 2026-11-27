@@ -1,0 +1,40 @@
+{
+  "accepted_as_native_accounting": false,
+  "ar_bridge_difference": "100801.91",
+  "balance_sheet_difference": "0.00",
+  "bounded_snapshot_sha256": "e4d672c1cdfca858e4a8e923a51a86627753c7ea1fedc695daa98066a5dc6041",
+  "conflicts": [
+    "D-001",
+    "D-002",
+    "D-003",
+    "D-004",
+    "D-005",
+    "D-006",
+    "D-007"
+  ],
+  "contract": "all-county-accounting-recovery-qualification/v1",
+  "custody_manifest_sha256": "f6640c0d531eaa8a822e82f697b3aaead65c8ae7b52a3c527e9616642c4d4f4a",
+  "customer_count": 909,
+  "external_mutation_authority": "none",
+  "external_mutations": 0,
+  "general_ledger_amount_difference": "0.00",
+  "invoice_count": 1341,
+  "invoice_line_count": 3140,
+  "invoice_open_balance": {
+    "amount": "500584.34",
+    "currency": "USD",
+    "state": "available"
+  },
+  "journal_difference": "0.00",
+  "missing_payment_invoice_links": 0,
+  "open_invoice_count": 101,
+  "payment_count": 1237,
+  "payment_invoice_links": 1171,
+  "profit_and_loss_difference": "0.00",
+  "rehearsal_digest": "236c5ea97007a2a8b2dcaa24614e676972079ed0e1d50900f9df3b0e008d37d3",
+  "relationship_id_count": 97093,
+  "result": "PASS_WITH_DISCLOSED_EXCEPTIONS",
+  "source_manifest_sha256": "b9a8bd5139bf70e80131c0c8096459e4f1c65576049ee58d91b683d8eeb5378f",
+  "source_record_count": 20702,
+  "trial_balance_difference": "0.00"
+}
