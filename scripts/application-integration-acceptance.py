@@ -14,7 +14,7 @@ import secrets
 import sys
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -251,7 +251,7 @@ def initial_flow(
         expected={201},
     )
     employee_id = str(technician["employee_id"])
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     next_slot_minutes = ((now.minute // 30) + 1) * 30
     window_start = now.replace(minute=0, second=0, microsecond=0) + timedelta(
         minutes=next_slot_minutes
