@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.acp.om1b.engineering-supervisor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-m</string>
+    <string>development_factory</string>
+    <string>--repo-root</string>
+    <string>__REPO_ROOT__</string>
+    <string>coordination</string>
+    <string>supervisor-run</string>
+    <string>--machine</string>
+    <string>OM1</string>
+    <string>--execution-identity</string>
+    <string>OM1-B</string>
+    <string>--state</string>
+    <string>__REPO_ROOT__/.development-factory/om1b/coordination.json</string>
+    <string>--runtime-state</string>
+    <string>__REPO_ROOT__/.development-factory/om1b/runtime.json</string>
+    <string>--plan</string>
+    <string>__REPO_ROOT__/docs/engineering/evidence/om1b-unattended-execution-plan-20261127.json</string>
+    <string>--poll-seconds</string>
+    <string>60</string>
+    <string>--max-assignments</string>
+    <string>8</string>
+    <string>--max-runtime-seconds</string>
+    <string>21600</string>
+    <string>--minimum-free-bytes</string>
+    <string>5368709120</string>
+    <string>--maximum-rss-bytes</string>
+    <string>536870912</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>__REPO_ROOT__/backend</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>__REPO_ROOT__</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>Nice</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>__REPO_ROOT__/.development-factory/om1b/launchd.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO_ROOT__/.development-factory/om1b/launchd.stderr.log</string>
+</dict>
+</plist>

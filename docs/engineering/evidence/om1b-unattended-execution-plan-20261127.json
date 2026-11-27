@@ -1,0 +1,30 @@
+{
+  "schema": "twelfthats.unattended-execution-plan.v1",
+  "machine": "OM1",
+  "execution_identity": "OM1-B",
+  "authority_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
+  "authority_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+  "allow_authority_profile_extensions": true,
+  "supersedes_plan_sha256": "c8d0b122c286736abba07c14f313bf06f9c76fba63118a7d3a5c44a6ddafeb25",
+  "assignments": [
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-04",
+      "contract_sha256": "4d63a1ad4e59111f38b7a6d3238c75a25e7263838313ad1c4f59b8b41f738f80",
+      "profile": "supervisor_continuation"
+    },
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-UNATTENDED-05",
+      "contract_sha256": "e89eb287680bff929d80e91c65de88dc2ccb87ffbf162e4899efddb2520158c1",
+      "profile": "supervisor_unattended"
+    }
+  ],
+  "safety": {
+    "worker_control_claims": false,
+    "worker_control_leases": false,
+    "automatic_commit": false,
+    "automatic_push": false,
+    "automatic_merge": false,
+    "automatic_deploy": false,
+    "protected_execution": false
+  }
+}

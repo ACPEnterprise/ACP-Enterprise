@@ -29,11 +29,23 @@ from development_factory.queue_discovery import (
 from development_factory.reports import render_markdown
 from development_factory.review_records import ReviewRecordError
 from development_factory.task_contract import TaskContractError
+from development_factory.unattended_supervisor import (
+    PersistentSupervisor,
+    SupervisorLimits,
+)
 from development_factory.worker_execution import WorkerExecutionError, WorkerExecutor
 from development_factory.workflow import Action, WorkflowError, WorkflowState
 from development_factory.workspaces import WorkspaceError, WorkspaceManager
 
 MACHINES = ("LAPTOP_MASTER", "OM1", "OM2", "REVIEWER")
+EXECUTION_IDENTITIES = (
+    "LAPTOP_MASTER",
+    "LAPTOP_REVIEWER",
+    "OM1-A",
+    "OM1-B",
+    "OM2-A",
+    "OM2-B",
+)
 
 
 def _add_supervisor_state(parser: argparse.ArgumentParser) -> None:
@@ -46,6 +58,12 @@ def _add_supervisor_state(parser: argparse.ArgumentParser) -> None:
 
 def _add_machine(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--machine", required=True, choices=MACHINES)
+
+
+def _add_execution_identity(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--execution-identity", required=True, choices=EXECUTION_IDENTITIES
+    )
 
 
 def _resolve(root: Path, path: Path) -> Path:
@@ -140,6 +158,7 @@ def main() -> int:
     )
     discover = coordination_commands.add_parser("discover")
     _add_machine(discover)
+    _add_execution_identity(discover)
     discover.add_argument("--remote", default="origin")
     discover.add_argument(
         "--state",
@@ -156,14 +175,17 @@ def main() -> int:
     supervisor_begin.add_argument("assignment_id")
     supervisor_begin.add_argument("--queue-digest", required=True)
     _add_machine(supervisor_begin)
+    _add_execution_identity(supervisor_begin)
     _add_supervisor_state(supervisor_begin)
     supervisor_recover = coordination_commands.add_parser("supervisor-recover")
     _add_machine(supervisor_recover)
+    _add_execution_identity(supervisor_recover)
     _add_supervisor_state(supervisor_recover)
     supervisor_reconcile = coordination_commands.add_parser("supervisor-reconcile")
     supervisor_reconcile.add_argument("assignment_id")
     supervisor_reconcile.add_argument("--evidence-sha256", required=True)
     _add_machine(supervisor_reconcile)
+    _add_execution_identity(supervisor_reconcile)
     supervisor_reconcile.add_argument(
         "--completed", action=argparse.BooleanOptionalAction, required=True
     )
@@ -172,12 +194,15 @@ def main() -> int:
     supervisor_complete.add_argument("assignment_id")
     supervisor_complete.add_argument("--evidence-sha256", required=True)
     _add_machine(supervisor_complete)
+    _add_execution_identity(supervisor_complete)
     _add_supervisor_state(supervisor_complete)
     supervisor_shutdown = coordination_commands.add_parser("supervisor-shutdown")
     _add_machine(supervisor_shutdown)
+    _add_execution_identity(supervisor_shutdown)
     _add_supervisor_state(supervisor_shutdown)
     supervisor_continue = coordination_commands.add_parser("supervisor-continue")
     _add_machine(supervisor_continue)
+    _add_execution_identity(supervisor_continue)
     _add_supervisor_state(supervisor_continue)
     supervisor_continue.add_argument("--remote", default="origin")
     supervisor_continue.add_argument("--max-polls", type=int, default=6)
@@ -188,6 +213,27 @@ def main() -> int:
         action="append",
         default=[],
         dest="completed_assignments",
+    )
+    supervisor_run = coordination_commands.add_parser("supervisor-run")
+    _add_machine(supervisor_run)
+    _add_execution_identity(supervisor_run)
+    _add_supervisor_state(supervisor_run)
+    supervisor_run.add_argument("--remote", default="origin")
+    supervisor_run.add_argument("--plan", type=Path, required=True)
+    supervisor_run.add_argument(
+        "--runtime-state",
+        type=Path,
+        default=Path(".development-factory/unattended/runtime.json"),
+    )
+    supervisor_run.add_argument("--poll-seconds", type=float, default=60)
+    supervisor_run.add_argument("--max-cycles", type=int, default=0)
+    supervisor_run.add_argument("--max-assignments", type=int, default=8)
+    supervisor_run.add_argument("--max-runtime-seconds", type=float, default=21_600)
+    supervisor_run.add_argument(
+        "--minimum-free-bytes", type=int, default=5 * 1024 * 1024 * 1024
+    )
+    supervisor_run.add_argument(
+        "--maximum-rss-bytes", type=int, default=512 * 1024 * 1024
     )
     subparsers.add_parser("report")
     task = subparsers.add_parser("task")
@@ -263,6 +309,7 @@ def main() -> int:
                 discovery_result = QueueDiscoverySupervisor(state).discover(
                     source,
                     machine=args.machine,
+                    execution_identity=args.execution_identity,
                     supplied_completed=args.completed_assignments,
                 )
                 print(
@@ -279,6 +326,7 @@ def main() -> int:
                                 discovery_result.completed_assignments
                             ),
                             "attempts": discovery_result.attempts,
+                            "execution_identity": discovery_result.execution_identity,
                         },
                         sort_keys=True,
                     )
@@ -291,6 +339,7 @@ def main() -> int:
                     continuation = discovery_supervisor.continue_until_work(
                         GitQueueSource(args.repo_root, remote=args.remote),
                         machine=args.machine,
+                        execution_identity=args.execution_identity,
                         supplied_completed=args.completed_assignments,
                         limits=ContinuationLimits(
                             max_polls=args.max_polls,
@@ -299,16 +348,39 @@ def main() -> int:
                         ),
                     )
                     print(json.dumps(continuation.__dict__, sort_keys=True))
+                elif args.coordination_command == "supervisor-run":
+                    persistent_runner = PersistentSupervisor(
+                        args.repo_root,
+                        discovery=discovery_supervisor,
+                        source=GitQueueSource(args.repo_root, remote=args.remote),
+                        plan_path=_resolve(args.repo_root, args.plan),
+                        runtime_state_path=_resolve(args.repo_root, args.runtime_state),
+                        machine=args.machine,
+                        execution_identity=args.execution_identity,
+                    )
+                    persistent_result = persistent_runner.run(
+                        limits=SupervisorLimits(
+                            poll_seconds=args.poll_seconds,
+                            max_cycles=args.max_cycles,
+                            max_assignments=args.max_assignments,
+                            max_runtime_seconds=args.max_runtime_seconds,
+                            minimum_free_bytes=args.minimum_free_bytes,
+                            maximum_rss_bytes=args.maximum_rss_bytes,
+                        )
+                    )
+                    print(json.dumps(persistent_result.__dict__, sort_keys=True))
                 elif args.coordination_command == "supervisor-begin":
                     discovery_supervisor.begin(
                         args.assignment_id,
                         queue_digest=args.queue_digest,
                         machine=args.machine,
+                        execution_identity=args.execution_identity,
                     )
                     print(f"Supervisor began: {args.assignment_id}")
                 elif args.coordination_command == "supervisor-recover":
                     recovered = discovery_supervisor.recover_after_restart(
-                        machine=args.machine
+                        machine=args.machine,
+                        execution_identity=args.execution_identity,
                     )
                     print(
                         "Reconciliation required: " + (", ".join(recovered) or "NONE")
@@ -319,6 +391,7 @@ def main() -> int:
                         completed=args.completed,
                         evidence_sha256=args.evidence_sha256,
                         machine=args.machine,
+                        execution_identity=args.execution_identity,
                     )
                     print(f"Supervisor reconciled: {args.assignment_id}")
                 elif args.coordination_command == "supervisor-complete":
@@ -326,11 +399,13 @@ def main() -> int:
                         args.assignment_id,
                         evidence_sha256=args.evidence_sha256,
                         machine=args.machine,
+                        execution_identity=args.execution_identity,
                     )
                     print(f"Supervisor completed: {args.assignment_id}")
                 else:
                     interrupted = discovery_supervisor.safe_shutdown(
-                        machine=args.machine
+                        machine=args.machine,
+                        execution_identity=args.execution_identity,
                     )
                     print(
                         "Safe shutdown; reconciliation required: "

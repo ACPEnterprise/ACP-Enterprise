@@ -50,6 +50,7 @@ class Assignment:
     allowed_paths: tuple[str, ...] = ()
     validation: tuple[str, ...] = ()
     stop_conditions: tuple[str, ...] = ()
+    execution_profile: str | None = None
 
 
 @dataclass(frozen=True)
@@ -298,6 +299,9 @@ def validate_queue(payload: object) -> CoordinationQueue:
                 stop_conditions=_string_list(
                     raw.get("stop_conditions", []), ident, "stop_conditions"
                 ),
+                execution_profile=_optional_string(
+                    raw.get("execution_profile"), ident, "execution_profile"
+                ),
             )
         )
 
@@ -429,6 +433,14 @@ def _string_list(value: object, assignment_id: str, field: str) -> tuple[str, ..
     ):
         raise CoordinationError(f"{assignment_id}: {field} must be a list of strings")
     return tuple(str(item) for item in value)
+
+
+def _optional_string(value: object, assignment_id: str, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise CoordinationError(f"{assignment_id}: {field} must be a nonempty string")
+    return value
 
 
 def dependency_layers(queue: CoordinationQueue) -> tuple[tuple[str, ...], ...]:

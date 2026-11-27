@@ -1,0 +1,64 @@
+{
+  "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-04",
+  "authority": {
+    "canonical_queue_sha256": "f8a26548fc2d89131b8a9582a9d866cc3b0b278bb478a60f4f7b35eb94d1aadf",
+    "contract_sha256": "4d63a1ad4e59111f38b7a6d3238c75a25e7263838313ad1c4f59b8b41f738f80",
+    "execution_identity": "OM1-B",
+    "machine": "OM1",
+    "queue_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
+    "queue_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "reservation": "RESERVED_MANUAL"
+  },
+  "completed_at_utc": "2026-11-27T14:39:44.020600+00:00",
+  "diagnosis": {
+    "cause": "The existing bounded foreground poller had no persistent process owner or assignment executor, and queue ownership was filtered only by physical machine rather than the six-lane execution identity.",
+    "previous_persistent_supervisor_found": false,
+    "previous_supervisor_checkpoint_found": false,
+    "unrelated_launch_agents_treated_as_engineering_continuity": false
+  },
+  "evidence_sha256": "1ac7c54c361c4c5d1307273aacf131fcb240e0de813a08cebafda4a37b4003b2",
+  "implementation": {
+    "activation_sha": "0ce7ce14cc695ef9cdd33c48dc5be11cb76e7690",
+    "checkpoint_recovery_sha": "776f1d0412f1d6aa10e9e53de1f0d1ff61a498f8",
+    "source_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "task_branch": "work/om1b-supervisor-continuation-04"
+  },
+  "operation": {
+    "assignment_attempts": 1,
+    "assignment_started_at_utc": "2026-11-27T14:39:44.017922+00:00",
+    "checkpoint_mode": "0600",
+    "current_authority_discovered": true,
+    "dependency_completed": "OM1-DF-SUPERVISOR-CONTINUATION-03",
+    "local_completion_persisted": true,
+    "successor_discovered": "OM1-DF-SUPERVISOR-UNATTENDED-05"
+  },
+  "protected_acceptance": {
+    "actual_protected_acceptance_performed": false,
+    "classification": "UNPROTECTED_OPERATIONAL_QUALIFICATION",
+    "production_claim_enabled": false
+  },
+  "publication": {
+    "remote_branch_published": false,
+    "status": "BLOCKED_GITHUB_WRITE_AUTHENTICATION"
+  },
+  "result": "PASS_LOCAL_PUBLICATION_BLOCKED",
+  "safety": {
+    "automatic_approval": false,
+    "deployment_performed": false,
+    "external_system_write_performed": false,
+    "private_key_accessed": false,
+    "protected_data_accessed": false,
+    "worker_control_claim_created": false,
+    "worker_control_lease_created": false
+  },
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "development_factory_tests": "200 passed in two isolated groups (176 + 24)",
+    "duplicate_execution_prevention": "PASS",
+    "execution_identity_denial": "PASS_EXIT_2",
+    "focused_supervisor_and_queue_tests": "22 passed",
+    "mypy": "PASS_33_SOURCE_FILES",
+    "ruff": "PASS",
+    "ruff_format": "PASS_49_FILES"
+  }
+}

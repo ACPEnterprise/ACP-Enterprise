@@ -1,0 +1,91 @@
+{
+  "assignment_id": "OM1-DF-SUPERVISOR-UNATTENDED-05",
+  "authority": {
+    "canonical_queue_sha256": "f8a26548fc2d89131b8a9582a9d866cc3b0b278bb478a60f4f7b35eb94d1aadf",
+    "contract_sha256": "e89eb287680bff929d80e91c65de88dc2ccb87ffbf162e4899efddb2520158c1",
+    "execution_identity": "OM1-B",
+    "machine": "OM1",
+    "queue_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
+    "queue_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "reservation": "RESERVED_MANUAL"
+  },
+  "completed_at_utc": "2026-11-27T14:39:53.002071+00:00",
+  "evidence_sha256": "5dbe79c59e14562850394a40b3aad35881b2f0302703e77dda6b1da558d84fe5",
+  "implementation": {
+    "activation_sha": "0ce7ce14cc695ef9cdd33c48dc5be11cb76e7690",
+    "checkpoint_recovery_sha": "776f1d0412f1d6aa10e9e53de1f0d1ff61a498f8",
+    "source_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "task_branch": "work/om1b-supervisor-continuation-04"
+  },
+  "operation": {
+    "assignment_attempts": 1,
+    "assignment_started_at_utc": "2026-11-27T14:39:52.999213+00:00",
+    "checkpoint_mode": "0600",
+    "duplicate_replay_after_completion": false,
+    "idle_queue_observed": true,
+    "persistent_process": {
+      "active_pid_at_evidence_capture": 35742,
+      "heartbeat_at_utc": "2026-11-27T14:49:12.279813+00:00",
+      "managed_execution_session": 99194,
+      "maximum_runtime_seconds": 21600,
+      "poll_seconds": 60,
+      "status": "ACTIVE_AT_EVIDENCE_CAPTURE"
+    },
+    "resources": {
+      "free_bytes": 16054116352,
+      "load_average_1m": 2.0205078125,
+      "logical_cpu_count": 12,
+      "process_max_rss_bytes": 22204416
+    },
+    "restart_count_at_evidence_capture": 6,
+    "stale_checkpoint_recovery": {
+      "event": "STALE_ACTIVE_PID_RECOVERED",
+      "recovered_at_utc": "2026-11-27T14:46:26.045925+00:00",
+      "stale_pid": 26957
+    },
+    "successive_assignments_completed": [
+      "OM1-DF-SUPERVISOR-CONTINUATION-04",
+      "OM1-DF-SUPERVISOR-UNATTENDED-05"
+    ]
+  },
+  "persistent_registration": {
+    "launchd_bootstrap_exit": 5,
+    "launchd_registered": false,
+    "managed_execution_session_active": true,
+    "status": "HOST_REGISTRATION_BLOCKED_IN_SANDBOX"
+  },
+  "protected_acceptance": {
+    "actual_protected_acceptance_performed": false,
+    "classification": "UNPROTECTED_OPERATIONAL_QUALIFICATION",
+    "production_claim_enabled": false
+  },
+  "publication": {
+    "remote_branch_published": false,
+    "status": "BLOCKED_GITHUB_WRITE_AUTHENTICATION"
+  },
+  "result": "PASS_LOCAL_PUBLICATION_BLOCKED",
+  "safety": {
+    "automatic_approval": false,
+    "deployment_performed": false,
+    "external_system_write_performed": false,
+    "private_key_accessed": false,
+    "protected_data_accessed": false,
+    "worker_control_claim_created": false,
+    "worker_control_lease_created": false
+  },
+  "schema": "twelfthats.engineering-qualification/v1",
+  "validation": {
+    "authority_ref_and_sha_revalidation": "PASS",
+    "development_factory_tests": "200 passed in two isolated groups (176 + 24)",
+    "duplicate_execution_prevention": "PASS",
+    "execution_identity_denial": "PASS_EXIT_2",
+    "fail_closed_contract_binding": "PASS",
+    "focused_supervisor_and_queue_tests": "22 passed",
+    "idle_session_detection": "PASS",
+    "mypy": "PASS_33_SOURCE_FILES",
+    "restart_recovery": "PASS",
+    "ruff": "PASS",
+    "ruff_format": "PASS_49_FILES",
+    "successor_discovery": "PASS"
+  }
+}
