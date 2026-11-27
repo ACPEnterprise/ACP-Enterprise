@@ -35,7 +35,7 @@
     },
     "appointment_cancellation": {
       "status": "PASS_FRONTEND_COMPLETE_SUITE_AND_PRODUCTION_BUILD",
-      "implementation_sha": "dae70c18c5c705990278cd9f56d9e6f77953c22f",
+      "implementation_sha": "dae70c18db7290901860e46b64089cce9065c28c",
       "authority": "Existing backend scheduling cancellation contract; no backend authority change.",
       "controls": [
         "COMPANY_SCHEDULING_MANAGE permission",
