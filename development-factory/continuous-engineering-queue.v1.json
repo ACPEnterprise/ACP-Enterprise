@@ -3,7 +3,7 @@
   "status": "AUTHORITATIVE_HANDOFF_PENDING_MACHINE_ACKNOWLEDGMENT",
   "handoff": {
     "revision": "friday-consolidated-20261127-01",
-    "application_candidate_sha": "8145776e3f9b6f2ecaf9d07a068eaec44c7d56af",
+    "application_candidate_sha": "5fe4ba659b4ac04acabe016c8a799cfd795523f4",
     "integration_branch": "integration/friday-consolidated-20261127",
     "parent_candidate_sha": "8733e4b41e96136f605e502d3155570a5ac023e3",
     "published_by": "LAPTOP_MASTER",
@@ -92,7 +92,7 @@
   "source_register": {
     "laptop_inventory_head": "e730fd58f2a0a5b63184c8d09a423e8f9c7728fc",
     "protected_integration_branch": "integration/friday-consolidated-20261127",
-    "protected_integration_sha": "8145776e3f9b6f2ecaf9d07a068eaec44c7d56af",
+    "protected_integration_sha": "5fe4ba659b4ac04acabe016c8a799cfd795523f4",
     "remote": "https://github.com/ACPEnterprise/ACP-Enterprise.git"
   },
   "manual_reservations": [
