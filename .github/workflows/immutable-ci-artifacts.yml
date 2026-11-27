@@ -61,7 +61,7 @@ jobs:
           npm run typecheck --prefix mobile
 
       - name: Backend qualification
-        run: scripts/qualify-backend-tests --python python -ra backend/tests
+        run: scripts/qualify-backend-tests --python "$(command -v python)" -ra backend/tests
 
       - name: Frontend and mobile qualification
         run: |
