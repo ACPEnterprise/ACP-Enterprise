@@ -191,6 +191,15 @@ export function DispatchAssignmentPanel({
           <h3 className="text-lg font-semibold">
             Assign {item.appointment_number}
           </h3>
+          {item.customer_display_name && (
+            <p className="font-medium">
+              {item.customer_display_name}
+              {item.job_number ? ` · Job ${item.job_number}` : ""}
+            </p>
+          )}
+          {item.service_location_label && (
+            <p className="text-sm text-content-muted">{item.service_location_label}</p>
+          )}
           <p className="text-sm text-content-muted">
             {new Date(item.window_start_at).toLocaleString()} ·{" "}
             {assignment?.primary_employee_name ?? "No primary technician"}

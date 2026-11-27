@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,14 +9,24 @@ if (!baseUrl || !credentialPath || !receiptPath || !outputPath) {
   throw new Error("usage: node real-browser-workflow.mjs BASE_URL CREDENTIALS RECEIPT OUTPUT [PHASE]");
 }
 
+if ((statSync(credentialPath).mode & 0o077) !== 0) {
+  throw new Error("credential file must not be accessible by group or other users (mode 0600 required)");
+}
+
 const credentials = JSON.parse(readFileSync(credentialPath, "utf8"));
 const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
 const artifactDirectory = `${outputPath}.artifacts`;
 mkdirSync(artifactDirectory, { recursive: true, mode: 0o700 });
 const profile = mkdtempSync(join(tmpdir(), "om2b-chrome-"));
-const debuggingPort = 19222;
+const debuggingPort = Number(process.env.OM2B_CHROME_DEBUG_PORT ?? "19222");
+const browserExecutable = process.env.OM2B_CHROME_EXECUTABLE
+  ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const servingSha = process.env.OM2B_SERVING_SHA;
+if (!servingSha) {
+  throw new Error("OM2B_SERVING_SHA is required and must identify the code served by the runtime");
+}
 const chrome = spawn(
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  browserExecutable,
   [
     "--headless=new",
     "--disable-gpu",
@@ -155,9 +165,9 @@ try {
   const output = {
     schema: "twelvehats.om2b.real-browser-workflow.v1",
     phase,
-    browser: "Google Chrome 158.0.8127.88",
+    browser: process.env.OM2B_BROWSER_LABEL ?? "Chromium-compatible browser",
     base_url: baseUrl,
-    serving_sha: "568f33f003a740baa488f03985b324c92ae9c376",
+    serving_sha: servingSha,
     fixture: "SYNTHETIC_DISPOSABLE",
     authenticated: true,
     results,

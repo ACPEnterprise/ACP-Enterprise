@@ -21,6 +21,9 @@ const released = {
   appointment_id: "appointment-1",
   appointment_number: "APT-1",
   job_id: "job-1",
+  job_number: "JOB-1",
+  customer_display_name: "Alex County",
+  service_location_label: "10 Main St, Albany, NY",
   branch_id: "branch-1",
   status: "scheduled",
   window_start_at: "2026-09-17T13:00:00Z",
@@ -54,6 +57,8 @@ describe("DispatchAssignmentPanel", () => {
     render(<MemoryRouter><DispatchAssignmentPanel item={released} onClose={vi.fn()} /></MemoryRouter>);
 
     expect(screen.getByText(/No primary technician/)).toBeVisible();
+    expect(screen.getByText("Alex County · Job JOB-1")).toBeVisible();
+    expect(screen.getByText("10 Main St, Albany, NY")).toBeVisible();
     expect(screen.getByText((_, element) => element?.textContent === "The latest assignment is released history. Assign a technician to create new current Dispatch authority.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Assign primary" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Add crew member" })).not.toBeInTheDocument();
