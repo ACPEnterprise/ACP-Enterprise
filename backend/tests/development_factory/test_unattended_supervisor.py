@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import stat
 from pathlib import Path
@@ -202,6 +203,9 @@ def test_successive_assignments_require_restart_and_execute_once(
 
     runtime = json.loads((tmp_path / "runtime.json").read_text())
     assert runtime["start_count"] == 3
+    assert runtime["active_pid"] is None
+    assert runtime["last_heartbeat_at_utc"] is not None
+    assert runtime["last_observed_authority_sha"] == QUEUE_SHA
     assert {
         assignment_id: record["attempts"]
         for assignment_id, record in runtime["assignments"].items()
@@ -214,6 +218,31 @@ def test_successive_assignments_require_restart_and_execute_once(
         (tmp_path / "evidence" / "OM1-DF-SUPERVISOR-UNATTENDED-05.json").read_text()
     )
     assert unattended_evidence["operation"]["restart_observed"] is True
+
+
+def test_stale_active_pid_is_reconciled_under_exclusive_lock(tmp_path: Path) -> None:
+    value = payload()
+    control = supervisor(tmp_path, value)
+    control.run(limits=limits())
+
+    runtime_path = tmp_path / "runtime.json"
+    runtime = json.loads(runtime_path.read_text())
+    runtime["active_pid"] = 987654
+    unsigned = {key: item for key, item in runtime.items() if key != "state_digest"}
+    encoded = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    runtime["state_digest"] = hashlib.sha256(encoded).hexdigest()
+    runtime_path.write_text(json.dumps(runtime), encoding="utf-8")
+    runtime_path.chmod(0o600)
+
+    control.run(limits=limits())
+
+    reconciled = json.loads(runtime_path.read_text())
+    assert reconciled["active_pid"] is None
+    assert reconciled["last_stale_pid"] == 987654
+    assert reconciled["last_stale_pid_recovered_at_utc"] is not None
+    assert any(
+        event["event"] == "STALE_ACTIVE_PID_RECOVERED" for event in reconciled["events"]
+    )
 
 
 def test_failed_execution_requires_reconciliation_and_is_not_replayed(

@@ -250,9 +250,23 @@ class PersistentSupervisor:
         self, plan: ExecutionPlan, limits: SupervisorLimits
     ) -> SupervisorRunResult:
         state = self._load_or_new(plan)
+        stale_pid = state.get("active_pid")
+        if stale_pid is not None:
+            if not isinstance(stale_pid, int) or isinstance(stale_pid, bool):
+                raise UnattendedSupervisorError(
+                    "runtime checkpoint active PID is invalid"
+                )
+            # The process owns the exclusive runtime lock at this point.  A PID
+            # recorded by an earlier owner therefore cannot represent an active
+            # supervisor, even if the operating system has since reused it.
+            state["active_pid"] = None
+            state["last_stale_pid"] = stale_pid
+            state["last_stale_pid_recovered_at_utc"] = _timestamp()
+            self._event(state, "STALE_ACTIVE_PID_RECOVERED")
         state["start_count"] = _integer(state, "start_count") + 1
         state["active_pid"] = os.getpid()
         state["last_started_at_utc"] = _timestamp()
+        state["last_heartbeat_at_utc"] = state["last_started_at_utc"]
         self._event(state, "SUPERVISOR_STARTED")
         self._write_state(state)
         start_count = cast(int, state["start_count"])
@@ -282,6 +296,9 @@ class PersistentSupervisor:
                     machine=self.machine,
                     execution_identity=self.execution_identity,
                 )
+                state["last_heartbeat_at_utc"] = _timestamp()
+                state["last_observed_authority_sha"] = discovery.queue_commit_sha
+                state["last_observed_queue_sha256"] = discovery.queue_digest
                 if plan.authority_ref not in discovery.queue_refs:
                     raise UnattendedSupervisorError(
                         "execution plan authority ref is not authoritative"
@@ -458,6 +475,11 @@ class PersistentSupervisor:
                 "assignments": {},
                 "events": [],
                 "last_resources": None,
+                "last_heartbeat_at_utc": None,
+                "last_observed_authority_sha": None,
+                "last_observed_queue_sha256": None,
+                "last_stale_pid": None,
+                "last_stale_pid_recovered_at_utc": None,
                 "last_error": None,
                 "last_exit_status": None,
                 "state_digest": "",
