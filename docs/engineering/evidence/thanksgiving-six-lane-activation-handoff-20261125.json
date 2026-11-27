@@ -5,7 +5,7 @@
   "handoff_ancestor_sha": "4e6c4fc9e1766f7e4de8b6a0720267fd49bd96b6",
   "current_remote_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
   "queue_path": "development-factory/continuous-engineering-queue.v1.json",
-  "queue_sha256": "2b6d554dce1cff4ee87b78ff7269cfd6ae8d7691eba032fa6538355111867fcf",
+  "queue_sha256": "7a9d473727f4818a627ff3fd48646b5e917530aa56118d580e07d9f507bdc705",
   "assignment_count": 51,
   "execution_identities": [
     "LAPTOP_MASTER",

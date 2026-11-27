@@ -46,31 +46,31 @@
     },
     "LAPTOP_REVIEWER": {
       "identity": "LAPTOP_REVIEWER",
-      "assignments": ["REVIEW-DF-SECURITY-01"],
+      "assignments": ["REVIEW-DF-SECURITY-01", "REVIEW-ALLCOUNTY-QUALIFICATION-02"],
       "state": "INDEPENDENT_REVIEW",
       "automated_claims_blocked": true
     },
     "OM1-A": {
       "identity": "OM1-A",
-      "assignments": ["OM1-DF-STORAGE-WORKTREE-INVENTORY-01"],
+      "assignments": ["OM1-DF-STORAGE-WORKTREE-INVENTORY-01", "OM1-DF-ARTIFACT-REHEARSAL-05"],
       "state": "RESERVED_MANUAL",
       "automated_claims_blocked": true
     },
     "OM1-B": {
       "identity": "OM1-B",
-      "assignments": ["OM1-DF-SUPERVISOR-CONTINUATION-04"],
+      "assignments": ["OM1-DF-SUPERVISOR-CONTINUATION-04", "OM1-DF-SUPERVISOR-UNATTENDED-05"],
       "state": "RESERVED_MANUAL",
       "automated_claims_blocked": true
     },
     "OM2-A": {
       "identity": "OM2-A",
-      "assignments": ["OM2-A-HCP-MEDIA-CUSTODY-05"],
+      "assignments": ["OM2-A-HCP-MEDIA-CUSTODY-05", "OM2-A-HCP-SOURCE-COMPLETENESS-06"],
       "state": "RESERVED_MANUAL",
       "automated_claims_blocked": true
     },
     "OM2-B": {
       "identity": "OM2-B",
-      "assignments": ["OM2-B-REAL-BROWSER-HISTORY-02", "OM2-B-HISTORICAL-MEDIA-02", "OM2-B-REVENUE-WORKFLOW-ACCEPT-01", "OM2-B-KEITH-DEMO-ACCEPT-01"],
+      "assignments": ["OM2-B-REAL-BROWSER-HISTORY-02", "OM2-B-HISTORICAL-MEDIA-02", "OM2-B-REVENUE-WORKFLOW-ACCEPT-01", "OM2-B-KEITH-DEMO-ACCEPT-01", "OM2-B-ACCOUNTING-BROWSER-03"],
       "state": "RESERVED_MANUAL",
       "automated_claims_blocked": true
     }
