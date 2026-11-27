@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as schedulingApi from "../api/scheduling";
-import { appointmentKeys, useAppointment, useAppointments, useRescheduleAppointment } from "./useScheduling";
+import { appointmentKeys, useAppointment, useAppointments, useCancelAppointment, useRescheduleAppointment } from "./useScheduling";
 
 vi.mock("../api/scheduling");
 
@@ -68,6 +68,25 @@ describe("Scheduling hooks", () => {
       },
     });
     await waitFor(() => expect(result.result.current.isError).toBe(true));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.lists() });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.detail("appointment-1") });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dispatch"] });
+  });
+  it("cancels with observed version and refreshes Schedule, detail, and Dispatch", async () => {
+    vi.mocked(schedulingApi.cancelAppointment).mockResolvedValue({ id: "appointment-1", status: "cancelled" } as never);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const result = renderHook(() => useCancelAppointment(), { wrapper });
+    result.result.current.mutate({
+      appointmentId: "appointment-1",
+      input: { expected_version: 4, reason_code: "customer_request" },
+    });
+    await waitFor(() => expect(result.result.current.isSuccess).toBe(true));
+    expect(schedulingApi.cancelAppointment).toHaveBeenCalledWith("appointment-1", {
+      expected_version: 4,
+      reason_code: "customer_request",
+    });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.lists() });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.detail("appointment-1") });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dispatch"] });

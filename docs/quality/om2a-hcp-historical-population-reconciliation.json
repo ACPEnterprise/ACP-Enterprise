@@ -1,0 +1,52 @@
+{
+  "contract": "twelvehats.om2a-hcp-historical-population-reconciliation-evidence.v1",
+  "generated_at": "2026-11-27T16:04:16Z",
+  "execution_identity": "OM2-A",
+  "authority": {
+    "handoff_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "laptop_master_successor": "a8c424d514da6b7b141884b2e5b5e42e8de93a59",
+    "om1a_qualification_successor": "10e05d132a9299e73e10cca316b4abf263d2d269",
+    "preserved_media_branch_sha": "6c79c8db2b5c64c192399e8bd108cd8b8f6a6bb9",
+    "preserved_completeness_branch_sha": "84e56aa453cf9ce7b6ef241e9b2a79e6a5de32ac"
+  },
+  "reported_populations_not_verified_on_om2a": {
+    "previous_restored": {"customers": 5524, "jobs": 735, "appointments": 1039},
+    "current_protected_runtime": {"customers": 635, "jobs": 699, "appointments": 1005}
+  },
+  "implementation": {
+    "mode": "read_only_non_destructive",
+    "detects": [
+      "missing_and_added_source_identities",
+      "duplicate_customer_targets",
+      "explicit_customer_merges",
+      "missing_locations",
+      "orphaned_jobs_and_appointments",
+      "source_to_target_identity_mismatches",
+      "excluded_or_held_records",
+      "snapshot_provenance_differences"
+    ],
+    "mutation_authority": "none"
+  },
+  "qualification": {
+    "isolated_environment": "/tmp/om2a-hcp-completeness-venv",
+    "dependency_source": "backend/requirements-dev.txt",
+    "dependency_pins_changed": false,
+    "focused_recovery_suite": "47 passed",
+    "new_and_predecessor_scope": "12 passed",
+    "broad_hcp_suite": "370 passed, 7 skipped, 10 failed, 1 error",
+    "broad_hcp_failure_classification": "All 10 failures and the setup error require the unavailable PostgreSQL service named postgres; no focused reconciliation or current-schema assertion failed.",
+    "ruff": "PASS",
+    "mypy_changed_contracts": "PASS"
+  },
+  "protected_acceptance": {
+    "performed": false,
+    "reason": "Sealed previous and current population snapshots were not available in approved OM2-A custody.",
+    "actual_population_discrepancy_resolved": false,
+    "records_created_merged_updated_or_deleted": false
+  },
+  "coordination": {
+    "laptop_master_action": "Run the documented command against sealed snapshots and review the mode-0600 result.",
+    "independent_reviewer_action": "Reproduce the output digest and inspect every missing, duplicate, merge, mismatch, orphan, exclusion, and provenance disposition.",
+    "database_qualification_action": "Run the PostgreSQL-dependent HCP subset in the coordinated qualification service; OM2-A did not start an uncoordinated database workload."
+  }
+}

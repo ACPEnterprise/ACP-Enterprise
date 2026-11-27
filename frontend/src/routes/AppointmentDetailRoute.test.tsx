@@ -8,7 +8,7 @@ import {
   useCreateJobFromAppointment,
   useJobForAppointment,
 } from "../hooks/useJobs";
-import { useAppointment } from "../hooks/useScheduling";
+import { useAppointment, useCancelAppointment } from "../hooks/useScheduling";
 import {
   useDispatchAssignment,
   useDispatchAssignmentHistory,
@@ -47,6 +47,7 @@ const appointment = {
   arrival_window_start_at: "2026-07-24T13:00:00Z",
   arrival_window_end_at: "2026-07-24T15:00:00Z",
   expected_duration_minutes: 90,
+  concurrency_version: 4,
 } as AppointmentDetail;
 
 function renderRoute(entry = "/appointments/appointment-1") {
@@ -63,9 +64,11 @@ function renderRoute(entry = "/appointments/appointment-1") {
 }
 
 describe("AppointmentDetailRoute", () => {
+  const cancelMutate = vi.fn();
   beforeEach(() => {
     permissions = new Set([
       "COMPANY_SCHEDULING_READ",
+      "COMPANY_SCHEDULING_MANAGE",
       "COMPANY_JOB_READ",
       "COMPANY_JOB_MANAGE",
       "COMPANY_CUSTOMER_READ",
@@ -76,6 +79,11 @@ describe("AppointmentDetailRoute", () => {
       isLoading: false,
       isError: false,
       data: appointment,
+    } as never);
+    vi.mocked(useCancelAppointment).mockReturnValue({
+      mutate: cancelMutate,
+      isPending: false,
+      error: null,
     } as never);
     vi.mocked(useCreateJobFromAppointment).mockReturnValue({
       mutate: vi.fn(),
@@ -111,6 +119,29 @@ describe("AppointmentDetailRoute", () => {
         ],
       },
     } as never);
+  });
+  it("requires confirmation and submits the controlled cancellation reason", async () => {
+    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [] } } as never);
+    renderRoute();
+    await userEvent.selectOptions(screen.getByLabelText("Cancellation reason"), "scheduling_conflict");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel appointment" }));
+    expect(cancelMutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Cancel this appointment?" })).toHaveTextContent("related job is not canceled");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }));
+    expect(cancelMutate).toHaveBeenCalledWith(
+      {
+        appointmentId: "appointment-1",
+        input: { expected_version: 4, reason_code: "scheduling_conflict" },
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+  });
+
+  it("does not expose cancellation to a scheduling reader", () => {
+    permissions = new Set(["COMPANY_SCHEDULING_READ"]);
+    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false } as never);
+    renderRoute();
+    expect(screen.queryByRole("button", { name: "Cancel appointment" })).not.toBeInTheDocument();
   });
   it("shows the authoritative related Job and navigates by business number", () => {
     vi.mocked(useJobForAppointment).mockReturnValue({

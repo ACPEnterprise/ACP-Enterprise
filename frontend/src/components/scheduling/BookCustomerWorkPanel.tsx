@@ -54,6 +54,7 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
   const [intakeError, setIntakeError] = useState<string | null>(null);
   const [duplicateWarnings, setDuplicateWarnings] = useState(0);
   const [createdCustomer, setCreatedCustomer] = useState<{ id: string; displayName: string } | null>(null);
+  const [recentIntake, setRecentIntake] = useState<{ customerId: string; customerName: string; locationId: string; locationLabel: string } | null>(null);
   const confirmIntake = async () => {
     setIntakePending(true);
     setIntakeError(null);
@@ -97,6 +98,12 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
       setCustomerId(resolvedCustomer.id);
       setCustomerSearch(resolvedCustomer.displayName);
       setLocationId(location.id);
+      setRecentIntake({
+        customerId: resolvedCustomer.id,
+        customerName: resolvedCustomer.displayName,
+        locationId: location.id,
+        locationLabel: `${newCustomer.address.trim()}, ${newCustomer.city.trim()}`,
+      });
       setCreatedCustomer(null);
       setCustomerMode("existing");
     } catch (error) {
@@ -156,14 +163,14 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
         <div>
           <p className="text-sm text-action-primary">CSR scheduling</p>
           <h2 id="book-customer-work-heading" className="text-xl font-semibold">Book customer work</h2>
-          <p className="mt-1 text-sm text-content-muted">Create one Appointment and its related draft Job through the authoritative service-request workflow.</p>
+          <p className="mt-1 text-sm text-content-muted">Choose a customer, service location, and arrival window. The appointment and related draft job will be created together.</p>
         </div>
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
       {error && <Alert className="mt-4" variant="danger" title={error.title} action={error.retryLabel && pendingRequest ? <Button variant="outline" onClick={() => setConfirmation(pendingRequest.input.request_id)} disabled={create.isPending}>{error.retryLabel}</Button> : undefined}><strong>{error.state.replaceAll("_", " ")}</strong> — {error.message}</Alert>}
       {create.data && (
         <Alert className="mt-4" variant="success" title="Work booked">
-          SUCCEEDED — {create.data.appointment.appointment_number} and {create.data.job.job_number} were saved and authoritative queue/calendar state was refreshed. Assignment remains a separate human-confirmed Dispatch action.
+          Appointment {create.data.appointment.appointment_number} and draft job {create.data.job.job_number} were saved. Choose Assign in Dispatch when you are ready to select a technician.
           <div className="mt-3 flex flex-wrap gap-3">
             <Link className="font-semibold text-action-primary underline" to={returnTo ? withSchedulingReturn(appointmentDetailPath(create.data.appointment.id), returnTo) : appointmentDetailPath(create.data.appointment.id)}>Open Appointment</Link>
             <Link className="font-semibold text-action-primary underline" to={returnTo ? withSchedulingReturn(jobDetailPath(create.data.job.id), returnTo) : jobDetailPath(create.data.job.id)}>Open Job</Link>
@@ -193,19 +200,21 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
           </section>
         )}
         {customerMode === "existing" && <>
-        <Field label="Find Customer" helperText={customers.isError ? "Customer search is unavailable." : "Search is bounded to 25 authorized Customers."}>
+        <Field label="Find Customer" helperText={customers.isError ? "Customer search is unavailable." : "Shows up to 25 matching customers you can access."}>
           <Input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Name or customer number" />
         </Field>
         <Field label="Customer" required>
           <Select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setLocationId(""); }} required>
             <option value="">Select Customer</option>
             {(customers.data?.items ?? []).map((item) => <option value={item.id} key={item.id}>{item.business_name || `${item.first_name ?? ""} ${item.last_name ?? ""}`.trim()}</option>)}
+            {recentIntake && !(customers.data?.items ?? []).some((item) => item.id === recentIntake.customerId) ? <option value={recentIntake.customerId}>{recentIntake.customerName}</option> : null}
           </Select>
         </Field>
         <Field label="Service Location" required helperText={customerId && customer.data?.properties.length === 0 ? "This Customer has no authorized Service Locations." : undefined}>
           <Select value={locationId} onChange={(event) => setLocationId(event.target.value)} disabled={!customerId || customer.isLoading} required>
             <option value="">Select Service Location</option>
             {(customer.data?.properties ?? []).map((item) => <option value={item.id} key={item.id}>{item.address_line_1}, {item.city}</option>)}
+            {recentIntake && !(customer.data?.properties ?? []).some((item) => item.id === recentIntake.locationId) ? <option value={recentIntake.locationId}>{recentIntake.locationLabel}</option> : null}
           </Select>
         </Field>
         </>}
@@ -229,7 +238,7 @@ export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose:
       {confirmation && (
         <ConfirmationDialog
           title="Book this customer work?"
-          description={`${selectedCustomer?.business_name || `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim() || "Selected Customer"} · ${selectedLocation?.address_line_1 ?? "Selected Location"} · ${start.toLocaleString()}–${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. No technician will be assigned automatically.`}
+          description={`${selectedCustomer?.business_name || `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim() || customerSearch.trim() || "Selected Customer"} · ${selectedLocation?.address_line_1 ?? (newCustomer.address.trim() || "Selected Location")} · ${start.toLocaleString()}–${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. No technician will be assigned automatically.`}
           confirmLabel="Confirm booking"
           pending={create.isPending}
           onConfirm={confirm}

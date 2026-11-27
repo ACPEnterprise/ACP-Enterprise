@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import type {
   AppointmentDetail,
+  AppointmentCancellationInput,
   AppointmentListParams,
   AppointmentRescheduleInput,
   CalendarQueryResult,
@@ -57,6 +58,18 @@ export async function rescheduleAppointment(
   return (
     await apiClient.post<AppointmentDetail>(
       `${APPOINTMENTS_PATH}/${appointmentId}/reschedule`,
+      input,
+    )
+  ).data;
+}
+
+export async function cancelAppointment(
+  appointmentId: string,
+  input: AppointmentCancellationInput,
+): Promise<AppointmentDetail> {
+  return (
+    await apiClient.post<AppointmentDetail>(
+      `${APPOINTMENTS_PATH}/${appointmentId}/cancel`,
       input,
     )
   ).data;

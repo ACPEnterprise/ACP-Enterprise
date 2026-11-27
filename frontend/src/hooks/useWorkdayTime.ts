@@ -27,6 +27,14 @@ export const workdayKeys = {
   payPeriods: () => ["workday", "pay-periods"] as const,
 };
 
+async function refreshSupervisorTimeAuthority(client: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: workdayKeys.adminReview() }),
+    client.invalidateQueries({ queryKey: ["workday", "admin-operations"] }),
+    client.invalidateQueries({ queryKey: ["payroll"] }),
+  ]);
+}
+
 export function useOwnWorkdayState(enabled = true) {
   return useQuery({
     queryKey: workdayKeys.state(),
@@ -41,9 +49,7 @@ export function useTimeCorrection() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ revisionId, input }: { revisionId: string; input: TimeCorrectionInput }) => correctTimeEntry(revisionId, input),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: workdayKeys.adminReview() });
-    },
+    onSettled: async () => refreshSupervisorTimeAuthority(client),
   });
 }
 
@@ -61,13 +67,7 @@ export function useApproveTimeEntry() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: approveTimeEntry,
-    onSuccess: async () => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: workdayKeys.adminReview() }),
-        client.invalidateQueries({ queryKey: ["workday", "admin-operations"] }),
-        client.invalidateQueries({ queryKey: ["payroll"] }),
-      ]);
-    },
+    onSettled: async () => refreshSupervisorTimeAuthority(client),
   });
 }
 
