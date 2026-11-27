@@ -61,3 +61,44 @@ Safe shutdown moves only the calling machine's running assignments to
 `reconciliation_required`, records the machine, and exits without approval,
 merge, deployment, or protected execution. A later successful discovery clears
 that machine's shutdown marker but does not bypass reconciliation.
+
+## Persistent unattended supervisor
+
+The bounded continuation command is a foreground discovery operation; it does
+not persist after its terminal session and does not execute assignments. A
+persistent engineering session must use `supervisor-run` with an exact,
+committed execution plan:
+
+```bash
+PYTHONPATH=backend python3 -m development_factory \
+  --repo-root . coordination supervisor-run \
+  --machine OM1 \
+  --execution-identity OM1-B \
+  --state .development-factory/om1b/coordination.json \
+  --runtime-state .development-factory/om1b/runtime.json \
+  --plan docs/engineering/evidence/om1b-unattended-execution-plan-20261127.json \
+  --poll-seconds 60 \
+  --max-assignments 8 \
+  --max-runtime-seconds 21600
+```
+
+This process reuses authoritative queue discovery and the existing durable
+checkpoint. It adds no claim or lease path. Every discovery, begin, restart,
+reconciliation, completion, and shutdown is bound to both the physical machine
+and the six-lane execution identity. An OM1-B process cannot execute an OM1-A
+reservation on the same host.
+
+The execution plan contains no command line or shell fragment. It binds each
+assignment to the SHA-256 digest of its exact queue assignment and manual
+reservation, and selects one of the built-in read-only qualification profiles.
+Changed scope, an unknown assignment, a different authority ref, unsupported
+profile, missing dependency, low disk, excessive supervisor memory, a second
+active process, or a secret-bearing plan fails closed.
+
+The mode-`0600` runtime journal records process starts, assignment transitions,
+resource observations, evidence digests, idle polls, and bounded exits. A
+restart retains local completions so they are never reoffered and can unlock an
+authorized successor. If a process stops while an assignment is running, the
+assignment becomes `reconciliation_required`; it is never replayed without
+durable completion evidence. Automatic commit, push, merge, deployment,
+protected execution, and Worker Control claims remain disabled.

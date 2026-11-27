@@ -21,8 +21,10 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from development_factory.coordination import (
+    Assignment,
     CoordinationError,
     CoordinationQueue,
+    ManualReservation,
     canonical_digest,
     validate_queue,
 )
@@ -100,6 +102,8 @@ class DiscoveryResult:
     completed_assignments: tuple[str, ...]
     attempts: int
     status: str
+    execution_identity: str
+    queue: CoordinationQueue
 
 
 @dataclass(frozen=True)
@@ -258,9 +262,12 @@ class QueueDiscoverySupervisor:
         source: QueueSource,
         *,
         machine: str,
+        execution_identity: str,
         supplied_completed: Iterable[str] = (),
         now: datetime | None = None,
     ) -> DiscoveryResult:
+        if not execution_identity:
+            raise QueueDiscoveryError("execution identity is required")
         candidates, attempts = self._load_with_retry(source)
         selected, refs = _select_authoritative(candidates, source.is_ancestor)
         queue = validate_queue(selected.payload)
@@ -292,6 +299,7 @@ class QueueDiscoverySupervisor:
                 )
             assignment_states = cast(dict[str, str], state["assignment_states"])
             assignment_machines = cast(dict[str, str], state["assignment_machines"])
+            assignment_identities = cast(dict[str, str], state["assignment_identities"])
             completed |= {
                 assignment_id
                 for assignment_id, status in assignment_states.items()
@@ -313,20 +321,35 @@ class QueueDiscoverySupervisor:
                 reservation.assignment_id: reservation.machine
                 for reservation in queue.manual_reservations
             }
+            reservation_identities = {
+                reservation.assignment_id: reservation.execution_identity
+                for reservation in queue.manual_reservations
+            }
             for assignment_id, reserved_machine in reservation_machines.items():
                 previous_machine = assignment_machines.get(assignment_id)
+                previous_identity = assignment_identities.get(assignment_id)
                 if (
-                    previous_machine is not None
-                    and previous_machine != reserved_machine
-                    and assignment_states.get(assignment_id)
-                    in {"running", "reconciliation_required"}
-                ):
+                    (
+                        previous_machine is not None
+                        and previous_machine != reserved_machine
+                    )
+                    or (
+                        previous_identity is not None
+                        and previous_identity != reservation_identities[assignment_id]
+                    )
+                ) and assignment_states.get(assignment_id) in {
+                    "running",
+                    "reconciliation_required",
+                }:
                     raise QueueDiscoveryError(
-                        "active assignment machine ownership changed"
+                        "active assignment execution ownership changed"
                     )
                 assignment_machines[assignment_id] = reserved_machine
+                assignment_identities[assignment_id] = reservation_identities[
+                    assignment_id
+                ]
 
-            eligible = _manual_eligible(queue, machine, completed)
+            eligible = _manual_eligible(queue, machine, execution_identity, completed)
             for assignment_id in eligible:
                 assignment_states.setdefault(assignment_id, "ready")
             offered = tuple(
@@ -369,6 +392,8 @@ class QueueDiscoverySupervisor:
             completed_assignments=tuple(sorted(completed)),
             attempts=attempts,
             status="AUTHORITATIVE_QUEUE_DISCOVERED",
+            execution_identity=execution_identity,
+            queue=queue,
         )
 
     def continue_until_work(
@@ -376,6 +401,7 @@ class QueueDiscoverySupervisor:
         source: QueueSource,
         *,
         machine: str,
+        execution_identity: str,
         supplied_completed: Iterable[str] = (),
         limits: ContinuationLimits | None = None,
         stop_requested: Callable[[], bool] = lambda: False,
@@ -387,10 +413,13 @@ class QueueDiscoverySupervisor:
             last = self.discover(
                 source,
                 machine=machine,
+                execution_identity=execution_identity,
                 supplied_completed=supplied_completed,
             )
             if stop_requested():
-                interrupted = self.safe_shutdown(machine=machine)
+                interrupted = self.safe_shutdown(
+                    machine=machine, execution_identity=execution_identity
+                )
                 self._record_continuation(machine, "SAFE_SHUTDOWN", poll)
                 return ContinuationResult(
                     last.queue_commit_sha,
@@ -432,12 +461,19 @@ class QueueDiscoverySupervisor:
             "QUEUE_EXHAUSTED_BOUNDED",
         )
 
-    def begin(self, assignment_id: str, *, queue_digest: str, machine: str) -> None:
+    def begin(
+        self,
+        assignment_id: str,
+        *,
+        queue_digest: str,
+        machine: str,
+        execution_identity: str,
+    ) -> None:
         with self._locked():
             state = self._load_required()
             if state.get("queue_digest") != queue_digest:
                 raise QueueDiscoveryError("queue digest changed before execution")
-            self._require_machine(state, assignment_id, machine)
+            self._require_owner(state, assignment_id, machine, execution_identity)
             assignment_states = cast(dict[str, str], state["assignment_states"])
             status = assignment_states.get(assignment_id)
             if status != "ready":
@@ -445,21 +481,26 @@ class QueueDiscoverySupervisor:
             assignment_states[assignment_id] = "running"
             self._write(state)
 
-    def recover_after_restart(self, *, machine: str) -> tuple[str, ...]:
+    def recover_after_restart(
+        self, *, machine: str, execution_identity: str
+    ) -> tuple[str, ...]:
         with self._locked():
             state = self._load_required()
             assignment_states = cast(dict[str, str], state["assignment_states"])
             assignment_machines = cast(dict[str, str], state["assignment_machines"])
+            assignment_identities = cast(dict[str, str], state["assignment_identities"])
             recovered = tuple(
                 sorted(
                     assignment_id
                     for assignment_id, status in assignment_states.items()
-                    if status == "running"
+                    if status in {"running", "reconciliation_required"}
                     and assignment_machines.get(assignment_id) == machine
+                    and assignment_identities.get(assignment_id) == execution_identity
                 )
             )
             for assignment_id in recovered:
-                assignment_states[assignment_id] = "reconciliation_required"
+                if assignment_states[assignment_id] == "running":
+                    assignment_states[assignment_id] = "reconciliation_required"
             self._write(state)
             return recovered
 
@@ -470,12 +511,13 @@ class QueueDiscoverySupervisor:
         completed: bool,
         evidence_sha256: str,
         machine: str,
+        execution_identity: str,
     ) -> None:
         if not SHA64.fullmatch(evidence_sha256):
             raise QueueDiscoveryError("reconciliation evidence digest is invalid")
         with self._locked():
             state = self._load_required()
-            self._require_machine(state, assignment_id, machine)
+            self._require_owner(state, assignment_id, machine, execution_identity)
             assignment_states = cast(dict[str, str], state["assignment_states"])
             if assignment_states.get(assignment_id) != "reconciliation_required":
                 raise QueueDiscoveryError("assignment does not require reconciliation")
@@ -485,13 +527,18 @@ class QueueDiscoverySupervisor:
             self._write(state)
 
     def complete(
-        self, assignment_id: str, *, evidence_sha256: str, machine: str
+        self,
+        assignment_id: str,
+        *,
+        evidence_sha256: str,
+        machine: str,
+        execution_identity: str,
     ) -> None:
         if not SHA64.fullmatch(evidence_sha256):
             raise QueueDiscoveryError("completion evidence digest is invalid")
         with self._locked():
             state = self._load_required()
-            self._require_machine(state, assignment_id, machine)
+            self._require_owner(state, assignment_id, machine, execution_identity)
             assignment_states = cast(dict[str, str], state["assignment_states"])
             if assignment_states.get(assignment_id) != "running":
                 raise QueueDiscoveryError("assignment is not running")
@@ -500,17 +547,21 @@ class QueueDiscoverySupervisor:
             reconciliations[assignment_id] = evidence_sha256
             self._write(state)
 
-    def safe_shutdown(self, *, machine: str) -> tuple[str, ...]:
+    def safe_shutdown(
+        self, *, machine: str, execution_identity: str
+    ) -> tuple[str, ...]:
         with self._locked():
             state = self._load_required()
             assignment_states = cast(dict[str, str], state["assignment_states"])
             assignment_machines = cast(dict[str, str], state["assignment_machines"])
+            assignment_identities = cast(dict[str, str], state["assignment_identities"])
             interrupted = tuple(
                 sorted(
                     assignment_id
                     for assignment_id, status in assignment_states.items()
                     if status == "running"
                     and assignment_machines.get(assignment_id) == machine
+                    and assignment_identities.get(assignment_id) == execution_identity
                 )
             )
             for assignment_id in interrupted:
@@ -530,19 +581,26 @@ class QueueDiscoverySupervisor:
             self._write(state)
 
     @staticmethod
-    def _require_machine(
-        state: dict[str, object], assignment_id: str, machine: str
+    def _require_owner(
+        state: dict[str, object],
+        assignment_id: str,
+        machine: str,
+        execution_identity: str,
     ) -> None:
-        if not machine:
-            raise QueueDiscoveryError("machine identity is required")
+        if not machine or not execution_identity:
+            raise QueueDiscoveryError("machine and execution identity are required")
         assignment_machines = cast(dict[str, str], state["assignment_machines"])
-        expected = assignment_machines.get(assignment_id)
-        if expected is None:
+        assignment_identities = cast(dict[str, str], state["assignment_identities"])
+        expected_machine = assignment_machines.get(assignment_id)
+        expected_identity = assignment_identities.get(assignment_id)
+        if expected_machine is None or expected_identity is None:
             raise QueueDiscoveryError(
-                "assignment machine ownership is unavailable; rediscovery required"
+                "assignment execution ownership is unavailable; rediscovery required"
             )
-        if expected != machine:
-            raise QueueDiscoveryError("assignment is reserved for another machine")
+        if expected_machine != machine or expected_identity != execution_identity:
+            raise QueueDiscoveryError(
+                "assignment is reserved for another execution identity"
+            )
 
     def _load_with_retry(
         self, source: QueueSource
@@ -607,6 +665,7 @@ class QueueDiscoverySupervisor:
                 "last_work_at_utc": None,
                 "assignment_states": {},
                 "assignment_machines": {},
+                "assignment_identities": {},
                 "reconciliations": {},
                 "continuations": {},
                 "state_digest": "",
@@ -630,6 +689,8 @@ class QueueDiscoverySupervisor:
             raise QueueDiscoveryError("coordination checkpoint integrity failed")
         if "assignment_machines" not in value:
             value["assignment_machines"] = {}
+        if "assignment_identities" not in value:
+            value["assignment_identities"] = {}
         if "shutdown_machines" not in value:
             value["shutdown_machines"] = []
         if "idle_poll_count" not in value:
@@ -643,6 +704,7 @@ class QueueDiscoverySupervisor:
         if (
             not isinstance(value.get("assignment_states"), dict)
             or not isinstance(value.get("assignment_machines"), dict)
+            or not isinstance(value.get("assignment_identities"), dict)
             or not isinstance(value.get("reconciliations"), dict)
             or not isinstance(value.get("continuations"), dict)
             or not isinstance(value.get("shutdown_machines"), list)
@@ -654,6 +716,9 @@ class QueueDiscoverySupervisor:
         ):
             raise QueueDiscoveryError("checkpoint shutdown machines are invalid")
         assignment_machines = cast(dict[object, object], value["assignment_machines"])
+        assignment_identities = cast(
+            dict[object, object], value["assignment_identities"]
+        )
         if any(
             not isinstance(assignment_id, str)
             or not assignment_id
@@ -663,6 +728,16 @@ class QueueDiscoverySupervisor:
         ):
             raise QueueDiscoveryError(
                 "coordination checkpoint machine ownership is invalid"
+            )
+        if any(
+            not isinstance(assignment_id, str)
+            or not assignment_id
+            or not isinstance(identity, str)
+            or not identity
+            for assignment_id, identity in assignment_identities.items()
+        ):
+            raise QueueDiscoveryError(
+                "coordination checkpoint execution identity is invalid"
             )
         return cast(dict[str, object], value)
 
@@ -749,6 +824,7 @@ def _completed_evidence(payload: dict[str, object]) -> set[str]:
 def _manual_eligible(
     queue: CoordinationQueue,
     machine: str,
+    execution_identity: str,
     completed: set[str],
 ) -> tuple[str, ...]:
     eligible: list[str] = []
@@ -756,6 +832,7 @@ def _manual_eligible(
         assignment = queue.by_id[reservation.assignment_id]
         if (
             reservation.machine == machine
+            and reservation.execution_identity == execution_identity
             and reservation.automated_claims_blocked
             and assignment.state in ELIGIBLE_STATES
             and assignment.id not in completed
@@ -763,6 +840,38 @@ def _manual_eligible(
         ):
             eligible.append(assignment.id)
     return tuple(sorted(eligible))
+
+
+def assignment_contract_digest(
+    assignment: Assignment, reservation: ManualReservation
+) -> str:
+    """Bind an unattended execution plan to one exact manual reservation."""
+    if assignment.id != reservation.assignment_id:
+        raise QueueDiscoveryError("assignment and reservation identity mismatch")
+    return canonical_digest(
+        {
+            "assignment": {
+                "id": assignment.id,
+                "lane": assignment.lane,
+                "priority": assignment.priority,
+                "state": assignment.state,
+                "depends_on": list(assignment.depends_on),
+                "objective": assignment.objective,
+                "allowed_paths": list(assignment.allowed_paths),
+                "validation": list(assignment.validation),
+                "stop_conditions": list(assignment.stop_conditions),
+            },
+            "reservation": {
+                "assignment_id": reservation.assignment_id,
+                "machine": reservation.machine,
+                "execution_identity": reservation.execution_identity,
+                "owner": reservation.owner,
+                "status": reservation.status,
+                "automated_claims_blocked": reservation.automated_claims_blocked,
+                "reason": reservation.reason,
+            },
+        }
+    )
 
 
 def _timestamp(value: datetime | None) -> str:

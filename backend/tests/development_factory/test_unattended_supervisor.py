@@ -1,0 +1,242 @@
+from __future__ import annotations
+
+import json
+import stat
+from pathlib import Path
+
+import pytest
+from development_factory.coordination import validate_queue
+from development_factory.queue_discovery import (
+    QueueCandidate,
+    QueueDiscoverySupervisor,
+    assignment_contract_digest,
+)
+from development_factory.unattended_supervisor import (
+    PersistentSupervisor,
+    ResourceSnapshot,
+    SupervisorLimits,
+    UnattendedSupervisorError,
+)
+
+AUTHORITY_REF = "refs/heads/handoff/continuous-engineering-authority-20261125"
+QUEUE_SHA = "a" * 40
+
+
+class Source:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+    def load(self) -> tuple[QueueCandidate, ...]:
+        return (QueueCandidate(AUTHORITY_REF, QUEUE_SHA, QUEUE_SHA, self.payload),)
+
+    def is_ancestor(self, older: str, newer: str) -> bool:
+        return older == newer
+
+
+class FailingExecutor:
+    calls = 0
+
+    def execute(self, assignment, reservation, entry, context):  # type: ignore[no-untyped-def]
+        self.calls += 1
+        raise RuntimeError("simulated bounded execution failure")
+
+
+def payload() -> dict[str, object]:
+    return {
+        "schema_version": "twelfthats.continuous-engineering-queue.v1",
+        "status": "AUTHORITATIVE_HANDOFF_PENDING_MACHINE_ACKNOWLEDGMENT",
+        "assignments": [
+            {
+                "id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
+                "lane": "OM1",
+                "priority": "P1",
+                "state": "READY_AFTER_INVENTORY",
+                "depends_on": [],
+                "objective": "Previously completed supervisor work.",
+                "allowed_paths": ["backend/development_factory/**"],
+                "validation": ["completion evidence"],
+                "stop_conditions": ["duplicate execution"],
+            },
+            {
+                "id": "OM1-DF-SUPERVISOR-CONTINUATION-04",
+                "lane": "OM1",
+                "priority": "P1",
+                "state": "READY_AFTER_INVENTORY",
+                "depends_on": ["OM1-DF-SUPERVISOR-CONTINUATION-03"],
+                "objective": "Operate the persistent identity-bound supervisor.",
+                "allowed_paths": ["backend/development_factory/**"],
+                "validation": ["current authority discovery"],
+                "stop_conditions": ["automatic protected execution"],
+            },
+            {
+                "id": "OM1-DF-SUPERVISOR-UNATTENDED-05",
+                "lane": "OM1",
+                "priority": "P1",
+                "state": "READY_AFTER_INVENTORY",
+                "depends_on": ["OM1-DF-SUPERVISOR-CONTINUATION-04"],
+                "objective": "Qualify a restarted unattended supervisor.",
+                "allowed_paths": ["backend/development_factory/**"],
+                "validation": ["restart recovery"],
+                "stop_conditions": ["unbounded execution"],
+            },
+        ],
+        "manual_reservations": [
+            {
+                "assignment_id": assignment_id,
+                "machine": "OM1",
+                "execution_identity": "OM1-B",
+                "owner": "LAPTOP_MASTER",
+                "status": "RESERVED_MANUAL",
+                "automated_claims_blocked": True,
+                "reason": "Explicit bounded OM1-B reservation.",
+            }
+            for assignment_id in (
+                "OM1-DF-SUPERVISOR-CONTINUATION-04",
+                "OM1-DF-SUPERVISOR-UNATTENDED-05",
+            )
+        ],
+        "completed_evidence": [
+            {
+                "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-03",
+                "commit_sha": "b" * 40,
+            }
+        ],
+    }
+
+
+def write_plan(tmp_path: Path, value: dict[str, object]) -> Path:
+    queue = validate_queue(value)
+    entries = []
+    for assignment_id, profile in (
+        ("OM1-DF-SUPERVISOR-CONTINUATION-04", "supervisor_continuation"),
+        ("OM1-DF-SUPERVISOR-UNATTENDED-05", "supervisor_unattended"),
+    ):
+        entries.append(
+            {
+                "assignment_id": assignment_id,
+                "contract_sha256": assignment_contract_digest(
+                    queue.by_id[assignment_id],
+                    queue.manual_reservation_by_id[assignment_id],
+                ),
+                "profile": profile,
+            }
+        )
+    path = tmp_path / "plan.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "twelfthats.unattended-execution-plan.v1",
+                "machine": "OM1",
+                "execution_identity": "OM1-B",
+                "authority_ref": AUTHORITY_REF,
+                "authority_sha": QUEUE_SHA,
+                "assignments": entries,
+                "safety": {
+                    "worker_control_claims": False,
+                    "worker_control_leases": False,
+                    "automatic_commit": False,
+                    "automatic_push": False,
+                    "automatic_merge": False,
+                    "automatic_deploy": False,
+                    "protected_execution": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
+    return path
+
+
+def supervisor(
+    tmp_path: Path,
+    value: dict[str, object],
+    *,
+    executor=None,  # type: ignore[no-untyped-def]
+) -> PersistentSupervisor:
+    return PersistentSupervisor(
+        tmp_path,
+        discovery=QueueDiscoverySupervisor(tmp_path / "coordination.json"),
+        source=Source(value),
+        plan_path=write_plan(tmp_path, value),
+        runtime_state_path=tmp_path / "runtime.json",
+        machine="OM1",
+        execution_identity="OM1-B",
+        executor=executor,
+        sleep=lambda _seconds: None,
+        resource_probe=lambda _root: ResourceSnapshot(
+            logical_cpu_count=12,
+            load_average_1m=1.0,
+            free_bytes=20 * 1024**3,
+            process_max_rss_bytes=32 * 1024**2,
+        ),
+    )
+
+
+def limits(*, max_assignments: int = 1, max_cycles: int = 0) -> SupervisorLimits:
+    return SupervisorLimits(
+        poll_seconds=1,
+        max_cycles=max_cycles,
+        max_assignments=max_assignments,
+        max_runtime_seconds=60,
+        minimum_free_bytes=1024**3,
+        maximum_rss_bytes=64 * 1024**2,
+    )
+
+
+def test_successive_assignments_require_restart_and_execute_once(
+    tmp_path: Path,
+) -> None:
+    value = payload()
+    control = supervisor(tmp_path, value)
+
+    first = control.run(limits=limits())
+    assert first.executed_assignments == ("OM1-DF-SUPERVISOR-CONTINUATION-04",)
+
+    second = control.run(limits=limits())
+    assert second.executed_assignments == ("OM1-DF-SUPERVISOR-UNATTENDED-05",)
+
+    third = control.run(limits=limits(max_cycles=1))
+    assert third.executed_assignments == ()
+    assert third.status == "CYCLE_LIMIT_REACHED"
+
+    runtime = json.loads((tmp_path / "runtime.json").read_text())
+    assert runtime["start_count"] == 3
+    assert {
+        assignment_id: record["attempts"]
+        for assignment_id, record in runtime["assignments"].items()
+    } == {
+        "OM1-DF-SUPERVISOR-CONTINUATION-04": 1,
+        "OM1-DF-SUPERVISOR-UNATTENDED-05": 1,
+    }
+    assert stat.S_IMODE((tmp_path / "runtime.json").stat().st_mode) == 0o600
+    unattended_evidence = json.loads(
+        (tmp_path / "evidence" / "OM1-DF-SUPERVISOR-UNATTENDED-05.json").read_text()
+    )
+    assert unattended_evidence["operation"]["restart_observed"] is True
+
+
+def test_failed_execution_requires_reconciliation_and_is_not_replayed(
+    tmp_path: Path,
+) -> None:
+    value = payload()
+    executor = FailingExecutor()
+    control = supervisor(tmp_path, value, executor=executor)
+
+    with pytest.raises(RuntimeError, match="simulated bounded"):
+        control.run(limits=limits())
+    recovered = control.run(limits=limits())
+
+    assert recovered.status == "RECOVERY_REQUIRED"
+    assert recovered.recovered_assignments == ("OM1-DF-SUPERVISOR-CONTINUATION-04",)
+    assert executor.calls == 1
+
+
+def test_plan_contract_change_fails_closed_before_execution(tmp_path: Path) -> None:
+    value = payload()
+    control = supervisor(tmp_path, value)
+    changed = value["assignments"][1]
+    changed["objective"] = "Unauthorized expanded objective."
+
+    with pytest.raises(UnattendedSupervisorError, match="contract changed"):
+        control.run(limits=limits())
