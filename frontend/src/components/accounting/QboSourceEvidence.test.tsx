@@ -80,6 +80,70 @@ const value = {
   mutation_authority: "none" as const,
 };
 
+const historicalValue = {
+  ...value,
+  ar: {
+    ...value.ar,
+    total_open: {
+      amount: "500584.34",
+      currency: "USD",
+      state: "available" as const,
+    },
+    invoice_evidence_count: 1341,
+    open_invoice_count: 101,
+  },
+  historical_reconciliation: {
+    state: "RECONCILED_WITH_DISCLOSED_EXCEPTIONS" as const,
+    source_record_count: 20702,
+    relationship_id_count: 97093,
+    conflict_count: 7,
+    customer_count: 909,
+    invoice_count: 1341,
+    invoice_line_count: 3140,
+    invoice_open_balance: {
+      amount: "500584.34",
+      currency: "USD",
+      state: "available" as const,
+    },
+    payment_count: 1237,
+    payment_total: {
+      amount: "1523656.97",
+      currency: "USD",
+      state: "available" as const,
+    },
+    payment_invoice_links: 1171,
+    missing_payment_invoice_links: 0,
+    unlinked_payment_count: 73,
+    unlinked_payment_total: {
+      amount: "85414.91",
+      currency: "USD",
+      state: "available" as const,
+    },
+    provider_unapplied_amount: {
+      amount: "87544.91",
+      currency: "USD",
+      state: "available" as const,
+    },
+    controls: {},
+    mutation_authority: "none" as const,
+  },
+  payments: [
+    {
+      source_id: "payment-1",
+      transaction_date: "2026-11-19",
+      customer_label: "Acceptance Customer",
+      source_status: "received",
+      amount: {
+        amount: "125.00",
+        currency: "USD",
+        state: "available" as const,
+      },
+      application_state: "applied",
+      applied_document_ids: ["invoice-1"],
+    },
+  ],
+};
+
 describe("QboSourceEvidence", () => {
   beforeEach(() => {
     vi.mocked(useQboSourceBackedArSummary).mockReturnValue({
@@ -151,6 +215,46 @@ describe("QboSourceEvidence", () => {
       target: { value: "accrual" },
     });
     expect(useQboAccountingEvidence).toHaveBeenLastCalledWith("accrual", true);
+  });
+
+  it("labels archive A/R truthfully and exposes reconciliation evidence", () => {
+    vi.mocked(useQboAccountingEvidence).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: historicalValue,
+    } as unknown as ReturnType<typeof useQboAccountingEvidence>);
+    vi.mocked(useQboSourceBackedArSummary).mockReturnValue({
+      isLoading: false,
+      data: {
+        contract_version: "qbo-source-backed-ar-summary/v1",
+        authority: "QBO_SOURCE_BACKED",
+        provider_environment: "production",
+        source: "QuickBooks Online manual archive A/R evidence",
+        source_company: "All County Plumbing and Leak",
+        realm_id: "masked",
+        report_date: "2026-11-27",
+        currency: "USD",
+        source_as_of: "2026-11-19",
+        acquired_at: "2026-11-20T00:06:49Z",
+        net_open_ar: "500584.34",
+        includes_customer_credits_and_unapplied_payments: false,
+        source_digest: "f".repeat(64),
+        accepted_as_acp_accounting: false,
+        mutation_authority: "none",
+      },
+    } as unknown as ReturnType<typeof useQboSourceBackedArSummary>);
+
+    render(<QboSourceEvidence enabled />);
+
+    expect(screen.getByText("20,702")).toBeVisible();
+    expect(screen.getByText("97,093")).toBeVisible();
+    expect(screen.getByText("Archive open invoice balance")).toBeVisible();
+    expect(
+      screen.getByText(/credits and unapplied payments require/i),
+    ).toBeVisible();
+    expect(screen.queryByText("Real total open A/R")).not.toBeInTheDocument();
+    expect(screen.getByText("Acceptance Customer")).toBeVisible();
+    expect(screen.getByText("payment-1")).toBeVisible();
   });
 
   it("navigates to source-backed report detail with provenance and no posting claim", () => {

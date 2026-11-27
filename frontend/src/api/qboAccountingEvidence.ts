@@ -45,6 +45,27 @@ export interface QboSourceConflict {
     source_date: string | null;
   }>;
   limitation: string;
+  next_action?: string;
+  evidence?: Array<{ name: string; value: string }>;
+}
+export interface QboHistoricalReconciliation {
+  state: "RECONCILED_WITH_DISCLOSED_EXCEPTIONS";
+  source_record_count: number;
+  relationship_id_count: number;
+  conflict_count: number;
+  customer_count: number;
+  invoice_count: number;
+  invoice_line_count: number;
+  invoice_open_balance: QboAmount;
+  payment_count: number;
+  payment_total: QboAmount;
+  payment_invoice_links: number;
+  missing_payment_invoice_links: number;
+  unlinked_payment_count: number;
+  unlinked_payment_total: QboAmount;
+  provider_unapplied_amount: QboAmount;
+  controls: Record<string, unknown>;
+  mutation_authority: "none";
 }
 export interface QboPaymentEvidence {
   source_id: string;
@@ -93,6 +114,7 @@ export interface QboAccountingEvidenceWorkspace {
   payments: QboPaymentEvidence[];
   reports: QboReportEvidence[];
   conflicts: QboSourceConflict[];
+  historical_reconciliation?: QboHistoricalReconciliation;
   mutation_authority: "none";
 }
 
@@ -107,7 +129,7 @@ export interface QboSourceBackedProfitAndLoss {
   report_type: "profit_and_loss";
   authority: "QBO_SOURCE_BACKED";
   provider_environment: "production";
-  source: "QuickBooks Online";
+  source: string;
   source_company: string;
   realm_id: string;
   start_date: string;
@@ -127,7 +149,7 @@ export interface QboSourceBackedArSummary {
   contract_version: "qbo-source-backed-ar-summary/v1";
   authority: "QBO_SOURCE_BACKED";
   provider_environment: "production";
-  source: "QuickBooks Online A/R Aging Summary";
+  source: string;
   source_company: string;
   realm_id: string;
   report_date: string;
@@ -135,8 +157,14 @@ export interface QboSourceBackedArSummary {
   source_as_of: string | null;
   acquired_at: string;
   net_open_ar: string;
-  includes_customer_credits_and_unapplied_payments: true;
+  current?: QboAmount;
+  overdue?: QboAmount;
+  invoice_evidence_count?: number;
+  open_invoice_count?: number;
+  includes_customer_credits_and_unapplied_payments: boolean;
   source_digest: string;
+  source_manifest_sha256?: string;
+  limitations?: string[];
   accepted_as_acp_accounting: false;
   mutation_authority: "none";
 }
