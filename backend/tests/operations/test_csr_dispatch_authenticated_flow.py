@@ -177,7 +177,9 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
     window_start_local += timedelta(minutes=(-window_start_local.minute) % 15)
     override_reason_code = None
     if window_start_local.date() != local_now.date():
-        window_start_local = local_now.replace(hour=22, minute=0, second=0, microsecond=0)
+        window_start_local = local_now.replace(
+            hour=22, minute=0, second=0, microsecond=0
+        )
         override_reason_code = "after_hours_call"
     window_end_local = window_start_local + timedelta(minutes=60)
     window_start = window_start_local.astimezone(timezone.utc)
@@ -478,9 +480,7 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
             )
             assert board_item["customer_display_name"] == customer_name
             assert board_item["job_id"] == job["id"]
-            assert board_item["assignment"]["primary_employee_id"] == str(
-                technician.id
-            )
+            assert board_item["assignment"]["primary_employee_id"] == str(technician.id)
 
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -523,8 +523,9 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
             assert job_detail_response.json()["customer"]["display_name"] == (
                 customer_name
             )
-            assert job_detail_response.json()["appointments"][0]["appointment_id"] == (
-                appointment["id"]
+            assert (
+                job_detail_response.json()["appointments"][0]["appointment_id"]
+                == (appointment["id"])
             )
             assert assignment_detail_response.json()["primary_employee_id"] == str(
                 technician.id
