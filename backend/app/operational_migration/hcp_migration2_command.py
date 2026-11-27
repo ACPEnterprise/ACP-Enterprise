@@ -25,6 +25,10 @@ from app.customer_migration.models import (
     ServiceLocationSourceIdentity,
 )
 from app.database.session import AsyncSessionFactory, engine
+from app.database.tenant_context import (
+    set_database_identity_context,
+    set_database_tenant_context,
+)
 from app.operational_migration.hcp_hybrid_customer import canonical_sha256
 from app.operational_migration.hcp_migration2_plan import (
     HcpMigration2Application,
@@ -443,6 +447,12 @@ async def resolve_rehearsal_context(
     *,
     credentialed: bool = False,
 ) -> AuthorizationContext:
+    # These identity-bound values come from the validated execution authority.
+    # Project them before the first ORM read so acp_app can discover the
+    # authorized actor and membership under forced RLS.  The rows are still
+    # validated below; a supplied ID cannot grant access by itself.
+    set_database_tenant_context(authority.company_id, (authority.branch_id,))
+    set_database_identity_context(authority.actor_id)
     user = await session.get(User, authority.actor_id)
     company = await session.get(Company, authority.company_id)
     branch = await session.get(Branch, authority.branch_id)
