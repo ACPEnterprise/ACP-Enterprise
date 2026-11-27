@@ -1,6 +1,10 @@
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -60,10 +64,59 @@ def test_application_acceptance_backend_waits_for_schema_and_bootstrap() -> None
     compose = _compose("docker-compose.application-acceptance.yml")
     depends_on = compose["services"]["backend"]["depends_on"]
 
-    assert compose["services"]["postgres"]["ports"] == ["127.0.0.1:15432:5432"]
+    assert compose["services"]["postgres"]["ports"] == [
+        "127.0.0.1:${ACCEPTANCE_POSTGRES_PORT:-15432}:5432"
+    ]
     assert depends_on["postgres"]["condition"] == "service_healthy"
     assert depends_on["redis"]["condition"] == "service_healthy"
     assert depends_on["bootstrap"]["condition"] == "service_completed_successfully"
+
+
+@pytest.mark.parametrize(
+    ("override", "expected"),
+    ((None, "15432"), ("25432", "25432")),
+)
+def test_application_acceptance_postgres_port_interpolates_safely(
+    override: str | None, expected: str
+) -> None:
+    """Verify Compose's default and explicit loopback-only port contracts."""
+    if shutil.which("docker") is None:
+        pytest.skip("Docker Compose is required to verify interpolation")
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "ACCEPTANCE_ADMIN_PASSWORD": "disposable-admin-password",
+            "ACCEPTANCE_APP_PASSWORD": "disposable-app-password",
+            "ACCEPTANCE_MIGRATE_PASSWORD": "disposable-migrate-password",
+            "ACCEPTANCE_BACKUP_PASSWORD": "disposable-backup-password",
+            "ACCEPTANCE_OWNER_PASSWORD": "disposable-owner-password",
+        }
+    )
+    if override is None:
+        environment.pop("ACCEPTANCE_POSTGRES_PORT", None)
+    else:
+        environment["ACCEPTANCE_POSTGRES_PORT"] = override
+    completed = subprocess.run(
+        (
+            "docker",
+            "compose",
+            "-f",
+            "docker-compose.application-acceptance.yml",
+            "config",
+            "--format",
+            "json",
+        ),
+        cwd=REPOSITORY_ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    rendered = json.loads(completed.stdout)
+    port = rendered["services"]["postgres"]["ports"][0]
+    assert port["host_ip"] == "127.0.0.1"
+    assert port["published"] == expected
+    assert port["target"] == 5432
 
 
 def test_disposable_qualification_services_are_internal_only() -> None:
