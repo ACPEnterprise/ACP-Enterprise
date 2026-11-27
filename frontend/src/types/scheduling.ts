@@ -57,6 +57,17 @@ export interface AppointmentRescheduleInput {
   override_reason_code?: import("./operations").SchedulingOverrideReason | null;
 }
 
+export type AppointmentCancellationReason =
+  | "customer_request"
+  | "duplicate_appointment"
+  | "scheduling_conflict"
+  | "service_unavailable";
+
+export interface AppointmentCancellationInput {
+  expected_version: number;
+  reason_code: AppointmentCancellationReason;
+}
+
 export interface BranchWeeklyInterval {
   day_of_week: number;
   start_minute: number;

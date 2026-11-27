@@ -86,6 +86,25 @@ describe("BookCustomerWorkPanel", () => {
     expect(addCustomerProperty).toHaveBeenCalledWith("customer-new", expect.objectContaining({ address_line_1: "20 Main St", is_primary: true }));
   });
 
+  it("uses the newly created customer and address in booking review", async () => {
+    vi.mocked(createCustomer).mockResolvedValue({
+      customer: { id: "customer-new", display_name: "Jamie New" },
+      duplicate_warnings: [],
+    } as never);
+    vi.mocked(addCustomerProperty).mockResolvedValue({ id: "location-new" } as never);
+    render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "New Customer intake" }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Customer name/ }), "Jamie New");
+    await userEvent.type(screen.getByRole("textbox", { name: /Phone/ }), "5551234567");
+    await userEvent.type(screen.getByRole("textbox", { name: /Service address/ }), "20 Main St");
+    await userEvent.type(screen.getByRole("textbox", { name: /City/ }), "Albany");
+    await userEvent.type(screen.getByRole("textbox", { name: /State/ }), "NY");
+    await userEvent.type(screen.getByRole("textbox", { name: /Postal code/ }), "12207");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm Customer and Location" }));
+    await userEvent.click(screen.getByRole("button", { name: "Review booking" }));
+    expect(screen.getByRole("dialog", { name: "Book this customer work?" })).toHaveTextContent("Jamie New · 20 Main St");
+  });
+
   it("fails closed when the customer arrival window ends before it starts", async () => {
     render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: /Customer/ }), "customer-1");
@@ -121,7 +140,7 @@ describe("BookCustomerWorkPanel", () => {
       },
     } as never);
     render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} returnTo="/scheduling?view=unassigned&queue=needs_attention&order=oldest&search=County" /></MemoryRouter>);
-    expect(screen.getByText(/Assignment remains a separate human-confirmed Dispatch action/)).toBeVisible();
+    expect(screen.getByText(/Choose Assign in Dispatch when you are ready to select a technician/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Open Appointment" })).toHaveAttribute("href", expect.stringMatching(/^\/appointments\/appointment-1\?returnTo=/));
     expect(screen.getByRole("link", { name: "Open Job" })).toHaveAttribute("href", expect.stringMatching(/^\/jobs\/job-1\?returnTo=/));
     expect(screen.getByRole("link", { name: "Assign in Dispatch" })).toHaveAttribute("href", "/dispatch");

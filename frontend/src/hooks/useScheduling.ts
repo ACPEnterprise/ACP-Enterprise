@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { shouldRetryApiQuery } from "../api/errors";
 import {
   getAppointment,
+  cancelAppointment,
   getBranchSchedulingPolicy,
   getBranchCalendarRoster,
   configureBranchSchedulingPolicy,
@@ -11,6 +12,7 @@ import {
 } from "../api/scheduling";
 import type {
   AppointmentListParams,
+  AppointmentCancellationInput,
   AppointmentRescheduleInput,
   BranchSchedulingPolicyInput,
 } from "../types/scheduling";
@@ -93,6 +95,26 @@ export function useRescheduleAppointment() {
         client.invalidateQueries({
           queryKey: appointmentKeys.detail(variables.appointmentId),
         }),
+        client.invalidateQueries({ queryKey: ["dispatch"] }),
+      ]);
+    },
+  });
+}
+
+export function useCancelAppointment() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      appointmentId,
+      input,
+    }: {
+      appointmentId: string;
+      input: AppointmentCancellationInput;
+    }) => cancelAppointment(appointmentId, input),
+    onSettled: async (_, __, variables) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: appointmentKeys.lists() }),
+        client.invalidateQueries({ queryKey: appointmentKeys.detail(variables.appointmentId) }),
         client.invalidateQueries({ queryKey: ["dispatch"] }),
       ]);
     },
