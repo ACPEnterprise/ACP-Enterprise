@@ -1,0 +1,37 @@
+{
+  "schema": "twelvehats.machine-readiness-receipt.v1",
+  "generated_on": "2026-11-27",
+  "execution_identity": "OM2-B",
+  "assignment_id": "OM2-B-REAL-BROWSER-HISTORY-02",
+  "authority": {
+    "branch": "handoff/continuous-engineering-authority-20261125",
+    "sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "application_candidate_sha": "568f33f003a740baa488f03985b324c92ae9c376",
+    "queue_sha256": "7a9d473727f4818a627ff3fd48646b5e917530aa56118d580e07d9f507bdc705",
+    "assignment_state": "READY_AFTER_INVENTORY",
+    "dependency_om2_b_ui_workflow_accept_01": "INTEGRATED_VERIFIED"
+  },
+  "execution": {
+    "branch": "work/om2b-real-browser-history-02",
+    "branch_point": "568f33f003a740baa488f03985b324c92ae9c376",
+    "worktree_clean_before_activation": true,
+    "isolated_runtime_port": 18182,
+    "fixture_classification": "SYNTHETIC_DISPOSABLE",
+    "protected_source_mutation": false
+  },
+  "resources": {
+    "logical_cpus": 6,
+    "memory_gib": 16,
+    "disk_available_tib": 1.5,
+    "load_average": [1.26, 1.44, 1.47],
+    "docker_containers_observed": 0,
+    "resource_disposition": "AVAILABLE_FOR_ONE_BOUNDED_ASSEMBLED_RUNTIME"
+  },
+  "boundaries": {
+    "live_deployment": false,
+    "live_database_mutation": false,
+    "external_communication": false,
+    "all_county_acceptance_claim": false
+  },
+  "status": "READY_FOR_BOUNDED_EXECUTION"
+}
