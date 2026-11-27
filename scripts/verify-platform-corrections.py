@@ -196,6 +196,19 @@ def _git(repository: Path, *arguments: str) -> str:
     return completed.stdout
 
 
+def _committed_file(repository: Path, candidate_sha: str, path: str) -> str:
+    completed = subprocess.run(
+        ("git", "show", f"{candidate_sha}:{path}"),
+        cwd=repository,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode:
+        raise PreservationError(f"candidate is missing required path: {path}")
+    return completed.stdout
+
+
 def verify_repository(repository: Path, candidate_sha: str) -> dict[str, object]:
     repository = repository.resolve()
     _require(
@@ -205,7 +218,7 @@ def verify_repository(repository: Path, candidate_sha: str) -> dict[str, object]
     resolved = _git(repository, "rev-parse", "--verify", f"{candidate_sha}^{{commit}}")
     _require(resolved.strip() == candidate_sha, "candidate SHA did not resolve exactly")
     files = {
-        path: _git(repository, "show", f"{candidate_sha}:{path}")
+        path: _committed_file(repository, candidate_sha, path)
         for path in REQUIRED_PATHS
     }
     checks = evaluate_candidate_files(files)
