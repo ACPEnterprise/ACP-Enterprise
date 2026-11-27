@@ -13,6 +13,9 @@ vi.mock("../../features/administration/hooks");
 vi.mock("./CustomerImportPanel", () => ({
   CustomerImportPanel: () => null,
 }));
+vi.mock("./HistoricalCustomerSearch", () => ({
+  HistoricalCustomerSearch: () => null,
+}));
 const permissions = new Set<string>();
 vi.mock("../../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),

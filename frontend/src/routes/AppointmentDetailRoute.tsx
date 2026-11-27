@@ -7,7 +7,8 @@ import { CreateJobFromAppointmentPanel } from "../components/appointments/Create
 import { useAuth, useHasPermission } from "../auth";
 import { useCustomerDetail } from "../hooks/useCustomers";
 import { useJobForAppointment } from "../hooks/useJobs";
-import { useAppointment } from "../hooks/useScheduling";
+import { useAppointment, useCancelAppointment } from "../hooks/useScheduling";
+import type { AppointmentCancellationReason } from "../types/scheduling";
 import {
   useDispatchAssignment,
   useDispatchAssignmentHistory,
@@ -22,7 +23,7 @@ import {
   schedulingReturnPath,
   withSchedulingReturn,
 } from "../routing/paths";
-import { Alert, Button, Card } from "../ui";
+import { Alert, Button, Card, ConfirmationDialog, Select } from "../ui";
 
 const jobEligibleStatuses = new Set([
   "draft",
@@ -45,6 +46,7 @@ export function AppointmentDetailRoute() {
   const contextPath = (path: string) =>
     searchParams.has("returnTo") ? withSchedulingReturn(path, returnTo) : path;
   const canRead = useHasPermission("COMPANY_SCHEDULING_READ");
+  const canManage = useHasPermission("COMPANY_SCHEDULING_MANAGE");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
@@ -55,6 +57,9 @@ export function AppointmentDetailRoute() {
     canRead && canReadJobs,
   );
   const [creating, setCreating] = useState(false);
+  const [cancelReason, setCancelReason] = useState<AppointmentCancellationReason>("customer_request");
+  const [confirmCancellation, setConfirmCancellation] = useState(false);
+  const cancelMutation = useCancelAppointment();
   const { activeCompany } = useAuth();
   const appointment = appointmentQuery.data;
   const assignmentQuery = useDispatchAssignment(
@@ -116,6 +121,25 @@ export function AppointmentDetailRoute() {
     : null;
   const terminalAssignment =
     assignmentQuery.data && !assignment ? assignmentQuery.data : null;
+  const canCancel = canManage && ["draft", "scheduled", "confirmed"].includes(appointment.status);
+  const cancellationError = cancelMutation.error
+    ? getOperatorApiError(cancelMutation.error, "Appointment cancellation")
+    : null;
+  const cancelAppointment = () => {
+    cancelMutation.mutate(
+      {
+        appointmentId: appointment.id,
+        input: {
+          expected_version: appointment.concurrency_version,
+          reason_code: cancelReason,
+        },
+      },
+      {
+        onSuccess: () => setConfirmCancellation(false),
+        onError: () => setConfirmCancellation(false),
+      },
+    );
+  };
   return (
     <div className="min-w-0 space-y-6">
       <Link
@@ -220,6 +244,33 @@ export function AppointmentDetailRoute() {
           )}
         </Card>
       </div>
+      {canCancel && (
+        <Card className="p-ui-4 sm:p-ui-6">
+          <h3 className="font-semibold">Cancel appointment</h3>
+          <p className="mt-1 text-sm text-content-muted">
+            Canceling preserves the appointment history and releases its reserved scheduling capacity. It does not cancel the related job.
+          </p>
+          {cancellationError && (
+            <Alert className="mt-4" variant="danger" title={cancellationError.title}>
+              {cancellationError.message}
+            </Alert>
+          )}
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="grid gap-2 text-sm font-medium">
+              Cancellation reason
+              <Select value={cancelReason} onChange={(event) => setCancelReason(event.target.value as AppointmentCancellationReason)}>
+                <option value="customer_request">Customer requested</option>
+                <option value="duplicate_appointment">Duplicate appointment</option>
+                <option value="scheduling_conflict">Scheduling conflict</option>
+                <option value="service_unavailable">Service unavailable</option>
+              </Select>
+            </label>
+            <Button variant="destructive" disabled={cancelMutation.isPending} onClick={() => setConfirmCancellation(true)}>
+              Cancel appointment
+            </Button>
+          </div>
+        </Card>
+      )}
       <Card className="p-ui-4 sm:p-ui-6">
         <h3 className="font-semibold">Dispatch assignment and readiness</h3>
         {!canReadDispatch ? (
@@ -449,6 +500,17 @@ export function AppointmentDetailRoute() {
         <CreateJobFromAppointmentPanel
           appointment={appointment}
           onCancel={() => setCreating(false)}
+        />
+      )}
+      {confirmCancellation && (
+        <ConfirmationDialog
+          title="Cancel this appointment?"
+          description={`${appointment.appointment_number} will be canceled for ${displayStatus(cancelReason)}. Appointment history is preserved, and the related job is not canceled.`}
+          confirmLabel="Confirm cancellation"
+          destructive
+          pending={cancelMutation.isPending}
+          onCancel={() => setConfirmCancellation(false)}
+          onConfirm={cancelAppointment}
         />
       )}
     </div>
