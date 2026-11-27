@@ -9,6 +9,7 @@
   ],
   "contract": "twelvehats-ci-drift-incident/v1",
   "failed_runs": {
+    "non_executable_qualification_python": [46041142025],
     "node_20_incompatibility": [46024693397],
     "ruff_format_inherited": [
       46015812751,
@@ -37,5 +38,5 @@
     "status": "success"
   },
   "total_cancelled": 6,
-  "total_failed": 16
+  "total_failed": 17
 }

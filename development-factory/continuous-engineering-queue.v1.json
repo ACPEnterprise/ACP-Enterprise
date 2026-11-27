@@ -419,6 +419,15 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Inventory and qualify table-by-table least-privilege remediation for the 18 non-RLS global/control tables; no live grants or policies may change in this assignment."
+    },
+    {
+      "assignment_id": "OM1-DF-CI-BASELINE-SYNC-08",
+      "machine": "OM1",
+      "execution_identity": "OM1-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Establish the qualified common baseline and verify the permanent executable-Python correction across all six identities; obsolete refs remain preserved but frozen."
     }
   ],
   "claim_policy": {
@@ -1071,6 +1080,17 @@
       "allowed_paths": ["backend/app/**", "backend/tests/**", "docs/engineering/**", "docs/quality/**", "scripts/**"],
       "validation": ["read-only privilege inventory", "table-by-table justification", "isolated role/grant rehearsal", "negative DDL and cross-tenant tests", "rollback evidence"],
       "stop_conditions": ["live grant change", "live RLS change", "application outage", "BYPASSRLS", "superuser runtime", "unreviewed global-table policy"]
+    },
+    {
+      "id": "OM1-DF-CI-BASELINE-SYNC-08",
+      "lane": "OM1",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Delegate common-baseline synchronization to OM1-A: verify baseline 6aec17be3ac0bc1316975b0222f39bc7c9903837 and hosted run 46029775062, freeze obsolete refs without deletion, and require candidate-ancestry plus platform-preservation checks before every subsequent publication.",
+      "allowed_paths": [".github/**", "scripts/**", "backend/tests/release/**", "docs/engineering/**", "docs/quality/evidence/**"],
+      "validation": ["exact baseline ancestry", "executable qualification Python", "platform preservation", "six-lane acknowledgment", "obsolete-ref freeze receipt"],
+      "stop_conditions": ["force-push", "protected-branch change", "qualification suppression", "worktree deletion", "live deployment"]
     }
   ]
 }
