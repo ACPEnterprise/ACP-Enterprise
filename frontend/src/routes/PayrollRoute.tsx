@@ -11,6 +11,20 @@ import { PayrollPolicySetup } from "../components/payroll/PayrollPolicySetup";
 
 const label = (value: string | null | undefined) => (value ?? "Not available").replaceAll("_", " ").replaceAll(":", " · ");
 
+const earningDetail = (earning: Record<string, unknown>) => {
+  const category = typeof earning.category === "string"
+    ? earning.category
+    : typeof earning.kind === "string"
+      ? earning.kind
+      : typeof earning.component_type === "string"
+        ? earning.component_type
+        : "earning";
+  const amount = [earning.amount, earning.calculated_amount, earning.total].find(
+    (value) => typeof value === "string" || typeof value === "number",
+  );
+  return amount === undefined ? label(category) : `${label(category)} · ${String(amount)}`;
+};
+
 const employeeRequirement = (code: string) => {
   if (code === "TIME_EVIDENCE_MISSING") return { requirement: "Accepted time", owner: "OWNER", blocks: "ASSEMBLE · CALCULATE · APPROVE · CLOSE", next: "Open the linked Timecard, resolve the period exception, and accept the time." };
   if (code.includes("COMPENSATION") || code.includes("PAY_RATE") || code.includes("SALARY")) return { requirement: "Compensation", owner: "OWNER", blocks: "CALCULATE · APPROVE · CLOSE", next: "Open Payroll setup and enter or approve the effective pay rate." };
@@ -502,7 +516,16 @@ export function PayrollRoute() {
                               </td>
                               <td>{member.accepted_minutes === null ? "Unavailable" : `${member.accepted_minutes / 60} h`}</td>
                               <td>{member.regular_minutes === null ? "Unavailable" : `${member.regular_minutes / 60} / ${(member.overtime_minutes ?? 0) / 60} h`}</td>
-                              <td>{member.gross ?? "Unavailable"}</td>
+                              <td>
+                                {member.gross ?? "Unavailable"}
+                                {(member.earnings ?? []).length > 0 && (
+                                  <ul className="mt-1 text-xs text-content-muted" aria-label={`${member.employee_name} earnings detail`}>
+                                    {(member.earnings ?? []).map((earning, index) => (
+                                      <li key={`${earningDetail(earning)}-${index}`}>{earningDetail(earning)}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </td>
                               <td>{member.employee_taxes ?? "Unavailable"}</td>
                               <td>{member.deductions ?? "Unavailable"}</td>
                               <td>{member.net_pay ?? "Unavailable"}</td>

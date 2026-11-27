@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from backend.scripts.reconcile_historical_workforce import _historical_rows
 
 
@@ -45,3 +48,44 @@ def test_melvin_and_dakota_are_preserved_as_non_authoritative_when_unresolved() 
     rows = {row["display_name"]: row for row in _historical_rows(native)}
     assert rows["Melvin Santiago"]["lifecycle_state"] == "PARTIAL"
     assert rows["Dakota Wilcox"]["lifecycle_state"] == "QUARANTINED"
+
+
+def test_operational_roster_and_historical_identity_counts_reconcile() -> None:
+    contract = json.loads(
+        (
+            Path(__file__).parents[2]
+            / "operations/real-workforce-cutover-contract.v1.json"
+        ).read_text()
+    )
+    employee_count = len(contract["expected_roster"]) + len(
+        contract["terminated_historical_roster"]
+    )
+    native = {
+        name: __import__("uuid").uuid4()
+        for name in (
+            "Michael Fouse",
+            "Alex Donahue",
+            "Melvin Santiago",
+            "Dakota Wilcox",
+            "Jason Calci",
+            "Alex Donahue (stale)",
+        )
+    }
+    historical = _historical_rows(native)
+
+    assert employee_count == 9
+    assert len(historical) == 10
+    assert {item["display_name"] for item in historical} >= {
+        item["canonical_display_name"]
+        for item in contract["terminated_historical_roster"]
+    }
+    terminated_names = {
+        item["canonical_display_name"]
+        for item in contract["terminated_historical_roster"]
+    }
+    assert all(
+        item["native_employee_id"] is None
+        and item["lifecycle_state"] == "UNRESOLVED"
+        for item in historical
+        if item["display_name"] in terminated_names
+    )

@@ -471,11 +471,25 @@ export function WorkforceRoute() {
               <h3 className="text-lg font-semibold">Current timecard review</h3>
               <p className="mt-1 text-sm text-content-muted">Read-only current-period evidence. Exceptions require human review; no Payroll execution occurs here.</p>
             </div>
-            {timeReview.data?.pay_period && (
-              <Badge variant="neutral">
-                {timeReview.data.pay_period.period_start} – {timeReview.data.pay_period.period_end}
-              </Badge>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {(payPeriods.data ?? []).length > 0 && (
+                <label className="text-sm font-medium">
+                  Pay period
+                  <select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => selectPayPeriod(event.target.value)}>
+                    {(payPeriods.data ?? []).map((period) => (
+                      <option key={period.id} value={period.id}>
+                        {period.period_start} – {period.period_end}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && (
+                <Link className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold" to={`/payroll${effectivePayPeriodId ? `?period=${effectivePayPeriodId}` : ""}`}>
+                  Review Payroll period
+                </Link>
+              )}
+            </div>
           </div>
           {timeReview.isLoading && (
             <div className="mt-4">
@@ -657,83 +671,7 @@ export function WorkforceRoute() {
               )}
             </form>
           )}
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold">Timecard operations</h3>
-              <p className="mt-1 text-sm text-content-muted">Read-only daily and pay-period evidence. Exceptions require human review; no Payroll execution occurs here.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="text-sm font-medium">
-                Pay period
-                <select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => selectPayPeriod(event.target.value)}>
-                {(payPeriods.data ?? []).map((period) => (
-                  <option key={period.id} value={period.id}>
-                    {period.period_start} – {period.period_end}
-                  </option>
-                ))}
-                </select>
-              </label>
-              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold" to={`/payroll${effectivePayPeriodId ? `?period=${effectivePayPeriodId}` : ""}`}>Review Payroll period</Link>}
-            </div>
-          </div>
-          {timeReview.isLoading && (
-            <div className="mt-4">
-              <Spinner label="Loading timecard review" />
-            </div>
-          )}
-          {timeReview.isError && (
-            <div className="mt-4">
-              <Alert variant="warning" title="Timecard review unavailable">
-                No time or Payroll state was changed. Refresh after verifying timekeeping authority.
-              </Alert>
-            </div>
-          )}
-          {timeReview.data && !timeReview.data.pay_period && !effectivePayPeriodId && (
-            <div className="mt-4">
-              <Alert variant="warning" title="Pay period required">
-                Configure an authorized pay period before preparing payroll time evidence.
-              </Alert>
-            </div>
-          )}
-          {timeReview.data?.pay_period && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[680px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-stroke text-content-muted">
-                    <th className="py-2">Employee</th>
-                    <th>Entries</th>
-                    <th>Recorded hours</th>
-                    <th>Review state</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timeReview.data.items.map((item) => (
-                    <tr className="border-b border-stroke" key={item.employee_id}>
-                      <td className="py-3">
-                        <strong>{item.display_name}</strong>
-                        <span className="block text-xs text-content-muted">{item.employee_number}</span>
-                      </td>
-                      <td>{item.entry_count}</td>
-                      <td>{(item.total_minutes / 60).toFixed(2)}</td>
-                      <td>
-                        <div className="flex flex-wrap gap-1">
-                          {item.exception_codes.length ? (
-                            item.exception_codes.map((code) => (
-                              <Badge variant={code === "overlap" ? "danger" : "warning"} key={code}>
-                                {code.replaceAll("_", " ")}
-                              </Badge>
-                            ))
-                          ) : (
-                            <Badge variant="success">ready for review</Badge>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <h3 className="mt-6 text-lg font-semibold">Detailed timecards</h3>
           {timecards.isLoading && (
             <div className="mt-4">
               <Spinner label="Loading detailed Employee timecards" />
