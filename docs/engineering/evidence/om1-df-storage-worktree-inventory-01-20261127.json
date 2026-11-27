@@ -1,0 +1,70 @@
+{
+  "assignment_id": "OM1-DF-STORAGE-WORKTREE-INVENTORY-01",
+  "authority": {
+    "application_candidate_sha": "568f33f003a740baa488f03985b324c92ae9c376",
+    "authority_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
+    "authority_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "automated_claim_used": false,
+    "execution_identity": "OM1-A",
+    "integration_authority": "LAPTOP_MASTER",
+    "manual_reservation_verified": true,
+    "queue_sha256": "7a9d473727f4818a627ff3fd48646b5e917530aa56118d580e07d9f507bdc705"
+  },
+  "collected_at_utc": "2026-11-27T14:27:18.827955+00:00",
+  "custody_classification": {
+    "detached_worktrees_requiring_explicit_review": 4,
+    "dirty_worktrees_preserve": 11,
+    "diverged_branch_worktrees_preserve": 6,
+    "execution_provider_worktrees_preserve": 8,
+    "no_remote_tracking_ref_worktrees_preserve": 67,
+    "published_exact_worktrees": 211,
+    "prunable_registration_candidates_review_only": 2,
+    "recommendation": "Do not remove or prune any worktree, container, volume, backup, or evidence artifact. Laptop Master must independently reconcile dirty, detached, diverged, provider-owned, and unpublished custody before authorizing any bounded cleanup. The two dry-run prunable registrations reference missing temporary gitdir files, but were intentionally preserved."
+  },
+  "evidence_digests": {
+    "dirty_worktree_path_inventory_sha256": "b6a0a1121ba18cc7d57ee215980ff819c04e9c3708fe51d45a46036167915f44",
+    "diverged_worktree_inventory_sha256": "65e71892e00271d5a2277e43c5b72fb643d9fd02ad7e0c78c70b0b30736531fb",
+    "machine_inventory_sha256": "27db418b548d12e89e95ac274471e7709fc9930da54b71fc003560b1ab00174f",
+    "registered_worktree_inventory_sha256": "d3ff70581570f5bfd347661cce08c7d2dc0d5a6c16f4d4d35850cb44e4a4f1bb",
+    "unpublished_worktree_inventory_sha256": "9aa1d6d5d212ebfb32fe4ae03c0e6d8dcc8545ff23cb29f6bf45c966f6da7fce"
+  },
+  "machine": {
+    "codex_version": "codex-cli 0.144.5",
+    "docker_version": "29.6.1",
+    "free_bytes_at_inventory": 16106475520,
+    "host_memory_bytes": 8589934592,
+    "hostname": "iMac-685.lan",
+    "os": "macOS-15.4.1-x86_64-i386-64bit",
+    "repository_root": "/Users/michaelbfouse/Development/ACP-Enterprise-om1a-storage-worktree-inventory-01"
+  },
+  "no_delete_proof": {
+    "containers_deleted": 0,
+    "git_prune_executed": false,
+    "registered_worktrees_after_inventory": 288,
+    "volumes_deleted": 0,
+    "worktrees_deleted": 0,
+    "worktrees_pruned": 0
+  },
+  "resource_summary": {
+    "docker_build_cache_bytes_reclaimable_reported": 1996083927,
+    "docker_containers": 30,
+    "docker_images": 63,
+    "docker_local_volumes": 85,
+    "filesystem_free_gib_approx": 16,
+    "filesystem_use_percent": 93,
+    "memory_free_percent": 51,
+    "resource_disposition": "CONSTRAINED_NO_CLEANUP_AUTHORIZED"
+  },
+  "result": "PASS_WITH_PRESERVATION_HOLDS",
+  "schema": "twelfthats.engineering-qualification/v1",
+  "worktree_inventory": {
+    "detached": 4,
+    "dirty": 11,
+    "diverged_from_remote": 6,
+    "missing_paths": 0,
+    "no_remote_tracking_ref": 67,
+    "prunable_dry_run_findings": 2,
+    "published_exact": 211,
+    "registered": 288
+  }
+}
