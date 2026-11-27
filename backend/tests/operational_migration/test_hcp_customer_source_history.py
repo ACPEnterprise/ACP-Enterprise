@@ -241,6 +241,33 @@ def test_searches_historical_customer_and_location_without_native_identity(
     assert by_name["mutation_authority"] == "none"
 
 
+def test_exposes_exact_job_embedded_customer_snapshot_when_collection_is_missing(
+    tmp_path: Path,
+) -> None:
+    root = _source(tmp_path)
+    details = root / "raw" / "job-details"
+    details.mkdir()
+    (details / "job-other.json").write_text(
+        json.dumps(
+            {
+                "id": "job-other",
+                "customer": {
+                    "id": "customer-other",
+                    "first_name": "Embedded",
+                    "last_name": "Historical",
+                },
+            }
+        )
+    )
+
+    result = project_customer_source_history(root, source_customer_id="customer-other")
+    assert result["counts"]["jobs"] == 1
+    assert result["jobs"][0]["source_id"] == "job-other"
+
+    search = search_customer_source_history(root, query="Embedded")
+    assert search["items"][0]["source_customer_id"] == "customer-other"
+
+
 def test_historical_customer_search_requires_bounded_meaningful_query(
     tmp_path: Path,
 ) -> None:

@@ -25,6 +25,26 @@ def _job_details(root: Path) -> dict[str, dict[str, Any]]:
     return details
 
 
+def _customers_with_job_snapshots(root: Path) -> list[dict[str, Any]]:
+    """Include exact provider Customer snapshots embedded in Job details.
+
+    HCP can return a Job whose Customer is absent from the paginated Customer
+    collection.  The embedded object is source evidence, not an inferred
+    identity, so it is safe to expose as historical-only data while retaining
+    the missing-collection distinction.
+    """
+    by_id = {
+        str(row["id"]): row
+        for row in _rows(root, "customers")
+        if isinstance(row.get("id"), str)
+    }
+    for detail in _job_details(root).values():
+        customer = detail.get("customer")
+        if isinstance(customer, Mapping) and isinstance(customer.get("id"), str):
+            by_id.setdefault(str(customer["id"]), dict(customer))
+    return list(by_id.values())
+
+
 def _attachment_rows(
     root: Path, attachment_root: Path | None
 ) -> dict[str, tuple[dict[str, Any], ...]]:
@@ -124,7 +144,9 @@ def _source_indexes(
     # this evidence read-only; a newly sealed package receives a new digest.
     del manifest_sha256
     root = Path(root_text)
-    customers_by_id = {str(row["id"]): row for row in _rows(root, "customers")}
+    customers_by_id = {
+        str(row["id"]): row for row in _customers_with_job_snapshots(root)
+    }
     jobs_by_customer: dict[str, list[dict[str, Any]]] = {}
     jobs_by_id: dict[str, dict[str, Any]] = {}
     details = _job_details(root)
@@ -423,7 +445,7 @@ def search_customer_source_history(
         raise HcpCustomerSourceHistoryError("source_package_not_read_only")
 
     matches: list[dict[str, object]] = []
-    for customer in _rows(root, "customers"):
+    for customer in _customers_with_job_snapshots(root):
         addresses = [
             address
             for address in customer.get("addresses") or []
