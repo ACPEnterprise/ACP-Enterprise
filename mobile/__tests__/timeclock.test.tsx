@@ -24,7 +24,21 @@ describe("native employee timeclock", () => {
     });
   });
 
-  it("renders Clock In while authoritatively clocked out and sends no identity or timestamp", async () => { const h = harness(); render(<TimeScreen service={h.service} network={h.network} canPunch />); expect(await screen.findByText("Clock In")).toBeEnabled(); fireEvent.press(screen.getByText("Clock In")); await waitFor(() => expect(h.service.punch).toHaveBeenCalledWith("clock_in", "opaque-idempotency-key")); expect(JSON.stringify((h.service.punch as jest.Mock).mock.calls)).not.toMatch(/employee|occurred_at|timestamp/); });
+  it("renders Clock In while authoritatively clocked out and sends no identity or timestamp", async () => {
+    const h = harness();
+    render(<TimeScreen service={h.service} network={h.network} canPunch />);
+    expect(await screen.findByText("Clock In")).toBeEnabled();
+    await act(async () => {
+      fireEvent.press(screen.getByText("Clock In"));
+    });
+    expect(h.service.punch).toHaveBeenCalledWith(
+      "clock_in",
+      "opaque-idempotency-key",
+    );
+    expect(JSON.stringify((h.service.punch as jest.Mock).mock.calls)).not.toMatch(
+      /employee|occurred_at|timestamp/,
+    );
+  });
   it("uses authoritative Clock In response", async () => { const h = harness(); render(<TimeScreen service={h.service} network={h.network} canPunch />); fireEvent.press(await screen.findByText("Clock In")); expect(await screen.findByText("Clocked in")).toBeOnTheScreen(); });
   it("offers Start Break and Clock Out while clocked in", async () => { const h = harness(states.clocked_in); render(<TimeScreen service={h.service} network={h.network} canPunch />); expect(await screen.findByText("Start Break")).toBeEnabled(); expect(screen.getByText("Clock Out")).toBeEnabled(); });
   it("shows a live elapsed display rooted in server-confirmed evidence", async () => { const h = harness(states.clocked_in); render(<TimeScreen service={h.service} network={h.network} canPunch />); expect(await screen.findByLabelText(/Elapsed Workday time/)).toBeOnTheScreen(); expect(screen.getByText(/ACP server evidence remains authoritative/)).toBeOnTheScreen(); });
