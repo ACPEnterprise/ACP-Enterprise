@@ -1,0 +1,63 @@
+{
+  "schema": "twelvehats.om2b.real-browser-history-evidence.v1",
+  "assignment_id": "OM2-B-REAL-BROWSER-HISTORY-02",
+  "generated_on": "2026-11-27",
+  "authority": {
+    "branch": "handoff/continuous-engineering-authority-20261125",
+    "sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "application_candidate_sha": "568f33f003a740baa488f03985b324c92ae9c376"
+  },
+  "runtime": {
+    "classification": "SYNTHETIC_DISPOSABLE_ISOLATED",
+    "url": "http://127.0.0.1:18182/",
+    "accessibility": "LOCAL_MACHINE_ONLY",
+    "serving_source_sha": "e7ab4e138c3800f4338819f67e74d2c2c296912d",
+    "schema_revision": "x3y5z7a9c1e4",
+    "database_port": 15432,
+    "health": "HEALTHY",
+    "live_deployment": false,
+    "protected_data": false
+  },
+  "qualification": {
+    "authenticated_application_lifecycle": {
+      "status": "PASS",
+      "workflows": [
+        "owner authentication",
+        "customer creation",
+        "location creation",
+        "employee onboarding in disposable fixture",
+        "technician eligibility",
+        "scheduling policy",
+        "appointment creation",
+        "technician assignment",
+        "job creation"
+      ]
+    },
+    "tenant_isolation": {
+      "status": "PASS_AUTHENTICATED_API",
+      "detail": "The created Customer was denied under a random foreign Company identity."
+    },
+    "restart_persistence": {
+      "status": "PASS_AUTHENTICATED_API",
+      "detail": "Backend and frontend restarted; a fresh login read back the same Customer, Location, Appointment, Employee, and Job identities."
+    },
+    "real_browser": {
+      "status": "BLOCKED_HOST_EXECUTION",
+      "browser": "Google Chrome 158.0.8127.88",
+      "detail": "Chrome aborted under the managed host sandbox before opening its DevTools port; SafariDriver was also denied. No HTTP or component result is substituted for browser acceptance."
+    }
+  },
+  "historical_source": {
+    "owner_acceptance_finding_001": "OPEN_SOURCE_MEDIA_AND_FIELD_COMPLETENESS_NOT_PROVEN",
+    "historical_media_assignment": "BLOCKED_EVIDENCE",
+    "media_dependency": "OM2-A-HCP-MEDIA-CUSTODY-05",
+    "fabricated_records": false
+  },
+  "result": "PARTIAL_BROWSER_BLOCKED",
+  "all_county_operational_acceptance": false,
+  "remaining_requirements": [
+    "Run the harness where Chrome or another supported browser may execute.",
+    "Verify the authenticated customer, job, scheduling, dispatch, workforce, technician, price-book, estimate, and invoice screens in that browser.",
+    "Preserve Owner Acceptance Finding 001 until actual protected source and browser acceptance pass."
+  ]
+}
