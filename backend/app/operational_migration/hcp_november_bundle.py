@@ -435,10 +435,7 @@ class NovemberQualificationAuthority:
                         payloads = {}
                         for normalized_name, member in file_members.items():
                             path = Path(normalized_name)
-                            if (
-                                path.is_absolute()
-                                or ".." in path.parts
-                            ):
+                            if path.is_absolute() or ".." in path.parts:
                                 _fail(
                                     "hcp_november_bundle_member_unsafe",
                                     member.name,

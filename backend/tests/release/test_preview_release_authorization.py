@@ -11,7 +11,9 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-NOW = datetime(2026, 11, 23, 20, 0, tzinfo=timezone.utc)
+# Keep generated review receipts inside the validator's 72-hour freshness window
+# regardless of when the release suite runs.
+NOW = datetime.now(timezone.utc)
 PASSPHRASE = b"owner-controlled-test-passphrase"
 
 
@@ -131,7 +133,7 @@ def test_owner_enrollment_creates_named_encrypted_authority_and_audit(
 
     assert receipt["authority_id"] == "twelvehats-beta-release-authority"
     assert receipt["custodian"] == {"id": "michael-fouse", "name": "Michael Fouse"}
-    assert receipt["key_id"].startswith("beta-era-20261123-")
+    assert receipt["key_id"].startswith(f"beta-era-{NOW:%Y%m%d}-")
     assert b"ENCRYPTED PRIVATE KEY" in private_key.read_bytes()
     assert stat.S_IMODE(private_key.stat().st_mode) == 0o600
     assert stat.S_IMODE(public_key.stat().st_mode) == 0o600
