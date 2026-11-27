@@ -1,0 +1,75 @@
+{
+  "schema_version": "all-county-native-accounting-admission-preparation/v1",
+  "as_of": "2026-11-27",
+  "state": "PREPARED_BLOCKED_BEFORE_NATIVE_WRITES",
+  "source": {
+    "run_id": "qbo-production-20261119T235000Z",
+    "record_count": 20702,
+    "relationship_id_count": 97093,
+    "source_manifest_sha256": "b9a8bd5139bf70e80131c0c8096459e4f1c65576049ee58d91b683d8eeb5378f",
+    "bounded_snapshot_sha256": "e4d672c1cdfca858e4a8e923a51a86627753c7ea1fedc695daa98066a5dc6041",
+    "manual_custody_manifest_sha256": "f6640c0d531eaa8a822e82f697b3aaead65c8ae7b52a3c527e9616642c4d4f4a"
+  },
+  "plan": {
+    "contract": "qbo-native-accounting-admission-plan/v1",
+    "plan_sha256": "0e696c85ad25427ce1aa99ba0ab1c439824122e4a83e79d69319e7e13347248b",
+    "private_file_sha256": "a569175c043990f9598e3db8e0329694975c27b01a0deb1ec8762595781f41dc",
+    "native_rows_created": 0,
+    "qbo_operations": 0,
+    "bank_feed_postings": 0,
+    "actual_transactions_posted": 0
+  },
+  "qualification": {
+    "database": "DISPOSABLE_LOOPBACK_POSTGRESQL_16",
+    "cache": "DISPOSABLE_LOOPBACK_REDIS_7_ACL",
+    "alembic_head": "x3y5z7a9c1e4",
+    "schema_drift": "NONE",
+    "focused_tests_passed": 49,
+    "focused_tests_failed": 0,
+    "database_cleanup": "VERIFIED",
+    "backup_manifest": "VERIFIED",
+    "empty_target_restore": "PASS",
+    "transaction_failure_rollback": "VERIFIED",
+    "partial_execution_recovery": "PASS_NEW_CLEAN_TARGET",
+    "post_restore_readiness": "HEALTHY",
+    "host_ports": "NONE",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "mypy": "PASS",
+    "actual_protected_acceptance": "NOT_RUN_NOT_AUTHORIZED"
+  },
+  "safe_source_evidence": {
+    "sealed_records": 20702,
+    "payment_invoice_links": 1171,
+    "missing_linked_invoice_ids": 0,
+    "balanced_journal_entries": 33,
+    "native_posting_authority": "NONE"
+  },
+  "held": {
+    "accounts": 131,
+    "invoices": 1341,
+    "payments": 1237,
+    "unlinked_payments": 73,
+    "purchases_deposits_transfers": 15885,
+    "american_express_pending": 102,
+    "payroll_employees": 30
+  },
+  "conflicts": [
+    "D-001",
+    "D-002",
+    "D-003",
+    "D-004",
+    "D-005",
+    "D-006",
+    "D-007"
+  ],
+  "blocking_requirements": [
+    "original_bounded_envelope_store_in_verified_read_only_custody",
+    "approved_exact_131_account_crosswalk",
+    "approved_historical_native_transaction_contracts",
+    "exact_overlap_resolution_for_existing_native_invoices_and_payments",
+    "accountant_accepted_100801_91_ar_bridge",
+    "per_account_opening_and_ledger_control_ties",
+    "candidate_bound_backup_restore_and_separate_execution_authority"
+  ]
+}
