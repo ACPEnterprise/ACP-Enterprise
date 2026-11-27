@@ -1,0 +1,53 @@
+{
+  "assignment": "OM2-A-HCP-IDENTITY-BLOCKERS-08",
+  "status": "EXECUTABLE_PACKAGE_QUALIFIED_PROTECTED_INVENTORY_PENDING",
+  "baseline": "9ef3e97ecd8df54c9f02c5603c5c30fe7c59ec8f",
+  "deliverable_contract": "hcp-identity-recovery-package/v1",
+  "required_binding_count": 417,
+  "classification_contract": [
+    "EXACT_EXISTING_NATIVE_SUCCESSOR",
+    "PROVEN_MISSING_NATIVE_RECORD",
+    "INCORRECT_UPDATE_DISPOSITION",
+    "DUPLICATE_OR_CONFLICTING_IDENTITY",
+    "UNRESOLVED_AND_HELD"
+  ],
+  "qualification": {
+    "pytest": "3 passed",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "mypy": "PASS",
+    "python": "3.12",
+    "full_requirements_install": "BLOCKED_CRYPTOGRAPHY_RUST_CACHE_SANDBOX",
+    "focused_pinned_tools": [
+      "pytest==8.4.2",
+      "ruff==0.16.8",
+      "mypy==1.20.2"
+    ]
+  },
+  "safety": {
+    "hcp_writes": false,
+    "protected_database_mutation": false,
+    "protected_inventory_accessed": false,
+    "name_only_identity_matching": false,
+    "unsupported_mapping_creation": false,
+    "output_overwrite_allowed": false,
+    "output_mode": "0600",
+    "mutation_authority": "none"
+  },
+  "protected_execution_dependency": {
+    "artifact": "hcp-update-runtime-successor-inventory/v1",
+    "producer": "backend/app/operational_migration/hcp_update_runtime_successor_command.py",
+    "required_custodian": "LAPTOP_MASTER",
+    "availability_on_om2": "NOT_PRESENT",
+    "effect": "No actual 417-row classification or protected recovery authorization is claimed"
+  },
+  "independent_recovery_rule": "Only exact successors whose UPDATE-parent dependency closure is also exact are emitted as independently recoverable candidates",
+  "attachment_search": {
+    "protected_handoff": "NOT_FOUND",
+    "downloads": "NOT_FOUND",
+    "documents": "NOT_FOUND",
+    "desktop": "NOT_FOUND",
+    "mounted_volumes": "NOT_FOUND",
+    "remaining_requirement": "Restore the sealed 621-reference manifest and media bundle or issue approved GET-only retrieval references"
+  }
+}
