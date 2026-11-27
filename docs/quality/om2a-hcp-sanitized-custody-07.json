@@ -1,0 +1,58 @@
+{
+  "contract": "twelvehats.om2a-hcp-sanitized-custody-qualification.v1",
+  "generated_at": "2026-11-27T16:50:36Z",
+  "execution_identity": "OM2-A",
+  "assignment_id": "OM2-A-HCP-SANITIZED-CUSTODY-07",
+  "composition": {
+    "common_baseline": "6aec17be3ac0bc1316975b0222f39bc7c9903837",
+    "preserved_source_branches": [
+      "6c79c8db2b5c64c192399e8bd108cd8b8f6a6bb9",
+      "84e56aa453cf9ce7b6ef241e9b2a79e6a5de32ac",
+      "6b629e4c3fdd7bf9e47671b93271f8fdac7c2e1a"
+    ],
+    "source_branches_rewritten": false
+  },
+  "hosted_formatting_failure": {
+    "run_id": 46030493716,
+    "failure": "ruff format check requested a single-line unsafe archive member condition in hcp_november_bundle.py",
+    "resolution": "Already corrected on the common baseline by 7184c4d5772d7e043d03366942ba8dba313a84ae",
+    "backend_format_check": "1650 files already formatted",
+    "backend_ruff_check": "PASS"
+  },
+  "qualification": {
+    "secret_custody_check": {
+      "required_declarations": 3,
+      "tracked_runtime_secret_files": 0,
+      "tracked_credential_signatures": 0,
+      "result": "PASS"
+    },
+    "backend_mypy": "PASS: 1035 source files",
+    "current_schema_and_recovery_tests": "47 passed",
+    "source_history_completeness_and_materialization_tests": "25 passed",
+    "dependency_environment": "/tmp/om2a-hcp-completeness-venv",
+    "dependency_source": "backend/requirements-dev.txt",
+    "dependency_pins_changed": false
+  },
+  "capabilities": [
+    "sanitized media manifest reconciliation",
+    "resumable GET-only media recovery checkpointing",
+    "missing-payload inventory generation",
+    "provider Company binding validation",
+    "historical population snapshot reconciliation",
+    "source relationship and provenance preservation"
+  ],
+  "protected_execution": {
+    "performed_on_om2a": false,
+    "protected_snapshot_result_available_on_remote_handoffs": false,
+    "actual_discrepancies_resolved": false,
+    "coordination_owner": "LAPTOP_MASTER",
+    "required_next_input": "Sanitized reconciliation receipt or approved in-custody execution results with source and target identities, dispositions, and evidence digests."
+  },
+  "safety": {
+    "protected_data_accessed": false,
+    "confidential_fixture_transferred": false,
+    "provider_write": false,
+    "live_deployment": false,
+    "fabricated_relationship": false
+  }
+}
