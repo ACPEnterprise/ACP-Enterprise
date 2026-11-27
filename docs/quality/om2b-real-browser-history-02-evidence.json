@@ -33,6 +33,31 @@
       "runtime_updated": false,
       "detail": "The reserved runtime remains on its prior serving source SHA for uninterrupted owner inspection. This component/build result is not real-browser or operational acceptance."
     },
+    "appointment_cancellation": {
+      "status": "PASS_FRONTEND_COMPLETE_SUITE_AND_PRODUCTION_BUILD",
+      "implementation_sha": "dae70c18c5c705990278cd9f56d9e6f77953c22f",
+      "authority": "Existing backend scheduling cancellation contract; no backend authority change.",
+      "controls": [
+        "COMPANY_SCHEDULING_MANAGE permission",
+        "observed concurrency version",
+        "controlled cancellation reason",
+        "explicit destructive confirmation",
+        "schedule, appointment detail, and dispatch refresh on settled outcome",
+        "appointment history preserved",
+        "related Job not implicitly cancelled"
+      ],
+      "qualification": {
+        "frontend_test_files_passed": 172,
+        "frontend_tests_passed": 800,
+        "frontend_failures": 0,
+        "production_build": "PASS",
+        "focused_eslint": "PASS",
+        "om1a_regression_reconciliation": "HistoricalCustomerSearch test isolation adopted exactly from 10e05d132a9299e73e10cca316b4abf263d2d269"
+      },
+      "runtime_updated": false,
+      "browser_acceptance": "PENDING_LAPTOP_MASTER_OR_INDEPENDENT_REVIEWER",
+      "all_county_operational_acceptance": false
+    },
     "reviewer_harness": {
       "status": "PUBLISHED_NOT_EXECUTED_ON_THIS_HOST",
       "implementation_sha": "a8f8ae13440e6bb144c7807356912e06a2907c29",
