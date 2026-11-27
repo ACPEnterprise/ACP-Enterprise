@@ -273,6 +273,101 @@ def project_manual_profit_and_loss(
     }
 
 
+def project_manual_aged_receivables(
+    *, root: Path, report_date: str
+) -> dict[str, object]:
+    """Project read-only A/R aging from the sealed invoice archive.
+
+    The manual archive is source-backed evidence, not ACP ledger truth.  Aging
+    is calculated only from invoice open balances and due dates present in the
+    verified invoice workbook; payments and credits without an invoice link
+    remain disclosed in the archive reconciliation exceptions.
+    """
+    projected = project_manual_archive(root=root, basis="accrual")
+    invoices = projected.get("invoices")
+    if not isinstance(invoices, list):
+        raise QboEvidenceProjectionError("manual_archive_invoice_projection_invalid")
+    ar = projected.get("ar")
+    if not isinstance(ar, Mapping):
+        raise QboEvidenceProjectionError("manual_archive_ar_projection_invalid")
+
+    try:
+        cutoff = datetime.fromisoformat(report_date).date()
+    except ValueError as error:
+        raise QboEvidenceProjectionError(
+            "manual_archive_report_date_invalid"
+        ) from error
+
+    current = Decimal(0)
+    overdue = Decimal(0)
+    for invoice in invoices:
+        if not isinstance(invoice, Mapping):
+            raise QboEvidenceProjectionError(
+                "manual_archive_invoice_projection_invalid"
+            )
+        balance = invoice.get("open_balance")
+        if not isinstance(balance, Mapping):
+            continue
+        amount = balance.get("amount")
+        if amount in {None, ""}:
+            continue
+        try:
+            open_balance = Decimal(str(amount))
+        except (InvalidOperation, ValueError) as error:
+            raise QboEvidenceProjectionError(
+                "manual_archive_invoice_balance_invalid"
+            ) from error
+        if open_balance <= 0:
+            continue
+        due_date = invoice.get("due_date")
+        if isinstance(due_date, str):
+            try:
+                due = datetime.fromisoformat(due_date).date()
+            except ValueError:
+                due = None
+        else:
+            due = None
+        if due is not None and due >= cutoff:
+            current += open_balance
+        else:
+            overdue += open_balance
+
+    register = _read_json(root / "reconciliation-register.json")
+    connection = _mapping(register.get("connection"))
+    return {
+        "contract_version": "qbo-source-backed-ar-summary/v1",
+        "authority": "QBO_SOURCE_BACKED",
+        "provider_environment": "production",
+        "source": "QuickBooks Online manual archive A/R evidence",
+        "source_company": _required_text(connection, "company_name"),
+        "realm_id": _required_text(connection, "realm_id"),
+        "report_date": report_date,
+        "currency": "USD",
+        "source_as_of": str(
+            _mapping(register.get("current_acquisition")).get("cutoff") or report_date
+        ),
+        "acquired_at": str(
+            _read_json(root / "custody-manifest.json").get("sealed_at")
+            or datetime.now(timezone.utc).isoformat()
+        ),
+        "net_open_ar": ar["total_open"],
+        "current": _amount(current),
+        "overdue": _amount(overdue),
+        "invoice_evidence_count": ar["invoice_evidence_count"],
+        "open_invoice_count": ar["open_invoice_count"],
+        "includes_customer_credits_and_unapplied_payments": False,
+        "source_manifest_sha256": projected["source_manifest_sha256"],
+        "accepted_as_acp_accounting": False,
+        "mutation_authority": "none",
+        "limitations": [
+            "sealed_manual_report_archive",
+            "invoice_open_balances_only",
+            "unapplied_payments_and_credits_require_account_level_bridge",
+            "source_reported_not_posted_acp_ledger",
+        ],
+    }
+
+
 def _verify_inventory(root: Path, files: list[object]) -> None:
     for entry in files:
         if not isinstance(entry, Mapping):

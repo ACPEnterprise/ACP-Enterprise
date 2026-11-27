@@ -47,6 +47,7 @@ from .intuit import IntuitAuthenticationError, IntuitError, IntuitProtocolError
 from .manual_archive import (
     manual_archive_available,
     manual_archive_readiness,
+    project_manual_aged_receivables,
     project_manual_profit_and_loss,
 )
 from .native_application import (
@@ -592,6 +593,17 @@ async def qbo_source_backed_aged_receivables(
             headers={"Cache-Control": "private, no-store"},
         )
     try:
+        if settings.qbo_manual_archive_root:
+            try:
+                workspace = project_manual_aged_receivables(
+                    root=Path(settings.qbo_manual_archive_root),
+                    report_date=report_date.isoformat(),
+                )
+                return JSONResponse(
+                    content=workspace, headers={"Cache-Control": "private, no-store"}
+                )
+            except QboEvidenceProjectionError:
+                pass
         document, marker = await read_production_aged_receivables(
             ProductionAgedReceivablesRequest(report_date)
         )

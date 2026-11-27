@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 from app.qbo_source.accounting_evidence_projection import project_latest_qbo_workspace
 from app.qbo_source.errors import QboEvidenceProjectionError
-from app.qbo_source.manual_archive import project_manual_archive
+from app.qbo_source.manual_archive import (
+    project_manual_aged_receivables,
+    project_manual_archive,
+)
 
 ARCHIVE = Path(
     "/Users/michaelfouse/ReleaseEvidence/qbo-accounting-acquisition-20261119"
@@ -25,6 +28,23 @@ def test_manual_archive_projects_verified_source_counts_without_native_posting()
     assert result["ar"]["total_open"]["amount"] == "500584.34"
     assert result["mutation_authority"] == "none"
     assert "source_reported_not_posted_acp_ledger" in result["limitations"]
+
+
+@pytest.mark.skipif(
+    not ARCHIVE.is_dir(), reason="sealed laptop custody package unavailable"
+)
+def test_manual_archive_projects_read_only_aged_receivables() -> None:
+    result = project_manual_aged_receivables(root=ARCHIVE, report_date="2026-11-27")
+
+    assert result["net_open_ar"]["amount"] == "500584.34"
+    assert result["current"]["amount"] == "12500.00"
+    assert result["overdue"]["amount"] == "488084.34"
+    assert result["accepted_as_acp_accounting"] is False
+    assert result["mutation_authority"] == "none"
+    assert (
+        "unapplied_payments_and_credits_require_account_level_bridge"
+        in result["limitations"]
+    )
 
 
 @pytest.mark.skipif(
