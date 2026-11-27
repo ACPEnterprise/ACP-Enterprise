@@ -1,0 +1,77 @@
+{
+  "actual_observations": {
+    "authority_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
+    "authority_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+    "canonical_queue_sha256": "f8a26548fc2d89131b8a9582a9d866cc3b0b278bb478a60f4f7b35eb94d1aadf",
+    "completed_once": {
+      "OM1-DF-SUPERVISOR-CONTINUATION-04": "1ac7c54c361c4c5d1307273aacf131fcb240e0de813a08cebafda4a37b4003b2",
+      "OM1-DF-SUPERVISOR-UNATTENDED-05": "5dbe79c59e14562850394a40b3aad35881b2f0302703e77dda6b1da558d84fe5"
+    },
+    "credential_resolution": {
+      "codex_interactive_prompt_available": false,
+      "git_effective_helper": "gh auth git-credential",
+      "github_cli_status": "INVALID_SAVED_CREDENTIAL",
+      "keychain_lookup_status": "UNAVAILABLE_IN_SANDBOX",
+      "secret_value_read": false,
+      "system_helper_reset_for_github": "osxkeychain"
+    },
+    "latest_heartbeat_at_capture_utc": "2026-11-27T15:16:11.509402+00:00",
+    "launchd": {
+      "installation_executed": false,
+      "installer_prepared": true,
+      "owner_action_required": true,
+      "template_validated": true
+    },
+    "published_refs": {
+      "refs/heads/handoff/om1b-machine-readiness-20261125": "4a89378cf3c0b5fdde84ed60be238ef764fecda3",
+      "refs/heads/work/om1b-supervisor-continuation-04": "3ce67d2aa4d1466b61300ea7e56942eafb89cf51"
+    },
+    "running_supervisor": {
+      "active_pid": 35742,
+      "bounded_end_utc": "2026-11-27T20:49:10.088578+00:00",
+      "current_assignment": null,
+      "managed_execution_session": 99194,
+      "poll_seconds": 60,
+      "start_count": 6,
+      "started_at_utc": "2026-11-27T14:49:10.088578+00:00"
+    }
+  },
+  "actual_protected_acceptance": false,
+  "automated_production_claims_enabled": false,
+  "execution_identity": "OM1-B",
+  "qualification": {
+    "development_factory_tests": "205 passed in isolated groups (181 + 24)",
+    "mypy": "PASS_33_SOURCE_FILES",
+    "ruff": "PASS",
+    "ruff_format": "PASS_49_FILES",
+    "shell_syntax": "PASS",
+    "launchd_template": "PASS"
+  },
+  "schema": "twelfthats.independent-supervisor-review-evidence.v1",
+  "simulated_or_local_only": {
+    "actual_laptop_master_successor_published": false,
+    "actual_launchd_restart_observed": false,
+    "actual_remote_completion_auto_publication": false,
+    "dependency_blocked_sibling_isolation": "QUALIFIED_BY_LOCAL_CONTRACT_TEST",
+    "descendant_authority_replenishment": "QUALIFIED_BY_LOCAL_OPERATIONAL_TEST",
+    "six_execution_identity_isolation": "QUALIFIED_BY_LOCAL_CONTRACT_TEST",
+    "execution_plan_supersession": {
+      "copied_checkpoint_exit": 0,
+      "new_plan_sha256": "ebd1ac6decc3517260a6a4b1e5659a254d1be27b72e29d1a5444cbf016930369",
+      "old_plan_sha256": "c8d0b122c286736abba07c14f313bf06f9c76fba63118a7d3a5c44a6ddafeb25",
+      "qualified_at_utc": "2026-11-27T15:18:24.729848+00:00",
+      "result": "PASS_ON_COPIED_CHECKPOINT_AGAINST_LIVE_AUTHORITY"
+    }
+  },
+  "status": "READY_FOR_INDEPENDENT_REVIEW_AFTER_SUCCESSOR_AND_LAUNCHD_EVIDENCE",
+  "safety": {
+    "automatic_commit": false,
+    "automatic_merge": false,
+    "automatic_push": false,
+    "deployment_performed": false,
+    "external_provider_write": false,
+    "private_key_accessed": false,
+    "worker_control_claim_created": false,
+    "worker_control_lease_created": false
+  }
+}

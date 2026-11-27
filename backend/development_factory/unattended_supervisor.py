@@ -54,6 +54,8 @@ class ExecutionPlan:
     authority_ref: str
     authority_sha: str
     assignments: tuple[PlanEntry, ...]
+    allow_authority_profile_extensions: bool = False
+    supersedes_plan_sha256: str | None = None
 
     @property
     def by_id(self) -> dict[str, PlanEntry]:
@@ -303,9 +305,11 @@ class PersistentSupervisor:
                     raise UnattendedSupervisorError(
                         "execution plan authority ref is not authoritative"
                     )
-                if plan.authority_sha != discovery.queue_commit_sha:
+                if not self.source.is_ancestor(
+                    plan.authority_sha, discovery.queue_commit_sha
+                ):
                     raise UnattendedSupervisorError(
-                        "execution plan authority SHA is stale"
+                        "discovered authority does not descend from plan baseline"
                     )
                 offered = discovery.eligible_assignments
                 if offered:
@@ -356,14 +360,20 @@ class PersistentSupervisor:
         resources: ResourceSnapshot,
         start_count: int,
     ) -> None:
-        entry = plan.by_id.get(assignment_id)
-        if entry is None:
-            raise UnattendedSupervisorError(
-                f"eligible assignment is not in the execution plan: {assignment_id}"
-            )
         assignment = discovery.queue.by_id[assignment_id]
         reservation = discovery.queue.manual_reservation_by_id[assignment_id]
         actual_digest = assignment_contract_digest(assignment, reservation)
+        entry = plan.by_id.get(assignment_id)
+        if entry is None:
+            profile = assignment.execution_profile
+            if (
+                not plan.allow_authority_profile_extensions
+                or profile not in SUPPORTED_PROFILES
+            ):
+                raise UnattendedSupervisorError(
+                    f"eligible assignment is not in the execution plan: {assignment_id}"
+                )
+            entry = PlanEntry(assignment_id, actual_digest, profile)
         if actual_digest != entry.contract_sha256:
             raise UnattendedSupervisorError(
                 f"assignment contract changed: {assignment_id}"
@@ -485,15 +495,29 @@ class PersistentSupervisor:
                 "state_digest": "",
             }
         state = _load_secure_state(self.runtime_path, RUNTIME_SCHEMA)
+        current_plan_sha = _file_digest(self.plan_path)
         for field, expected in (
             ("machine", self.machine),
             ("execution_identity", self.execution_identity),
             ("authority_ref", plan.authority_ref),
             ("authority_sha", plan.authority_sha),
-            ("plan_sha256", _file_digest(self.plan_path)),
         ):
             if state.get(field) != expected:
                 raise UnattendedSupervisorError(f"runtime checkpoint {field} mismatch")
+        previous_plan_sha = state.get("plan_sha256")
+        if previous_plan_sha != current_plan_sha:
+            if (
+                not _is_sha256(previous_plan_sha)
+                or plan.supersedes_plan_sha256 != previous_plan_sha
+            ):
+                raise UnattendedSupervisorError(
+                    "runtime checkpoint plan supersession is unauthorized"
+                )
+            state["plan_sha256"] = current_plan_sha
+            state["previous_plan_sha256"] = previous_plan_sha
+            state["plan_superseded_at_utc"] = _timestamp()
+            self._event(state, "EXECUTION_PLAN_SUPERSEDED")
+            self._write_state(state)
         if not isinstance(state.get("assignments"), dict) or not isinstance(
             state.get("events"), list
         ):
@@ -553,6 +577,8 @@ def load_execution_plan(path: Path) -> ExecutionPlan:
     identity = payload.get("execution_identity")
     authority_ref = payload.get("authority_ref")
     authority_sha = payload.get("authority_sha")
+    allow_extensions = payload.get("allow_authority_profile_extensions", False)
+    supersedes_plan_sha = payload.get("supersedes_plan_sha256")
     raw_assignments = payload.get("assignments")
     safety = payload.get("safety")
     if not all(
@@ -568,6 +594,12 @@ def load_execution_plan(path: Path) -> ExecutionPlan:
         raise UnattendedSupervisorError("execution plan authority SHA is invalid")
     if not isinstance(raw_assignments, list) or not raw_assignments:
         raise UnattendedSupervisorError("execution plan assignments are missing")
+    if not isinstance(allow_extensions, bool):
+        raise UnattendedSupervisorError(
+            "execution plan authority extension policy is invalid"
+        )
+    if supersedes_plan_sha is not None and not _is_sha256(supersedes_plan_sha):
+        raise UnattendedSupervisorError("execution plan superseded digest is invalid")
     if not isinstance(safety, dict):
         raise UnattendedSupervisorError("execution plan safety boundary is missing")
     for field in (
@@ -609,6 +641,8 @@ def load_execution_plan(path: Path) -> ExecutionPlan:
         cast(str, authority_ref),
         authority_sha,
         tuple(entries),
+        allow_extensions,
+        cast(str, supersedes_plan_sha) if supersedes_plan_sha is not None else None,
     )
 
 

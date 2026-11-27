@@ -1,0 +1,87 @@
+{
+  "authority_owner": "LAPTOP_MASTER",
+  "current_authority": {
+    "ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
+    "sha": "00ea2c587d6386220ba786815485de63b66bf938"
+  },
+  "execution_identity": "OM1-B",
+  "proposed_assignments": [
+    {
+      "allowed_paths": [
+        "backend/development_factory/**",
+        "backend/tests/development_factory/**",
+        "docs/engineering/**",
+        "scripts/install-om1b-supervisor-launchagent.sh"
+      ],
+      "depends_on": [
+        "OM1-DF-SUPERVISOR-UNATTENDED-05"
+      ],
+      "execution_profile": "supervisor_continuation",
+      "id": "OM1-DF-SUPERVISOR-REPLENISHMENT-06",
+      "objective": "Qualify descendant-authority replenishment, unrelated-work progress while a sibling is dependency-blocked, and exact execution-identity fencing.",
+      "requested_execution_identity": "OM1-B",
+      "requested_machine": "OM1",
+      "stop_conditions": [
+        "automatic protected execution",
+        "unsupported execution profile",
+        "non-descendant queue authority",
+        "unbounded execution",
+        "secret persistence"
+      ],
+      "validation": [
+        "unprompted successor discovery",
+        "dependency isolation",
+        "single execution",
+        "completion evidence persistence"
+      ]
+    },
+    {
+      "allowed_paths": [
+        "backend/development_factory/**",
+        "backend/tests/development_factory/**",
+        "docs/engineering/**",
+        "scripts/install-om1b-supervisor-launchagent.sh"
+      ],
+      "depends_on": [
+        "OM1-DF-SUPERVISOR-REPLENISHMENT-06"
+      ],
+      "execution_profile": "supervisor_unattended",
+      "id": "OM1-DF-SUPERVISOR-LAUNCHD-RECOVERY-07",
+      "objective": "Independently qualify user-level launchd restart, checkpoint recovery, duplicate fencing, idle monitoring, and resource boundaries.",
+      "requested_execution_identity": "OM1-B",
+      "requested_machine": "OM1",
+      "stop_conditions": [
+        "duplicate supervisor",
+        "automatic protected execution",
+        "unbounded restart",
+        "secret persistence"
+      ],
+      "validation": [
+        "launchd process replacement",
+        "plan supersession evidence",
+        "restart recovery",
+        "duplicate execution prevention",
+        "bounded resource monitoring"
+      ]
+    }
+  ],
+  "requested_independent_review": {
+    "depends_on": [
+      "OM1-DF-SUPERVISOR-LAUNCHD-RECOVERY-07"
+    ],
+    "id": "REVIEW-DF-SUPERVISOR-UNATTENDED-02",
+    "requested_execution_identity": "LAPTOP_REVIEWER",
+    "requested_machine": "REVIEWER",
+    "scope": [
+      "actual descendant queue execution",
+      "actual launchd restart",
+      "credential isolation",
+      "dependency isolation",
+      "fail-closed authorization",
+      "no protected acceptance claim"
+    ]
+  },
+  "reservation_created": false,
+  "schema": "twelfthats.supervisor-qualification-request.v1",
+  "status": "PROPOSAL_ONLY_LAPTOP_MASTER_RESERVATION_REQUIRED"
+}

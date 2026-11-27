@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import stat
@@ -21,6 +22,7 @@ from development_factory.unattended_supervisor import (
 
 AUTHORITY_REF = "refs/heads/handoff/continuous-engineering-authority-20261125"
 QUEUE_SHA = "a" * 40
+NEXT_QUEUE_SHA = "c" * 40
 
 
 class Source:
@@ -32,6 +34,23 @@ class Source:
 
     def is_ancestor(self, older: str, newer: str) -> bool:
         return older == newer
+
+
+class ReplenishingSource:
+    def __init__(
+        self, initial: dict[str, object], successor: dict[str, object]
+    ) -> None:
+        self.payloads = (initial, successor)
+        self.calls = 0
+
+    def load(self) -> tuple[QueueCandidate, ...]:
+        index = min(self.calls, 1)
+        self.calls += 1
+        commit = QUEUE_SHA if index == 0 else NEXT_QUEUE_SHA
+        return (QueueCandidate(AUTHORITY_REF, commit, commit, self.payloads[index]),)
+
+    def is_ancestor(self, older: str, newer: str) -> bool:
+        return older == newer or (older, newer) == (QUEUE_SHA, NEXT_QUEUE_SHA)
 
 
 class FailingExecutor:
@@ -243,6 +262,113 @@ def test_stale_active_pid_is_reconciled_under_exclusive_lock(tmp_path: Path) -> 
     assert any(
         event["event"] == "STALE_ACTIVE_PID_RECOVERED" for event in reconciled["events"]
     )
+
+
+def test_descendant_authority_replenishes_supported_profile_without_prompt(
+    tmp_path: Path,
+) -> None:
+    initial = payload()
+    initial["completed_evidence"].extend(
+        [
+            {
+                "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-04",
+                "commit_sha": "d" * 40,
+            },
+            {
+                "assignment_id": "OM1-DF-SUPERVISOR-UNATTENDED-05",
+                "commit_sha": "e" * 40,
+            },
+        ]
+    )
+    successor = copy.deepcopy(initial)
+    successor["assignments"].append(
+        {
+            "id": "OM1-DF-SUPERVISOR-QUALIFICATION-06",
+            "lane": "OM1",
+            "priority": "P1",
+            "state": "READY_AFTER_INVENTORY",
+            "depends_on": ["OM1-DF-SUPERVISOR-UNATTENDED-05"],
+            "objective": "Qualify descendant authority replenishment.",
+            "allowed_paths": ["backend/development_factory/**"],
+            "validation": ["successor discovery"],
+            "stop_conditions": ["unbounded execution"],
+            "execution_profile": "supervisor_continuation",
+        }
+    )
+    successor["manual_reservations"].append(
+        {
+            "assignment_id": "OM1-DF-SUPERVISOR-QUALIFICATION-06",
+            "machine": "OM1",
+            "execution_identity": "OM1-B",
+            "owner": "LAPTOP_MASTER",
+            "status": "RESERVED_MANUAL",
+            "automated_claims_blocked": True,
+            "reason": "Bounded descendant-authority qualification.",
+        }
+    )
+    plan_path = write_plan(tmp_path, initial)
+    plan_payload = json.loads(plan_path.read_text())
+    plan_payload["allow_authority_profile_extensions"] = True
+    plan_path.write_text(json.dumps(plan_payload), encoding="utf-8")
+    plan_path.chmod(0o600)
+    control = PersistentSupervisor(
+        tmp_path,
+        discovery=QueueDiscoverySupervisor(tmp_path / "coordination.json"),
+        source=ReplenishingSource(initial, successor),
+        plan_path=plan_path,
+        runtime_state_path=tmp_path / "runtime.json",
+        machine="OM1",
+        execution_identity="OM1-B",
+        sleep=lambda _seconds: None,
+        resource_probe=lambda _root: ResourceSnapshot(
+            12, 1.0, 20 * 1024**3, 32 * 1024**2
+        ),
+    )
+
+    result = control.run(limits=limits())
+
+    assert result.executed_assignments == ("OM1-DF-SUPERVISOR-QUALIFICATION-06",)
+    evidence = json.loads(
+        (tmp_path / "evidence" / "OM1-DF-SUPERVISOR-QUALIFICATION-06.json").read_text()
+    )
+    assert evidence["authority"]["queue_commit_sha"] == NEXT_QUEUE_SHA
+
+
+def test_execution_plan_supersession_requires_previous_digest(tmp_path: Path) -> None:
+    value = payload()
+    control = supervisor(tmp_path, value)
+    control.run(limits=limits())
+    plan_path = tmp_path / "plan.json"
+    previous_digest = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+    plan_payload = json.loads(plan_path.read_text())
+    plan_payload["allow_authority_profile_extensions"] = True
+    plan_payload["supersedes_plan_sha256"] = previous_digest
+    plan_path.write_text(json.dumps(plan_payload), encoding="utf-8")
+    plan_path.chmod(0o600)
+
+    control.run(limits=limits())
+
+    runtime = json.loads((tmp_path / "runtime.json").read_text())
+    assert runtime["previous_plan_sha256"] == previous_digest
+    assert any(
+        event["event"] == "EXECUTION_PLAN_SUPERSEDED" for event in runtime["events"]
+    )
+
+
+def test_execution_plan_change_without_supersession_fails_closed(
+    tmp_path: Path,
+) -> None:
+    value = payload()
+    control = supervisor(tmp_path, value)
+    control.run(limits=limits())
+    plan_path = tmp_path / "plan.json"
+    plan_payload = json.loads(plan_path.read_text())
+    plan_payload["allow_authority_profile_extensions"] = True
+    plan_path.write_text(json.dumps(plan_payload), encoding="utf-8")
+    plan_path.chmod(0o600)
+
+    with pytest.raises(UnattendedSupervisorError, match="supersession is unauthorized"):
+        control.run(limits=limits())
 
 
 def test_failed_execution_requires_reconciliation_and_is_not_replayed(

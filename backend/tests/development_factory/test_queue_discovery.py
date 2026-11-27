@@ -314,6 +314,42 @@ def test_completed_recognition_and_dependency_clearance(tmp_path: Path) -> None:
     assert result.eligible_assignments == ("OM1-DEPENDENT",)
 
 
+def test_dependency_blocked_reservation_does_not_block_unrelated_work(
+    tmp_path: Path,
+) -> None:
+    value = payload(include_follow_on=True)
+    value["assignments"].append(
+        {
+            "id": "OM1-BLOCKED-BY-OM2",
+            "lane": "OM1",
+            "priority": "P1",
+            "state": "BLOCKED_DEPENDENCY",
+            "depends_on": ["OM2-OTHER"],
+            "objective": "Remain blocked while independent work proceeds.",
+        }
+    )
+    value["manual_reservations"].append(
+        {
+            "assignment_id": "OM1-BLOCKED-BY-OM2",
+            "machine": "OM1",
+            "execution_identity": "OM1-A",
+            "owner": "LAPTOP_MASTER",
+            "status": "RESERVED_MANUAL",
+            "automated_claims_blocked": True,
+            "reason": "Dependency isolation qualification.",
+        }
+    )
+
+    result = supervisor(tmp_path).discover(
+        Source((candidate(NEW_SHA, value),)),
+        machine="OM1",
+        execution_identity="OM1-A",
+    )
+
+    assert result.eligible_assignments == ("OM1-FIRST", "OM1-NEW-QUEUE")
+    assert "OM1-BLOCKED-BY-OM2" not in result.eligible_assignments
+
+
 def test_machine_ownership_and_manual_claim_exclusion(tmp_path: Path) -> None:
     source = Source((candidate(NEW_SHA, payload()),))
     assert supervisor(tmp_path / "om1").discover(
@@ -350,6 +386,55 @@ def test_execution_identity_prevents_same_machine_cross_lane_execution(
             machine="OM1",
             execution_identity="OM1-A",
         )
+
+
+def test_all_six_execution_identities_discover_only_their_reservation(
+    tmp_path: Path,
+) -> None:
+    identities = (
+        ("LAPTOP_MASTER", "LAPTOP_MASTER", "LAPTOP_MASTER"),
+        ("OM1-A", "OM1", "OM1"),
+        ("OM1-B", "OM1", "OM1"),
+        ("OM2-A", "OM2", "OM2"),
+        ("OM2-B", "OM2", "OM2"),
+        ("LAPTOP_REVIEWER", "REVIEWER", "REVIEWER"),
+    )
+    value = {
+        "schema_version": "twelfthats.continuous-engineering-queue.v1",
+        "status": "SIX_IDENTITY_QUALIFICATION",
+        "assignments": [
+            {
+                "id": f"IDENTITY-{identity}",
+                "lane": lane,
+                "priority": "P1",
+                "state": "READY_AFTER_INVENTORY",
+                "depends_on": [],
+                "objective": f"Qualify reservation isolation for {identity}.",
+            }
+            for identity, _machine, lane in identities
+        ],
+        "manual_reservations": [
+            {
+                "assignment_id": f"IDENTITY-{identity}",
+                "machine": machine,
+                "execution_identity": identity,
+                "owner": "LAPTOP_MASTER",
+                "status": "RESERVED_MANUAL",
+                "automated_claims_blocked": True,
+                "reason": "Six-identity isolation qualification.",
+            }
+            for identity, machine, _lane in identities
+        ],
+        "completed_evidence": [],
+    }
+
+    for identity, machine, _lane in identities:
+        result = supervisor(tmp_path / identity).discover(
+            Source((candidate(NEW_SHA, value),)),
+            machine=machine,
+            execution_identity=identity,
+        )
+        assert result.eligible_assignments == (f"IDENTITY-{identity}",)
 
 
 def test_shared_checkpoint_fences_machine_lifecycle_operations(

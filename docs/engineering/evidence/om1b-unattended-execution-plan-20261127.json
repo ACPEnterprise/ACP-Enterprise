@@ -4,6 +4,8 @@
   "execution_identity": "OM1-B",
   "authority_ref": "refs/heads/handoff/continuous-engineering-authority-20261125",
   "authority_sha": "00ea2c587d6386220ba786815485de63b66bf938",
+  "allow_authority_profile_extensions": true,
+  "supersedes_plan_sha256": "c8d0b122c286736abba07c14f313bf06f9c76fba63118a7d3a5c44a6ddafeb25",
   "assignments": [
     {
       "assignment_id": "OM1-DF-SUPERVISOR-CONTINUATION-04",

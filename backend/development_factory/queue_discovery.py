@@ -848,19 +848,22 @@ def assignment_contract_digest(
     """Bind an unattended execution plan to one exact manual reservation."""
     if assignment.id != reservation.assignment_id:
         raise QueueDiscoveryError("assignment and reservation identity mismatch")
+    assignment_contract: dict[str, object] = {
+        "id": assignment.id,
+        "lane": assignment.lane,
+        "priority": assignment.priority,
+        "state": assignment.state,
+        "depends_on": list(assignment.depends_on),
+        "objective": assignment.objective,
+        "allowed_paths": list(assignment.allowed_paths),
+        "validation": list(assignment.validation),
+        "stop_conditions": list(assignment.stop_conditions),
+    }
+    if assignment.execution_profile is not None:
+        assignment_contract["execution_profile"] = assignment.execution_profile
     return canonical_digest(
         {
-            "assignment": {
-                "id": assignment.id,
-                "lane": assignment.lane,
-                "priority": assignment.priority,
-                "state": assignment.state,
-                "depends_on": list(assignment.depends_on),
-                "objective": assignment.objective,
-                "allowed_paths": list(assignment.allowed_paths),
-                "validation": list(assignment.validation),
-                "stop_conditions": list(assignment.stop_conditions),
-            },
+            "assignment": assignment_contract,
             "reservation": {
                 "assignment_id": reservation.assignment_id,
                 "machine": reservation.machine,
