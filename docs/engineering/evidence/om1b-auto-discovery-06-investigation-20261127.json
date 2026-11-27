@@ -1,0 +1,77 @@
+{
+  "assignment_id": "OM1-DF-SUPERVISOR-AUTO-DISCOVERY-06",
+  "authority": {
+    "assignment_count": 57,
+    "canonical_queue_sha256": "d81ae38d5e88ba37a03c62f73c95a0f9a1a3b162caf8dd259be9bf916ba1b562",
+    "file_sha256": "dfb5a233cd35ead1700a8212c38215768eb6d8069f4a78780597f6a06a812e20",
+    "ref": "refs/heads/handoff/friday-consolidated-20261127",
+    "sha": "6aec17be3ac0bc1316975b0222f39bc7c9903837",
+    "verified": true
+  },
+  "autonomous_observation": {
+    "assignment_executed": false,
+    "checkpoint_selected_new_authority": false,
+    "discovery_attempted": true,
+    "fail_closed_at_utc": "2026-11-27T16:00:44.711626+00:00",
+    "failure": "QueueDiscoveryError: completion evidence references unknown assignment",
+    "last_heartbeat_at_utc": "2026-11-27T15:59:42.253222+00:00",
+    "process_exit_code": 2,
+    "result": "AUTONOMOUS_DISCOVERY_ATTEMPT_FAILED_CLOSED"
+  },
+  "dependency_disposition": {
+    "dependency": "OM1-DF-SUPERVISOR-UNATTENDED-05",
+    "local_checkpoint_state": "completed",
+    "local_evidence_sha256": "5dbe79c59e14562850394a40b3aad35881b2f0302703e77dda6b1da558d84fe5",
+    "present_in_authoritative_completed_evidence": false,
+    "status": "MISSING_AUTHORITATIVE_COMPLETION"
+  },
+  "execution_authorization": {
+    "execution_profile": null,
+    "integrated_supervisor_requires_supported_profile_for_unplanned_successor": true,
+    "manual_reservation": {
+      "automated_claims_blocked": true,
+      "execution_identity": "OM1-B",
+      "machine": "OM1",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL"
+    },
+    "status": "MISSING_BOUNDED_EXECUTION_PROFILE"
+  },
+  "preserved_prechange_evidence": {
+    "coordination_checkpoint_sha256": "8a2d84f0123591b61355f381596d154538f6528c325f20394a91fa09d6c0c37f",
+    "execution_plan_sha256": "ebd1ac6decc3517260a6a4b1e5659a254d1be27b72e29d1a5444cbf016930369",
+    "runtime_checkpoint_sha256": "0640e7d65c6f871eb2f47f429e0434d8bf76232b3c58e47eeda570c742038d70"
+  },
+  "queue_contract_defects": {
+    "unknown_completed_assignments": [
+      "OM1A-PLATFORM-CORRECTION-PRESERVATION-06",
+      "OM1B-SUPERVISOR-CONTINUATION-04"
+    ],
+    "unknown_completed_count": 2
+  },
+  "required_laptop_master_correction": {
+    "completion_evidence": [
+      "Replace or remove completion IDs that are absent from assignments.",
+      "Publish exact completion evidence for OM1-DF-SUPERVISOR-CONTINUATION-04.",
+      "Publish exact completion evidence for OM1-DF-SUPERVISOR-UNATTENDED-05."
+    ],
+    "execution_profile": "Set OM1-DF-SUPERVISOR-AUTO-DISCOVERY-06.execution_profile to supervisor_continuation.",
+    "queue_relationship": "Publish the correction as a descendant of 6aec17be3ac0bc1316975b0222f39bc7c9903837."
+  },
+  "running_code_identity": {
+    "code_sha": "776f1d0412f1d6aa10e9e53de1f0d1ff61a498f8",
+    "integrated_successor_sha": "66f1d8f1324d537d590de1c08fad2e33552efcf6",
+    "process_started_at_utc": "2026-11-27T14:49:10.088578+00:00",
+    "reason": "The process started 18 seconds after 776f1d04 was committed and before the later supervisor commits; Python had already loaded the older module before 66f1d8f1 was committed at 15:20:26Z.",
+    "status": "OLDER_CODE_CONFIRMED"
+  },
+  "schema": "twelfthats.supervisor-auto-discovery-investigation.v1",
+  "security": {
+    "assignment_manually_executed": false,
+    "duplicate_supervisor_started": false,
+    "launch_agent_installed": false,
+    "protected_claim_created": false,
+    "queue_modified": false,
+    "secret_accessed": false
+  }
+}
