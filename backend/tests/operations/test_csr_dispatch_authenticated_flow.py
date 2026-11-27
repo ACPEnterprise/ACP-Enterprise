@@ -21,10 +21,12 @@ from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
 from app.platform.permissions.codes import (
+    AdministrationPermission,
     CustomerPermission,
     DispatchPermission,
     JobPermission,
     SchedulingPermission,
+    WorkforcePermission,
 )
 from app.platform.permissions.models import (
     MembershipRole,
@@ -38,11 +40,7 @@ from app.scheduling.models import (
     BranchSchedulingWeeklyInterval,
 )
 from app.scheduling.router import router as scheduling_router
-from app.workforce.models import (
-    WorkforceBranchEligibility,
-    WorkforceCapabilityProfile,
-    WorkforceWorkingAvailability,
-)
+from app.workforce.router import router as workforce_router
 from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -208,6 +206,9 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
                 *JobPermission.ALL,
                 *SchedulingPermission.ALL,
                 *DispatchPermission.ALL,
+                AdministrationPermission.IDENTITY_ONBOARDING_MANAGE,
+                WorkforcePermission.CAPABILITY_MANAGE,
+                WorkforcePermission.AVAILABILITY_MANAGE,
                 EmployeeOperationsPermission.OWN_DAY_READ,
             }
         )
@@ -224,11 +225,6 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
             for permission in permissions
             if permission.code != EmployeeOperationsPermission.OWN_DAY_READ
         )
-        technician_permissions = tuple(
-            permission
-            for permission in permissions
-            if permission.code == EmployeeOperationsPermission.OWN_DAY_READ
-        )
         csr_user, _, csr_sessions = await _actor(
             session,
             company=company,
@@ -239,36 +235,39 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
             suffix=suffix,
             authentication_session_count=2,
         )
-        technician_user, technician_membership, technician_sessions = await _actor(
-            session,
-            company=company,
-            branch=branch,
-            permissions=technician_permissions,
-            role_code="TECHNICIAN",
-            display_name="Qualification Technician",
-            suffix=suffix,
-        )
-        technician = Employee(
+        technician_role = Role(
             company_id=company.id,
-            home_branch_id=branch.id,
-            membership_id=technician_membership.id,
-            employee_number=f"QT-{suffix.upper()}",
-            first_name="Qualification",
-            last_name="Technician",
-            display_name="Qualification Technician",
-            job_title="Service Technician",
-            employee_type="employee",
+            code="TECHNICIAN",
+            name="Technician",
             status="active",
+            is_system=True,
+            created_by_user_id=csr_user.id,
+            updated_by_user_id=csr_user.id,
         )
-        session.add(technician)
-        await session.flush()
-        profile = WorkforceCapabilityProfile(
+        mobile_role = Role(
             company_id=company.id,
-            employee_id=technician.id,
+            code="ACP_EMPLOYEE_MOBILE",
+            name="ACP Employee Mobile",
             status="active",
+            is_system=True,
+            created_by_user_id=csr_user.id,
+            updated_by_user_id=csr_user.id,
         )
-        session.add(profile)
+        session.add_all([technician_role, mobile_role])
         await session.flush()
+        technician_permission_codes = {
+            EmployeeOperationsPermission.OWN_DAY_READ,
+            JobPermission.EXECUTE,
+        }
+        session.add_all(
+            RolePermission(
+                role_id=mobile_role.id,
+                permission_id=permission.id,
+                assigned_by_user_id=csr_user.id,
+            )
+            for permission in permissions
+            if permission.code in technician_permission_codes
+        )
         calendar = BranchSchedulingCalendar(
             company_id=company.id,
             branch_id=branch.id,
@@ -281,21 +280,6 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
         await session.flush()
         session.add_all(
             [
-                WorkforceBranchEligibility(
-                    company_id=company.id,
-                    profile_id=profile.id,
-                    branch_id=branch.id,
-                    status="active",
-                ),
-                WorkforceWorkingAvailability(
-                    company_id=company.id,
-                    profile_id=profile.id,
-                    branch_id=branch.id,
-                    start_at=window_start - timedelta(hours=1),
-                    end_at=window_end + timedelta(hours=1),
-                    status="available",
-                    source="isolated_qualification",
-                ),
                 *(
                     BranchSchedulingWeeklyInterval(
                         calendar_id=calendar.id,
@@ -309,22 +293,28 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
             ]
         )
 
-    app = FastAPI()
-    for router in (
-        customers_router,
-        jobs_router,
-        scheduling_router,
-        dispatch_router,
-        employee_operations_router,
-    ):
-        app.include_router(router)
-
     async def database_session() -> AsyncIterator[AsyncSession]:
         async with factory() as session:
             yield session
 
-    app.dependency_overrides[get_database_session] = database_session
-    app.dependency_overrides[get_security_database_session] = database_session
+    def build_application() -> FastAPI:
+        application = FastAPI()
+        for router in (
+            customers_router,
+            jobs_router,
+            scheduling_router,
+            dispatch_router,
+            employee_operations_router,
+            workforce_router,
+        ):
+            application.include_router(router)
+        application.dependency_overrides[get_database_session] = database_session
+        application.dependency_overrides[get_security_database_session] = (
+            database_session
+        )
+        return application
+
+    app = build_application()
     csr_write_headers = _headers(
         company_id=company.id,
         branch_id=branch.id,
@@ -335,17 +325,74 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
         branch_id=branch.id,
         token=_token(csr_user, csr_sessions[1]),
     )
-    technician_headers = _headers(
-        company_id=company.id,
-        branch_id=branch.id,
-        token=_token(technician_user, technician_sessions[0]),
-    )
     customer_name = f"P0 Rivera Residence {suffix}"
 
     try:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as csr_write_session:
+            onboarding_response = await csr_write_session.post(
+                "/api/v1/workforce/administration/employee-onboarding",
+                headers=csr_write_headers,
+                json={
+                    "request_key": f"p0-technician-{suffix}",
+                    "branch_id": str(branch.id),
+                    "first_name": "Qualification",
+                    "last_name": "Technician",
+                    "email": f"qualification-tech-{suffix}@example.test",
+                    "phone": "(919) 555-0100",
+                    "access_profile": "FIELD_TECHNICIAN",
+                    "temporary_password": "Field-Tech-2026!Qualified",
+                    "confirm_temporary_password": "Field-Tech-2026!Qualified",
+                    "require_password_change": False,
+                },
+            )
+            assert onboarding_response.status_code == 201, onboarding_response.text
+            onboarding = onboarding_response.json()
+            technician_id = UUID(onboarding["employee_id"])
+
+            readiness_response = await csr_write_session.put(
+                f"/api/v1/workforce/administration/employees/{technician_id}/field-readiness",
+                headers=csr_write_headers,
+                json={
+                    "branch_id": str(branch.id),
+                    "window_start_at": (window_start - timedelta(hours=1)).isoformat(),
+                    "window_end_at": (window_end + timedelta(hours=1)).isoformat(),
+                    "reason": "Owner-confirmed isolated P0 readiness",
+                },
+            )
+            assert readiness_response.status_code == 200, readiness_response.text
+            assert readiness_response.json()["branch_eligibility_id"]
+
+            async with factory() as identity_session, identity_session.begin():
+                technician = await identity_session.get(Employee, technician_id)
+                assert technician is not None and technician.membership_id is not None
+                technician_membership = await identity_session.get(
+                    Membership, technician.membership_id
+                )
+                assert technician_membership is not None
+                technician_user = await identity_session.get(
+                    User, technician_membership.user_id
+                )
+                assert technician_user is not None
+                technician_authentication_session = AuthenticationSession(
+                    user_id=technician_user.id,
+                    status="active",
+                    created_at=utc_now(),
+                    last_seen_at=utc_now(),
+                    absolute_expires_at=utc_now() + timedelta(days=30),
+                    idle_expires_at=utc_now() + timedelta(days=7),
+                    authentication_method="password",
+                    credential_version=1,
+                    authorization_version=technician_user.authorization_version,
+                )
+                identity_session.add(technician_authentication_session)
+            technician_headers = _headers(
+                company_id=company.id,
+                branch_id=branch.id,
+                token=_token(technician_user, technician_authentication_session),
+            )
+
             customer_response = await csr_write_session.post(
                 "/api/v1/customers",
                 headers={
@@ -417,6 +464,18 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
                 json={"expected_version": job["concurrency_version"]},
             )
             assert activated_response.status_code == 200, activated_response.text
+            eligibility_response = await csr_write_session.get(
+                f"/api/v1/dispatch/appointments/{appointment['id']}/eligible-technicians",
+                headers=csr_write_headers,
+            )
+            assert eligibility_response.status_code == 200, eligibility_response.text
+            technician_option = next(
+                item
+                for item in eligibility_response.json()
+                if item["employee_id"] == str(technician.id)
+            )
+            assert technician_option["eligible"] is True
+            assert technician_option["reasons"] == []
             assignment_response = await csr_write_session.post(
                 f"/api/v1/dispatch/appointments/{appointment['id']}/assignment",
                 headers=csr_write_headers,
@@ -482,8 +541,9 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
                 technician.id
             )
 
+        restarted_app = build_application()
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
+            transport=httpx.ASGITransport(app=restarted_app), base_url="http://test"
         ) as technician_session:
             my_day_response = await technician_session.get(
                 "/api/v1/employee-operations/me/day",
@@ -504,7 +564,7 @@ async def test_authenticated_csr_dispatch_flow_persists_across_sessions() -> Non
             )
 
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
+            transport=httpx.ASGITransport(app=restarted_app), base_url="http://test"
         ) as persistence_readback_session:
             detail_response = await persistence_readback_session.get(
                 f"/api/v1/customers/{customer['id']}", headers=csr_read_headers

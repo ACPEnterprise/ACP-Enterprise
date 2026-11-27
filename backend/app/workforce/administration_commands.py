@@ -1,17 +1,21 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.audit.service import AuditEntry, audit_service
+from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.models import MembershipRole, Role
+from app.platform.users.models import User
 from app.workforce.models import (
     Capability,
     CapabilityCategory,
     Certification,
     Language,
+    WorkforceBranchEligibility,
     WorkforceCapability,
     WorkforceCapabilityProfile,
     WorkforceCertification,
@@ -35,13 +39,20 @@ class WorkforceAdministrationService:
         start_at: datetime,
         end_at: datetime,
         reason: str,
-    ) -> tuple[UUID, UUID, UUID]:
+    ) -> tuple[UUID, UUID, UUID, UUID]:
         if end_at <= start_at:
             raise WorkforceAdministrationConflict("Assignment window is invalid.")
         if not context.can_access_branch(branch_id):
             raise WorkforceAdministrationConflict("Branch is not authorized.")
         async with session.begin():
             employee = await self._employee(session, context, employee_id)
+            await self._require_dispatch_identity(
+                session,
+                context=context,
+                employee=employee,
+                branch_id=branch_id,
+                effective_at=start_at,
+            )
             profile = await session.scalar(
                 select(WorkforceCapabilityProfile)
                 .where(
@@ -159,6 +170,40 @@ class WorkforceAdministrationService:
                     "Capability evidence conflicts with current authority."
                 )
 
+            branch_eligibility = await session.scalar(
+                select(WorkforceBranchEligibility)
+                .where(
+                    WorkforceBranchEligibility.company_id == context.company.id,
+                    WorkforceBranchEligibility.profile_id == profile.id,
+                    WorkforceBranchEligibility.branch_id == branch_id,
+                )
+                .with_for_update()
+            )
+            if branch_eligibility is None:
+                branch_eligibility = WorkforceBranchEligibility(
+                    company_id=context.company.id,
+                    profile_id=profile.id,
+                    branch_id=branch_id,
+                    status="active",
+                )
+                session.add(branch_eligibility)
+                await session.flush()
+                self._audit(
+                    session,
+                    context,
+                    "workforce.branch_eligibility_recorded",
+                    branch_eligibility.id,
+                    {
+                        "employee_id": str(employee.id),
+                        "branch_id": str(branch_id),
+                        "reason": reason.strip(),
+                    },
+                )
+            elif branch_eligibility.status != "active":
+                raise WorkforceAdministrationConflict(
+                    "Branch eligibility conflicts with current authority."
+                )
+
             availability = await session.scalar(
                 select(WorkforceWorkingAvailability)
                 .where(
@@ -202,7 +247,97 @@ class WorkforceAdministrationService:
                 raise WorkforceAdministrationConflict(
                     "Availability evidence conflicts with current authority."
                 )
-        return profile.id, capability_evidence.id, availability.id
+        return (
+            profile.id,
+            capability_evidence.id,
+            branch_eligibility.id,
+            availability.id,
+        )
+
+    @staticmethod
+    async def _require_dispatch_identity(
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        employee: Employee,
+        branch_id: UUID,
+        effective_at: datetime,
+    ) -> None:
+        """Require the identity, role, and Branch grant dispatch will consume."""
+        if employee.membership_id is None or employee.status != "active":
+            raise WorkforceAdministrationConflict(
+                "Active Employee identity is required for field readiness."
+            )
+        membership = await session.scalar(
+            select(Membership)
+            .where(
+                Membership.company_id == context.company.id,
+                Membership.id == employee.membership_id,
+                Membership.status == "active",
+            )
+            .with_for_update()
+        )
+        if membership is None:
+            raise WorkforceAdministrationConflict(
+                "Active Employee membership is required for field readiness."
+            )
+        user_ready = bool(
+            await session.scalar(
+                select(User.id).where(
+                    User.id == membership.user_id,
+                    User.status == "active",
+                    User.archived_at.is_(None),
+                )
+            )
+        )
+        if not user_ready:
+            raise WorkforceAdministrationConflict(
+                "Active Employee login is required for field readiness."
+            )
+        technician_role = await session.scalar(
+            select(MembershipRole.id)
+            .join(Role, Role.id == MembershipRole.role_id)
+            .where(
+                MembershipRole.company_id == context.company.id,
+                MembershipRole.membership_id == membership.id,
+                MembershipRole.revoked_at.is_(None),
+                or_(
+                    MembershipRole.effective_at.is_(None),
+                    MembershipRole.effective_at <= effective_at,
+                ),
+                or_(
+                    MembershipRole.expires_at.is_(None),
+                    MembershipRole.expires_at > effective_at,
+                ),
+                Role.company_id == context.company.id,
+                Role.code == "TECHNICIAN",
+                Role.status == "active",
+                Role.archived_at.is_(None),
+            )
+            .limit(1)
+        )
+        if technician_role is None:
+            raise WorkforceAdministrationConflict(
+                "Active Technician role is required for field readiness."
+            )
+        branch_granted = (
+            membership.has_all_branch_access
+            or membership.default_branch_id == branch_id
+            or bool(
+                await session.scalar(
+                    select(MembershipBranchAccess.id)
+                    .where(
+                        MembershipBranchAccess.membership_id == membership.id,
+                        MembershipBranchAccess.branch_id == branch_id,
+                    )
+                    .limit(1)
+                )
+            )
+        )
+        if not branch_granted:
+            raise WorkforceAdministrationConflict(
+                "Employee membership is not granted to the readiness Branch."
+            )
 
     async def ensure_profile(
         self,
