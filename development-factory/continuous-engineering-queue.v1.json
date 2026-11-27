@@ -410,6 +410,15 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Independently review supervisor and LaunchAgent installer behavior in isolation; no implementation, signing, merge, or deployment authority."
+    },
+    {
+      "assignment_id": "OM1-DF-RLS-GLOBAL-CONTROL-REMEDIATION-07",
+      "machine": "OM1",
+      "execution_identity": "OM1-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Inventory and qualify table-by-table least-privilege remediation for the 18 non-RLS global/control tables; no live grants or policies may change in this assignment."
     }
   ],
   "claim_policy": {
@@ -1051,6 +1060,17 @@
       "allowed_paths": ["backend/development_factory/**", "scripts/install-om1b-supervisor-launchagent.sh", "docs/engineering/**", "docs/engineering/evidence/**"],
       "validation": ["clean checkout", "installer dry run", "restart recovery", "bounded shutdown", "secret redaction"],
       "stop_conditions": ["implementation changes", "owner signing", "automatic protected execution", "deployment authority"]
+    },
+    {
+      "id": "OM1-DF-RLS-GLOBAL-CONTROL-REMEDIATION-07",
+      "lane": "OM1",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Prepare an isolated, table-by-table least-privilege remediation for the 18 non-RLS global/control tables identified in docs/engineering/rls-global-control-remediation-07.md; distinguish legitimate global identity/control data from tenant-owned data and remove broad acp_app DML only in a reversible rehearsal.",
+      "allowed_paths": ["backend/app/**", "backend/tests/**", "docs/engineering/**", "docs/quality/**", "scripts/**"],
+      "validation": ["read-only privilege inventory", "table-by-table justification", "isolated role/grant rehearsal", "negative DDL and cross-tenant tests", "rollback evidence"],
+      "stop_conditions": ["live grant change", "live RLS change", "application outage", "BYPASSRLS", "superuser runtime", "unreviewed global-table policy"]
     }
   ]
 }
