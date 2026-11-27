@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 from collections.abc import Mapping
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +81,29 @@ def qualify(root: Path, expected_custody_sha256: str) -> dict[str, object]:
     }
     if conflict_ids != EXPECTED_CONFLICTS:
         raise ValueError("discrepancy register is incomplete")
+    discrepancies = {
+        str(item["id"]): item
+        for item in conflicts
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    ar_bridge = discrepancies["D-002"]
+    unapplied = discrepancies["D-003"]
+    bank_feed = register.get("bank_feed_evidence")
+    if not isinstance(bank_feed, Mapping):
+        raise TypeError("bank feed evidence missing")
+    invoice_open_balance = Decimal(str(ar_bridge["invoice_open_balance"]))
+    balance_sheet_ar = Decimal(str(ar_bridge["balance_sheet_accounts_receivable"]))
+    bridge_difference = invoice_open_balance - balance_sheet_ar
+    provider_unapplied = Decimal(str(unapplied["provider_unapplied_amount"]))
+    unlinked_payment_total = Decimal(str(unapplied["total"]))
+    if bridge_difference != Decimal(str(ar_bridge["dollar_difference"])):
+        raise ValueError("A/R bridge arithmetic mismatch")
+    if int(unapplied["count"]) != 73:
+        raise ValueError("unlinked payment count mismatch")
+    if bank_feed.get("disposition") != "UNPOSTED_SOURCE_EVIDENCE":
+        raise ValueError("bank feed evidence is not preserved as unposted")
+    if bank_feed.get("automatic_expense_creation_allowed") is not False:
+        raise ValueError("bank feed mutation authority changed")
 
     trial_balance = controls.get("trial_balance")
     balance_sheet = controls.get("balance_sheet")
@@ -153,7 +177,31 @@ def qualify(root: Path, expected_custody_sha256: str) -> dict[str, object]:
         "payment_invoice_links": historical["payment_invoice_links"],
         "missing_payment_invoice_links": historical["missing_payment_invoice_links"],
         "conflicts": sorted(conflict_ids),
-        "ar_bridge_difference": "100801.91",
+        "ar_bridge": {
+            "invoice_open_balance": f"{invoice_open_balance:.2f}",
+            "balance_sheet_accounts_receivable": f"{balance_sheet_ar:.2f}",
+            "difference": f"{bridge_difference:.2f}",
+            "provider_unapplied_amount": f"{provider_unapplied:.2f}",
+            "unlinked_payment_count": int(unapplied["count"]),
+            "unlinked_payment_total": f"{unlinked_payment_total:.2f}",
+            "provider_unapplied_minus_unlinked": (
+                f"{provider_unapplied - unlinked_payment_total:.2f}"
+            ),
+            "bridge_minus_provider_unapplied": (
+                f"{bridge_difference - provider_unapplied:.2f}"
+            ),
+            "state": "UNRESOLVED_SOURCE_CROSSWALK",
+        },
+        "bank_feed": {
+            "pending_rows": int(bank_feed["authoritative_pending_rows"]),
+            "exact_duplicate_rows": int(bank_feed["exact_duplicate_rows"]),
+            "authoritative_amount_total": str(bank_feed["authoritative_amount_total"]),
+            "duplicate_incremental_amount": str(
+                bank_feed["duplicate_incremental_amount"]
+            ),
+            "disposition": str(bank_feed["disposition"]),
+            "automatic_expense_creation_allowed": False,
+        },
         "trial_balance_difference": trial_balance["difference"],
         "balance_sheet_difference": balance_sheet["equation_difference"],
         "profit_and_loss_difference": profit_and_loss["provider_difference"],

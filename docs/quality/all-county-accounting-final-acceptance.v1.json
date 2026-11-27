@@ -1,0 +1,49 @@
+{
+  "accepted_as_native_accounting": false,
+  "archive_aged_receivables": {
+    "corrected_by": "4004d0980f713fa6fad2d027325ef8b2d5f89883",
+    "expected_status_after_integration": 200,
+    "gross_open_invoice_balance": "500584.34",
+    "includes_customer_credits_and_unapplied_payments": false,
+    "protected_observed_status_before_correction": 503
+  },
+  "ar_bridge": {
+    "balance_sheet_accounts_receivable": "399782.43",
+    "bridge_minus_provider_unapplied": "13257.00",
+    "difference": "100801.91",
+    "invoice_open_balance": "500584.34",
+    "provider_unapplied_amount": "87544.91",
+    "provider_unapplied_minus_unlinked": "2130.00",
+    "state": "UNRESOLVED_SOURCE_CROSSWALK",
+    "unlinked_payment_count": 73,
+    "unlinked_payment_total": "85414.91"
+  },
+  "bank_feed": {
+    "automatic_expense_creation_allowed": false,
+    "disposition": "UNPOSTED_SOURCE_EVIDENCE",
+    "exact_duplicate_rows": 4,
+    "pending_rows": 102
+  },
+  "contract": "all-county-accounting-final-acceptance/v1",
+  "external_mutation_authority": "none",
+  "external_mutations": 0,
+  "historical_source": {
+    "accepted_as_native_accounting": false,
+    "custody_manifest_sha256": "f6640c0d531eaa8a822e82f697b3aaead65c8ae7b52a3c527e9616642c4d4f4a",
+    "record_count": 20702,
+    "relationship_identity_count": 97093
+  },
+  "independent_protected_evidence": {
+    "application_sha": "a8c424d514da6b7b141884b2e5b5e42e8de93a59",
+    "p0_acceptance_sha256": "a72ee9438a265b997576aba0cf0670a593e5d0d9e33cc9c423a4e0ac84a47fa5",
+    "qbo_browser_sha256": "4df542c2e9464d68f4fbb535168d0b3b83bae73b5ca88a2566707380632b1d9c",
+    "runtime_manifest_sha256": "3719ac28ac3d661c8d3e384440e50def856ebba6818315c65826739fe39cdacc"
+  },
+  "native_financial_reports": {
+    "classification": "NO_ADMITTED_NATIVE_REPORTING_CONTEXT",
+    "corrected_by_preserved_handoff": false,
+    "protected_observed_status": 404,
+    "source_evidence_substitution_allowed": false
+  },
+  "result": "ARCHIVE_PATH_CORRECTED_NATIVE_ADMISSION_BLOCKED"
+}

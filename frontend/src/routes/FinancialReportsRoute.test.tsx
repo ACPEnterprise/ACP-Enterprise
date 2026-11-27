@@ -6,6 +6,7 @@ import { FinancialReportsRoute } from "./FinancialReportsRoute";
 
 let allowed = false;
 let reportRows: Array<Record<string, string>> = [];
+let reportErrorStatus: number | null = null;
 vi.mock("../auth", () => ({
   useHasPermission: () => allowed,
   useAuth: () => ({
@@ -15,7 +16,7 @@ vi.mock("../auth", () => ({
   }),
 }));
 vi.mock("../hooks/useFinancialReporting", () => ({
-  useFinancialReport: vi.fn(() => ({
+  useFinancialReport: vi.fn(() => reportErrorStatus === null ? ({
     isPending: false,
     isError: false,
     data: {
@@ -45,6 +46,11 @@ vi.mock("../hooks/useFinancialReporting", () => ({
       total_credits: "0",
       total_ending_balance: "0",
     },
+  }) : ({
+    isPending: false,
+    isError: true,
+    data: undefined,
+    error: { isAxiosError: true, response: { status: reportErrorStatus } },
   })),
 }));
 vi.mock("../hooks/useQboAccountingEvidence", () => ({
@@ -65,6 +71,7 @@ vi.mock("../hooks/useQboAccountingEvidence", () => ({
 describe("FinancialReportsRoute", () => {
   beforeEach(() => {
     allowed = false;
+    reportErrorStatus = null;
     reportRows = [{
       account_id: "account-1", code: "1100", name: "Accounts Receivable",
       classification: "asset", beginning_balance: "125.5", debits: "20",
@@ -121,6 +128,25 @@ describe("FinancialReportsRoute", () => {
     reportRows = [];
     render(<FinancialReportsRoute />);
     expect(screen.getByText(/No posted account balances exist for this report scope/i)).toBeVisible();
+  });
+
+  it("keeps a missing native ledger distinct from historical source evidence", () => {
+    allowed = true;
+    reportErrorStatus = 404;
+    render(<FinancialReportsRoute />);
+    expect(screen.getByText("Native accounting evidence is not admitted")).toBeVisible();
+    expect(
+      screen.getByText(/Historical QuickBooks source evidence is available separately/i),
+    ).toBeVisible();
+    expect(screen.getByText(/not substituted for native Accounting records/i)).toBeVisible();
+  });
+
+  it("does not relabel other report failures as an admission state", () => {
+    allowed = true;
+    reportErrorStatus = 409;
+    render(<FinancialReportsRoute />);
+    expect(screen.getByText(/authoritative report could not be generated/i)).toBeVisible();
+    expect(screen.queryByText("Native accounting evidence is not admitted")).not.toBeInTheDocument();
   });
 
   it("rejects reversed report periods before changing the authoritative request", () => {
