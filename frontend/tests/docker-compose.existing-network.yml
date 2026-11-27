@@ -1,0 +1,6 @@
+# Runtime-only fallback for hosts whose Docker address pools are exhausted.
+# The caller must select and verify an empty, existing user-defined bridge.
+networks:
+  acceptance:
+    external: true
+    name: ${ACCEPTANCE_EXISTING_NETWORK:?Set an empty existing Docker bridge}
