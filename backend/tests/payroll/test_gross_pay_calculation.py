@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.payroll.calculation import (
     ApprovedAdditionalEarning,
     EarningsComponentType,
@@ -347,7 +348,7 @@ def test_only_explicitly_authorized_additional_earnings_are_included() -> None:
     authority = compensation(company_id, employee_id)
     authority = replace(
         authority,
-        additional_earning_types=("synthetic_bonus",),
+        additional_earning_types=("commission",),
         authority_digest="",
     )
     authority = replace(
@@ -356,7 +357,7 @@ def test_only_explicitly_authorized_additional_earnings_are_included() -> None:
     snapshot = time_input(company_id, employee_id, 600)
     earning = ApprovedAdditionalEarning(
         "synthetic-earning-1",
-        "synthetic_bonus",
+        "commission",
         Decimal("10.00"),
         "USD",
         canonical_digest({"synthetic": "earning-evidence"}),
@@ -371,7 +372,7 @@ def test_only_explicitly_authorized_additional_earnings_are_included() -> None:
             policy_value,
             authority,
             snapshot,
-            additional_earnings=(replace(earning, category="commission"),),
+            additional_earnings=(replace(earning, category="unauthorized_bonus"),),
         )
 
 
