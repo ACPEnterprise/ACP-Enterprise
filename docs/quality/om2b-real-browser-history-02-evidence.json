@@ -19,6 +19,26 @@
     "protected_data": false
   },
   "qualification": {
+    "csr_dispatch_usability": {
+      "status": "PASS_COMPONENT_AND_PRODUCTION_BUILD",
+      "implementation_sha": "a8f8ae13440e6bb144c7807356912e06a2907c29",
+      "tests": {
+        "command": "npm exec -- vitest run src/components/scheduling/BookCustomerWorkPanel.test.tsx src/components/dispatch/DispatchAssignmentPanel.test.tsx src/routes/SchedulingRoute.test.tsx src/routes/DispatchRoute.test.tsx --maxWorkers=2",
+        "files_passed": 4,
+        "tests_passed": 50,
+        "failures": 0
+      },
+      "production_build": "PASS",
+      "browser_acceptance": "PENDING_LAPTOP_MASTER_OR_INDEPENDENT_REVIEWER",
+      "runtime_updated": false,
+      "detail": "The reserved runtime remains on its prior serving source SHA for uninterrupted owner inspection. This component/build result is not real-browser or operational acceptance."
+    },
+    "reviewer_harness": {
+      "status": "PUBLISHED_NOT_EXECUTED_ON_THIS_HOST",
+      "implementation_sha": "a8f8ae13440e6bb144c7807356912e06a2907c29",
+      "runbook": "docs/quality/om2b-real-browser-history-02-runbook.md",
+      "security": "Credential file mode 0600 is enforced; credentials are not logged or committed."
+    },
     "authenticated_application_lifecycle": {
       "status": "PASS",
       "workflows": [
