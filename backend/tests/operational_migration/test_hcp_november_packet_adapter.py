@@ -112,7 +112,7 @@ def _adapt(source: dict) -> dict:
         expected_source_packet_digest=source["digest"],
         qualification_digest=QUALIFICATION,
         repository_sha="9" * 40,
-        schema_head="r4s6u8w0y2a4",
+        schema_head="x3y5z7a9c1e4",
         expected_scope={
             "company_id": COMPANY,
             "branch_id": BRANCH,

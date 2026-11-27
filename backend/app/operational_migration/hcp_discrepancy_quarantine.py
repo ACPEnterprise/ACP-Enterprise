@@ -444,7 +444,7 @@ class DiscrepancyQuarantineAuthority:
             )
         if self.authority_digest != _digest(self._payload(value)):
             _fail("hcp_discrepancy_authority_digest_mismatch")
-        if self.target != "preview" or self.schema_head != "r4s6u8w0y2a4":
+        if self.target != "preview" or self.schema_head != "x3y5z7a9c1e4":
             _fail("hcp_discrepancy_runtime_boundary_invalid")
         if len(self.repository_sha) != 40 or any(
             c not in "0123456789abcdef" for c in self.repository_sha

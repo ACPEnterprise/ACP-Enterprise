@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import stat
+import tarfile
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -28,7 +29,7 @@ BUNDLE_CONTRACTS = frozenset({BUNDLE_CONTRACT, SEALED_HANDOFF_CONTRACT})
 EXPECTED_SCHEMA_HEAD = "yp8r0t2v4x6z"
 # The runtime-bound authority is intentionally explicit.  It is not a generic
 # override: this is the schema currently qualified for the Beta application.
-CURRENT_RUNTIME_SCHEMA_HEAD = "r4s6u8w0y2a4"
+CURRENT_RUNTIME_SCHEMA_HEAD = "x3y5z7a9c1e4"
 REQUIRED_FILES = frozenset(
     {
         "BUNDLE-MANIFEST.json",
@@ -405,7 +406,53 @@ class NovemberQualificationAuthority:
                             },
                         )
                     payloads = {name: archive.read(name) for name in REQUIRED_FILES}
-            except (OSError, zipfile.BadZipFile, KeyError) as error:
+            except zipfile.BadZipFile:
+                try:
+                    with tarfile.open(bundle, mode="r:*") as archive:
+                        members = archive.getmembers()
+                        file_members: dict[str, tarfile.TarInfo] = {}
+                        for member in members:
+                            if not member.isfile():
+                                continue
+                            normalized_name = member.name
+                            while normalized_name.startswith("./"):
+                                normalized_name = normalized_name[2:]
+                            if normalized_name in file_members:
+                                _fail(
+                                    "hcp_november_bundle_member_duplicate",
+                                    normalized_name,
+                                )
+                            file_members[normalized_name] = member
+                        names = set(file_members)
+                        if names != REQUIRED_FILES:
+                            _fail(
+                                "hcp_november_bundle_contents_mismatch",
+                                {
+                                    "missing": sorted(REQUIRED_FILES - names),
+                                    "extra": sorted(names - REQUIRED_FILES),
+                                },
+                            )
+                        payloads = {}
+                        for normalized_name, member in file_members.items():
+                            path = Path(normalized_name)
+                            if (
+                                path.is_absolute()
+                                or ".." in path.parts
+                            ):
+                                _fail(
+                                    "hcp_november_bundle_member_unsafe",
+                                    member.name,
+                                )
+                            stream = archive.extractfile(member)
+                            if stream is None:
+                                _fail(
+                                    "hcp_november_bundle_member_unreadable",
+                                    normalized_name,
+                                )
+                            payloads[normalized_name] = stream.read()
+                except (OSError, tarfile.TarError, KeyError) as error:
+                    _fail("hcp_november_bundle_unreadable", str(error))
+            except (OSError, KeyError) as error:
                 _fail("hcp_november_bundle_unreadable", str(error))
         manifest = _require_mapping(
             _json_bytes(payloads["BUNDLE-MANIFEST.json"], "BUNDLE-MANIFEST.json"),

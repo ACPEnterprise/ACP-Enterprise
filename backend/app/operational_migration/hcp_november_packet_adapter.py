@@ -154,7 +154,7 @@ def adapt_source_packet(
         char not in "0123456789abcdef" for char in repository_sha
     ):
         _fail("hcp_november_adapter_repository_sha_invalid", repository_sha)
-    if schema_head != "r4s6u8w0y2a4":
+    if schema_head != "x3y5z7a9c1e4":
         _fail("hcp_november_adapter_schema_head_invalid", schema_head)
     _scope(source, expected_scope)
 

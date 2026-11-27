@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import tarfile
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +28,7 @@ REPOSITORY_SHA = "f9888ce8338a0b74d4e4ac7ec21cdafa53039a1f"
 ACQUISITION = "02820d1bbdb0a2468304cf493f717b8cae3982c5f8774404a813e07208680754"
 RECONCILIATION = "7aaed3abde50d943cb4f981fbdcb185c19b1656e1cf3d1d8da6b20631ca12536"
 ATTACHMENT_CUSTODY = "c11e31d63541d6e5c202535d85f73fab161d969f19dc0b737f7085582fbed79e"
-SCHEMA_HEAD = "r4s6u8w0y2a4"
+SCHEMA_HEAD = "x3y5z7a9c1e4"
 POLICY = "285d288b98da96140fff9e25200b95beb120d05a2b5196560a89d0a616dd7c0e"
 
 
@@ -167,6 +170,28 @@ def test_november_bundle_qualifies_without_attachment_bodies(tmp_path: Path) -> 
     assert result["attachment_bodies_required"] is False
     assert result["counts"] == {"create": 1, "update": 1, "replay": 1, "hold": 38}
     assert result["unexplained_omissions"] == 0
+
+
+def test_november_tar_gz_bundle_qualifies_without_extracting(tmp_path: Path) -> None:
+    zip_path, authority = _write_bundle(tmp_path)
+    tar_path = tmp_path / "november-handoff.tar.gz"
+    with zipfile.ZipFile(zip_path) as source, tarfile.open(tar_path, "w:gz") as target:
+        for name in sorted(source.namelist()):
+            payload = source.read(name)
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            info.mode = 0o600
+            target.addfile(info, io.BytesIO(payload))
+    tar_path.chmod(0o600)
+    tar_authority = replace(
+        authority,
+        bundle_path=tar_path,
+        bundle_sha256=hashlib.sha256(tar_path.read_bytes()).hexdigest(),
+    )
+
+    result = tar_authority.verify()
+
+    assert result["qualification"] == "PASS"
 
 
 @pytest.mark.parametrize(
