@@ -235,6 +235,7 @@ def main() -> int:
     supervisor_run.add_argument(
         "--maximum-rss-bytes", type=int, default=512 * 1024 * 1024
     )
+    supervisor_run.add_argument("--max-discovery-failures", type=int, default=60)
     subparsers.add_parser("report")
     task = subparsers.add_parser("task")
     task_commands = task.add_subparsers(dest="task_command", required=True)
@@ -366,6 +367,7 @@ def main() -> int:
                             max_runtime_seconds=args.max_runtime_seconds,
                             minimum_free_bytes=args.minimum_free_bytes,
                             maximum_rss_bytes=args.maximum_rss_bytes,
+                            max_discovery_failures=args.max_discovery_failures,
                         )
                     )
                     print(json.dumps(persistent_result.__dict__, sort_keys=True))

@@ -25,6 +25,16 @@
     "present_in_authoritative_completed_evidence": false,
     "status": "MISSING_AUTHORITATIVE_COMPLETION"
   },
+  "durability_correction": {
+    "behavior": "Reject malformed authority without execution, persist a secret-free failure event and heartbeat, wait one poll interval, and retry until the bounded consecutive-failure budget is exhausted.",
+    "consecutive_failure_limit": 60,
+    "development_factory_tests": "207 passed in isolated groups (183 + 24)",
+    "focused_supervisor_and_queue_tests": "29 passed",
+    "mypy": "PASS_33_SOURCE_FILES",
+    "ruff": "PASS",
+    "ruff_format": "PASS_49_FILES",
+    "status": "QUALIFIED_LOCALLY"
+  },
   "execution_authorization": {
     "execution_profile": null,
     "integrated_supervisor_requires_supported_profile_for_unplanned_successor": true,
@@ -57,6 +67,19 @@
     ],
     "execution_profile": "Set OM1-DF-SUPERVISOR-AUTO-DISCOVERY-06.execution_profile to supervisor_continuation.",
     "queue_relationship": "Publish the correction as a descendant of 6aec17be3ac0bc1316975b0222f39bc7c9903837."
+  },
+  "replacement_supervisor": {
+    "active_pid": 64655,
+    "assignment_executed": false,
+    "consecutive_discovery_failures": 1,
+    "current_assignment": null,
+    "failure_budget": 60,
+    "first_rejection_at_utc": "2026-11-27T16:52:54.332170+00:00",
+    "managed_execution_session": 50178,
+    "plan_superseded_at_utc": "2026-11-27T16:52:51.918641+00:00",
+    "poll_seconds": 60,
+    "started_at_utc": "2026-11-27T16:52:51.920938+00:00",
+    "status": "ACTIVE_WAITING_FOR_CORRECTED_DESCENDANT"
   },
   "running_code_identity": {
     "code_sha": "776f1d0412f1d6aa10e9e53de1f0d1ff61a498f8",

@@ -24,6 +24,7 @@ from typing import Protocol, cast
 from development_factory.coordination import Assignment, ManualReservation
 from development_factory.queue_discovery import (
     DiscoveryResult,
+    QueueDiscoveryError,
     QueueDiscoverySupervisor,
     QueueSource,
     assignment_contract_digest,
@@ -70,6 +71,7 @@ class SupervisorLimits:
     max_runtime_seconds: float = 21_600
     minimum_free_bytes: int = 5 * 1024 * 1024 * 1024
     maximum_rss_bytes: int = 512 * 1024 * 1024
+    max_discovery_failures: int = 60
 
     def validate(self) -> None:
         if not 1 <= self.poll_seconds <= 3_600:
@@ -84,6 +86,10 @@ class SupervisorLimits:
             raise UnattendedSupervisorError("free-space limit is outside safe bounds")
         if not 64 * 1024**2 <= self.maximum_rss_bytes <= 4 * 1024**3:
             raise UnattendedSupervisorError("memory limit is outside safe bounds")
+        if not 1 <= self.max_discovery_failures <= 1_440:
+            raise UnattendedSupervisorError(
+                "discovery failure limit is outside safe bounds"
+            )
 
 
 @dataclass(frozen=True)
@@ -293,11 +299,30 @@ class PersistentSupervisor:
                 resources = self.resource_probe(self.root)
                 self._require_resources(resources, limits)
                 state["last_resources"] = resources.to_dict()
-                discovery = self.discovery.discover(
-                    self.source,
-                    machine=self.machine,
-                    execution_identity=self.execution_identity,
-                )
+                try:
+                    discovery = self.discovery.discover(
+                        self.source,
+                        machine=self.machine,
+                        execution_identity=self.execution_identity,
+                    )
+                except QueueDiscoveryError as error:
+                    failures = _integer(state, "consecutive_discovery_failures") + 1
+                    state["consecutive_discovery_failures"] = failures
+                    state["last_heartbeat_at_utc"] = _timestamp()
+                    state["last_error"] = _safe_error(error)
+                    self._event(state, "AUTHORITY_DISCOVERY_REJECTED")
+                    self._write_state(state)
+                    if failures >= limits.max_discovery_failures:
+                        raise UnattendedSupervisorError(
+                            "authority discovery failure budget exhausted"
+                        ) from error
+                    if limits.max_cycles and cycles >= limits.max_cycles:
+                        status = "CYCLE_LIMIT_REACHED"
+                        break
+                    self.sleep(limits.poll_seconds)
+                    continue
+                state["consecutive_discovery_failures"] = 0
+                state["last_error"] = None
                 state["last_heartbeat_at_utc"] = _timestamp()
                 state["last_observed_authority_sha"] = discovery.queue_commit_sha
                 state["last_observed_queue_sha256"] = discovery.queue_digest
@@ -490,6 +515,7 @@ class PersistentSupervisor:
                 "last_observed_queue_sha256": None,
                 "last_stale_pid": None,
                 "last_stale_pid_recovered_at_utc": None,
+                "consecutive_discovery_failures": 0,
                 "last_error": None,
                 "last_exit_status": None,
                 "state_digest": "",
@@ -522,6 +548,8 @@ class PersistentSupervisor:
             state.get("events"), list
         ):
             raise UnattendedSupervisorError("runtime checkpoint structure is invalid")
+        if "consecutive_discovery_failures" not in state:
+            state["consecutive_discovery_failures"] = 0
         return state
 
     def _write_state(self, state: dict[str, object]) -> None:

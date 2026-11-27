@@ -53,7 +53,10 @@ existing process does not stop, preventing duplicate execution.
 
 The LaunchAgent uses a 60-second poll interval, a six-hour per-process runtime,
 an eight-assignment cap, a 5 GiB free-disk floor, a 512 MiB process-RSS ceiling,
-low-priority I/O, and launchd restart throttling. Because `KeepAlive` is set,
+60 consecutive authority-rejection limit, low-priority I/O, and launchd restart
+throttling. A rejected or malformed authority is checkpointed and retried after
+the poll interval without executing it; exhausting the bounded rejection budget
+stops the child fail closed. Because `KeepAlive` is set,
 launchd replaces each bounded process after it exits; every replacement must
 revalidate the execution plan and current authority before doing work.
 
