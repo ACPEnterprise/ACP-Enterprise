@@ -35,6 +35,13 @@ const employeeRequirement = (code: string) => {
   return { requirement: label(code), owner: "SYSTEM", blocks: "ASSEMBLE · CALCULATE · APPROVE · CLOSE", next: "Review the linked Payroll setup blocker and contact Operations if it cannot be resolved." };
 };
 
+const PRECALCULATION_STATES = new Set([
+  "GROSS_PAY_NOT_CALCULATED",
+  "WITHHOLDING_NOT_CALCULATED",
+]);
+
+const blocksPayrollAssembly = (code: string) => !PRECALCULATION_STATES.has(code);
+
 function StateList({ values, empty }: { values: Record<string, number>; empty: string }) {
   const entries = Object.entries(values).sort(([left], [right]) => left.localeCompare(right));
   if (!entries.length) return <p className="text-sm text-content-muted">{empty}</p>;
@@ -308,9 +315,9 @@ export function PayrollRoute() {
                 <span className="text-sm">
                   Payroll policy: <strong>{label(periodOperations.data.policy_readiness)}</strong>
                 </span>
-                {canAssembleRuns && <Button size="small" variant="outline" disabled={runActions.assemble.isPending || !effectivePayPeriodId || periodOperations.data.employees.length === 0 || periodOperations.data.employees.some((employee) => employee.exception_codes.length > 0)} onClick={() => { void runActions.assemble.mutateAsync({ pay_period_id: effectivePayPeriodId!, employee_ids: periodOperations.data!.employees.map((employee) => employee.employee_id), members: periodOperations.data!.employees.map((employee) => ({ employee_id: employee.employee_id, disposition: "pending_calculation" as const })), currency: "USD" }); }}>Assemble Payroll</Button>}
+                {canAssembleRuns && <Button size="small" variant="outline" disabled={runActions.assemble.isPending || !effectivePayPeriodId || periodOperations.data.employees.length === 0 || periodOperations.data.employees.some((employee) => employee.exception_codes.some(blocksPayrollAssembly))} onClick={() => { void runActions.assemble.mutateAsync({ pay_period_id: effectivePayPeriodId!, employee_ids: periodOperations.data!.employees.map((employee) => employee.employee_id), members: periodOperations.data!.employees.map((employee) => ({ employee_id: employee.employee_id, disposition: "pending_calculation" as const })), currency: "USD" }); }}>Assemble Payroll</Button>}
               </div>
-              {periodOperations.data.employees.some((employee) => employee.exception_codes.length > 0) && <p className="text-sm text-content-muted">Assembly is unavailable until every Employee blocker above is resolved. No incomplete Payroll run will be created.</p>}
+              {periodOperations.data.employees.some((employee) => employee.exception_codes.some(blocksPayrollAssembly)) && <p className="text-sm text-content-muted">Assembly is unavailable until every setup, employment, policy, and accepted-time blocker above is resolved. Expected pre-calculation states do not prevent creating the projection.</p>}
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[1050px] text-left text-sm">
                   <thead>

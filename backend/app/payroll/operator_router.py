@@ -527,13 +527,16 @@ async def decide_run_review(
 async def approve_run(
     run_id: UUID, payload: ReviewInput, context: Approve, session: Session
 ) -> dict[str, object]:
-    value = await PayrollRunService().approve(
-        session,
-        context=context,
-        run_id=run_id,
-        reason_code=payload.reason_code,
-        safe_note=payload.safe_note,
-    )
+    try:
+        value = await PayrollRunService().approve(
+            session,
+            context=context,
+            run_id=run_id,
+            reason_code=payload.reason_code,
+            safe_note=payload.safe_note,
+        )
+    except PayrollConflictError as error:
+        raise HTTPException(409, str(error)) from error
     return {
         "run_id": value.run_id,
         "decision": value.decision,

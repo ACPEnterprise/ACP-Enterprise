@@ -524,6 +524,21 @@ class PayrollRunService:
         value = await self._locked_run(session, context, run_id)
         if value.lifecycle != PayrollRunLifecycle.REVIEWED.value:
             raise PayrollConflictError("reviewed Payroll run is required for approval")
+        accepted_reviewer_id = await session.scalar(
+            select(PayrollRunReviewRecord.actor_user_id).where(
+                PayrollRunReviewRecord.run_id == run_id,
+                PayrollRunReviewRecord.decision
+                == PayrollRunReviewDecision.ACCEPTED.value,
+            )
+        )
+        if accepted_reviewer_id is None:
+            raise PayrollConflictError(
+                "accepted Payroll review evidence is required for approval"
+            )
+        if accepted_reviewer_id == context.user.id:
+            raise PayrollConflictError(
+                "Payroll approval requires a separate authorized approver"
+            )
         value.lifecycle = PayrollRunLifecycle.APPROVED.value
         evidence = await self._review(
             session,

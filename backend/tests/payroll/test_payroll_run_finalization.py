@@ -4,6 +4,9 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.events.models import BusinessEvent
 from app.payroll.contracts import (
     PayrollAuthorizationError,
@@ -13,6 +16,7 @@ from app.payroll.contracts import (
 from app.payroll.finalization import GrossReviewDecision, PayrollGrossResultService
 from app.payroll.models import EmployeeCompensationAuthorityVersion
 from app.payroll.operations import PayrollOperationsService
+from app.payroll.operator_router import ReviewInput, close_run
 from app.payroll.permissions import PayrollPermission
 from app.payroll.run_finalization import (
     PayrollPopulationEvidence,
@@ -30,9 +34,6 @@ from app.payroll.tax_finalization import (
 from app.platform.audit.models import AuditRecord
 from app.platform.employees.models import Employee
 from app.timekeeping.models import PayrollTimeInputRecord
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from tests.payroll.test_gross_pay_calculation import compensation
 from tests.payroll.test_gross_pay_finalization import (
     FakeContext,
@@ -75,7 +76,9 @@ def contexts(values: dict[str, object]) -> tuple[Any, Any, Any, Any]:
         values["company_id"], values["reviewer_id"], {PayrollPermission.RUN_REVIEW}
     )
     approve = FakeContext(
-        values["company_id"], values["reviewer_id"], {PayrollPermission.RUN_APPROVE}
+        values["company_id"],
+        values["actor_id"],
+        {PayrollPermission.RUN_APPROVE, PayrollPermission.RUN_READ},
     )
     return assemble, read, review, approve
 
@@ -278,9 +281,31 @@ async def test_assembly_totals_replay_review_approval_and_safe_handoffs(
             decision=PayrollRunReviewDecision.ACCEPTED,
             reason_code="synthetic",
         )
+        same_person_approval = FakeContext(
+            values["company_id"],
+            values["reviewer_id"],
+            {PayrollPermission.RUN_APPROVE},
+        )
+        with pytest.raises(PayrollConflictError, match="separate authorized approver"):
+            await service.approve(
+                session,
+                context=same_person_approval,
+                run_id=first.id,
+                reason_code="synthetic",
+            )
         await service.approve(
             session, context=approve, run_id=first.id, reason_code="synthetic"
         )
+        close_payload = ReviewInput(
+            reason_code="synthetic qualification close",
+            idempotency_key="synthetic-close-1",
+        )
+        close_result = await close_run(first.id, close_payload, approve, session)
+        close_replay = await close_run(first.id, close_payload, approve, session)
+        assert close_result["status"] == "closed_payroll_authority"
+        assert close_result["payment_execution"] == "not_performed"
+        assert close_result["accounting_posted"] is False
+        assert close_replay["replayed"] is True
         payment = await service.approved_handoff(
             session, context=read, run_id=first.id, purpose="future_payment_release"
         )

@@ -368,7 +368,7 @@ describe("PayrollRoute authorization", () => {
         withholding_readiness: "READY",
         gross_pay_readiness: "NOT_CALCULATED",
         payroll_review_status: "NOT_STARTED",
-        exception_codes: [],
+        exception_codes: ["GROSS_PAY_NOT_CALCULATED", "WITHHOLDING_NOT_CALCULATED"],
       }],
     }) as never);
 
@@ -465,5 +465,23 @@ describe("PayrollRoute authorization", () => {
     expect(screen.queryByRole("button", { name: "Calculate" })).not.toBeInTheDocument();
     fireEvent.click(approveButton);
     await waitFor(() => expect(approve).toHaveBeenCalledWith({ runId: "run-2", reason: "Owner approved Payroll register" }));
+  });
+
+  it("closes approved Payroll with a fresh idempotency identity", async () => {
+    permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ", "COMPANY_PAYROLL_RUN_APPROVE"]);
+    const close = vi.fn();
+    vi.mocked(usePayrollRunActions).mockReturnValue({ assemble: { isPending: false, mutateAsync: vi.fn() }, calculate: { isPending: false, mutateAsync: vi.fn() }, review: { isPending: false, mutateAsync: vi.fn() }, acceptReview: { isPending: false, mutateAsync: vi.fn() }, approve: { isPending: false, mutateAsync: vi.fn() }, close: { isPending: false, mutateAsync: close }, issuePaperCheck: { isPending: false, mutateAsync: vi.fn() }, voidPaperCheck: { isPending: false, mutateAsync: vi.fn() }, reissuePaperCheck: { isPending: false, mutateAsync: vi.fn() } } as never);
+    vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: true, aggregate_approved_gross: "100.00", aggregate_approved_net: "80.00", reconciliation_state: "reconciled", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: { approved: 1 }, member_dispositions: { ready: 1 }, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
+    vi.mocked(usePayrollOperatingRegisters).mockReturnValue(query([{ run_id: "run-3", period_start: "2026-09-01", period_end: "2026-09-07", processing_date: "2026-09-08", payday: "2026-09-09", lifecycle: "approved", review_state: "accepted", currency: "USD", members: [], liability_totals: {}, manual_tax_filing_payment_required: true, run_digest: "run" }]) as never);
+
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Close Payroll" }));
+
+    await waitFor(() => expect(close).toHaveBeenCalledWith({
+      runId: "run-3",
+      reason: "Operator confirmed Payroll register review",
+      idempotencyKey: expect.any(String),
+    }));
+    expect(close.mock.calls[0][0].idempotencyKey).not.toHaveLength(0);
   });
 });
