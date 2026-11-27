@@ -285,6 +285,7 @@ def parse_args() -> argparse.Namespace:
             "tenant-isolation",
             "routes",
             "background-services",
+            "accounting-readonly",
             "schema",
             "release-metadata",
         ),
@@ -325,6 +326,7 @@ def main() -> int:
             "tenant-isolation",
             "routes",
             "background-services",
+            "accounting-readonly",
         }:
             result = check_smoke(
                 args.runtime_root,

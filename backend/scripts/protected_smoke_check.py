@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import stat
 import urllib.error
 import urllib.request
@@ -197,6 +198,99 @@ def check_background(path: str, credential_file: Path) -> dict[str, str]:
     return {"check": "background-services", "status": "PASS", "source": path}
 
 
+def _json_object(body: bytes, failure: str) -> dict[str, object]:
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise SmokeBlocked(failure) from exc
+    if not isinstance(payload, dict):
+        raise SmokeBlocked(failure)
+    return payload
+
+
+def check_accounting_readonly(credential_file: Path) -> dict[str, str]:
+    """Verify source A/R and classify native reports without any write request."""
+
+    token = secret(credential_file)
+    company_id, branch_id = tenant_binding()
+    status, body = request(
+        "/api/v1/accounting/source-evidence/qbo?basis=accrual",
+        token,
+        company_id=company_id,
+        branch_id=branch_id,
+    )
+    if status != 200:
+        raise SmokeBlocked("QBO source evidence workspace is unavailable")
+    workspace = _json_object(body, "QBO source evidence is invalid")
+    if (
+        workspace.get("mutation_authority") != "none"
+        or workspace.get("accepted_as_acp_accounting") is True
+    ):
+        raise SmokeBlocked("QBO source evidence authority boundary is invalid")
+    report_date = str(workspace.get("as_of") or "")[:10]
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report_date):
+        raise SmokeBlocked("QBO source evidence cutoff is unavailable")
+
+    status, body = request(
+        "/api/v1/accounting/source-evidence/qbo/reports/aged-receivables"
+        f"?report_date={report_date}",
+        token,
+        company_id=company_id,
+        branch_id=branch_id,
+    )
+    if status != 200:
+        raise SmokeBlocked("archive-backed aged receivables is unavailable")
+    aged = _json_object(body, "archive-backed aged receivables is invalid")
+    if (
+        aged.get("contract_version") != "qbo-source-backed-ar-summary/v1"
+        or aged.get("accepted_as_acp_accounting") is not False
+        or aged.get("mutation_authority") != "none"
+        or aged.get("includes_customer_credits_and_unapplied_payments") is not False
+        or not isinstance(aged.get("net_open_ar"), str)
+    ):
+        raise SmokeBlocked("archive-backed aged receivables authority is invalid")
+
+    report_paths = (
+        f"/api/v1/accounting/reports/trial-balance?as_of={report_date}",
+        f"/api/v1/accounting/reports/balance-sheet?as_of={report_date}",
+        (
+            "/api/v1/accounting/reports/income-statement"
+            f"?start_date={report_date[:4]}-01-01&end_date={report_date}"
+        ),
+    )
+    report_statuses = tuple(
+        request(
+            path,
+            token,
+            company_id=company_id,
+            branch_id=branch_id,
+        )[0]
+        for path in report_paths
+    )
+    if report_statuses == (404, 404, 404):
+        native_state = "NO_ADMITTED_NATIVE_REPORTING_CONTEXT"
+    elif report_statuses == (200, 200, 200):
+        native_state = "NATIVE_REPORTING_AVAILABLE"
+    else:
+        raise SmokeBlocked("native financial report state is inconsistent")
+
+    historical = workspace.get("historical_reconciliation")
+    source_records = (
+        str(historical.get("source_record_count"))
+        if isinstance(historical, dict)
+        and isinstance(historical.get("source_record_count"), int)
+        else "unavailable"
+    )
+    return {
+        "check": "accounting-readonly",
+        "status": "PASS",
+        "native_reporting_state": native_state,
+        "aged_receivables_contract": str(aged["contract_version"]),
+        "source_record_count": source_records,
+        "mutation_authority": "none",
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -207,6 +301,7 @@ def parse_args() -> argparse.Namespace:
             "tenant-isolation",
             "routes",
             "background-services",
+            "accounting-readonly",
         ),
         required=True,
     )
@@ -236,10 +331,12 @@ def main() -> int:
             if not args.route:
                 raise SmokeBlocked("protected route list is required")
             result = check_routes(tuple(args.route), args.credential_file)
-        else:
+        elif args.check == "background-services":
             result = check_background(
                 args.path or "/health/ready", args.credential_file
             )
+        else:
+            result = check_accounting_readonly(args.credential_file)
     except SmokeBlocked as exc:
         print(f"BLOCKED: {exc}")
         return 2

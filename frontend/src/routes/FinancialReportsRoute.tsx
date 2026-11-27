@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import { useState } from "react";
 
 import {
@@ -208,6 +209,10 @@ export function FinancialReportsRoute() {
   });
   const invalidPeriod = !endDate || Boolean(startDate && startDate > endDate);
   const report = useFinancialReport(request, canRead);
+  const nativeEvidenceNotAdmitted =
+    report.isError &&
+    isAxiosError(report.error) &&
+    report.error.response?.status === 404;
   if (!canRead)
     return (
       <Alert variant="danger">
@@ -327,10 +332,19 @@ export function FinancialReportsRoute() {
         {report.isPending ? (
           <Spinner label="Generating financial report" />
         ) : report.isError ? (
-          <Alert variant="danger">
-            The authoritative report could not be generated. Review Accounting
-            reconciliation evidence.
-          </Alert>
+          nativeEvidenceNotAdmitted ? (
+            <Alert variant="warning" title="Native accounting evidence is not admitted">
+              No posted TwelveHats General Ledger reporting context exists for
+              this company and scope. Historical QuickBooks source evidence is
+              available separately below, but it remains read-only evidence and
+              is not substituted for native Accounting records.
+            </Alert>
+          ) : (
+            <Alert variant="danger">
+              The authoritative report could not be generated. Review Accounting
+              reconciliation evidence.
+            </Alert>
+          )
         ) : report.data ? (
           <Card>
             <CardHeader>

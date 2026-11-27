@@ -282,6 +282,22 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
           <CardContent>
             <p className="text-2xl font-bold">{arSummary.isLoading ? "Loading…" : money(netOpenAr)}</p>
             <p className="text-sm text-content-muted">{arSummaryDescription}</p>
+            {arSummary.isError ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-sm text-status-warning">
+                  The read-only source A/R projection is unavailable. No balance
+                  was inferred and no native Accounting record was changed.
+                </p>
+                <Button
+                  onClick={() => void arSummary.refetch()}
+                  size="small"
+                  type="button"
+                  variant="secondary"
+                >
+                  Retry read-only A/R
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
         <Card>

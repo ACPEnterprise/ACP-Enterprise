@@ -1,7 +1,25 @@
 {
   "accepted_as_native_accounting": false,
-  "ar_bridge_difference": "100801.91",
+  "ar_bridge": {
+    "balance_sheet_accounts_receivable": "399782.43",
+    "bridge_minus_provider_unapplied": "13257.00",
+    "difference": "100801.91",
+    "invoice_open_balance": "500584.34",
+    "provider_unapplied_amount": "87544.91",
+    "provider_unapplied_minus_unlinked": "2130.00",
+    "state": "UNRESOLVED_SOURCE_CROSSWALK",
+    "unlinked_payment_count": 73,
+    "unlinked_payment_total": "85414.91"
+  },
   "balance_sheet_difference": "0.00",
+  "bank_feed": {
+    "authoritative_amount_total": "29272.51",
+    "automatic_expense_creation_allowed": false,
+    "disposition": "UNPOSTED_SOURCE_EVIDENCE",
+    "duplicate_incremental_amount": "-872.76",
+    "exact_duplicate_rows": 4,
+    "pending_rows": 102
+  },
   "bounded_snapshot_sha256": "e4d672c1cdfca858e4a8e923a51a86627753c7ea1fedc695daa98066a5dc6041",
   "conflicts": [
     "D-001",

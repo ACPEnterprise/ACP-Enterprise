@@ -257,6 +257,27 @@ describe("QboSourceEvidence", () => {
     expect(screen.getByText("payment-1")).toBeVisible();
   });
 
+  it("fails closed and supports a read-only retry when A/R evidence is unavailable", () => {
+    const refetch = vi.fn();
+    vi.mocked(useQboAccountingEvidence).mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: historicalValue,
+    } as unknown as ReturnType<typeof useQboAccountingEvidence>);
+    vi.mocked(useQboSourceBackedArSummary).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      data: undefined,
+      refetch,
+    } as unknown as ReturnType<typeof useQboSourceBackedArSummary>);
+
+    render(<QboSourceEvidence enabled />);
+
+    expect(screen.getByText(/No balance was inferred/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry read-only A/R" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
   it("navigates to source-backed report detail with provenance and no posting claim", () => {
     vi.mocked(useQboAccountingEvidence).mockReturnValue({
       isPending: false,

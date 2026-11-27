@@ -8,12 +8,16 @@ nonexistent endpoint as a denial.
 
 The implementation requires an approved smoke credential file; it contains
 the authentication, authorization, tenant-isolation, routes, and
-background-services checks and the Authorization header contract.
+background-services and accounting-readonly checks and the Authorization
+header contract. The accounting check fails closed when archive-backed aged
+receivables is unavailable, classifies NO_ADMITTED_NATIVE_REPORTING_CONTEXT,
+and preserves `"mutation_authority": "none"`.
 
 tenant-scoped identities require the protected company and branch bindings
 used by the real checker before membership-backed authentication is evaluated.
 "authentication" "authorization" "tenant-isolation" "routes"
 "background-services"
+"accounting-readonly"
 "anonymous protected request was not rejected"
 "cross-tenant request was not denied"
 
