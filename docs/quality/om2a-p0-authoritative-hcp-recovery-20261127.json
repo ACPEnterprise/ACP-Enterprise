@@ -1,0 +1,126 @@
+{
+  "contract": "om2a-authoritative-hcp-recovery-assessment/v1",
+  "assessed_at": "2026-11-27",
+  "status": "SOURCE_CUSTODY_VERIFIED_RECOVERY_BLOCKED",
+  "scope": "read_only",
+  "protected_acceptance": false,
+  "source_custody": {
+    "handoff_contract": "enterprise-release-hcp-cutover-handoff/v2",
+    "handoff_root": "/Users/michaelfouse/.acp-enterprise/release-handoffs/hcp-cutover-94f05c12",
+    "current_source_semantic_sha256": "a8d7c94592e52470a288b9b30c865b2b2c112090a40b489930e937654a15d8cd",
+    "sealed_source4_semantic_sha256": "4a4a9582d7fde37dba73ba9e93db5669d9341768c7f5741f6e8916971fd9ec60",
+    "provider_company_binding_verified": true,
+    "provider_access_mode": "GET_ONLY",
+    "protected_clone_dump_present": true,
+    "protected_clone_dump_sha256": "222d77ce4de4db340667c919d907eb1069ae58e5eb67555b200e2137ece9a3af",
+    "provider_writes": 0,
+    "clone_mutations": 0
+  },
+  "customer_population": {
+    "reported_historical_count": 5524,
+    "reported_current_restored_count": 635,
+    "owner_recovered_export_unique_ids": 5464,
+    "owner_recovered_export_sha256": "a36214f27ced45e4752605b37b54ce5ea1a5810086c1bd979fdb9f369f530579",
+    "sealed_source4_unique_ids": 5253,
+    "current_get_unique_ids": 5381,
+    "reported_historical_minus_export": 60,
+    "reported_historical_minus_current_get": 143,
+    "disposition": "UNRESOLVED_DIFFERENT_POPULATIONS_AND_IDENTITY_NAMESPACES",
+    "finding": "The 5524 and 635 figures are not record-level comparable. No sealed artifact inspected proves 5524 provider identities, and the 635 runtime subset requires an authorized protected snapshot before an exact set difference can be produced."
+  },
+  "current_get_population": {
+    "customers": 5381,
+    "jobs": 5898,
+    "estimates": 1348,
+    "invoices": 5854,
+    "employees": 9,
+    "open_job_appointments": 478,
+    "embedded_payments": 4370,
+    "embedded_refunds": 30,
+    "locations": "EMBEDDED_CUSTOMER_AND_JOB_RELATIONSHIPS",
+    "standalone_payments": "ENDPOINT_HTTP_404_UNAVAILABLE_NOT_ZERO",
+    "attachments": "ENDPOINT_HTTP_404_UNAVAILABLE_NOT_ZERO"
+  },
+  "sealed_source4_population": {
+    "customers": 5253,
+    "jobs": 5801,
+    "estimates": 1307,
+    "invoices": 5756,
+    "employees": 7,
+    "appointment_target_jobs": 3950,
+    "appointment_records": 3219,
+    "appointment_http_200": 3030,
+    "appointment_http_400": 920
+  },
+  "record_level_crosswalks": {
+    "customer": {
+      "rows": 5253,
+      "control_available": 0,
+      "control_absent": 5253,
+      "sha256": "f59b958651f1e669246b9a7d9d165d8faefbeba268577894e36a776b2847c0cd"
+    },
+    "job": {
+      "rows": 5801,
+      "control_available": 4816,
+      "control_absent": 985,
+      "sha256": "eb37d7097b058b0147bfc0c54fe7552ede6f3632cb0f797df6ee5236c5a445ec"
+    },
+    "estimate": {
+      "rows": 1307,
+      "control_available": 1306,
+      "control_absent": 1,
+      "sha256": "6d39af1a44d642cb6d668eb2848188eb0c1de108796f5ffbc3f37593f70fc65a"
+    },
+    "current_overlay_complete_graph": {
+      "rows": 522,
+      "create_new": 174,
+      "update_existing": 5,
+      "reuse_existing": 4,
+      "hold": 339,
+      "current_operational_graph_admittable": true,
+      "ready_for_guarded_execution": true,
+      "sha256": "e886eaeddea4c3c9a7f00e1987beb813eebe872bb9c28953efe78ba3a2fc91ee"
+    }
+  },
+  "legacy_admission": {
+    "classified_records": 6510,
+    "exact_successors": 5121,
+    "ambiguous_holds": 1389,
+    "canonical_admission_authorized": false,
+    "identity_bridge_status": "ABSENT_FOR_LEGACY_NUMERIC_TO_CURRENT_OPAQUE_PROVIDER_IDS"
+  },
+  "attachment_custody": {
+    "sealed_manifest_reference_count": 621,
+    "sealed_manifest_declared_bytes": 3088372246,
+    "attachment_bodies_in_current_handoff": 0,
+    "recorded_november_packet_present": false,
+    "recorded_november_bundle_present": false,
+    "recorded_execution_authority_input_present": false,
+    "approved_retrieval_references_present": false,
+    "disposition": "CUSTODY_DEFICIENCY_UNRESOLVED",
+    "required_action": "Laptop Master must restore or reseal the referenced attachment manifest and body bundle inside approved custody, or authorize a provider-supported GET-only retrieval route. Do not infer URLs from filenames or identifiers."
+  },
+  "financial_and_relationship_reconciliation": {
+    "jobs": "SOURCE4_RECORD_CROSSWALK_PRESENT_WITH_985_CONTROL_ABSENCES",
+    "appointments": "PARTIAL_3030_SUCCESSFUL_JOB_RESPONSES_920_HTTP_400_RESPONSES",
+    "estimates": "SOURCE4_RECORD_CROSSWALK_PRESENT_WITH_1_CONTROL_ABSENCE",
+    "invoices": "SOURCE_COLLECTION_PRESENT_IDENTITY_DRIFT_REQUIRES_PROTECTED_CROSSWALK",
+    "payments": "EMBEDDED_SOURCE_RECORDS_PRESENT_STANDALONE_ENDPOINT_UNAVAILABLE",
+    "locations": "RELATIONSHIPS_PRESENT_302_JOB_LOCATION_PARENT_EXCEPTIONS_RECORDED_IN_DELTA",
+    "protected_database_reconciliation": "NOT_EXECUTED"
+  },
+  "rollback_safety": {
+    "input_artifacts_immutable": true,
+    "outputs_must_be_new_mode_0600_files": true,
+    "overwrite_refused": true,
+    "database_mutation_required": false,
+    "hcp_write_required": false,
+    "admission_authority_granted": false
+  },
+  "blocking_dependencies": [
+    "Authorized protected runtime snapshot containing provider and native identities for the reported 635-customer population",
+    "Qualified legacy-numeric-to-current-opaque provider identity bridge or an accepted overlay execution receipt",
+    "Restored or resealed 621-reference attachment manifest and corresponding media bodies",
+    "Explicit Laptop Master authority before any protected database admission"
+  ]
+}
