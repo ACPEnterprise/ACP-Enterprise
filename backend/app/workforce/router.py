@@ -746,6 +746,7 @@ async def prepare_field_readiness(
         (
             profile_id,
             capability_id,
+            branch_eligibility_id,
             availability_id,
         ) = await workforce_administration_service.prepare_field_readiness(
             session,
@@ -761,6 +762,7 @@ async def prepare_field_readiness(
     return FieldReadinessResponse(
         profile_id=profile_id,
         capability_evidence_id=capability_id,
+        branch_eligibility_id=branch_eligibility_id,
         availability_evidence_id=availability_id,
     )
 

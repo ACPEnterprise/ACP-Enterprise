@@ -451,6 +451,7 @@ class FieldReadinessRequest(WorkforceSchema):
 class FieldReadinessResponse(WorkforceSchema):
     profile_id: UUID
     capability_evidence_id: UUID
+    branch_eligibility_id: UUID
     availability_evidence_id: UUID
 
 
