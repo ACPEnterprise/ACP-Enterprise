@@ -1,6 +1,15 @@
 {
   "schema_version": "twelfthats.continuous-engineering-queue.v1",
   "status": "AUTHORITATIVE_HANDOFF_PENDING_MACHINE_ACKNOWLEDGMENT",
+  "handoff": {
+    "revision": "friday-consolidated-20261127-01",
+    "application_candidate_sha": "fe15fbfa7f9c482e746be6d08b545fad37999474",
+    "integration_branch": "integration/friday-consolidated-20261127",
+    "parent_candidate_sha": "8733e4b41e96136f605e502d3155570a5ac023e3",
+    "published_by": "LAPTOP_MASTER",
+    "automated_claims_blocked": true,
+    "protected_work_requires_prerequisite_receipts": true
+  },
   "completed_evidence": [
     {"assignment_id": "OM1-DF-DURABLE-COORDINATION-01", "commit_sha": "ff2666b901f2f5f4e5db371c014069502cce459f", "remote_ref": "refs/heads/work/om1-df-durable-coordination-01", "evidence": "229 tests passed; PostgreSQL 16 race qualification passed; schema drift NONE"},
     {"assignment_id": "OM2-HCP-HISTORY-RECON-01", "commit_sha": "6c999f50876a227e27488f347e56848250e23264", "remote_ref": "refs/heads/work/om2-hcp-history-recon-01", "evidence": "Synthetic-only read-only HCP history reconciliation; no All County acceptance claimed"},
@@ -29,6 +38,8 @@
     ,{"assignment_id": "OM2-A-POPULATION-RECON-04", "commit_sha": "9bac34a85be6d8162f39aa918fccc31a83acd422", "remote_ref": "refs/heads/work/om2a-population-recon-04", "evidence": "Record-level source population reconciliation passed synthetic qualification; held and missing relationships remain explicit"}
     ,{"assignment_id": "OM2-A-ACCOUNTING-ARAP-READBACK-04", "commit_sha": "bc527641fff055d4726d5ca69abed1ccab99bbc8", "remote_ref": "refs/heads/work/om2a-accounting-arap-readback-04", "evidence": "Read-only A/R and A/P projection passed synthetic qualification; QBO source registration and native posting remain separate"}
     ,{"assignment_id": "OM2-B-UI-WORKFLOW-ACCEPT-01", "commit_sha": "d8897ca66ddbb7055760e3e29967293c6600a37e", "remote_ref": "refs/heads/work/om2b-ui-workflow-accept-01", "evidence": "91 focused workflow tests, 16 changed-scope regression tests, TypeScript and Vite build passed; no real-browser acceptance claimed"}
+    ,{"assignment_id": "OM1A-PLATFORM-CORRECTION-PRESERVATION-06", "commit_sha": "2f1a2a6cf81b47ec4428121817e9b3b74a4e2276", "remote_ref": "refs/heads/work/om1a-platform-correction-preservation-06", "evidence": "Hosted CI run 46023702546 passed; platform correction preservation and HCP correction ancestry verified; no deployment or protected mutation claimed"}
+    ,{"assignment_id": "OM1B-SUPERVISOR-CONTINUATION-04", "commit_sha": "66f1d8f1324d537d590de1c08fad2e33552efcf6", "remote_ref": "refs/heads/work/om1b-supervisor-continuation-04", "evidence": "Continuous supervisor successor published for bounded nonproduction qualification; automatic protected claims remain blocked pending independent review"}
   ],
   "authority": {
     "application_integration_lane": "LAPTOP_MASTER",
@@ -77,8 +88,8 @@
   },
   "source_register": {
     "laptop_inventory_head": "e730fd58f2a0a5b63184c8d09a423e8f9c7728fc",
-    "protected_integration_branch": "integration/ci-runtime-correction-20261125",
-    "protected_integration_sha": "568f33f003a740baa488f03985b324c92ae9c376",
+    "protected_integration_branch": "integration/friday-consolidated-20261127",
+    "protected_integration_sha": "fe15fbfa7f9c482e746be6d08b545fad37999474",
     "remote": "https://github.com/ACPEnterprise/ACP-Enterprise.git"
   },
   "manual_reservations": [
@@ -342,6 +353,60 @@
       "status": "RESERVED_MANUAL",
       "automated_claims_blocked": true,
       "reason": "Independent review of protected recovery evidence and authenticated acceptance; no implementation or deployment authority."
+    },
+    {
+      "assignment_id": "LAP-ALLCOUNTY-BROWSER-ACCEPT-03",
+      "machine": "LAPTOP_MASTER",
+      "execution_identity": "LAPTOP_MASTER",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Continue actual isolated All County browser acceptance and record-level evidence; no live mutation or external-system writes."
+    },
+    {
+      "assignment_id": "OM1-DF-PLATFORM-PRESERVATION-QUAL-06",
+      "machine": "OM1",
+      "execution_identity": "OM1-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Bounded nonproduction platform-preservation and artifact-derived configuration qualification after the integrated successor; no deployment or protected mutation."
+    },
+    {
+      "assignment_id": "OM1-DF-SUPERVISOR-AUTO-DISCOVERY-06",
+      "machine": "OM1",
+      "execution_identity": "OM1-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Demonstrate actual bounded automatic queue discovery and successive nonproduction execution using the qualified supervisor; no Worker Control lease or protected claim."
+    },
+    {
+      "assignment_id": "OM2-A-HCP-SANITIZED-CUSTODY-07",
+      "machine": "OM2",
+      "execution_identity": "OM2-A",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Implement source-custody and missing-payload contract validation using sanitized fixtures only; protected HCP inputs remain on Laptop Master custody and no provider access is assumed."
+    },
+    {
+      "assignment_id": "OM2-B-KEITH-DEMO-QUAL-02",
+      "machine": "OM2",
+      "execution_identity": "OM2-B",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Qualify synthetic Demo authentication, NDA gating, tenant isolation, and navigation without invitations or All County access."
+    },
+    {
+      "assignment_id": "REVIEW-DF-SUPERVISOR-LAUNCHAGENT-01",
+      "machine": "REVIEWER",
+      "execution_identity": "LAPTOP_REVIEWER",
+      "owner": "LAPTOP_MASTER",
+      "status": "RESERVED_MANUAL",
+      "automated_claims_blocked": true,
+      "reason": "Independently review supervisor and LaunchAgent installer behavior in isolation; no implementation, signing, merge, or deployment authority."
     }
   ],
   "claim_policy": {
@@ -916,6 +981,72 @@
       "allowed_paths": ["docs/quality/**", "docs/engineering/evidence/**"],
       "validation": ["fresh authenticated sessions", "record-level evidence", "source provenance", "tenant isolation", "safety-boundary review"],
       "stop_conditions": ["missing evidence", "unexplained discrepancy", "unauthorized external write", "self-approval"]
+    },
+    {
+      "id": "LAP-ALLCOUNTY-BROWSER-ACCEPT-03",
+      "lane": "LAPTOP_MASTER",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Continue authenticated browser acceptance against protected isolated All County data and preserve truthful source-state labels.",
+      "allowed_paths": ["frontend/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["fresh browser authentication", "customer history", "workforce and dispatch", "restart persistence", "tenant isolation"],
+      "stop_conditions": ["live mutation", "unavailable record presented as present", "cross-tenant access", "external communication"]
+    },
+    {
+      "id": "OM1-DF-PLATFORM-PRESERVATION-QUAL-06",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-ARTIFACT-REHEARSAL-05"],
+      "objective": "Qualify the integrated platform-preservation verifier, immutable artifacts, and artifact-derived configuration against an isolated baseline.",
+      "allowed_paths": [".github/**", "scripts/**", "backend/development_factory/**", "backend/tests/release/**", "docs/engineering/**", "docs/quality/**"],
+      "validation": ["exact candidate identity", "platform verifier", "artifact digest", "configuration provenance", "mismatch rejection"],
+      "stop_conditions": ["private-key access", "live deployment", "protected mutation", "automatic approval"]
+    },
+    {
+      "id": "OM1-DF-SUPERVISOR-AUTO-DISCOVERY-06",
+      "lane": "OM1",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-SUPERVISOR-UNATTENDED-05"],
+      "objective": "Demonstrate bounded automatic discovery of this successor queue and successive nonproduction assignment execution with duplicate fencing.",
+      "allowed_paths": ["backend/development_factory/**", "backend/tests/development_factory/**", "docs/engineering/**"],
+      "validation": ["current queue discovery", "successive assignment execution", "restart recovery", "duplicate prevention", "secret-free checkpoint"],
+      "stop_conditions": ["Worker Control bypass", "protected claim", "unbounded retry", "secret persistence"]
+    },
+    {
+      "id": "OM2-A-HCP-SANITIZED-CUSTODY-07",
+      "lane": "OM2",
+      "priority": "P0",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": [],
+      "objective": "Implement and qualify HCP source-custody, missing-payload, and media-contract validation using sanitized fixtures only while protected custody remains on Laptop Master.",
+      "allowed_paths": ["backend/app/operational_migration/**", "backend/app/source_history/**", "backend/tests/**", "docs/operations/**", "docs/quality/**"],
+      "validation": ["manifest digest contract", "missing-payload inventory", "tenant binding", "read-only enforcement", "no confidential fixture transfer"],
+      "stop_conditions": ["protected source access assumed", "provider write", "fabricated relationship", "confidential transfer"]
+    },
+    {
+      "id": "OM2-B-KEITH-DEMO-QUAL-02",
+      "lane": "OM2",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM2-B-UI-WORKFLOW-ACCEPT-01"],
+      "objective": "Qualify the synthetic Demo login, first-login NDA gate, receipt persistence, tenant isolation, and core navigation without external activation.",
+      "allowed_paths": ["frontend/**", "backend/tests/**", "docs/quality/**"],
+      "validation": ["synthetic authentication", "NDA receipt", "direct All County denial", "refresh and logout persistence", "Demo workflow access"],
+      "stop_conditions": ["All County visibility", "external invitation", "credential exposure", "cross-tenant access"]
+    },
+    {
+      "id": "REVIEW-DF-SUPERVISOR-LAUNCHAGENT-01",
+      "lane": "REVIEWER",
+      "priority": "P1",
+      "state": "READY_AFTER_INVENTORY",
+      "depends_on": ["OM1-DF-SUPERVISOR-AUTO-DISCOVERY-06"],
+      "objective": "Independently review the supervisor and LaunchAgent installer for bounded execution, restart behavior, resource limits, and secret-safe evidence.",
+      "allowed_paths": ["backend/development_factory/**", "scripts/install-om1b-supervisor-launchagent.sh", "docs/engineering/**", "docs/engineering/evidence/**"],
+      "validation": ["clean checkout", "installer dry run", "restart recovery", "bounded shutdown", "secret redaction"],
+      "stop_conditions": ["implementation changes", "owner signing", "automatic protected execution", "deployment authority"]
     }
   ]
 }
