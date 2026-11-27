@@ -204,11 +204,39 @@ def test_ci_workflow_is_read_only_pinned_and_verifies_before_upload() -> None:
     assert 'qualification_python="$(command -v python)"' in workflow
     assert "using Node.js 20" not in workflow
     assert '"$QUALIFICATION_PYTHON" scripts/verify-platform-corrections.py' in workflow
+    assert '"$QUALIFICATION_PYTHON" scripts/verify-development-candidate.py' in workflow
+    assert "- handoff/**" in workflow
+    assert "- integration/**" in workflow
+    assert "- work/**" not in workflow
+    assert "cancel-in-progress: false" in workflow
     assert workflow.index("scripts/ci-artifacts verify") < workflow.index(
         "actions/upload-artifact@"
     )
     assert "compression-level: 0" in workflow
     assert "deployment" not in workflow.lower()
+
+
+def test_work_branch_preflight_is_pinned_bounded_and_fail_closed() -> None:
+    repository_root = Path(__file__).parents[3]
+    workflow = (
+        repository_root / ".github/workflows/development-candidate-preflight.yml"
+    ).read_text(encoding="utf-8")
+    action_refs = re.findall(r"uses: [^@\s]+@([^\s]+)", workflow)
+
+    assert action_refs == [
+        "3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+    ]
+    assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
+    assert "- work/**" in workflow
+    assert "timeout-minutes: 10" in workflow
+    assert "cancel-in-progress: true" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "scripts/verify-development-candidate.py" in workflow
+    assert "scripts/verify-platform-corrections.py" in workflow
+    assert "qualify-backend-tests" not in workflow
+    assert "upload-artifact" not in workflow
+    assert "paths-ignore" not in workflow
 
 
 def test_node_runtime_is_consistent_across_ci_packages_and_artifacts() -> None:

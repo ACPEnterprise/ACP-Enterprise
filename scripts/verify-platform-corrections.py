@@ -14,6 +14,7 @@ CONTRACT = "twelvehats-platform-correction-preservation/v1"
 NODE_VERSION = "24.22.3"
 SHA40 = re.compile(r"[0-9a-f]{40}")
 REQUIRED_PATHS = (
+    ".github/workflows/development-candidate-preflight.yml",
     ".github/workflows/immutable-ci-artifacts.yml",
     ".node-version",
     "backend/development_factory/ci_artifacts.py",
@@ -29,6 +30,7 @@ REQUIRED_PATHS = (
     "mobile/package-lock.json",
     "mobile/package.json",
     "scripts/qualify-backend-tests",
+    "scripts/verify-development-candidate.py",
 )
 
 
@@ -82,6 +84,21 @@ def evaluate_candidate_files(files: Mapping[str, str]) -> dict[str, str]:
     _require(
         '"$QUALIFICATION_PYTHON" scripts/verify-platform-corrections.py' in workflow,
         "CI must execute the Platform correction preservation check",
+    )
+    _require(
+        '"$QUALIFICATION_PYTHON" scripts/verify-development-candidate.py' in workflow,
+        "full CI must verify qualified development baseline ancestry",
+    )
+    preflight = files[".github/workflows/development-candidate-preflight.yml"]
+    _require(
+        "- work/**" in preflight
+        and "scripts/verify-development-candidate.py" in preflight
+        and "scripts/verify-platform-corrections.py" in preflight,
+        "work branches must run synchronization and preservation preflight",
+    )
+    _require(
+        "- work/**" not in workflow,
+        "work branches must not start duplicate full qualification runs",
     )
 
     _require(
