@@ -250,13 +250,13 @@ describe("application routing", () => {
     renderRoute("/mission-control");
     const trigger = await screen.findByRole("button", { name: "Open navigation" });
     await user.click(trigger);
-    expect(screen.getByRole("complementary", { name: "Mobile application navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Mobile application navigation" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Customers" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "Jobs" })).toHaveLength(2);
     expect(screen.queryByRole("link", { name: "Dispatch" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Engineering Factory" })).toHaveLength(2);
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mobile application navigation" })).not.toBeInTheDocument());
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Mobile application navigation" })).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });

@@ -431,6 +431,7 @@ export const navigationGroups = [
       item("payroll"),
       item("revenue-cycle"),
       item("accounts-payable"),
+      item("accounting"),
       item("financial-reports"),
       item("banking"),
       item("inventory"),

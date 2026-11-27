@@ -56,7 +56,8 @@ describe("JobDetailRoute", () => {
     permissions = new Set(["COMPANY_JOB_READ", "COMPANY_INVOICE_READ"]);
     vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: job } as never);
     renderRoute();
-    expect(screen.getByText("Find invoices connected to this job. Invoice details open in the Invoices workspace.")).toBeVisible();
+    const invoicePanel = screen.getByText("Find invoices connected to this job. Invoice details open in the Invoices workspace.").closest("div");
+    expect(invoicePanel).toHaveClass("twelve-hats-panel-outline", "border-2", "border-solid", "border-[var(--semantic-panel-outline)]");
     expect(screen.getByRole("link", { name: "View related invoices" })).toHaveAttribute("href", "/invoices?query=JOB-000001");
   });
   it("shows existing-Job scheduling only with both manage authorities", () => {

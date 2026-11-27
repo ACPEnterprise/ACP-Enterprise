@@ -51,6 +51,8 @@
 
   /* Canonical Twelve Hats normal card/panel outline. Keep exact for brand custody. */
   --twelve-hats-panel-red: #c01529;
+  --work-card-border-width: 2px;
+  --work-card-border-style: solid;
 
   --acp-white: oklch(1 0 0);
   --acp-slate-50: oklch(0.98 0.004 255);

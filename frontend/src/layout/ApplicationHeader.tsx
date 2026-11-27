@@ -13,11 +13,12 @@ import type { WorkspaceMetadata } from "./types";
 interface ApplicationHeaderProps {
   readonly brand: BrandConfiguration;
   readonly metadata: WorkspaceMetadata;
+  readonly navigationOpen?: boolean;
   readonly onOpenNavigation: () => void;
   readonly navigationTriggerRef: RefObject<HTMLButtonElement | null>;
 }
 
-export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigationTriggerRef }: ApplicationHeaderProps) {
+export function ApplicationHeader({ brand, metadata, navigationOpen = false, onOpenNavigation, navigationTriggerRef }: ApplicationHeaderProps) {
   const { preference, setPreference } = useTheme();
   const { activeCompany, signOut, user } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -33,7 +34,9 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
             label="Open navigation"
             variant="ghost"
             onClick={onOpenNavigation}
-            className="md:hidden"
+            aria-controls="mobile-application-navigation"
+            aria-expanded={navigationOpen}
+            className="lg:hidden"
           />
           <div className="min-w-0">
             {metadata.breadcrumbs.length > 0 && (

@@ -94,7 +94,7 @@ export function JobDetailRoute() {
         <ServiceLocationCard job={job} />
       </div>
       <JobOperationalDetails job={job} />
-      {canReadInvoices && <div className="rounded-xl border border-stroke p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Invoices</h3><p className="mt-2 text-sm text-content-muted">Find invoices connected to this job. Invoice details open in the Invoices workspace.</p><Link className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline" to={`/invoices?query=${encodeURIComponent(job.job_number)}`}>View related invoices</Link></div>}
+      {canReadInvoices && <div className="twelve-hats-panel-outline rounded-xl border-2 border-solid border-[var(--semantic-panel-outline)] p-ui-4 sm:p-ui-6"><h3 className="font-semibold">Invoices</h3><p className="mt-2 text-sm text-content-muted">Find invoices connected to this job. Invoice details open in the Invoices workspace.</p><Link className="mt-3 inline-flex min-h-11 items-center font-semibold text-action-primary hover:underline" to={`/invoices?query=${encodeURIComponent(job.job_number)}`}>View related invoices</Link></div>}
       {canReadInventory && materialsQuery.data ? (
         <JobMaterialsCard materials={materialsQuery.data} />
       ) : null}

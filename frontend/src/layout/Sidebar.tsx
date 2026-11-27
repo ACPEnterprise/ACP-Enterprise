@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import type { RefObject } from "react";
 
 import type { BrandConfiguration } from "../branding/types";
 import { IconButton } from "../ui";
@@ -12,6 +13,7 @@ import { isFieldTechnicianProfile } from "../auth/authorizationProfiles";
 interface SidebarProps {
   readonly brand: BrandConfiguration;
   readonly mobile?: boolean;
+  readonly navigationRef?: RefObject<HTMLElement | null>;
   readonly onNavigate?: () => void;
   readonly onClose?: () => void;
 }
@@ -19,6 +21,7 @@ interface SidebarProps {
 export function Sidebar({
   brand,
   mobile = false,
+  navigationRef,
   onNavigate,
   onClose,
 }: SidebarProps) {
@@ -42,10 +45,14 @@ export function Sidebar({
     .filter((group) => group.items.length > 0);
   return (
     <aside
+      ref={navigationRef}
+      id={mobile ? "mobile-application-navigation" : undefined}
       aria-label={mobile ? "Mobile application navigation" : "Application navigation"}
+      aria-modal={mobile ? true : undefined}
+      role={mobile ? "dialog" : undefined}
       className={mobile
-        ? "theme-navigation safe-area-drawer fixed inset-y-0 left-0 z-[var(--layer-overlay)] flex h-dvh w-72 max-w-[calc(100vw-var(--space-8))] min-w-0 flex-col overflow-hidden border-r border-stroke shadow-lg"
-        : "theme-navigation theme-navigation-desktop shrink-0 flex-col overflow-hidden border-r border-stroke"}
+        ? "theme-navigation theme-navigation-mobile safe-area-drawer flex flex-col overflow-hidden border-r border-stroke shadow-lg lg:hidden"
+        : "theme-navigation theme-navigation-desktop hidden shrink-0 flex-col overflow-hidden border-r border-stroke lg:flex"}
     >
       <div className="relative">
         <BrandRegion brand={brand} />
@@ -57,7 +64,7 @@ export function Sidebar({
             variant="ghost"
             size="small"
             onClick={onClose}
-            className="absolute right-ui-2 top-ui-5"
+            className="theme-navigation-close absolute right-ui-2 top-ui-5"
           />
         )}
       </div>

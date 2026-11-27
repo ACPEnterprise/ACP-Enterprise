@@ -23,7 +23,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
     <article
       ref={ref}
       className={classNames(
-        "twelve-hats-panel-outline min-w-0 rounded-xl border bg-surface text-content",
+        "twelve-hats-panel-outline min-w-0 rounded-xl border-2 border-solid border-[var(--semantic-panel-outline)] bg-surface text-content",
         elevationClasses[elevation],
         className,
       )}
