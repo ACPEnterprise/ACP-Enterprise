@@ -1,0 +1,100 @@
+{
+  "schema_version": "all-county-qbo-transaction-evidence-recovery/v1",
+  "generated_at": "2026-11-27T20:28:58Z",
+  "status": "BLOCKED_EXTERNAL_TRANSACTION_ENVELOPES_MISSING",
+  "source": {
+    "run_id": "qbo-production-20261119T235000Z",
+    "completed_at": "2026-11-20T00:32:07.269391+00:00",
+    "record_count": 20702,
+    "relationship_identity_count": 97093,
+    "source_manifest_sha256": "b9a8bd5139bf70e80131c0c8096459e4f1c65576049ee58d91b683d8eeb5378f",
+    "expected_bounded_snapshot_sha256": "e4d672c1cdfca858e4a8e923a51a86627753c7ea1fedc695daa98066a5dc6041",
+    "bounded_snapshot_verification": "CORROBORATED_BY_SURVIVING_CONTROLS_NOT_RECOMPUTABLE_WITHOUT_OBJECTS"
+  },
+  "custody": {
+    "manual_archive_manifest_sha256": "f6640c0d531eaa8a822e82f697b3aaead65c8ae7b52a3c527e9616642c4d4f4a",
+    "listed_files_verified": 21,
+    "listed_files_missing": 0,
+    "listed_files_mismatched": 0,
+    "package_files_mode_0600": 24,
+    "reconciliation_register_sha256": "b0e3d11de08e361efc9beeefd8a8509800a9c1ef87337372beee80c00b2e6c40",
+    "native_rehearsal_sha256": "6b99654147f82a7eca5e6296b09dd4aa99256d7eea1099bee3e60aff94325f33"
+  },
+  "search": {
+    "original_store_path": "/var/lib/acp-qbo-production-evidence",
+    "beta_volume": "acp-enterprise-preview_preview_qbo_production_evidence",
+    "beta_volume_created_at": "2026-11-12T02:37:02Z",
+    "beta_volume_recreated_after_acquisition": false,
+    "required_object_trees_present": false,
+    "searched_locations": [
+      "OM1 authorized ReleaseEvidence and acquisition custody",
+      "OM1 repositories, Git objects, branches, worktrees, and mounted external volumes",
+      "Laptop Master home, ReleaseEvidence, repositories, sessions, and handoffs",
+      "Beta Docker volumes, release/shared paths, root custody, and local backup paths"
+    ],
+    "unsearched_external_location": "DigitalOcean droplet backups or snapshots"
+  },
+  "current_connection": {
+    "qbo_production_enabled": false,
+    "callback_runtime": "LEGACY_PREVIEW",
+    "runtime_root_mode": "0755",
+    "protected_client_present_mode_0600": true,
+    "oauth_token_present": false,
+    "verified_company_marker_present": false,
+    "exact_company_binding_present": false,
+    "reacquisition_ready": false,
+    "new_oauth_started": false
+  },
+  "original_rehearsal_dispositions": {
+    "exact_bindings": 0,
+    "unresolved_mappings": 1941,
+    "contract_holds": 18463,
+    "unsupported_or_separate_authority": 298,
+    "duplicate_source_identities": 0,
+    "held_source_records": 20702,
+    "provider_unavailable_families": 1,
+    "application_records_created": 0,
+    "qbo_writes": 0,
+    "native_accounting_writes": 0
+  },
+  "disposable_admission": {
+    "executed": false,
+    "blocker": "ORIGINAL_TRANSACTION_ENVELOPES_UNAVAILABLE",
+    "aggregate_report_reconstruction_prohibited": true
+  },
+  "finance_approval": {
+    "state": "NOT_READY",
+    "account_mappings_required": 131,
+    "invoice_records_held": 1341,
+    "invoice_open_balance": "500584.34",
+    "payment_records_held": 1237,
+    "exact_payment_invoice_links_preserved": 1171,
+    "unlinked_payment_count": 73,
+    "unlinked_payment_total": "85414.91",
+    "ar_bridge_difference": "100801.91",
+    "native_posting_authorized": false
+  },
+  "preserved_conflicts": [
+    "D-001",
+    "D-002",
+    "D-003",
+    "D-004",
+    "D-005",
+    "D-006",
+    "D-007"
+  ],
+  "required_external_action": {
+    "preferred": "RECOVER_ORIGINAL_OBJECT_TREES_FROM_ISOLATED_DIGITALOCEAN_SNAPSHOT",
+    "fallback": "GOVERNED_DIRECT_BETA_GET_ONLY_RELEASE_PLUS_OWNER_OAUTH_AND_NEW_SEPARATELY_SEALED_SNAPSHOT",
+    "droplet_id": 618323703,
+    "droplet_name": "acp-beta-clean",
+    "region": "nyc2"
+  },
+  "safety": {
+    "qbo_writes": 0,
+    "bank_feed_mutations": 0,
+    "protected_financial_record_mutations": 0,
+    "native_transactions_posted": 0,
+    "oauth_authorizations_initiated": 0
+  }
+}
