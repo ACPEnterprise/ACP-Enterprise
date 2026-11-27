@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     qbo_production_api_minor_version: int = 75
     qbo_repository_root: str = "/app"
     hcp_source4_evidence_root: str | None = None
+    hcp_historical_attachment_root: str | None = None
 
     # Google Ads secrets remain in the platform secret provider. These values are
     # opaque references and callback metadata only; live access is separately gated.
@@ -295,6 +296,11 @@ class Settings(BaseSettings):
             and not Path(self.hcp_source4_evidence_root).is_absolute()
         ):
             raise ValueError("HCP SOURCE.4 evidence root must be an absolute path")
+        if (
+            self.hcp_historical_attachment_root
+            and not Path(self.hcp_historical_attachment_root).is_absolute()
+        ):
+            raise ValueError("HCP historical attachment root must be an absolute path")
         if self.environment in {"preview", "production"}:
             if not self.platform_contract_expected_fingerprint:
                 raise ValueError(

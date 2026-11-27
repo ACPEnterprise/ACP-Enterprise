@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -154,6 +155,73 @@ def test_rejects_non_read_only_source_package(tmp_path: Path) -> None:
 
     with pytest.raises(HcpCustomerSourceHistoryError, match="not_read_only"):
         project_customer_source_history(root, source_customer_id="customer-1")
+
+
+def test_projects_incomplete_job_facts_and_recovered_attachments_as_history(
+    tmp_path: Path,
+) -> None:
+    root = _source(tmp_path)
+    details = root / "raw" / "job-details"
+    details.mkdir()
+    (details / "job-detail-1.json").write_text(
+        json.dumps(
+            {
+                "id": "job-1",
+                "description": "Historical leak repair",
+                "schedule": {"scheduled_start": "2026-05-20T12:00:00Z"},
+                "notes": [{"id": "note-1", "content": "Technician note"}],
+                "assigned_employees": [{"id": "employee-1"}],
+            }
+        )
+    )
+    appointments = root / "raw" / "appointments"
+    appointments.mkdir()
+    digest = hashlib.sha256(b"job-1").hexdigest()
+    (appointments / f"job-appointments-{digest}-http-200.json").write_text(
+        json.dumps(
+            {
+                "appointments": [
+                    {"id": "appointment-1", "start_time": "2026-05-20T12:00:00Z"}
+                ]
+            }
+        )
+    )
+    attachment_root = tmp_path / "attachments"
+    attachment_root.mkdir()
+    (attachment_root / "attachment-body.bin").write_bytes(b"image")
+    (attachment_root / "attachment-custody-manifest.json").write_text(
+        json.dumps(
+            {
+                "attachments": [
+                    {
+                        "source_id": "attachment-1",
+                        "job_id": "job-1",
+                        "file_name": "leak.jpg",
+                        "file_type": "image/jpeg",
+                        "size_bytes": 5,
+                        "content_sha256": hashlib.sha256(b"image").hexdigest(),
+                        "artifact": "attachment-body.bin",
+                        "status": "RECOVERED",
+                    }
+                ],
+                "conflicts": [],
+            }
+        )
+    )
+
+    result = project_customer_source_history(
+        root,
+        source_customer_id="customer-1",
+        attachment_root=attachment_root,
+    )
+
+    job = result["jobs"][0]
+    assert job["service_date"] == "2026-05-20T12:00:00Z"
+    assert job["description"] == "Historical leak repair"
+    assert job["notes"][0]["content"] == "Technician note"
+    assert job["assigned_employee_source_ids"] == ["employee-1"]
+    assert result["counts"]["appointments"] == 1
+    assert job["attachments"][0]["body_available"] is True
 
 
 def test_searches_historical_customer_and_location_without_native_identity(

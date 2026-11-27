@@ -41,7 +41,31 @@ export type HcpCustomerSourceHistory = {
     updated_at: string | null;
     scheduled_start: string | null;
     scheduled_end: string | null;
+    service_date: string | null;
+    description: string | null;
+    notes: Array<{ source_id: string | null; content: string | null }>;
+    work_timestamps: {
+      started_at?: string | null;
+      completed_at?: string | null;
+      on_my_way_at?: string | null;
+    };
+    original_estimate_id: string | null;
+    original_estimate_ids: string[];
+    invoice_number: string | null;
+    total_amount: number | string | null;
+    outstanding_balance: number | string | null;
     assigned_employee_source_ids: string[];
+    attachments: Array<{
+      source_id: string;
+      file_name: string | null;
+      file_type: string | null;
+      size_bytes: number | null;
+      content_sha256: string | null;
+      status: string | null;
+      body_available: boolean;
+      conflict_reason: string | null;
+      view_url: string | null;
+    }>;
     authority: "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY";
   }>;
   appointments: Array<{

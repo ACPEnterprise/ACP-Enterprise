@@ -16,6 +16,87 @@ class HcpCustomerSourceHistoryError(ValueError):
     pass
 
 
+def _job_details(root: Path) -> dict[str, dict[str, Any]]:
+    details: dict[str, dict[str, Any]] = {}
+    for path in sorted((root / "raw" / "job-details").glob("*.json")):
+        value = json.loads(path.read_bytes())
+        if isinstance(value, dict) and isinstance(value.get("id"), str):
+            details[value["id"]] = value
+    return details
+
+
+def _attachment_rows(
+    root: Path, attachment_root: Path | None
+) -> dict[str, tuple[dict[str, Any], ...]]:
+    manifest_path = root / "attachment-custody-manifest.json"
+    if not manifest_path.exists() and attachment_root is not None:
+        manifest_path = attachment_root / "attachment-custody-manifest.json"
+    if not manifest_path.exists():
+        return {}
+    manifest = json.loads(manifest_path.read_bytes())
+    conflicts = {
+        str(item.get("attachment_id")): item
+        for item in manifest.get("conflicts", [])
+        if isinstance(item, Mapping) and item.get("attachment_id")
+    }
+    by_job: dict[str, list[dict[str, Any]]] = {}
+    for item in manifest.get("attachments", []):
+        if not isinstance(item, Mapping) or not item.get("source_id"):
+            continue
+        source_id = str(item["source_id"])
+        conflict = conflicts.get(source_id)
+        artifact = str(item.get("artifact") or "")
+        body_available = bool(
+            attachment_root
+            and artifact
+            and (attachment_root / artifact).is_file()
+            and item.get("status") == "RECOVERED"
+            and conflict is None
+        )
+        row = {
+            "source_id": source_id,
+            "file_name": item.get("file_name"),
+            "file_type": item.get("file_type"),
+            "size_bytes": item.get("size_bytes"),
+            "content_sha256": item.get("content_sha256"),
+            "status": "UNRESOLVED" if conflict else item.get("status"),
+            "body_available": body_available,
+            "conflict_reason": conflict.get("reason") if conflict else None,
+            "view_url": (
+                f"/api/v1/migration/source-history/attachments/{source_id}"
+                if body_available
+                else None
+            ),
+        }
+        job_id = item.get("job_id")
+        if isinstance(job_id, str):
+            by_job.setdefault(job_id, []).append(row)
+    for conflict in conflicts.values():
+        source_id = str(conflict["attachment_id"])
+        if any(
+            row.get("source_id") == source_id
+            for rows in by_job.values()
+            for row in rows
+        ):
+            continue
+        job_id = conflict.get("job_id")
+        if isinstance(job_id, str):
+            by_job.setdefault(job_id, []).append(
+                {
+                    "source_id": source_id,
+                    "file_name": None,
+                    "file_type": None,
+                    "size_bytes": None,
+                    "content_sha256": None,
+                    "status": "UNRESOLVED",
+                    "body_available": False,
+                    "conflict_reason": conflict.get("reason"),
+                    "view_url": None,
+                }
+            )
+    return {key: tuple(value) for key, value in by_job.items()}
+
+
 def _rows(root: Path, family: str, *, required: bool = True) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for path in sorted((root / "raw" / family).glob("*.json")):
@@ -37,7 +118,7 @@ def _rows(root: Path, family: str, *, required: bool = True) -> list[dict[str, A
 
 @lru_cache(maxsize=2)
 def _source_indexes(
-    root_text: str, manifest_sha256: str
+    root_text: str, manifest_sha256: str, attachment_root_text: str | None
 ) -> dict[str, dict[str, tuple[dict[str, Any], ...]]]:
     # The manifest digest is intentionally part of the cache key. Deployments mount
     # this evidence read-only; a newly sealed package receives a new digest.
@@ -46,25 +127,39 @@ def _source_indexes(
     customers_by_id = {str(row["id"]): row for row in _rows(root, "customers")}
     jobs_by_customer: dict[str, list[dict[str, Any]]] = {}
     jobs_by_id: dict[str, dict[str, Any]] = {}
+    details = _job_details(root)
     for source_job in _rows(root, "jobs"):
         job_id = str(source_job["id"])
-        jobs_by_id[job_id] = source_job
-        customer_id = (source_job.get("customer") or {}).get("id")
+        merged_job = {**source_job, **details.get(job_id, {})}
+        jobs_by_id[job_id] = merged_job
+        customer_id = (merged_job.get("customer") or {}).get("id")
         if isinstance(customer_id, str):
-            jobs_by_customer.setdefault(customer_id, []).append(source_job)
+            jobs_by_customer.setdefault(customer_id, []).append(merged_job)
     estimates_by_customer: dict[str, list[dict[str, Any]]] = {}
     for estimate in _rows(root, "estimates"):
         customer_id = (estimate.get("customer") or {}).get("id")
         if isinstance(customer_id, str):
             estimates_by_customer.setdefault(customer_id, []).append(estimate)
     appointments_by_customer: dict[str, list[dict[str, Any]]] = {}
-    for appointment in _rows(root, "appointments", required=False):
-        parent_job = jobs_by_id.get(str(appointment.get("_parent_job_id")))
-        customer_id = (
-            (parent_job.get("customer") or {}).get("id") if parent_job else None
+    job_hashes = {
+        hashlib.sha256(job_id.encode()).hexdigest(): job_id for job_id in jobs_by_id
+    }
+    for path in sorted((root / "raw" / "appointments").glob("*.json")):
+        value = json.loads(path.read_bytes())
+        parent_job_id = next(
+            (job_id for digest, job_id in job_hashes.items() if digest in path.stem),
+            None,
         )
-        if isinstance(customer_id, str):
-            appointments_by_customer.setdefault(customer_id, []).append(appointment)
+        for appointment in value.get("appointments", []):
+            if not isinstance(appointment, dict):
+                continue
+            appointment = {**appointment, "_parent_job_id": parent_job_id}
+            parent_job = jobs_by_id.get(str(parent_job_id))
+            customer_id = (
+                (parent_job.get("customer") or {}).get("id") if parent_job else None
+            )
+            if isinstance(customer_id, str):
+                appointments_by_customer.setdefault(customer_id, []).append(appointment)
     invoices_by_customer: dict[str, list[dict[str, Any]]] = {}
     for invoice in _rows(root, "invoices"):
         parent_job = jobs_by_id.get(str(invoice.get("job_id")))
@@ -83,11 +178,17 @@ def _source_indexes(
             key: tuple(value) for key, value in estimates_by_customer.items()
         },
         "invoices": {key: tuple(value) for key, value in invoices_by_customer.items()},
+        "attachments": _attachment_rows(
+            root, Path(attachment_root_text) if attachment_root_text else None
+        ),
     }
 
 
 def project_customer_source_history(
-    root: Path, *, source_customer_id: str
+    root: Path,
+    *,
+    source_customer_id: str,
+    attachment_root: Path | None = None,
 ) -> dict[str, object]:
     """Project exact provider-linked history without creating Accounting truth."""
     manifest_path = root / "acquisition-package-manifest.json"
@@ -107,7 +208,11 @@ def project_customer_source_history(
         raise HcpCustomerSourceHistoryError("source_package_not_read_only")
 
     manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
-    indexes = _source_indexes(str(root.resolve()), manifest_sha256)
+    indexes = _source_indexes(
+        str(root.resolve()),
+        manifest_sha256,
+        str(attachment_root.resolve()) if attachment_root else None,
+    )
     customer_rows = indexes["customers"].get(source_customer_id, ())
     jobs = indexes["jobs"].get(source_customer_id, ())
     appointments = indexes["appointments"].get(source_customer_id, ())
@@ -137,13 +242,33 @@ def project_customer_source_history(
             "status": job.get("work_status") or job.get("status"),
             "created_at": job.get("created_at"),
             "updated_at": job.get("updated_at"),
-            "scheduled_start": job.get("start_time"),
-            "scheduled_end": job.get("end_time"),
+            "scheduled_start": (job.get("schedule") or {}).get("scheduled_start")
+            or job.get("start_time"),
+            "scheduled_end": (job.get("schedule") or {}).get("scheduled_end")
+            or job.get("end_time"),
+            "service_date": (job.get("schedule") or {}).get("scheduled_start")
+            or job.get("start_time"),
+            "description": job.get("description"),
+            "notes": [
+                {
+                    "source_id": note.get("id"),
+                    "content": note.get("content"),
+                }
+                for note in job.get("notes") or []
+                if isinstance(note, Mapping)
+            ],
+            "work_timestamps": job.get("work_timestamps") or {},
+            "original_estimate_id": job.get("original_estimate_id"),
+            "original_estimate_ids": list(job.get("original_estimate_uuids") or []),
+            "invoice_number": job.get("invoice_number"),
+            "total_amount": job.get("total_amount"),
+            "outstanding_balance": job.get("outstanding_balance"),
             "assigned_employee_source_ids": [
                 str(item.get("id"))
                 for item in job.get("assigned_employees") or []
                 if isinstance(item, Mapping) and item.get("id")
             ],
+            "attachments": list(indexes["attachments"].get(str(job.get("id")), ())),
             "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
         }
         for job in sorted(jobs, key=lambda row: str(row.get("id")))

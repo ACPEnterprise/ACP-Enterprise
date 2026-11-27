@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -164,6 +165,11 @@ async def hcp_customer_source_history(
         result = project_customer_source_history(
             Path(settings.hcp_source4_evidence_root),
             source_customer_id=next(iter(source_ids)),
+            attachment_root=(
+                Path(settings.hcp_historical_attachment_root)
+                if settings.hcp_historical_attachment_root
+                else None
+            ),
         )
     except (OSError, ValueError, HcpCustomerSourceHistoryError):
         return JSONResponse(
@@ -229,7 +235,54 @@ async def hcp_customer_history_by_source(
         result = project_customer_source_history(
             Path(settings.hcp_source4_evidence_root),
             source_customer_id=source_customer_id,
+            attachment_root=(
+                Path(settings.hcp_historical_attachment_root)
+                if settings.hcp_historical_attachment_root
+                else None
+            ),
         )
     except (OSError, ValueError, HcpCustomerSourceHistoryError):
         return _history_unavailable(status.HTTP_503_SERVICE_UNAVAILABLE)
     return JSONResponse(content=result, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get(
+    "/source-history/attachments/{attachment_id}",
+    name="hcp-source-history-attachment",
+)
+async def hcp_source_history_attachment(
+    attachment_id: str,
+    context: CustomerRead,
+) -> Response:
+    """Serve only a recovered, source-indexed body from protected custody."""
+    del context
+    if not settings.hcp_historical_attachment_root:
+        return _history_unavailable()
+    custody = Path(settings.hcp_historical_attachment_root).resolve()
+    manifest_path = custody / "attachment-custody-manifest.json"
+    if not manifest_path.is_file():
+        return _history_unavailable(status.HTTP_503_SERVICE_UNAVAILABLE)
+    try:
+        manifest = json.loads(manifest_path.read_bytes())
+        item = next(
+            (
+                row
+                for row in manifest.get("attachments", [])
+                if isinstance(row, dict) and row.get("source_id") == attachment_id
+            ),
+            None,
+        )
+        if not item or item.get("status") != "RECOVERED":
+            return _history_unavailable()
+        artifact = str(item.get("artifact") or "")
+        body = (custody / artifact).resolve()
+        if body.parent != custody or not body.is_file():
+            return _history_unavailable(status.HTTP_503_SERVICE_UNAVAILABLE)
+    except (OSError, ValueError, TypeError):
+        return _history_unavailable(status.HTTP_503_SERVICE_UNAVAILABLE)
+    return FileResponse(
+        body,
+        media_type=str(item.get("file_type") or "application/octet-stream"),
+        filename=str(item.get("file_name") or artifact),
+        headers={"Cache-Control": "private, no-store"},
+    )
