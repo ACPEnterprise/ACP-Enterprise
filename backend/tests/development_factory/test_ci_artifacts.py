@@ -203,6 +203,7 @@ def test_ci_workflow_is_read_only_pinned_and_verifies_before_upload() -> None:
     assert "--python python" not in workflow
     assert 'qualification_python="$(command -v python)"' in workflow
     assert "using Node.js 20" not in workflow
+    assert '"$QUALIFICATION_PYTHON" scripts/verify-platform-corrections.py' in workflow
     assert workflow.index("scripts/ci-artifacts verify") < workflow.index(
         "actions/upload-artifact@"
     )

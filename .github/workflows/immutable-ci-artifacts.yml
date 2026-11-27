@@ -56,6 +56,14 @@ jobs:
           test "$(node --version)" = "v$(cat .node-version)"
           printf 'QUALIFICATION_PYTHON=%s\n' "$qualification_python" >> "$GITHUB_ENV"
 
+      - name: Verify accepted Platform corrections
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          "$QUALIFICATION_PYTHON" scripts/verify-platform-corrections.py \
+            --repository . \
+            --candidate-sha "$CANDIDATE_SHA"
+
       - name: Install locked dependencies
         run: |
           "$QUALIFICATION_PYTHON" -m pip install --disable-pip-version-check -r backend/requirements-dev.txt
