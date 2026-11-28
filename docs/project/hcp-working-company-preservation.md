@@ -15,6 +15,18 @@ Status: preservation checkpoint only. No live cutover is authorized by this docu
 
 The original All County company and the partial legacy migration company remain separate and unchanged. The recovered source package and attachment custody remain at their existing protected paths and are mounted read-only.
 
+## Qualified working-company clone
+
+The first independent promotion clone is running for owner acceptance:
+
+- URL: `http://127.0.0.1:18188/`
+- Company: `All County Plumbing & Leak`
+- Company ID: `f8b460b4-e08c-4437-abc0-f8fd17ad8966`
+- Working-company manifest: `/Users/michaelfouse/ReleaseEvidence/hcp-migration-preservation-20261127/all-county-working-company-manifest.json`
+- Working-company manifest SHA-256: `ed5abe06f6cd47be238bdb0eae9c488c30733c972cbc760dce1ab62f0e8b0642`
+
+This clone has its own PostgreSQL volume and application containers. Its database was restored from the preserved dump and its company display name was changed only inside the clone. The migration runtime on port 18187 remains available as the untouched preservation source.
+
 ## Simplest reliable promotion path
 
 1. Keep the recovered migration company as the canonical historical-data foundation; do not repair or overwrite the old partially populated company.
