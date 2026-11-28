@@ -84,8 +84,7 @@ def test_operational_roster_and_historical_identity_counts_reconcile() -> None:
         for item in contract["terminated_historical_roster"]
     }
     assert all(
-        item["native_employee_id"] is None
-        and item["lifecycle_state"] == "UNRESOLVED"
+        item["native_employee_id"] is None and item["lifecycle_state"] == "UNRESOLVED"
         for item in historical
         if item["display_name"] in terminated_names
     )

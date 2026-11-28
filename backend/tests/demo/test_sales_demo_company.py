@@ -284,8 +284,6 @@ async def test_preserved_demo_restoration_keeps_credential_and_refuses_real_acce
 
     async with factory() as session:
         with pytest.raises(OnboardingConflictError, match="non-Demo company access"):
-            await service.restore_preserved_company(
-                session, context=context(owner_id)
-            )
+            await service.restore_preserved_company(session, context=context(owner_id))
         await session.rollback()
     await engine.dispose()
