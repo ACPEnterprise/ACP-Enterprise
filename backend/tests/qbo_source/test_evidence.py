@@ -22,7 +22,11 @@ from app.qbo_source.evidence import (
     ProtectedFilesystemEvidenceStore,
     RunState,
 )
-from app.qbo_source.intuit import PageEvidence, PartialAcquisitionError
+from app.qbo_source.intuit import (
+    AttachmentEvidence,
+    PageEvidence,
+    PartialAcquisitionError,
+)
 from app.qbo_source.runner import AcquisitionRunner
 
 
@@ -110,6 +114,21 @@ def test_immutable_store_is_resumable_deduplicated_and_deterministic(
         ),
         raw_body=raw_page,
     )
+    attachment_body = b"sealed-receipt"
+    attachment_digest = hashlib.sha256(attachment_body).hexdigest()
+    store.record_attachment(
+        run_id="synthetic-run",
+        evidence=AttachmentEvidence(
+            attachable_id="attachment-1",
+            filename="receipt.pdf",
+            content_type="application/pdf",
+            declared_size=len(attachment_body),
+            disposition="BODY_SEALED",
+            body_sha256=attachment_digest,
+            observed_at="2026-08-26T12:05:00+00:00",
+        ),
+        raw_body=attachment_body,
+    )
     digest = store.finish_run(
         run_id="synthetic-run",
         state=RunState.COMPLETE,
@@ -129,6 +148,20 @@ def test_immutable_store_is_resumable_deduplicated_and_deterministic(
         "synthetic-invoice-2",
     ]
     assert "Balance" not in manifest_bytes.decode()
+    assert manifest["attachments"] == [
+        {
+            "attachable_id": "attachment-1",
+            "body_sha256": attachment_digest,
+            "content_type": "application/pdf",
+            "declared_size": len(attachment_body),
+            "disposition": "BODY_SEALED",
+            "filename": "receipt.pdf",
+            "observed_at": "2026-08-26T12:05:00+00:00",
+        }
+    ]
+    assert (
+        tmp_path / "protected/blobs" / attachment_digest[:2] / attachment_digest
+    ).read_bytes() == attachment_body
     assert stat.S_IMODE((tmp_path / "protected").stat().st_mode) == 0o700
     assert stat.S_IMODE(manifest_path.stat().st_mode) == 0o600
 

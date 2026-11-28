@@ -18,6 +18,7 @@ import {
   Spinner,
   Input,
 } from "../../ui";
+import { QboHistoricalArchive } from "./QboHistoricalArchive";
 
 const money = (value: QboAmount) => {
   if (value.amount === null || value.state === "unavailable")
@@ -572,6 +573,7 @@ export function QboSourceEvidence({ enabled }: { enabled: boolean }) {
       ) : (
         <Workspace value={evidence.data} />
       )}
+      <QboHistoricalArchive enabled={enabled} />
       <Card>
         <CardHeader>
           <CardTitle>Real-company Profit &amp; Loss</CardTitle>

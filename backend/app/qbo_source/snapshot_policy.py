@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from .contracts import EntityKind
 
 SNAPSHOT_POLICY_VERSION = "qbo-production-snapshot-policy/v1"
-CATALOG_VERSION = "qbo-production-acquisition-catalog/v2"
+CATALOG_VERSION = "qbo-production-acquisition-catalog/v3"
 
 
 class TemporalClassification(str, Enum):
@@ -110,7 +110,12 @@ def build_bounded_snapshot(
     cutoff_end = datetime.combine(cutoff, time.max, ZoneInfo(timezone_value))
     entities = source_manifest.get("entities")
     dispositions = source_manifest.get("catalog_dispositions", [])
-    if not isinstance(entities, list) or not isinstance(dispositions, list):
+    attachments = source_manifest.get("attachments", [])
+    if (
+        not isinstance(entities, list)
+        or not isinstance(dispositions, list)
+        or not isinstance(attachments, list)
+    ):
         raise SnapshotPolicyError("source_manifest_invalid")
 
     unavailable = {
@@ -251,6 +256,22 @@ def build_bounded_snapshot(
         item_kind = str(item["entity_kind"])
         excluded_counts[item_kind] = excluded_counts.get(item_kind, 0) + 1
     exclusion_digest = hashlib.sha256(_canonical(excluded)).hexdigest()
+    attachable_ids = {
+        str(item["native_id"])
+        for item in entities
+        if isinstance(item, dict) and item.get("entity_kind") == "attachable"
+    }
+    if any(
+        not isinstance(item, dict)
+        or item.get("attachable_id") not in attachable_ids
+        or item.get("disposition")
+        not in {"BODY_SEALED", "BODY_URL_UNAVAILABLE", "NOTE_ONLY"}
+        for item in attachments
+    ):
+        raise SnapshotPolicyError("source_attachment_manifest_invalid")
+    bounded_attachments = sorted(
+        attachments, key=lambda item: str(item["attachable_id"])
+    )
     document: dict[str, object] = {
         "schema_version": "qbo-bounded-accounting-snapshot/v1",
         "state": "BOUNDED_COMPLETE",
@@ -271,6 +292,7 @@ def build_bounded_snapshot(
         "included_entities": included,
         "excluded_post_cutoff": excluded,
         "post_cutoff_source_modifications": corrections,
+        "attachments": bounded_attachments,
         "exclusion_digest": exclusion_digest,
     }
     digest = hashlib.sha256(_canonical(document)).hexdigest()

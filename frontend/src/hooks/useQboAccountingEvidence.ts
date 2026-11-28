@@ -1,8 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   getQboAccountingEvidence,
+  getQboHistoricalCatalog,
+  getQboHistoricalReport,
   getQboSourceBackedArSummary,
   getQboSourceBackedProfitAndLoss,
+  searchQboHistoricalRecords,
+} from "../api/qboAccountingEvidence";
+import type {
+  QboHistoricalKind,
+  QboHistoricalReportType,
 } from "../api/qboAccountingEvidence";
 
 export const useQboSourceBackedArSummary = (
@@ -44,6 +51,59 @@ export const useQboSourceBackedProfitAndLoss = (
       request,
     ],
     queryFn: () => getQboSourceBackedProfitAndLoss(request),
+    enabled,
+    retry: false,
+  });
+
+export const useQboHistoricalCatalog = (enabled = true) =>
+  useQuery({
+    queryKey: ["accounting", "source-evidence", "qbo", "historical", "catalog"],
+    queryFn: getQboHistoricalCatalog,
+    enabled,
+    retry: false,
+  });
+
+export const useQboHistoricalRecords = (
+  request: {
+    kind: QboHistoricalKind;
+    query?: string;
+    startDate?: string;
+    endDate?: string;
+  },
+  enabled = true,
+) =>
+  useQuery({
+    queryKey: [
+      "accounting",
+      "source-evidence",
+      "qbo",
+      "historical",
+      "records",
+      request,
+    ],
+    queryFn: () => searchQboHistoricalRecords(request),
+    enabled,
+    retry: false,
+  });
+
+export const useQboHistoricalReport = (
+  request: {
+    report: QboHistoricalReportType;
+    startDate?: string;
+    endDate?: string;
+  },
+  enabled = true,
+) =>
+  useQuery({
+    queryKey: [
+      "accounting",
+      "source-evidence",
+      "qbo",
+      "historical",
+      "report",
+      request,
+    ],
+    queryFn: () => getQboHistoricalReport(request),
     enabled,
     retry: false,
   });

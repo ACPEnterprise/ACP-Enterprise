@@ -137,27 +137,51 @@ try {
     if (location === "/login") throw new Error("login has not completed");
   });
 
-  const checks = [
-    { name: "customer", path: `/customers/${receipt.customer_id}`, expected: ["Integration Acceptance", "History completeness", "Service locations"] },
-    { name: "job", path: `/jobs/${receipt.job_id}`, expected: ["Integration acceptance service request", "Customer", "Service Location", "Appointments"] },
-    { name: "scheduling", path: "/scheduling", expected: ["Schedule", "Appointments"] },
-    { name: "dispatch", path: "/dispatch", expected: ["Schedule", "Appointments"] },
-    { name: "employees", path: "/employees", expected: ["Employees"] },
-    { name: "price-book", path: "/price-book", expected: ["Price Book"] },
-    { name: "estimates", path: "/estimates", expected: ["Estimates"] },
-    { name: "invoices", path: "/invoices", expected: ["Invoices"] },
-  ];
+  const checks = process.env.QBO_HISTORICAL_ACCEPTANCE === "true"
+    ? [{
+      name: "qbo-historical-accounting",
+      path: "/financial-reports",
+      expected: [
+        "Complete QuickBooks historical archive",
+        "20,702",
+        "97,093",
+        "46,405",
+        "Unresolved financial exceptions",
+      ],
+    }]
+    : [
+      { name: "customer", path: `/customers/${receipt.customer_id}`, expected: ["Integration Acceptance", "History completeness", "Service locations"] },
+      { name: "job", path: `/jobs/${receipt.job_id}`, expected: ["Integration acceptance service request", "Customer", "Service Location", "Appointments"] },
+      { name: "scheduling", path: "/scheduling", expected: ["Schedule", "Appointments"] },
+      { name: "dispatch", path: "/dispatch", expected: ["Schedule", "Appointments"] },
+      { name: "employees", path: "/employees", expected: ["Employees"] },
+      { name: "price-book", path: "/price-book", expected: ["Price Book"] },
+      { name: "estimates", path: "/estimates", expected: ["Estimates"] },
+      { name: "invoices", path: "/invoices", expected: ["Invoices"] },
+    ];
   const results = [];
   const artifacts = [];
   for (const check of checks) {
     await navigate(check.path);
+    if (check.name === "qbo-historical-accounting") {
+      await eventually(async () => {
+        const opened = await evaluate(`(() => {
+          const details = document.querySelector('details');
+          if (!details) return false;
+          if (!details.open) details.querySelector('summary')?.click();
+          return details.open;
+        })()`);
+        if (!opened) throw new Error("accounting source-evidence drawer unavailable");
+      });
+    }
     const body = await eventually(async () => {
       const text = await evaluate("document.body.innerText");
-      if (!check.expected.every((value) => text.includes(value))) {
-        throw new Error(`${check.name} missing expected operator text`);
+      const missing = check.expected.filter((value) => !text.includes(value));
+      if (missing.length > 0) {
+        throw new Error(`${check.name} missing expected operator text: ${missing.join(", ")}`);
       }
       return text;
-    });
+    }, check.name === "qbo-historical-accounting" ? 60_000 : 20_000);
     const location = await evaluate("location.pathname + location.search");
     artifacts.push(await screenshot(`${phase}-${check.name}`));
     results.push({ name: check.name, requested_path: check.path, rendered_path: location, expected_text: check.expected, text_length: body.length, status: "PASS" });
@@ -168,7 +192,9 @@ try {
     browser: process.env.OM2B_BROWSER_LABEL ?? "Chromium-compatible browser",
     base_url: baseUrl,
     serving_sha: servingSha,
-    fixture: "SYNTHETIC_DISPOSABLE",
+    fixture: process.env.QBO_HISTORICAL_ACCEPTANCE === "true"
+      ? "ISOLATED_QBO_HISTORICAL_CUSTODY"
+      : "SYNTHETIC_DISPOSABLE",
     authenticated: true,
     results,
     artifacts,

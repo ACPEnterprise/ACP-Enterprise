@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import urllib.parse
@@ -31,12 +32,16 @@ from app.qbo_source.intuit import (
 class CatalogObserver:
     def __init__(self) -> None:
         self.dispositions: list[object] = []
+        self.attachments: list[tuple[object, bytes | None]] = []
 
     async def record_page(self, evidence, raw_body):  # type: ignore[no-untyped-def]
         del evidence, raw_body
 
     async def record_catalog_disposition(self, evidence):  # type: ignore[no-untyped-def]
         self.dispositions.append(evidence)
+
+    async def record_attachment(self, evidence, raw_body):  # type: ignore[no-untyped-def]
+        self.attachments.append((evidence, raw_body))
 
 
 class FakeClock:
@@ -165,6 +170,101 @@ def snapshot() -> SnapshotIdentity:
 
 def test_every_contract_entity_has_explicit_official_acquisition_route() -> None:
     assert set(ENTITY_QUERY_NAMES) | {EntityKind.COMPANY_INFO} == set(EntityKind)
+
+
+@pytest.mark.asyncio
+async def test_attachable_metadata_notes_and_parent_relationships_are_acquired() -> (
+    None
+):
+    clock = FakeClock()
+    secrets = FakeSecrets(token(clock))
+    observer = CatalogObserver()
+    body = b"%PDF"
+    transport = SequenceTransport(
+        [
+            response(
+                200,
+                {
+                    "CompanyInfo": {
+                        "Id": "synthetic-realm",
+                        "CompanyName": "Synthetic Plumbing Sandbox",
+                    }
+                },
+            ),
+            response(
+                200,
+                {
+                    "QueryResponse": {
+                        "Attachable": [
+                            {
+                                "Id": "attachment-1",
+                                "SyncToken": "2",
+                                "Note": "Source note",
+                                "FileName": "receipt.pdf",
+                                "Size": 4,
+                                "ContentType": "application/pdf",
+                                "TempDownloadUri": (
+                                    "https://intuit-qbo-sandbox-9.s3.amazonaws.com/"
+                                    "synthetic/attachments/receipt.pdf?X-Amz-Signature=test"
+                                ),
+                                "AttachableRef": [
+                                    {
+                                        "EntityRef": {
+                                            "type": "Invoice",
+                                            "value": "invoice-95",
+                                        }
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                },
+            ),
+            HttpResponse(200, {"Content-Type": "application/pdf"}, body),
+        ]
+    )
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.SANDBOX,
+        transport=transport,
+        secrets=secrets,
+        credential_reference="secret://synthetic/client",
+        clock=clock,
+    )
+    adapter = IntuitReadOnlyAdapter(
+        binding=binding(),
+        token_manager=SerializedTokenManager(
+            oauth=oauth, secrets=secrets, binding=binding(), clock=clock
+        ),
+        transport=transport,
+        clock=clock,
+        page_observer=observer,
+    )
+
+    acquired = [
+        item
+        async for item in adapter.acquire(
+            AcquisitionRequest(snapshot(), (EntityKind.ATTACHABLE,))
+        )
+    ]
+
+    assert len(acquired) == 1
+    item = acquired[0]
+    assert item.native_entity_type == "attachable"
+    assert item.relationship_ids == ("EntityRef:invoice-95",)
+    assert item.source_accounting_meaning == {
+        "native_type": "Attachable",
+        "Note": "Source note",
+        "FileName": "receipt.pdf",
+        "Size": 4,
+        "ContentType": "application/pdf",
+    }
+    assert all(request["method"] == "GET" for request in transport.requests)
+    attachment, captured = observer.attachments[0]
+    assert attachment.attachable_id == "attachment-1"
+    assert attachment.disposition == "BODY_SEALED"
+    assert attachment.body_sha256 == hashlib.sha256(body).hexdigest()
+    assert captured == body
+    assert "Authorization" not in transport.requests[-1]["headers"]
 
 
 @pytest.mark.asyncio
@@ -709,5 +809,25 @@ async def test_official_transport_rejects_non_intuit_or_write_destinations() -> 
             url="https://sandbox-quickbooks.api.intuit.com/v3/company/realm/invoice",
             headers={},
             body=b"{}",
+        )
+    with pytest.raises(IntuitProtocolError, match="operation_rejected"):
+        await transport.request(
+            method="GET",
+            url=(
+                "https://intuit-qbo-prod-9.s3.amazonaws.com/not-attachments/"
+                "receipt.pdf?X-Amz-Signature=test"
+            ),
+            headers={},
+            body=None,
+        )
+    with pytest.raises(IntuitProtocolError, match="authorization_header_rejected"):
+        await transport.request(
+            method="GET",
+            url=(
+                "https://intuit-qbo-prod-9.s3.amazonaws.com/company/attachments/"
+                "receipt.pdf?X-Amz-Signature=test"
+            ),
+            headers={"Authorization": "Bearer forbidden"},
+            body=None,
         )
     await transport.client.aclose()

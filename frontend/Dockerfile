@@ -3,7 +3,11 @@ FROM node:24.22.3-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adee
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci \
+      --fetch-retries=4 \
+      --fetch-retry-mintimeout=20000 \
+      --fetch-retry-maxtimeout=120000
 
 COPY . .
 

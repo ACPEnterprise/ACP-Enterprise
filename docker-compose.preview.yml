@@ -39,11 +39,11 @@ x-backend-environment: &backend-environment
   HCP_SOURCE4_EVIDENCE_ROOT: ${HCP_SOURCE4_EVIDENCE_ROOT:-}
   HCP_HISTORICAL_ATTACHMENT_ROOT: ${HCP_HISTORICAL_ATTACHMENT_ROOT:-}
   QBO_PRODUCTION_ENABLED: ${QBO_PRODUCTION_ENABLED:-false}
-  QBO_PRODUCTION_ACP_COMPANY_ID: ${QBO_PRODUCTION_ACP_COMPANY_ID:-a56fc415-563b-459c-913f-2e6183109119}
-  QBO_PRODUCTION_CALLBACK_URI: https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/production/oauth/callback
+  QBO_PRODUCTION_ACP_COMPANY_ID: ${QBO_PRODUCTION_ACP_COMPANY_ID:?Set QBO_PRODUCTION_ACP_COMPANY_ID in .env.preview}
+  QBO_PRODUCTION_CALLBACK_URI: https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback
   QBO_PRODUCTION_RUNTIME_ROOT: /var/lib/acp-qbo-production
   QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-qbo-production-evidence
-  QBO_MANUAL_ARCHIVE_ROOT: ${QBO_MANUAL_ARCHIVE_ROOT:-/var/lib/acp-qbo-production-evidence/manual-archive}
+  QBO_MANUAL_ARCHIVE_ROOT: ${QBO_MANUAL_ARCHIVE_ROOT:-/var/lib/acp-qbo-manual-archive}
   SMOKE_COMPANY_ID: ${SMOKE_COMPANY_ID:?Set SMOKE_COMPANY_ID in .env.preview}
   SMOKE_BRANCH_ID: ${SMOKE_BRANCH_ID:?Set SMOKE_BRANCH_ID in .env.preview}
   SMOKE_DENIED_COMPANY_ID: ${SMOKE_DENIED_COMPANY_ID:?Set SMOKE_DENIED_COMPANY_ID in .env.preview}
@@ -194,6 +194,7 @@ services:
       - preview_qbo_sandbox_state:/var/lib/acp-qbo-sandbox
       - preview_qbo_production_state:/var/lib/acp-qbo-production
       - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
+      - ${QBO_MANUAL_ARCHIVE_ROOT_HOST:?Set QBO_MANUAL_ARCHIVE_ROOT_HOST in .env.preview}:/var/lib/acp-qbo-manual-archive:ro
       - ${HCP_SOURCE4_EVIDENCE_ROOT_HOST:?Set HCP_SOURCE4_EVIDENCE_ROOT_HOST in .env.preview}:/run/hcp-source-history:ro
       - ${HCP_HISTORICAL_ATTACHMENT_ROOT_HOST:?Set HCP_HISTORICAL_ATTACHMENT_ROOT_HOST in .env.preview}:/run/hcp-attachments:ro
       - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro

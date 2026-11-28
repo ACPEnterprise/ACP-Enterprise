@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
 from app.database.session import AsyncSessionFactory
+from app.payroll.permissions import PayrollPermission
 from app.platform.auth.errors import RateLimitExceededError, RateLimitUnavailableError
 from app.platform.auth.rate_limit import AuthenticationRateLimiter
 from app.platform.permissions.authorization import AuthorizationContext
@@ -43,6 +44,14 @@ from .bounded_evidence import (
     load_bounded_envelopes,
 )
 from .callback import CALLBACK_PATH
+from .historical_archive import (
+    HistoricalKind,
+    HistoricalReport,
+    historical_archive_catalog,
+    historical_payroll_records,
+    historical_report,
+    search_historical_archive,
+)
 from .intuit import IntuitAuthenticationError, IntuitError, IntuitProtocolError
 from .manual_archive import (
     manual_archive_available,
@@ -85,6 +94,10 @@ _Reconcile = Annotated[
     AuthorizationContext,
     Depends(require_permission(AccountingPermission.RECONCILE)),
 ]
+_PayrollReportRead = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PayrollPermission.REPORTING_READ)),
+]
 
 
 def get_qbo_application_session_factory() -> async_sessionmaker[AsyncSession]:
@@ -111,6 +124,10 @@ AGED_RECEIVABLES_PATH = (
 )
 NATIVE_APPLICATION_PATH = "/api/v1/accounting/source-evidence/qbo/native-application"
 NATIVE_REVIEW_PATH = f"{NATIVE_APPLICATION_PATH}/review-queue"
+HISTORICAL_CATALOG_PATH = f"{ACCOUNTING_EVIDENCE_PATH}/historical/catalog"
+HISTORICAL_RECORDS_PATH = f"{ACCOUNTING_EVIDENCE_PATH}/historical/records"
+HISTORICAL_PAYROLL_PATH = f"{ACCOUNTING_EVIDENCE_PATH}/historical/payroll"
+HISTORICAL_REPORT_PATH = f"{ACCOUNTING_EVIDENCE_PATH}/historical/reports/{{report}}"
 
 
 class QboReviewDecisionRequest(BaseModel):
@@ -122,8 +139,7 @@ class QboReviewDecisionRequest(BaseModel):
 
 
 _PRODUCTION_CALLBACK_URI = (
-    "https://preview.allcountyhomeservices.com"
-    "/api/v1/integrations/qbo/production/oauth/callback"
+    "https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback"
 )
 
 _SAFE_HEADERS = {
@@ -131,6 +147,20 @@ _SAFE_HEADERS = {
     "Pragma": "no-cache",
     "Referrer-Policy": "no-referrer",
 }
+
+
+def _manual_archive_authorized(authorization: AuthorizationContext) -> bool:
+    if not settings.qbo_manual_archive_root:
+        return False
+    if (
+        settings.qbo_production_acp_company_id
+        and settings.qbo_production_acp_company_id == authorization.company.id
+    ):
+        return True
+    return bool(
+        settings.qbo_manual_archive_company_code
+        and authorization.company.code == settings.qbo_manual_archive_company_code
+    )
 
 
 def _family_count_response(item: FamilyDispositionCount) -> dict[str, object]:
@@ -476,23 +506,32 @@ async def qbo_accounting_source_evidence(
     authorization: _ReportRead,
 ) -> JSONResponse:
     """Return sealed QBO evidence; never query QBO or create Accounting truth."""
-    if (
-        not settings.qbo_production_acp_company_id
-        or settings.qbo_production_acp_company_id != authorization.company.id
-    ):
+    production_authorized = bool(
+        settings.qbo_production_acp_company_id
+        and settings.qbo_production_acp_company_id == authorization.company.id
+    )
+    if not production_authorized and not _manual_archive_authorized(authorization):
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"detail": "QBO source evidence is not available."},
             headers={"Cache-Control": "private, no-store"},
         )
-    if not settings.qbo_production_evidence_root:
+    if (
+        not settings.qbo_production_evidence_root
+        and not settings.qbo_manual_archive_root
+    ):
         workspace = unavailable_qbo_workspace(
             basis=basis, limitation="live_qbo_authorization_blocked"
         )
     else:
         try:
             workspace = project_latest_qbo_workspace(
-                evidence_root=Path(settings.qbo_production_evidence_root),
+                evidence_root=(
+                    Path(settings.qbo_production_evidence_root)
+                    if settings.qbo_production_evidence_root
+                    else Path(settings.qbo_manual_archive_root or "/unavailable")
+                    / "missing-bounded-root"
+                ),
                 basis=basis,
                 runtime_root=(
                     Path(settings.qbo_production_runtime_root)
@@ -522,10 +561,12 @@ async def qbo_source_backed_profit_and_loss(
     authorization: _ReportRead,
 ) -> JSONResponse:
     """Read a real-company provider P&L without creating ACP ledger truth."""
-    if (
-        not settings.qbo_production_acp_company_id
-        or settings.qbo_production_acp_company_id != authorization.company.id
-    ):
+    production_authorized = bool(
+        settings.qbo_production_acp_company_id
+        and settings.qbo_production_acp_company_id == authorization.company.id
+    )
+    manual_authorized = _manual_archive_authorized(authorization)
+    if not production_authorized and not manual_authorized:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"detail": "QBO source report is not available."},
@@ -538,7 +579,7 @@ async def qbo_source_backed_profit_and_loss(
             headers={"Cache-Control": "private, no-store"},
         )
     try:
-        if settings.qbo_manual_archive_root:
+        if manual_authorized and settings.qbo_manual_archive_root:
             try:
                 workspace = project_manual_profit_and_loss(
                     root=Path(settings.qbo_manual_archive_root),
@@ -550,7 +591,8 @@ async def qbo_source_backed_profit_and_loss(
                     content=workspace, headers={"Cache-Control": "private, no-store"}
                 )
             except QboEvidenceProjectionError:
-                pass
+                if not production_authorized:
+                    raise
         document, marker = await read_production_profit_and_loss(
             ProductionProfitAndLossRequest(start_date, end_date, basis)
         )
@@ -583,17 +625,19 @@ async def qbo_source_backed_aged_receivables(
     authorization: _ReportRead,
 ) -> JSONResponse:
     """Read QBO's net A/R aging total without creating ACP Accounting truth."""
-    if (
-        not settings.qbo_production_acp_company_id
-        or settings.qbo_production_acp_company_id != authorization.company.id
-    ):
+    production_authorized = bool(
+        settings.qbo_production_acp_company_id
+        and settings.qbo_production_acp_company_id == authorization.company.id
+    )
+    manual_authorized = _manual_archive_authorized(authorization)
+    if not production_authorized and not manual_authorized:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"detail": "QBO source report is not available."},
             headers={"Cache-Control": "private, no-store"},
         )
     try:
-        if settings.qbo_manual_archive_root:
+        if manual_authorized and settings.qbo_manual_archive_root:
             try:
                 workspace = project_manual_aged_receivables(
                     root=Path(settings.qbo_manual_archive_root),
@@ -603,7 +647,8 @@ async def qbo_source_backed_aged_receivables(
                     content=workspace, headers={"Cache-Control": "private, no-store"}
                 )
             except QboEvidenceProjectionError:
-                pass
+                if not production_authorized:
+                    raise
         document, marker = await read_production_aged_receivables(
             ProductionAgedReceivablesRequest(report_date)
         )
@@ -628,6 +673,124 @@ async def qbo_source_backed_aged_receivables(
     return JSONResponse(
         content=workspace, headers={"Cache-Control": "private, no-store"}
     )
+
+
+def _historical_root() -> Path:
+    if not settings.qbo_manual_archive_root:
+        raise QboEvidenceProjectionError("manual_archive_not_configured")
+    return Path(settings.qbo_manual_archive_root)
+
+
+def _historical_unavailable() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "QBO historical source evidence is unavailable."},
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.get(HISTORICAL_CATALOG_PATH, name="qbo-historical-catalog")
+async def qbo_historical_catalog(authorization: _ReportRead) -> JSONResponse:
+    if not _manual_archive_authorized(authorization):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "QBO historical source evidence is not available."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        content = historical_archive_catalog(root=_historical_root())
+    except (OSError, ValueError, QboEvidenceProjectionError):
+        return _historical_unavailable()
+    return JSONResponse(content=content, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get(HISTORICAL_RECORDS_PATH, name="qbo-historical-records")
+async def qbo_historical_records(
+    authorization: _ReportRead,
+    kind: HistoricalKind = "all",
+    query: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    transaction_type: str | None = None,
+    account: str | None = None,
+    offset: int = 0,
+    limit: int = 100,
+) -> JSONResponse:
+    if not _manual_archive_authorized(authorization):
+        return JSONResponse(status_code=404, content={"detail": "Not found."})
+    if offset < 0 or limit < 1 or limit > 200:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": "Invalid historical record page."},
+        )
+    if start_date and end_date and start_date > end_date:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": "Report start date must not follow end date."},
+        )
+    try:
+        content = search_historical_archive(
+            root=_historical_root(),
+            kind=kind,
+            query=query,
+            start_date=start_date,
+            end_date=end_date,
+            transaction_type=transaction_type,
+            account=account,
+            offset=offset,
+            limit=limit,
+        )
+    except (KeyError, OSError, ValueError, QboEvidenceProjectionError):
+        return _historical_unavailable()
+    return JSONResponse(content=content, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get(HISTORICAL_PAYROLL_PATH, name="qbo-historical-payroll")
+async def qbo_historical_payroll(
+    authorization: _PayrollReportRead,
+    query: str | None = None,
+    offset: int = 0,
+    limit: int = 100,
+) -> JSONResponse:
+    if not _manual_archive_authorized(authorization):
+        return JSONResponse(status_code=404, content={"detail": "Not found."})
+    if offset < 0 or limit < 1 or limit > 200:
+        return JSONResponse(
+            status_code=422, content={"detail": "Invalid payroll page."}
+        )
+    try:
+        content = historical_payroll_records(
+            root=_historical_root(), query=query, offset=offset, limit=limit
+        )
+    except (OSError, ValueError, QboEvidenceProjectionError):
+        return _historical_unavailable()
+    return JSONResponse(content=content, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get(HISTORICAL_REPORT_PATH, name="qbo-historical-report")
+async def qbo_historical_source_report(
+    report: HistoricalReport,
+    authorization: _ReportRead,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> JSONResponse:
+    if not _manual_archive_authorized(authorization):
+        return JSONResponse(status_code=404, content={"detail": "Not found."})
+    if start_date and end_date and start_date > end_date:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Report start date must not follow end date."},
+        )
+    try:
+        content = historical_report(
+            root=_historical_root(),
+            report=report,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except (KeyError, OSError, ValueError, QboEvidenceProjectionError):
+        return _historical_unavailable()
+    return JSONResponse(content=content, headers={"Cache-Control": "private, no-store"})
 
 
 def _safe_response(status_code: int, code: str) -> JSONResponse:

@@ -118,6 +118,36 @@ def load_bounded_envelopes(
     return tuple(result)
 
 
+def load_bounded_attachment_bodies(
+    packet: BoundedEvidencePacket,
+) -> tuple[tuple[Mapping[str, object], bytes | None], ...]:
+    records = packet.bounded_manifest.get("attachments", [])
+    if not isinstance(records, list) or any(
+        not isinstance(record, Mapping) for record in records
+    ):
+        raise BoundedEvidenceError("bounded_attachments_invalid")
+    result: list[tuple[Mapping[str, object], bytes | None]] = []
+    for record in records:
+        disposition = _required_text(record, "disposition")
+        if disposition == "BODY_SEALED":
+            digest = _required_digest(record, "body_sha256")
+            path = packet.root / "blobs" / digest[:2] / digest
+            body = path.read_bytes()
+            if hashlib.sha256(body).hexdigest() != digest:
+                raise BoundedEvidenceError("attachment_body_digest_conflict")
+            declared = record.get("declared_size")
+            if not isinstance(declared, int) or declared != len(body):
+                raise BoundedEvidenceError("attachment_body_size_conflict")
+        elif disposition in {"BODY_URL_UNAVAILABLE", "NOTE_ONLY"}:
+            if record.get("body_sha256") is not None:
+                raise BoundedEvidenceError("attachment_disposition_invalid")
+            body = None
+        else:
+            raise BoundedEvidenceError("attachment_disposition_invalid")
+        result.append((record, body))
+    return tuple(result)
+
+
 def _included_records(packet: BoundedEvidencePacket) -> list[Mapping[str, object]]:
     records = packet.bounded_manifest.get("included_entities")
     if not isinstance(records, list) or any(

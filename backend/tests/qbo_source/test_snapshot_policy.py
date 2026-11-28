@@ -6,6 +6,10 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
+from app.qbo_source.bounded_evidence import (
+    latest_bounded_evidence,
+    load_bounded_attachment_bodies,
+)
 from app.qbo_source.contracts import (
     AcquisitionRequest,
     EntityKind,
@@ -13,6 +17,7 @@ from app.qbo_source.contracts import (
     SnapshotIdentity,
 )
 from app.qbo_source.evidence import ProtectedFilesystemEvidenceStore, RunState
+from app.qbo_source.intuit import AttachmentEvidence
 from app.qbo_source.runner import AcquisitionRunner
 from app.qbo_source.snapshot_policy import SNAPSHOT_POLICY_VERSION
 
@@ -118,6 +123,58 @@ def test_bounded_snapshot_preserves_raw_and_excludes_post_cutoff(
     )
     assert bounded["per_family_policy"]["bill"]["classification"] == ("EMPTY_CONFIRMED")
     assert "after" not in json.dumps(bounded)
+
+
+def test_bounded_snapshot_preserves_and_verifies_attachment_bodies(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    root = tmp_path / "evidence"
+    store = ProtectedFilesystemEvidenceStore(
+        root=root,
+        repository_root=repository,
+        bounded_snapshot=True,
+    )
+    store.begin_run(
+        run_id="bounded-generation", snapshot=_snapshot(), company_name="Synthetic"
+    )
+    store.store_envelope(
+        run_id="bounded-generation",
+        envelope=_envelope(
+            "attachable",
+            "attachment-1",
+            {"FileName": "receipt.pdf", "Size": 4},
+        ),
+    )
+    body = b"%PDF"
+    digest = hashlib.sha256(body).hexdigest()
+    store.record_attachment(
+        run_id="bounded-generation",
+        evidence=AttachmentEvidence(
+            attachable_id="attachment-1",
+            filename="receipt.pdf",
+            content_type="application/pdf",
+            declared_size=len(body),
+            disposition="BODY_SEALED",
+            body_sha256=digest,
+            observed_at="2026-09-01T12:00:00+00:00",
+        ),
+        raw_body=body,
+    )
+    store.finish_run(
+        run_id="bounded-generation",
+        state=RunState.COMPLETE,
+        ended_at=datetime(2026, 9, 1, 14, tzinfo=timezone.utc),
+    )
+
+    packet = latest_bounded_evidence(root)
+    assert packet is not None
+    attachments = load_bounded_attachment_bodies(packet)
+    assert len(attachments) == 1
+    assert attachments[0][0]["attachable_id"] == "attachment-1"
+    assert attachments[0][0]["body_sha256"] == digest
+    assert attachments[0][1] == body
     assert (tmp_path / "evidence/blobs").is_dir()
 
 
