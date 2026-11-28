@@ -384,10 +384,10 @@ async def test_runtime_connection_evidence_rejects_token_realm_conflict(
         await runtime.connection_evidence()
 
 
-def test_production_configuration_requires_exact_isolated_preview_contract(
+def test_production_configuration_requires_exact_isolated_beta_contract(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="must match Preview exactly"):
+    with pytest.raises(ValueError, match="must match Beta exactly"):
         Settings(
             environment="test",
             qbo_production_enabled=True,
@@ -405,7 +405,7 @@ async def test_acquisition_requires_verified_connection_before_any_query(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(tmp_path / "runtime"),
@@ -440,7 +440,7 @@ async def test_acquisition_rejects_api_version_drift_before_any_query(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(runtime),
@@ -481,7 +481,7 @@ async def test_read_probe_requires_verified_connection_before_companyinfo(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(tmp_path / "runtime"),
@@ -530,7 +530,7 @@ async def test_read_probe_seals_only_companyinfo_without_false_empty_families(
         environment="test",
         qbo_production_enabled=True,
         qbo_production_callback_uri=(
-            "https://preview.allcountyhomeservices.com"
+            "https://beta.twelve-hats.com"
             "/api/v1/integrations/qbo/production/oauth/callback"
         ),
         qbo_production_runtime_root=str(runtime),

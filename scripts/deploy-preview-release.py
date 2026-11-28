@@ -29,6 +29,12 @@ from urllib.request import urlopen
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 RELEASE_PREFIX = "enterprise-beta-"
 PROJECT_NAME = "acp-enterprise-preview"
+QBO_PRODUCTION_BETA_CALLBACK = (
+    "https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback"
+)
+QBO_PRODUCTION_ALL_COUNTY_COMPANY_ID = "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd"
+QBO_PRODUCTION_RUNTIME_ROOT = "/var/lib/acp-qbo-production"
+QBO_PRODUCTION_EVIDENCE_ROOT = "/var/lib/acp-qbo-production-evidence"
 DEFAULT_ROOT = Path("/opt/acp-enterprise")
 DEFAULT_SERVICES = ("backend",)
 ALLOWED_SERVICES = {
@@ -209,8 +215,26 @@ def validate_runtime_env(
         values[key.strip()] = value.strip()
     if values.get("COMPOSE_PROJECT_NAME") != PROJECT_NAME:
         fail(f".env.preview must set COMPOSE_PROJECT_NAME={PROJECT_NAME}")
-    if values.get("QBO_PRODUCTION_ENABLED", "false").lower() == "true":
-        fail("QBO production support is disabled in this Preview-only deployer")
+    qbo_enabled = values.get("QBO_PRODUCTION_ENABLED", "false").lower()
+    if qbo_enabled not in {"true", "false"}:
+        fail("QBO_PRODUCTION_ENABLED must be exactly true or false")
+    if qbo_enabled == "true":
+        required_qbo_values = {
+            "QBO_PRODUCTION_CALLBACK_URI": QBO_PRODUCTION_BETA_CALLBACK,
+            "QBO_PRODUCTION_ACP_COMPANY_ID": QBO_PRODUCTION_ALL_COUNTY_COMPANY_ID,
+            "QBO_PRODUCTION_RUNTIME_ROOT": QBO_PRODUCTION_RUNTIME_ROOT,
+            "QBO_PRODUCTION_EVIDENCE_ROOT": QBO_PRODUCTION_EVIDENCE_ROOT,
+        }
+        mismatches = [
+            key
+            for key, expected in required_qbo_values.items()
+            if values.get(key) != expected
+        ]
+        if mismatches:
+            fail(
+                "QBO Production read-only Beta configuration is incomplete or "
+                "mismatched: " + ", ".join(sorted(mismatches))
+            )
     if expected_sha is not None and values.get("APP_VERSION") != expected_sha:
         fail(f"APP_VERSION is not {expected_sha} in {path}")
     for required in (
@@ -223,6 +247,19 @@ def validate_runtime_env(
         if not values.get(required):
             fail(f".env.preview is missing required value: {required}")
     return values
+
+
+def require_qbo_production_release_authority(
+    values: dict[str, str], *, explicitly_allowed: bool
+) -> None:
+    if (
+        values.get("QBO_PRODUCTION_ENABLED", "false").lower() == "true"
+        and not explicitly_allowed
+    ):
+        fail(
+            "QBO Production read-only OAuth requires the explicit "
+            "--allow-qbo-production-read-only release authority"
+        )
 
 
 def update_app_version(content: str, sha: str) -> str:
@@ -647,7 +684,10 @@ def bootstrap(args: argparse.Namespace) -> int:
     services = selected_services(args.service)
     sha, tree = require_source(source_root, args.sha)
     env_file = Path(args.env_file).resolve()
-    validate_runtime_env(env_file, expected_sha=sha)
+    values = validate_runtime_env(env_file, expected_sha=sha)
+    require_qbo_production_release_authority(
+        values, explicitly_allowed=args.allow_qbo_production_read_only
+    )
     target = release_target(root, sha)
     if os.path.lexists(target):
         fail(f"conflicting target release already exists: {target}")
@@ -699,7 +739,10 @@ def deploy(args: argparse.Namespace) -> int:
     target = release_target(root, sha)
     if os.path.lexists(target):
         fail(f"conflicting target release already exists: {target}")
-    validate_runtime_env(previous / ".env.preview")
+    values = validate_runtime_env(previous / ".env.preview")
+    require_qbo_production_release_authority(
+        values, explicitly_allowed=args.allow_qbo_production_read_only
+    )
     if args.dry_run:
         print(f"DRY-RUN: source={source_root} sha={sha} tree={tree}")
         print(f"DRY-RUN: target={target}")
@@ -780,6 +823,10 @@ def rollback(args: argparse.Namespace) -> int:
     if target == current:
         fail("rollback target is already current")
     services = selected_services(args.service)
+    values = validate_runtime_env(target / ".env.preview")
+    require_qbo_production_release_authority(
+        values, explicitly_allowed=args.allow_qbo_production_read_only
+    )
     validate_compose(target, dry_run=args.dry_run)
     if args.dry_run:
         print(
@@ -821,6 +868,14 @@ def parser() -> argparse.ArgumentParser:
     common.add_argument("--root", type=Path, default=DEFAULT_ROOT)
     common.add_argument("--health-timeout", type=int, default=180)
     common.add_argument("--dry-run", action="store_true")
+    common.add_argument(
+        "--allow-qbo-production-read-only",
+        action="store_true",
+        help=(
+            "explicit Beta release authority for the exact All County "
+            "read-only Production OAuth contract"
+        ),
+    )
     command_parser = argparse.ArgumentParser(description=__doc__)
     subparsers = command_parser.add_subparsers(dest="command", required=True)
     deploy_parser = subparsers.add_parser("deploy", parents=[common])

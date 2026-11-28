@@ -597,8 +597,7 @@ def get_production_oauth_runtime() -> SandboxOAuthRuntime:
     if not configuration.qbo_production_enabled:
         raise SandboxRuntimeError("production_oauth_runtime_disabled")
     expected_uri = (
-        "https://preview.allcountyhomeservices.com"
-        "/api/v1/integrations/qbo/production/oauth/callback"
+        "https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback"
     )
     if configuration.qbo_production_callback_uri != expected_uri:
         raise SandboxRuntimeError("production_callback_uri_mismatch")

@@ -139,8 +139,7 @@ class QboReviewDecisionRequest(BaseModel):
 
 
 _PRODUCTION_CALLBACK_URI = (
-    "https://preview.allcountyhomeservices.com"
-    "/api/v1/integrations/qbo/production/oauth/callback"
+    "https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback"
 )
 
 _SAFE_HEADERS = {

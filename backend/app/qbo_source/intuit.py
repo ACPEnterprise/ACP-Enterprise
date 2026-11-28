@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
@@ -167,6 +168,10 @@ class IntuitHttpTransport:
         }
     )
 
+    _attachment_host = re.compile(
+        r"^intuit-qbo-(?:prod|sandbox)-[0-9]+\.s3\.amazonaws\.com$"
+    )
+
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         _install_intuit_url_log_filter()
         self.client = client or httpx.AsyncClient(
@@ -182,16 +187,33 @@ class IntuitHttpTransport:
         body: bytes | None,
     ) -> HttpResponse:
         parsed = httpx.URL(url)
-        if parsed.scheme != "https" or parsed.host not in self._allowed_hosts:
+        attachment_host = bool(
+            parsed.host and self._attachment_host.fullmatch(parsed.host)
+        )
+        if parsed.scheme != "https" or (
+            parsed.host not in self._allowed_hosts and not attachment_host
+        ):
             raise IntuitProtocolError("transport_destination_rejected")
         normalized_method = method.upper()
         if normalized_method not in {"GET", "POST"}:
             raise IntuitProtocolError("transport_method_rejected")
-        if normalized_method == "GET" and parsed.host not in {
-            "sandbox-quickbooks.api.intuit.com",
-            "quickbooks.api.intuit.com",
-        }:
-            raise IntuitProtocolError("transport_operation_rejected")
+        if normalized_method == "GET":
+            api_read = parsed.host in {
+                "sandbox-quickbooks.api.intuit.com",
+                "quickbooks.api.intuit.com",
+            }
+            attachment_read = bool(
+                attachment_host
+                and parsed.path.startswith("/")
+                and "/attachments/" in parsed.path
+                and parsed.query
+            )
+            if not api_read and not attachment_read:
+                raise IntuitProtocolError("transport_operation_rejected")
+            if attachment_read and any(
+                key.lower() == "authorization" for key in headers
+            ):
+                raise IntuitProtocolError("attachment_authorization_header_rejected")
         if normalized_method == "POST" and parsed.host not in {
             "oauth.platform.intuit.com",
             "developer.api.intuit.com",
@@ -214,7 +236,11 @@ class _IntuitProviderUrlLogFilter(logging.Filter):
         if record.name != "httpx":
             return True
         message = record.getMessage()
-        return not any(host in message for host in IntuitHttpTransport._allowed_hosts)
+        return not (
+            any(host in message for host in IntuitHttpTransport._allowed_hosts)
+            or "intuit-qbo-" in message
+            and ".s3.amazonaws.com" in message
+        )
 
 
 def _install_intuit_url_log_filter() -> None:
@@ -553,6 +579,7 @@ ENTITY_QUERY_NAMES: Mapping[EntityKind, str] = {
     EntityKind.PURCHASE_ORDER: "PurchaseOrder",
     EntityKind.TERM: "Term",
     EntityKind.PAYMENT_METHOD: "PaymentMethod",
+    EntityKind.ATTACHABLE: "Attachable",
 }
 
 
@@ -578,11 +605,26 @@ class CatalogDispositionEvidence:
     observed_at: str
 
 
+@dataclass(frozen=True)
+class AttachmentEvidence:
+    attachable_id: str
+    filename: str | None
+    content_type: str | None
+    declared_size: int | None
+    disposition: str
+    body_sha256: str | None
+    observed_at: str
+
+
 class PageObserver(Protocol):
     async def record_page(self, evidence: PageEvidence, raw_body: bytes) -> None: ...
 
     async def record_catalog_disposition(
         self, evidence: CatalogDispositionEvidence
+    ) -> None: ...
+
+    async def record_attachment(
+        self, evidence: AttachmentEvidence, raw_body: bytes | None
     ) -> None: ...
 
 
@@ -592,6 +634,11 @@ class NullPageObserver:
 
     async def record_catalog_disposition(
         self, evidence: CatalogDispositionEvidence
+    ) -> None:
+        return None
+
+    async def record_attachment(
+        self, evidence: AttachmentEvidence, raw_body: bytes | None
     ) -> None:
         return None
 
@@ -652,6 +699,8 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
                         native_type=native_type,
                         payload=payload,
                     )
+                    if kind is EntityKind.ATTACHABLE:
+                        await self._capture_attachment(payload)
             except PartialAcquisitionError as error:
                 if not self._is_provider_unavailable_optional(kind, error):
                     raise
@@ -856,6 +905,91 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
             await self.clock.sleep(delay)
         raise IntuitRequestError("api_retry_exhausted", provider_status=response.status)
 
+    async def _capture_attachment(self, payload: Mapping[str, object]) -> None:
+        attachable_id = payload.get("Id")
+        if not isinstance(attachable_id, str) or not attachable_id:
+            raise IntuitProtocolError("native_id_missing")
+        filename = payload.get("FileName")
+        filename = filename if isinstance(filename, str) and filename else None
+        content_type = payload.get("ContentType")
+        content_type = (
+            content_type if isinstance(content_type, str) and content_type else None
+        )
+        declared_size_value = payload.get("Size")
+        declared_size = (
+            int(declared_size_value)
+            if isinstance(declared_size_value, (int, str))
+            and str(declared_size_value).isdigit()
+            else None
+        )
+        if filename is None:
+            await self.page_observer.record_attachment(
+                AttachmentEvidence(
+                    attachable_id=attachable_id,
+                    filename=None,
+                    content_type=content_type,
+                    declared_size=declared_size,
+                    disposition="NOTE_ONLY",
+                    body_sha256=None,
+                    observed_at=self.clock.now().isoformat(),
+                ),
+                None,
+            )
+            return
+        if declared_size is not None and not 0 <= declared_size <= 100_000_000:
+            raise PartialAcquisitionError(
+                "attachment_size_invalid",
+                entity_kind=EntityKind.ATTACHABLE.value,
+                page=1,
+            )
+        download_uri = payload.get("TempDownloadUri")
+        if not isinstance(download_uri, str) or not download_uri:
+            await self.page_observer.record_attachment(
+                AttachmentEvidence(
+                    attachable_id=attachable_id,
+                    filename=filename,
+                    content_type=content_type,
+                    declared_size=declared_size,
+                    disposition="BODY_URL_UNAVAILABLE",
+                    body_sha256=None,
+                    observed_at=self.clock.now().isoformat(),
+                ),
+                None,
+            )
+            return
+        response = await self.transport.request(
+            method="GET",
+            url=download_uri,
+            headers={"Accept": content_type or "application/octet-stream"},
+            body=None,
+        )
+        if response.status != 200:
+            raise PartialAcquisitionError(
+                "attachment_download_rejected",
+                entity_kind=EntityKind.ATTACHABLE.value,
+                page=1,
+                provider_status=response.status,
+            )
+        if declared_size is not None and len(response.body) != declared_size:
+            raise PartialAcquisitionError(
+                "attachment_size_mismatch",
+                entity_kind=EntityKind.ATTACHABLE.value,
+                page=1,
+            )
+        digest = hashlib.sha256(response.body).hexdigest()
+        await self.page_observer.record_attachment(
+            AttachmentEvidence(
+                attachable_id=attachable_id,
+                filename=filename,
+                content_type=content_type,
+                declared_size=declared_size,
+                disposition="BODY_SEALED",
+                body_sha256=digest,
+                observed_at=self.clock.now().isoformat(),
+            ),
+            response.body,
+        )
+
     def _backoff(self, request_identity: str, attempt: int) -> float:
         seed = hashlib.sha256(f"{request_identity}:{attempt}".encode()).digest()[0]
         jitter = seed / 255
@@ -956,6 +1090,10 @@ def _accounting_meaning(
         "DocNumber",
         "PaymentRefNum",
         "PrivateNote",
+        "Note",
+        "FileName",
+        "Size",
+        "ContentType",
     )
     return {
         "native_type": native_type,

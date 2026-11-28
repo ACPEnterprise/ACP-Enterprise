@@ -1,0 +1,80 @@
+{
+  "contract": "all-county-qbo-fresh-readonly-supplement/v1",
+  "prepared_at": "2026-11-27T19:58:00-05:00",
+  "base_candidate": "988b10da5890753fa0f989c6483b2e327211349b",
+  "scope": "BETA_ONLY_READ_ONLY_SOURCE_ACQUISITION",
+  "preserved_historical_evidence": {
+    "archive_record_count": 20702,
+    "relationship_identity_count": 97093,
+    "exception_count": 7,
+    "exception_workbook": "/Users/michaelbfouse/ReleaseEvidence/qbo-historical-migration-20261127/AllCounty_QBO_Historical_Exceptions.xlsx",
+    "exception_workbook_sha256": "e8e152272b131864fb264a9223e9c7a3020f6bd0072cfb08a1e1d889ed9f7d85",
+    "browser_acceptance_sha256": "ba4d7a9b77904db107774f40542538bcdba5b852a022685bcde676575c164115"
+  },
+  "fresh_snapshot_contract": {
+    "catalog_version": "qbo-production-acquisition-catalog/v3",
+    "separate_source_snapshot_required": true,
+    "original_archive_replacement": false,
+    "http_accounting_api_methods": [
+      "GET"
+    ],
+    "mutation_authority": "none",
+    "new_family": "attachable",
+    "preserved_attachable_fields": [
+      "Id",
+      "SyncToken",
+      "Note",
+      "FileName",
+      "Size",
+      "ContentType",
+      "AttachableRef"
+    ],
+    "attachment_body_states": [
+      "BODY_SEALED",
+      "BODY_URL_UNAVAILABLE",
+      "NOTE_ONLY"
+    ],
+    "attachment_download_boundary": "GET-only exact Intuit QBO S3 host pattern, no Authorization header, 100 MB maximum, declared-size and SHA-256 verification"
+  },
+  "direct_beta_oauth": {
+    "callback": "https://beta.twelve-hats.com/api/v1/integrations/qbo/production/oauth/callback",
+    "all_county_company_id": "3ddf07ce-0f44-4b67-a40f-fb0ec41bb7cd",
+    "oauth_scope": "com.intuit.quickbooks.accounting",
+    "owner_completion_required": true,
+    "company_info_exact_match_required": true,
+    "release_flag_required": "--allow-qbo-production-read-only"
+  },
+  "runtime_observation": {
+    "url": "https://beta.twelve-hats.com/financial-reports",
+    "observed_serving_sha": "3d415c07f4438bbb0cdd93bbf7c6a78f3798457c",
+    "liveness_http_status": 200,
+    "readiness_http_status": 200,
+    "database": "connected",
+    "redis": "connected",
+    "candidate_deployed": false,
+    "qbo_connection_probe": "AUTHENTICATION_REQUIRED"
+  },
+  "local_protected_authorization": {
+    "production_runtime_root": "ABSENT",
+    "production_evidence_root": "ABSENT",
+    "client_credential_read": "NOT_ATTEMPTED_ABSENT_PROTECTED_ROOT",
+    "token_read": "NOT_ATTEMPTED_ABSENT_PROTECTED_ROOT",
+    "provider_call_performed": false
+  },
+  "qualification": {
+    "focused_tests": 71,
+    "focused_failures": 0,
+    "qbo_and_release_suite_passed": 207,
+    "qbo_and_release_suite_skipped": 11,
+    "host_database_environment_failures": 7,
+    "host_database_failure_reason": "Docker-only hostname postgres is not resolvable from the host test process; the same seven baseline tests passed in the prior assembled acceptance",
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "mypy": "PASS",
+    "external_provider_calls": 0,
+    "quickbooks_writes": 0,
+    "financial_postings": 0,
+    "deployments": 0
+  },
+  "release_state": "INTEGRATION_AND_OWNER_OAUTH_REQUIRED"
+}

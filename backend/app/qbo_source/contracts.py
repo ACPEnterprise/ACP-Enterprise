@@ -42,6 +42,7 @@ class EntityKind(str, Enum):
     PURCHASE_ORDER = "purchase_order"
     TERM = "term"
     PAYMENT_METHOD = "payment_method"
+    ATTACHABLE = "attachable"
 
 
 @dataclass(frozen=True)

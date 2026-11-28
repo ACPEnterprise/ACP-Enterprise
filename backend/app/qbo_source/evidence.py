@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import Protocol
 
 from .contracts import QboSourceEnvelope, SnapshotIdentity, _json_domain
-from .intuit import CatalogDispositionEvidence, PageEvidence, PageObserver
+from .intuit import (
+    AttachmentEvidence,
+    CatalogDispositionEvidence,
+    PageEvidence,
+    PageObserver,
+)
 from .snapshot_policy import build_bounded_snapshot
 
 
@@ -183,6 +188,7 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             "entities": {},
             "pages": [],
             "catalog_dispositions": [],
+            "attachments": [],
         }
         self._replace_json(state_path, state)
         return AcquisitionRun(
@@ -295,6 +301,40 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             dispositions.append(record)
         self._replace_json(state_path, state)
 
+    def record_attachment(
+        self,
+        *,
+        run_id: str,
+        evidence: AttachmentEvidence,
+        raw_body: bytes | None,
+    ) -> None:
+        if evidence.disposition == "BODY_SEALED":
+            if raw_body is None or evidence.body_sha256 is None:
+                raise EvidenceStoreError("attachment_body_missing")
+            if hashlib.sha256(raw_body).hexdigest() != evidence.body_sha256:
+                raise EvidenceStoreError("attachment_body_digest_conflict")
+            self._store_blob(evidence.body_sha256, raw_body)
+        elif raw_body is not None or evidence.body_sha256 is not None:
+            raise EvidenceStoreError("attachment_disposition_invalid")
+        state_path = self._state_path(run_id)
+        state = self._read_json(state_path)
+        if state["state"] != RunState.IN_PROGRESS.value:
+            raise EvidenceStoreError("run_not_writable")
+        attachments = state.get("attachments")
+        if not isinstance(attachments, list):
+            raise EvidenceStoreError("run_state_invalid")
+        record = asdict(evidence)
+        matching = [
+            item
+            for item in attachments
+            if item.get("attachable_id") == evidence.attachable_id
+        ]
+        if matching and matching[0] != record:
+            raise EvidenceStoreError("attachment_checkpoint_conflict")
+        if not matching:
+            attachments.append(record)
+        self._replace_json(state_path, state)
+
     def finish_run(
         self,
         *,
@@ -320,9 +360,11 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
         entities = document.pop("entities")
         pages = document.pop("pages")
         catalog_dispositions = document.pop("catalog_dispositions", [])
+        attachments = document.pop("attachments", [])
         assert isinstance(entities, dict)
         assert isinstance(pages, list)
         assert isinstance(catalog_dispositions, list)
+        assert isinstance(attachments, list)
         entity_records = sorted(
             entities.values(), key=lambda row: (row["entity_kind"], row["native_id"])
         )
@@ -346,6 +388,7 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             "catalog_dispositions": sorted(
                 catalog_dispositions, key=lambda row: row["entity_kind"]
             ),
+            "attachments": sorted(attachments, key=lambda row: row["attachable_id"]),
         }
         if state is RunState.COMPLETE and self.bounded_snapshot:
             bounded = build_bounded_snapshot(
@@ -525,6 +568,13 @@ class RunPageObserver(PageObserver):
         self, evidence: CatalogDispositionEvidence
     ) -> None:
         self.store.record_catalog_disposition(run_id=self.run_id, evidence=evidence)
+
+    async def record_attachment(
+        self, evidence: AttachmentEvidence, raw_body: bytes | None
+    ) -> None:
+        self.store.record_attachment(
+            run_id=self.run_id, evidence=evidence, raw_body=raw_body
+        )
 
 
 class ControlReportKind(str, Enum):

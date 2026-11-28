@@ -11,7 +11,7 @@ from .evidence import (
     RunState,
 )
 
-CATALOG_VERSION = "qbo-production-acquisition-catalog/v2"
+CATALOG_VERSION = "qbo-production-acquisition-catalog/v3"
 
 # Financial source families remain required. Provider-dependent dimensions and
 # payroll-adjacent query surfaces are explicit rather than silently skipped.
