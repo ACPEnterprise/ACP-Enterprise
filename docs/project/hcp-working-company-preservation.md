@@ -24,6 +24,9 @@ The first independent promotion clone is running for owner acceptance:
 - Company ID: `f8b460b4-e08c-4437-abc0-f8fd17ad8966`
 - Working-company manifest: `/Users/michaelfouse/ReleaseEvidence/hcp-migration-preservation-20261127/all-county-working-company-manifest.json`
 - Working-company manifest SHA-256: `ed5abe06f6cd47be238bdb0eae9c488c30733c972cbc760dce1ab62f0e8b0642`
+- Working-company backup/restore receipt: `/Users/michaelfouse/ReleaseEvidence/hcp-migration-preservation-20261127/all-county-working-company-backup-restore-receipt.json`
+- Working-company backup SHA-256: `1c1de5571ed20e90bae162134fcc47d4b75983eff2ba48ec43e02b5a7e39ff81`
+- Backup/restore receipt SHA-256: `27e8cfbccefa512c1b42ab9962fecdbe1ca80dff083c550881026d8c66cad323`
 
 This clone has its own PostgreSQL volume and application containers. Its database was restored from the preserved dump and its company display name was changed only inside the clone. The migration runtime on port 18187 remains available as the untouched preservation source.
 
