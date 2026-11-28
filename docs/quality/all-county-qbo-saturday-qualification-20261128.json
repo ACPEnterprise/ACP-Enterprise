@@ -1,0 +1,79 @@
+{
+  "schema": "twelvehats.qbo-historical-saturday-qualification.v1",
+  "qualified_at": "2026-11-28",
+  "candidate_sha": "3b227b2ca72dce37918d6cd700be6dc460f0622c",
+  "preserved_handoff_sha": "a1c31d4931ffce661afcc6e9bd4bab491260e76f",
+  "source_evidence": {
+    "records": 20702,
+    "relationships": 97093,
+    "conflicts": 7,
+    "custody_manifest_sha256": "f6640c0d531eaa8a822e82f697b3aaead65c8ae7b52a3c527e9616642c4d4f4a",
+    "custody_set_sha256": "dc682d25fa20327ee0c7663835a99f61feefdc93e1161466a5f0528c37d998ed"
+  },
+  "assembled_acceptance": {
+    "status": "PASS",
+    "serving_sha": "3b227b2ca72dce37918d6cd700be6dc460f0622c",
+    "browser_route": "/financial-reports",
+    "authenticated": true,
+    "browser_receipt_path": "/Users/michaelbfouse/ReleaseEvidence/qbo-historical-migration-20261127/authenticated-browser-acceptance-3b227b2c.json",
+    "browser_receipt_sha256": "af014f998425de3dd375e8a2fc20b1e96e28a1b55b39f816e3b900bc76f0535f",
+    "browser_receipt_mode": "0600",
+    "browser_artifact_sha256": "5d662e1609eafbc45fc82da9944dd71fd9cccd5c9e7ca1b1bef226cd437da679",
+    "browser_artifact_bytes": 1132211,
+    "database": "PostgreSQL 16 disposable isolated database",
+    "migration": "PASS",
+    "alembic_head": "x3y5z7a9c1e4",
+    "single_alembic_head": true,
+    "authentication": "PASS",
+    "authorization": "PASS",
+    "tenant_isolation": "PASS",
+    "restricted_runtime_identity": "PASS acp_app",
+    "forced_rls": "PASS",
+    "fresh_session_readback": "PASS",
+    "backup_restore": "PASS 429 public tables",
+    "provider_calls": 0,
+    "financial_mutations": 0,
+    "deployments": 0
+  },
+  "environment_failure_disposition": {
+    "status": "PASS",
+    "passed": 7,
+    "failed": 0,
+    "duration_seconds": 2.03,
+    "python": "3.12.13",
+    "pytest": "8.4.2",
+    "postgres": "16 disposable isolated database via 127.0.0.1",
+    "classification": "ENVIRONMENT_ONLY",
+    "prior_causes": [
+      "The host test process could not resolve the Compose-only hostname postgres.",
+      "The macOS system Python 3.9 interpreter is below the application Python requirement."
+    ],
+    "candidate_corrections_required": 0,
+    "tests": [
+      "test_clean_majority_binds_exact_and_quarantines_only_conflicts",
+      "test_review_decision_binds_exact_vendor_and_preserves_history",
+      "test_review_decision_supersession_is_explicit_and_stale_replay_fails",
+      "test_review_decision_authority_and_company_isolation_fail_closed",
+      "test_same_provider_version_with_changed_content_is_quarantined",
+      "test_company_isolation_and_permission_fail_closed",
+      "test_provider_unavailable_is_explicit_and_replay_safe"
+    ]
+  },
+  "runtime_recovery": {
+    "status": "PASS",
+    "engine": "Docker Engine 29.5.2 through preserved Colima profile",
+    "compose": "5.8.0",
+    "buildkit": "0.30.0",
+    "existing_volumes_deleted": false,
+    "existing_databases_deleted": false,
+    "preserved_evidence_modified": false
+  },
+  "release_boundary": {
+    "integration_authority": "Laptop Master",
+    "ready_for_integration_review": true,
+    "owner_oauth_required": true,
+    "hosted_deployment_authorized": false,
+    "quickbooks_writes_authorized": false,
+    "native_financial_posting_authorized": false
+  }
+}

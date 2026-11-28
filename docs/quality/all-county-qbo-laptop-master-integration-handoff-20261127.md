@@ -36,15 +36,37 @@ No conflict has an approved automatic disposition.
 
 Focused QBO, attachment custody, callback, release-deployer, and Beta contract tests
 passed `71/71`. The wider non-database QBO/release suite passed 207 tests with 11
-skips. Ruff, Ruff format, and MyPy passed. The preserved archive-backed assembled
-application passed at base `988b10da5890753fa0f989c6483b2e327211349b`.
+skips. Ruff, Ruff format, and MyPy passed.
 
-Candidate-specific assembled acceptance for `3b227b2c...` is not yet complete. On
-2026-11-27, Docker Desktop processes were present but `docker info` did not return;
-the prior attempts ended when the daemon exited, before a browser receipt was written.
-No application assertion or provider operation failed. When a healthy disposable
-Docker runtime is available, run exactly from a clean checkout at the application
-candidate:
+Candidate-specific assembled acceptance for
+`3b227b2ca72dce37918d6cd700be6dc460f0622c` passed on 2026-11-28. The run started
+from an empty disposable PostgreSQL 16 database, migrated through the single head,
+bootstrapped the isolated accounting company, built the backend and frontend images,
+and exercised authenticated browser readback. Authentication, authorization, tenant
+isolation, restricted `acp_app` runtime identity, forced RLS, protected-principal
+lifecycle, restart/readback, and backup plus isolated restore across 429 public tables
+all passed. The mode-0600 browser receipt is outside Git at:
+
+`/Users/michaelbfouse/ReleaseEvidence/qbo-historical-migration-20261127/authenticated-browser-acceptance-3b227b2c.json`
+
+SHA-256:
+`af014f998425de3dd375e8a2fc20b1e96e28a1b55b39f816e3b900bc76f0535f`
+
+The receipt binds the exact candidate, authenticated isolated QBO historical fixture,
+`/financial-reports` route, 20,702 records, 97,093 relationships, 46,405 report rows,
+visible unresolved financial exceptions, and a browser-artifact digest. The acceptance
+created only disposable local state and made no provider call.
+
+The seven previously reported failures in
+`backend/tests/qbo_source/test_native_application.py` passed `7/7` in 2.03 seconds
+under Python 3.12.13 against the same disposable PostgreSQL 16 topology through its
+loopback port. Their final disposition is **environment-only**: the prior host run used
+the Compose-only hostname `postgres`; a diagnostic retry also confirmed macOS system
+Python 3.9 is too old for the application's Python syntax. No source correction or gate
+exception was needed. Exact node IDs and environment evidence are recorded in
+`docs/quality/all-county-qbo-saturday-qualification-20261128.json`.
+
+The original reproducible command remains:
 
 ```bash
 test "$(git rev-parse HEAD)" = "3b227b2ca72dce37918d6cd700be6dc460f0622c"
@@ -58,10 +80,9 @@ ACCEPTANCE_BROWSER_OUTPUT="/Users/michaelbfouse/ReleaseEvidence/qbo-historical-m
 scripts/qualify-application-integration.sh
 ```
 
-Require a mode-0600 receipt that binds the exact candidate, source manifest, isolated
-company, authenticated owner identity, report totals, drill-downs, tenant denial, and
-all seven exceptions. This qualification uses only disposable local state and must
-make no provider call.
+Any integration successor must reproduce or independently accept this candidate-bound
+receipt, retain the source-manifest seals, isolated company, report totals, tenant
+denial, and all seven exceptions, and make no provider call before governed owner OAuth.
 
 ## Governed Beta prerequisites
 
@@ -151,9 +172,8 @@ backup/restore rollback procedure.
 
 ## Acceptance boundary
 
-Release acceptance requires the candidate-specific assembled receipt, serving-SHA
-readback, authenticated `/financial-reports` browser acceptance, exact source controls
-of 20,702 records and 97,093 relationships, visible unchanged conflicts, cross-tenant
-denial, successful GET-only provider acquisition, and explicit owner/Finance review.
-No independent deployment, QuickBooks mutation, native posting, or conflict resolution
-is authorized by this handoff.
+Local candidate qualification is complete. Final release acceptance still requires
+protected integration, serving-SHA readback, successful fresh GET-only provider
+acquisition after owner OAuth, complete supplemental reconciliation, and explicit
+owner/Finance review. No independent deployment, QuickBooks mutation, native posting,
+or conflict resolution is authorized by this handoff.
