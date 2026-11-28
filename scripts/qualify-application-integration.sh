@@ -52,6 +52,7 @@ migrate_password="$(openssl rand -hex 32)"
 backup_password="$(openssl rand -hex 32)"
 owner_password="$(openssl rand -hex 32)Aa1!"
 frontend_port="${ACCEPTANCE_FRONTEND_PORT:-18181}"
+owner_email="${ACCEPTANCE_OWNER_EMAIL:-acceptance-owner@example.invalid}"
 
 printf '%s\n' \
   "ACCEPTANCE_ADMIN_PASSWORD=$admin_password" \
@@ -59,9 +60,13 @@ printf '%s\n' \
   "ACCEPTANCE_MIGRATE_PASSWORD=$migrate_password" \
   "ACCEPTANCE_BACKUP_PASSWORD=$backup_password" \
   "ACCEPTANCE_OWNER_PASSWORD=$owner_password" \
+  "ACCEPTANCE_OWNER_EMAIL=$owner_email" \
+  "ACCEPTANCE_COMPANY_NAME=${ACCEPTANCE_COMPANY_NAME:-TwelveHats Isolated Acceptance}" \
+  "ACCEPTANCE_COMPANY_CODE=${ACCEPTANCE_COMPANY_CODE:-ACCEPTANCE}" \
+  "QBO_HISTORICAL_ARCHIVE_HOST=${QBO_HISTORICAL_ARCHIVE_HOST:-}" \
   "ACCEPTANCE_FRONTEND_PORT=$frontend_port" >"$ENV_FILE"
 
-printf '%s\n' '{"email":"acceptance-owner@example.invalid","password":"'"$owner_password"'"}' >"$CREDENTIAL_FILE"
+printf '%s\n' '{"email":"'"$owner_email"'","password":"'"$owner_password"'"}' >"$CREDENTIAL_FILE"
 chmod 600 "$ENV_FILE" "$CREDENTIAL_FILE"
 
 compose() {
@@ -82,7 +87,7 @@ compose run --rm bootstrap
 compose run --rm bootstrap
 compose up --detach --wait backend frontend
 
-published_frontend_port="$(compose port frontend 80 | awk -F: 'NF {print $NF; exit}')"
+published_frontend_port="$frontend_port"
 if [[ -z "$published_frontend_port" ]]; then
   echo "frontend did not publish port 80" >&2
   compose ps >&2
@@ -109,6 +114,22 @@ curl --fail --silent --show-error "http://127.0.0.1:${published_frontend_port}/h
   --credential-file "$CREDENTIAL_FILE" \
   --receipt "$RECEIPT_FILE" \
   --smoke-token-file "$SMOKE_TOKEN_FILE"
+
+if [[ -n "${QBO_HISTORICAL_ARCHIVE_HOST:-}" ]]; then
+  browser_output="${ACCEPTANCE_BROWSER_OUTPUT:-$WORK_DIR/qbo-historical-browser-acceptance.json}"
+  mkdir -p "$(dirname "$browser_output")"
+  chmod 700 "$(dirname "$browser_output")"
+  OM2B_SERVING_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+    QBO_HISTORICAL_ACCEPTANCE=true \
+    node "$ROOT_DIR/frontend/tests/real-browser-workflow.mjs" \
+      "http://127.0.0.1:${published_frontend_port}" \
+      "$CREDENTIAL_FILE" \
+      "$RECEIPT_FILE" \
+      "$browser_output" \
+      qbo-historical
+  chmod 600 "$browser_output"
+  echo "QBO historical authenticated browser acceptance: PASS ($browser_output)"
+fi
 
 # Host-created files are owned by the host-side user.  Stage the token through
 # stdin into a file created by the actual non-root backend identity so a

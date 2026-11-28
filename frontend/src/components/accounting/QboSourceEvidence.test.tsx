@@ -2,6 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useQboAccountingEvidence,
+  useQboHistoricalCatalog,
+  useQboHistoricalReport,
+  useQboHistoricalRecords,
   useQboSourceBackedArSummary,
   useQboSourceBackedProfitAndLoss,
 } from "../../hooks/useQboAccountingEvidence";
@@ -9,6 +12,9 @@ import { QboSourceEvidence } from "./QboSourceEvidence";
 
 vi.mock("../../hooks/useQboAccountingEvidence", () => ({
   useQboAccountingEvidence: vi.fn(),
+  useQboHistoricalCatalog: vi.fn(),
+  useQboHistoricalReport: vi.fn(),
+  useQboHistoricalRecords: vi.fn(),
   useQboSourceBackedArSummary: vi.fn(),
   useQboSourceBackedProfitAndLoss: vi.fn(),
 }));
@@ -146,6 +152,20 @@ const historicalValue = {
 
 describe("QboSourceEvidence", () => {
   beforeEach(() => {
+    vi.mocked(useQboHistoricalCatalog).mockReturnValue({
+      isLoading: false,
+      isError: true,
+    } as unknown as ReturnType<typeof useQboHistoricalCatalog>);
+    vi.mocked(useQboHistoricalRecords).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: undefined,
+    } as unknown as ReturnType<typeof useQboHistoricalRecords>);
+    vi.mocked(useQboHistoricalReport).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: undefined,
+    } as unknown as ReturnType<typeof useQboHistoricalReport>);
     vi.mocked(useQboSourceBackedArSummary).mockReturnValue({
       isLoading: false,
       data: undefined,

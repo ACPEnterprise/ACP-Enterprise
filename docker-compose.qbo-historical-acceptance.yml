@@ -1,0 +1,45 @@
+# Additive override for disposable, read-only QBO historical acceptance.
+# It must only be composed with docker-compose.application-acceptance.yml.
+services:
+  qbo-historical-custody:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.preview
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        test -f /source/custody-manifest.json
+        test -f /source/reconciliation-register.json
+        rm -rf /custody/raw /custody/custody-manifest.json /custody/reconciliation-register.json
+        cp -a /source/. /custody/
+        chown -R acp:acp /custody
+        find /custody -type d -exec chmod 700 {} \;
+        find /custody -type f -exec chmod 600 {} \;
+    volumes:
+      - ${QBO_HISTORICAL_ARCHIVE_HOST:?Set the verified QBO historical archive path}:/source:ro
+      - qbo-historical-custody:/custody
+
+  bootstrap:
+    environment:
+      BOOTSTRAP_COMPANY_NAME: ${ACCEPTANCE_COMPANY_NAME:-All County Plumbing & Leak — Accounting Migration}
+      BOOTSTRAP_COMPANY_CODE: ${ACCEPTANCE_COMPANY_CODE:-ALLCOUNTY-QBO-HISTORY}
+      BOOTSTRAP_BRANCH_NAME: Accounting Migration
+      BOOTSTRAP_BRANCH_CODE: ACCOUNTING
+      BOOTSTRAP_ADMINISTRATOR_EMAIL: ${ACCEPTANCE_OWNER_EMAIL:-acceptance-owner@example.invalid}
+      BOOTSTRAP_ADMINISTRATOR_FIRST_NAME: Michael
+      BOOTSTRAP_ADMINISTRATOR_LAST_NAME: Fouse
+      BOOTSTRAP_ADMINISTRATOR_DISPLAY_NAME: Michael Fouse
+
+  backend:
+    depends_on:
+      qbo-historical-custody:
+        condition: service_completed_successfully
+    environment:
+      QBO_MANUAL_ARCHIVE_ROOT: /run/qbo-historical-custody
+      QBO_MANUAL_ARCHIVE_COMPANY_CODE: ${ACCEPTANCE_COMPANY_CODE:-ALLCOUNTY-QBO-HISTORY}
+    volumes:
+      - qbo-historical-custody:/run/qbo-historical-custody:ro
+
+volumes:
+  qbo-historical-custody:

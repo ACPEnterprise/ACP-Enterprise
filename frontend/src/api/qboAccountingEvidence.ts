@@ -209,3 +209,187 @@ export async function getQboSourceBackedArSummary(
     )
   ).data;
 }
+
+export interface QboHistoricalDataset {
+  key: string;
+  label: string;
+  category: string;
+  source_file: string;
+  source_sha256: string;
+  source_bytes: number;
+  record_count: number;
+  starts_on: string | null;
+  ends_on: string | null;
+}
+
+export interface QboHistoricalCatalog {
+  contract_version: "qbo-historical-archive-catalog/v1";
+  source_company: string;
+  source_cutoff: string;
+  source_record_count: number;
+  relationship_identity_count: number;
+  historical_basis: "cash";
+  currency: "USD";
+  datasets: QboHistoricalDataset[];
+  reconciliation_controls: {
+    trial_balance: {
+      manual_debits: string;
+      manual_credits: string;
+      difference: string;
+    };
+    balance_sheet: {
+      assets: string;
+      liabilities_plus_equity: string;
+      equation_difference: string;
+    };
+    profit_and_loss: {
+      net_income: string;
+      provider_difference: string;
+    };
+    general_ledger: {
+      manual_dated_rows: number;
+      amount_difference: string;
+    };
+  };
+  exception_count: number;
+  exceptions: Array<Record<string, unknown>>;
+  limitations: string[];
+  mutation_authority: "none";
+}
+
+export interface QboHistoricalRecord {
+  source_identity: string;
+  identity_kind: string;
+  record_kind: string;
+  dataset: string;
+  source_row_number: number;
+  transaction_date?: string;
+  due_date?: string;
+  transaction_type?: string;
+  reference?: string;
+  name?: string;
+  description?: string;
+  account?: string;
+  split_account?: string;
+  amount?: string | number;
+  balance?: string | number;
+  open_balance?: string | number;
+  phone?: string;
+  email?: string;
+  address?: string;
+  account_type?: string;
+  account_subtype?: string;
+  net_amount?: string | number;
+  payment_method?: string;
+  status?: string;
+}
+
+export interface QboHistoricalSearch {
+  contract_version: "qbo-historical-search/v1" | "qbo-historical-payroll/v1";
+  kind: string;
+  total: number;
+  offset: number;
+  limit: number;
+  records: QboHistoricalRecord[];
+  mutation_authority: "none";
+}
+
+export type QboHistoricalKind =
+  | "all"
+  | "account"
+  | "customer"
+  | "vendor"
+  | "invoice"
+  | "transaction"
+  | "bank_activity"
+  | "payroll";
+
+export type QboHistoricalReportType =
+  | "profit_and_loss"
+  | "balance_sheet"
+  | "trial_balance"
+  | "general_ledger"
+  | "cash_activity";
+
+export interface QboHistoricalReport {
+  contract_version: "qbo-historical-report/v1";
+  report_type: QboHistoricalReportType;
+  title: string;
+  basis: "cash";
+  currency: "USD";
+  start_date: string | null;
+  end_date: string | null;
+  columns: string[];
+  rows: Array<QboHistoricalRecord | { row_number: number; cells: unknown[] }>;
+  record_count: number;
+  amount_total?: string;
+  source_sha256: string;
+  source_mode: "sealed_source_report" | "sealed_report_rows";
+  requested_period_matches_source?: boolean;
+  mutation_authority: "none";
+}
+
+export async function getQboHistoricalCatalog(): Promise<QboHistoricalCatalog> {
+  return (
+    await apiClient.get<QboHistoricalCatalog>(
+      "/api/v1/accounting/source-evidence/qbo/historical/catalog",
+    )
+  ).data;
+}
+
+export async function searchQboHistoricalRecords(request: {
+  kind: QboHistoricalKind;
+  query?: string;
+  startDate?: string;
+  endDate?: string;
+  offset?: number;
+  limit?: number;
+}): Promise<QboHistoricalSearch> {
+  if (request.kind === "payroll") {
+    return (
+      await apiClient.get<QboHistoricalSearch>(
+        "/api/v1/accounting/source-evidence/qbo/historical/payroll",
+        {
+          params: {
+            query: request.query || undefined,
+            offset: request.offset ?? 0,
+            limit: request.limit ?? 100,
+          },
+        },
+      )
+    ).data;
+  }
+  return (
+    await apiClient.get<QboHistoricalSearch>(
+      "/api/v1/accounting/source-evidence/qbo/historical/records",
+      {
+        params: {
+          kind: request.kind,
+          query: request.query || undefined,
+          start_date: request.startDate || undefined,
+          end_date: request.endDate || undefined,
+          offset: request.offset ?? 0,
+          limit: request.limit ?? 100,
+        },
+      },
+    )
+  ).data;
+}
+
+export async function getQboHistoricalReport(request: {
+  report: QboHistoricalReportType;
+  startDate?: string;
+  endDate?: string;
+}): Promise<QboHistoricalReport> {
+  return (
+    await apiClient.get<QboHistoricalReport>(
+      `/api/v1/accounting/source-evidence/qbo/historical/reports/${request.report}`,
+      {
+        params: {
+          start_date: request.startDate || undefined,
+          end_date: request.endDate || undefined,
+        },
+      },
+    )
+  ).data;
+}

@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     qbo_production_runtime_root: str | None = None
     qbo_production_evidence_root: str | None = None
     qbo_manual_archive_root: str | None = None
+    qbo_manual_archive_company_code: str | None = None
     qbo_production_acp_company_id: UUID | None = None
     qbo_production_api_minor_version: int = 75
     qbo_repository_root: str = "/app"
@@ -290,6 +291,20 @@ class Settings(BaseSettings):
                 raise ValueError("QBO sandbox and Production roots must be isolated")
             if not 1 <= self.qbo_production_api_minor_version <= 999:
                 raise ValueError("QBO Production API minor version is invalid")
+        if self.qbo_manual_archive_root:
+            if not Path(self.qbo_manual_archive_root).is_absolute():
+                raise ValueError("QBO manual archive root must be absolute")
+            if self.qbo_manual_archive_company_code:
+                normalized_code = self.qbo_manual_archive_company_code.strip().upper()
+                if (
+                    not normalized_code
+                    or normalized_code != self.qbo_manual_archive_company_code
+                ):
+                    raise ValueError(
+                        "QBO manual archive Company code must be normalized uppercase"
+                    )
+        elif self.qbo_manual_archive_company_code:
+            raise ValueError("QBO manual archive Company code requires an archive root")
         if (
             self.hcp_source4_evidence_root
             and not Path(self.hcp_source4_evidence_root).is_absolute()
