@@ -12,6 +12,7 @@ import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 from app import main as application_model_registry  # noqa: F401
 from app.access_agreements.models import AccessAgreementDocument
@@ -22,6 +23,7 @@ from app.demo.models import DemoEnvironment
 from app.demo.service import PRESERVED_DEMO_COMPANY_ID, sales_demo_service
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User, UserCredential
 from sqlalchemy import select
 
@@ -96,7 +98,9 @@ async def execute(args: argparse.Namespace) -> dict[str, object]:
 
         before_hash = credential.password_hash
         before_version = credential.credential_version
-        context = SimpleNamespace(user=SimpleNamespace(id=user.id))
+        context = cast(
+            AuthorizationContext, SimpleNamespace(user=SimpleNamespace(id=user.id))
+        )
         result = await sales_demo_service.restore_preserved_company(
             session, context=context
         )
