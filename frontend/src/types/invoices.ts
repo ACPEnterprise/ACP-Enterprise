@@ -57,9 +57,16 @@ export interface InvoiceMutationInput {
   occurred_at: string;
 }
 
+export type ManualPaymentMethod =
+  | "cash"
+  | "check"
+  | "ach_external"
+  | "card_external"
+  | "other_manual";
+
 export interface ManualPaymentInput extends InvoiceMutationInput {
   amount: string;
-  payment_method: "check" | "other_manual";
+  payment_method: ManualPaymentMethod;
   reference: string;
 }
 
@@ -67,7 +74,7 @@ export interface ManualPayment {
   id: string;
   invoice_id: string;
   customer_id: string;
-  payment_method: "check" | "other_manual";
+  payment_method: ManualPaymentMethod;
   reference_label: string;
   amount: string;
   currency: string;

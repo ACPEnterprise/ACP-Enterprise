@@ -114,7 +114,13 @@ try {
   });
   await command("Page.enable");
   await command("Runtime.enable");
-  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  const setViewport = (viewport) => command("Emulation.setDeviceMetricsOverride", {
+    width: viewport.width,
+    height: viewport.height,
+    deviceScaleFactor: 1,
+    mobile: viewport.mobile ?? false,
+  });
+  await setViewport({ width: 1440, height: 1000 });
 
   await navigate("/login");
   await eventually(async () => {
@@ -137,10 +143,12 @@ try {
     if (location === "/login") throw new Error("login has not completed");
   });
 
+  const revenue = receipt.revenue_cycle;
   const checks = process.env.QBO_HISTORICAL_ACCEPTANCE === "true"
     ? [{
       name: "qbo-historical-accounting",
       path: "/financial-reports",
+      viewport: { width: 1440, height: 1000 },
       expected: [
         "Complete QuickBooks historical archive",
         "20,702",
@@ -149,19 +157,41 @@ try {
         "Unresolved financial exceptions",
       ],
     }]
+    : process.env.REVENUE_CYCLE_ACCEPTANCE === "true"
+      ? [
+        {
+          name: "estimate-desktop",
+          path: `/estimates?id=${revenue.estimate_id}`,
+          viewport: { width: 1440, height: 1000 },
+          expected: [revenue.estimate_number, "Synthetic leak diagnostic — revised", "approved", "Immutable revision 2", "Total"],
+        },
+        {
+          name: "invoice-tablet",
+          path: `/invoices/${revenue.invoice_id}`,
+          viewport: { width: 820, height: 1180 },
+          expected: [revenue.invoice_number, "Office payment history", "Cash", "Check", "settlement not confirmed"],
+        },
+        {
+          name: "revenue-cycle-mobile",
+          path: "/revenue-cycle",
+          viewport: { width: 390, height: 844, mobile: true },
+          expected: ["Revenue cycle", "Open Invoices", "Payment receipts"],
+        },
+      ]
     : [
-      { name: "customer", path: `/customers/${receipt.customer_id}`, expected: ["Integration Acceptance", "History completeness", "Service locations"] },
-      { name: "job", path: `/jobs/${receipt.job_id}`, expected: ["Integration acceptance service request", "Customer", "Service Location", "Appointments"] },
-      { name: "scheduling", path: "/scheduling", expected: ["Schedule", "Appointments"] },
-      { name: "dispatch", path: "/dispatch", expected: ["Schedule", "Appointments"] },
-      { name: "employees", path: "/employees", expected: ["Employees"] },
-      { name: "price-book", path: "/price-book", expected: ["Price Book"] },
-      { name: "estimates", path: "/estimates", expected: ["Estimates"] },
-      { name: "invoices", path: "/invoices", expected: ["Invoices"] },
+      { name: "customer", path: `/customers/${receipt.customer_id}`, viewport: { width: 1440, height: 1000 }, expected: ["Integration Acceptance", "History completeness", "Service locations"] },
+      { name: "job", path: `/jobs/${receipt.job_id}`, viewport: { width: 1440, height: 1000 }, expected: ["Integration acceptance service request", "Customer", "Service Location", "Appointments"] },
+      { name: "scheduling", path: "/scheduling", viewport: { width: 1440, height: 1000 }, expected: ["Schedule", "Appointments"] },
+      { name: "dispatch", path: "/dispatch", viewport: { width: 1440, height: 1000 }, expected: ["Schedule", "Appointments"] },
+      { name: "employees", path: "/employees", viewport: { width: 1440, height: 1000 }, expected: ["Employees"] },
+      { name: "price-book", path: "/price-book", viewport: { width: 1440, height: 1000 }, expected: ["Price Book"] },
+      { name: "estimates", path: "/estimates", viewport: { width: 1440, height: 1000 }, expected: ["Estimates"] },
+      { name: "invoices", path: "/invoices", viewport: { width: 1440, height: 1000 }, expected: ["Invoices"] },
     ];
   const results = [];
   const artifacts = [];
   for (const check of checks) {
+    await setViewport(check.viewport);
     await navigate(check.path);
     if (check.name === "qbo-historical-accounting") {
       await eventually(async () => {
@@ -194,7 +224,9 @@ try {
     serving_sha: servingSha,
     fixture: process.env.QBO_HISTORICAL_ACCEPTANCE === "true"
       ? "ISOLATED_QBO_HISTORICAL_CUSTODY"
-      : "SYNTHETIC_DISPOSABLE",
+      : process.env.REVENUE_CYCLE_ACCEPTANCE === "true"
+        ? "SYNTHETIC_REVENUE_CYCLE_DISPOSABLE"
+        : "SYNTHETIC_DISPOSABLE",
     authenticated: true,
     results,
     artifacts,

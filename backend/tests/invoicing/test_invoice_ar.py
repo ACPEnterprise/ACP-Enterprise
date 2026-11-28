@@ -561,6 +561,46 @@ async def test_manual_check_payment_is_replay_safe_partial_and_not_settlement(
         )
 
 
+@pytest.mark.parametrize(
+    "payment_method,reference",
+    (
+        ("cash", "CASH DRAWER 7"),
+        ("ach_external", "ACH TRACE 7001"),
+        ("card_external", "PROCESSOR RECEIPT 7002"),
+        ("other_manual", "OTHER EVIDENCE 7003"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_manual_payment_method_classification_remains_non_settlement_evidence(
+    invoice_fixture, payment_method: str, reference: str
+):
+    factory, company, branch, actor, _, _, spec = invoice_fixture
+    service = InvoiceService()
+    async with factory() as session:
+        invoice = await service.create_from_estimate(session, spec)
+    invoice = await issue(factory, actor, invoice)
+    async with factory() as session:
+        applied, receipt = await service.record_manual_payment(
+            session,
+            RecordManualPayment(
+                company_id=company.id,
+                branch_id=branch.id,
+                invoice_id=invoice.id,
+                expected_version=invoice.version,
+                actor_user_id=actor.id,
+                idempotency_key=f"manual-method-{payment_method}",
+                occurred_at=datetime.now(timezone.utc),
+                amount=Decimal("1.00"),
+                payment_method=payment_method,
+                reference=reference,
+            ),
+        )
+    assert applied.open_amount == invoice.total_amount - Decimal("1.00")
+    assert receipt.payment_method == payment_method
+    assert receipt.settlement_state == "not_asserted"
+    assert receipt.accounting_state == "not_posted"
+
+
 @pytest.mark.asyncio
 async def test_manual_payment_duplicate_reference_and_tenant_scope_fail_closed(
     invoice_fixture,

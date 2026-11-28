@@ -38,7 +38,9 @@ class PaymentApplicationInput(MutationInput):
 
 class ManualPaymentInput(MutationInput):
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
-    payment_method: Literal["check", "other_manual"]
+    payment_method: Literal[
+        "cash", "check", "ach_external", "card_external", "other_manual"
+    ]
     reference: str = Field(min_length=1, max_length=80)
 
 

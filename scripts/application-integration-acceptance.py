@@ -15,6 +15,7 @@ import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -120,11 +121,353 @@ def tenant_headers(
     return company_id, branch_id
 
 
+def revenue_cycle_flow(
+    base_url: str,
+    *,
+    token: str,
+    company_id: str,
+    branch_id: str,
+    customer_id: str,
+    location_id: str,
+) -> dict[str, object]:
+    """Exercise native Customer-to-cash authority with disposable evidence."""
+
+    def mutate(
+        method: str,
+        path: str,
+        body: dict[str, object],
+        expected: set[int] | None = None,
+    ) -> dict[str, object]:
+        _, result = request(
+            base_url,
+            method,
+            path,
+            token=token,
+            company_id=company_id,
+            branch_id=branch_id,
+            body=body,
+            expected=expected or {200, 201},
+        )
+        if not isinstance(result, dict):
+            raise AcceptanceFailure(
+                f"revenue-cycle endpoint returned no object: {path}"
+            )
+        return result
+
+    suffix = uuid4().hex[:10]
+    now = datetime.now(timezone.utc)
+    effective_at = now - timedelta(minutes=5)
+    category = mutate(
+        "POST",
+        "/api/v1/price-book/categories",
+        {"code": f"ACC{suffix}", "name": "Acceptance services"},
+    )
+    tax = mutate(
+        "POST",
+        "/api/v1/price-book/tax-classifications",
+        {
+            "code": f"TAX{suffix}",
+            "name": "Synthetic local service tax",
+            "taxable": True,
+        },
+    )
+    item = mutate(
+        "POST",
+        "/api/v1/price-book/service-items",
+        {
+            "branch_id": branch_id,
+            "category_id": str(category["id"]),
+            "code": f"SERVICE{suffix}",
+            "name": "Synthetic leak diagnostic",
+            "customer_description": "Disposable revenue-cycle acceptance service",
+        },
+    )
+    version = mutate(
+        "POST",
+        f"/api/v1/price-book/service-items/{item['id']}/versions",
+        {
+            "branch_id": branch_id,
+            "tax_classification_id": str(tax["id"]),
+            "currency": "USD",
+            "unit_price": "125.00",
+            "effective_at": effective_at.isoformat(),
+            "components": [
+                {
+                    "component_type": "labor",
+                    "code": "LABOR",
+                    "label": "Synthetic technician labor",
+                    "quantity": "1.00",
+                    "unit_cost": "40.00",
+                },
+                {
+                    "component_type": "material",
+                    "code": "MATERIAL",
+                    "label": "Synthetic diagnostic material",
+                    "quantity": "1.00",
+                    "unit_cost": "10.00",
+                },
+            ],
+        },
+    )
+    mutate(
+        "POST",
+        f"/api/v1/price-book/versions/{version['id']}/activate",
+        {
+            "expected_version": int(version["version"]),
+            "reason": "Disposable acceptance activation",
+        },
+    )
+    snapshot = mutate(
+        "POST",
+        f"/api/v1/price-book/service-items/{item['id']}/snapshots",
+        {
+            "branch_id": branch_id,
+            "quantity": "2.00",
+            "currency": "USD",
+            "effective_at": now.isoformat(),
+            "idempotency_key": f"acceptance-snapshot-{suffix}",
+            "historical": False,
+        },
+    )
+    mutate(
+        "POST",
+        "/api/v1/estimates/tax-policies",
+        {
+            "branch_id": branch_id,
+            "tax_classification_id": str(tax["id"]),
+            "currency": "USD",
+            "rate_basis_points": 700,
+            "version": 1,
+            "effective_at": effective_at.isoformat(),
+        },
+    )
+    proposal = {
+        "branch_id": branch_id,
+        "customer_id": customer_id,
+        "service_location_id": location_id,
+        "proposal_title": "Synthetic leak diagnostic options",
+        "customer_message": "Disposable acceptance proposal; no communication sent.",
+        "terms": "Synthetic residential terms",
+        "expires_at": (now + timedelta(days=14)).isoformat(),
+        "lines": [
+            {
+                "snapshot_id": str(snapshot["id"]),
+                "title": "Synthetic leak diagnostic",
+                "description": "Two units from the governed Price Book snapshot.",
+            }
+        ],
+        "discount_type": "percentage",
+        "discount_value": "10.00",
+    }
+    estimate = mutate("POST", "/api/v1/estimates", proposal)
+    estimate = mutate(
+        "POST",
+        f"/api/v1/estimates/{estimate['id']}/revisions",
+        {
+            **proposal,
+            "expected_version": int(estimate["version"]),
+            "proposal_title": "Synthetic leak diagnostic — revised",
+        },
+    )
+
+    lifecycle_at = now + timedelta(minutes=1)
+
+    def estimate_transition(
+        action: str, record: dict[str, object]
+    ) -> dict[str, object]:
+        nonlocal lifecycle_at
+        lifecycle_at += timedelta(seconds=1)
+        return mutate(
+            "POST",
+            f"/api/v1/estimates/{record['id']}/{action}",
+            {
+                "branch_id": branch_id,
+                "expected_version": int(record["version"]),
+                "occurred_at": lifecycle_at.isoformat(),
+            },
+        )
+
+    estimate = estimate_transition("send", estimate)
+    estimate = estimate_transition("view", estimate)
+    lifecycle_at += timedelta(seconds=1)
+    estimate = mutate(
+        "POST",
+        f"/api/v1/estimates/{estimate['id']}/approve",
+        {
+            "branch_id": branch_id,
+            "expected_version": int(estimate["version"]),
+            "occurred_at": lifecycle_at.isoformat(),
+            "customer_name": "Synthetic Acceptance Customer",
+            "customer_email": "acceptance-customer@example.invalid",
+            "customer_comment": "Synthetic approval only.",
+            "evidence_reference": f"synthetic-acceptance-{suffix}",
+        },
+    )
+    conversion = mutate(
+        "POST",
+        f"/api/v1/estimates/{estimate['id']}/convert-to-job",
+        {
+            "branch_id": branch_id,
+            "expected_version": int(estimate["version"]),
+            "idempotency_key": f"acceptance-estimate-job-{suffix}",
+            "job_type_code": "revenue_cycle_acceptance",
+            "customer_reported_problem": "Synthetic sold work",
+        },
+    )
+    job = mutate(
+        "POST",
+        f"/api/v1/jobs/{conversion['job_id']}/activate",
+        {"expected_version": 1},
+    )
+    job = mutate(
+        "POST",
+        f"/api/v1/jobs/{job['id']}/start",
+        {"expected_version": int(job["concurrency_version"])},
+    )
+    job = mutate(
+        "POST",
+        f"/api/v1/jobs/{job['id']}/complete",
+        {"expected_version": int(job["concurrency_version"])},
+    )
+    if job.get("status") != "completed":
+        raise AcceptanceFailure("sold Job did not reach completed state")
+    due_date = (now + timedelta(days=30)).date().isoformat()
+    invoice = mutate(
+        "POST",
+        "/api/v1/invoices",
+        {
+            "branch_id": branch_id,
+            "estimate_id": str(estimate["id"]),
+            "job_id": str(job["id"]),
+            "due_date": due_date,
+            "terms": "Net 30 — synthetic residential terms",
+            "idempotency_key": f"acceptance-invoice-{suffix}",
+        },
+    )
+    invoice = mutate(
+        "POST",
+        f"/api/v1/invoices/{invoice['id']}/issue",
+        {
+            "branch_id": branch_id,
+            "expected_version": int(invoice["version"]),
+            "idempotency_key": f"acceptance-issue-{suffix}",
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    total = Decimal(str(invoice["total_amount"]))
+    first_amount = Decimal("40.00")
+    first_payment = mutate(
+        "POST",
+        f"/api/v1/invoices/{invoice['id']}/manual-payments",
+        {
+            "branch_id": branch_id,
+            "expected_version": int(invoice["version"]),
+            "idempotency_key": f"acceptance-cash-{suffix}",
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "amount": str(first_amount),
+            "payment_method": "cash",
+            "reference": f"CASH DRAWER {suffix[-4:]}",
+        },
+    )
+    invoice = first_payment["invoice"]
+    if not isinstance(invoice, dict) or invoice.get("status") != "partially_paid":
+        raise AcceptanceFailure("partial cash evidence did not preserve Invoice state")
+    second_payment = mutate(
+        "POST",
+        f"/api/v1/invoices/{invoice['id']}/manual-payments",
+        {
+            "branch_id": branch_id,
+            "expected_version": int(invoice["version"]),
+            "idempotency_key": f"acceptance-check-{suffix}",
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "amount": str(total - first_amount),
+            "payment_method": "check",
+            "reference": f"CHECK {suffix[-4:]}",
+        },
+    )
+    invoice = second_payment["invoice"]
+    if (
+        not isinstance(invoice, dict)
+        or invoice.get("status") != "paid"
+        or Decimal(str(invoice.get("open_amount"))) != 0
+    ):
+        raise AcceptanceFailure("multiple payments did not close the Invoice exactly")
+    _, payment_history = request(
+        base_url,
+        "GET",
+        f"/api/v1/invoices/{invoice['id']}/manual-payments",
+        token=token,
+        company_id=company_id,
+        branch_id=branch_id,
+        expected={200},
+    )
+    if not isinstance(payment_history, list) or len(payment_history) != 2:
+        raise AcceptanceFailure("manual payment history did not preserve two receipts")
+    if any(
+        not isinstance(payment, dict)
+        or payment.get("settlement_state") != "not_asserted"
+        or payment.get("accounting_state") != "not_posted"
+        for payment in payment_history
+    ):
+        raise AcceptanceFailure(
+            "manual payment evidence overstated settlement or posting"
+        )
+    _, balance = request(
+        base_url,
+        "GET",
+        f"/api/v1/invoices/customers/{customer_id}/balance?as_of={now.date().isoformat()}",
+        token=token,
+        company_id=company_id,
+        branch_id=branch_id,
+        expected={200},
+    )
+    if not isinstance(balance, dict) or Decimal(str(balance.get("open_balance"))) != 0:
+        raise AcceptanceFailure("Customer receivable balance did not reconcile to zero")
+    cross_tenant_status, _ = request(
+        base_url,
+        "GET",
+        f"/api/v1/invoices/{invoice['id']}",
+        token=token,
+        company_id=str(uuid4()),
+        branch_id=branch_id,
+        expected={401, 403},
+    )
+    if cross_tenant_status not in {401, 403}:
+        raise AcceptanceFailure("cross-tenant Invoice access was not denied")
+    current_revision = estimate.get("current_revision")
+    if (
+        not isinstance(current_revision, dict)
+        or int(current_revision.get("revision_number", 0)) != 2
+    ):
+        raise AcceptanceFailure(
+            "Estimate revision history did not preserve its successor"
+        )
+    if Decimal(str(current_revision.get("total_amount"))) != total:
+        raise AcceptanceFailure("Estimate and Invoice totals did not reconcile")
+    return {
+        "price_book_item_id": item["id"],
+        "snapshot_id": snapshot["id"],
+        "estimate_id": estimate["id"],
+        "estimate_number": estimate["estimate_number"],
+        "estimate_revision": 2,
+        "job_id": job["id"],
+        "invoice_id": invoice["id"],
+        "invoice_number": invoice["invoice_number"],
+        "total": str(total),
+        "open_balance": "0.00",
+        "payment_count": 2,
+        "payment_methods": ["cash", "check"],
+        "settlement_state": "not_asserted",
+        "accounting_state": "not_posted",
+    }
+
+
 def initial_flow(
     base_url: str,
     credentials: dict[str, object],
     receipt_path: Path,
     smoke_token_path: Path | None,
+    revenue_cycle: bool = False,
 ) -> None:
     email = str(credentials["email"])
     password = str(credentials["password"])
@@ -400,6 +743,15 @@ def initial_flow(
         "employee_id": employee_id,
         "technician_email": tech_email,
     }
+    if revenue_cycle:
+        receipt["revenue_cycle"] = revenue_cycle_flow(
+            base_url,
+            token=owner_token,
+            company_id=company_id,
+            branch_id=branch_id,
+            customer_id=customer_id,
+            location_id=location_id,
+        )
     receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     receipt_path.chmod(0o600)
     print(
@@ -428,6 +780,23 @@ def readback(base_url: str, credentials: dict[str, object], receipt_path: Path) 
             branch_id=branch_id,
             expected={200},
         )
+    revenue = receipt.get("revenue_cycle")
+    if isinstance(revenue, dict):
+        for path in (
+            f"/api/v1/estimates/{revenue['estimate_id']}",
+            f"/api/v1/jobs/{revenue['job_id']}",
+            f"/api/v1/invoices/{revenue['invoice_id']}",
+            f"/api/v1/invoices/{revenue['invoice_id']}/manual-payments",
+        ):
+            request(
+                base_url,
+                "GET",
+                path,
+                token=token,
+                company_id=company_id,
+                branch_id=branch_id,
+                expected={200},
+            )
     print(json.dumps({"status": "PASS", "phase": "fresh-session-readback"}))
 
 
@@ -438,6 +807,7 @@ def main() -> int:
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--smoke-token-file", type=Path)
     parser.add_argument("--readback", action="store_true")
+    parser.add_argument("--revenue-cycle", action="store_true")
     args = parser.parse_args()
     try:
         credentials = read_json(args.credential_file)
@@ -449,6 +819,7 @@ def main() -> int:
                 credentials,
                 args.receipt,
                 args.smoke_token_file,
+                args.revenue_cycle,
             )
     except AcceptanceFailure as error:
         print(f"FAIL: {error}", file=sys.stderr)

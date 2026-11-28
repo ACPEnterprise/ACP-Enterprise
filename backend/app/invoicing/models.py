@@ -397,7 +397,7 @@ class ManualPaymentReceipt(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "payment_method IN ('check','other_manual')",
+            "payment_method IN ('cash','check','ach_external','card_external','other_manual')",
             name="ck_manual_payment_method",
         ),
         CheckConstraint("amount > 0", name="ck_manual_payment_amount"),

@@ -74,4 +74,53 @@ describe("financial object-detail authorization", () => {
     renderDetail("/payments/receipt-1");
     expect(await screen.findByRole("link", { name: "Back to Customer" })).toHaveAttribute("href", "/customers/customer-1");
   });
+
+  it("classifies manual methods without claiming processor or settlement authority", async () => {
+    permissions = new Set([
+      "COMPANY_INVOICE_READ",
+      "COMPANY_INVOICE_MANUAL_PAYMENT_RECORD",
+      "COMPANY_PAYMENT_READ",
+    ]);
+    vi.mocked(invoicesApi.getInvoice).mockResolvedValue({
+      id: "invoice-1",
+      company_id: "company-1",
+      branch_id: "branch-1",
+      customer_id: "customer-1",
+      service_location_id: "location-1",
+      job_id: "job-1",
+      estimate_id: "estimate-1",
+      estimate_revision_id: "revision-1",
+      invoice_number: "INV-000001",
+      status: "issued",
+      accounting_status: "pending",
+      currency: "USD",
+      issue_date: "2026-11-28",
+      due_date: "2026-12-28",
+      terms: "Net 30",
+      subtotal_amount: "125.00",
+      discount_amount: "0.00",
+      taxable_basis: "125.00",
+      tax_amount: "0.00",
+      total_amount: "125.00",
+      open_amount: "125.00",
+      calculation_digest: "a".repeat(64),
+      legacy_evidence_missing: false,
+      version: 2,
+      issued_at: "2026-11-28T12:00:00Z",
+      created_at: "2026-11-28T12:00:00Z",
+      updated_at: "2026-11-28T12:00:00Z",
+    });
+    vi.mocked(invoicesApi.getInvoiceOfficeDetail).mockRejectedValue(new Error("not required"));
+    vi.mocked(invoicesApi.getManualPaymentHistory).mockResolvedValue([]);
+
+    renderDetail("/invoices/invoice-1");
+
+    const method = await screen.findByLabelText("Manual payment method");
+    expect(method).toHaveTextContent("Cash");
+    expect(method).toHaveTextContent("Externally verified ACH evidence");
+    expect(method).toHaveTextContent("Externally verified card evidence");
+    expect(
+      screen.getByText(/No choice charges a card, debits a bank, or claims settlement/i),
+    ).toBeVisible();
+  });
 });

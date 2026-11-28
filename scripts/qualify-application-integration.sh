@@ -109,11 +109,17 @@ for attempt in {1..30}; do
 done
 curl --fail --silent --show-error "http://127.0.0.1:${published_frontend_port}/health/ready" >/dev/null
 
+acceptance_args=()
+if [[ "${REVENUE_CYCLE_ACCEPTANCE:-false}" == "true" ]]; then
+  acceptance_args+=(--revenue-cycle)
+fi
+
 "$PYTHON_BIN" "$ROOT_DIR/scripts/application-integration-acceptance.py" \
   --base-url "http://127.0.0.1:${published_frontend_port}" \
   --credential-file "$CREDENTIAL_FILE" \
   --receipt "$RECEIPT_FILE" \
-  --smoke-token-file "$SMOKE_TOKEN_FILE"
+  --smoke-token-file "$SMOKE_TOKEN_FILE" \
+  "${acceptance_args[@]}"
 
 if [[ -n "${QBO_HISTORICAL_ARCHIVE_HOST:-}" ]]; then
   browser_output="${ACCEPTANCE_BROWSER_OUTPUT:-$WORK_DIR/qbo-historical-browser-acceptance.json}"
@@ -129,6 +135,22 @@ if [[ -n "${QBO_HISTORICAL_ARCHIVE_HOST:-}" ]]; then
       qbo-historical
   chmod 600 "$browser_output"
   echo "QBO historical authenticated browser acceptance: PASS ($browser_output)"
+fi
+
+if [[ "${REVENUE_CYCLE_ACCEPTANCE:-false}" == "true" ]]; then
+  browser_output="${ACCEPTANCE_BROWSER_OUTPUT:-$WORK_DIR/revenue-cycle-browser-acceptance.json}"
+  mkdir -p "$(dirname "$browser_output")"
+  chmod 700 "$(dirname "$browser_output")"
+  OM2B_SERVING_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+    REVENUE_CYCLE_ACCEPTANCE=true \
+    node "$ROOT_DIR/frontend/tests/real-browser-workflow.mjs" \
+      "http://127.0.0.1:${published_frontend_port}" \
+      "$CREDENTIAL_FILE" \
+      "$RECEIPT_FILE" \
+      "$browser_output" \
+      revenue-cycle
+  chmod 600 "$browser_output"
+  echo "Revenue-cycle authenticated browser acceptance: PASS ($browser_output)"
 fi
 
 # Host-created files are owned by the host-side user.  Stage the token through
