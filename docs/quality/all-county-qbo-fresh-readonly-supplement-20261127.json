@@ -71,6 +71,8 @@
     "ruff": "PASS",
     "ruff_format": "PASS",
     "mypy": "PASS",
+    "assembled_acceptance": "BLOCKED_LOCAL_DOCKER_RUNTIME_EXITED_BEFORE_RECEIPT",
+    "preserved_base_assembled_acceptance": "PASS at 988b10da5890753fa0f989c6483b2e327211349b",
     "external_provider_calls": 0,
     "quickbooks_writes": 0,
     "financial_postings": 0,

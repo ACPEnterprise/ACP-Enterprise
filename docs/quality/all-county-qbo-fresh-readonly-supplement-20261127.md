@@ -96,6 +96,13 @@ must not be committed to Git.
   the host process. These are the same seven environment-only tests that passed in
   the prior assembled acceptance; none exercises a changed path in this supplement.
 - Changed-file Ruff, Ruff format, and MyPy: passed.
+- A candidate-specific assembled acceptance was attempted twice. The local Docker
+  runtime exited before producing a browser receipt and could not be restarted from
+  this noninteractive session. No application assertion or provider operation failed;
+  candidate-specific assembled acceptance remains blocked on the local container
+  runtime. The complete assembled acceptance at preserved base
+  `988b10da5890753fa0f989c6483b2e327211349b` remains valid for the unchanged
+  archive-backed application paths.
 - QuickBooks provider reads: 0 (authorization unavailable on OM1).
 - QuickBooks writes, ACP financial postings, deployments: 0.
 - Fresh entity counts and attachment content counts remain unknown until owner OAuth.
