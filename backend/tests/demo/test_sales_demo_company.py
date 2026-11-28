@@ -5,8 +5,15 @@ from uuid import uuid4
 import pytest
 from app.core.config import settings
 from app.demo.models import DemoEnvironment, DemoScenario
-from app.demo.service import DEMO_PERMISSION_CODES, SalesDemoService
+from app.demo.service import (
+    DEMO_PERMISSION_CODES,
+    PRESERVED_DEMO_COMPANY_ID,
+    SalesDemoService,
+)
+from app.platform.branch.models import Branch
+from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.onboarding.service import OnboardingConflictError
 from app.platform.permissions.catalog_sync import permission_catalog_sync_service
 from app.platform.permissions.codes import (
     AccountsPayablePermission,
@@ -14,7 +21,7 @@ from app.platform.permissions.codes import (
     PaymentPermission,
 )
 from app.platform.permissions.models import Permission, Role, RolePermission
-from app.platform.users.models import User
+from app.platform.users.models import User, UserCredential
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -181,4 +188,104 @@ async def test_per_rep_tenant_seed_reset_isolation_and_scenarios():
     left, right = await asyncio.gather(concurrent_provision(), concurrent_provision())
     assert left.company_id == right.company_id
     assert {left.action, right.action} == {"created", "reused"}
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_preserved_demo_restoration_keeps_credential_and_refuses_real_access():
+    engine = create_async_engine(settings.database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    service = SalesDemoService(configuration=configuration())
+    owner_id = uuid4()
+    password_hash = "$argon2id$synthetic-preserved-hash"
+    async with factory() as session:
+        await permission_catalog_sync_service.synchronize(session)
+        session.add(
+            User(
+                id=owner_id,
+                normalized_email=f"preserved-demo-{owner_id}@example.invalid",
+                first_name="Demo",
+                last_name="Representative",
+                display_name="Demo Representative",
+                status="active",
+                authorization_version=1,
+            )
+        )
+        session.add(
+            UserCredential(
+                user_id=owner_id,
+                password_hash=password_hash,
+                credential_version=7,
+            )
+        )
+        await session.commit()
+
+    async with factory() as session:
+        restored = await service.restore_preserved_company(
+            session, context=context(owner_id)
+        )
+        await session.commit()
+    assert restored.action == "restored"
+    assert restored.company_id == PRESERVED_DEMO_COMPANY_ID
+
+    async with factory() as session:
+        credential = await session.scalar(
+            select(UserCredential).where(UserCredential.user_id == owner_id)
+        )
+        memberships = (
+            await session.scalars(
+                select(Membership).where(Membership.user_id == owner_id)
+            )
+        ).all()
+        replay = await service.restore_preserved_company(
+            session, context=context(owner_id)
+        )
+        await session.commit()
+    assert credential.password_hash == password_hash
+    assert credential.credential_version == 7
+    assert replay.action == "reused"
+    assert [(row.company_id, row.status) for row in memberships] == [
+        (PRESERVED_DEMO_COMPANY_ID, "active")
+    ]
+
+    real_company_id, real_branch_id = uuid4(), uuid4()
+    async with factory() as session:
+        session.add(
+            Company(
+                id=real_company_id,
+                name="Real Company Boundary",
+                code=f"REAL_{real_company_id.hex[:8]}",
+                status="active",
+                timezone="America/New_York",
+            )
+        )
+        session.add(
+            Branch(
+                id=real_branch_id,
+                company_id=real_company_id,
+                name="Real Branch",
+                code="REAL",
+                status="active",
+                timezone="America/New_York",
+                is_primary=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            Membership(
+                user_id=owner_id,
+                company_id=real_company_id,
+                status="active",
+                default_branch_id=real_branch_id,
+                has_all_branch_access=True,
+            )
+        )
+        await session.commit()
+
+    async with factory() as session:
+        with pytest.raises(OnboardingConflictError, match="non-Demo company access"):
+            await service.restore_preserved_company(
+                session, context=context(owner_id)
+            )
+        await session.rollback()
     await engine.dispose()
