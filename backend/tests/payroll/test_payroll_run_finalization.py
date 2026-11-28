@@ -4,9 +4,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.events.models import BusinessEvent
 from app.payroll.contracts import (
     PayrollAuthorizationError,
@@ -34,6 +31,9 @@ from app.payroll.tax_finalization import (
 from app.platform.audit.models import AuditRecord
 from app.platform.employees.models import Employee
 from app.timekeeping.models import PayrollTimeInputRecord
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from tests.payroll.test_gross_pay_calculation import compensation
 from tests.payroll.test_gross_pay_finalization import (
     FakeContext,

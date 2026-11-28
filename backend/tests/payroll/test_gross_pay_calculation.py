@@ -4,7 +4,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.payroll.calculation import (
     ApprovedAdditionalEarning,
     EarningsComponentType,
