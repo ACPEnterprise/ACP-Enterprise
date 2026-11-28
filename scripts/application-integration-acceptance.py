@@ -13,6 +13,7 @@ import json
 import secrets
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -125,6 +126,7 @@ def initial_flow(
     credentials: dict[str, object],
     receipt_path: Path,
     smoke_token_path: Path | None,
+    technician_credential_path: Path | None,
 ) -> None:
     email = str(credentials["email"])
     password = str(credentials["password"])
@@ -229,6 +231,7 @@ def initial_flow(
     # still exercises the normal technician identity path.
     tech_email = f"acceptance-tech-{suffix}@example.test"
     tech_password = secrets.token_urlsafe(24)
+    technician_display_name = f"Integration Technician {suffix}"
     _, technician = request(
         base_url,
         "POST",
@@ -257,6 +260,7 @@ def initial_flow(
         minutes=next_slot_minutes
     )
     window_end = window_start + timedelta(minutes=60)
+    readiness_end = window_end + timedelta(minutes=30)
     request(
         base_url,
         "PUT",
@@ -267,7 +271,7 @@ def initial_flow(
         body={
             "branch_id": branch_id,
             "window_start_at": window_start.isoformat(),
-            "window_end_at": window_end.isoformat(),
+            "window_end_at": readiness_end.isoformat(),
             "reason": "Isolated application integration acceptance",
         },
         expected={200},
@@ -330,11 +334,21 @@ def initial_flow(
             "appointment_id": appointment_id,
             "job_type_code": "integration_acceptance",
             "priority": "normal",
-            "customer_reported_problem": "Synthetic acceptance fixture",
+            "customer_reported_problem": "Integration acceptance service request",
         },
         expected={201},
     )
     job_id = str(job["id"])
+    _, job = request(
+        base_url,
+        "POST",
+        f"/api/v1/jobs/{job_id}/activate",
+        token=owner_token,
+        company_id=company_id,
+        branch_id=branch_id,
+        body={"expected_version": int(job["concurrency_version"])},
+        expected={200},
+    )
     _, eligible = request(
         base_url,
         "GET",
@@ -375,6 +389,94 @@ def initial_flow(
             "Dispatch assignment did not preserve technician identity"
         )
 
+    rescheduled_start = window_start + timedelta(minutes=30)
+    rescheduled_end = window_end + timedelta(minutes=30)
+    _, appointment = request(
+        base_url,
+        "POST",
+        f"/api/v1/scheduling/appointments/{appointment_id}/reschedule",
+        token=owner_token,
+        company_id=company_id,
+        branch_id=branch_id,
+        body={
+            "expected_version": int(appointment["concurrency_version"]),
+            "arrival_window_start_at": rescheduled_start.isoformat(),
+            "arrival_window_end_at": rescheduled_end.isoformat(),
+            "expected_duration_minutes": 60,
+            "capacity_units": "1.00",
+            "reason_code": "operational_adjustment",
+        },
+        expected={200},
+    )
+    if int(appointment.get("reschedule_count", 0)) != 1:
+        raise AcceptanceFailure("appointment reschedule was not durably recorded")
+
+    _, assignment = request(
+        base_url,
+        "GET",
+        f"/api/v1/dispatch/appointments/{appointment_id}/assignment",
+        token=owner_token,
+        company_id=company_id,
+        branch_id=branch_id,
+        expected={200},
+    )
+    if str(assignment.get("primary_employee_id")) != employee_id:
+        raise AcceptanceFailure("reschedule did not preserve the technician assignment")
+
+    _, search = request(
+        base_url,
+        "GET",
+        f"/api/v1/customers/search?query=Integration%20Acceptance%20{suffix}",
+        token=owner_token,
+        company_id=company_id,
+        branch_id=branch_id,
+        expected={200},
+    )
+    search_items = search.get("items") if isinstance(search, dict) else None
+    if not isinstance(search_items, list) or not any(
+        isinstance(item, dict) and str(item.get("id")) == customer_id
+        for item in search_items
+    ):
+        raise AcceptanceFailure("customer search omitted the created customer")
+
+    board_start = rescheduled_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    board_end = board_start + timedelta(days=1)
+    board_query = urllib.parse.urlencode(
+        {
+            "start_at": board_start.isoformat(),
+            "end_at": board_end.isoformat(),
+            "branch_id": branch_id,
+        }
+    )
+    _, board = request(
+        base_url,
+        "GET",
+        f"/api/v1/dispatch/board?{board_query}",
+        token=owner_token,
+        company_id=company_id,
+        branch_id=branch_id,
+        expected={200},
+    )
+    board_items = board.get("items") if isinstance(board, dict) else None
+    board_item = next(
+        (
+            item
+            for item in board_items or []
+            if isinstance(item, dict)
+            and str(item.get("appointment_id")) == appointment_id
+        ),
+        None,
+    )
+    if not isinstance(board_item, dict):
+        raise AcceptanceFailure("daily dispatch board omitted the appointment")
+    board_assignment = board_item.get("assignment")
+    if (
+        str(board_item.get("status")) not in {"scheduled", "confirmed"}
+        or not isinstance(board_assignment, dict)
+        or str(board_assignment.get("primary_employee_id")) != employee_id
+    ):
+        raise AcceptanceFailure("dispatch board status or assignment was incorrect")
+
     technician_login = login(base_url, tech_email, tech_password)
     tech_token = str(technician_login["access_token"])
     _, day = request(
@@ -388,6 +490,23 @@ def initial_flow(
     )
     if not isinstance(day, dict):
         raise AcceptanceFailure("technician My Day returned an invalid response")
+    itinerary = day.get("assignments")
+    if not isinstance(itinerary, list) or not any(
+        isinstance(item, dict)
+        and str(item.get("appointment_id")) == appointment_id
+        and str(item.get("job_id")) == job_id
+        for item in itinerary
+    ):
+        raise AcceptanceFailure("technician My Day omitted the assigned work")
+
+    if technician_credential_path is not None:
+        if technician_credential_path.exists() or technician_credential_path.is_symlink():
+            raise AcceptanceFailure("technician credential output already exists")
+        technician_credential_path.write_text(
+            json.dumps({"email": tech_email, "password": tech_password}) + "\n",
+            encoding="utf-8",
+        )
+        technician_credential_path.chmod(0o600)
 
     receipt = {
         "contract": "twelvehats.application-integration-acceptance/v1",
@@ -399,6 +518,13 @@ def initial_flow(
         "appointment_id": appointment_id,
         "employee_id": employee_id,
         "technician_email": tech_email,
+        "technician_display_name": technician_display_name,
+        "customer_display_name": str(customer["display_name"]),
+        "appointment_number": str(appointment["appointment_number"]),
+        "job_number": str(job["job_number"]),
+        "appointment_status": str(board_item["status"]),
+        "assignment_version": int(assignment["version"]),
+        "reschedule_count": int(appointment["reschedule_count"]),
     }
     receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     receipt_path.chmod(0o600)
@@ -431,17 +557,53 @@ def readback(base_url: str, credentials: dict[str, object], receipt_path: Path) 
     print(json.dumps({"status": "PASS", "phase": "fresh-session-readback"}))
 
 
+def technician_readback(
+    base_url: str, credentials: dict[str, object], receipt_path: Path
+) -> None:
+    receipt = read_json(receipt_path)
+    technician = login(
+        base_url, str(credentials["email"]), str(credentials["password"])
+    )
+    _, day = request(
+        base_url,
+        "GET",
+        "/api/v1/employee-operations/me/day",
+        token=str(technician["access_token"]),
+        company_id=str(receipt["company_id"]),
+        branch_id=str(receipt["branch_id"]),
+        expected={200},
+    )
+    assignments = day.get("assignments") if isinstance(day, dict) else None
+    item = next(
+        (
+            candidate
+            for candidate in assignments or []
+            if isinstance(candidate, dict)
+            and str(candidate.get("appointment_id")) == receipt["appointment_id"]
+            and str(candidate.get("job_id")) == receipt["job_id"]
+        ),
+        None,
+    )
+    if not isinstance(item, dict):
+        raise AcceptanceFailure("fresh technician session omitted assigned My Day work")
+    print(json.dumps({"status": "PASS", "phase": "technician-session-readback"}))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--credential-file", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--smoke-token-file", type=Path)
+    parser.add_argument("--technician-credential-file", type=Path)
     parser.add_argument("--readback", action="store_true")
+    parser.add_argument("--technician-readback", action="store_true")
     args = parser.parse_args()
     try:
         credentials = read_json(args.credential_file)
-        if args.readback:
+        if args.technician_readback:
+            technician_readback(args.base_url, credentials, args.receipt)
+        elif args.readback:
             readback(args.base_url, credentials, args.receipt)
         else:
             initial_flow(
@@ -449,6 +611,7 @@ def main() -> int:
                 credentials,
                 args.receipt,
                 args.smoke_token_file,
+                args.technician_credential_file,
             )
     except AcceptanceFailure as error:
         print(f"FAIL: {error}", file=sys.stderr)
