@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
 import { Link } from "react-router";
 
@@ -16,20 +16,23 @@ export function HistoricalCustomerSearch({
 }) {
   const [input, setInput] = useState("");
   const [localQuery, setLocalQuery] = useState("");
-  const [offset, setOffset] = useState(0);
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [searchState, setSearchState] = useState({
+    query: "",
+    offset: 0,
+    selectedSourceId: null as string | null,
+  });
   const query = controlledQuery ?? localQuery;
-  const search = useHcpHistoricalCustomerSearch(query, offset);
-  const history = useHcpCustomerSourceHistoryBySource(selectedSourceId);
-
-  useEffect(() => {
-    setOffset(0);
-    setSelectedSourceId(null);
-  }, [query]);
+  const stateForQuery = searchState.query === query
+    ? searchState
+    : { query, offset: 0, selectedSourceId: null };
+  const search = useHcpHistoricalCustomerSearch(query, stateForQuery.offset);
+  const history = useHcpCustomerSourceHistoryBySource(stateForQuery.selectedSourceId);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    setLocalQuery(input.trim());
+    const nextQuery = input.trim();
+    setLocalQuery(nextQuery);
+    setSearchState({ query: nextQuery, offset: 0, selectedSourceId: null });
   };
 
   const nativeIds = new Set(nativeItems.map((item) => item.id));
@@ -70,7 +73,7 @@ export function HistoricalCustomerSearch({
                     <span className="mt-1 block text-sm text-content-muted">{item.primary_location ?? "Location unavailable in source evidence"}</span>
                   </Link>
                 ) : (
-                  <button className="block min-h-11 w-full text-left" type="button" onClick={() => setSelectedSourceId(item.source_customer_id)}>
+                  <button className="block min-h-11 w-full text-left" type="button" onClick={() => setSearchState({ query, offset: stateForQuery.offset, selectedSourceId: item.source_customer_id })}>
                     <span className="flex flex-wrap items-center gap-2"><strong>{item.display_name}</strong><Badge variant="information">Customer</Badge>{standalone && <span className="sr-only">OLDER HISTORY</span>}</span>
                     <span className="mt-1 block text-sm text-content-muted">{item.primary_location ?? "Location unavailable in source evidence"}</span>
                   </button>
@@ -81,8 +84,8 @@ export function HistoricalCustomerSearch({
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-content-muted">
             <span>{search.data.match_count.toLocaleString()} source-backed customer records available</span>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 20))}>Previous</Button>
-              <Button type="button" variant="outline" disabled={!search.data.limited} onClick={() => setOffset((value) => value + 20)}>More customers</Button>
+              <Button type="button" variant="outline" disabled={stateForQuery.offset === 0} onClick={() => setSearchState({ query, offset: Math.max(0, stateForQuery.offset - 20), selectedSourceId: null })}>Previous</Button>
+              <Button type="button" variant="outline" disabled={!search.data.limited} onClick={() => setSearchState({ query, offset: stateForQuery.offset + 20, selectedSourceId: null })}>More customers</Button>
             </div>
           </div>
         </div>

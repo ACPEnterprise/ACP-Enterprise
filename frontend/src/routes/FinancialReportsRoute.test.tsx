@@ -66,6 +66,27 @@ vi.mock("../hooks/useQboAccountingEvidence", () => ({
     data: undefined,
     refetch: vi.fn(),
   })),
+  useQboHistoricalCatalog: vi.fn(() => ({
+    isPending: false,
+    isLoading: false,
+    isError: true,
+    isSuccess: false,
+    data: undefined,
+  })),
+  useQboHistoricalReport: vi.fn(() => ({
+    isPending: false,
+    isLoading: false,
+    isError: true,
+    isSuccess: false,
+    data: undefined,
+  })),
+  useQboHistoricalRecords: vi.fn(() => ({
+    isPending: false,
+    isLoading: false,
+    isError: true,
+    isSuccess: false,
+    data: undefined,
+  })),
 }));
 
 describe("FinancialReportsRoute", () => {
