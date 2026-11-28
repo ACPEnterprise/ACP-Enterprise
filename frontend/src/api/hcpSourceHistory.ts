@@ -9,11 +9,11 @@ export async function getHcpCustomerSourceHistory(customerId: string) {
   ).data;
 }
 
-export async function searchHcpHistoricalCustomers(query: string) {
+export async function searchHcpHistoricalCustomers(query: string, offset = 0) {
   return (
     await apiClient.get<HcpHistoricalCustomerSearch>(
       "/api/v1/migration/source-history/customers",
-      { params: { query, limit: 20 } },
+      { params: { query, limit: 20, offset } },
     )
   ).data;
 }

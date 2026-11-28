@@ -13,6 +13,7 @@ import type { CustomerTimelineEntry } from "../../types/customers";
 import type { JobListItem } from "../../types/jobs";
 import { Alert, Badge, Card, Spinner } from "../../ui";
 import { CustomerHistoryWorkspace } from "./CustomerHistoryWorkspace";
+import { HcpHistoryDetails } from "./HcpHistoryDetails";
 
 function windowBoundary(days: number) {
   const value = new Date();
@@ -133,6 +134,7 @@ export function CustomerOperationsPanel({
         invoices={invoices.data ?? []}
         payments={payments.data ?? []}
         evidence={evidence}
+        sourceHistory={sourceHistory.data}
         unavailableDomains={unavailableDomains}
         timelineEntries={timelineEntries}
         timelinePage={timelinePage}
@@ -143,6 +145,7 @@ export function CustomerOperationsPanel({
         onPreviousTimelinePage={onPreviousTimelinePage}
         onNextTimelinePage={onNextTimelinePage}
       />}
+      {sourceHistory.data && <HcpHistoryDetails history={sourceHistory.data} />}
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         {canReadJobs && <section className="rounded-xl border border-stroke p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Jobs</h4><Link to={`/jobs?customerId=${encodeURIComponent(customerId)}`} className="text-xs text-action-primary">View all related Jobs</Link></div>{currentJobs.data && historicalJobs.data && <p className="mt-1 text-xs text-content-muted">Showing {currentJobs.data.items.length + historicalJobs.data.items.length} of {currentJobs.data.total_count + historicalJobs.data.total_count} related Jobs.</p>}<div className="mt-3 space-y-2"><JobList customerId={customerId} jobs={[...(currentJobs.data?.items ?? []), ...(historicalJobs.data?.items ?? [])]} empty="No Jobs are linked to this Customer." /></div></section>}
         {canReadScheduling && <section className="rounded-xl border border-stroke p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Appointments</h4><Link to="/scheduling" className="text-xs text-action-primary">Open Scheduling</Link></div><p className="mt-1 text-xs text-content-muted">Bounded to one year before and after today.</p><div className="mt-3 space-y-2">{(appointments.data?.items ?? []).map((item) => <Link key={item.id} to={`/appointments/${item.id}`} className="flex flex-wrap justify-between gap-3 rounded-lg bg-surface-subtle p-3 text-sm"><span>{item.appointment_number} · {item.arrival_window_start_at ? new Date(item.arrival_window_start_at).toLocaleString() : "Unscheduled"}</span><Badge variant="neutral">{item.status}</Badge></Link>)}{appointments.isSuccess && appointments.data.items.length === 0 && <p className="text-sm text-content-muted">No Appointments are linked to this Customer in the displayed window.</p>}</div></section>}

@@ -182,27 +182,60 @@ async def hcp_customer_source_history(
 
 @router.get("/source-history/customers", name="hcp-historical-customer-search")
 async def hcp_historical_customer_search(
-    query: str,
     context: CustomerRead,
+    session: DatabaseSession,
+    query: str = "",
     limit: int = 20,
+    offset: int = 0,
 ) -> JSONResponse:
     """Search sealed HCP history independently of native Customer admission."""
-    del context
     if not settings.hcp_source4_evidence_root:
         return _history_unavailable()
     try:
         result = search_customer_source_history(
-            Path(settings.hcp_source4_evidence_root), query=query, limit=limit
+            Path(settings.hcp_source4_evidence_root),
+            query=query,
+            limit=limit,
+            offset=offset,
         )
     except HcpCustomerSourceHistoryError as error:
         code = (
             status.HTTP_422_UNPROCESSABLE_CONTENT
-            if str(error) in {"search_query_too_short", "search_limit_invalid"}
+            if str(error)
+            in {"search_query_too_short", "search_limit_invalid", "search_offset_invalid"}
             else status.HTTP_503_SERVICE_UNAVAILABLE
         )
         return _history_unavailable(code)
     except (OSError, ValueError):
         return _history_unavailable(status.HTTP_503_SERVICE_UNAVAILABLE)
+    if result["items"]:
+        source_ids = [item["source_customer_id"] for item in result["items"]]
+        identities = (
+            await session.execute(
+                select(
+                    CustomerSourceIdentity.source_system,
+                    CustomerSourceIdentity.source_customer_id,
+                    CustomerSourceIdentity.customer_id,
+                ).where(
+                    CustomerSourceIdentity.company_id == context.company.id,
+                    CustomerSourceIdentity.branch_id.in_(context.authorized_branch_ids),
+                    CustomerSourceIdentity.source_customer_id.in_(source_ids),
+                    CustomerSourceIdentity.source_system.in_(
+                        ("housecall_pro_source4", "housecall_pro")
+                    ),
+                )
+            )
+        ).all()
+        native_by_source: dict[str, str] = {}
+        for source_system, source_id, customer_id in identities:
+            # SOURCE.4 is the authoritative successor identity when both
+            # predecessor and successor bindings are retained.
+            if source_id not in native_by_source or source_system == "housecall_pro_source4":
+                native_by_source[source_id] = str(customer_id)
+        for item in result["items"]:
+            item["native_customer_id"] = native_by_source.get(
+                item["source_customer_id"]
+            )
     return JSONResponse(content=result, headers={"Cache-Control": "private, no-store"})
 
 
@@ -283,6 +316,8 @@ async def hcp_source_history_attachment(
     return FileResponse(
         body,
         media_type=str(item.get("file_type") or "application/octet-stream"),
-        filename=str(item.get("file_name") or artifact),
-        headers={"Cache-Control": "private, no-store"},
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": "inline",
+        },
     )

@@ -42,6 +42,12 @@ export type HcpCustomerSourceHistory = {
     scheduled_start: string | null;
     scheduled_end: string | null;
     service_date: string | null;
+    source_location: {
+      address: string | null;
+      city: string | null;
+      state: string | null;
+      postal_code: string | null;
+    } | null;
     description: string | null;
     notes: Array<{ source_id: string | null; content: string | null }>;
     work_timestamps: {
@@ -55,6 +61,7 @@ export type HcpCustomerSourceHistory = {
     total_amount: number | string | null;
     outstanding_balance: number | string | null;
     assigned_employee_source_ids: string[];
+    assigned_employee_names: string[];
     attachments: Array<{
       source_id: string;
       file_name: string | null;
@@ -94,6 +101,10 @@ export type HcpCustomerSourceHistory = {
     balance_cents: number | null;
     invoice_date: string | null;
     service_date: string | null;
+    line_items: Array<{
+      description: string | null;
+      amount_cents: number | null;
+    }>;
     payments: HcpSourcePayment[];
     refunds: Array<{
       source_id: string | null;
@@ -116,12 +127,15 @@ export type HcpHistoricalCustomerSearch = {
   query: string;
   items: Array<{
     source_customer_id: string;
+    native_customer_id?: string | null;
     display_name: string;
     primary_location: string | null;
     authority: "HCP_SOURCE_BACKED_HISTORICAL_CUSTOMER";
     accepted_as_native: false;
   }>;
   match_count: number;
+  offset: number;
+  limit: number;
   limited: boolean;
   source_manifest_sha256: string;
 };

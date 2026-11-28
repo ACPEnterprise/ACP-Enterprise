@@ -270,6 +270,18 @@ def project_customer_source_history(
             or job.get("end_time"),
             "service_date": (job.get("schedule") or {}).get("scheduled_start")
             or job.get("start_time"),
+            "source_location": (
+                {
+                    "address": (job.get("address") or {}).get("street")
+                    or (job.get("address") or {}).get("address"),
+                    "city": (job.get("address") or {}).get("city"),
+                    "state": (job.get("address") or {}).get("state"),
+                    "postal_code": (job.get("address") or {}).get("zip")
+                    or (job.get("address") or {}).get("postal_code"),
+                }
+                if isinstance(job.get("address"), Mapping)
+                else None
+            ),
             "description": job.get("description"),
             "notes": [
                 {
@@ -289,6 +301,16 @@ def project_customer_source_history(
                 str(item.get("id"))
                 for item in job.get("assigned_employees") or []
                 if isinstance(item, Mapping) and item.get("id")
+            ],
+            "assigned_employee_names": [
+                " ".join(
+                    str(value).strip()
+                    for value in (item.get("first_name"), item.get("last_name"))
+                    if value
+                )
+                for item in job.get("assigned_employees") or []
+                if isinstance(item, Mapping)
+                and (item.get("first_name") or item.get("last_name"))
             ],
             "attachments": list(indexes["attachments"].get(str(job.get("id")), ())),
             "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
@@ -383,6 +405,21 @@ def project_customer_source_history(
                     "authority": "HCP_SOURCE_BACKED_REFUND_EVIDENCE_NOT_ACCOUNTING_POSTING",
                 }
             )
+        raw_line_items = invoice.get("line_items") or invoice.get("items")
+        line_items = []
+        if isinstance(raw_line_items, list):
+            for line_item in raw_line_items:
+                if not isinstance(line_item, Mapping):
+                    continue
+                line_items.append(
+                    {
+                        "description": line_item.get("description")
+                        or line_item.get("name"),
+                        "amount_cents": line_item.get("amount")
+                        if line_item.get("amount") is not None
+                        else line_item.get("total"),
+                    }
+                )
         invoice_items.append(
             {
                 "source_id": invoice.get("id"),
@@ -393,6 +430,7 @@ def project_customer_source_history(
                 "balance_cents": invoice.get("due_amount"),
                 "invoice_date": invoice.get("invoice_date"),
                 "service_date": invoice.get("service_date"),
+                "line_items": line_items,
                 "payments": payment_items,
                 "refunds": refund_items,
                 "authority": "HCP_SOURCE_BACKED_OPERATIONAL_HISTORY",
@@ -424,14 +462,16 @@ def project_customer_source_history(
 
 
 def search_customer_source_history(
-    root: Path, *, query: str, limit: int = 20
+    root: Path, *, query: str = "", limit: int = 20, offset: int = 0
 ) -> dict[str, object]:
     """Search sealed source Customers without requiring native admission."""
     normalized = " ".join(query.casefold().split())
-    if len(normalized) < 2:
+    if normalized and len(normalized) < 2:
         raise HcpCustomerSourceHistoryError("search_query_too_short")
     if not 1 <= limit <= 50:
         raise HcpCustomerSourceHistoryError("search_limit_invalid")
+    if offset < 0:
+        raise HcpCustomerSourceHistoryError("search_offset_invalid")
 
     manifest_path = root / "acquisition-package-manifest.json"
     if not manifest_path.exists():
@@ -476,7 +516,7 @@ def search_customer_source_history(
                 ],
             ]
         ).casefold()
-        if normalized not in searchable:
+        if normalized and normalized not in searchable:
             continue
         matches.append(
             {
@@ -507,8 +547,10 @@ def search_customer_source_history(
         "authority": "HCP_SOURCE_BACKED_HISTORICAL_CUSTOMER",
         "mutation_authority": "none",
         "query": query,
-        "items": ordered[:limit],
+        "items": ordered[offset : offset + limit],
         "match_count": len(ordered),
-        "limited": len(ordered) > limit,
+        "offset": offset,
+        "limit": limit,
+        "limited": offset + limit < len(ordered),
         "source_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
     }

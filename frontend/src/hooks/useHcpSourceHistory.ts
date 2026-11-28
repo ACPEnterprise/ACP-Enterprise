@@ -11,11 +11,11 @@ export function useHcpCustomerSourceHistory(customerId: string, enabled = true) 
   });
 }
 
-export function useHcpHistoricalCustomerSearch(query: string) {
+export function useHcpHistoricalCustomerSearch(query: string, offset = 0) {
   return useQuery({
-    queryKey: ["hcp-source-history", "historical-customer-search", query],
-    queryFn: () => searchHcpHistoricalCustomers(query),
-    enabled: query.trim().length >= 2,
+    queryKey: ["hcp-source-history", "historical-customer-search", query, offset],
+    queryFn: () => searchHcpHistoricalCustomers(query, offset),
+    enabled: query.trim().length === 0 || query.trim().length >= 2,
     retry: false,
   });
 }

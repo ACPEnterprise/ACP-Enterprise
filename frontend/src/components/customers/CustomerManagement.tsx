@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, Star } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
-import { activeCompanyId } from "../../api/client";
 import { getOperatorApiError } from "../../api/errors";
 import { useHasPermission } from "../../auth";
 import {
@@ -13,7 +12,6 @@ import { customerDetailPath } from "../../routing/paths";
 import { type CustomerInput, type DuplicateMatch } from "../../types/customers";
 import { Alert, Button, Card, EmptyState, Input, Spinner } from "../../ui";
 import { CustomerForm } from "./CustomerForm";
-import { CustomerImportPanel } from "./CustomerImportPanel";
 import { HistoricalCustomerSearch } from "./HistoricalCustomerSearch";
 
 const PAGE_SIZE = 20;
@@ -64,20 +62,16 @@ export function CustomerManagement() {
 
   return <div className="space-y-6">
     <section className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0"><p className="text-sm font-medium text-action-primary">CRM</p><h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Customers</h2><p className="mt-2 text-content-muted">Find a Customer, open the record, and continue into locations and related work.</p></div>
+      <div className="min-w-0"><p className="text-sm font-medium text-action-primary">CRM</p><h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Customers</h2><p className="mt-2 text-content-muted">Search the complete customer directory and open any customer’s service history.</p></div>
       {canManage && <Button type="button" onClick={() => { setDuplicateWarnings([]); setIsCreating(true); }} leadingIcon={<Plus size={18} />}>New Customer</Button>}
     </section>
-
-    {canManage && <CustomerImportPanel key={`customer-import-${activeCompanyId() ?? "no-company"}`} />}
-
-    <HistoricalCustomerSearch />
 
     {canManage && isCreating && <Card className="p-ui-4 sm:p-ui-6"><h3 className="text-xl font-semibold">Create customer</h3><p className="mt-1 text-sm text-content-muted">Create the Customer record first, then add Service Locations and Contacts.</p><div className="mt-6"><CustomerForm duplicateWarnings={duplicateWarnings} isSaving={mutations.create.isPending} isCheckingDuplicates={mutations.duplicateCheck.isPending} error={mutations.create.error ?? mutations.duplicateCheck.error} onCancel={() => setIsCreating(false)} onCheckDuplicates={(input) => mutations.duplicateCheck.mutate({ first_name: input.first_name, last_name: input.last_name, business_name: input.business_name, phone: input.primary_phone, email: input.email }, { onSuccess: setDuplicateWarnings })} onSubmit={(input: CustomerInput) => mutations.create.mutate(input, { onSuccess: (result) => { setDuplicateWarnings(result.duplicate_warnings); setIsCreating(false); navigate(customerDetailPath(result.customer.id)); } })} /></div></Card>}
 
     <Card>
       <div className="border-b border-stroke p-ui-4 sm:p-ui-5">
         <form onSubmit={submitSearch} className="flex flex-col gap-3 sm:flex-row">
-          <label className="relative min-w-0"><span className="sr-only">Search customers</span><Search size={18} className="pointer-events-none absolute left-3 top-3 text-content-muted" /><Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Name, number, contact, phone, email, or address" className="pl-10" /></label>
+          <label className="relative min-w-0"><span className="sr-only">Search customers and history</span><Search size={18} className="pointer-events-none absolute left-3 top-3 text-content-muted" /><Input aria-label="Search customers" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Name, number, contact, phone, email, or address" className="pl-10" /></label>
           <Button type="submit" variant="primary">Search</Button>
         </form>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -103,6 +97,7 @@ export function CustomerManagement() {
         <p className="truncate text-sm text-content-secondary">{customer.primary_location ? `${customer.primary_location.address_line_1}, ${customer.primary_location.city}, ${customer.primary_location.state} ${customer.primary_location.postal_code}` : "Location unavailable"}</p><p className="truncate text-sm text-content-secondary">{customer.primary_phone || "No phone"}</p><p className="truncate text-sm text-content-muted">{customer.email ?? "No email"}</p><span className={`w-fit rounded-full px-2.5 py-1 text-xs ${customer.archived_at || customer.status === "inactive" ? "bg-status-warning/15 text-status-warning" : "bg-status-success/15 text-status-success"}`}>{customer.archived_at ? "archived" : customer.status.replaceAll("_", " ")}</span>
       </Link>)}</div>}
       {customers.data && customers.data.total_count > 0 && <div className="flex flex-col gap-3 border-t border-stroke p-ui-4 text-sm text-content-muted sm:flex-row sm:items-center sm:justify-between"><span>Showing {(customers.data.page - 1) * customers.data.page_size + 1}–{Math.min(customers.data.page * customers.data.page_size, customers.data.total_count)} of {customers.data.total_count} Customers · page {customers.data.page} of {customers.data.total_pages}</span><div className="flex gap-2"><Button type="button" variant="outline" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} leadingIcon={<ChevronLeft size={16} />}>Previous</Button><Button type="button" variant="outline" disabled={page >= customers.data.total_pages} onClick={() => setPage((value) => value + 1)} trailingIcon={<ChevronRight size={16} />}>Next</Button></div></div>}
+      <HistoricalCustomerSearch query={search} nativeItems={customers.data?.items ?? []} />
     </Card>
   </div>;
 }

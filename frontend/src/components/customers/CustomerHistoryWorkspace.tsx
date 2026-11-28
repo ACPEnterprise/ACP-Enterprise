@@ -7,6 +7,7 @@ import type { JobListItem } from "../../types/jobs";
 import type { PaymentReceipt } from "../../types/payments";
 import type { AppointmentDetail } from "../../types/scheduling";
 import type { CustomerTimelineEntry } from "../../types/customers";
+import type { HcpCustomerSourceHistory } from "../../types/hcpSourceHistory";
 import { Badge } from "../../ui";
 import { buildCustomerHistoryItems } from "./customerHistory";
 
@@ -22,6 +23,7 @@ interface CustomerHistoryWorkspaceProps {
   readonly invoices: readonly InvoiceWorkspaceItem[];
   readonly payments: readonly PaymentReceipt[];
   readonly evidence: readonly CustomerEvidenceClassification[];
+  readonly sourceHistory?: HcpCustomerSourceHistory;
   readonly unavailableDomains: readonly string[];
   readonly timelineEntries?: readonly CustomerTimelineEntry[];
   readonly timelinePage?: number;
@@ -81,7 +83,13 @@ export function CustomerHistoryWorkspace(props: CustomerHistoryWorkspaceProps) {
         {completeness("Estimates", domainState("Estimates"), unavailable.has("Estimates") ? "Estimate evidence could not be loaded." : "Customer-linked Estimates are shown in the same workflow.")}
         {completeness("Invoices", invoiceState, "This view shows up to the 100 newest customer invoices.")}
         {completeness("Payments", domainState("Payments"), unavailable.has("Payments") ? "Payment history could not be loaded." : "This view shows up to the 100 newest customer payment receipts.")}
-        {completeness("Photos & attachments", "UNAVAILABLE", "Photos and attachments are not yet available in this customer history view.")}
+        {completeness(
+          "Photos & attachments",
+          props.sourceHistory ? "SOURCE_BACKED" : "UNAVAILABLE",
+          props.sourceHistory
+            ? "Recovered source media and attachment status are shown in the service history below."
+            : "Photos and attachments are not yet available in this customer history view.",
+        )}
       </div>
       {sourceEvidence.some((item) => item.classification === "UNAVAILABLE") && <p className="mt-3 text-sm text-content-muted">Some history could not be loaded. A missing item does not mean there was no activity.</p>}
     </section>

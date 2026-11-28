@@ -39,6 +39,7 @@ import {
 import { MigrationWorkspace } from "./MigrationWorkspace";
 import { CustomerMigrationControls } from "./CustomerMigrationControls";
 import { BranchSchedulingSetup } from "../../components/scheduling/BranchSchedulingSetup";
+import { CustomerImportPanel } from "../../components/customers/CustomerImportPanel";
 
 type PendingChange = {
   action: "grant" | "remove";
@@ -436,6 +437,7 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
+      {canAdminister && <CustomerImportPanel />}
       {canAdminister && <CustomerMigrationControls />}
       {canAdminister && <MigrationWorkspace />}
       {canReadRoles && (

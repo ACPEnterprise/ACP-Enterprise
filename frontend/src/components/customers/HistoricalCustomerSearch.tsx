@@ -1,45 +1,96 @@
-import { useState, type FormEvent } from "react";
-import { Archive, Search } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Search } from "lucide-react";
+import { Link } from "react-router";
 
 import { useHcpCustomerSourceHistoryBySource, useHcpHistoricalCustomerSearch } from "../../hooks/useHcpSourceHistory";
-import { Alert, Badge, Button, Card, EmptyState, Input, Spinner } from "../../ui";
+import type { CustomerSummary } from "../../types/customers";
+import { Alert, Badge, Button, EmptyState, Input, Spinner } from "../../ui";
+import { HcpHistoryDetails } from "./HcpHistoryDetails";
 
-export function HistoricalCustomerSearch() {
+export function HistoricalCustomerSearch({
+  nativeItems = [],
+  query: controlledQuery,
+}: {
+  readonly nativeItems?: readonly CustomerSummary[];
+  readonly query?: string;
+}) {
   const [input, setInput] = useState("");
-  const [query, setQuery] = useState("");
+  const [localQuery, setLocalQuery] = useState("");
+  const [offset, setOffset] = useState(0);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
-  const search = useHcpHistoricalCustomerSearch(query);
+  const query = controlledQuery ?? localQuery;
+  const search = useHcpHistoricalCustomerSearch(query, offset);
   const history = useHcpCustomerSourceHistoryBySource(selectedSourceId);
+
+  useEffect(() => {
+    setOffset(0);
+    setSelectedSourceId(null);
+  }, [query]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    setSelectedSourceId(null);
-    setQuery(input.trim());
+    setLocalQuery(input.trim());
   };
 
-  return <Card className="p-ui-4 sm:p-ui-5">
-    <div className="flex items-start gap-3"><Archive className="mt-1 text-action-primary" size={20} /><div><h3 className="font-semibold">Older customer history</h3><p className="mt-1 text-sm text-content-muted">Search imported customer and service-location history, including records that have not been added to the current customer list.</p></div></div>
-    <Alert variant="information" className="mt-4">Older history is view-only. To schedule work, create an invoice, or make other changes, use a customer in the current customer list.</Alert>
-    <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={submit}>
-      <label className="relative min-w-0 flex-1"><span className="sr-only">Search historical customers</span><Search className="pointer-events-none absolute left-3 top-3 text-content-muted" size={18} /><Input aria-label="Search historical customers" className="pl-10" minLength={2} required value={input} onChange={(event) => setInput(event.target.value)} placeholder="Historical name, email, phone, address, or source ID" /></label>
-      <Button type="submit">Search history</Button>
-    </form>
+  const nativeIds = new Set(nativeItems.map((item) => item.id));
+  const sourceItems = (search.data?.items ?? []).filter(
+    (item) => !item.native_customer_id || !nativeIds.has(item.native_customer_id),
+  );
+  const standalone = controlledQuery === undefined;
 
-    {search.isLoading && <div className="mt-4"><Spinner label="Searching historical customer records" /></div>}
-    {search.isError && <div className="mt-4"><Alert variant="warning" title="Historical records unavailable">The sealed historical source could not be searched. Native Customer search remains separate.</Alert></div>}
-    {search.data?.items.length === 0 && <div className="mt-4"><EmptyState title="No historical customers match." description="Try a different name, source ID, contact value, or service address." /></div>}
-    {search.data && search.data.items.length > 0 && <div className="mt-4 space-y-3"><p className="text-xs text-content-muted">{search.data.match_count} historical match{search.data.match_count === 1 ? "" : "es"}{search.data.limited ? " · showing the first 20" : ""}</p><ul className="divide-y divide-stroke rounded-lg border border-stroke">{search.data.items.map((item) => <li className="p-3" key={item.source_customer_id}><button className="min-h-11 w-full text-left" type="button" onClick={() => setSelectedSourceId(item.source_customer_id)}><span className="flex flex-wrap items-center gap-2"><strong>{item.display_name}</strong><Badge variant="information">OLDER HISTORY</Badge></span><span className="mt-1 block text-sm text-content-muted">{item.primary_location ?? "Location unavailable"}</span><span className="mt-1 block text-xs text-content-muted">Historical record {item.source_customer_id}</span></button></li>)}</ul></div>}
-
-    {history.isLoading && <div className="mt-4"><Spinner label="Loading historical customer journey" /></div>}
-    {history.isError && <div className="mt-4"><Alert variant="warning">The selected historical journey is unavailable or requires additional financial read permission.</Alert></div>}
-    {history.data && <section aria-label="Historical customer journey" className="mt-4 rounded-lg border border-stroke bg-surface-subtle p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Historical customer journey</h4><Badge variant="information">SOURCE BACKED</Badge></div><p className="mt-1 text-xs text-content-muted">HCP source ID {history.data.source_customer_id} · manifest {history.data.source_manifest_sha256.slice(0, 12)}… · no mutation authority</p><dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6"><div><dt className="text-content-muted">Locations</dt><dd className="font-semibold">{history.data.counts.locations}</dd></div><div><dt className="text-content-muted">Jobs</dt><dd className="font-semibold">{history.data.counts.jobs}</dd></div><div><dt className="text-content-muted">Appointments</dt><dd className="font-semibold">{history.data.counts.appointments}</dd></div><div><dt className="text-content-muted">Estimates</dt><dd className="font-semibold">{history.data.counts.estimates}</dd></div><div><dt className="text-content-muted">Invoices</dt><dd className="font-semibold">{history.data.counts.invoices}</dd></div><div><dt className="text-content-muted">Payments</dt><dd className="font-semibold">{history.data.counts.payments}</dd></div></dl>
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div><h5 className="font-medium">Service Locations</h5><div className="mt-2 space-y-2">{history.data.locations.map((location) => <article className="rounded-lg bg-surface p-3" key={location.source_id}><strong>{location.address ?? "Address unavailable"}</strong><p className="text-sm text-content-muted">{[location.city, location.state, location.postal_code].filter(Boolean).join(", ")}</p><p className="mt-1 text-xs text-content-muted">Source Location {location.source_id}</p></article>)}{history.data.locations.length === 0 && <p className="text-sm text-content-muted">No source-backed Locations are available.</p>}</div></div>
-        <div><h5 className="font-medium">Jobs</h5><div className="mt-2 space-y-2">{history.data.jobs.map((job) => { const notes = job.notes ?? []; const attachments = job.attachments ?? []; const estimateIds = job.original_estimate_ids ?? []; return <article className="rounded-lg bg-surface p-3" key={job.source_id}><strong>{job.number ? `Job ${job.number}` : "Job number unavailable"}</strong><p className="text-sm text-content-muted">{job.status ?? "Status unavailable"} · Source Job {job.source_id}</p><dl className="mt-2 grid gap-1 text-xs text-content-muted"><div><dt className="inline font-medium">Scheduled service date: </dt><dd className="inline">{job.service_date ?? "Unavailable in source"}</dd></div><div><dt className="inline font-medium">Service location: </dt><dd className="inline">{job.source_location_id ?? "Unavailable in source"}</dd></div><div><dt className="inline font-medium">Technicians: </dt><dd className="inline">{job.assigned_employee_source_ids.length ? job.assigned_employee_source_ids.join(", ") : "Unavailable in source"}</dd></div><div><dt className="inline font-medium">Preceding estimate: </dt><dd className="inline">{job.original_estimate_id ?? (estimateIds.length ? estimateIds.join(", ") : "Unavailable in source")}</dd></div><div><dt className="inline font-medium">Invoice: </dt><dd className="inline">{job.invoice_number ?? "Unavailable in source"}</dd></div></dl>{job.description && <p className="mt-2 whitespace-pre-wrap text-sm">{job.description}</p>}<p className="mt-2 text-xs text-content-muted">{job.source_location_id ? `Source Location ${job.source_location_id}` : "Held relationship: source Location unavailable"}</p>{notes.length > 0 && <div className="mt-2 rounded-md border border-stroke p-2"><strong className="text-xs">Notes</strong><ul className="mt-1 space-y-1 text-xs">{notes.map((note, index) => <li key={note.source_id ?? `note-${index}`}>{note.content ?? "Note content unavailable"}</li>)}</ul></div>}{attachments.length > 0 && <div className="mt-2 rounded-md border border-stroke p-2"><strong className="text-xs">Documents and media</strong><ul className="mt-1 space-y-1 text-xs">{attachments.map((attachment) => <li key={attachment.source_id}>{attachment.body_available && attachment.view_url ? <a className="text-action-primary underline" href={attachment.view_url} target="_blank" rel="noreferrer">{attachment.file_name ?? attachment.source_id}</a> : <span>{attachment.file_name ?? attachment.source_id} · {attachment.status ?? "UNRESOLVED"}</span>}{attachment.conflict_reason && <span className="text-content-muted"> · {attachment.conflict_reason}</span>}</li>)}</ul></div>}</article>; })}{history.data.jobs.length === 0 && <p className="text-sm text-content-muted">No source-backed Jobs are available.</p>}</div></div>
-        <div><h5 className="font-medium">Appointments</h5><div className="mt-2 space-y-2">{history.data.appointments.map((appointment) => <article className="rounded-lg bg-surface p-3" key={appointment.source_id}><strong>Source Appointment {appointment.source_id}</strong><p className="text-sm text-content-muted">{appointment.scheduled_start ?? "Schedule unavailable"}</p><p className="mt-1 text-xs text-content-muted">{appointment.source_job_id ? `Source Job ${appointment.source_job_id}` : "Held relationship: source Job unavailable"}</p></article>)}{history.data.appointments.length === 0 && <p className="text-sm text-content-muted">No source-backed Appointments are available.</p>}</div></div>
-        <div><h5 className="font-medium">Estimates</h5><div className="mt-2 space-y-2">{history.data.estimates.map((estimate) => <article className="rounded-lg bg-surface p-3" key={estimate.source_id}><strong>{estimate.number ? `Estimate ${estimate.number}` : "Estimate number unavailable"}</strong><p className="text-sm text-content-muted">{estimate.status ?? "Status unavailable"} · {estimate.options.length} option{estimate.options.length === 1 ? "" : "s"}</p><p className="mt-1 text-xs text-content-muted">Source Estimate {estimate.source_id}</p></article>)}{history.data.estimates.length === 0 && <p className="text-sm text-content-muted">No source-backed Estimates are available.</p>}</div></div>
-        <div className="lg:col-span-2"><h5 className="font-medium">Invoices and Payments</h5><div className="mt-2 grid gap-2 lg:grid-cols-2">{history.data.invoices.map((invoice) => <article className="rounded-lg bg-surface p-3" key={invoice.source_id}><strong>{invoice.number ? `Invoice ${invoice.number}` : "Invoice number unavailable"}</strong><p className="text-sm text-content-muted">{invoice.status ?? "Status unavailable"} · Source Invoice {invoice.source_id}</p><p className="mt-1 text-xs text-content-muted">{invoice.source_job_id ? `Source Job ${invoice.source_job_id}` : "Held relationship: source Job unavailable"}</p><ul className="mt-2 space-y-1 text-sm">{invoice.payments.map((payment) => <li key={payment.source_id}>Payment {payment.source_id} · {payment.status} · {payment.amount_cents / 100} · <span className="text-content-muted">{payment.overlap_disposition.replaceAll("_", " ")}</span></li>)}{invoice.refunds.map((refund, index) => <li key={refund.source_id ?? `refund-${index}`}>Refund {refund.source_id ?? "source ID unavailable"} · {refund.amount_cents / 100} · <span className="text-content-muted">not aggregation safe</span></li>)}</ul></article>)}{history.data.invoices.length === 0 && <p className="text-sm text-content-muted">No source-backed Invoices or Payments are available.</p>}</div></div>
+  return (
+    <div className="mt-5 border-t border-stroke pt-5">
+      <div className="flex items-start gap-3">
+        <Search className="mt-1 shrink-0 text-action-primary" size={20} />
+        <div>
+          <h3 className="font-semibold">Customers and service history</h3>
+          <p className="mt-1 text-sm text-content-muted">Search the complete customer directory. Open any customer to review service history, invoices, payments, notes, photographs, and documents.</p>
+          {standalone && <span className="sr-only">Older history is view-only</span>}
+        </div>
       </div>
-    </section>}
-  </Card>;
+      {controlledQuery === undefined && <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={submit}>
+        <label className="relative min-w-0 flex-1">
+          <span className="sr-only">Search historical customers</span>
+          <Input aria-label="Search historical customers" className="pl-3" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Name, phone, email, address, customer number, or source ID" />
+        </label>
+        <Button type="submit">Search history</Button>
+        {query && <Button type="button" variant="ghost" onClick={() => { setInput(""); setLocalQuery(""); }}>Clear</Button>}
+      </form>}
+
+      {search.isLoading && <div className="mt-4"><Spinner label="Loading customers and service history" /></div>}
+      {search.isError && <div className="mt-4"><Alert variant="warning" title="Some customer history is unavailable">The source-backed history could not be loaded. Available customer records remain visible above.</Alert></div>}
+      {search.data && sourceItems.length > 0 && (
+        <div className="mt-4">
+          <ul className="divide-y divide-stroke rounded-lg border border-stroke">
+            {sourceItems.map((item) => (
+              <li className="p-3" key={item.source_customer_id}>
+                {item.native_customer_id ? (
+                  <Link className="block min-h-11 text-left" to={`/customers/${item.native_customer_id}`}>
+                    <span className="flex flex-wrap items-center gap-2"><strong>{item.display_name}</strong><Badge variant="information">Customer</Badge>{standalone && <span className="sr-only">OLDER HISTORY</span>}</span>
+                    <span className="mt-1 block text-sm text-content-muted">{item.primary_location ?? "Location unavailable in source evidence"}</span>
+                  </Link>
+                ) : (
+                  <button className="block min-h-11 w-full text-left" type="button" onClick={() => setSelectedSourceId(item.source_customer_id)}>
+                    <span className="flex flex-wrap items-center gap-2"><strong>{item.display_name}</strong><Badge variant="information">Customer</Badge>{standalone && <span className="sr-only">OLDER HISTORY</span>}</span>
+                    <span className="mt-1 block text-sm text-content-muted">{item.primary_location ?? "Location unavailable in source evidence"}</span>
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-content-muted">
+            <span>{search.data.match_count.toLocaleString()} source-backed customer records available</span>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 20))}>Previous</Button>
+              <Button type="button" variant="outline" disabled={!search.data.limited} onClick={() => setOffset((value) => value + 20)}>More customers</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {search.data && sourceItems.length === 0 && search.data.match_count === 0 && <div className="mt-4"><EmptyState title="No additional customers match." description="Try a different name, contact value, address, or source ID." /></div>}
+      {history.isLoading && <div className="mt-4"><Spinner label="Loading customer service history" /></div>}
+      {history.isError && <div className="mt-4"><Alert variant="warning">The selected customer history is unavailable. No missing information was inferred.</Alert></div>}
+      {history.data && <HcpHistoryDetails history={history.data} />}
+    </div>
+  );
 }
