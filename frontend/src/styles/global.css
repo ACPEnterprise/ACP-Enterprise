@@ -1,9 +1,14 @@
 html,
 body,
 #root {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
   min-width: 320px;
   min-height: 100%;
   margin: 0;
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -28,7 +33,7 @@ body {
     var(--gradient-primary) !important;
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 64rem) {
   .theme-shell {
     display: grid;
     height: 100dvh;
@@ -107,7 +112,7 @@ body {
   background: var(--workspace-wash);
 }
 
-@media (max-width: 47.99rem) {
+@media (max-width: 63.99rem) {
   .theme-navigation-desktop {
     display: none;
   }
@@ -118,7 +123,7 @@ body {
   }
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 64rem) {
   .theme-navigation-desktop {
     display: flex;
   }
@@ -135,21 +140,48 @@ body {
 }
 
 .theme-navigation {
-  position: relative;
-  z-index: 2;
   isolation: isolate;
   box-sizing: border-box;
-  flex: 0 0 16rem;
-  width: 16rem;
-  min-width: 16rem;
-  min-height: 100dvh;
   background:
     linear-gradient(145deg, rgb(255 255 255 / 0.08), transparent 34%),
     var(--gradient-sidebar);
   box-shadow: 10px 0 32px rgb(3 19 56 / 0.12);
 }
 
-@media (min-width: 48rem) and (max-width: 68.74rem) {
+.theme-navigation-desktop {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 16rem;
+  width: 16rem;
+  min-width: 16rem;
+  min-height: 100dvh;
+}
+
+.theme-navigation-mobile {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: var(--layer-overlay);
+  width: min(18rem, calc(100vw - var(--space-8)));
+  min-width: 0;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overscroll-behavior: contain;
+}
+
+.theme-navigation-backdrop {
+  touch-action: none;
+}
+
+.theme-navigation-mobile .theme-primary-navigation {
+  overscroll-behavior: contain;
+}
+
+.theme-navigation-mobile .theme-navigation-close {
+  top: max(var(--space-5), calc(var(--safe-area-top) + var(--space-2)));
+}
+
+@media (min-width: 64rem) and (max-width: 68.74rem) {
   .theme-navigation {
     flex-basis: 5rem;
     width: 5rem;

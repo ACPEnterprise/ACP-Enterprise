@@ -1,0 +1,43 @@
+{
+  "schema": "twelvehats.om1b.mobile-navigation-regression-recovery.v1",
+  "observed_at": "2026-11-28T19:16:20Z",
+  "hosted_read_only_observation": {
+    "url": "https://preview.allcountyhomeservices.com/",
+    "status": 200,
+    "etag": "6ac59daa-55f",
+    "last_modified": "Wed, 07 Oct 2026 01:17:30 GMT",
+    "index_sha256": "1be579791580976bb38afe2e405274d175984270eac34f2fc9183240981e2523",
+    "javascript_asset": "assets/index-BVLtwvDa.js",
+    "javascript_sha256": "ea3fecdaba450620d392c87c4501bbbcf3ea27223216a6797de434ab71230206",
+    "stylesheet_asset": "assets/index-DbALZJeK.css",
+    "stylesheet_sha256": "539703983eaee92441135541edb7f203a3731f6bbbb53117e0246646fe0e8ef7",
+    "mutation_performed": false
+  },
+  "git_lineage": {
+    "recovery_baseline": "5d2e46b9db953f41c6cb084949de7537ef060352",
+    "previous_mobile_candidate": "7105ab8a2bbdbded418f1c3d2f975496289f2375",
+    "previous_candidate_is_ancestor_of_recovery_baseline": false,
+    "merge_base": "6783a78aed1e73dbde1b3ba4787afae47a3fe338",
+    "recovery_branch": "work/om1b-mobile-navigation-regression-recovery"
+  },
+  "qualification": {
+    "focused_files_passed": 5,
+    "focused_tests_passed": 34,
+    "full_frontend_files_passed": 175,
+    "full_frontend_tests_passed": 815,
+    "production_build": "PASS",
+    "changed_file_lint": "PASS",
+    "repository_lint": "BASELINE_FAILURE_OUTSIDE_CHANGESET",
+    "repository_lint_failure": "frontend/src/components/customers/HistoricalCustomerSearch.tsx:26 react-hooks/set-state-in-effect",
+    "managed_browser_launch": "BLOCKED_BY_HOST_SANDBOX",
+    "managed_browser_failure": "Chromium MachPortRendezvousServer bootstrap_check_in permission denied; SafariDriver unavailable",
+    "protected_data_used": false,
+    "hosted_acceptance": false
+  },
+  "security_boundary": {
+    "hosted_mutation": false,
+    "deployment": false,
+    "quickbooks_access": false,
+    "quickbooks_mutation": false
+  }
+}

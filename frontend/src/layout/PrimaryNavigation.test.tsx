@@ -12,6 +12,7 @@ describe("PrimaryNavigation", () => {
     expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Mission Control" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("href", "/dispatch");
+    expect(screen.getByRole("link", { name: "Accounting" })).toHaveAttribute("href", "/accounting");
     expect(screen.getByRole("link", { name: "Engineering Factory" })).toHaveAttribute("href", "/engineering");
     expect(screen.queryByRole("link", { name: "Scheduling" })).not.toBeInTheDocument();
   });
