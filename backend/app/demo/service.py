@@ -66,6 +66,7 @@ from app.scheduling.models import Appointment
 from app.timekeeping.models import PayPeriod, WorkdayPunchEvent
 
 SEED_VERSION = "twelvehats.sales-demo.v1"
+PRESERVED_DEMO_COMPANY_ID = UUID("c36895cf-8a6f-5c31-a2ed-474dee8d0fc4")
 DEMO_ROLE_CODE = "SALES_DEMO"
 DEMO_ROLE_NAME = "Sales Demo"
 DEMO_PERMISSION_CODES = frozenset(
@@ -313,6 +314,133 @@ class SalesDemoService:
         assert audit.id
         return DemoProvisionResult(
             environment.id, company_id, branch_id, generation, action, counts
+        )
+
+    async def restore_preserved_company(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+    ) -> DemoProvisionResult:
+        """Restore the approved persistent training tenant for an existing user.
+
+        This is intentionally stricter than ordinary per-representative provisioning:
+        the identity must not have any access-bearing membership in another company,
+        and its credential is never read or changed.
+        """
+        self._guard()
+        owner_id = context.user.id
+        await session.execute(
+            select(func.pg_advisory_xact_lock(owner_id.int % (2**63 - 1)))
+        )
+        conflicting_company_id = await session.scalar(
+            select(Membership.company_id).where(
+                Membership.user_id == owner_id,
+                Membership.company_id != PRESERVED_DEMO_COMPANY_ID,
+                Membership.status.in_(("invited", "active", "suspended")),
+            )
+        )
+        if conflicting_company_id is not None:
+            raise OnboardingConflictError(
+                "Sales Demo restoration refused: the identity has non-Demo company access."
+            )
+
+        environment = await session.scalar(
+            select(DemoEnvironment)
+            .where(DemoEnvironment.owner_user_id == owner_id)
+            .with_for_update()
+        )
+        company = await session.get(Company, PRESERVED_DEMO_COMPANY_ID)
+        if environment is not None or company is not None:
+            if (
+                environment is None
+                or company is None
+                or environment.active_company_id != PRESERVED_DEMO_COMPANY_ID
+                or environment.status != "ready"
+                or company.status != "active"
+            ):
+                raise OnboardingConflictError(
+                    "Preserved Sales Demo state is incomplete; restoration requires an empty target or a complete ready tenant."
+                )
+            membership = await session.scalar(
+                select(Membership).where(
+                    Membership.user_id == owner_id,
+                    Membership.company_id == PRESERVED_DEMO_COMPANY_ID,
+                    Membership.status == "active",
+                )
+            )
+            branch = await session.scalar(
+                select(Branch).where(
+                    Branch.company_id == PRESERVED_DEMO_COMPANY_ID,
+                    Branch.is_primary.is_(True),
+                )
+            )
+            if membership is None or branch is None:
+                raise OnboardingConflictError(
+                    "Preserved Sales Demo access is incomplete and was not changed."
+                )
+            return DemoProvisionResult(
+                environment.id,
+                company.id,
+                branch.id,
+                environment.generation,
+                "reused",
+                await self.counts(session, company.id),
+            )
+
+        environment = DemoEnvironment(
+            id=uuid5(NAMESPACE_URL, f"preserved-sales-demo:{owner_id}"),
+            owner_user_id=owner_id,
+            generation=1,
+            seed_version=SEED_VERSION,
+            status="provisioning",
+        )
+        branch_id = _id(environment.id, 1, "branch")
+        company = Company(
+            id=PRESERVED_DEMO_COMPANY_ID,
+            name="TwelveHats Demo Services",
+            code="TWELVEHATS_DEMO_SERVICES",
+            status="active",
+            timezone="America/New_York",
+        )
+        branch = Branch(
+            id=branch_id,
+            company_id=company.id,
+            name="Metro Demo Branch",
+            code="METRO",
+            status="active",
+            timezone="America/New_York",
+            is_primary=True,
+        )
+        session.add_all([environment, company, branch])
+        await session.flush()
+        await self._seed_access(session, context, company.id, branch.id, environment, 1)
+        counts = await self._seed_business(
+            session, owner_id, environment, company.id, branch.id, 1
+        )
+        environment.active_company_id = company.id
+        environment.status = "ready"
+        audit = self.auditing.stage(
+            session,
+            AuditEntry(
+                action="sales_demo.restore_preserved",
+                actor_user_id=owner_id,
+                company_id=company.id,
+                branch_id=branch.id,
+                resource_type="demo_environment",
+                resource_id=environment.id,
+                reason_code="sales_training_restoration",
+                details={
+                    "seed_version": SEED_VERSION,
+                    "credential_changed": False,
+                    "external_actions": "disabled",
+                },
+            ),
+        )
+        await session.flush()
+        assert audit.id
+        return DemoProvisionResult(
+            environment.id, company.id, branch.id, 1, "restored", counts
         )
 
     async def _seed_access(
